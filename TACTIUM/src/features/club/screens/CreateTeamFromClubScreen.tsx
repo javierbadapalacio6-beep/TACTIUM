@@ -1,0 +1,493 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Colors } from '@core/theme/colors';
+import { Fonts } from '@core/theme/fonts';
+import { Radius } from '@core/theme/spacing';
+import {
+  AmbientBackdrop,
+  IconBack,
+  Toggle,
+} from '@components/ui';
+import {
+  FEDERATIONS,
+  type TeamGender,
+} from '@core/data/federations';
+import { useTeamStore } from '@store/teamStore';
+import { useClubStore, selectActiveClub } from '@store/clubStore';
+
+import type { ClubStackScreenProps } from '@navigation/types';
+
+const CATS = ['1ª', '2ª', '3ª', '4ª'];
+const GROUPS = ['A', 'B', 'C', 'D'];
+const GENDERS: { id: TeamGender; label: string }[] = [
+  { id: 'masculino', label: 'Masculino' },
+  { id: 'femenino', label: 'Femenino' },
+  { id: 'mixto', label: 'Mixto' },
+];
+
+export const CreateTeamFromClubScreen = ({
+  navigation,
+}: ClubStackScreenProps<'CreateTeamFromClub'>) => {
+  const insets = useSafeAreaInsets();
+  const club = useClubStore(selectActiveClub);
+  const createTeam = useTeamStore((s) => s.createTeam);
+
+  // La federación se hereda del club: un club pertenece a una federación
+  // concreta y todos sus equipos juegan bajo ella. No tiene sentido pedirla
+  // de nuevo aquí. Se muestra como info readonly.
+  const clubFederation = useMemo(
+    () => FEDERATIONS.find((f) => f.code === club?.federation) ?? null,
+    [club?.federation],
+  );
+
+  const [name, setName] = useState('');
+  const [league, setLeague] = useState('');
+  const [cat, setCat] = useState('2ª');
+  const [gender, setGender] = useState<TeamGender>('masculino');
+  const [group, setGroup] = useState<string>('A');
+  const [hasGroup, setHasGroup] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const valid = useMemo(
+    () =>
+      Boolean(
+        name.trim() &&
+          league.trim() &&
+          cat &&
+          (!hasGroup || group),
+      ),
+    [name, league, cat, group, hasGroup],
+  );
+
+  const handleSave = async () => {
+    if (!valid || submitting || !club) return;
+    setSubmitting(true);
+    try {
+      await createTeam({
+        name: name.trim(),
+        federation: club.federation ?? undefined,
+        league: league.trim(),
+        category: cat,
+        group: hasGroup ? group : undefined,
+        gender,
+        clubId: club.id,
+        // No tocar el flag de onboarding: estamos creando un equipo
+        // adicional desde el ClubDashboard. Si lo tocásemos, el
+        // RootNavigator desmontaría MainTabs por un instante y las pilas
+        // (HomeStack/Jornada/Lineup) perderían historial al remontar.
+        keepOnboardingState: true,
+      });
+      navigation.goBack();
+    } catch (e: any) {
+      Alert.alert('Error al crear equipo', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!club) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top + 18 }]}>
+        <Text style={styles.empty}>Sin club activo.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.root}
+    >
+      <AmbientBackdrop intensity={0.5} />
+
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          onPress={() => {
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate('ClubRoot');
+          }}
+          hitSlop={10}
+          style={styles.headerBtn}
+        >
+          <IconBack size={18} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          Nuevo equipo
+        </Text>
+        <View style={styles.headerBtn} />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.eyebrow}>CLUB · {club.name.toUpperCase()}</Text>
+        <Text style={styles.title}>Configura el equipo</Text>
+        <Text style={styles.lede}>
+          Pertenecerá a {club.name}. Podrás asignarle capitán después.
+        </Text>
+
+        <Section label="Nombre del equipo">
+          <View style={styles.nameInput}>
+            <View style={styles.accentBar} />
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Equipo A"
+              placeholderTextColor={Colors.textFaint}
+              style={styles.nameInputField}
+              autoFocus
+            />
+          </View>
+        </Section>
+
+        <Section label="Federación">
+          <View style={styles.federationReadonly}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              {clubFederation ? (
+                <>
+                  <Text style={styles.selectorValue} numberOfLines={1}>
+                    {clubFederation.name}
+                  </Text>
+                  <Text style={styles.selectorMeta}>
+                    {clubFederation.region} · {clubFederation.shortName}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.selectorPlaceholder}>
+                  El club no tiene federación asignada
+                </Text>
+              )}
+            </View>
+            <Text style={styles.federationLockedHint}>HEREDADA DEL CLUB</Text>
+          </View>
+        </Section>
+
+        <Section label="Liga">
+          <View style={styles.plainInput}>
+            <TextInput
+              value={league}
+              onChangeText={setLeague}
+              placeholder="Liga por equipos absoluta"
+              placeholderTextColor={Colors.textFaint}
+              style={styles.plainInputField}
+            />
+          </View>
+        </Section>
+
+        <Section label="Categoría">
+          <View style={styles.catGrid}>
+            {CATS.map((c) => {
+              const sel = cat === c;
+              return (
+                <Pressable
+                  key={c}
+                  onPress={() => setCat(c)}
+                  style={[
+                    styles.catCell,
+                    sel && {
+                      backgroundColor: Colors.accent,
+                      borderColor: Colors.accent,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.catCellText,
+                      { color: sel ? '#000' : Colors.text },
+                    ]}
+                  >
+                    {c}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+
+        <Section label="Género">
+          <View style={styles.catGrid}>
+            {GENDERS.map((g) => {
+              const sel = gender === g.id;
+              return (
+                <Pressable
+                  key={g.id}
+                  onPress={() => setGender(g.id)}
+                  style={[
+                    styles.catCell,
+                    sel && {
+                      backgroundColor: Colors.accent,
+                      borderColor: Colors.accent,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.catCellText,
+                      { fontSize: 14, color: sel ? '#000' : Colors.text },
+                    ]}
+                  >
+                    {g.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+
+        <Section
+          label="Grupo"
+          right={
+            <View style={styles.groupToggle}>
+              <Toggle value={hasGroup} onChange={setHasGroup} size="sm" />
+              <Text style={styles.groupToggleText}>
+                {hasGroup ? 'Sí' : 'Sin grupos'}
+              </Text>
+            </View>
+          }
+        >
+          {hasGroup ? (
+            <View style={styles.catGrid}>
+              {GROUPS.map((g) => {
+                const sel = group === g;
+                return (
+                  <Pressable
+                    key={g}
+                    onPress={() => setGroup(g)}
+                    style={[
+                      styles.catCell,
+                      sel && {
+                        backgroundColor: Colors.accent,
+                        borderColor: Colors.accent,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.catCellText,
+                        { color: sel ? '#000' : Colors.text },
+                      ]}
+                    >
+                      {g}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </Section>
+      </ScrollView>
+
+      <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
+        <Pressable
+          disabled={!valid || submitting}
+          onPress={handleSave}
+          style={({ pressed }) => [
+            styles.ctaBtn,
+            (!valid || submitting) && { opacity: 0.4 },
+            pressed && valid && !submitting && { opacity: 0.85 },
+          ]}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#001810" />
+          ) : (
+            <Text style={styles.ctaLabel}>Crear equipo</Text>
+          )}
+        </Pressable>
+      </View>
+
+    </KeyboardAvoidingView>
+  );
+};
+
+const Section: React.FC<{
+  label: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ label, right, children }) => (
+  <View style={{ marginTop: 18 }}>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      {right}
+    </View>
+    {children}
+  </View>
+);
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.background },
+  header: {
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  scroll: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 18 },
+  eyebrow: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 2.5,
+    color: Colors.accent,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  title: {
+    color: Colors.text,
+    fontSize: 26,
+    fontWeight: '600',
+    letterSpacing: -0.6,
+    lineHeight: 30,
+    marginBottom: 6,
+  },
+  lede: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
+  nameInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  accentBar: {
+    width: 5,
+    height: 22,
+    borderRadius: 3,
+    backgroundColor: Colors.accent,
+  },
+  nameInputField: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+    paddingVertical: 0,
+  },
+  plainInput: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  plainInputField: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+    paddingVertical: 0,
+  },
+  catGrid: { flexDirection: 'row', gap: 6 },
+  catCell: {
+    flex: 1,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catCellText: {
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+  },
+  federationReadonly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 54,
+    opacity: 0.92,
+  },
+  federationLockedHint: {
+    fontFamily: Fonts.mono,
+    fontSize: 9,
+    letterSpacing: 1.4,
+    color: Colors.textFaint,
+    fontWeight: '600',
+  },
+  selectorValue: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  selectorMeta: {
+    color: Colors.textFaint,
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  selectorPlaceholder: { color: Colors.textFaint, fontSize: 14 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: Colors.textFaint,
+    textTransform: 'uppercase',
+    fontWeight: '500',
+  },
+  groupToggle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  groupToggleText: { color: Colors.textMuted, fontSize: 12 },
+  cta: { paddingHorizontal: 20, paddingTop: 8 },
+  ctaBtn: {
+    height: 54,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  ctaLabel: {
+    color: '#001810',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  empty: { color: Colors.textFaint, textAlign: 'center', fontSize: 14 },
+});

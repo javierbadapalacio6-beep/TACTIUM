@@ -1,0 +1,709 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Colors } from '@core/theme/colors';
+import { Fonts } from '@core/theme/fonts';
+import { Radius } from '@core/theme/spacing';
+import { TactiumMark } from '@components/brand/TactiumMark';
+import { IconPlus, IconPencil, NeonDot } from '@components/ui';
+import { useTeamStore } from '@store/teamStore';
+import { useClubStore, selectActiveClub } from '@store/clubStore';
+import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
+import * as ClubDashboardApi from '@core/services/clubDashboard';
+import type { ClubTeamOverview } from '@core/services/clubDashboard';
+
+import type { ClubStackScreenProps } from '@navigation/types';
+
+const MONTH_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const WEEKDAY_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function formatShortDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${WEEKDAY_ES[d.getDay()]} ${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
+}
+
+export const ClubDashboardScreen = ({
+  navigation,
+}: ClubStackScreenProps<'ClubRoot'>) => {
+  const insets = useSafeAreaInsets();
+  const club = useClubStore(selectActiveClub);
+  const teams = useTeamStore((s) => s.teams);
+
+  const [membersSheet, setMembersSheet] = useState<{
+    teamId: string;
+    teamName: string;
+  } | null>(null);
+  const [overviews, setOverviews] = useState<ClubTeamOverview[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const clubTeams = useMemo(
+    () => (club ? teams.filter((t) => t.club_id === club.id) : []),
+    [teams, club],
+  );
+
+  const reload = useCallback(async () => {
+    if (clubTeams.length === 0) {
+      setOverviews([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
+      setOverviews(data);
+    } catch (e) {
+      console.warn('club overview', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [clubTeams]);
+
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload]),
+  );
+
+  const openManage = (teamId: string, teamName: string) => {
+    setMembersSheet({ teamId, teamName });
+  };
+
+  if (!club) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top + 18 }]}>
+        <Text style={styles.empty}>Sin club activo.</Text>
+      </View>
+    );
+  }
+
+  const upcomingCards = overviews.filter((o) => o.nextMatchday !== null);
+  const lastResultCards = overviews.filter((o) => o.lastResult !== null);
+
+  return (
+    <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+      <View style={styles.topbar}>
+        <View style={styles.brandRow}>
+          <TactiumMark size={34} gradient />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.eyebrow}>CLUB · ADMIN</Text>
+            <Text style={styles.brandName} numberOfLines={1}>
+              {club.name}
+            </Text>
+          </View>
+        </View>
+        <NeonDot size={7} />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* KPIs club */}
+        <View style={styles.statsRow}>
+          <Stat label="EQUIPOS" value={String(clubTeams.length)} />
+          <View style={styles.statsDivider} />
+          <Stat label="FEDERACIÓN" value={club.federation ?? '—'} small />
+        </View>
+
+        <Text style={styles.intro}>
+          Vista global del club. Las jornadas y los resultados los gestiona el
+          capitán de cada equipo — desde aquí solo administras la estructura.
+        </Text>
+
+        {loading ? (
+          <View style={styles.loaderBox}>
+            <ActivityIndicator color={Colors.accent} />
+          </View>
+        ) : (
+          <>
+            {/* PRÓXIMAS JORNADAS */}
+            {upcomingCards.length > 0 ? (
+              <View>
+                <SectionHeader
+                  label="PRÓXIMAS JORNADAS"
+                  count={upcomingCards.length}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.hScrollContent}
+                >
+                  {upcomingCards.map((o) => (
+                    <NextMatchdayCard key={o.team.id} overview={o} />
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {/* ÚLTIMOS RESULTADOS */}
+            {lastResultCards.length > 0 ? (
+              <View>
+                <SectionHeader
+                  label="ÚLTIMOS RESULTADOS"
+                  count={lastResultCards.length}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.hScrollContent}
+                >
+                  {lastResultCards.map((o) => (
+                    <LastResultCard key={o.team.id} overview={o} />
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {/* EQUIPOS */}
+            <SectionHeader label="EQUIPOS" count={overviews.length} padded />
+            {overviews.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>Aún no hay equipos</Text>
+                <Text style={styles.emptyText}>
+                  Crea el primer equipo del club para empezar.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.teamList}>
+                {overviews.map((o, idx) => (
+                  <TeamRow
+                    key={o.team.id}
+                    overview={o}
+                    last={idx === overviews.length - 1}
+                    onManage={() => openManage(o.team.id, o.team.name)}
+                  />
+                ))}
+              </View>
+            )}
+
+            <Pressable
+              onPress={() => navigation.navigate('CreateTeamFromClub')}
+              style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
+            >
+              <IconPlus size={16} color={Colors.accent} />
+              <Text style={styles.ctaLabel}>Crear nuevo equipo</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
+
+      <TeamMembersSheet
+        open={membersSheet !== null}
+        teamId={membersSheet?.teamId ?? null}
+        teamName={membersSheet?.teamName ?? null}
+        onClose={() => setMembersSheet(null)}
+      />
+    </View>
+  );
+};
+
+// ─── SectionHeader ──────────────────────────────────────────────────────────
+const SectionHeader: React.FC<{
+  label: string;
+  count: number;
+  padded?: boolean;
+}> = ({ label, count, padded }) => (
+  <View
+    style={[
+      styles.sectionHeader,
+      padded && { paddingHorizontal: 22 },
+    ]}
+  >
+    <Text style={styles.sectionLabel}>{label}</Text>
+    <Text style={styles.sectionCount}>{String(count).padStart(2, '0')}</Text>
+  </View>
+);
+
+// ─── NextMatchdayCard ───────────────────────────────────────────────────────
+const NextMatchdayCard: React.FC<{
+  overview: ClubTeamOverview;
+}> = ({ overview }) => {
+  const md = overview.nextMatchday!;
+  const dateLabel = formatShortDate(md.match_date);
+  const timeLabel = md.match_time ? md.match_time.slice(0, 5) : null;
+
+  return (
+    <View style={styles.upcomingCard}>
+      <View style={styles.cardTopRow}>
+        <Text style={styles.cardJornada}>
+          J·{String(md.jornada_number).padStart(2, '0')}
+        </Text>
+        <View
+          style={[
+            styles.venueDot,
+            { backgroundColor: md.is_home ? Colors.accent : Colors.textFaint },
+          ]}
+        />
+      </View>
+      <Text style={styles.cardDate}>{dateLabel}</Text>
+      {timeLabel ? <Text style={styles.cardTime}>{timeLabel}</Text> : null}
+      <Text style={styles.cardOpponent} numberOfLines={2}>
+        {md.is_home ? 'vs.' : '@ '}
+        {md.opponent}
+      </Text>
+      <View style={styles.cardFooter}>
+        <Text style={styles.cardTeamName} numberOfLines={1}>
+          {overview.team.name}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// ─── LastResultCard ─────────────────────────────────────────────────────────
+const LastResultCard: React.FC<{
+  overview: ClubTeamOverview;
+}> = ({ overview }) => {
+  const md = overview.lastResult!;
+  const tint =
+    md.outcome === 'win'
+      ? Colors.accent
+      : md.outcome === 'loss'
+        ? Colors.error
+        : Colors.warning;
+  const label =
+    md.outcome === 'win' ? 'V' : md.outcome === 'loss' ? 'D' : 'E';
+  const hasScore = md.score_for != null && md.score_against != null;
+  const isHome = md.is_home;
+  const leftScore = isHome ? md.score_for : md.score_against;
+  const rightScore = isHome ? md.score_against : md.score_for;
+
+  return (
+    <View style={[styles.resultCard, { borderColor: `${tint}66` }]}>
+      <View style={styles.cardTopRow}>
+        <Text
+          style={[
+            styles.cardOutcomePill,
+            { color: tint, borderColor: `${tint}80` },
+          ]}
+        >
+          {label}
+        </Text>
+        <Text style={styles.cardJornadaSmall}>
+          J·{String(md.jornada_number).padStart(2, '0')}
+        </Text>
+      </View>
+      {hasScore ? (
+        <View style={styles.resultScoreRow}>
+          <Text
+            style={[
+              styles.resultScoreNum,
+              { color: isHome ? tint : Colors.text },
+            ]}
+          >
+            {leftScore}
+          </Text>
+          <Text style={styles.resultScoreSep}>·</Text>
+          <Text
+            style={[
+              styles.resultScoreNum,
+              { color: isHome ? Colors.text : tint },
+            ]}
+          >
+            {rightScore}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.resultScoreEmpty}>—</Text>
+      )}
+      <Text style={styles.cardOpponent} numberOfLines={2}>
+        {isHome ? 'vs.' : '@ '}
+        {md.opponent}
+      </Text>
+      <View style={styles.cardFooter}>
+        <Text style={styles.cardTeamName} numberOfLines={1}>
+          {overview.team.name}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// ─── TeamRow ────────────────────────────────────────────────────────────────
+const TeamRow: React.FC<{
+  overview: ClubTeamOverview;
+  last: boolean;
+  onManage: () => void;
+}> = ({ overview, last, onManage }) => {
+  const { team, playersCount } = overview;
+  const meta =
+    [team.category, team.gender, team.group_name && `Grupo ${team.group_name}`]
+      .filter(Boolean)
+      .join(' · ') || 'Sin configurar';
+
+  return (
+    <Pressable
+      onPress={onManage}
+      style={({ pressed }) => [
+        styles.row,
+        last ? null : styles.rowDivider,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View style={styles.teamBadge}>
+        <Text style={styles.teamBadgeText}>
+          {(team.category ?? team.name).slice(0, 3).toUpperCase()}
+        </Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.teamName} numberOfLines={1}>
+          {team.name}
+        </Text>
+        <Text style={styles.teamMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+        <Text style={styles.teamKpi} numberOfLines={1}>
+          {playersCount} {playersCount === 1 ? 'jugador' : 'jugadores'}
+        </Text>
+      </View>
+      <View style={styles.manageBtn}>
+        <IconPencil size={14} color={Colors.accent} />
+      </View>
+    </Pressable>
+  );
+};
+
+// ─── Stat ───────────────────────────────────────────────────────────────────
+const Stat: React.FC<{ label: string; value: string; small?: boolean }> = ({
+  label,
+  value,
+  small,
+}) => (
+  <View style={{ flex: 1 }}>
+    <Text style={styles.statLabel}>{label}</Text>
+    <Text
+      style={[styles.statValue, small && { fontSize: 16 }]}
+      numberOfLines={1}
+    >
+      {value}
+    </Text>
+  </View>
+);
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.background },
+  empty: { color: Colors.textFaint, textAlign: 'center', fontSize: 14 },
+
+  topbar: {
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 4,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  eyebrow: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    fontWeight: '500',
+  },
+  brandName: {
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginTop: 2,
+  },
+
+  scroll: { paddingTop: 22 },
+
+  statsRow: {
+    marginHorizontal: 22,
+    flexDirection: 'row',
+    gap: 16,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: Colors.hair,
+  },
+  statsDivider: { width: 1, backgroundColor: Colors.hair },
+  statLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    color: Colors.textFaint,
+    letterSpacing: 1.5,
+    fontWeight: '500',
+  },
+  statValue: {
+    color: Colors.text,
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginTop: 4,
+  },
+
+  intro: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 22,
+    marginTop: 14,
+  },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    marginBottom: 8,
+    paddingHorizontal: 22,
+  },
+  sectionLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.text,
+    letterSpacing: 2,
+    fontWeight: '500',
+  },
+  sectionCount: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.textFaint,
+    letterSpacing: 1,
+  },
+
+  hScrollContent: {
+    paddingHorizontal: 22,
+    paddingVertical: 4,
+    gap: 10,
+  },
+
+  // Cards
+  upcomingCard: {
+    width: 160,
+    minHeight: 168,
+    borderRadius: 16,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+  resultCard: {
+    width: 160,
+    minHeight: 168,
+    borderRadius: 16,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardJornada: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  cardJornadaSmall: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  venueDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  cardDate: {
+    fontFamily: Fonts.mono,
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginTop: 8,
+  },
+  cardTime: {
+    fontFamily: Fonts.mono,
+    color: Colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    marginTop: 2,
+  },
+  cardOpponent: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    marginTop: 8,
+  },
+  cardFooter: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderColor: Colors.hair,
+  },
+  cardTeamName: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  cardOutcomePill: {
+    fontFamily: Fonts.mono,
+    fontSize: 13,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 7,
+    borderWidth: 1,
+    overflow: 'hidden',
+    letterSpacing: 0.5,
+  },
+  resultScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  resultScoreNum: {
+    fontFamily: Fonts.mono,
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
+  resultScoreSep: {
+    fontFamily: Fonts.mono,
+    fontSize: 18,
+    color: Colors.textFaint,
+  },
+  resultScoreEmpty: {
+    color: Colors.textFaint,
+    fontFamily: Fonts.mono,
+    fontSize: 18,
+    marginTop: 8,
+  },
+
+  loaderBox: {
+    paddingVertical: 36,
+    alignItems: 'center',
+  },
+
+  emptyCard: {
+    marginHorizontal: 22,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    paddingVertical: 24,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptyTitle: { color: Colors.text, fontSize: 15, fontWeight: '600' },
+  emptyText: { color: Colors.textMuted, fontSize: 12, textAlign: 'center' },
+
+  teamList: {
+    marginHorizontal: 22,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderColor: Colors.hair,
+  },
+  teamBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamBadgeText: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  teamName: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  teamMeta: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 3,
+    letterSpacing: 0.4,
+  },
+  teamKpi: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.textFaint,
+    marginTop: 3,
+    letterSpacing: 0.4,
+  },
+  manageBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  cta: {
+    marginTop: 16,
+    marginHorizontal: 22,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.accent50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  ctaLabel: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+});

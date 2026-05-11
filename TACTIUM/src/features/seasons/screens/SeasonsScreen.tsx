@@ -1,0 +1,617 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+
+import { Colors } from '@core/theme/colors';
+import { Fonts } from '@core/theme/fonts';
+import { Radius } from '@core/theme/spacing';
+import {
+  IconPlus,
+  IconChevron,
+  NeonDot,
+  BottomSheet,
+} from '@components/ui';
+import * as SeasonsApi from '@core/services/seasons';
+import { useTeamStore } from '@store/teamStore';
+
+import type { SeasonsStackScreenProps } from '@navigation/types';
+
+export const SeasonsScreen = ({
+  navigation,
+}: SeasonsStackScreenProps<'SeasonsRoot'>) => {
+  const insets = useSafeAreaInsets();
+  const team = useTeamStore((s) => s.team);
+
+  const [seasons, setSeasons] = useState<SeasonsApi.Season[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+
+  const reload = React.useCallback(async () => {
+    if (!team) return;
+    setLoading(true);
+    try {
+      const list = await SeasonsApi.fetchSeasons(team.id);
+      setSeasons(list);
+    } catch (e: any) {
+      console.warn('fetchSeasons', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [team]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload]),
+  );
+
+  const active = seasons.filter((s) => s.active);
+  const past = seasons.filter((s) => !s.active);
+
+  return (
+    <View style={styles.root}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.eyebrow}>
+          {team ? `${team.name.toUpperCase()} · ${team.category ?? ''}` : 'TEMPORADAS'}
+        </Text>
+        <Pressable
+          onPress={() => setCreating(true)}
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+        >
+          <IconPlus size={16} color={Colors.accent} />
+        </Pressable>
+      </View>
+
+      <View style={styles.intro}>
+        <Text style={styles.title}>Temporadas</Text>
+        <Text style={styles.lede}>
+          Organiza ligas, playoffs y temporadas pasadas.
+        </Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 22 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {loading ? (
+          <View style={{ paddingVertical: 60, alignItems: 'center' }}>
+            <ActivityIndicator color={Colors.accent} />
+          </View>
+        ) : (
+          <>
+            {active.map((s) => (
+              <ActiveSeasonCard
+                key={s.id}
+                season={s}
+                onPress={() => navigation.navigate('SeasonDetail', { id: s.id })}
+              />
+            ))}
+
+            {seasons.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>Sin temporadas</Text>
+                <Text style={styles.emptyText}>
+                  Crea la primera temporada para empezar a planificar jornadas.
+                </Text>
+              </View>
+            ) : null}
+
+            {past.length > 0 ? (
+              <>
+                <View style={styles.histHeader}>
+                  <Text style={styles.histLabel}>HISTÓRICO</Text>
+                  <Text style={styles.histCount}>{past.length} temp.</Text>
+                </View>
+                <View style={{ gap: 8 }}>
+                  {past.map((s) => (
+                    <PastSeasonCard
+                      key={s.id}
+                      season={s}
+                      onPress={() => navigation.navigate('SeasonDetail', { id: s.id })}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            <Pressable
+              onPress={() => setCreating(true)}
+              style={({ pressed }) => [styles.dashed, pressed && { opacity: 0.7 }]}
+            >
+              <IconPlus size={14} color={Colors.accent} />
+              <Text style={styles.dashedText}>Crear nueva temporada</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
+
+      <CreateSeasonSheet
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          reload();
+        }}
+      />
+    </View>
+  );
+};
+
+const ActiveSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => void }> = ({
+  season,
+  onPress,
+}) => {
+  const pct = season.total_matchdays
+    ? Math.round((1 / season.total_matchdays) * 100)
+    : 0;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.activeCard, pressed && { opacity: 0.95 }]}
+    >
+      <LinearGradient
+        colors={[Colors.primary, Colors.bgCard2]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.activeRow}>
+        <NeonDot size={6} />
+        <Text style={styles.activeBadge}>ACTIVA · {season.phase.toUpperCase()}</Text>
+      </View>
+      <Text style={styles.activeName}>{season.name}</Text>
+      <Text style={styles.activeMeta}>
+        {season.category ?? '—'} · {season.total_matchdays} jornadas
+      </Text>
+
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${pct}%` }]} />
+      </View>
+    </Pressable>
+  );
+};
+
+const PastSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => void }> = ({
+  season,
+  onPress,
+}) => {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.pastCard, pressed && { opacity: 0.85 }]}
+    >
+      <View style={styles.pastBadge}>
+        <Text style={styles.pastBadgeText}>{season.phase.slice(0, 4).toUpperCase()}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.pastName}>{season.name}</Text>
+        <Text style={styles.pastMeta}>{season.category ?? '—'}</Text>
+      </View>
+      <IconChevron size={14} color={Colors.textFaint} />
+    </Pressable>
+  );
+};
+
+const PHASE_OPTIONS: { id: SeasonsApi.SeasonPhase; label: string; sub: string }[] = [
+  { id: 'liga', label: 'Liga regular', sub: '18 jornadas' },
+  { id: 'playoff', label: 'Playoff', sub: 'Eliminatorias' },
+  { id: 'mixto', label: 'Liga + Playoff', sub: 'Formato completo' },
+];
+
+const CreateSeasonSheet: React.FC<{
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}> = ({ open, onClose, onCreated }) => {
+  const team = useTeamStore((s) => s.team);
+  const [name, setName] = useState('');
+  const [phase, setPhase] = useState<SeasonsApi.SeasonPhase>('liga');
+  const [submitting, setSubmitting] = useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      const yr = new Date().getFullYear();
+      setName(`Temporada ${String(yr).slice(2)}/${String(yr + 1).slice(2)}`);
+      setPhase('liga');
+    }
+  }, [open]);
+
+  const submit = async () => {
+    if (!team || !name.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await SeasonsApi.createSeason(team.id, {
+        name: name.trim(),
+        category: team.category ?? undefined,
+        phase,
+        active: true,
+      });
+      onCreated();
+    } catch (e: any) {
+      Alert.alert('Error al crear temporada', e?.message ?? '');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <BottomSheet open={open} onClose={onClose}>
+      <Text style={styles.sheetEyebrow}>NUEVA</Text>
+      <Text style={styles.sheetTitle}>Crear temporada</Text>
+
+      <Text style={styles.sheetLabel}>NOMBRE</Text>
+      <View style={styles.sheetInputWrap}>
+        <View style={styles.accentBar} />
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          style={styles.sheetInput}
+          placeholderTextColor={Colors.textFaint}
+        />
+      </View>
+
+      <Text style={styles.sheetLabel}>FORMATO</Text>
+      <View style={{ gap: 6 }}>
+        {PHASE_OPTIONS.map((p) => {
+          const sel = phase === p.id;
+          return (
+            <Pressable
+              key={p.id}
+              onPress={() => setPhase(p.id)}
+              style={[
+                styles.phaseOption,
+                sel && {
+                  backgroundColor: Colors.accent10,
+                  borderColor: Colors.accent50,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.radioOuter,
+                  sel && {
+                    backgroundColor: Colors.accent,
+                    borderColor: Colors.accent,
+                  },
+                ]}
+              >
+                {sel ? <View style={styles.radioInner} /> : null}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.phaseLabel}>{p.label}</Text>
+                <Text style={styles.phaseSub}>{p.sub}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Pressable
+        disabled={submitting || !name.trim()}
+        onPress={submit}
+        style={({ pressed }) => [
+          styles.sheetCta,
+          (submitting || !name.trim()) && { opacity: 0.4 },
+          pressed && !submitting && { opacity: 0.85 },
+        ]}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#001810" />
+        ) : (
+          <Text style={styles.sheetCtaLabel}>Crear temporada</Text>
+        )}
+      </Pressable>
+    </BottomSheet>
+  );
+};
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 22,
+  },
+  eyebrow: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 3,
+    color: Colors.accent,
+    fontWeight: '500',
+  },
+  addBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  intro: {
+    paddingHorizontal: 22,
+    paddingTop: 18,
+  },
+  title: {
+    color: Colors.text,
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -0.8,
+    lineHeight: 34,
+  },
+  lede: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  scroll: {
+    paddingHorizontal: 22,
+    paddingTop: 18,
+  },
+  activeCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    paddingHorizontal: 22,
+    paddingVertical: 18,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  activeBadge: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    fontWeight: '600',
+  },
+  activeName: {
+    color: Colors.text,
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.7,
+    lineHeight: 28,
+  },
+  activeMeta: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.black35,
+    marginTop: 18,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: Colors.accent,
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
+  },
+  histHeader: {
+    marginTop: 28,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  histLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 3,
+    color: Colors.textFaint,
+    fontWeight: '500',
+  },
+  histCount: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.textFaint,
+  },
+  pastCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+  },
+  pastBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.bgRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pastBadgeText: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: Colors.text,
+  },
+  pastName: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  pastMeta: {
+    color: Colors.textFaint,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dashed: {
+    marginTop: 14,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderStyle: 'dashed',
+    borderWidth: 1.5,
+    borderColor: Colors.hairStrong,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dashedText: {
+    color: Colors.accent,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  empty: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptyText: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  sheetEyebrow: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    letterSpacing: 2,
+    fontWeight: '500',
+  },
+  sheetTitle: {
+    color: Colors.text,
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  sheetLabel: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 11,
+    letterSpacing: 2,
+    marginTop: 8,
+    marginBottom: 6,
+    paddingLeft: 4,
+  },
+  sheetInputWrap: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  accentBar: {
+    width: 5,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: Colors.accent,
+  },
+  sheetInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    paddingVertical: 0,
+  },
+  phaseOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+  },
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#000',
+  },
+  phaseLabel: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  phaseSub: {
+    color: Colors.textFaint,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  sheetCta: {
+    height: 52,
+    marginTop: 14,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  sheetCtaLabel: {
+    color: '#001810',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "TACTIUM",
+    "slug": "tactium",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#030F0F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.4padellab.tactium"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#030F0F"
+      },
+      "package": "com.fourpadellab.tactium"
+    },
+    "web": {},
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}

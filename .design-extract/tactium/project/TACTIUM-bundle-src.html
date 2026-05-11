@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>TACTIUM</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<!-- Satoshi is the brand font; Fontshare blocks crawlers so we alias to Manrope (closest geometric humanist sans on Google Fonts) -->
+<style>
+  @font-face { font-family: "Satoshi"; src: local("Manrope"); font-weight: 300; }
+  @font-face { font-family: "Satoshi"; src: local("Manrope"); font-weight: 400; }
+  @font-face { font-family: "Satoshi"; src: local("Manrope"); font-weight: 500; }
+  @font-face { font-family: "Satoshi"; src: local("Manrope"); font-weight: 700; }
+  @font-face { font-family: "Satoshi"; src: local("Manrope"); font-weight: 900; }
+  /* Force Manrope rendering everywhere so the alias actually fires */
+  body, button, input, select, textarea { font-family: "Manrope", "Satoshi", -apple-system, system-ui, sans-serif !important; }
+</style>
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0a0a; min-height: 100vh; font-family: "Satoshi", -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { display: flex; align-items: center; justify-content: center; padding: 32px 16px; color: #fff; }
+  *::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+  button { font-family: inherit; }
+  /* Subtle ambient backdrop */
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    background:
+      radial-gradient(60% 50% at 50% 30%, rgba(3,98,76,0.18), transparent 70%),
+      radial-gradient(40% 40% at 80% 80%, rgba(0,223,130,0.06), transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+  #app { position: relative; z-index: 1; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<template id="__bundler_thumbnail" data-bg-color="#030F0F">
+  <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="g" x1="40" y1="160" x2="160" y2="40" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#A8FF60"/>
+        <stop offset="1" stop-color="#00DF82"/>
+      </linearGradient>
+    </defs>
+    <circle cx="100" cy="100" r="72" fill="none" stroke="url(#g)" stroke-width="9"/>
+    <path d="M70 65 H130 M100 65 V145" stroke="url(#g)" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <circle cx="42" cy="85" r="7" fill="url(#g)"/>
+    <circle cx="33" cy="106" r="5" fill="url(#g)"/>
+    <circle cx="27" cy="124" r="3.5" fill="url(#g)"/>
+  </svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="tactium-tokens.jsx"></script>
+<script type="text/babel" src="tactium-icons.jsx"></script>
+<script type="text/babel" src="screens/welcome.jsx"></script>
+<script type="text/babel" src="screens/login.jsx"></script>
+<script type="text/babel" src="screens/create-team.jsx"></script>
+<script type="text/babel" src="screens/add-players.jsx"></script>
+<script type="text/babel" src="screens/home.jsx"></script>
+<script type="text/babel" src="screens/jornada.jsx"></script>
+<script type="text/babel" src="screens/availability.jsx"></script>
+<script type="text/babel" src="screens/lineup.jsx"></script>
+<script type="text/babel" src="screens/results.jsx"></script>
+<script type="text/babel" src="screens/seasons.jsx"></script>
+<script type="text/babel" src="screens/season-detail.jsx"></script>
+<script type="text/babel" src="screens/profile.jsx"></script>
+<script type="text/babel" src="screens/team.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "tone": "bold",
+  "neonIntensity": 90,
+  "showPoints": false,
+  "deviceFrame": true
+}/*EDITMODE-END*/;
+
+const SCREENS = [
+  { id: 'welcome',      label: '00 Welcome' },
+  { id: 'login',        label: '01 Login' },
+  { id: 'create-team',  label: '02 Crear equipo' },
+  { id: 'add-players',  label: '03 Añadir jugadores' },
+  { id: 'home',         label: '04 Home' },
+  { id: 'jornada',      label: '05 Jornada' },
+  { id: 'lineup',       label: '06 Alineación' },
+  { id: 'results',      label: '06b Resultados' },
+  { id: 'availability', label: '07 Disponibilidad' },
+  { id: 'seasons',      label: '08 Temporadas' },
+  { id: 'season-detail',label: '08b Detalle temp.' },
+  { id: 'team',         label: '09 Equipo' },
+  { id: 'profile',      label: '10 Perfil' },
+];
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [screen, setScreen] = React.useState('welcome');
+  const [players, setPlayers] = React.useState(ROSTER);
+  const [lineupReady, setLineupReady] = React.useState(true);
+  const [resultsFocus, setResultsFocus] = React.useState(0);
+  // Match results — shared between Jornada (preview) and Results (entry)
+  const [matchResults, setMatchResults] = React.useState(
+    Array.from({ length: 5 }, () => ({
+      sets: [{ us: '', them: '' }, { us: '', them: '' }, { us: '', them: '' }],
+      forfeit: false,
+    }))
+  );
+
+  // apply neon intensity by overriding accent
+  const baseAccent = '#00DF82';
+  const intensity = (tweaks.neonIntensity ?? 100) / 100;
+  // boost shadow / glow by modulating opacity (simple approach)
+  // we'll rely on TACTIUM defaults; neonIntensity affects only shadow halo via CSS var
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--neon-glow', `${intensity}`);
+  }, [intensity]);
+
+  const go = (s) => setScreen(s);
+
+  const renderScreen = () => {
+    switch (screen) {
+      case 'welcome':      return <ScreenWelcome onFinish={() => go('login')} />;
+      case 'login':        return <ScreenLogin onContinue={() => go('create-team')} />;
+      case 'create-team':  return <ScreenCreateTeam onNext={() => go('add-players')} onBack={() => go('login')} />;
+      case 'add-players':  return <ScreenAddPlayers onNext={() => go('home')} onBack={() => go('create-team')}
+                                                    players={players} setPlayers={setPlayers} />;
+      case 'home':         return <ScreenHome onOpenJornada={() => go('jornada')} onOpenAvail={() => go('availability')}
+                                              onOpenLineup={() => go('lineup')} onOpenSeasons={() => go('seasons')}
+                                              onOpenTeam={() => go('team')} onOpenProfile={() => go('profile')}
+                                              players={players} />;
+      case 'jornada':      return <ScreenJornada onBack={() => go('home')} onCreateLineup={() => go('lineup')}
+                                                 onAddResults={(focus) => { setResultsFocus(focus ?? 0); go('results'); }}
+                                                 lineupReady={lineupReady}
+                                                 matchResults={matchResults} />;
+      case 'lineup':       return <ScreenLineup onBack={() => go('jornada')} players={players} courts={5} />;
+      case 'results':      return <ScreenResults onBack={() => go('jornada')} initialFocus={resultsFocus}
+                                                  matchResults={matchResults} setMatchResults={setMatchResults} />;
+      case 'availability': return <ScreenAvailability onBack={() => go('home')} players={players} setPlayers={setPlayers} />;
+      case 'seasons':      return <ScreenSeasons onBack={() => go('home')} onOpenSeason={() => go('season-detail')} />;
+      case 'season-detail':return <ScreenSeasonDetail onBack={() => go('seasons')} onOpenJornada={() => go('jornada')} />;
+      case 'profile':      return <ScreenProfile onBack={() => go('home')} onLogout={() => go('login')} />;
+      case 'team':         return <ScreenTeam onBack={() => go('home')} players={players} setPlayers={setPlayers} />;
+      default: return null;
+    }
+  };
+
+  const Frame = tweaks.deviceFrame !== false ? IOSDevice : 'div';
+  const frameProps = tweaks.deviceFrame !== false
+    ? { width: 402, height: 874, dark: true }
+    : { style: { width: 402, height: 874, overflow: 'hidden', borderRadius: 24, background: '#030F0F' } };
+
+  return (
+    <React.Fragment>
+      <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
+        {/* Screen picker rail */}
+        <ScreenRail current={screen} onChange={go} />
+
+        {/* Device */}
+        <Frame {...frameProps}>
+          {renderScreen()}
+        </Frame>
+
+        {/* Side meta panel */}
+        <SideMeta screen={screen} players={players} />
+      </div>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Visual">
+          <TweakRadio label="Tono" value={tweaks.tone || 'balanced'}
+            options={[
+              { value: 'minimal',  label: 'Minimal' },
+              { value: 'balanced', label: 'Balance' },
+              { value: 'bold',     label: 'Bold' },
+            ]}
+            onChange={v => setTweak('tone', v)} />
+          <TweakSlider label="Intensidad neón" min={40} max={140} step={10}
+            value={tweaks.neonIntensity ?? 100}
+            onChange={v => setTweak('neonIntensity', v)} />
+          <TweakToggle label="Marco iPhone" value={tweaks.deviceFrame !== false}
+            onChange={v => setTweak('deviceFrame', v)} />
+          <TweakToggle label="Mostrar puntos" value={tweaks.showPoints !== false}
+            onChange={v => setTweak('showPoints', v)} />
+        </TweakSection>
+        <TweakSection title="Navegación">
+          {SCREENS.map(s => (
+            <TweakButton key={s.id} label={s.label} onClick={() => go(s.id)} />
+          ))}
+        </TweakSection>
+      </TweaksPanel>
+    </React.Fragment>
+  );
+}
+
+function ScreenRail({ current, onChange }) {
+  return (
+    <div style={{
+      width: 200, padding: 16, borderRadius: 18,
+      background: 'rgba(8,24,24,0.7)', border: '1px solid rgba(232,245,239,0.08)',
+      backdropFilter: 'blur(20px)',
+      display: 'flex', flexDirection: 'column', gap: 4,
+      position: 'sticky', top: 32,
+    }}>
+      <div style={{ fontSize: 10, letterSpacing: 3, color: '#00DF82',
+                    textTransform: 'uppercase', fontWeight: 500, padding: '8px 10px 4px' }}>Tactium · Demo</div>
+      <div style={{ fontSize: 11, color: 'rgba(232,245,239,0.5)',
+                    padding: '0 10px 12px', lineHeight: 1.4 }}>
+        Toca cualquier botón en la app para navegar, o usa estos atajos.
+      </div>
+      {SCREENS.map(s => (
+        <button key={s.id} onClick={() => onChange(s.id)} style={{
+          textAlign: 'left', padding: '10px 12px', borderRadius: 10,
+          border: 'none', cursor: 'pointer',
+          background: current === s.id ? 'rgba(0,223,130,0.10)' : 'transparent',
+          color: current === s.id ? '#00DF82' : 'rgba(232,245,239,0.85)',
+          fontFamily: 'Satoshi', fontSize: 13, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: current === s.id ? '#00DF82' : 'rgba(232,245,239,0.2)',
+            boxShadow: current === s.id ? '0 0 8px #00DF82' : 'none',
+          }} />
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SideMeta({ screen, players }) {
+  const meta = {
+    'welcome':      { title: 'Welcome', body: 'Carrusel de 4 slides que presenta TACTIUM antes del login. Saltable.' },
+    'login':        { title: 'Login', body: 'Sin distracciones. Apple primero (público iOS), Google secundario.' },
+    'create-team':  { title: 'Onboarding · Equipo', body: 'Una sola decisión por pantalla. Categoría como segmented grid de 4.' },
+    'add-players':  { title: 'Onboarding · Plantilla', body: 'Lista editable con puntos visibles. Fila de "Añadir" inline.' },
+    'home':         { title: 'Home', body: 'Hero = próxima jornada. Acciones rápidas en grid 2×2.' },
+    'jornada':      { title: 'Jornada', body: '5 partidos · validación al frente. Recordatorio de la regla de orden.' },
+    'lineup':       { title: 'Alineación · KEY', body: 'Toca cualquier slot → bottom sheet. Auto-orden por puntos. Validación en vivo.' },
+    'results':      { title: 'Resultados', body: 'Entrada opcional set-a-set por pista. Marcador agregado del equipo en vivo.' },
+    'availability': { title: 'Disponibilidad', body: 'Toggle grande, 1 toque = confirmado. Filtro segmentado.' },
+    'seasons':      { title: 'Temporadas', body: 'Centro de organización. Hero para temporada activa, histórico compacto, crear nueva.' },
+    'season-detail':{ title: 'Detalle temporada', body: 'Jornadas agrupadas por fase (Liga / Playoff). Editar, crear, ver resultados.' },
+    'team':         { title: 'Equipo', body: 'Plantilla con stats, búsqueda, edición inline en bottom sheet.' },
+    'profile':      { title: 'Perfil', body: 'Usuario, equipo, rol, ajustes y logout. iOS Settings style.' },
+  }[screen] || {};
+
+  return (
+    <div style={{
+      width: 240, padding: 18, borderRadius: 18,
+      background: 'rgba(8,24,24,0.7)', border: '1px solid rgba(232,245,239,0.08)',
+      backdropFilter: 'blur(20px)',
+      position: 'sticky', top: 32,
+    }}>
+      <div style={{ fontSize: 10, letterSpacing: 3, color: 'rgba(232,245,239,0.4)',
+                    textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Notas</div>
+      <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: -0.2, marginBottom: 8 }}>{meta.title}</div>
+      <div style={{ fontSize: 13, color: 'rgba(232,245,239,0.6)', lineHeight: 1.5 }}>{meta.body}</div>
+
+      <div style={{ height: 1, background: 'rgba(232,245,239,0.08)', margin: '16px 0' }} />
+
+      <div style={{ fontSize: 10, letterSpacing: 3, color: 'rgba(232,245,239,0.4)',
+                    textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Sistema</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11,
+                    fontFamily: 'JetBrains Mono', color: 'rgba(232,245,239,0.7)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#030F0F',
+                          border: '1px solid rgba(232,245,239,0.15)' }} /> #030F0F
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#03624C' }} /> #03624C
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#00DF82',
+                          boxShadow: '0 0 6px #00DF8260' }} /> #00DF82
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(232,245,239,0.5)' }}>
+          Satoshi
+        </div>
+      </div>
+
+      <div style={{ height: 1, background: 'rgba(232,245,239,0.08)', margin: '16px 0' }} />
+
+      <div style={{ fontSize: 11, color: 'rgba(232,245,239,0.4)', lineHeight: 1.5 }}>
+        Roster: {players.length} jugadores · {players.filter(p=>p.avail).length} disp.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+</script>
+</body>
+</html>
