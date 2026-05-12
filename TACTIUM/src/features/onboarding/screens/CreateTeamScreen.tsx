@@ -166,6 +166,8 @@ export const CreateTeamScreen = ({
               onChangeText={setName}
               placeholder="Padel Club"
               placeholderTextColor={Colors.textFaint}
+              maxLength={50}
+              autoCapitalize="words"
               style={styles.nameInputField}
             />
           </View>

@@ -1,0 +1,281 @@
+/* =========================================================
+   TACTIUM · Design Tokens
+   Dark-only, monochromatic green, "elite lab" aesthetic.
+   ========================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
+:root {
+  /* ─── Backgrounds ────────────────────────────────────── */
+  --color-bg:          #030F0F;   /* Greenish-black base */
+  --color-bg-raised:   #081818;   /* Elevated surface */
+  --color-bg-card:     #0C2222;   /* Cards & modules */
+  --color-bg-card-2:   #0F2A28;   /* Card hover / second elevation */
+  --color-bg-overlay:  rgba(3, 15, 15, 0.72);
+
+  /* ─── Brand greens ───────────────────────────────────── */
+  --color-primary:     #03624C;   /* Institutional green (accent fills) */
+  --color-primary-dim: #02463A;
+  --color-accent:      #00DF82;   /* ⭐ TACTIUM green */
+  --color-accent-dim:  #00B86B;
+
+  /* ─── Text ───────────────────────────────────────────── */
+  --color-text:         #E8F5EF;
+  --color-text-muted:   rgba(232, 245, 239, 0.70);
+  --color-text-faint:   rgba(232, 245, 239, 0.50);
+  --color-text-inverse: #001810;
+
+  /* ─── Hairlines / borders ────────────────────────────── */
+  --color-hair:         rgba(232, 245, 239, 0.06);
+  --color-hair-strong:  rgba(232, 245, 239, 0.10);
+
+  /* ─── Semantic ───────────────────────────────────────── */
+  --color-success: #00DF82;
+  --color-warning: #F2C94C;
+  --color-error:   #FF6B6B;
+
+  /* ─── Accent tints (overlays / fills) ───────────────── */
+  --color-accent-10: rgba(0, 223, 130, 0.10);
+  --color-accent-15: rgba(0, 223, 130, 0.15);
+  --color-accent-25: rgba(0, 223, 130, 0.25);
+  --color-accent-40: rgba(0, 223, 130, 0.40);
+  --color-accent-55: rgba(0, 223, 130, 0.55);
+
+  /* ─── Typography stacks ─────────────────────────────── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* ─── Type scale (fluid mobile-first) ───────────────── */
+  --fs-display:  clamp(40px, 7vw, 88px);   /* hero */
+  --fs-h1:       clamp(32px, 5vw, 64px);
+  --fs-h2:       clamp(28px, 4vw, 48px);
+  --fs-h3:       18px;
+  --fs-body-lg:  18px;
+  --fs-body:     15px;
+  --fs-small:    13px;
+  --fs-eyebrow:  11px;
+  --fs-mono-sm:  10px;
+
+  /* ─── Tracking helpers ──────────────────────────────── */
+  --tracking-tight:   -0.02em;
+  --tracking-eyebrow: 0.25em;
+  --tracking-data:    0.10em;
+
+  /* ─── Radii ─────────────────────────────────────────── */
+  --r-sm:    8px;
+  --r-md:    12px;
+  --r-lg:    16px;
+  --r-xl:    24px;
+  --r-2xl:   28px;
+  --r-pill:  999px;
+  --r-phone: 42px;
+
+  /* ─── Spacing scale (multiples of 4) ────────────────── */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-12: 48px; --sp-16: 64px; --sp-20: 80px; --sp-24: 96px;
+  --sp-32: 128px;
+
+  /* ─── Elevations / shadows ─────────────────────────── */
+  --shadow-card-soft:
+    0 20px 50px -15px rgba(0, 0, 0, 0.60),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-card-strong:
+    0 50px 100px -20px rgba(0, 0, 0, 0.80),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-cta:
+    0 8px 24px -6px rgba(0, 223, 130, 0.40);
+  --shadow-cta-strong:
+    0 14px 40px -8px rgba(0, 223, 130, 0.55);
+  --shadow-inset-line:
+    inset 0 0 0 1px var(--color-hair);
+
+  /* ─── Glows ────────────────────────────────────────── */
+  --glow-accent-soft: 0 0 80px rgba(0, 223, 130, 0.18);
+  --glow-accent-hard: 0 0 40px rgba(0, 223, 130, 0.35);
+
+  /* ─── Motion ───────────────────────────────────────── */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out:    cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 460ms;
+
+  /* ─── Layout ───────────────────────────────────────── */
+  --container:     1152px;
+  --container-sm:  720px;
+  --pad-section:   clamp(64px, 8vw, 128px);
+}
+
+/* =========================================================
+   SEMANTIC ELEMENT STYLES
+   ========================================================= */
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-accent-40);
+  color: var(--color-text-inverse);
+}
+
+h1 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h1);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.05;
+  color: var(--color-text);
+  margin: 0;
+}
+h2 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h2);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.1;
+  color: var(--color-text);
+  margin: 0;
+}
+h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text);
+  margin: 0;
+}
+
+p { color: var(--color-text-muted); margin: 0; }
+
+.t-display {
+  font-size: var(--fs-display);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.02;
+}
+
+.t-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-eyebrow);
+  font-weight: 500;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-sm);
+  letter-spacing: var(--tracking-data);
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+}
+
+.t-muted  { color: var(--color-text-muted); }
+.t-faint  { color: var(--color-text-faint); }
+.t-accent { color: var(--color-accent); }
+
+code, pre, .data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: opacity var(--dur-fast) var(--ease-out-quart);
+}
+a:hover { opacity: 0.8; }
+
+/* =========================================================
+   COMPONENT RECIPES — reusable building blocks
+   ========================================================= */
+
+.surface-card {
+  background: var(--color-bg-card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card-soft);
+}
+
+.surface-card-elev {
+  background: var(--color-bg-card-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card-strong);
+}
+
+.btn-accent {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 16px;
+  padding: 16px 24px;
+  border-radius: var(--r-pill);
+  border: 0;
+  box-shadow: var(--shadow-cta);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out-quart),
+              box-shadow var(--dur-fast) var(--ease-out-quart);
+}
+.btn-accent:hover { box-shadow: var(--shadow-cta-strong); transform: translateY(-1px); }
+.btn-accent:active { transform: translateY(0); }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font-weight: 600;
+  padding: 14px 20px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--color-hair-strong);
+  cursor: pointer;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+.btn-ghost:hover { border-color: var(--color-accent-40); background: var(--color-accent-10); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-40);
+  background: var(--color-accent-10);
+}
+.badge-warn  { color: var(--color-warning); border-color: rgba(242,201,76,0.40); background: rgba(242,201,76,0.10); }
+.badge-error { color: var(--color-error);   border-color: rgba(255,107,107,0.40); background: rgba(255,107,107,0.10); }
+.badge-mute  { color: var(--color-text-faint); border-color: var(--color-hair-strong); background: transparent; }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -118,6 +118,41 @@ export type Database = {
         }
         Relationships: []
       }
+      lineup_variants: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          matchday_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label: string
+          matchday_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          matchday_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lineup_variants_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lineups: {
         Row: {
           court_number: number
@@ -176,41 +211,6 @@ export type Database = {
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "lineup_variants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      lineup_variants: {
-        Row: {
-          created_at: string
-          id: string
-          is_active: boolean
-          label: string
-          matchday_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          label: string
-          matchday_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          label?: string
-          matchday_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lineup_variants_matchday_id_fkey"
-            columns: ["matchday_id"]
-            isOneToOne: false
-            referencedRelation: "matchdays"
             referencedColumns: ["id"]
           },
         ]
@@ -375,6 +375,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          notifications_enabled: boolean
           updated_at: string
         }
         Insert: {
@@ -383,6 +384,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          notifications_enabled?: boolean
           updated_at?: string
         }
         Update: {
@@ -391,6 +393,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          notifications_enabled?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -444,6 +447,101 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subscription_events: {
+        Row: {
+          event_type: string
+          id: string
+          payload: Json
+          processed_at: string | null
+          received_at: string
+          subscription_id: string | null
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          payload: Json
+          processed_at?: string | null
+          received_at?: string
+          subscription_id?: string | null
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          subscription_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_events_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          billing_period: Database["public"]["Enums"]["subscription_billing_period"]
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string
+          current_period_start: string | null
+          id: string
+          original_transaction_id: string
+          payer_user_id: string
+          plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          platform: Database["public"]["Enums"]["subscription_platform"]
+          product_id: string
+          revenuecat_customer_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+          trial_end: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_period: Database["public"]["Enums"]["subscription_billing_period"]
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end: string
+          current_period_start?: string | null
+          id?: string
+          original_transaction_id: string
+          payer_user_id: string
+          plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          platform: Database["public"]["Enums"]["subscription_platform"]
+          product_id: string
+          revenuecat_customer_id: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+          trial_end?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_period?: Database["public"]["Enums"]["subscription_billing_period"]
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string | null
+          id?: string
+          original_transaction_id?: string
+          payer_user_id?: string
+          plan_tier?: Database["public"]["Enums"]["subscription_plan_tier"]
+          platform?: Database["public"]["Enums"]["subscription_platform"]
+          product_id?: string
+          revenuecat_customer_id?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          subject_id?: string
+          subject_type?: Database["public"]["Enums"]["subscription_subject_type"]
+          trial_end?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       team_invitations: {
         Row: {
@@ -579,7 +677,6 @@ export type Database = {
           created_at: string | null
           id: string | null
           matchday_id: string | null
-          variant_id: string | null
           pair_points: number | null
           player_a_id: string | null
           player_a_name: string | null
@@ -588,6 +685,7 @@ export type Database = {
           player_b_name: string | null
           player_b_pts: number | null
           updated_at: string | null
+          variant_id: string | null
         }
         Relationships: [
           {
@@ -611,10 +709,32 @@ export type Database = {
             referencedRelation: "players"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lineups_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "lineup_variants"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Functions: {
+      captain_unclaim_player: {
+        Args: { p_player_id: string }
+        Returns: {
+          active: boolean
+          available: boolean
+          created_at: string
+          id: string
+          name: string
+          position: Database["public"]["Enums"]["player_position"]
+          pts: number
+          team_id: string
+          updated_at: string
+          user_id: string | null
+        }
+      }
       claim_player: {
         Args: { p_player_id: string }
         Returns: {
@@ -629,12 +749,10 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
-        SetofOptions: {
-          from: "*"
-          to: "players"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+      }
+      clone_lineup_variant_pairs: {
+        Args: { p_source_variant_id: string; p_target_variant_id: string }
+        Returns: undefined
       }
       close_matchday: {
         Args: { target_matchday: string }
@@ -655,12 +773,6 @@ export type Database = {
           status: Database["public"]["Enums"]["matchday_status"]
           updated_at: string
         }
-        SetofOptions: {
-          from: "*"
-          to: "matchdays"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       create_team_invitation: {
         Args: {
@@ -678,12 +790,10 @@ export type Database = {
           used_at: string | null
           used_by: string | null
         }
-        SetofOptions: {
-          from: "*"
-          to: "team_invitations"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+      }
+      fn_has_premium_access: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: boolean
       }
       list_unclaimed_players: {
         Args: { p_team_id: string }
@@ -699,12 +809,6 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }[]
-        SetofOptions: {
-          from: "*"
-          to: "players"
-          isOneToOne: false
-          isSetofReturn: true
-        }
       }
       redeem_team_invitation: {
         Args: { invitation_code: string }
@@ -719,16 +823,21 @@ export type Database = {
           used_at: string | null
           used_by: string | null
         }
-        SetofOptions: {
-          from: "*"
-          to: "team_invitations"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       renumber_season_matchdays: {
         Args: { target_season: string }
         Returns: undefined
+      }
+      set_active_lineup_variant: {
+        Args: { p_variant_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          matchday_id: string
+          updated_at: string
+        }
       }
       set_player_self_availability: {
         Args: { p_available: boolean; p_player_id: string }
@@ -743,12 +852,6 @@ export type Database = {
           team_id: string
           updated_at: string
           user_id: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "players"
-          isOneToOne: true
-          isSetofReturn: false
         }
       }
       unclaim_player: {
@@ -765,56 +868,8 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
-        SetofOptions: {
-          from: "*"
-          to: "players"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      captain_unclaim_player: {
-        Args: { p_player_id: string }
-        Returns: {
-          active: boolean
-          available: boolean
-          created_at: string
-          id: string
-          name: string
-          position: Database["public"]["Enums"]["player_position"]
-          pts: number
-          team_id: string
-          updated_at: string
-          user_id: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "players"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       whoami: { Args: never; Returns: Json }
-      set_active_lineup_variant: {
-        Args: { p_variant_id: string }
-        Returns: {
-          created_at: string
-          id: string
-          is_active: boolean
-          label: string
-          matchday_id: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "lineup_variants"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      clone_lineup_variant_pairs: {
-        Args: { p_source_variant_id: string; p_target_variant_id: string }
-        Returns: undefined
-      }
     }
     Enums: {
       club_role: "admin"
@@ -822,6 +877,20 @@ export type Database = {
       matchday_status: "upcoming" | "in_progress" | "finished"
       player_position: "Drive" | "Revés" | "Ambos"
       season_phase: "liga" | "playoff" | "mixto"
+      subscription_billing_period: "monthly" | "yearly"
+      subscription_plan_tier:
+        | "captain"
+        | "club_starter"
+        | "club_pro"
+        | "club_elite"
+      subscription_platform: "ios" | "android" | "web"
+      subscription_status:
+        | "trialing"
+        | "active"
+        | "grace_period"
+        | "canceled"
+        | "expired"
+      subscription_subject_type: "user" | "club"
       team_gender: "masculino" | "femenino" | "mixto"
       team_role: "captain" | "admin" | "player"
     }
@@ -956,6 +1025,22 @@ export const Constants = {
       matchday_status: ["upcoming", "in_progress", "finished"],
       player_position: ["Drive", "Revés", "Ambos"],
       season_phase: ["liga", "playoff", "mixto"],
+      subscription_billing_period: ["monthly", "yearly"],
+      subscription_plan_tier: [
+        "captain",
+        "club_starter",
+        "club_pro",
+        "club_elite",
+      ],
+      subscription_platform: ["ios", "android", "web"],
+      subscription_status: [
+        "trialing",
+        "active",
+        "grace_period",
+        "canceled",
+        "expired",
+      ],
+      subscription_subject_type: ["user", "club"],
       team_gender: ["masculino", "femenino", "mixto"],
       team_role: ["captain", "admin", "player"],
     },

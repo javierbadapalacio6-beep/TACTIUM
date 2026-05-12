@@ -169,7 +169,9 @@ export const SeasonDetailScreen = ({
           </Pressable>
           <Pressable
             onPress={() => setAdding(true)}
-            hitSlop={6}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Añadir jornada"
             style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
           >
             <IconPlus size={16} color={Colors.accent} />
@@ -621,7 +623,46 @@ const EditMatchdaySheet: React.FC<{
   };
 
   return (
-    <BottomSheet open onClose={onClose}>
+    <BottomSheet
+      open
+      onClose={onClose}
+      footer={
+        // Sticky al fondo del sheet (con paddingBottom + safe-area aplicado
+        // por el propio BottomSheet) → los botones ya no se cortan abajo.
+        <View style={styles.sheetActions}>
+          <Pressable
+            onPress={confirmDelete}
+            disabled={deleting}
+            style={({ pressed }) => [
+              styles.deleteBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            {deleting ? (
+              <ActivityIndicator color={Colors.error} size="small" />
+            ) : (
+              <Text style={styles.deleteBtnLabel}>Eliminar</Text>
+            )}
+          </Pressable>
+          <Pressable
+            disabled={submitting || !opponent.trim()}
+            onPress={save}
+            style={({ pressed }) => [
+              styles.sheetCta,
+              { flex: 2 },
+              (submitting || !opponent.trim()) && { opacity: 0.4 },
+              pressed && !submitting && { opacity: 0.85 },
+            ]}
+          >
+            {submitting ? (
+              <ActivityIndicator color={Colors.textInverse} />
+            ) : (
+              <Text style={styles.sheetCtaLabel}>Guardar</Text>
+            )}
+          </Pressable>
+        </View>
+      }
+    >
       <Text style={styles.sheetEyebrow}>EDITAR</Text>
       <Text style={styles.sheetTitle}>
         J{String(m.jornada_number).padStart(2, '0')} — {m.opponent}
@@ -684,33 +725,6 @@ const EditMatchdaySheet: React.FC<{
         label="HORA DEL PARTIDO"
         allowClear
       />
-
-
-      <View style={styles.sheetActions}>
-        <Pressable
-          onPress={confirmDelete}
-          disabled={deleting}
-          style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.7 }]}
-        >
-          {deleting
-            ? <ActivityIndicator color={Colors.error} size="small" />
-            : <Text style={styles.deleteBtnLabel}>Eliminar</Text>}
-        </Pressable>
-        <Pressable
-          disabled={submitting || !opponent.trim()}
-          onPress={save}
-          style={({ pressed }) => [
-            styles.sheetCta,
-            { flex: 2 },
-            (submitting || !opponent.trim()) && { opacity: 0.4 },
-            pressed && !submitting && { opacity: 0.85 },
-          ]}
-        >
-          {submitting
-            ? <ActivityIndicator color={Colors.textInverse} />
-            : <Text style={styles.sheetCtaLabel}>Guardar</Text>}
-        </Pressable>
-      </View>
     </BottomSheet>
   );
 };
@@ -1079,11 +1093,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  // Sheet actions
+  // Sheet actions — el `marginTop` ya no es necesario porque ahora
+  // viven en el `footer` sticky del BottomSheet (que aplica su propio
+  // padding superior + bordeTop).
   sheetActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 16,
   },
   deleteBtn: {
     flex: 1,

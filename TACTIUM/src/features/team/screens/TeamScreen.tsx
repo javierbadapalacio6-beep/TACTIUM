@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -7,6 +8,7 @@ import {
   ScrollView,
   TextInput,
 } from 'react-native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@core/theme/colors';
@@ -22,6 +24,14 @@ import {
   Toggle,
 } from '@components/ui';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
+import { toast } from '@store/toastStore';
+import {
+  NAME_MAX_LENGTH,
+  isValidName,
+  normalizeName,
+  parsePts,
+  sanitizePtsInput,
+} from '@core/utils/validation';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 
 const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
@@ -50,6 +60,21 @@ export const TeamScreen = () => {
     }
   };
 
+  // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
+  // desde otra pantalla (tab o stack nested).
+  const scrollRef = useRef<ScrollView | null>(null);
+  useScrollToTop(scrollRef);
+  const didMountRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMountRef.current) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      } else {
+        didMountRef.current = true;
+      }
+    }, []),
+  );
+
   const sorted = useMemo(
     () => [...players].sort((a, b) => b.pts - a.pts),
     [players],
@@ -59,6 +84,7 @@ export const TeamScreen = () => {
   );
   const totalPts = players.reduce((a, p) => a + p.pts, 0);
   const avg = players.length ? Math.round(totalPts / players.length) : 0;
+
 
   return (
     <View style={styles.root}>
@@ -77,7 +103,9 @@ export const TeamScreen = () => {
           </Pressable>
           <Pressable
             onPress={() => setAdding(true)}
-            hitSlop={6}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Añadir jugador"
             style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
           >
             <IconPlus size={16} color={Colors.accent} />
@@ -115,15 +143,79 @@ export const TeamScreen = () => {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 22 },
+          // Reserva el alto del tab bar flotante (~64) + offset (12) + colchón (32)
+          // para que el último item no quede pegado al pill cristal.
+          { paddingBottom: insets.bottom + 64 + 12 + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.list}>
           {shown.length === 0 ? (
-            <Text style={styles.empty}>Ningún jugador encontrado</Text>
+            players.length === 0 ? (
+              // Empty real: equipo sin jugadores. Mostramos CTAs para
+              // que la primera acción sea evidente.
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Plantilla vacía</Text>
+                <Text style={styles.emptySubtitle}>
+                  Añade jugadores manualmente o escanea un ranking FEP para
+                  importarlos.
+                </Text>
+                <View style={styles.emptyActions}>
+                  <Pressable
+                    onPress={() => setAdding(true)}
+                    style={({ pressed }) => [
+                      styles.emptyCtaPrimary,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Añadir jugador"
+                  >
+                    <IconPlus size={14} color={Colors.textInverse} />
+                    <Text style={styles.emptyCtaPrimaryLabel}>
+                      Añadir jugador
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setScanning(true)}
+                    style={({ pressed }) => [
+                      styles.emptyCtaSecondary,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Escanear ranking"
+                  >
+                    <Text style={styles.emptyCtaSecondaryLabel}>
+                      Escanear ranking
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              // Hay jugadores pero el filtro no devuelve nada → sugerir
+              // limpiar búsqueda.
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Sin coincidencias</Text>
+                <Text style={styles.emptySubtitle}>
+                  Ningún jugador coincide con "{search}".
+                </Text>
+                <Pressable
+                  onPress={() => setSearch('')}
+                  style={({ pressed }) => [
+                    styles.emptyCtaSecondary,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Limpiar búsqueda"
+                >
+                  <Text style={styles.emptyCtaSecondaryLabel}>
+                    Limpiar búsqueda
+                  </Text>
+                </Pressable>
+              </View>
+            )
           ) : (
             shown.map((p, i) => (
               <Pressable
@@ -131,7 +223,7 @@ export const TeamScreen = () => {
                 onPress={() => setEditing(p)}
                 style={({ pressed }) => [
                   styles.row,
-                  i < shown.length - 1 && styles.rowDivider,
+                  i < shown.length - 1 && styles.rowDividerInline,
                   pressed && { opacity: 0.85 },
                 ]}
               >
@@ -182,12 +274,33 @@ export const TeamScreen = () => {
         player={editing}
         onClose={() => setEditing(null)}
         onSave={(patch) => {
-          if (editing) updatePlayer(editing.id, patch);
+          if (editing) {
+            updatePlayer(editing.id, patch);
+            toast.success('Jugador actualizado', editing.name);
+          }
           setEditing(null);
         }}
         onRemove={() => {
-          if (editing) removePlayer(editing.id);
-          setEditing(null);
+          // Confirmación destructiva antes de borrar — el botón estaba
+          // disparando remove directamente sin preguntar.
+          if (!editing) return;
+          const target = editing;
+          Alert.alert(
+            'Eliminar jugador',
+            `Vas a borrar a "${target.name}" de la plantilla. Esta acción no se puede deshacer.`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Eliminar',
+                style: 'destructive',
+                onPress: () => {
+                  removePlayer(target.id);
+                  toast.success('Jugador eliminado', target.name);
+                  setEditing(null);
+                },
+              },
+            ],
+          );
         }}
       />
 
@@ -195,9 +308,17 @@ export const TeamScreen = () => {
         open={adding}
         onClose={() => setAdding(false)}
         onAdd={(data) => {
-          addPlayer({ ...data, available: true }).catch((e) => {
-            console.warn('addPlayer failed', e);
-          });
+          addPlayer({ ...data, available: true })
+            .then(() => {
+              toast.success(`Jugador añadido`, data.name);
+            })
+            .catch((e: any) => {
+              console.warn('addPlayer failed', e);
+              toast.error(
+                'No se pudo añadir el jugador',
+                e?.message ?? 'Inténtalo de nuevo.',
+              );
+            });
           setAdding(false);
         }}
       />
@@ -270,15 +391,20 @@ const EditPlayerSheet: React.FC<EditProps> = ({
             <Text style={styles.removeBtnText}>Eliminar</Text>
           </Pressable>
           <Pressable
+            disabled={!isValidName(name)}
             onPress={() =>
               onSave({
-                name,
-                pts: parseInt(pts, 10) || 0,
+                name: normalizeName(name),
+                pts: parsePts(pts),
                 position: pos,
                 available: avail,
               })
             }
-            style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              !isValidName(name) && { opacity: 0.4 },
+              pressed && isValidName(name) && { opacity: 0.85 },
+            ]}
           >
             <Text style={styles.saveBtnText}>Guardar</Text>
           </Pressable>
@@ -292,6 +418,8 @@ const EditPlayerSheet: React.FC<EditProps> = ({
         <TextInput
           value={name}
           onChangeText={setName}
+          maxLength={NAME_MAX_LENGTH}
+          autoCapitalize="words"
           style={styles.sheetInput}
           placeholderTextColor={Colors.textFaint}
         />
@@ -299,8 +427,9 @@ const EditPlayerSheet: React.FC<EditProps> = ({
       <FormRow label="PUNTOS FEP">
         <TextInput
           value={pts}
-          onChangeText={(v) => setPts(v.replace(/[^0-9]/g, ''))}
+          onChangeText={(v) => setPts(sanitizePtsInput(v))}
           keyboardType="number-pad"
+          maxLength={4}
           style={[styles.sheetInput, { fontFamily: Fonts.mono }]}
           placeholderTextColor={Colors.textFaint}
         />
@@ -372,12 +501,18 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
       onClose={onClose}
       footer={
         <Pressable
-          disabled={!name}
-          onPress={() => onAdd({ name, pts: parseInt(pts, 10) || 0, position: pos })}
+          disabled={!isValidName(name)}
+          onPress={() =>
+            onAdd({
+              name: normalizeName(name),
+              pts: parsePts(pts),
+              position: pos,
+            })
+          }
           style={({ pressed }) => [
             styles.saveBtnFull,
-            !name && { opacity: 0.4 },
-            pressed && name && { opacity: 0.85 },
+            !isValidName(name) && { opacity: 0.4 },
+            pressed && isValidName(name) && { opacity: 0.85 },
           ]}
         >
           <Text style={styles.saveBtnText}>Añadir al equipo</Text>
@@ -392,6 +527,8 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
           value={name}
           onChangeText={setName}
           autoFocus
+          maxLength={NAME_MAX_LENGTH}
+          autoCapitalize="words"
           placeholder="Player 13"
           style={styles.sheetInput}
           placeholderTextColor={Colors.textFaint}
@@ -400,8 +537,9 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
       <FormRow label="PUNTOS FEP">
         <TextInput
           value={pts}
-          onChangeText={(v) => setPts(v.replace(/[^0-9]/g, ''))}
+          onChangeText={(v) => setPts(sanitizePtsInput(v))}
           keyboardType="number-pad"
+          maxLength={4}
           style={[styles.sheetInput, { fontFamily: Fonts.mono }]}
         />
       </FormRow>
@@ -565,7 +703,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  rowDivider: {
+  rowDividerInline: {
     borderBottomWidth: 1,
     borderColor: Colors.hair,
   },
@@ -629,6 +767,63 @@ const styles = StyleSheet.create({
     color: Colors.textFaint,
     textAlign: 'center',
     fontSize: 13,
+  },
+  emptyState: {
+    paddingVertical: 36,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    gap: 10,
+  },
+  emptyTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  emptySubtitle: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  emptyCtaPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.accent,
+  },
+  emptyCtaPrimaryLabel: {
+    color: Colors.textInverse,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  emptyCtaSecondary: {
+    paddingHorizontal: 16,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCtaSecondaryLabel: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   sheetEyebrow: {
     fontFamily: Fonts.mono,

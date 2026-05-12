@@ -34,7 +34,14 @@ export {
   IconShare,
   IconPin,
   IconPencil,
+  IconCamera,
+  IconImage,
+  IconFile,
 } from './Icon';
 export { DateField, TimeField, dateToIsoDate, dateToIsoTime, isoDateToDate, isoTimeToDate } from './DateTimeField';
 export { TeamSwitcher } from './TeamSwitcher';
 export { ScanSheet } from './ScanSheet';
+export { ToastHost } from './Toast';
+export { OfflineBanner } from './OfflineBanner';
+export { PremiumGateButton } from './PremiumGateButton';
+export { TrialExpiringBanner } from './TrialExpiringBanner';

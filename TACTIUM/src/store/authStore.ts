@@ -20,6 +20,7 @@ interface AuthState {
     password: string,
     fullName?: string,
   ) => Promise<{ error?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   markWelcomeSeen: () => void;
   setAuthError: (msg: string | null) => void;
@@ -36,30 +37,21 @@ export const useAuthStore = create<AuthState>()(
       authError: null,
 
       hydrate: async () => {
-        if (__DEV__) {
-          // En dev: no restauramos sesión y forzamos volver a ver el onboarding.
-          // Si hay una sesión previa guardada (de antes de desactivar persist),
-          // la limpiamos para que el siguiente arranque sea consistente.
-          try {
-            await supabase.auth.signOut();
-          } catch {
-            /* sin sesión previa, sigue */
-          }
-          set({
-            session: null,
-            user: null,
-            isAuthenticated: false,
-            isHydrating: false,
-            hasSeenWelcome: false,
-          });
-          supabase.auth.onAuthStateChange((_event, session) => {
-            set({
-              session,
-              user: session?.user ?? null,
-              isAuthenticated: !!session,
+        // Restaura la sesión persistida por Supabase (AsyncStorage) y
+        // suscribe cambios. Idéntico en dev y prod: el splash/onboarding
+        // sólo debe verse la PRIMERA vez (controlado por `hasSeenWelcome`).
+        //
+        // Esperamos también la hidratación de zustand-persist para que
+        // `hasSeenWelcome` esté ya cargado antes de quitar el loader,
+        // si no AuthStack vería false momentáneamente y montaría Welcome
+        // en vez de Login.
+        if (!useAuthStore.persist.hasHydrated()) {
+          await new Promise<void>((resolve) => {
+            const unsub = useAuthStore.persist.onFinishHydration(() => {
+              unsub();
+              resolve();
             });
           });
-          return;
         }
 
         const { data } = await supabase.auth.getSession();
@@ -103,6 +95,16 @@ export const useAuthStore = create<AuthState>()(
         return {};
       },
 
+      sendPasswordReset: async (email) => {
+        // Dispara el email de reset de Supabase. Sin redirectTo: el usuario
+        // recibe un link que abre la consola web de Supabase para fijar
+        // nueva contraseña. Más adelante podemos usar deep links + un
+        // ResetPasswordScreen propio si se quiere flujo 100% in-app.
+        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        if (error) return { error: error.message };
+        return {};
+      },
+
       signOut: async () => {
         await supabase.auth.signOut();
         set({ session: null, user: null, isAuthenticated: false });
@@ -114,10 +116,10 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'tactium-auth-prefs',
       storage: createJSONStorage(() => AsyncStorage),
-      // En dev no persistimos nada para que el splash/onboarding aparezca siempre.
-      partialize: __DEV__
-        ? () => ({} as Partial<AuthState>)
-        : (s) => ({ hasSeenWelcome: s.hasSeenWelcome }),
+      // Persistimos `hasSeenWelcome` para que el splash/onboarding sólo
+      // aparezca la primera vez que el usuario abre la app. Sesión (token)
+      // la gestiona Supabase directamente vía su propio storage adapter.
+      partialize: (s) => ({ hasSeenWelcome: s.hasSeenWelcome }),
     },
   ),
 );

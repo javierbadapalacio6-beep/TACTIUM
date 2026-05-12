@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Text colors</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:24px;background:var(--color-bg);display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .sw{height:120px;border-radius:14px;background:var(--color-bg-card);box-shadow:var(--shadow-inset-line);padding:14px;display:flex;flex-direction:column;justify-content:space-between;}
+  .top{font-family:var(--font-sans);font-size:18px;font-weight:600;}
+  .label{font-family:var(--font-mono);font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--color-text-faint);}
+</style></head><body>
+  <div class="sw"><div class="top" style="color:#E8F5EF">Aa · El laboratorio</div><div class="label">Text · #E8F5EF</div></div>
+  <div class="sw"><div class="top" style="color:rgba(232,245,239,0.70)">Aa · subtítulo apagado</div><div class="label">Text muted · 70%</div></div>
+  <div class="sw"><div class="top" style="color:rgba(232,245,239,0.50)">Aa · hint sutil</div><div class="label">Text faint · 50%</div></div>
+  <div class="sw" style="background:var(--color-accent);"><div class="top" style="color:#001810">Aa · CTA</div><div class="label" style="color:rgba(0,24,16,0.65)">Inverse · #001810</div></div>
+</body></html>

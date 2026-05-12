@@ -190,9 +190,12 @@ export const IconSearch = make(16, ({ color, strokeWidth }) => (
 ));
 
 export const IconApple = ({ size = 18, color = '#000' }: IconProps) => (
-  <Svg width={size} height={size} viewBox="0 0 18 18">
+  // viewBox 0 0 24 24 con el logo bien centrado y la hoja sin cortar.
+  // El logo anterior tenía coordenadas negativas (la hoja) que el viewBox
+  // 0 0 18 18 recortaba arriba.
+  <Svg width={size} height={size} viewBox="0 0 24 24">
     <Path
-      d="M14.5 9.5c0-2.4 2-3.5 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9s-2-.9-3.2-.9c-1.7 0-3.2 1-4.1 2.5-1.7 3-.4 7.5 1.3 9.9.8 1.2 1.8 2.5 3.1 2.5s1.7-.8 3.2-.8 1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.7-1-2.7-4.2zM12.1 2.6c.7-.8 1.1-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"
+      d="M17.05 12.04c-.02-2.13 1.74-3.16 1.82-3.21-.99-1.45-2.54-1.65-3.09-1.67-1.32-.13-2.57.78-3.24.78-.67 0-1.7-.76-2.79-.74-1.44.02-2.77.84-3.51 2.13-1.49 2.59-.38 6.43 1.07 8.53.71 1.03 1.55 2.18 2.66 2.14 1.07-.04 1.47-.69 2.76-.69 1.29 0 1.65.69 2.78.67 1.15-.02 1.88-1.04 2.59-2.07.81-1.19 1.15-2.34 1.17-2.4-.03-.01-2.24-.86-2.22-3.47zM14.92 5.59c.59-.71 1-1.7.89-2.69-.86.04-1.91.57-2.52 1.28-.55.63-1.04 1.65-.91 2.62.96.07 1.94-.49 2.54-1.21z"
       fill={color}
     />
   </Svg>
@@ -321,6 +324,72 @@ export const IconTrash = make(14, ({ color, strokeWidth }) => (
       strokeLinecap="round"
       strokeLinejoin="round"
       fill="none"
+    />
+  </>
+));
+
+export const IconCamera = make(18, ({ color, strokeWidth }) => (
+  <>
+    <Path
+      d="M3 8.5h3l1.5-2h9l1.5 2h3v10.5H3v-10.5z"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <Circle cx="12" cy="13" r="3.4" stroke={color} strokeWidth={strokeWidth} />
+  </>
+));
+
+export const IconImage = make(18, ({ color, strokeWidth }) => (
+  <>
+    <Rect
+      x="3.5"
+      y="4.5"
+      width="17"
+      height="15"
+      rx="2.5"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      fill="none"
+    />
+    <Circle cx="8.5" cy="9.5" r="1.6" stroke={color} strokeWidth={strokeWidth} />
+    <Path
+      d="M5 17l4.5-4.5 4 4 3-2.5L20 18"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </>
+));
+
+export const IconFile = make(18, ({ color, strokeWidth }) => (
+  <>
+    {/* Hoja con esquina doblada — usado para indicar archivos genéricos
+        (PDF / Word / Excel / TXT) en el ScanSheet. */}
+    <Path
+      d="M7 3h7l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <Path
+      d="M14 3v4h4"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <Path
+      d="M9 13h6M9 17h4"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
     />
   </>
 ));

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@core/theme/colors';
@@ -75,6 +75,21 @@ export const ClubDashboardScreen = ({
     }, [reload]),
   );
 
+  // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
+  // desde otra pantalla (tab o stack nested).
+  const scrollRef = useRef<ScrollView | null>(null);
+  useScrollToTop(scrollRef);
+  const didMountRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMountRef.current) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      } else {
+        didMountRef.current = true;
+      }
+    }, []),
+  );
+
   const openManage = (teamId: string, teamName: string) => {
     setMembersSheet({ teamId, teamName });
   };
@@ -106,9 +121,13 @@ export const ClubDashboardScreen = ({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 24 },
+          // Tab bar flotante: ~64px alto + 12px bottom offset + safe-area.
+          // Sumamos colchón visual de 32px para que el último equipo no
+          // quede pegado al pill cristal.
+          { paddingBottom: insets.bottom + 64 + 12 + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -169,7 +188,13 @@ export const ClubDashboardScreen = ({
             ) : null}
 
             {/* EQUIPOS */}
-            <SectionHeader label="EQUIPOS" count={overviews.length} padded />
+            <SectionHeader
+              label="EQUIPOS"
+              count={overviews.length}
+              padded
+              onAdd={() => navigation.navigate('CreateTeamFromClub')}
+              addLabel="Crear nuevo equipo"
+            />
             {overviews.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>Aún no hay equipos</Text>
@@ -189,14 +214,6 @@ export const ClubDashboardScreen = ({
                 ))}
               </View>
             )}
-
-            <Pressable
-              onPress={() => navigation.navigate('CreateTeamFromClub')}
-              style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
-            >
-              <IconPlus size={16} color={Colors.accent} />
-              <Text style={styles.ctaLabel}>Crear nuevo equipo</Text>
-            </Pressable>
           </>
         )}
       </ScrollView>
@@ -216,7 +233,9 @@ const SectionHeader: React.FC<{
   label: string;
   count: number;
   padded?: boolean;
-}> = ({ label, count, padded }) => (
+  onAdd?: () => void;
+  addLabel?: string;
+}> = ({ label, count, padded, onAdd, addLabel }) => (
   <View
     style={[
       styles.sectionHeader,
@@ -224,7 +243,23 @@ const SectionHeader: React.FC<{
     ]}
   >
     <Text style={styles.sectionLabel}>{label}</Text>
-    <Text style={styles.sectionCount}>{String(count).padStart(2, '0')}</Text>
+    <View style={styles.sectionRight}>
+      <Text style={styles.sectionCount}>{String(count).padStart(2, '0')}</Text>
+      {onAdd ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={addLabel ?? 'Añadir'}
+          onPress={onAdd}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.sectionAddBtn,
+            pressed && { opacity: 0.75 },
+          ]}
+        >
+          <IconPlus size={14} color={Colors.accent} />
+        </Pressable>
+      ) : null}
+    </View>
   </View>
 );
 
@@ -348,6 +383,8 @@ const TeamRow: React.FC<{
   return (
     <Pressable
       onPress={onManage}
+      accessibilityRole="button"
+      accessibilityLabel={`Gestionar equipo ${team.name}. ${meta}. ${playersCount} ${playersCount === 1 ? 'jugador' : 'jugadores'}.`}
       style={({ pressed }) => [
         styles.row,
         last ? null : styles.rowDivider,
@@ -482,6 +519,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textFaint,
     letterSpacing: 1,
+  },
+  sectionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionAddBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   hScrollContent: {

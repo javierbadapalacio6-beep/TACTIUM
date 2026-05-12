@@ -5,18 +5,17 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './config';
 import type { Database } from './database.types';
 
-// En desarrollo NO persistimos la sesión: facilita iterar sobre onboarding
-// y flujos de auth sin tener que cerrar sesión manualmente cada vez.
-const persistSession = !__DEV__;
-
+// Persistimos sesión en todos los entornos (dev y prod): el usuario sólo
+// debe iniciar sesión una vez. Para volver al onboarding/login en dev,
+// usa `signOut()` desde el perfil o limpia AsyncStorage manualmente.
 export const supabase = createClient<Database>(
   SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY,
   {
     auth: {
       storage: AsyncStorage,
-      autoRefreshToken: persistSession,
-      persistSession,
+      autoRefreshToken: true,
+      persistSession: true,
       detectSessionInUrl: false,
     },
   },

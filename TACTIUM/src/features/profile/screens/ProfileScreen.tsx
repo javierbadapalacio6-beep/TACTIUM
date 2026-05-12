@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,10 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
+import { useFocusEffect, useNavigation, useScrollToTop } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -15,17 +18,22 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconChevron, NeonDot, AmbientBackdrop } from '@components/ui';
+import { IconChevron, NeonDot, AmbientBackdrop, Toggle } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
+import { useSubscriptionStore } from '@store/subscriptionStore';
+import { toast } from '@store/toastStore';
+import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as PlayersApi from '@core/services/players';
+import * as ProfileApi from '@core/services/profile';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import type { Database } from '@core/supabase/database.types';
+import type { RootStackParamList } from '@navigation/types';
 
 type TeamRole = Database['public']['Enums']['team_role'];
 
@@ -37,7 +45,10 @@ const ROLE_LABEL: Record<TeamRole, string> = {
 
 export const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user    = useAuthStore((s) => s.user);
+  const userId  = useAuthStore((s) => s.user?.id ?? null);
   const signOut = useAuthStore((s) => s.signOut);
   const team    = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
@@ -60,11 +71,69 @@ export const ProfileScreen = () => {
   const [redeemOpen, setRedeemOpen]     = useState(false);
   const [claimOpen, setClaimOpen]       = useState(false);
   const [unlinking, setUnlinking]       = useState(false);
+  // Notificaciones: state local sincronizado con profiles.notifications_enabled.
+  // Optimistic on toggle, revert on error.
+  const [notifEnabled, setNotifEnabled] = useState<boolean | null>(null);
+  const [notifSaving, setNotifSaving]   = useState(false);
+
+  // Hidratamos el flag desde DB al montar.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await ProfileApi.fetchMyProfile();
+        if (!cancelled) setNotifEnabled(p?.notifications_enabled ?? true);
+      } catch {
+        if (!cancelled) setNotifEnabled(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggleNotifications = async (next: boolean) => {
+    if (notifSaving) return;
+    setNotifEnabled(next); // optimistic
+    setNotifSaving(true);
+    try {
+      await ProfileApi.setNotificationsEnabled(next);
+    } catch (e: any) {
+      setNotifEnabled(!next); // revert
+      toast.error(
+        'No se pudo guardar',
+        e?.message ?? 'Inténtalo de nuevo.',
+      );
+    } finally {
+      setNotifSaving(false);
+    }
+  };
+
+  const openExternalUrl = (url: string) => {
+    Linking.openURL(url).catch(() =>
+      toast.error('No se pudo abrir', 'Comprueba tu conexión.'),
+    );
+  };
 
   const isPlayer = activeRole === 'player';
   const myPlayer = useMemo(
     () => (myPlayerId ? players.find((p) => p.id === myPlayerId) ?? null : null),
     [myPlayerId, players],
+  );
+
+  // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
+  // desde otra pantalla (tab o stack nested).
+  const scrollRef = useRef<ScrollView | null>(null);
+  useScrollToTop(scrollRef);
+  const didMountRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMountRef.current) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      } else {
+        didMountRef.current = true;
+      }
+    }, []),
   );
 
   const handleUnlink = () => {
@@ -158,7 +227,13 @@ export const ProfileScreen = () => {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 22 }]}
+        ref={scrollRef}
+        contentContainerStyle={[
+          styles.scroll,
+          // Reserva el alto del tab bar flotante (~64) + offset (12) + colchón (32)
+          // para que el último item no quede pegado al pill cristal.
+          { paddingBottom: insets.bottom + 64 + 12 + 32 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Avatar */}
@@ -311,6 +386,14 @@ export const ProfileScreen = () => {
           </>
         ) : null}
 
+        {/* Suscripción */}
+        <SubscriptionCard
+          activeRole={activeRole}
+          userId={userId}
+          onPressUser={() => navigation.navigate('Subscription')}
+          onPressClub={() => navigation.navigate('ClubBilling')}
+        />
+
         {/* Invitaciones */}
         <Text style={styles.sectionLabel}>INVITACIONES</Text>
         <Pressable
@@ -336,19 +419,31 @@ export const ProfileScreen = () => {
         <Text style={styles.sectionLabel}>CUENTA</Text>
         <SettingsList
           items={[
-            { label: 'Notificaciones', detail: 'Activadas' },
-            { label: 'Apariencia',     detail: 'Oscuro' },
-            { label: 'Idioma',         detail: 'Español' },
-            { label: 'Privacidad',     detail: '' },
+            {
+              label: 'Notificaciones',
+              trailing: 'toggle',
+              value: notifEnabled ?? true,
+              onToggle: handleToggleNotifications,
+              accessibilityLabel: 'Activar o desactivar notificaciones push',
+            },
+            { label: 'Apariencia', detail: 'Oscuro', trailing: 'soon' },
+            { label: 'Idioma', detail: 'Español', trailing: 'soon' },
+            { label: 'Privacidad', trailing: 'soon' },
           ]}
         />
 
         <Text style={styles.sectionLabel}>SOPORTE</Text>
         <SettingsList
           items={[
-            { label: 'Centro de ayuda',       detail: '' },
-            { label: 'Términos y privacidad', detail: '' },
-            { label: 'Versión',               detail: '1.0.0', noChevron: true },
+            {
+              label: 'Centro de ayuda',
+              onPress: () => openExternalUrl('https://tactium.app/help'),
+            },
+            {
+              label: 'Términos y privacidad',
+              onPress: () => openExternalUrl('https://tactium.app/legal'),
+            },
+            { label: 'Versión', detail: '1.0.0', trailing: 'static' },
           ]}
         />
 
@@ -388,25 +483,211 @@ const ProfileStat: React.FC<{ label: string; value: string; highlight?: boolean 
   </View>
 );
 
-interface SettingItem { label: string; detail?: string; noChevron?: boolean; }
+// ─── SubscriptionCard ──────────────────────────────────────────────────────
+// Resume el estado de la suscripción del user + entry-point a la pantalla
+// de gestión. Para club_admin lleva a `ClubBillingScreen`; para el resto a
+// `SubscriptionScreen`. Si no hay sub activa, el copy invita a probar Pro.
+const SubscriptionCard: React.FC<{
+  activeRole: ActiveRole | null;
+  userId: string | null;
+  onPressUser: () => void;
+  onPressClub: () => void;
+}> = ({ activeRole, userId, onPressUser, onPressClub }) => {
+  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
+
+  // Sub activa propia o del club: mostramos lo más relevante.
+  const activeSub = React.useMemo(() => {
+    const candidates = subscriptions.filter((s) =>
+      PREMIUM_STATUSES.includes(s.status),
+    );
+    // Preferimos sub de club si el user es club_admin.
+    if (activeRole === 'club_admin') {
+      return (
+        candidates.find((s) => s.subject_type === 'club') ??
+        candidates.find((s) => s.subject_type === 'user' && s.subject_id === userId) ??
+        null
+      );
+    }
+    return (
+      candidates.find((s) => s.subject_type === 'user' && s.subject_id === userId) ??
+      candidates.find((s) => s.subject_type === 'club') ??
+      null
+    );
+  }, [subscriptions, activeRole, userId]);
+
+  const plan = activeSub ? PLAN_BY_TIER[activeSub.plan_tier] : null;
+  const isClubAdmin = activeRole === 'club_admin';
+  const onPress = isClubAdmin ? onPressClub : onPressUser;
+
+  // Días restantes si la sub está en trial. `null` si no aplica.
+  // Usamos `trial_end` cuando exista, si no caemos a `current_period_end`
+  // (en trial RC ambos suelen coincidir).
+  const trialDaysLeft = React.useMemo(() => {
+    if (!activeSub || activeSub.status !== 'trialing') return null;
+    const endIso = activeSub.trial_end ?? activeSub.current_period_end;
+    if (!endIso) return null;
+    const ms = new Date(endIso).getTime() - Date.now();
+    return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+  }, [activeSub]);
+
+  // Color del contador según urgencia: ≤3 días → warning amarillo,
+  // resto → accent verde. Da una pista visual sin frenar al usuario.
+  const trialTint =
+    trialDaysLeft != null && trialDaysLeft <= 3
+      ? Colors.warning
+      : Colors.accent;
+  const trialBgTint =
+    trialDaysLeft != null && trialDaysLeft <= 3
+      ? 'rgba(242,201,76,0.12)'
+      : Colors.accent10;
+  const trialBorderTint =
+    trialDaysLeft != null && trialDaysLeft <= 3
+      ? 'rgba(242,201,76,0.45)'
+      : Colors.accent40;
+
+  return (
+    <>
+      <Text style={styles.sectionLabel}>SUSCRIPCIÓN</Text>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={
+          activeSub
+            ? `Plan ${plan?.displayName ?? ''}. Gestionar.`
+            : 'Activar plan premium'
+        }
+        style={({ pressed }) => [
+          styles.subCard,
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <View
+          style={[
+            styles.subBadge,
+            activeSub && {
+              backgroundColor: Colors.accent10,
+              borderColor: Colors.accent40,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.subBadgeText,
+              activeSub && { color: Colors.accent },
+            ]}
+          >
+            {activeSub ? 'PRO' : 'FREE'}
+          </Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.subTitle}>
+            {activeSub
+              ? plan?.displayName ?? 'TACTIUM Pro'
+              : isClubAdmin
+                ? 'Suscribir el club'
+                : 'Probar TACTIUM Pro'}
+          </Text>
+          <Text style={styles.subHint} numberOfLines={1}>
+            {activeSub
+              ? activeSub.status === 'trialing'
+                ? trialDaysLeft === 0
+                  ? 'Tu prueba termina hoy · Gestionar'
+                  : trialDaysLeft === 1
+                    ? 'Tu prueba termina mañana · Gestionar'
+                    : `Te quedan ${trialDaysLeft} días de prueba · Gestionar`
+                : activeSub.cancel_at_period_end
+                  ? 'Termina pronto · Gestionar plan'
+                  : 'Activa · Gestionar plan'
+              : isClubAdmin
+                ? 'Cubre a todos los capitanes del club'
+                : 'Prueba 14 días · Sin compromiso'}
+          </Text>
+        </View>
+        {/* Pill con el contador de días de trial. Se pinta antes del chevron
+            cuando hay trial activo, para que el usuario lo vea de un vistazo
+            desde Perfil sin tener que entrar a Suscripción. */}
+        {trialDaysLeft != null ? (
+          <View
+            style={[
+              styles.trialCounter,
+              {
+                backgroundColor: trialBgTint,
+                borderColor: trialBorderTint,
+              },
+            ]}
+          >
+            <Text style={[styles.trialCounterNum, { color: trialTint }]}>
+              {trialDaysLeft}
+            </Text>
+            <Text style={[styles.trialCounterUnit, { color: trialTint }]}>
+              d
+            </Text>
+          </View>
+        ) : null}
+        <IconChevron size={14} color={Colors.textFaint} />
+      </Pressable>
+    </>
+  );
+};
+
+interface SettingItem {
+  label: string;
+  detail?: string;
+  // Render del lado derecho: por defecto chevron (navegable); 'static'
+  // sin chevron (sólo lectura, ej. versión); 'toggle' switch reactivo;
+  // 'soon' badge "PRONTO" para placeholders aún no funcionales.
+  trailing?: 'chevron' | 'static' | 'toggle' | 'soon';
+  // Estado del toggle (sólo si trailing='toggle')
+  value?: boolean;
+  onToggle?: (next: boolean) => void;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}
 
 const SettingsList: React.FC<{ items: SettingItem[] }> = ({ items }) => (
   <View style={styles.settingsList}>
-    {items.map((it, i) => (
-      <Pressable
-        key={it.label}
-        disabled={it.noChevron}
-        style={({ pressed }) => [
-          styles.settingRow,
-          i < items.length - 1 && styles.settingDivider,
-          pressed && !it.noChevron && { opacity: 0.85 },
-        ]}
-      >
-        <Text style={styles.settingLabel}>{it.label}</Text>
-        {it.detail ? <Text style={styles.settingDetail}>{it.detail}</Text> : null}
-        {!it.noChevron ? <IconChevron size={14} color={Colors.textFaint} /> : null}
-      </Pressable>
-    ))}
+    {items.map((it, i) => {
+      const trailing = it.trailing ?? 'chevron';
+      const interactive = trailing === 'chevron' && !!it.onPress;
+      return (
+        <Pressable
+          key={it.label}
+          disabled={!interactive}
+          onPress={it.onPress}
+          accessibilityRole={interactive ? 'button' : undefined}
+          accessibilityLabel={it.accessibilityLabel ?? it.label}
+          style={({ pressed }) => [
+            styles.settingRow,
+            i < items.length - 1 && styles.settingDivider,
+            pressed && interactive && { opacity: 0.85 },
+          ]}
+        >
+          <Text
+            style={[
+              styles.settingLabel,
+              trailing === 'soon' && { color: Colors.textMuted },
+            ]}
+          >
+            {it.label}
+          </Text>
+          {it.detail ? <Text style={styles.settingDetail}>{it.detail}</Text> : null}
+          {trailing === 'chevron' ? (
+            <IconChevron size={14} color={Colors.textFaint} />
+          ) : trailing === 'toggle' ? (
+            <Toggle
+              size="sm"
+              value={!!it.value}
+              onChange={it.onToggle ?? (() => {})}
+              accessibilityLabel={it.accessibilityLabel ?? it.label}
+            />
+          ) : trailing === 'soon' ? (
+            <View style={styles.soonBadge}>
+              <Text style={styles.soonBadgeText}>PRONTO</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      );
+    })}
   </View>
 );
 
@@ -481,6 +762,67 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.accent50,
+  },
+  subCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+  },
+  subBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+  },
+  subBadgeText: {
+    fontFamily: Fonts.mono,
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  subTitle: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  subHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  trialCounter: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 9,
+    borderWidth: 1,
+    minWidth: 38,
+    justifyContent: 'center',
+  },
+  trialCounterNum: {
+    fontFamily: Fonts.mono,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  trialCounterUnit: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 1,
+    opacity: 0.85,
   },
   claimCard: {
     flexDirection: 'row',
@@ -582,6 +924,21 @@ const styles = StyleSheet.create({
   settingDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
   settingLabel:   { flex: 1, color: Colors.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
   settingDetail:  { color: Colors.textMuted, fontSize: 13, marginRight: 8 },
+  soonBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 5,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+  },
+  soonBadgeText: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
 
   logout:      { marginTop: 24, height: 52, borderRadius: Radius.lg, borderWidth: 1, borderColor: 'rgba(255,107,107,0.4)', alignItems: 'center', justifyContent: 'center' },
   logoutLabel: { color: Colors.error, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },

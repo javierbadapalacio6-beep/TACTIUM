@@ -10,6 +10,10 @@ import { Colors } from './src/core/theme/colors';
 import { useAuthStore } from './src/store/authStore';
 import { useTeamStore } from './src/store/teamStore';
 import { useClubStore } from './src/store/clubStore';
+import { useConnectionStore } from './src/store/connectionStore';
+import { useSubscriptionStore } from './src/store/subscriptionStore';
+import { ToastHost, OfflineBanner } from './src/components/ui';
+import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
 
 const navTheme = {
   ...DefaultTheme,
@@ -28,18 +32,31 @@ const navTheme = {
 export default function App() {
   const isHydrating = useAuthStore((s) => s.isHydrating);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
   const loadTeam = useTeamStore((s) => s.loadForUser);
   const resetTeam = useTeamStore((s) => s.reset);
   const loadClubs = useClubStore((s) => s.loadForUser);
   const resetClubs = useClubStore((s) => s.reset);
 
+  const initConnection = useConnectionStore((s) => s.init);
+  const refreshSubs = useSubscriptionStore((s) => s.refresh);
+  const subscribeSubsRealtime = useSubscriptionStore((s) => s.subscribeRealtime);
+  const resetSubs = useSubscriptionStore((s) => s.reset);
+
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Suscribe NetInfo. El propio store evita duplicar listeners si
+    // el efecto se re-ejecuta (HMR).
+    const unsub = initConnection();
+    return unsub;
+  }, [initConnection]);
+
+  useEffect(() => {
+    if (isAuthenticated && userId) {
       let cancelled = false;
       (async () => {
         // Esperamos a que zustand-persist hidrate el activeTeamId desde
@@ -59,6 +76,12 @@ export default function App() {
         await loadClubs();
         if (cancelled) return;
         await loadTeam();
+        if (cancelled) return;
+        // Subscriptions: refresh inicial + Realtime para que el cambio
+        // de status (webhook → DB) repinte UI sin polling.
+        await refreshSubs(userId);
+        if (cancelled) return;
+        subscribeSubsRealtime(userId);
       })();
       return () => {
         cancelled = true;
@@ -66,8 +89,19 @@ export default function App() {
     } else {
       resetTeam();
       resetClubs();
+      resetSubs();
     }
-  }, [isAuthenticated, loadTeam, resetTeam, loadClubs, resetClubs]);
+  }, [
+    isAuthenticated,
+    userId,
+    loadTeam,
+    resetTeam,
+    loadClubs,
+    resetClubs,
+    refreshSubs,
+    subscribeSubsRealtime,
+    resetSubs,
+  ]);
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -81,6 +115,18 @@ export default function App() {
           ) : (
             <RootNavigator />
           )}
+          {/* Host de toasts y banner offline: flotan encima de cualquier
+              pantalla. Van DENTRO del NavigationContainer para heredar
+              el theme y respetar safe-area del provider. Banner ANTES
+              del Toast en el árbol pero ambos absolute → orden no afecta
+              al render, sí al stacking entre ellos (Toast queda encima
+              porque su zIndex es mayor). */}
+          <OfflineBanner />
+          <ToastHost />
+          {/* Modal one-shot que da la bienvenida al trial al detectar
+              una sub trialing nueva (auto-creada por trigger DB tras
+              crear primer club/team). */}
+          <TrialStartedModal />
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>

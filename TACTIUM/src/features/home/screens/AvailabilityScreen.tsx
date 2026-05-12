@@ -85,7 +85,7 @@ export const AvailabilityScreen = ({
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 22 },
+          { paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -165,6 +165,7 @@ export const AvailabilityScreen = ({
                 <Toggle
                   value={p.available}
                   disabled={!canEdit}
+                  accessibilityLabel={`Disponibilidad de ${p.name}`}
                   onChange={(v) =>
                     isPlayer ? setSelfAvail(p.id, v) : setPlayerAvail(p.id, v)
                   }

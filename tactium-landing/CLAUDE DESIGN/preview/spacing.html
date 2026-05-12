@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Spacing</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>body{margin:0;padding:24px;background:var(--color-bg);display:flex;flex-direction:column;gap:8px;}
+.row{display:grid;grid-template-columns:60px 1fr 120px;align-items:center;gap:12px;}
+.bar{height:14px;background:var(--color-accent);border-radius:2px;}
+.token{font-family:var(--font-mono);font-size:11px;color:var(--color-accent);letter-spacing:0.1em;}
+.use{font-family:var(--font-mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-text-faint);text-align:right;}
+</style></head><body>
+  <div class="row"><div class="token">sp-1 · 4</div><div class="bar" style="width:4px"></div><div class="use">icon gap</div></div>
+  <div class="row"><div class="token">sp-2 · 8</div><div class="bar" style="width:8px"></div><div class="use">badge padding</div></div>
+  <div class="row"><div class="token">sp-3 · 12</div><div class="bar" style="width:12px"></div><div class="use">inline rhythm</div></div>
+  <div class="row"><div class="token">sp-4 · 16</div><div class="bar" style="width:16px"></div><div class="use">card inner</div></div>
+  <div class="row"><div class="token">sp-6 · 24</div><div class="bar" style="width:24px"></div><div class="use">card outer</div></div>
+  <div class="row"><div class="token">sp-8 · 32</div><div class="bar" style="width:32px"></div><div class="use">module gap</div></div>
+  <div class="row"><div class="token">sp-16 · 64</div><div class="bar" style="width:64px"></div><div class="use">section · sm</div></div>
+  <div class="row"><div class="token">sp-32 · 128</div><div class="bar" style="width:128px"></div><div class="use">section · lg</div></div>
+</body></html>

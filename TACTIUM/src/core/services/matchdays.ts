@@ -118,6 +118,20 @@ export async function renumberSeasonMatchdays(seasonId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Borra una jornada completa. Las dependencias (lineup_variants, lineups,
+ * match_results) están con `on delete cascade` en la migración, así que un
+ * único delete sobre matchdays limpia todo.
+ *
+ * Útil para deshacer una jornada creada por error o eliminar duplicados.
+ * Debe ser confirmado por el usuario antes de invocarse — operación
+ * destructiva sin undo en cliente.
+ */
+export async function deleteMatchday(id: string): Promise<void> {
+  const { error } = await supabase.from('matchdays').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function createMatchday(
   seasonId: string,
   input: {

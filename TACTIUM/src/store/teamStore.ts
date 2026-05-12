@@ -462,14 +462,12 @@ export const useTeamStore = create<TeamState>()(
     {
       name: 'tactium-team-active',
       storage: createJSONStorage(() => AsyncStorage),
-      // Persistimos solo selección de equipo y override de rol. El resto es
-      // estado de red. En dev no persistimos nada (consistente con authStore).
-      partialize: __DEV__
-        ? () => ({} as Partial<TeamState>)
-        : (s) => ({
-            activeTeamId: s.activeTeamId,
-            activeRoleOverride: s.activeRoleOverride,
-          }),
+      // Persistimos selección de equipo y override de rol en TODOS los
+      // entornos. El resto del state (jugadores, etc.) viene de red.
+      partialize: (s) => ({
+        activeTeamId: s.activeTeamId,
+        activeRoleOverride: s.activeRoleOverride,
+      }),
     },
   ),
 );

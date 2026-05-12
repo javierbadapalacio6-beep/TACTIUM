@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Cards</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>body{margin:0;padding:24px;background:var(--color-bg);display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.card{background:var(--color-bg-card);border-radius:16px;padding:16px;box-shadow:var(--shadow-inset-line);}
+.card.sel{box-shadow:inset 0 0 0 1.5px var(--color-accent-55);}
+.eye{font-family:var(--font-mono);font-size:10px;letter-spacing:0.25em;text-transform:uppercase;color:var(--color-text-faint);}
+.eye.a{color:var(--color-accent);}
+.head{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;}
+.tile{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:rgba(0,223,130,0.08);font-family:var(--font-sans);font-weight:700;font-size:13px;color:var(--color-accent);box-shadow:inset 0 0 0 1px var(--color-accent-25);}
+.row{display:flex;align-items:center;gap:10px;}
+.num{font-family:var(--font-sans);font-weight:800;font-size:28px;color:var(--color-text);font-variant-numeric:tabular-nums;}
+.num.a{color:var(--color-accent);}
+.pts{font-family:var(--font-mono);font-size:10px;letter-spacing:0.2em;color:var(--color-text-faint);}
+.bar{height:3px;border-radius:2px;background:rgba(255,255,255,0.12);margin-top:6px;overflow:hidden;}
+.bar > i{display:block;height:100%;background:var(--color-accent);}
+.name{font-family:var(--font-sans);font-weight:700;font-size:14px;color:var(--color-text);}
+.sub{font-family:var(--font-mono);font-size:11px;color:var(--color-text-faint);}
+</style></head><body>
+  <div class="card sel">
+    <div class="row" style="justify-content:space-between"><span class="eye a">P1 · PAREJA TITULAR</span><span><span class="num a">4600</span><span class="pts"> PTS</span></span></div>
+    <div class="bar"><i style="width:100%"></i></div>
+    <div class="row" style="margin-top:12px;gap:8px"><div class="tile">GA</div><div><div class="name">Juan G.</div><div class="sub">Drive · 2400</div></div></div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><span class="eye">P2</span><span><span class="num">3800</span><span class="pts"> PTS</span></span></div>
+    <div class="bar"><i style="width:82%;background:rgba(232,245,239,0.4)"></i></div>
+    <div class="row" style="margin-top:12px;gap:8px"><div class="tile" style="background:rgba(232,245,239,0.04);color:var(--color-text-muted);box-shadow:inset 0 0 0 1px var(--color-hair-strong);">SÁ</div><div><div class="name">David S.</div><div class="sub">Drive · 2050</div></div></div>
+  </div>
+</body></html>

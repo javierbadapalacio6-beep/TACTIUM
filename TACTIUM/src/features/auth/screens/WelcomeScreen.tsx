@@ -8,6 +8,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  SlideInRight,
+  SlideInLeft,
+  FadeOut,
+  ZoomIn,
+} from 'react-native-reanimated';
 
 import { Colors } from '@core/theme/colors';
 import { Typography } from '@core/theme/typography';
@@ -59,8 +68,21 @@ export const WelcomeScreen = ({
   navigation,
 }: AuthStackScreenProps<'Welcome'>) => {
   const [step, setStep] = useState(0);
+  // Dirección del último cambio: 1 = avanzando, -1 = retrocediendo, 0 = mount.
+  // Permite que la animación de entrada del visual + texto sea direccional,
+  // como en una galería de swipe nativa.
+  const [direction, setDirection] = useState<1 | -1 | 0>(0);
   const insets = useSafeAreaInsets();
   const markWelcomeSeen = useAuthStore((s) => s.markWelcomeSeen);
+
+  const goNext = () => {
+    setDirection(1);
+    setStep(step + 1);
+  };
+  const goPrev = () => {
+    setDirection(-1);
+    setStep(step - 1);
+  };
 
   const slide = slides[step];
   const last = step === slides.length - 1;
@@ -97,14 +119,19 @@ export const WelcomeScreen = ({
       <AmbientBackdrop />
 
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.brand}>
+        <Animated.View
+          style={styles.brand}
+          entering={FadeIn.delay(80).duration(380)}
+        >
           <TactiumMark size={22} gradient />
           <Text style={styles.wordmark}>TACTIUM</Text>
-        </View>
+        </Animated.View>
         {!last ? (
-          <Pressable hitSlop={10} onPress={finish}>
-            <Text style={styles.skip}>Saltar</Text>
-          </Pressable>
+          <Animated.View entering={FadeIn.delay(180).duration(260)}>
+            <Pressable hitSlop={10} onPress={finish}>
+              <Text style={styles.skip}>Saltar</Text>
+            </Pressable>
+          </Animated.View>
         ) : (
           <View style={{ width: 48 }} />
         )}
@@ -114,15 +141,49 @@ export const WelcomeScreen = ({
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.visualWrap} key={step}>
+        {/* Visual: entra desde la derecha al avanzar, desde la izquierda
+            al retroceder. ZoomIn springy en el mount inicial (step=0). */}
+        <Animated.View
+          style={styles.visualWrap}
+          key={`visual-${step}`}
+          entering={
+            direction === 0
+              ? ZoomIn.duration(440).easing(Easing.out(Easing.cubic))
+              : direction === 1
+                ? SlideInRight.duration(380).easing(Easing.out(Easing.cubic))
+                : SlideInLeft.duration(380).easing(Easing.out(Easing.cubic))
+          }
+          exiting={FadeOut.duration(160)}
+        >
           <slide.Visual />
-        </View>
+        </Animated.View>
       </ScrollView>
 
-      <View style={styles.copy}>
-        <Text style={styles.tag}>{slide.tag}</Text>
-        <View style={styles.titleBlock}>{renderTitle(slide.title)}</View>
-        <Text style={styles.bodyText}>{slide.body}</Text>
+      <View style={styles.copy} key={`copy-${step}`}>
+        <Animated.Text
+          style={styles.tag}
+          entering={FadeInDown.duration(280)
+            .delay(80)
+            .easing(Easing.out(Easing.cubic))}
+        >
+          {slide.tag}
+        </Animated.Text>
+        <Animated.View
+          style={styles.titleBlock}
+          entering={FadeInDown.duration(360)
+            .delay(160)
+            .easing(Easing.out(Easing.cubic))}
+        >
+          {renderTitle(slide.title)}
+        </Animated.View>
+        <Animated.Text
+          style={styles.bodyText}
+          entering={FadeInDown.duration(320)
+            .delay(240)
+            .easing(Easing.out(Easing.cubic))}
+        >
+          {slide.body}
+        </Animated.Text>
       </View>
 
       <View
@@ -146,18 +207,23 @@ export const WelcomeScreen = ({
 
         <View style={styles.ctaRow}>
           {step > 0 && (
-            <Pressable
-              onPress={() => setStep(step - 1)}
-              style={({ pressed }) => [
-                styles.backBtn,
-                pressed && { opacity: 0.7 },
-              ]}
+            <Animated.View
+              entering={FadeIn.duration(220)}
+              exiting={FadeOut.duration(140)}
             >
-              <IconBack size={18} color={Colors.text} />
-            </Pressable>
+              <Pressable
+                onPress={goPrev}
+                style={({ pressed }) => [
+                  styles.backBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <IconBack size={18} color={Colors.text} />
+              </Pressable>
+            </Animated.View>
           )}
           <Pressable
-            onPress={() => (last ? finish() : setStep(step + 1))}
+            onPress={() => (last ? finish() : goNext())}
             style={({ pressed }) => [
               styles.cta,
               pressed && { opacity: 0.85 },
@@ -174,10 +240,24 @@ export const WelcomeScreen = ({
           </Pressable>
         </View>
 
-        <View style={styles.signature}>
+        {/* Subtítulo bajo el CTA — visible en la última slide para anunciar
+            que la prueba es gratuita 14 días antes de crear cuenta. */}
+        {last ? (
+          <Animated.Text
+            style={styles.trialNote}
+            entering={FadeIn.delay(220).duration(260)}
+          >
+            14 días gratis · Después desde 4,99 €/mes
+          </Animated.Text>
+        ) : null}
+
+        <Animated.View
+          style={styles.signature}
+          entering={FadeIn.delay(400).duration(320)}
+        >
           <NeonDot size={4} />
           <Text style={styles.signatureText}>CREATE · ANALYZE · ELEVATE</Text>
-        </View>
+        </Animated.View>
       </View>
     </View>
   );
@@ -307,6 +387,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+  trialNote: {
+    textAlign: 'center',
+    color: Colors.accent,
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    marginTop: 12,
   },
   signature: {
     alignSelf: 'center',

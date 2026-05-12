@@ -10,6 +10,9 @@ import { AuthStack } from './AuthStack';
 import { OnboardingStack } from './OnboardingStack';
 import { TabNavigator } from './TabNavigator';
 import { PlayerClaimGate } from '@features/onboarding/components/PlayerClaimGate';
+import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
+import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
+import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -49,7 +52,40 @@ export const RootNavigator = () => {
         ) : !team || isOnboarding ? (
           <Stack.Screen name="OnboardingFlow" component={OnboardingStack} />
         ) : (
-          <Stack.Screen name="MainTabs" component={TabNavigator} />
+          <>
+            <Stack.Screen name="MainTabs" component={TabNavigator} />
+            {/* Modales de suscripción presentados sobre las tabs.
+                `presentation:'modal'` da la animación slide-up nativa y
+                permite gesto de cierre por swipe-down en iOS. */}
+            <Stack.Screen
+              name="Paywall"
+              component={PaywallScreen}
+              options={{
+                // `fullScreenModal` cubre completamente la pantalla anterior
+                // (no se ve el screen detrás como con `modal` en iOS, evitando
+                // el efecto de fondo transparente solapado).
+                presentation: 'fullScreenModal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+              }}
+            />
+            <Stack.Screen
+              name="Subscription"
+              component={SubscriptionScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="ClubBilling"
+              component={ClubBillingScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+          </>
         )}
       </Stack.Navigator>
       {showMainTabs ? <PlayerClaimGate /> : null}

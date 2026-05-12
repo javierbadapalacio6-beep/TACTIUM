@@ -19,12 +19,22 @@ import { Radius } from '@core/theme/spacing';
 import {
   AmbientBackdrop,
   IconBack,
+  IconCamera,
   IconPlus,
   IconCheck,
   IconX,
   IconArrowRight,
+  ScanSheet,
 } from '@components/ui';
 import { useTeamStore, type Side } from '@store/teamStore';
+import type { ScannedPlayer } from '@core/services/imageRecognition';
+import {
+  NAME_MAX_LENGTH,
+  isValidName,
+  normalizeName,
+  parsePts,
+  sanitizePtsInput,
+} from '@core/utils/validation';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -38,23 +48,44 @@ export const AddPlayersScreen = ({
   const addPlayer = useTeamStore((s) => s.addPlayer);
   const removePlayer = useTeamStore((s) => s.removePlayer);
   const updatePlayer = useTeamStore((s) => s.updatePlayer);
+  const team = useTeamStore((s) => s.team);
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
 
   const [adding, setAdding] = useState(false);
   const [submittingAdd, setSubmittingAdd] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPts, setNewPts] = useState('');
   const [newSide, setNewSide] = useState<Side>('Drive');
 
+  // Inserción en bloque cuando el OCR devuelve la lista de jugadores. Misma
+  // lógica que en TeamScreen: insertamos uno a uno para que addPlayer del
+  // store mantenga sincronía con DB (y errores individuales no rompan todo).
+  const handleBulkPlayers = async (scanned: ScannedPlayer[]) => {
+    for (const p of scanned) {
+      try {
+        await addPlayer({
+          name: p.name.trim(),
+          pts: p.pts ?? 0,
+          position: p.position ?? 'Ambos',
+        });
+      } catch (e) {
+        // Continuamos con el resto si uno falla; el toast del store ya avisa.
+        console.warn('AddPlayersScreen bulk player failed', e);
+      }
+    }
+  };
+
   const total = players.reduce((a, p) => a + p.pts, 0);
 
   const onAdd = async () => {
-    if (!newName.trim() || submittingAdd) return;
+    if (!isValidName(newName) || submittingAdd) return;
     setSubmittingAdd(true);
     try {
       await addPlayer({
-        name: newName.trim(),
-        pts: parseInt(newPts, 10) || 200,
+        name: normalizeName(newName),
+        // Si no introduce puntos, default 200 (es onboarding rápido).
+        pts: newPts.trim() === '' ? 200 : parsePts(newPts),
         position: newSide,
       });
       setNewName('');
@@ -109,6 +140,29 @@ export const AddPlayersScreen = ({
         <Text style={styles.lede}>
           Mínimo 10 jugadores. Los puntos FEP determinan el orden de las parejas.
         </Text>
+
+        {/* Atajo: escanear ranking FEP directamente desde onboarding.
+            Mismo flow que en TeamScreen → ScanSheet con OCR. */}
+        <Pressable
+          onPress={() => setScanning(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Escanear plantilla"
+          style={({ pressed }) => [
+            styles.scanShortcut,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <View style={styles.scanShortcutIcon}>
+            <IconCamera size={14} color={Colors.accent} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.scanShortcutTitle}>Escanear plantilla</Text>
+            <Text style={styles.scanShortcutHint}>
+              Importa varios jugadores de una captura del ranking
+            </Text>
+          </View>
+          <IconArrowRight size={14} color={Colors.accent} />
+        </Pressable>
       </View>
 
       <View style={styles.counter}>
@@ -171,14 +225,17 @@ export const AddPlayersScreen = ({
                   placeholder="Nombre"
                   placeholderTextColor={Colors.textFaint}
                   autoFocus
+                  maxLength={NAME_MAX_LENGTH}
+                  autoCapitalize="words"
                   style={[styles.addField, { flex: 1 }]}
                 />
                 <TextInput
                   value={newPts}
-                  onChangeText={setNewPts}
+                  onChangeText={(v) => setNewPts(sanitizePtsInput(v))}
                   placeholder="Pts"
                   placeholderTextColor={Colors.textFaint}
                   keyboardType="number-pad"
+                  maxLength={4}
                   style={[
                     styles.addField,
                     { width: 64, fontFamily: Fonts.mono, textAlign: 'center' },
@@ -241,6 +298,14 @@ export const AddPlayersScreen = ({
           <IconArrowRight size={18} color="#000" />
         </Pressable>
       </View>
+
+      <ScanSheet
+        open={scanning}
+        onClose={() => setScanning(false)}
+        mode="ranking"
+        teamName={team?.name}
+        onConfirm={handleBulkPlayers}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -301,6 +366,39 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 15,
     lineHeight: 21,
+  },
+  scanShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.accent10,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+  },
+  scanShortcutIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.accent50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanShortcutTitle: {
+    color: Colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  scanShortcutHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
   },
   counter: {
     paddingHorizontal: 24,

@@ -12,9 +12,13 @@ export const Colors = {
   accentDim: '#00B86B',
 
   // ── Text ────────────────────────────────────────────────────────
+  // Alphas calibradas contra `background` (#030F0F) para cumplir
+  // WCAG AA 4.5:1 en texto body:
+  //   - textMuted 0.70 → ~8:1  (AAA)
+  //   - textFaint 0.50 → ~4.7:1 (AA, mínimo para body)
   text: '#E8F5EF',
-  textMuted: 'rgba(232,245,239,0.55)',
-  textFaint: 'rgba(232,245,239,0.32)',
+  textMuted: 'rgba(232,245,239,0.70)',
+  textFaint: 'rgba(232,245,239,0.50)',
   textInverse: '#001810',
 
   // ── Strokes ─────────────────────────────────────────────────────

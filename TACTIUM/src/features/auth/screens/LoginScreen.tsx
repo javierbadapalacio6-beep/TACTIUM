@@ -46,6 +46,7 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
   const insets = useSafeAreaInsets();
   const signIn = useAuthStore((s) => s.signInWithPassword);
   const signUp = useAuthStore((s) => s.signUpWithPassword);
+  const sendPasswordReset = useAuthStore((s) => s.sendPasswordReset);
 
   // Cuando el teclado está abierto, ya cubre el home indicator y la
   // clearance extra del footer (insets+24) deja un hueco visible feo.
@@ -104,6 +105,60 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
     );
   };
 
+  const handleForgotPassword = () => {
+    // Si el usuario ya tecleó email, lo prefilleamos.
+    const trimmed = email.trim();
+    Alert.prompt
+      ? Alert.prompt(
+          'Recuperar contraseña',
+          'Introduce tu email. Recibirás un enlace para restablecer la contraseña.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Enviar',
+              onPress: async (input?: string) => {
+                const target = (input ?? trimmed).trim();
+                if (!target.includes('@')) {
+                  Alert.alert('Email inválido', 'Comprueba el email.');
+                  return;
+                }
+                const { error } = await sendPasswordReset(target);
+                if (error) {
+                  Alert.alert('No se pudo enviar', error);
+                } else {
+                  Alert.alert(
+                    'Email enviado',
+                    `Si existe una cuenta con ${target}, recibirás un enlace para restablecer la contraseña.`,
+                  );
+                }
+              },
+            },
+          ],
+          'plain-text',
+          trimmed,
+        )
+      : // Android: Alert.prompt no existe. Si el usuario tecleó email lo
+        // usamos directamente; si no, pedimos que lo introduzca antes.
+        (async () => {
+          if (!trimmed.includes('@')) {
+            Alert.alert(
+              'Introduce tu email',
+              'Escribe primero tu email en el formulario y vuelve a pulsar "¿Olvidaste?".',
+            );
+            return;
+          }
+          const { error } = await sendPasswordReset(trimmed);
+          if (error) {
+            Alert.alert('No se pudo enviar', error);
+          } else {
+            Alert.alert(
+              'Email enviado',
+              `Si existe una cuenta con ${trimmed}, recibirás un enlace para restablecer la contraseña.`,
+            );
+          }
+        })();
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -136,6 +191,7 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
           submitting={submitting}
           onBack={() => setMode('choice')}
           onSubmit={handleEmail}
+          onForgotPassword={handleForgotPassword}
         />
       )}
     </KeyboardAvoidingView>
@@ -217,6 +273,9 @@ const ChoiceView: React.FC<ChoiceProps> = ({
           </Text>
         </Pressable>
 
+        <Text style={styles.trialNote}>
+          14 días de prueba gratis al crear tu primer equipo · Sin compromiso
+        </Text>
         <Text style={styles.legal}>
           Al continuar aceptas los Términos{'\n'}y la Política de Privacidad.
         </Text>
@@ -242,6 +301,7 @@ interface EmailProps {
   submitting: boolean;
   onBack: () => void;
   onSubmit: () => void;
+  onForgotPassword: () => void;
 }
 
 const EmailView: React.FC<EmailProps> = ({
@@ -261,6 +321,7 @@ const EmailView: React.FC<EmailProps> = ({
   submitting,
   onBack,
   onSubmit,
+  onForgotPassword,
 }) => {
   const isSignup = tab === 'signup';
   const disabled = !valid || submitting;
@@ -365,7 +426,12 @@ const EmailView: React.FC<EmailProps> = ({
           }
           hint={
             !isSignup ? (
-              <Pressable hitSlop={6}>
+              <Pressable
+                onPress={onForgotPassword}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Recuperar contraseña"
+              >
                 <Text style={styles.hint}>¿Olvidaste?</Text>
               </Pressable>
             ) : undefined
@@ -489,6 +555,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 2,
     color: Colors.textFaint,
+  },
+  trialNote: {
+    textAlign: 'center',
+    color: Colors.accent,
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    marginTop: 14,
+    paddingHorizontal: 18,
   },
   legal: {
     textAlign: 'center',

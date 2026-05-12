@@ -79,12 +79,10 @@ export const PopoverMenu: React.FC<Props> = ({
               <React.Fragment key={opt.label}>
                 {idx > 0 ? <View style={styles.divider} /> : null}
                 <Pressable
-                  onPress={() => {
-                    onClose();
-                    // Pequeño retraso para que el modal se cierre antes
-                    // de ejecutar la acción — evita flickers.
-                    setTimeout(opt.onPress, 60);
-                  }}
+                  // NO llamamos a onClose aquí: deja que el handler de la
+                  // opción decida si cierra (ej. si va a cambiar el estado
+                  // del componente padre para mostrar un spinner).
+                  onPress={opt.onPress}
                   style={({ pressed }) => [
                     styles.row,
                     pressed && { backgroundColor: Colors.accent10 },

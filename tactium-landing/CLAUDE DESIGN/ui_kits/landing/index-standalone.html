@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>TACTIUM · Landing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+<meta name="ext-resource-dependency" content="../../assets/screens/splash.jpeg" data-resource-id="splashImg"/>
+<meta name="ext-resource-dependency" content="../../assets/screens/alineacion.jpeg" data-resource-id="alineacionImg"/>
+<meta name="ext-resource-dependency" content="../../assets/screens/jornada-pendiente.jpeg" data-resource-id="jornadaPendienteImg"/>
+<meta name="ext-resource-dependency" content="../../assets/screens/jornada-resultados.jpeg" data-resource-id="jornadaResultadosImg"/>
+<meta name="ext-resource-dependency" content="../../assets/screens/club.jpeg" data-resource-id="clubImg"/>
+<meta name="ext-resource-dependency" content="../../assets/screens/equipos-club.jpeg" data-resource-id="equiposClubImg"/>
+
+<link rel="stylesheet" href="../../colors_and_type.css"/>
+<style>
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    position: relative;
+  }
+
+  /* ─── Site-wide grid background ─── */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(rgba(232,245,239,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,245,239,0.04) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 0%, rgba(0,0,0,0.85) 60%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 0%, rgba(0,0,0,0.85) 60%, transparent 100%);
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* ─── Phone idle float ─── */
+  @keyframes tk-float {
+    0%, 100% { translate: 0 -10px; }
+    50%      { translate: 0  10px; }
+  }
+  .tk-phone {
+    animation: tk-float 7.5s ease-in-out infinite alternate;
+    will-change: translate;
+  }
+
+  /* ─── Scroll-triggered reveal ─── */
+  [data-tk-reveal] {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 800ms cubic-bezier(0.25,1,0.5,1),
+                transform 800ms cubic-bezier(0.25,1,0.5,1);
+    transition-delay: var(--tk-delay, 0ms);
+  }
+  [data-tk-reveal].tk-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ─── Bento + pricing hover lift ─── */
+  .bento > div, .pricing-grid > div {
+    transition: transform 280ms cubic-bezier(0.25,1,0.5,1),
+                box-shadow  280ms cubic-bezier(0.25,1,0.5,1);
+  }
+  .bento > div:hover {
+    transform: translateY(-6px);
+    box-shadow: inset 0 0 0 1px var(--color-accent-40),
+                0 28px 60px -20px rgba(0,223,130,0.18) !important;
+  }
+  .pricing-grid > div:hover {
+    transform: translateY(-6px);
+  }
+
+  /* ─── Reduced-motion respect ─── */
+  @media (prefers-reduced-motion: reduce) {
+    .tk-phone { animation: none !important; }
+    [data-tk-reveal] { opacity: 1 !important; transform: none !important; }
+  }
+
+  /* ─── ≤ 920px: collapse multi-column sections ─── */
+  @media (max-width: 920px) {
+    .hero-grid, .two-col { grid-template-columns: 1fr !important; gap: 32px !important; }
+    .three-col { grid-template-columns: 1fr !important; gap: 48px !important; }
+    .bento { grid-template-columns: 1fr 1fr !important; }
+    .pricing-grid { grid-template-columns: 1fr 1fr !important; }
+    .hero-phones { height: 460px !important; }
+    .step-phone { height: 380px !important; }
+    .club-phones { height: 520px !important; }
+  }
+
+  /* ─── ≤ 720px: phone scale-down, hide site nav ─── */
+  @media (max-width: 720px) {
+    .site-nav-link { display: none !important; }
+    .bento { grid-template-columns: 1fr !important; }
+    .bento > div { grid-column: span 1 !important; }
+    .hero-phones { height: 420px !important; transform: scale(0.85); transform-origin: center top; }
+    .step-phone { height: 360px !important; }
+    .club-phones { height: 480px !important; transform: scale(0.85); transform-origin: center top; }
+  }
+
+  /* ─── ≤ 560px: tighten pricing & hero phones ─── */
+  @media (max-width: 560px) {
+    .pricing-grid { grid-template-columns: 1fr !important; }
+    .hero-phones { height: 380px !important; transform: scale(0.72); }
+    .club-phones { height: 420px !important; transform: scale(0.72); }
+    .step-phone { height: 320px !important; }
+  }
+  /* ─── demo iPhone scale on small viewports ─── */
+  @media (max-width: 720px) {
+    .demo-device { transform: scale(0.78); transform-origin: center top; }
+    .demo-stage { margin-top: 24px !important; height: 680px; }
+  }
+  @media (max-width: 480px) {
+    .demo-device { transform: scale(0.62); transform-origin: center top; }
+    .demo-stage { height: 560px; }
+  }
+</style>
+
+<template id="__bundler_thumbnail" data-bg-color="#030F0F">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#A0FF4D"/>
+        <stop offset="1" stop-color="#00DF82"/>
+      </linearGradient>
+    </defs>
+    <rect width="1200" height="800" fill="#030F0F"/>
+    <circle cx="600" cy="400" r="220" fill="none" stroke="url(#g)" stroke-width="14"/>
+    <path d="M460 320 L740 320 M600 320 L600 520" fill="none" stroke="url(#g)" stroke-width="42" stroke-linecap="square"/>
+    <circle cx="430" cy="445" r="9" fill="#A0FF4D"/>
+    <circle cx="445" cy="490" r="9" fill="#7BF064"/>
+    <circle cx="465" cy="535" r="9" fill="#00DF82"/>
+  </svg>
+</template>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="../app/ios-frame.jsx"></script>
+  <script type="text/babel" src="../app/components.jsx"></script>
+  <script type="text/babel" src="../app/screens.jsx"></script>
+  <script type="text/babel" src="components-standalone.jsx"></script>
+
+  <script type="text/babel">
+    function Landing() {
+      return (
+        <>
+          <Header/>
+          <main>
+            <Hero/>
+            <FederationsMarquee/>
+            <AppPreview/>
+            <ForWho/>
+            <ForClubs/>
+            <Features/>
+            <Pricing/>
+            <FAQ/>
+            <FinalCta/>
+          </main>
+          <Footer/>
+        </>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<Landing/>);
+
+    // ─── Scroll-triggered section reveals ─────────────────────
+    requestAnimationFrame(() => {
+      const sections = document.querySelectorAll("main > section");
+      sections.forEach((s, i) => { if (i > 0) s.setAttribute("data-tk-reveal", ""); });
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) { e.target.classList.add("tk-in"); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.08, rootMargin: "0px 0px -6% 0px" });
+      document.querySelectorAll("[data-tk-reveal]").forEach(el => io.observe(el));
+    });
+  </script>
+</body>
+</html>

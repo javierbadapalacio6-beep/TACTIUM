@@ -41,6 +41,7 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { getCourtsForCompetition } from '@core/data/federations';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useTeamStore } from '@store/teamStore';
 import {
   formatLongDay,
@@ -159,6 +160,7 @@ export const JornadaScreen = ({
 }: HomeStackScreenProps<'Jornada'>) => {
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
+  const gate = usePremiumGate();
 
   const [matchday, setMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
@@ -437,7 +439,7 @@ export const JornadaScreen = ({
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 16 },
+          { paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -616,7 +618,7 @@ export const JornadaScreen = ({
         {!closed ? (
           <>
             <Pressable
-              onPress={closeMatch}
+              onPress={gate(closeMatch, 'matchday_close')}
               disabled={!canClose || closing}
               style={({ pressed }) => [
                 styles.closeCta,
@@ -645,6 +647,45 @@ export const JornadaScreen = ({
             ) : null}
           </>
         ) : null}
+
+        {/* === ELIMINAR JORNADA === */}
+        {/* Discreto al final. Confirma 2 veces (Alert) y borra en cascada
+            todas las dependencias (lineups, resultados). */}
+        <Pressable
+          onPress={() => {
+            Alert.alert(
+              'Eliminar jornada',
+              `Vas a borrar la jornada J·${String(matchday.jornada_number).padStart(2, '0')} vs ${matchday.opponent}. Se eliminarán también las alineaciones y resultados asociados. Esta acción no se puede deshacer.`,
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Eliminar',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await MatchdaysApi.deleteMatchday(matchday.id);
+                      if (navigation.canGoBack()) navigation.goBack();
+                      else navigation.navigate('HomeRoot');
+                    } catch (e: any) {
+                      Alert.alert(
+                        'No se pudo eliminar',
+                        e?.message ?? 'Inténtalo de nuevo.',
+                      );
+                    }
+                  },
+                },
+              ],
+            );
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Eliminar jornada"
+          style={({ pressed }) => [
+            styles.deleteJornada,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={styles.deleteJornadaLabel}>Eliminar jornada</Text>
+        </Pressable>
       </ScrollView>
 
       {/* === CTA === */}
@@ -919,11 +960,11 @@ const PairResultRow: React.FC<{
 
   const badge =
     outcome.state === 'won'
-      ? { label: 'V', tint: Colors.accent }
+      ? { label: 'V', tint: Colors.accent, a11y: 'Victoria' }
       : outcome.state === 'lost'
-      ? { label: 'D', tint: Colors.error }
+      ? { label: 'D', tint: Colors.error, a11y: 'Derrota' }
       : outcome.state === 'partial'
-      ? { label: '·', tint: Colors.warning }
+      ? { label: '·', tint: Colors.warning, a11y: 'En juego' }
       : null;
 
   const borderColor = tint
@@ -997,6 +1038,8 @@ const PairResultRow: React.FC<{
 
         {badge ? (
           <View
+            accessible
+            accessibilityLabel={badge.a11y}
             style={[
               styles.outcomeBadge,
               {
@@ -2040,6 +2083,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: 'center',
     marginTop: -4,
+  },
+  deleteJornada: {
+    alignSelf: 'center',
+    marginTop: 28,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  deleteJornadaLabel: {
+    color: Colors.error,
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
   manualCloseCancel: {
     alignSelf: 'stretch',

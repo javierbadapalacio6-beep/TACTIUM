@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Line, Rect } from 'react-native-svg';
 
@@ -50,6 +50,44 @@ export const HomeScreen = ({
   const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
   const [nextMatchday, setNextMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   const [lineupFilled, setLineupFilled] = useState(0);
+
+  // Al cambiar de equipo activo, el contenido se reemplaza. Si el usuario
+  // estaba scrolleado, la nueva data podría tener distinta altura y el
+  // scroll se "atornilla" en una posición incoherente → se siente brusco.
+  // Además, los estados locales (matchday, lineup, season) muestran data
+  // del equipo anterior mientras llega la nueva fetch — eso provoca el
+  // "a veces no aparece, después sí". Limpiamos en cuanto cambia team.id
+  // para que useFocusEffect repinte limpio.
+  const scrollRef = useRef<ScrollView | null>(null);
+  // Pulsar la pestaña "Inicio" cuando ya estamos en HomeRoot dispara
+  // scroll-to-top automáticamente (hook estándar de react-navigation).
+  useScrollToTop(scrollRef);
+
+  const prevTeamIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentId = team?.id ?? null;
+    if (prevTeamIdRef.current !== null && prevTeamIdRef.current !== currentId) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      setNextMatchday(null);
+      setLineupFilled(0);
+      setActiveSeason(null);
+    }
+    prevTeamIdRef.current = currentId;
+  }, [team?.id]);
+
+  // Si el usuario está en otra pantalla del Home stack (Jornada, Lineup…)
+  // o en otra pestaña y pulsa "Inicio", al recuperar el foco hacemos
+  // scroll a la parte superior. En el primer mount no hacemos nada.
+  const didMountRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMountRef.current) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      } else {
+        didMountRef.current = true;
+      }
+    }, []),
+  );
 
   // Refetcheamos cada vez que el screen vuelve a foco. El team puede no
   // cambiar de referencia, pero el usuario puede haber creado/editado
@@ -125,7 +163,13 @@ export const HomeScreen = ({
         </View>
         <View style={[styles.topbarSide, styles.topbarSideRight]}>
           {canEdit ? (
-            <Pressable onPress={goSeasons} style={styles.iconBtn} hitSlop={4}>
+            <Pressable
+              onPress={goSeasons}
+              style={styles.iconBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir temporadas"
+            >
               <IconCalendar size={18} color={Colors.text} />
             </Pressable>
           ) : null}
@@ -133,9 +177,12 @@ export const HomeScreen = ({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 24 },
+          // Reserva el alto del tab bar flotante (~64) + offset (12) + colchón (32)
+          // para que el último item no quede pegado al pill cristal.
+          { paddingBottom: insets.bottom + 64 + 12 + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -367,6 +414,8 @@ const ActionRow: React.FC<{
 }> = ({ icon, title, value, hint, onPress }) => (
   <Pressable
     onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={`${title}. ${value}. ${hint}`}
     style={({ pressed }) => [
       styles.actionRow,
       pressed && { opacity: 0.85 },

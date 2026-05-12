@@ -85,8 +85,20 @@ export const BottomSheet: React.FC<Props> = ({
                 {children}
               </View>
             )}
-            {/* Footer sticky (CTA principal). Siempre visible. */}
-            {footer ? <View style={styles.footer}>{footer}</View> : null}
+            {/* Footer sticky (CTA principal). Siempre visible.
+                paddingBottom dinámico para respetar el home indicator y
+                dar aire visual a los botones (antes el borde inferior
+                quedaba cortado). */}
+            {footer ? (
+              <View
+                style={[
+                  styles.footer,
+                  { paddingBottom: safeBottom + 16 },
+                ]}
+              >
+                {footer}
+              </View>
+            ) : null}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -103,9 +115,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheetWrap: {
-    flex: 1, // ✅ Nuevo: Ocupa todo el espacio
     width: '100%',
-    justifyContent: 'flex-end', // ✅ Nuevo: Empuja el sheet al fondo
+    // SIN flex: 1. Si lo pones, el sheetWrap se reparte la pantalla 50/50
+    // con el scrim (que también tiene flex:1), y el sheet acaba en el
+    // centro vertical con una franja grande vacía encima. Dejándolo sin
+    // flex, el sheetWrap se dimensiona a su contenido (el sheet) y se
+    // ancla naturalmente al fondo gracias a la flex column del root.
     backgroundColor: Colors.bgRaised,
   },
   sheet: {
@@ -115,11 +130,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: Colors.hairStrong,
     paddingTop: 10,
-    maxHeight: '90%', // ✅ Aumentado de 92% a 90%
-    minHeight: 200, // ✅ Nuevo: Altura mínima
+    maxHeight: '90%',
+    // Sin minHeight: que el sheet abrace el contenido. Si el contenido
+    // es corto (como el idle de ScanSheet con 2 cards), no hay hueco
+    // vacío detrás. Si excede, el ScrollView gestiona el scroll.
   },
   scrollFull: {
-    flex: 1, // ✅ Nuevo: ScrollView ocupa todo espacio disponible
+    // El ScrollView solo necesita poder shrinkear cuando el contenido
+    // excede el maxHeight del sheet; NO debe expandirse: si lo hace,
+    // arrastra al sheet a su maxHeight aunque el contenido sea pequeño.
+    flexShrink: 1,
   },
   scrollFlex: {
     flexShrink: 1, // Cuando hay footer, se adapta
@@ -134,4 +154,13 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.md + 4,
-    paddingTop: 8, // ✅ Nuevo: Better spacing
+    paddingTop: 8,
+    gap: 14,
+  },
+  footer: {
+    paddingHorizontal: Spacing.md + 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.hair,
+  },
+});

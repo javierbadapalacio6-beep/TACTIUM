@@ -106,6 +106,8 @@ export const CreateClubScreen = ({
               onChangeText={setName}
               placeholder="Padel Club"
               placeholderTextColor={Colors.textFaint}
+              maxLength={60}
+              autoCapitalize="words"
               style={styles.nameInputField}
               autoFocus
             />

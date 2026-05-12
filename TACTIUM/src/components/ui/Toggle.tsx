@@ -8,6 +8,7 @@ interface Props {
   onChange: (next: boolean) => void;
   size?: 'sm' | 'md';
   disabled?: boolean;
+  accessibilityLabel?: string;
 }
 
 export const Toggle: React.FC<Props> = ({
@@ -15,6 +16,7 @@ export const Toggle: React.FC<Props> = ({
   onChange,
   size = 'md',
   disabled = false,
+  accessibilityLabel,
 }) => {
   const w = size === 'sm' ? 36 : 50;
   const h = size === 'sm' ? 22 : 30;
@@ -27,6 +29,9 @@ export const Toggle: React.FC<Props> = ({
       }}
       disabled={disabled}
       hitSlop={6}
+      accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ checked: value, disabled }}
       style={[
         styles.track,
         {

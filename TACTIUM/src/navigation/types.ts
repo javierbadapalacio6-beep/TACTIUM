@@ -58,6 +58,10 @@ export type RootStackParamList = {
   AuthFlow: undefined;
   OnboardingFlow: undefined;
   MainTabs: undefined;
+  // Modales presentados encima de las tabs
+  Paywall: { intent?: string } | undefined;
+  Subscription: undefined;
+  ClubBilling: undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

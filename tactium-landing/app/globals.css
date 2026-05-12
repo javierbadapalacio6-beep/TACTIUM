@@ -1,0 +1,308 @@
+@import "tailwindcss";
+
+/* ============================================================================
+ * TACTIUM · Design tokens (synced con la app móvil)
+ * ============================================================================
+ * Paleta dark exclusiva — el producto vive en oscuro. Si en el futuro
+ * añadimos light mode, hay que duplicar tokens con `@media (prefers-color-scheme: light)`
+ * y comprobar contrastes WCAG independientemente.
+ * --------------------------------------------------------------------------*/
+
+:root {
+  /* Backgrounds */
+  --color-bg: #030F0F;
+  --color-bg-raised: #081818;
+  --color-bg-card: #0C2222;
+  --color-bg-card-2: #0F2A28;
+
+  /* Brand */
+  --color-primary: #03624C;
+  --color-primary-dim: #02463A;
+  --color-accent: #00DF82;
+  --color-accent-dim: #00B86B;
+
+  /* Text */
+  --color-text: #E8F5EF;
+  --color-text-muted: rgba(232, 245, 239, 0.70);
+  --color-text-faint: rgba(232, 245, 239, 0.50);
+  --color-text-inverse: #001810;
+
+  /* Strokes */
+  --color-hair: rgba(232, 245, 239, 0.06);
+  --color-hair-strong: rgba(232, 245, 239, 0.10);
+
+  /* Status */
+  --color-success: #00DF82;
+  --color-warning: #F2C94C;
+  --color-error: #FF6B6B;
+
+  /* Accent tints (overlays) */
+  --color-accent-10: rgba(0, 223, 130, 0.10);
+  --color-accent-25: rgba(0, 223, 130, 0.25);
+  --color-accent-40: rgba(0, 223, 130, 0.40);
+  --color-accent-55: rgba(0, 223, 130, 0.55);
+}
+
+@theme inline {
+  /* Color tokens visibles desde Tailwind: bg-bg, bg-accent, text-text-muted, etc. */
+  --color-bg: var(--color-bg);
+  --color-bg-raised: var(--color-bg-raised);
+  --color-bg-card: var(--color-bg-card);
+  --color-bg-card-2: var(--color-bg-card-2);
+  --color-accent: var(--color-accent);
+  --color-accent-dim: var(--color-accent-dim);
+  --color-accent-10: var(--color-accent-10);
+  --color-accent-25: var(--color-accent-25);
+  --color-accent-40: var(--color-accent-40);
+  --color-accent-55: var(--color-accent-55);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-faint: var(--color-text-faint);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-hair: var(--color-hair);
+  --color-hair-strong: var(--color-hair-strong);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+
+  /* Type scale (mobile-first). Inter para body, JetBrains Mono para eyebrows/datos. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  /* Radius scale — coherente con la app. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+/* Base: el body siempre arranca con el fondo profundo. */
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  /* Anti-zoom iOS en inputs <16px */
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+/* Selección con accent verde — micro-detalle de marca. */
+::selection {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+/* Reduce-motion: respetar siempre. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Float subtle + tilt 3D del mockup en hero — sólo si motion-safe. */
+@keyframes hero-float {
+  0%, 100% {
+    transform: translateY(0) rotateY(-6deg) rotateX(2deg);
+  }
+  50% {
+    transform: translateY(-10px) rotateY(6deg) rotateX(-1deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-hero-float {
+    animation: hero-float 8s ease-in-out infinite;
+    transform-style: preserve-3d;
+  }
+}
+
+/* Container 3D wrapper — perspective para que rotateY/X tenga profundidad. */
+.perspective-\[1200px\] {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+/* ── Aurora background ─────────────────────────────────────────────────────
+ * 3 blobs radiales que se desplazan y deforman muy lento. Cero JS, solo
+ * keyframes CSS + transform/filter (todo GPU-accelerated). Cae a estático
+ * con prefers-reduced-motion gracias al wrapper genérico arriba. */
+.aurora {
+  position: absolute;
+  inset: -20% 0 0 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  /* Mascara para que los blobs no toquen el borde inferior bruscamente. */
+  mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+.aurora-blob-1 {
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(0, 223, 130, 0.55), transparent 70%);
+  top: -200px; left: -100px;
+  animation: aurora-drift-1 22s ease-in-out infinite;
+}
+
+.aurora-blob-2 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(3, 98, 76, 0.65), transparent 70%);
+  top: 100px; right: -100px;
+  animation: aurora-drift-2 28s ease-in-out infinite;
+}
+
+.aurora-blob-3 {
+  width: 700px; height: 400px;
+  background: radial-gradient(ellipse, rgba(0, 184, 107, 0.35), transparent 70%);
+  top: 300px; left: 30%;
+  animation: aurora-drift-3 32s ease-in-out infinite;
+}
+
+/* Blob que sigue el cursor con lerp suavizado (HeroAuroraCursor.tsx).
+ * Cuando JS no se monta, queda en posición inicial razonable (50% 30%).
+ * Cuando reduced-motion, JS no actualiza las vars y queda estático. */
+.aurora-blob-cursor {
+  position: absolute;
+  width: 520px; height: 520px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.4;
+  pointer-events: none;
+  left: var(--aurora-x, 50%);
+  top: var(--aurora-y, 30%);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(0, 223, 130, 0.6), transparent 65%);
+  will-change: left, top;
+}
+
+@keyframes aurora-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1) }
+  33%      { transform: translate(80px, 30px) scale(1.1) }
+  66%      { transform: translate(-40px, 60px) scale(0.95) }
+}
+
+@keyframes aurora-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1) }
+  50%      { transform: translate(-60px, 80px) scale(1.15) }
+}
+
+@keyframes aurora-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg) }
+  50%      { transform: translate(40px, -30px) scale(1.05) rotate(8deg) }
+}
+
+/* Grid sutil sobre la aurora — refuerza el look "data/precision".
+ * Mask radial para que se desvanezca hacia los bordes (sin invadir contenido). */
+.aurora-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(232, 245, 239, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 245, 239, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 30%, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 30%, black 30%, transparent 80%);
+  z-index: 0;
+}
+
+/* ── Marquee horizontal infinito (federaciones) ────────────────────────────
+ * Strip que scrollea continuo. Doblamos contenido en HTML para que el
+ * loop sea seamless. Pausa al hover (UX para leer). */
+@keyframes marquee-scroll {
+  from { transform: translateX(0) }
+  to   { transform: translateX(-50%) }
+}
+
+.marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 60s linear infinite;
+}
+
+.marquee-wrap:hover .marquee {
+  animation-play-state: paused;
+}
+
+/* Mask lateral para que el contenido se desvanezca en los bordes (más
+ * limpio que un corte abrupto). */
+.marquee-wrap {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+}
+
+/* Variante del marquee para tarjetas de features: misma keyframe pero
+ * mucho más lenta (cards grandes, queremos que se puedan leer al pasar). */
+.features-marquee {
+  display: flex;
+  gap: 1rem;
+  width: max-content;
+  animation: marquee-scroll 120s linear infinite;
+}
+.features-marquee-wrap:hover .features-marquee {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .features-marquee {
+    animation: none;
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Hover trail / glow bento cards ────────────────────────────────────────
+ * El glow se posiciona via CSS variables que JS actualiza con la posición
+ * del cursor. Cero rerenders, todo via custom properties. */
+.bento-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    600px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(0, 223, 130, 0.10),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 240ms ease;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+.bento-card:hover::before {
+  opacity: 1;
+}
+
+.bento-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Smooth scroll global ──────────────────────────────────────────────────
+ * scroll-behavior smooth aplica a anchors. scroll-padding-top respeta el
+ * header sticky de 64px para que el target no quede tapado. */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

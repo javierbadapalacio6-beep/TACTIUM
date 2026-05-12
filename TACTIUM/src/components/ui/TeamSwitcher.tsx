@@ -5,6 +5,7 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { useTeamStore } from '@store/teamStore';
+import { toast } from '@store/toastStore';
 
 import { BottomSheet } from './BottomSheet';
 import { IconChevron, IconCheck } from './Icon';
@@ -24,6 +25,7 @@ export const TeamSwitcher: React.FC<{
   const setActiveTeam = useTeamStore((s) => s.setActiveTeam);
 
   const [open, setOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   if (!team) return null;
 
@@ -77,9 +79,29 @@ export const TeamSwitcher: React.FC<{
             return (
               <Pressable
                 key={t.id}
+                disabled={switching}
                 onPress={async () => {
-                  if (!sel) await setActiveTeam(t.id);
-                  setOpen(false);
+                  // Si ya está seleccionado: solo cierra el sheet.
+                  if (sel) {
+                    setOpen(false);
+                    return;
+                  }
+                  // Bloqueamos taps adicionales mientras conmuta para
+                  // evitar carreras (fetch players + resolveMyPlayer).
+                  if (switching) return;
+                  setSwitching(true);
+                  try {
+                    await setActiveTeam(t.id);
+                  } catch (e: any) {
+                    console.warn('TeamSwitcher:setActiveTeam', e);
+                    toast.error(
+                      'No se pudo cambiar de equipo',
+                      e?.message ?? 'Inténtalo de nuevo.',
+                    );
+                  } finally {
+                    setSwitching(false);
+                    setOpen(false);
+                  }
                 }}
                 style={[
                   styles.teamRow,

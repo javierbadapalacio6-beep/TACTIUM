@@ -14,13 +14,22 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
   ImageRecognitionApi,
+  PermissionDeniedError,
+  openAppSettings,
   type ScannedPlayer,
   type ScannedMatchday,
 } from '@core/services/imageRecognition';
 
 import { BottomSheet } from './BottomSheet';
-import { PopoverMenu } from './PopoverMenu';
-import { IconCheck, IconTrash, IconPlus } from './Icon';
+import {
+  IconCheck,
+  IconTrash,
+  IconPlus,
+  IconX,
+  IconCamera,
+  IconImage,
+  IconFile,
+} from './Icon';
 
 type Mode = 'ranking' | 'calendar';
 type Step = 'idle' | 'loading' | 'preview' | 'saving';
@@ -65,11 +74,22 @@ export const ScanSheet: React.FC<Props> = (props) => {
     onClose();
   };
 
-  const pickAndScan = async (source: 'camera' | 'library') => {
+  const pickAndScan = async (source: 'camera' | 'library' | 'file') => {
+    // Cambiamos a 'loading' ANTES de abrir el picker. Eso desmonta el
+    // PopoverMenu y monta el BottomSheet con el spinner, de modo que en
+    // cuanto el usuario cierra el picker (o incluso mientras está abierto)
+    // ya ve el feedback de "Procesando…".
+    setStep('loading');
     try {
-      const picked = await ImageRecognitionApi.pickImageBase64(source);
-      if (!picked) return;
-      setStep('loading');
+      const picked =
+        source === 'file'
+          ? await ImageRecognitionApi.pickFileBase64()
+          : await ImageRecognitionApi.pickImageBase64(source);
+      if (!picked) {
+        // Canceló o no eligió: volvemos al menú compacto.
+        setStep('idle');
+        return;
+      }
       const result =
         mode === 'ranking'
           ? await ImageRecognitionApi.scanRanking(picked.base64, picked.mime)
@@ -82,7 +102,9 @@ export const ScanSheet: React.FC<Props> = (props) => {
       if (withIds.length === 0) {
         Alert.alert(
           'Sin resultados',
-          'No se han podido extraer datos. Prueba con una foto más nítida.',
+          source === 'file'
+            ? 'No se han podido extraer datos del archivo. Prueba con un PDF o imagen más nítida.'
+            : 'No se han podido extraer datos. Prueba con una foto más nítida.',
         );
         setStep('idle');
         return;
@@ -91,7 +113,33 @@ export const ScanSheet: React.FC<Props> = (props) => {
       setStep('preview');
     } catch (e: any) {
       setStep('idle');
-      Alert.alert('Error al procesar imagen', e?.message ?? 'Error desconocido');
+      // Permiso denegado: oferta de ir a Ajustes del OS en vez de toast
+      // genérico que no resuelve nada. Si el user lo deniega definitivamente
+      // ("No volver a preguntar" en Android), launch*Async ya no muestra
+      // el system prompt — sólo desde Ajustes.
+      if (e instanceof PermissionDeniedError) {
+        const labelOf = e.kind === 'camera' ? 'cámara' : 'galería';
+        Alert.alert(
+          `Sin acceso a ${labelOf}`,
+          `Necesitamos acceso a la ${labelOf} para escanear. Puedes activarlo en los Ajustes del dispositivo.`,
+          [
+            { text: 'Ahora no', style: 'cancel' },
+            {
+              text: 'Abrir Ajustes',
+              onPress: () => {
+                openAppSettings().catch(() => {
+                  /* fallback inocuo */
+                });
+              },
+            },
+          ],
+        );
+        return;
+      }
+      Alert.alert(
+        source === 'file' ? 'Error al procesar archivo' : 'Error al procesar imagen',
+        e?.message ?? 'Error desconocido',
+      );
     }
   };
 
@@ -121,17 +169,30 @@ export const ScanSheet: React.FC<Props> = (props) => {
     if (items.length === 0) return;
     setStep('saving');
     try {
+      // Sanitize antes de mandar: trim de nombres, clamp de pts, filtramos
+      // filas vacías. Evita basura en DB cuando el OCR deja celdas sueltas
+      // o el user edita y deja inputs en blanco.
       const sanitized = items.map(({ _id, ...rest }) => rest);
       if (mode === 'ranking') {
-        await (props as RankingProps).onConfirm(
-          sanitized.filter((p) => 'name' in p && p.name.trim() !== '') as ScannedPlayer[],
-        );
+        const players = (sanitized as ScannedPlayer[])
+          .map((p) => ({
+            ...p,
+            name: p.name.trim().replace(/\s+/g, ' '),
+            pts:
+              p.pts != null
+                ? Math.min(Math.max(p.pts, 0), 1000)
+                : undefined,
+          }))
+          .filter((p) => p.name.length >= 2);
+        await (props as RankingProps).onConfirm(players);
       } else {
-        await (props as CalendarProps).onConfirm(
-          sanitized.filter(
-            (m) => 'opponent' in m && m.opponent.trim() !== '',
-          ) as ScannedMatchday[],
-        );
+        const matchdays = (sanitized as ScannedMatchday[])
+          .map((m) => ({
+            ...m,
+            opponent: m.opponent.trim().replace(/\s+/g, ' '),
+          }))
+          .filter((m) => m.opponent.length >= 2);
+        await (props as CalendarProps).onConfirm(matchdays);
       }
       reset();
       onClose();
@@ -149,31 +210,6 @@ export const ScanSheet: React.FC<Props> = (props) => {
   // siempre debe estar visible aunque la lista de filas crezca. Lo colocamos
   // en el `footer` sticky del BottomSheet.
   const inPreview = (step === 'preview' || step === 'saving') && items.length > 0;
-
-  // En estado idle mostramos un PopoverMenu compacto anclado arriba a la
-  // derecha (estilo iOS context menu). Solo cuando el usuario elige fuente
-  // (cámara/galería) y comienza el proceso pasamos al BottomSheet de
-  // pantalla completa para loading/preview.
-  if (step === 'idle') {
-    return (
-      <PopoverMenu
-        open={open}
-        onClose={close}
-        options={[
-          {
-            eyebrow: 'CÁMARA',
-            label: 'Hacer foto',
-            onPress: () => pickAndScan('camera'),
-          },
-          {
-            eyebrow: 'GALERÍA',
-            label: 'Subir imagen',
-            onPress: () => pickAndScan('library'),
-          },
-        ]}
-      />
-    );
-  }
 
   return (
     <BottomSheet
@@ -206,13 +242,65 @@ export const ScanSheet: React.FC<Props> = (props) => {
         ) : undefined
       }
     >
-      <Text style={styles.eyebrow}>{eyebrow}</Text>
-      <Text style={styles.title}>{title}</Text>
+      {/* Header al estilo Claude mobile: X cerrar a la izquierda, título
+          centrado. Spacer transparente a la derecha (mismo ancho que el
+          botón X) para que el título quede ópticamente centrado. */}
+      <View style={styles.idleHeader}>
+        <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
+          <IconX size={14} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.idleTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      {step === 'idle' ? (
+        <View style={styles.sourceRow}>
+          <Pressable
+            onPress={() => pickAndScan('camera')}
+            accessibilityRole="button"
+            accessibilityLabel="Hacer foto con la cámara"
+            style={({ pressed }) => [
+              styles.sourceCard,
+              pressed && { backgroundColor: Colors.accent10 },
+            ]}
+          >
+            <IconCamera size={20} color={Colors.accent} />
+            <Text style={styles.sourceCardLabel}>Cámara</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => pickAndScan('library')}
+            accessibilityRole="button"
+            accessibilityLabel="Elegir de la galería"
+            style={({ pressed }) => [
+              styles.sourceCard,
+              pressed && { backgroundColor: Colors.accent10 },
+            ]}
+          >
+            <IconImage size={20} color={Colors.accent} />
+            <Text style={styles.sourceCardLabel}>Galería</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => pickAndScan('file')}
+            accessibilityRole="button"
+            accessibilityLabel="Elegir archivo PDF o imagen"
+            style={({ pressed }) => [
+              styles.sourceCard,
+              pressed && { backgroundColor: Colors.accent10 },
+            ]}
+          >
+            <IconFile size={20} color={Colors.accent} />
+            <Text style={styles.sourceCardLabel}>Archivo</Text>
+            <Text style={styles.sourceCardHint}>PDF</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {step === 'loading' ? (
         <View style={styles.loaderBox}>
           <ActivityIndicator color={Colors.accent} />
-          <Text style={styles.loaderText}>Procesando imagen…</Text>
+          <Text style={styles.loaderText}>Procesando…</Text>
           <Text style={styles.loaderHint}>Suele tardar 2–5 segundos.</Text>
         </View>
       ) : null}
@@ -401,51 +489,68 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
-  menu: {
-    backgroundColor: Colors.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  menuRow: {
+  // Header del sheet estilo Claude mobile: X cerrar (izq) + título centrado.
+  idleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    marginTop: -4,
+    marginBottom: 4,
   },
-  menuRowFirst: {
-    borderTopLeftRadius: Radius.lg,
-    borderTopRightRadius: Radius.lg,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  menuRowLast: {
-    borderBottomLeftRadius: Radius.lg,
-    borderBottomRightRadius: Radius.lg,
+  // Spacer transparente del mismo ancho que el botón X para que el title
+  // quede centrado pero sin el redondel visible.
+  headerSpacer: {
+    width: 32,
+    height: 32,
   },
-  menuLeading: {
+  idleTitle: {
     flex: 1,
-    minWidth: 0,
-  },
-  menuEyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    color: Colors.textFaint,
-    letterSpacing: 1.5,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  menuLabel: {
+    textAlign: 'center',
     color: Colors.text,
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+
+  // Grid de 2 cards horizontales con icono grande arriba + label debajo.
+  sourceRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  sourceCard: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 6,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  sourceCardLabel: {
+    color: Colors.text,
+    fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
-  menuDivider: {
-    height: 1,
-    backgroundColor: Colors.hair,
-    marginLeft: 16,
+  sourceCardHint: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 9,
+    letterSpacing: 0.4,
   },
 
   loaderBox: {

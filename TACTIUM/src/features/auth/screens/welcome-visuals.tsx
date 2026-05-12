@@ -1,17 +1,16 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
   Defs,
   Line,
   LinearGradient,
-  Path,
   Rect,
   Stop,
-  Text as SvgText,
 } from 'react-native-svg';
 import Animated, {
   Easing,
+  FadeIn,
   useAnimatedProps,
   useSharedValue,
   withDelay,
@@ -22,6 +21,38 @@ import Animated, {
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { NeonDot, Toggle } from '@components/ui';
+import { TactiumMark } from '@components/brand/TactiumMark';
+
+// Hook que anima un contador entero de 0 a `target` durante `duration`ms.
+// Lo usamos para los stats de SeasonVisual (winRate %, jugadas, vict., etc.).
+const useAnimatedCounter = (
+  target: number,
+  duration: number,
+  delay = 0,
+) => {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    setValue(0);
+    let raf: number;
+    let start: number | null = null;
+    const tick = (t: number) => {
+      if (start === null) start = t;
+      const elapsed = t - start - delay;
+      if (elapsed < 0) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      const progress = Math.min(1, elapsed / duration);
+      // ease-out cubic, sigue la regla del UX guide.
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(target * eased));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, delay]);
+  return value;
+};
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -93,84 +124,92 @@ const PlayerDot: React.FC<PlayerDotProps> = ({
 };
 
 const PLAYER_DOTS: PlayerDotProps[] = [
-  { cx: 55, cy: 175, dx: 22, dy: -16, duration: 2400, delay: 0 },
-  { cx: 200, cy: 135, dx: -26, dy: -18, duration: 2800, delay: 600 },
-  { cx: 80, cy: 80, dx: 28, dy: 14, duration: 3000, delay: 200 },
-  { cx: 225, cy: 50, dx: -22, dy: 20, duration: 2600, delay: 900 },
+  { cx: 55, cy: 175, dx: 16, dy: -12, duration: 2600, delay: 0 },
+  { cx: 235, cy: 175, dx: -16, dy: -12, duration: 2600, delay: 600 },
+  { cx: 45, cy: 45, dx: 16, dy: 12, duration: 2600, delay: 200 },
+  { cx: 225, cy: 50, dx: -16, dy: 12, duration: 2600, delay: 900 },
 ];
 
 export const HeroVisual = () => (
-  <Svg width={280} height={220} viewBox="0 0 280 220">
-    <Defs>
-      <LinearGradient id="court" x1="0" y1="0" x2="0" y2="1">
-        <Stop offset="0%" stopColor={Colors.primary} stopOpacity="0.55" />
-        <Stop offset="100%" stopColor={Colors.background} stopOpacity="0.3" />
-      </LinearGradient>
-    </Defs>
-    <Rect
-      x="20"
-      y="14"
-      width="240"
-      height="180"
-      rx="6"
-      fill="url(#court)"
-      stroke={Colors.accent}
-      strokeOpacity={0.55}
-      strokeWidth="1.2"
-    />
-    <Line x1="20" y1="104" x2="260" y2="104" stroke={Colors.accent} strokeOpacity={0.7} strokeWidth="1.2" strokeDasharray="4 4" />
-    <Line x1="140" y1="14" x2="140" y2="60" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-    <Line x1="140" y1="148" x2="140" y2="194" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-    <Line x1="20" y1="60" x2="260" y2="60" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-    <Line x1="20" y1="148" x2="260" y2="148" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-    <Path
-      d="M 55 175 Q 140 105 225 50"
-      fill="none"
-      stroke={Colors.accent}
-      strokeWidth="1.2"
-      strokeDasharray="3 4"
-      opacity={0.35}
-    />
-    {PLAYER_DOTS.map((dot, i) => (
-      <PlayerDot key={i} {...dot} />
-    ))}
-    <Circle cx={140} cy={104} r="22" fill={Colors.background} stroke={Colors.accent} strokeOpacity={0.6} />
-    <SvgText
-      x={140}
-      y={106}
-      textAnchor="middle"
-      fill={Colors.accent}
-      fontFamily={Fonts.mono}
-      fontSize="9"
-    >
-      PLAN
-    </SvgText>
-    <SvgText
-      x={140}
-      y={117}
-      textAnchor="middle"
-      fill={Colors.text}
-      fontFamily={Fonts.mono}
-      fontSize="7"
-      opacity={0.6}
-    >
-      ADAPT · WIN
-    </SvgText>
-  </Svg>
+  // Visual del slide 1. Pista de pádel con los 4 jugadores en movimiento
+  // y el logo TACTIUM en el centro (donde antes ponía PLAN · ADAPT · WIN).
+  <View style={{ width: 340, height: 268, alignItems: 'center', justifyContent: 'center' }}>
+    <Svg width={340} height={268} viewBox="0 0 280 220">
+      <Defs>
+        <LinearGradient id="court" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0%" stopColor={Colors.primary} stopOpacity="0.55" />
+          <Stop offset="100%" stopColor={Colors.background} stopOpacity="0.3" />
+        </LinearGradient>
+      </Defs>
+      <Rect
+        x="20"
+        y="14"
+        width="240"
+        height="180"
+        rx="6"
+        fill="url(#court)"
+        stroke={Colors.accent}
+        strokeOpacity={0.55}
+        strokeWidth="1.2"
+      />
+      <Line x1="20" y1="104" x2="260" y2="104" stroke={Colors.accent} strokeOpacity={0.7} strokeWidth="1.2" strokeDasharray="4 4" />
+      <Line x1="140" y1="60" x2="140" y2="104" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="140" y1="104" x2="140" y2="148" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="20" y1="60" x2="260" y2="60" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="20" y1="148" x2="260" y2="148" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
+      {PLAYER_DOTS.map((dot, i) => (
+        <PlayerDot key={i} {...dot} />
+      ))}
+    </Svg>
+    {/* Logo TACTIUM superpuesto en el centro de la pista. */}
+    <View style={visualStyles.heroLogo} pointerEvents="none">
+      <TactiumMark size={56} gradient />
+    </View>
+  </View>
 );
 
 export const AvailVisual = () => {
+  // Estado final: 3/4 disponibles. Los toggles parten todos en false y
+  // van encendiéndose secuencialmente para simular que el capitán los
+  // está pulsando uno a uno. El que termina en false (jugador 03) NO se
+  // enciende — se queda apagado.
+  const targets = [true, true, false, true];
+  const [states, setStates] = useState<boolean[]>([false, false, false, false]);
+
+  // Tras el mount, encendemos en orden los que SÍ deben quedar en true.
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let stepDelay = 500;
+    const STEP_GAP = 320;
+    targets.forEach((wantOn, i) => {
+      if (!wantOn) return;
+      timers.push(
+        setTimeout(() => {
+          setStates((prev) => {
+            const next = [...prev];
+            next[i] = true;
+            return next;
+          });
+        }, stepDelay),
+      );
+      stepDelay += STEP_GAP;
+    });
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onCount = states.filter(Boolean).length;
   const rows = [
-    { name: 'Jugador 01', pts: '6.2', on: true },
-    { name: 'Jugador 02', pts: '5.8', on: true },
-    { name: 'Jugador 03', pts: '5.4', on: false },
-    { name: 'Jugador 04', pts: '5.1', on: true },
+    { name: 'Jugador 01', pts: '6.2' },
+    { name: 'Jugador 02', pts: '5.8' },
+    { name: 'Jugador 03', pts: '5.4' },
+    { name: 'Jugador 04', pts: '5.1' },
   ];
   return (
     <View style={visualStyles.card}>
       <View style={visualStyles.cardHeader}>
         <Text style={visualStyles.eyebrow}>DISPONIBILIDAD</Text>
-        <Text style={visualStyles.eyebrowAccent}>3 / 4</Text>
+        <Text style={visualStyles.eyebrowAccent}>{onCount} / 4</Text>
       </View>
       {rows.map((r, i) => (
         <View
@@ -194,7 +233,7 @@ export const AvailVisual = () => {
               <Text style={visualStyles.meta}>{r.pts} PTS</Text>
             </View>
           </View>
-          <Toggle value={r.on} onChange={() => {}} size="sm" />
+          <Toggle value={states[i]} onChange={() => {}} size="sm" />
         </View>
       ))}
     </View>
@@ -206,7 +245,32 @@ export const LineupVisual = () => {
     { a: '01', b: '02', sum: 12.0 },
     { a: '03', b: '04', sum: 10.5 },
     { a: '05', b: '06', sum: 9.2 },
+    { a: '07', b: '08', sum: 8.4 },
+    { a: '09', b: '10', sum: 7.1 },
   ];
+
+  // Cada pareja se revela en orden. Dentro de cada pareja, el chip A,
+  // luego el chip B, y por último la puntuación combinada — sensación
+  // de "estamos seleccionando y calculando". Con 5 parejas reducimos el
+  // step a 550ms para que la secuencia completa quede en ~2.6s.
+  const REVEAL_DELAY = 400;
+  const REVEAL_STEP = 550;
+  const [revealedCount, setRevealedCount] = useState(0);
+
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    pairs.forEach((_, i) => {
+      timers.push(
+        setTimeout(
+          () => setRevealedCount(i + 1),
+          REVEAL_DELAY + i * REVEAL_STEP,
+        ),
+      );
+    });
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <View style={visualStyles.card}>
       <View style={visualStyles.cardHeader}>
@@ -216,21 +280,46 @@ export const LineupVisual = () => {
           <Text style={visualStyles.validBadgeText}>VÁLIDA</Text>
         </View>
       </View>
-      {pairs.map((p, i) => (
-        <View key={i} style={visualStyles.pairRow}>
-          <View style={visualStyles.pairIdx}>
-            <Text style={visualStyles.pairIdxText}>{i + 1}</Text>
-          </View>
-          <View style={visualStyles.pairChips}>
-            {[p.a, p.b].map((n, j) => (
-              <View key={j} style={visualStyles.pairChip}>
-                <Text style={visualStyles.pairChipText}>P{n}</Text>
-              </View>
-            ))}
-          </View>
-          <Text style={visualStyles.pairSum}>{p.sum.toFixed(1)}</Text>
-        </View>
-      ))}
+      {pairs.map((p, i) => {
+        if (i >= revealedCount) return null;
+        return (
+          <Animated.View
+            key={i}
+            entering={FadeIn.duration(300).easing(Easing.out(Easing.cubic))}
+            style={visualStyles.pairRow}
+          >
+            <View style={visualStyles.pairIdx}>
+              <Text style={visualStyles.pairIdxText}>{i + 1}</Text>
+            </View>
+            <View style={visualStyles.pairChips}>
+              <Animated.View
+                entering={FadeIn.duration(220)
+                  .delay(120)
+                  .easing(Easing.out(Easing.cubic))}
+                style={visualStyles.pairChip}
+              >
+                <Text style={visualStyles.pairChipText}>P{p.a}</Text>
+              </Animated.View>
+              <Animated.View
+                entering={FadeIn.duration(220)
+                  .delay(220)
+                  .easing(Easing.out(Easing.cubic))}
+                style={visualStyles.pairChip}
+              >
+                <Text style={visualStyles.pairChipText}>P{p.b}</Text>
+              </Animated.View>
+            </View>
+            <Animated.Text
+              entering={FadeIn.duration(260)
+                .delay(380)
+                .easing(Easing.out(Easing.cubic))}
+              style={visualStyles.pairSum}
+            >
+              {p.sum.toFixed(1)}
+            </Animated.Text>
+          </Animated.View>
+        );
+      })}
     </View>
   );
 };
@@ -246,6 +335,45 @@ export const SeasonVisual = () => {
     { v: '·', c: Colors.textFaint },
     { v: '·', c: Colors.textFaint },
   ];
+
+  // Cuenta cuántas jornadas se "han revelado" hasta el momento. Los stats
+  // de abajo se calculan en base a las jornadas reveladas → la barra de
+  // V/E/D y los contadores suben sincronizados con la aparición.
+  const REVEAL_DELAY = 500;
+  const REVEAL_STEP = 140;
+  const [revealedCount, setRevealedCount] = useState(0);
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    journeys.forEach((_, i) => {
+      timers.push(
+        setTimeout(() => setRevealedCount(i + 1), REVEAL_DELAY + i * REVEAL_STEP),
+      );
+    });
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stats por jornadas reveladas (saltan según se van encendiendo celdas).
+  const revealedPlayed = Math.max(
+    0,
+    journeys.slice(0, revealedCount).filter((j) => j.v !== '·').length,
+  );
+  const revealedWins = journeys
+    .slice(0, revealedCount)
+    .filter((j) => j.v === 'V').length;
+  const revealedDraws = journeys
+    .slice(0, revealedCount)
+    .filter((j) => j.v === 'E').length;
+  const revealedLosses = journeys
+    .slice(0, revealedCount)
+    .filter((j) => j.v === 'D').length;
+
+  // Win-rate (%) sube de 0 a 67 pasando por todos los enteros intermedios.
+  // Duración generosa para que sea claramente perceptible. Empieza con el
+  // primer reveal (delay 500ms).
+  const finalWinRate = 67; // 4 victorias / 6 jugadas
+  const winRate = useAnimatedCounter(finalWinRate, 1600, REVEAL_DELAY);
+
   return (
     <View style={visualStyles.card}>
       <View
@@ -259,34 +387,52 @@ export const SeasonVisual = () => {
           <Text style={visualStyles.bigTitle}>2ª Categoría</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={visualStyles.winRate}>67%</Text>
+          <Text style={visualStyles.winRate}>{winRate}%</Text>
           <Text style={visualStyles.winRateLabel}>VICTORIAS</Text>
         </View>
       </View>
       <View style={visualStyles.journeyGrid}>
-        {journeys.map((j, i) => (
-          <View
-            key={i}
-            style={[
-              visualStyles.journeyCell,
-              {
-                backgroundColor: j.v === '·' ? 'transparent' : j.c + '22',
-                borderColor: j.v === '·' ? Colors.hair : j.c + '70',
-              },
-            ]}
-          >
-            <Text style={[visualStyles.journeyText, { color: j.c }]}>{j.v}</Text>
-          </View>
-        ))}
+        {journeys.map((j, i) =>
+          i < revealedCount ? (
+            <Animated.View
+              key={i}
+              entering={FadeIn.duration(220).easing(Easing.out(Easing.cubic))}
+              style={[
+                visualStyles.journeyCell,
+                {
+                  backgroundColor: j.v === '·' ? 'transparent' : j.c + '22',
+                  borderColor: j.v === '·' ? Colors.hair : j.c + '70',
+                },
+              ]}
+            >
+              <Text style={[visualStyles.journeyText, { color: j.c }]}>
+                {j.v}
+              </Text>
+            </Animated.View>
+          ) : (
+            // Placeholder vacío para que el grid no salte de tamaño mientras
+            // se revelan las celdas.
+            <View
+              key={i}
+              style={[
+                visualStyles.journeyCell,
+                {
+                  backgroundColor: 'transparent',
+                  borderColor: 'transparent',
+                },
+              ]}
+            />
+          ),
+        )}
       </View>
       <View style={visualStyles.statsRow}>
         {[
-          ['JUGADAS', '6'],
-          ['VICT.', '4'],
-          ['EMP.', '1'],
-          ['DERR.', '1'],
+          ['JUGADAS', revealedPlayed],
+          ['VICT.', revealedWins],
+          ['EMP.', revealedDraws],
+          ['DERR.', revealedLosses],
         ].map(([l, v]) => (
-          <View key={l} style={{ flex: 1 }}>
+          <View key={l as string} style={{ flex: 1 }}>
             <Text style={visualStyles.statValue}>{v}</Text>
             <Text style={visualStyles.statLabel}>{l}</Text>
           </View>
@@ -297,6 +443,19 @@ export const SeasonVisual = () => {
 };
 
 const visualStyles = StyleSheet.create({
+  heroLogo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // El centro del campo (donde está la red) queda ~14px por encima del
+    // centro geométrico del contenedor. Subimos el logo con paddingBottom
+    // para que aterrice justo sobre la red.
+    paddingBottom: 14,
+  },
   card: {
     width: 290,
     padding: 16,
@@ -463,7 +622,11 @@ const visualStyles = StyleSheet.create({
   journeyText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
+    lineHeight: 11,
     fontWeight: '700',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   statsRow: {
     flexDirection: 'row',

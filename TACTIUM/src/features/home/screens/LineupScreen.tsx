@@ -37,6 +37,7 @@ import * as LineupVariantsApi from '@core/services/lineupVariants';
 import type { LineupVariant } from '@core/services/lineupVariants';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
 import { useTeamStore, type Player } from '@store/teamStore';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -158,6 +159,7 @@ export const LineupScreen = ({
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
+  const gate = usePremiumGate();
   const matchdayId = route.params.matchdayId;
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const mustOrder = requiresStrengthOrder(team?.federation, team?.league, team?.gender);
@@ -1045,7 +1047,9 @@ export const LineupScreen = ({
       >
         <Pressable
           disabled={filledCount < courts || closed}
-          onPress={() => {
+          // gate envuelve la acción: si el user no tiene premium, abre
+          // PaywallScreen antes de ejecutar; si lo tiene, sigue como antes.
+          onPress={gate(() => {
             const back = () => {
               if (navigation.canGoBack()) navigation.goBack();
               else navigation.navigate('HomeRoot');
@@ -1064,7 +1068,7 @@ export const LineupScreen = ({
               return;
             }
             back();
-          }}
+          }, 'lineup_confirm')}
           style={({ pressed }) => [
             styles.cta,
             filledCount < courts && styles.ctaDisabled,

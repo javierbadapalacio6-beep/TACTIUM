@@ -1,18 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   createBottomTabNavigator,
   BottomTabBar,
   type BottomTabBarButtonProps,
   type BottomTabBarProps,
 } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSequence,
-  withSpring,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
@@ -35,38 +34,26 @@ import type { TabParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
-// Icono del tab con micro-animación: cuando pasa de inactivo a activo,
-// hace un "pop" spring (1 → 1.18 → 1.0) en ~280ms — siguiendo la regla
-// `motion-meaning` (la animación expresa la transición de estado).
+// Icono del tab — sólo cambia color según foco. El halo accent se renderiza
+// en el botón (AnimatedTabButton) para englobar icono + label.
 const TabIcon: React.FC<{
   Icon: React.ComponentType<{ size?: number; color?: string }>;
   focused: boolean;
 }> = ({ Icon, focused }) => {
-  const scale = useSharedValue(1);
-  useEffect(() => {
-    if (focused) {
-      scale.value = withSequence(
-        withTiming(1.18, { duration: 140, easing: Easing.out(Easing.quad) }),
-        withSpring(1, { damping: 9, stiffness: 180 }),
-      );
-    }
-  }, [focused, scale]);
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
   return (
-    <Animated.View style={[styles.icon, animStyle]}>
+    <View style={styles.icon}>
       <Icon
         size={22}
         color={focused ? Colors.tabBarActive : Colors.tabBarInactive}
       />
-    </Animated.View>
+    </View>
   );
 };
 
-// Botón custom que añade press-feedback (scale 1 → 0.88) sobre el item
-// del tab. Sigue las reglas `scale-feedback` + `interruptible` +
-// `spring-physics` del UX guide.
+// Botón custom: añade press-feedback (scale 1 → 0.88) y halo accent que
+// englobe icono + label cuando el tab está activo. El halo aparece sin
+// rebote: si el tab ya está activo al montar (Inicio en arranque), se
+// pinta directo en opacidad 1 sin animar.
 const AnimatedTabButton: React.FC<BottomTabBarButtonProps> = ({
   children,
   onPress,
@@ -76,10 +63,35 @@ const AnimatedTabButton: React.FC<BottomTabBarButtonProps> = ({
   accessibilityState,
   testID,
 }) => {
+  const focused = accessibilityState?.selected ?? false;
   const scale = useSharedValue(1);
+  const haloOpacity = useSharedValue(focused ? 1 : 0);
+  const isFirstMount = useRef(true);
+
+  useEffect(() => {
+    const skip = isFirstMount.current;
+    isFirstMount.current = false;
+    if (focused) {
+      // Sin rebote: timing con ease-out. En el primer render, si ya está
+      // activo, saltamos la animación (debe estar ya englobado).
+      haloOpacity.value = skip
+        ? 1
+        : withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+    } else {
+      haloOpacity.value = withTiming(0, {
+        duration: 160,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, [focused, haloOpacity]);
+
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: haloOpacity.value,
+  }));
+
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
@@ -89,14 +101,21 @@ const AnimatedTabButton: React.FC<BottomTabBarButtonProps> = ({
       onPress={onPress}
       onLongPress={onLongPress}
       onPressIn={() => {
-        scale.value = withSpring(0.88, { damping: 14, stiffness: 280 });
+        scale.value = withTiming(0.92, {
+          duration: 90,
+          easing: Easing.out(Easing.cubic),
+        });
       }}
       onPressOut={() => {
-        scale.value = withSpring(1, { damping: 12, stiffness: 220 });
+        scale.value = withTiming(1, {
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+        });
       }}
       android_ripple={null}
       style={styles.tabButton}
     >
+      <Animated.View style={[styles.halo, haloStyle]} pointerEvents="none" />
       <Animated.View style={[styles.tabButtonInner, animStyle]}>
         {children as React.ReactNode}
       </Animated.View>
@@ -113,8 +132,35 @@ const IconClub = IconTeam;
 //     glassPill (overflow hidden, borderRadius → clip del BlurView)
 //       BlurView + tint + border = efecto cristal
 //     BottomTabBar absolute encima (transparente, solo iconos/labels)
+//
+// Se OCULTA automáticamente en screens anidadas (Jornada, Lineup, etc.)
+// — patrón drill-down estándar (Instagram, Twitter): el tab bar molesta
+// y pisa CTAs sticky en pantallas de detalle.
+//
+// Detección por NOMBRE de ruta (allowlist explícita). Confiar en
+// `state.index > 0` es frágil: tras navegar a un detalle, cambiar de tab
+// y volver, el stack puede quedar con index > 0 aunque la screen visible
+// sea ahora root — eso hacía que el tab bar desapareciera en Home.
+const HIDE_TAB_BAR_ON: ReadonlySet<string> = new Set([
+  'Jornada',
+  'Lineup',
+  'Results',
+  'Availability',
+  'SeasonDetail',
+  'CreateTeamFromClub',
+]);
+
 const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
   const insets = useSafeAreaInsets();
+
+  const focusedTab = props.state.routes[props.state.index];
+  const focusedRouteName = getFocusedRouteNameFromRoute(focusedTab);
+  // Si aún no hay state hidratado, focusedRouteName es undefined → root.
+  const isNestedScreen =
+    focusedRouteName !== undefined && HIDE_TAB_BAR_ON.has(focusedRouteName);
+
+  if (isNestedScreen) return null;
+
   return (
     <View
       style={[
@@ -155,6 +201,10 @@ export const TabNavigator = () => {
         tabBarBackground: () => null,
         // Botón con animación de press (scale-feedback + spring).
         tabBarButton: (props) => <AnimatedTabButton {...props} />,
+        // Transición entre tabs estilo "shift" — desplazamiento direccional
+        // según orden de pestañas + crossfade. Sigue las reglas
+        // `navigation-direction` + `motion-meaning` del UX guide.
+        animation: 'shift',
       }}
     >
       {activeRole === 'club_admin' ? (
@@ -298,6 +348,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 22,
+  },
+  halo: {
+    // Englobe icono + label. Inset en los lados para no tocar los bordes
+    // del pill, y en vertical para respetar el padding del tab bar.
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    left: 8,
+    right: 8,
+    borderRadius: 18,
+    backgroundColor: Colors.accent + '22', // ~13% alpha
+    borderWidth: 1,
+    borderColor: Colors.accent + '55',
   },
   label: {
     fontSize: 10,

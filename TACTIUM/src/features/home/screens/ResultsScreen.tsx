@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -75,9 +75,29 @@ export const ResultsScreen = ({
   const [pairs, setPairs] = useState<LineupsApi.LineupPair[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(Math.min(focus, courts - 1));
-  const [savingCell, setSavingCell] = useState<string | null>(null);
+  // savingCells = SET de strings `${court}-${setIdx}` — varias celdas
+  // pueden estar guardando a la vez en pistas distintas. Antes era un
+  // string único y el spinner se "robaba" entre celdas.
+  const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
+  // savedCells = checkmark verde efímero tras guardar bien. Da feedback
+  // positivo cuando la red estuvo lenta y el spinner duró varios segundos.
+  const [savedCells, setSavedCells] = useState<Set<string>>(new Set());
   const [savingForfeit, setSavingForfeit] = useState<number | null>(null);
-  const [closing, setClosing] = useState(false);
+  // Debounce timers + requestId por celda. Map<key, { timer, seq }> donde
+  // `seq` se incrementa con cada llamada y permite descartar respuestas
+  // antiguas si llegan después de una nueva (race con red lenta).
+  const persistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  const persistSeqRef = useRef<Map<string, number>>(new Map());
+  // Espejo síncrono de `matches`. Necesario porque `doPersistCell` se ejecuta
+  // dentro de un `setTimeout` programado en `persistCellDebounced` — el
+  // closure capturado al programar el timer vería `matches` del render
+  // PREVIO al keystroke, no del posterior. Leyendo de `matchesRef.current`
+  // siempre obtenemos los valores tipeados más recientes. Era el bug por
+  // el que sets 2/3 se perdían al salir antes del blur.
+  const matchesRef = useRef<Match[]>(matches);
+  matchesRef.current = matches;
 
   useEffect(() => {
     setExpanded((e) => Math.min(e, courts - 1));
@@ -112,6 +132,7 @@ export const ResultsScreen = ({
             them: r.them !== null ? String(r.them) : '',
           };
         });
+        matchesRef.current = next;
         setMatches(next);
       } catch (e) {
         console.warn('Results fetch', e);
@@ -157,76 +178,124 @@ export const ResultsScreen = ({
     if (!canEdit) return;
     if (value !== '' && !/^\d+$/.test(value)) return;
     const sanitized = value.slice(0, 2);
-    setMatches((ms) =>
-      ms.map((m, i) =>
-        i !== court
-          ? m
-          : {
-              ...m,
-              sets: m.sets.map((s, j) =>
-                j !== setIdx ? s : { ...s, [side]: sanitized },
-              ),
-            },
-      ),
-    );
-  };
-
-  /**
-   * Si todos los partidos tienen outcome resuelto (V/D vía sets o W.O.),
-   * cierra el acta automáticamente. La RPC backend calcula el outcome final
-   * y marca status='finished'. Idempotente: si ya está cerrada, no hace nada.
-   */
-  const maybeAutoClose = async (current: Match[]) => {
-    if (closing) return;
-    if (matchday?.status === 'finished') return;
-    const allResolved = current.every((m) => matchOutcome(m) !== null);
-    if (!allResolved) return;
-    setClosing(true);
-    try {
-      const updated = await MatchdaysApi.closeMatchday(matchdayId);
-      setMatchday(updated);
-      Alert.alert(
-        'Acta cerrada',
-        'Todos los partidos están registrados. La jornada queda como jugada.',
-        [
-          {
-            text: 'Volver a Jornada',
-            onPress: () => {
-              if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate('HomeRoot');
-            },
+    // Actualizamos matchesRef PRIMERO de forma síncrona — así, si el user
+    // teclea y pulsa Back antes de que React aplique el re-render, el
+    // flush en cleanup todavía leerá el valor fresco desde el ref.
+    const next = matchesRef.current.map((m, i) =>
+      i !== court
+        ? m
+        : {
+            ...m,
+            sets: m.sets.map((s, j) =>
+              j !== setIdx ? s : { ...s, [side]: sanitized },
+            ),
           },
-        ],
-      );
-    } catch (e: any) {
-      Alert.alert('No se pudo cerrar acta', e?.message ?? '');
-    } finally {
-      setClosing(false);
-    }
+    );
+    matchesRef.current = next;
+    setMatches(next);
   };
 
-  const persistCell = async (court: number, setIdx: number) => {
+  // El cierre del acta NO es automático tras introducir el último resultado.
+  // El capitán debe poder revisar y corregir antes de cerrar. La acción de
+  // cerrar vive como botón explícito en `JornadaScreen`.
+
+  // Guardado real al servidor (run inmediato — no chequear debounce aquí).
+  // Lee la celda DESDE `matchesRef.current` (no `matches` directo) para
+  // tener siempre los valores tipeados más recientes — `matches` capturado
+  // en closure puede estar stale cuando el timer dispara o el unmount
+  // flushea pendientes.
+  const doPersistCell = async (court: number, setIdx: number) => {
     if (!canEdit) return;
-    const cell = matches[court].sets[setIdx];
+    const key = `${court}-${setIdx}`;
+    const seq = (persistSeqRef.current.get(key) ?? 0) + 1;
+    persistSeqRef.current.set(key, seq);
+
+    const cell = matchesRef.current[court].sets[setIdx];
     const us = cell.us !== '' ? Number(cell.us) : null;
     const them = cell.them !== '' ? Number(cell.them) : null;
-    setSavingCell(`${court}-${setIdx}`);
+
+    setSavingCells((s) => new Set(s).add(key));
     try {
       await MatchResultsApi.upsertSet(matchdayId, court + 1, setIdx + 1, us, them);
-      await maybeAutoClose(matches);
+      // Si en el camino otra request más reciente arrancó (seq mayor),
+      // descartamos esta respuesta — no marcamos como guardada con
+      // valores potencialmente obsoletos.
+      if (persistSeqRef.current.get(key) !== seq) return;
+      setSavedCells((s) => new Set(s).add(key));
+      // El check verde desaparece tras 1.2 s.
+      setTimeout(() => {
+        setSavedCells((s) => {
+          const n = new Set(s);
+          n.delete(key);
+          return n;
+        });
+      }, 1200);
     } catch (e: any) {
-      Alert.alert('No se pudo guardar', e?.message ?? '');
+      if (persistSeqRef.current.get(key) === seq) {
+        Alert.alert('No se pudo guardar', e?.message ?? '');
+      }
     } finally {
-      setSavingCell(null);
+      if (persistSeqRef.current.get(key) === seq) {
+        setSavingCells((s) => {
+          const n = new Set(s);
+          n.delete(key);
+          return n;
+        });
+      }
     }
   };
+
+  // Versión debounced — la que llama el TextInput onChange. Programa el
+  // guardado 600 ms tras el último tecleo en esa misma celda. Si el user
+  // sigue tecleando, se cancela y reprograma.
+  const persistCellDebounced = (court: number, setIdx: number) => {
+    if (!canEdit) return;
+    const key = `${court}-${setIdx}`;
+    const existing = persistTimersRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const t = setTimeout(() => {
+      persistTimersRef.current.delete(key);
+      doPersistCell(court, setIdx);
+    }, 600);
+    persistTimersRef.current.set(key, t);
+  };
+
+  // Flush inmediato: usado en onBlur y en unmount para forzar el guardado
+  // de cualquier debounce pendiente. Si ya no hay timer, no hace nada.
+  const flushCell = (court: number, setIdx: number) => {
+    const key = `${court}-${setIdx}`;
+    const timer = persistTimersRef.current.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      persistTimersRef.current.delete(key);
+      doPersistCell(court, setIdx);
+    }
+  };
+
+  // Al desmontar: flushea cualquier timer pendiente (dispara guardado
+  // inmediato con últimos valores). Sin esto, si el user sale a <600ms
+  // del último tecleo, esa edición se pierde porque el timer se cancela.
+  // Captura las keys en closure para no leer state stale.
+  const flushAllRef = useRef<() => void>(() => {});
+  flushAllRef.current = () => {
+    const timers = persistTimersRef.current;
+    timers.forEach((t, key) => {
+      clearTimeout(t);
+      const [c, s] = key.split('-').map(Number);
+      doPersistCell(c, s);
+    });
+    timers.clear();
+  };
+  useEffect(() => {
+    return () => {
+      flushAllRef.current();
+    };
+  }, []);
 
   const toggleForfeit = async (court: number) => {
     if (!canEdit) return;
-    const next = !matches[court].forfeit;
-    // Calculamos el nuevo estado explícitamente para poder pasárselo al
-    // auto-cierre sin depender de la actualización async de useState.
-    const nextMatches: Match[] = matches.map((m, i) =>
+    const next = !matchesRef.current[court].forfeit;
+    const nextMatches: Match[] = matchesRef.current.map((m, i) =>
       i !== court
         ? m
         : {
@@ -235,17 +304,19 @@ export const ResultsScreen = ({
             sets: next ? m.sets.map(() => ({ us: '', them: '' })) : m.sets,
           },
     );
+    matchesRef.current = nextMatches;
     setMatches(nextMatches);
     setSavingForfeit(court);
     try {
       await MatchResultsApi.setCourtForfeit(matchdayId, court + 1, next, SETS);
-      await maybeAutoClose(nextMatches);
     } catch (e: any) {
       Alert.alert('No se pudo guardar', e?.message ?? '');
-      // Rollback
-      setMatches((ms) =>
-        ms.map((m, i) => (i !== court ? m : { ...m, forfeit: !next })),
+      // Rollback en caso de fallo de red.
+      const rollback = matchesRef.current.map((m, i) =>
+        i !== court ? m : { ...m, forfeit: !next },
       );
+      matchesRef.current = rollback;
+      setMatches(rollback);
     } finally {
       setSavingForfeit(null);
     }
@@ -286,7 +357,7 @@ export const ResultsScreen = ({
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 22 },
+          { paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -382,7 +453,8 @@ export const ResultsScreen = ({
                 expanded={expanded === ci}
                 disabled={!canEdit}
                 outcome={matchOutcome(m)}
-                savingCell={savingCell}
+                savingCells={savingCells}
+                savedCells={savedCells}
                 savingForfeit={savingForfeit === ci}
                 isHome={isHome}
                 homeName={homeName}
@@ -390,10 +462,14 @@ export const ResultsScreen = ({
                 onToggleExpand={() =>
                   setExpanded((e) => (e === ci ? -1 : ci))
                 }
-                onUpdateCell={(setIdx, side, value) =>
-                  updateSet(ci, setIdx, side, value)
-                }
-                onPersistCell={(setIdx) => persistCell(ci, setIdx)}
+                onUpdateCell={(setIdx, side, value) => {
+                  updateSet(ci, setIdx, side, value);
+                  // Tras cada cambio, reprogramamos el debounce de esa
+                  // celda. Cuando el user deje de teclear 600 ms, se
+                  // dispara el guardado real con valores finales.
+                  persistCellDebounced(ci, setIdx);
+                }}
+                onPersistCell={(setIdx) => flushCell(ci, setIdx)}
                 onToggleForfeit={() => toggleForfeit(ci)}
               />
             );
@@ -423,7 +499,11 @@ const ResultRow: React.FC<{
   expanded: boolean;
   disabled: boolean;
   outcome: 'won' | 'lost' | null;
-  savingCell: string | null;
+  // Sets de keys `${court}-${setIdx}` para indicadores por celda.
+  // Pasar Sets en vez de un único string permite múltiples spinners
+  // simultáneos sin "robarse" entre celdas distintas.
+  savingCells: Set<string>;
+  savedCells: Set<string>;
   savingForfeit: boolean;
   isHome: boolean;
   homeName: string;
@@ -439,7 +519,8 @@ const ResultRow: React.FC<{
   expanded,
   disabled,
   outcome,
-  savingCell,
+  savingCells,
+  savedCells,
   savingForfeit,
   isHome,
   homeName,
@@ -481,6 +562,10 @@ const ResultRow: React.FC<{
     >
       <Pressable
         onPress={onToggleExpand}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}. ${summaryText}`}
+        accessibilityState={{ expanded }}
+        hitSlop={4}
         style={({ pressed }) => [styles.rowHeader, pressed && { opacity: 0.85 }]}
       >
         <View
@@ -512,6 +597,8 @@ const ResultRow: React.FC<{
 
         {outcome ? (
           <View
+            accessible
+            accessibilityLabel={outcome === 'won' ? 'Victoria' : 'Derrota'}
             style={[
               styles.outcomePill,
               { backgroundColor: `${tint}15`, borderColor: `${tint}40` },
@@ -522,7 +609,11 @@ const ResultRow: React.FC<{
             </Text>
           </View>
         ) : (
-          <View style={styles.outcomePill}>
+          <View
+            accessible
+            accessibilityLabel="Sin resultado"
+            style={styles.outcomePill}
+          >
             <Text style={styles.outcomePillTextMuted}>—</Text>
           </View>
         )}
@@ -618,7 +709,8 @@ const ResultRow: React.FC<{
                   cell={cell}
                   isHome={isHome}
                   disabled={disabled}
-                  saving={savingCell === `${court}-${i}`}
+                  saving={savingCells.has(`${court}-${i}`)}
+                  saved={savedCells.has(`${court}-${i}`)}
                   onChange={(side, value) =>
                     onUpdateCell(i, side, value)
                   }
@@ -643,13 +735,27 @@ const SetLine: React.FC<{
   isHome: boolean;
   disabled: boolean;
   saving: boolean;
+  saved: boolean;
   onChange: (side: 'us' | 'them', value: string) => void;
   onBlurCell: () => void;
-}> = ({ setIdx, cell, isHome, disabled, saving, onChange, onBlurCell }) => {
+}> = ({ setIdx, cell, isHome, disabled, saving, saved, onChange, onBlurCell }) => {
   const leftSide: 'us' | 'them' = isHome ? 'us' : 'them';
   const rightSide: 'us' | 'them' = isHome ? 'them' : 'us';
   const leftValue = cell[leftSide];
   const rightValue = cell[rightSide];
+
+  // Validación de marcador padel:
+  //   - Sets 1 y 2: 0..7 (7 sólo con tiebreak desde 6-6).
+  //   - Set 3 ("OPC."): super-tiebreak, hasta 15 (cubre 10-X con diferencia
+  //     de 2; 15 es margen amplio).
+  // Cualquier entrada mayor se clampa al máximo del set en cuestión.
+  const maxForSet = setIdx === 2 ? 15 : 7;
+  const sanitize = (raw: string): string => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    if (!digits) return '';
+    const n = Math.min(parseInt(digits, 10), maxForSet);
+    return String(n);
+  };
 
   return (
     <View style={styles.setLine}>
@@ -663,7 +769,8 @@ const SetLine: React.FC<{
           accent={leftSide === 'us'}
           disabled={disabled}
           saving={saving}
-          onChange={(v) => onChange(leftSide, v)}
+          saved={saved}
+          onChange={(v) => onChange(leftSide, sanitize(v))}
           onBlurCell={onBlurCell}
         />
         <Text style={styles.setLineSep}>·</Text>
@@ -672,7 +779,8 @@ const SetLine: React.FC<{
           accent={rightSide === 'us'}
           disabled={disabled}
           saving={saving}
-          onChange={(v) => onChange(rightSide, v)}
+          saved={saved}
+          onChange={(v) => onChange(rightSide, sanitize(v))}
           onBlurCell={onBlurCell}
         />
       </View>
@@ -686,9 +794,10 @@ const ScoreCell: React.FC<{
   accent: boolean;
   disabled: boolean;
   saving: boolean;
+  saved: boolean;
   onChange: (value: string) => void;
   onBlurCell: () => void;
-}> = ({ value, accent, disabled, saving, onChange, onBlurCell }) => (
+}> = ({ value, accent, disabled, saving, saved, onChange, onBlurCell }) => (
   <View style={styles.scoreCellWrap}>
     <TextInput
       value={value}
@@ -699,6 +808,7 @@ const ScoreCell: React.FC<{
       editable={!disabled}
       placeholder="·"
       placeholderTextColor={Colors.textFaint}
+      accessibilityLabel={accent ? 'Juegos a favor' : 'Juegos del rival'}
       style={[
         styles.scoreCell,
         { color: accent && value ? Colors.accent : Colors.text },
@@ -708,6 +818,12 @@ const ScoreCell: React.FC<{
     {saving ? (
       <View style={styles.scoreCellSaving}>
         <ActivityIndicator size="small" color={Colors.accent} />
+      </View>
+    ) : saved ? (
+      // Check verde efímero (~1.2s) tras guardado exitoso — feedback
+      // positivo cuando la red fue lenta y el spinner duró un rato.
+      <View style={styles.scoreCellSaving}>
+        <IconCheck size={12} color={Colors.accent} />
       </View>
     ) : null}
   </View>

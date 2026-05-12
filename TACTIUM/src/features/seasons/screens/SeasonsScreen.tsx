@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -24,6 +24,8 @@ import {
 } from '@components/ui';
 import * as SeasonsApi from '@core/services/seasons';
 import { useTeamStore } from '@store/teamStore';
+import { toast } from '@store/toastStore';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { SeasonsStackScreenProps } from '@navigation/types';
 
@@ -32,19 +34,33 @@ export const SeasonsScreen = ({
 }: SeasonsStackScreenProps<'SeasonsRoot'>) => {
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
+  const gate = usePremiumGate();
 
   const [seasons, setSeasons] = useState<SeasonsApi.Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  // Marcamos cuando la última carga falló para mostrar empty-state con
+  // botón "Reintentar" en lugar de pintar como si no hubiera temporadas
+  // (que es semánticamente distinto).
+  const [loadError, setLoadError] = useState(false);
+
+  // CTA "crear temporada" envuelto en gate premium.
+  const startCreating = gate(() => setCreating(true), 'season_create');
 
   const reload = React.useCallback(async () => {
     if (!team) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const list = await SeasonsApi.fetchSeasons(team.id);
       setSeasons(list);
     } catch (e: any) {
       console.warn('fetchSeasons', e);
+      setLoadError(true);
+      toast.error(
+        'No se pudieron cargar las temporadas',
+        e?.message ?? 'Comprueba tu conexión.',
+      );
     } finally {
       setLoading(false);
     }
@@ -60,6 +76,21 @@ export const SeasonsScreen = ({
     }, [reload]),
   );
 
+  // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
+  // desde otra pantalla (tab o stack nested).
+  const scrollRef = useRef<ScrollView | null>(null);
+  useScrollToTop(scrollRef);
+  const didMountRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMountRef.current) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      } else {
+        didMountRef.current = true;
+      }
+    }, []),
+  );
+
   const active = seasons.filter((s) => s.active);
   const past = seasons.filter((s) => !s.active);
 
@@ -70,7 +101,10 @@ export const SeasonsScreen = ({
           {team ? `${team.name.toUpperCase()} · ${team.category ?? ''}` : 'TEMPORADAS'}
         </Text>
         <Pressable
-          onPress={() => setCreating(true)}
+          onPress={startCreating}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Crear temporada"
           style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
         >
           <IconPlus size={16} color={Colors.accent} />
@@ -85,15 +119,39 @@ export const SeasonsScreen = ({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + 22 },
+          // Reserva el alto del tab bar flotante (~64) + offset (12) + colchón (32)
+          // para que el último item no quede pegado al pill cristal.
+          { paddingBottom: insets.bottom + 64 + 12 + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
           <View style={{ paddingVertical: 60, alignItems: 'center' }}>
             <ActivityIndicator color={Colors.accent} />
+          </View>
+        ) : loadError && seasons.length === 0 ? (
+          // Fallo en la primera carga (sin caché previa) — distinguimos del
+          // empty-state "Sin temporadas" para dejar claro que es un error
+          // de red, no que no haya datos.
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>No se pudieron cargar</Text>
+            <Text style={styles.emptyText}>
+              Comprueba tu conexión y vuelve a intentarlo.
+            </Text>
+            <Pressable
+              onPress={reload}
+              style={({ pressed }) => [
+                styles.emptyCta,
+                pressed && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Reintentar cargar temporadas"
+            >
+              <Text style={styles.emptyCtaLabel}>Reintentar</Text>
+            </Pressable>
           </View>
         ) : (
           <>
@@ -111,6 +169,18 @@ export const SeasonsScreen = ({
                 <Text style={styles.emptyText}>
                   Crea la primera temporada para empezar a planificar jornadas.
                 </Text>
+                <Pressable
+                  onPress={startCreating}
+                  style={({ pressed }) => [
+                    styles.emptyCta,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Crear primera temporada"
+                >
+                  <IconPlus size={14} color={Colors.textInverse} />
+                  <Text style={styles.emptyCtaLabel}>Crear temporada</Text>
+                </Pressable>
               </View>
             ) : null}
 
@@ -132,13 +202,21 @@ export const SeasonsScreen = ({
               </>
             ) : null}
 
-            <Pressable
-              onPress={() => setCreating(true)}
-              style={({ pressed }) => [styles.dashed, pressed && { opacity: 0.7 }]}
-            >
-              <IconPlus size={14} color={Colors.accent} />
-              <Text style={styles.dashedText}>Crear nueva temporada</Text>
-            </Pressable>
+            {/* Dashed "Crear nueva temporada" sólo cuando ya hay alguna —
+                si la lista está vacía, la card empty ya tiene su CTA y
+                duplicar botones distrae. */}
+            {seasons.length > 0 ? (
+              <Pressable
+                onPress={startCreating}
+                style={({ pressed }) => [
+                  styles.dashed,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <IconPlus size={14} color={Colors.accent} />
+                <Text style={styles.dashedText}>Crear nueva temporada</Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -263,6 +341,8 @@ const CreateSeasonSheet: React.FC<{
         <TextInput
           value={name}
           onChangeText={setName}
+          maxLength={60}
+          autoCapitalize="words"
           style={styles.sheetInput}
           placeholderTextColor={Colors.textFaint}
         />
@@ -512,6 +592,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
+  },
+  emptyCta: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.accent,
+  },
+  emptyCtaLabel: {
+    color: Colors.textInverse,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
   },
   sheetEyebrow: {
     fontFamily: Fonts.mono,

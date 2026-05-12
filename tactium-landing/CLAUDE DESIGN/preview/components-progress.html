@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Progress</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>body{margin:0;padding:24px;background:var(--color-bg);display:flex;flex-direction:column;gap:16px;}
+.lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-text-faint);}
+.bar{height:4px;background:rgba(255,255,255,0.10);border-radius:2px;overflow:hidden;}
+.bar > i{display:block;height:100%;background:var(--color-accent);}
+.row{display:flex;justify-content:space-between;align-items:baseline;}
+.num{font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--color-text);font-variant-numeric:tabular-nums;}
+.muted{color:var(--color-text-faint);}
+.ring{width:54px;height:54px;}
+.ring text{font-family:var(--font-mono);font-size:11px;fill:var(--color-text);letter-spacing:0.1em;}
+.ring-row{display:flex;align-items:center;gap:18px;}
+</style></head><body>
+  <div class="lbl">Progress bars · stacked & solo</div>
+  <div>
+    <div class="row"><span class="num">100/100</span><span class="num muted">EQUI.</span></div>
+    <div class="bar" style="margin-top:6px"><i style="width:100%"></i></div>
+  </div>
+  <div>
+    <div class="row"><span class="num">82</span><span class="num muted">%</span></div>
+    <div class="bar" style="margin-top:6px"><i style="width:82%"></i></div>
+  </div>
+  <div class="ring-row">
+    <svg class="ring" viewBox="0 0 36 36">
+      <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="3"/>
+      <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-accent)" stroke-width="3" stroke-dasharray="94.2" stroke-dashoffset="9" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+      <text x="18" y="20" text-anchor="middle">90%</text>
+    </svg>
+    <div><div class="num">Equipo confirmado</div><div class="num muted">9 de 10 disponibles para J·07</div></div>
+  </div>
+</body></html>

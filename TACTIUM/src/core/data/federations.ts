@@ -178,8 +178,11 @@ export function requiresStrengthOrder(
   return true;
 }
 
+// Listado mostrado al usuario al crear equipo/club. No incluye la FEP
+// nacional porque las ligas oficiales se juegan bajo la federación
+// autonómica; FEP sigue existiendo en `FEDERATION_RULES` como referencia
+// normativa default si alguna pantalla lo necesita.
 export const FEDERATIONS: Federation[] = [
-  { code: 'FEP',   name: 'Federación Española de Pádel',                    shortName: 'FEP',   region: 'Nacional' },
   { code: 'FAP',   name: 'Federación Andaluza de Pádel',                    shortName: 'FAP',   region: 'Andalucía' },
   { code: 'FAraP', name: 'Federación Aragonesa de Pádel',                   shortName: 'FAraP', region: 'Aragón' },
   { code: 'FPPA',  name: 'Federación de Pádel del Principado de Asturias',  shortName: 'FPPA',  region: 'Asturias' },
