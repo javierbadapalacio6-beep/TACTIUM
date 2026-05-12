@@ -1046,37 +1046,53 @@ export const LineupScreen = ({
         ]}
       >
         <Pressable
-          disabled={filledCount < courts || closed}
-          // gate envuelve la acción: si el user no tiene premium, abre
-          // PaywallScreen antes de ejecutar; si lo tiene, sigue como antes.
-          onPress={gate(() => {
-            const back = () => {
-              if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate('HomeRoot');
-            };
-            // Soft warning: si la federación exige orden y se incumple,
-            // pedimos confirmación pero permitimos guardar.
-            if (!allOk && mustOrder) {
-              Alert.alert(
-                'Orden de parejas',
-                'Las parejas no van en orden de fuerza decreciente. La federación puede rechazar el acta. ¿Guardar igualmente?',
-                [
-                  { text: 'Cancelar', style: 'cancel' },
-                  { text: 'Guardar igual', style: 'destructive', onPress: back },
-                ],
-              );
-              return;
-            }
-            back();
-          }, 'lineup_confirm')}
+          disabled={!closed && filledCount < courts}
+          // Si el acta esta cerrada (closed), el boton actua como "Volver"
+          // sin pasar por el gate premium (no tiene sentido paywall al volver).
+          // Si no, gate envuelve la acción: si el user no tiene premium,
+          // abre PaywallScreen antes de ejecutar; si lo tiene, sigue como antes.
+          onPress={
+            closed
+              ? () => {
+                  if (navigation.canGoBack()) navigation.goBack();
+                  else navigation.navigate('HomeRoot');
+                }
+              : gate(() => {
+                  const back = () => {
+                    if (navigation.canGoBack()) navigation.goBack();
+                    else navigation.navigate('HomeRoot');
+                  };
+                  // Soft warning: si la federación exige orden y se incumple,
+                  // pedimos confirmación pero permitimos guardar.
+                  if (!allOk && mustOrder) {
+                    Alert.alert(
+                      'Orden de parejas',
+                      'Las parejas no van en orden de fuerza decreciente. La federación puede rechazar el acta. ¿Guardar igualmente?',
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Guardar igual', style: 'destructive', onPress: back },
+                      ],
+                    );
+                    return;
+                  }
+                  back();
+                }, 'lineup_confirm')
+          }
           style={({ pressed }) => [
             styles.cta,
-            filledCount < courts && styles.ctaDisabled,
-            !allOk && filledCount === courts && styles.ctaWarn,
-            pressed && filledCount === courts && { opacity: 0.85 },
+            !closed && filledCount < courts && styles.ctaDisabled,
+            !closed && !allOk && filledCount === courts && styles.ctaWarn,
+            pressed && (closed || filledCount === courts) && { opacity: 0.85 },
           ]}
         >
-          {filledCount < courts ? (
+          {closed ? (
+            // Acta cerrada: el boton actua siempre como "Volver", sin importar
+            // el estado de fill o aviso de orden de parejas.
+            <>
+              <IconCheck size={15} color="#000" />
+              <Text style={styles.ctaLabel}>Volver</Text>
+            </>
+          ) : filledCount < courts ? (
             <Text style={styles.ctaLabelDisabled}>
               Faltan {courts - filledCount}
             </Text>
@@ -1088,9 +1104,7 @@ export const LineupScreen = ({
           ) : (
             <>
               <IconCheck size={15} color="#000" />
-              <Text style={styles.ctaLabel}>
-                {closed ? 'Volver' : 'Confirmar alineación'}
-              </Text>
+              <Text style={styles.ctaLabel}>Confirmar alineación</Text>
             </>
           )}
         </Pressable>
