@@ -17,7 +17,7 @@ export function Hero() {
   return (
     <section
       id="hero"
-      className="relative overflow-hidden pt-16 pb-24 sm:pt-24 sm:pb-32"
+      className="relative overflow-hidden pt-16 pb-12 sm:pt-24 sm:pb-16"
     >
       {/* Aurora animada + grid sutil — capas decorativas, no interactivas. */}
       <div className="aurora" aria-hidden="true">

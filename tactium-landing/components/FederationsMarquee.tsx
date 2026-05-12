@@ -31,7 +31,7 @@ export function FederationsMarquee() {
   return (
     <section
       aria-label="Federaciones autonómicas soportadas"
-      className="py-12 border-y border-[var(--color-hair)] bg-[color-mix(in_srgb,var(--color-bg)_92%,var(--color-bg-card))]"
+      className="py-8 border-y border-[var(--color-hair)] bg-[color-mix(in_srgb,var(--color-bg)_92%,var(--color-bg-card))]"
     >
       <div className="max-w-6xl mx-auto px-6">
         <p className="font-mono text-[10px] tracking-[0.3em] text-[var(--color-text-faint)] text-center mb-6">

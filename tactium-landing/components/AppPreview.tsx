@@ -93,7 +93,7 @@ export function AppPreview() {
     <section
       ref={sectionRef}
       id="app-preview"
-      className="relative py-24 sm:py-32 border-t border-[var(--color-hair)] overflow-hidden"
+      className="relative py-16 sm:py-24 border-t border-[var(--color-hair)] overflow-hidden"
     >
       {/* Glow ambient suave detrás del stack */}
       <div

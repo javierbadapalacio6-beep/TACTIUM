@@ -8,7 +8,7 @@ export function Faq() {
   return (
     <section
       id="faq"
-      className="py-20 sm:py-28 border-t border-[var(--color-hair)]"
+      className="py-14 sm:py-20 border-t border-[var(--color-hair)]"
     >
       <div className="max-w-3xl mx-auto px-6">
         <div className="text-center mb-12">

@@ -67,7 +67,7 @@ export function ForClubs() {
     <section
       ref={sectionRef}
       id="for-clubs"
-      className="relative py-24 sm:py-32 border-t border-[var(--color-hair)] overflow-hidden"
+      className="relative py-16 sm:py-24 border-t border-[var(--color-hair)] overflow-hidden"
     >
       <div className="relative max-w-6xl mx-auto px-6 grid lg:grid-cols-[1fr_1.1fr] gap-12 lg:gap-16 items-center">
         {/* Izq: copy */}

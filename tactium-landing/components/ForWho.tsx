@@ -33,7 +33,7 @@ export function ForWho() {
   return (
     <section
       id="para-quien"
-      className="py-20 sm:py-28 border-t border-[var(--color-hair)]"
+      className="py-14 sm:py-20 border-t border-[var(--color-hair)]"
     >
       <div className="max-w-6xl mx-auto px-6">
         <div className="mb-12 sm:mb-16">

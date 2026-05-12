@@ -72,7 +72,7 @@ export function Features() {
   return (
     <section
       id="features"
-      className="py-20 sm:py-28 border-t border-[var(--color-hair)] overflow-hidden"
+      className="py-14 sm:py-20 border-t border-[var(--color-hair)] overflow-hidden"
     >
       <div className="max-w-6xl mx-auto px-6 mb-12 sm:mb-16">
         <p className="font-mono text-[11px] tracking-[0.25em] font-medium text-[var(--color-accent)] mb-3">

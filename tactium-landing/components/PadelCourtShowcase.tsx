@@ -246,7 +246,7 @@ export function PadelCourtShowcase() {
   return (
     <section
       id="court"
-      className="relative py-20 sm:py-28 border-t border-[var(--color-hair)] overflow-hidden"
+      className="relative py-14 sm:py-20 border-t border-[var(--color-hair)] overflow-hidden"
     >
       <div
         aria-hidden="true"
