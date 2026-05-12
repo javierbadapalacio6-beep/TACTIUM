@@ -100,8 +100,8 @@ export default async function OpengraphImage() {
             }}
           >
             <span>El sistema operativo</span>
-            <span>
-              del{" "}
+            <span style={{ display: "flex", gap: "0.3em" }}>
+              <span>del</span>
               <span style={{ color: "#00DF82" }}>pádel federado</span>
             </span>
           </div>
