@@ -1,0 +1,69 @@
+name: Weekly Supabase Backup
+
+on:
+  schedule:
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Run pg_dump (public + private schemas)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set"
+            exit 1
+          fi
+          TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+          FILENAME="tactium_backup_${TIMESTAMP}.sql"
+          pg_dump \
+            --clean \
+            --if-exists \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            --schema=private \
+            "$SUPABASE_DB_URL" > "$FILENAME"
+          BYTES=$(wc -c < "$FILENAME")
+          echo "Dump size: ${BYTES} bytes"
+          if [ "$BYTES" -lt 10000 ]; then
+            echo "::error::Backup file suspiciously small (${BYTES} bytes). Aborting."
+            exit 1
+          fi
+          gzip -9 "$FILENAME"
+          echo "BACKUP_FILE=${FILENAME}.gz" >> "$GITHUB_ENV"
+          echo "BACKUP_NAME=tactium-backup-${TIMESTAMP}" >> "$GITHUB_ENV"
+          ls -lh "${FILENAME}.gz"
+
+      - name: Export auth.users (data only)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+          USERS_FILE="tactium_auth_users_${TIMESTAMP}.csv"
+          psql "$SUPABASE_DB_URL" -c "\copy (SELECT id, email, created_at, last_sign_in_at, raw_user_meta_data FROM auth.users ORDER BY created_at) TO STDOUT WITH CSV HEADER" > "$USERS_FILE"
+          echo "Users exported: $(wc -l < "$USERS_FILE") rows (incl. header)"
+          gzip -9 "$USERS_FILE"
+          echo "USERS_FILE=${USERS_FILE}.gz" >> "$GITHUB_ENV"
+
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_NAME }}
+          path: |
+            ${{ env.BACKUP_FILE }}
+            ${{ env.USERS_FILE }}
+          retention-days: 90
+          compression-level: 0
