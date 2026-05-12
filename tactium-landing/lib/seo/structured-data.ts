@@ -21,7 +21,7 @@ export function organizationSchema(siteUrl: string) {
     ],
     contactPoint: {
       "@type": "ContactPoint",
-      email: "hola@tactium.app",
+      email: "hola@tactium.io",
       contactType: "customer support",
       availableLanguage: ["Spanish"],
     },

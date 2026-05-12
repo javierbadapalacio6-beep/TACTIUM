@@ -20,10 +20,10 @@ Carpeta: `public/brand/social/avatars/`
 ## Instagram
 
 ### Handle / @username
-**Primera opción**: `@tactium.app` (o `@tactium.padel` si está cogido)
+**Primera opción**: `@tactium.io` (o `@tactium.padel` si está cogido)
 **Backup**: `@tactium_app` o `@tactium.lab`
 
-> Verifica disponibilidad antes de crear el handle: https://www.instagram.com/tactium.app/
+> Verifica disponibilidad antes de crear el handle: https://www.instagram.com/tactium.io/
 
 ### Nombre visible (display name)
 ```
@@ -61,7 +61,7 @@ Pádel federado · iOS + Android · Beta abierta ↓
 
 ### Link in bio
 ```
-https://tactium.app
+https://tactium.io
 ```
 (post-deploy. Por ahora puedes usar la versión Vercel preview o un Linktree temporal con CTA "Únete a la beta")
 
@@ -78,7 +78,7 @@ https://tactium.app
 ## TikTok
 
 ### Handle / @username
-**Primera opción**: `@tactium.app`
+**Primera opción**: `@tactium.io`
 **Backup**: `@tactium_padel`, `@tactium.lab`
 
 ### Display name
@@ -102,7 +102,7 @@ Sustituye tu Excel de alineaciones. Pádel federado · Beta abierta ↓
 
 ### Link
 ```
-https://tactium.app
+https://tactium.io
 ```
 
 ### Categoría

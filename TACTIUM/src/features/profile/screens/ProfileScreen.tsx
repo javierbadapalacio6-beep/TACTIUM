@@ -437,11 +437,11 @@ export const ProfileScreen = () => {
           items={[
             {
               label: 'Centro de ayuda',
-              onPress: () => openExternalUrl('https://tactium.app/help'),
+              onPress: () => openExternalUrl('https://tactium.io/help'),
             },
             {
               label: 'Términos y privacidad',
-              onPress: () => openExternalUrl('https://tactium.app/legal'),
+              onPress: () => openExternalUrl('https://tactium.io/legal'),
             },
             { label: 'Versión', detail: '1.0.0', trailing: 'static' },
           ]}

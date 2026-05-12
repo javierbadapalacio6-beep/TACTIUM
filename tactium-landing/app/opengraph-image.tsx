@@ -151,7 +151,7 @@ export default async function OpengraphImage() {
               boxShadow: "0 8px 24px -6px rgba(0,223,130,0.4)",
             }}
           >
-            tactium.app
+            tactium.io
           </div>
         </div>
       </div>

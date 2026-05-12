@@ -30,10 +30,10 @@ export function Footer() {
             Términos
           </Link>
           <a
-            href="mailto:hola@tactium.app"
+            href="mailto:hola@tactium.io"
             className="hover:text-[var(--color-text)] transition"
           >
-            hola@tactium.app
+            hola@tactium.io
           </a>
         </nav>
       </div>

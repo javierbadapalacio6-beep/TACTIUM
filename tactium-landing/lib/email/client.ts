@@ -25,7 +25,7 @@ export function getResend(): Resend | null {
 
 // Sender por defecto. Sin dominio verificado usamos el sandbox de Resend
 // (onboarding@resend.dev) que sólo permite enviar a tu propia cuenta.
-// Cuando registremos tactium.app, sólo cambiamos EMAIL_FROM y desbloquea
+// Cuando registremos tactium.io, sólo cambiamos EMAIL_FROM y desbloquea
 // envíos a cualquier destinatario.
 export function getEmailFrom(): string {
   return process.env.EMAIL_FROM ?? "TACTIUM <onboarding@resend.dev>";

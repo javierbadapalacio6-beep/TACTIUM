@@ -281,7 +281,7 @@ export const SubscriptionScreen = ({
         <View style={styles.legalBlock}>
           <Text style={styles.legalText}>
             Términos de uso y Política de Privacidad disponibles en
-            tactium.app/legal
+            tactium.io/legal
           </Text>
         </View>
       </ScrollView>

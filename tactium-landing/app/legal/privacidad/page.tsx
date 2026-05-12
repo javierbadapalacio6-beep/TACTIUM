@@ -34,10 +34,10 @@ export default function PrivacidadPage() {
           <p>
             El responsable del tratamiento es TACTIUM. Contacto:{" "}
             <a
-              href="mailto:hola@tactium.app"
+              href="mailto:hola@tactium.io"
               className="text-[var(--color-accent)] underline"
             >
-              hola@tactium.app
+              hola@tactium.io
             </a>
             .
           </p>
@@ -76,10 +76,10 @@ export default function PrivacidadPage() {
             Puedes solicitar acceso, rectificación o supresión de tus datos
             en cualquier momento escribiendo a{" "}
             <a
-              href="mailto:hola@tactium.app"
+              href="mailto:hola@tactium.io"
               className="text-[var(--color-accent)] underline"
             >
-              hola@tactium.app
+              hola@tactium.io
             </a>
             .
           </p>
