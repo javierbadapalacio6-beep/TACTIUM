@@ -59,7 +59,7 @@ export async function sendWelcomeWaitlist(
     const { data, error } = await resend.emails.send({
       from: getEmailFrom(),
       to: recipient,
-      subject: "Estás dentro · TACTIUM te avisa cuando lancemos",
+      subject: "Estás dentro · Esto es lo que viene",
       html,
       text,
       // Headers útiles para deliverability y debugging.
