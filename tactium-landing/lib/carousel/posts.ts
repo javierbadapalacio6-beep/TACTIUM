@@ -134,8 +134,39 @@ Pre-lanzamiento abierto en tactium.io`,
         kind: "cta",
         eyebrow: "DEMO PRIVADA",
         title: "Únete a la beta",
-        cta: "tactium.io",
-        url: "Link en bio",
+        cta: "Link en bio",
+        url: "tactium.io",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // Post 3 · BTS · Por qué nació TACTIUM (1 slide stat, caption largo)
+  // ────────────────────────────────────────────────────────────────
+  {
+    id: "bts-30-seg",
+    internalTitle: "BTS · 30 segundos vs 20 minutos (build in public)",
+    caption: `30 segundos.
+
+Eso es lo que le toma a TACTIUM armar la alineación de tu equipo federado.
+
+Antes te llevaba 20 minutos. Excel abierto. Página de FEP para mirar puntos. WhatsApp para confirmar quién juega. Y un papel para anotar el orden por puntos respetando las reglas de tu federación.
+
+Una jornada perdí 25 minutos y me equivoqué del orden por fuerza. Ese viernes pensé: esto es 2026, esto no puede llevar tanto tiempo.
+
+TACTIUM nace de ahí.
+
+Pre-lanzamiento abierto en tactium.io.`,
+    hashtags: [
+      "buildinpublic", "padelfederado", "startup", "sportsapp",
+      "capitanpadel", "fep", "padelclub", "founder",
+    ],
+    slides: [
+      {
+        kind: "stat",
+        eyebrow: "BUILD IN PUBLIC",
+        stat: "30 SEG",
+        statLabel: "vs 20 min en Excel",
       },
     ],
   },

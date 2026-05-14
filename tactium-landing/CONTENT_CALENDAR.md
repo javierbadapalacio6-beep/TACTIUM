@@ -33,8 +33,12 @@ Total: **12 posts/mes**. Ajusta a 2/semana (8/mes) si la producción se hace cue
 - **Instagram**: https://www.instagram.com/p/DYU47WWDKwA/
 - **TikTok**: _(pendiente de añadir link)_
 
-### Post 2 · Miércoles
-- **Tipo**: EDUCATIONAL · "El problema que resolvemos"
+### Post 2 · Viernes 2026-05-15 — mañana (reprogramado de Miércoles)
+- **Tipo**: PROMO · "Excel vs TACTIUM"
+- **Formato**: Carrusel 5 slides
+- **Post ID**: `vs-excel` (ya creado en `posts.ts`, fix de CTA aplicado)
+- **Caption**: ver `posts.ts`
+- **Slides originales (alternativa Educational)** abajo, archivados por si volvemos a ellos en otro slot:
 - **Formato**: Carrusel 4 slides
 - **Slides propuestos**:
   1. Cover · "El problema del capitán federado"
@@ -49,12 +53,13 @@ Total: **12 posts/mes**. Ajusta a 2/semana (8/mes) si la producción se hace cue
   > La semana que viene te enseño cómo TACTIUM lo soluciona.
 - **Hashtags**: `#padelfederado #capitanpadel #fep #padelclub #padelespaña`
 
-### Post 3 · Viernes
-- **Tipo**: BTS · "Detrás del producto"
-- **Formato**: 1 imagen + caption largo, o Reel/TikTok 15-30 seg
-- **Idea**: Screenshot de la pantalla de Alineación con texto encima "Esto te lleva 30 segundos. Antes te llevaba 20 minutos."
-- **Caption**: Build-in-public — explicar de dónde nació la idea
-- **Hashtags**: `#buildinpublic #padelfederado #startup #sportsapp`
+### Post 3 · Viernes 2026-05-15 — tarde
+- **Tipo**: BTS · "Por qué nació TACTIUM"
+- **Formato**: 1 imagen (slide tipo `stat`) + caption largo
+- **Post ID**: `bts-30-seg` (creado en `posts.ts` el 2026-05-14)
+- **Slide**: stat `30 SEG` con eyebrow `BUILD IN PUBLIC` y label `vs 20 min en Excel`
+- **Caption**: ver `posts.ts` — historia personal del founder (capitán federado de Madrid que se hartó del Excel)
+- **Hashtags**: ver `posts.ts`
 
 ---
 
