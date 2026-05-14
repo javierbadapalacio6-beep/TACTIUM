@@ -96,11 +96,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       sendPasswordReset: async (email) => {
-        // Dispara el email de reset de Supabase. Sin redirectTo: el usuario
-        // recibe un link que abre la consola web de Supabase para fijar
-        // nueva contraseña. Más adelante podemos usar deep links + un
-        // ResetPasswordScreen propio si se quiere flujo 100% in-app.
-        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        // El link del email apunta a la página web de reset en la landing,
+        // donde el usuario fija nueva contraseña y vuelve a la app a entrar.
+        // Cuando montemos deep linking nativo, esto pasará a `tactium://`.
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: 'https://tactium.io/auth/reset-password',
+        });
         if (error) return { error: error.message };
         return {};
       },
