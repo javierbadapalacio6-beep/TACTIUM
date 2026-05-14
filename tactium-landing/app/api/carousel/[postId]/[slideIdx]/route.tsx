@@ -55,7 +55,12 @@ function Eyebrow({ children }: { children: string }) {
   );
 }
 
-function renderSlide(slide: Slide, slideIdx: number, totalSlides: number) {
+function renderSlide(
+  slide: Slide,
+  slideIdx: number,
+  totalSlides: number,
+  origin: string,
+) {
   const containerBase = {
     width: "100%",
     height: "100%",
@@ -273,6 +278,117 @@ function renderSlide(slide: Slide, slideIdx: number, totalSlides: number) {
     );
   }
 
+  if (slide.kind === "image-overlay") {
+    const imageUrl = slide.imagePath
+      ? new URL(slide.imagePath, origin).toString()
+      : "";
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          position: "relative",
+          fontFamily: "system-ui, -apple-system, sans-serif",
+          color: COLORS.text,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt=""
+          width={W}
+          height={H}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+        {/* Vignette + gradient para legibilidad del texto inferior */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(to bottom, rgba(3,15,15,0.10) 0%, rgba(3,15,15,0.05) 45%, rgba(3,15,15,0.85) 88%, rgba(3,15,15,0.96) 100%)",
+          }}
+        />
+        {/* Bloque de texto inferior */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            padding: "80px 80px 60px 80px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 24,
+          }}
+        >
+          {slide.eyebrow && <Eyebrow>{slide.eyebrow}</Eyebrow>}
+          {slide.title && (
+            <div
+              style={{
+                fontSize: 78,
+                fontWeight: 800,
+                lineHeight: 1.05,
+                letterSpacing: "-0.03em",
+                color: COLORS.text,
+                display: "flex",
+                textShadow: "0 2px 24px rgba(0,0,0,0.45)",
+              }}
+            >
+              {slide.title}
+            </div>
+          )}
+          {/* Footer compacto: pagination + isotipo */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 16,
+            }}
+          >
+            <div style={{ display: "flex", gap: 10 }}>
+              {Array.from({ length: totalSlides }).map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: i === slideIdx ? 32 : 10,
+                    height: 10,
+                    borderRadius: 5,
+                    background:
+                      i === slideIdx
+                        ? COLORS.accent
+                        : "rgba(232,245,239,0.40)",
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <TactiumMarkSvg size={32} />
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  letterSpacing: "0.32em",
+                  color: COLORS.text,
+                }}
+              >
+                TACTIUM
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // CTA
   return (
     <div style={containerBase}>
@@ -333,7 +449,7 @@ function renderSlide(slide: Slide, slideIdx: number, totalSlides: number) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ postId: string; slideIdx: string }> },
 ) {
   const { postId, slideIdx } = await params;
@@ -347,8 +463,13 @@ export async function GET(
     return new Response("Slide not found", { status: 404 });
   }
 
-  return new ImageResponse(renderSlide(slide, idx, post.slides.length), {
-    width: W,
-    height: H,
-  });
+  // Origin para que el renderer pueda resolver imagePath relativos
+  // (`/social/avatar/xxx.png` → `https://tactium.io/social/avatar/xxx.png`).
+  // En dev sale `http://localhost:3000`, en prod el dominio real.
+  const origin = req.nextUrl.origin;
+
+  return new ImageResponse(
+    renderSlide(slide, idx, post.slides.length, origin),
+    { width: W, height: H },
+  );
 }

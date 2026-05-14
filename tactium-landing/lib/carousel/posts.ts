@@ -6,13 +6,20 @@
 // existente, cambia el id, slides, caption y hashtags.
 //
 // Tipos de slide:
-//   - "cover"    → título grande + isotipo + eyebrow
-//   - "content"  → eyebrow + título + body + visual element opcional
-//   - "stat"     → número grande mono + label
-//   - "quote"    → texto destacado + atribución
-//   - "cta"      → CTA grande + URL + isotipo
+//   - "cover"          → título grande + isotipo + eyebrow
+//   - "content"        → eyebrow + título + body + visual element opcional
+//   - "stat"           → número grande mono + label
+//   - "quote"          → texto destacado + atribución
+//   - "cta"            → CTA grande + URL + isotipo
+//   - "image-overlay"  → foto fullbleed + gradiente inferior + eyebrow/title encima
 
-export type SlideKind = "cover" | "content" | "stat" | "quote" | "cta";
+export type SlideKind =
+  | "cover"
+  | "content"
+  | "stat"
+  | "quote"
+  | "cta"
+  | "image-overlay";
 
 export interface Slide {
   kind: SlideKind;
@@ -25,6 +32,10 @@ export interface Slide {
   attribution?: string;
   cta?: string;
   url?: string;
+  // Sólo para kind:"image-overlay". Ruta pública relativa al dominio
+  // (ej. "/social/avatar/hero.png"). Se resuelve a URL absoluta en el
+  // route handler con request origin.
+  imagePath?: string;
 }
 
 export interface CarouselPost {
@@ -167,6 +178,64 @@ Pre-lanzamiento abierto en tactium.io.`,
         eyebrow: "BUILD IN PUBLIC",
         stat: "30 SEG",
         statLabel: "vs 20 min en Excel",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // Post 4 · Un día con TACTIUM (carrusel narrativo con avatar IA)
+  // Producido con HIGGSFIELD nano_banana_2 + cast 03 como reference.
+  // Las imágenes viven en public/social/avatar/
+  // ────────────────────────────────────────────────────────────────
+  {
+    id: "un-dia-tactium",
+    internalTitle: "Un día con TACTIUM · narrativo con avatar IA",
+    caption: `Tu jornada empieza antes de pisar la pista.
+
+Llegas al club. La pala lista. Pero la alineación sin armar.
+
+Antes te tocaba sacar el Excel, pegar los puntos a mano y discutir el orden por WhatsApp.
+
+Ahora son 30 segundos. Auto-balance por puntos FEP, respetando el orden de tu federación. Y al confirmar, los jugadores reciben push con hora, pista y pareja.
+
+Vas a jugar — no a discutir el orden.
+
+Pre-lanzamiento abierto en tactium.io.`,
+    hashtags: [
+      "padelfederado", "fep", "capitanpadel", "padelclub",
+      "padelespaña", "padellife", "padel", "sportsapp", "startup",
+    ],
+    slides: [
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/walk.png",
+        eyebrow: "01 · LLEGADA",
+        title: "Tu jornada empieza aquí.",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/hero.png",
+        eyebrow: "02 · ANTES DEL PARTIDO",
+        title: "Pala lista. ¿Y la alineación?",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/lineup-bench.png",
+        eyebrow: "03 · 30 SEGUNDOS",
+        title: "Por puntos FEP. Sin discusiones.",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/drive.png",
+        eyebrow: "04 · JUEGAS",
+        title: "Vas a jugar — no a discutir el orden.",
+      },
+      {
+        kind: "cta",
+        eyebrow: "ÚNETE A LA BETA",
+        title: "Pre-lanzamiento abierto",
+        cta: "Link en bio",
+        url: "tactium.io",
       },
     ],
   },
