@@ -2,7 +2,7 @@
 
 > Plan de 12 posts (3/semana) para Instagram + TikTok.
 > Tono: BRAND_SOCIAL.md. Visuales: lib/carousel/posts.ts → /dev/carousel.
-> Última actualización: 2026-05-12.
+> Última actualización: 2026-05-14.
 
 ## Cadencia y horarios recomendados
 
@@ -24,12 +24,14 @@ Total: **12 posts/mes**. Ajusta a 2/semana (8/mes) si la producción se hace cue
 
 ## Semana 1 · Bienvenida y posicionamiento
 
-### Post 1 · Lunes
+### Post 1 · Lunes ✅ PUBLICADO 2026-05-14
 - **Tipo**: PROMO · Lanzamiento de cuenta
 - **Formato**: Carrusel 5 slides
 - **Post ID**: `welcome` (ya creado en `posts.ts`)
 - **Caption**: ver `posts.ts`
 - **CTA**: Únete al waitlist desde link en bio
+- **Instagram**: https://www.instagram.com/p/DYU47WWDKwA/
+- **TikTok**: _(pendiente de añadir link)_
 
 ### Post 2 · Miércoles
 - **Tipo**: EDUCATIONAL · "El problema que resolvemos"
