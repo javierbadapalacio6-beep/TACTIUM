@@ -127,7 +127,7 @@ export function ForClubs() {
           {/* Phone 1 — dashboard club, ligero rotate izq y arriba */}
           <div className="relative z-[2] -translate-x-6 -rotate-[5deg]">
             <PhoneFrame
-              src="/screens/club.jpg"
+              src="/screens/club.png"
               alt="Panel admin del club con próximas jornadas y últimos resultados"
               size="card"
               glow="subtle"
@@ -136,7 +136,7 @@ export function ForClubs() {
           {/* Phone 2 — listado de equipos, rotate dcha y abajo, detrás */}
           <div className="relative z-[1] translate-x-6 translate-y-12 rotate-[5deg]">
             <PhoneFrame
-              src="/screens/equipos-club.jpg"
+              src="/screens/equipos-club.png"
               alt="Listado de equipos del club, multi-categoría"
               size="card"
               glow="subtle"

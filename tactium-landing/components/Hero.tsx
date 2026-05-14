@@ -91,14 +91,14 @@ export function Hero() {
             <div className="w-[70%] h-[60%] bg-[var(--color-accent)] opacity-[0.14] blur-3xl rounded-full" />
           </div>
 
-          {/* Phone secundario: splash, esquina ARRIBA-IZQUIERDA del contenedor.
+          {/* Phone secundario: login, esquina ARRIBA-IZQUIERDA del contenedor.
               Hidden en mobile (no hay espacio horizontal). */}
           <div
             className="hidden sm:block absolute top-0 left-0 z-[1] -rotate-[9deg] opacity-90"
             aria-hidden="true"
           >
             <PhoneFrame
-              src="/screens/splash.jpg"
+              src="/screens/login.png"
               alt=""
               size="card"
               glow="subtle"
