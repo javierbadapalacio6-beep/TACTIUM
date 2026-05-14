@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TACTIUM · Bitácora</title>
+<style>
+  :root {
+    --bg: #030F0F;
+    --bg-2: #061818;
+    --card: #0C2222;
+    --card-raised: #0F2A28;
+    --hair: rgba(232, 245, 239, 0.08);
+    --hair-strong: rgba(232, 245, 239, 0.14);
+    --text: #E8F5EF;
+    --muted: rgba(232, 245, 239, 0.70);
+    --faint: rgba(232, 245, 239, 0.45);
+    --accent: #00DF82;
+    --accent-deep: #03624C;
+
+    --feat: #00DF82;
+    --fix: #FFB454;
+    --chore: #94A3B8;
+    --docs: #60A5FA;
+    --decision: #C084FC;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    line-height: 1.55;
+    background-image: radial-gradient(ellipse 900px 500px at 50% -200px, rgba(3, 98, 76, 0.35) 0%, var(--bg) 60%);
+    min-height: 100vh;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  /* ── Header ─────────────────────────────────────────────────── */
+  .header { margin-bottom: 40px; }
+  .eyebrow {
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.32em;
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    line-height: 1.05;
+    margin: 0 0 14px;
+  }
+  .lede { color: var(--muted); font-size: 17px; max-width: 580px; margin: 0; }
+
+  /* ── Stats grid ─────────────────────────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 36px 0 32px;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--hair);
+    border-radius: 16px;
+    padding: 18px 18px;
+  }
+  .stat .num {
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin: 0 0 6px;
+  }
+  .stat .lbl {
+    font-size: 12px;
+    color: var(--faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 0;
+  }
+  .stat.accent .num { color: var(--accent); }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ── Filtros ────────────────────────────────────────────────── */
+  .filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 24px;
+    padding: 14px;
+    background: var(--card);
+    border: 1px solid var(--hair);
+    border-radius: 16px;
+  }
+  .chip {
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--hair-strong);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .chip:hover { color: var(--text); border-color: var(--text); }
+  .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .chip[data-type="feat"].active { background: var(--feat); color: #001810; border-color: var(--feat); }
+  .chip[data-type="fix"].active { background: var(--fix); color: #1a0a00; border-color: var(--fix); }
+  .chip[data-type="chore"].active { background: var(--chore); color: #050a14; border-color: var(--chore); }
+  .chip[data-type="docs"].active { background: var(--docs); color: #00121f; border-color: var(--docs); }
+  .chip[data-type="decision"].active { background: var(--decision); color: #1a0033; border-color: var(--decision); }
+
+  /* ── Entries ────────────────────────────────────────────────── */
+  .entry {
+    background: var(--card);
+    border: 1px solid var(--hair);
+    border-radius: 20px;
+    padding: 28px 28px 24px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .entry-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .entry-date {
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--faint);
+    text-transform: uppercase;
+    margin: 0;
+  }
+  .entry-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    line-height: 1.25;
+    color: var(--text);
+    margin: 0;
+    flex: 1 1 100%;
+  }
+
+  .changes { list-style: none; padding: 0; margin: 0; }
+  .change {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px dashed var(--hair);
+  }
+  .change:first-child { border-top: none; padding-top: 0; }
+  .badge {
+    flex: 0 0 auto;
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 6px;
+    margin-top: 2px;
+    min-width: 60px;
+    text-align: center;
+  }
+  .badge.feat { background: rgba(0, 223, 130, 0.14); color: var(--feat); border: 1px solid rgba(0, 223, 130, 0.3); }
+  .badge.fix { background: rgba(255, 180, 84, 0.14); color: var(--fix); border: 1px solid rgba(255, 180, 84, 0.3); }
+  .badge.chore { background: rgba(148, 163, 184, 0.14); color: var(--chore); border: 1px solid rgba(148, 163, 184, 0.3); }
+  .badge.docs { background: rgba(96, 165, 250, 0.14); color: var(--docs); border: 1px solid rgba(96, 165, 250, 0.3); }
+  .badge.decision { background: rgba(192, 132, 252, 0.14); color: var(--decision); border: 1px solid rgba(192, 132, 252, 0.3); }
+  .change-text { flex: 1; font-size: 15px; color: var(--muted); }
+  .change-text strong { color: var(--text); font-weight: 600; }
+  .change-text code {
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 0.88em;
+    background: var(--bg-2);
+    border: 1px solid var(--hair);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--faint);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <p class="eyebrow">TACTIUM · BITÁCORA INTERNA</p>
+      <h1>Lo que cambiamos<br>cada día.</h1>
+      <p class="lede">Registro cronológico de decisiones, fixes y features del proyecto. Las entradas se añaden al cierre de cada sesión de trabajo.</p>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><p class="num" id="stat-sessions">0</p><p class="lbl">Sesiones</p></div>
+      <div class="stat accent"><p class="num" id="stat-changes">0</p><p class="lbl">Cambios</p></div>
+      <div class="stat"><p class="num" id="stat-last">—</p><p class="lbl">Última sesión</p></div>
+      <div class="stat"><p class="num" id="stat-streak">0</p><p class="lbl">Días activos</p></div>
+    </section>
+
+    <div class="filters" id="filters">
+      <button class="chip active" data-type="all">Todos</button>
+      <button class="chip" data-type="feat">Feat</button>
+      <button class="chip" data-type="fix">Fix</button>
+      <button class="chip" data-type="chore">Chore</button>
+      <button class="chip" data-type="docs">Docs</button>
+      <button class="chip" data-type="decision">Decisión</button>
+    </div>
+
+    <main id="timeline"></main>
+  </div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────
+   LOG · Editar SOLO este array para añadir/quitar entradas.
+   Formato:
+   {
+     date: "YYYY-MM-DD",
+     title: "Resumen corto del día",
+     changes: [
+       { type: "feat" | "fix" | "chore" | "docs" | "decision",
+         text: "Descripción. Puedes usar <strong> y <code>." }
+     ]
+   }
+   Más reciente arriba del array (se ordena por fecha automáticamente).
+   ───────────────────────────────────────────────────────────────── */
+const LOG = [
+  {
+    date: "2026-05-14",
+    title: "Resend operativo con dominio tactium.io",
+    changes: [
+      { type: "fix", text: "Diagnóstico: los emails de waitlist solo llegaban a la cuenta del owner porque <code>EMAIL_FROM</code> usaba el sandbox <code>onboarding@resend.dev</code> (Resend rechaza cualquier otro destinatario sin dominio verificado)." },
+      { type: "chore", text: "Verificado dominio <strong>tactium.io</strong> en Resend. Actualizado <code>.env.local</code> a <code>EMAIL_FROM=TACTIUM &lt;hola@tactium.io&gt;</code>." },
+      { type: "chore", text: "Limpieza de variables obsoletas: comentada <code>RESEND_TEST_TO</code> (redirigía todo en dev a una sola dirección) y eliminada <code>RESEND_FROM_EMAIL</code> (el código sólo lee <code>EMAIL_FROM</code>)." },
+      { type: "docs", text: "Sincronizado <code>.env.example</code> con la nueva convención (documentado el remitente verificado y el toggle de <code>RESEND_TEST_TO</code> opcional para dev)." },
+      { type: "docs", text: "Documentado el set mínimo de variables que la landing necesita en Vercel: <code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>, <code>NEXT_PUBLIC_SITE_URL</code>, <code>RESEND_API_KEY</code>, <code>EMAIL_FROM</code>." },
+      { type: "decision", text: "<strong>BIMI aparcado hasta trademark.</strong> Para mostrar logo TACTIUM como avatar del remitente en Gmail hace falta un VMC (~$1.000–1.500/año) que sólo se emite con marca registrada. Hasta tenerla, no merece la pena el setup." },
+      { type: "feat", text: "Creada <strong>bitacora.html</strong> en la raíz del repo — registro visual auto-contenido (sin servidor, datos en array <code>LOG</code>). Estética dark coherente con la marca, filtros por tipo, stats arriba." },
+      { type: "decision", text: "<strong>Scope de la bitácora: todo el workspace.</strong> Un único fichero registra cambios de <code>tactium-landing/</code>, <code>TACTIUM/</code> (app móvil) y cualquier otro subproyecto. Actualización sólo bajo petición explícita al cerrar sesión." },
+      { type: "fix", text: "Diagnóstico del flow de <strong>reset password</strong> roto: la app llamaba <code>resetPasswordForEmail</code> sin <code>redirectTo</code>, no existía página de reset en ningún lado, y los emails salían desde <code>noreply@mail.app.supabase.io</code> (riesgo spam) en vez de tactium.io." },
+      { type: "feat", text: "<strong>tactium-landing</strong>: nueva página <code>/auth/reset-password</code> — consume el hash <code>#access_token</code> que Supabase añade tras <code>/verify</code>, form de nueva contraseña con validación, llama a <code>updateUser</code> y cierra sesión efímera. Estados verifying / ready / submitting / success / invalid / error. Marcada <code>noindex</code>." },
+      { type: "feat", text: "<strong>tactium-landing</strong>: nuevo cliente <code>lib/supabase-browser.ts</code> singleton con <code>persistSession:false</code> y <code>detectSessionInUrl:true</code> — para flows transitorios sin dejar sesión en localStorage." },
+      { type: "chore", text: "<strong>TACTIUM app</strong>: <code>authStore.ts</code> ahora pasa <code>redirectTo: 'https://tactium.io/auth/reset-password'</code> al disparar el email de recovery." },
+      { type: "chore", text: "<strong>Supabase Dashboard</strong>: configurado SMTP custom de Resend (envío desde <code>hola@tactium.io</code>) + Site URL + Redirect URLs whitelist. Tarea manual ya completada por el usuario." },
+      { type: "feat", text: "Template <strong>Reset Password</strong> brandeado guardado en <code>lib/email/supabase-templates/reset-password.html</code> como referencia. Contenido pegado en Supabase Dashboard → Auth → Email Templates (los templates viven en config de Supabase, no en este repo)." },
+      { type: "chore", text: "Commit <code>ced60ab5</code> · <code>feat(auth): wire up password reset flow end-to-end</code>. Push a <code>origin/main</code> hecho, Vercel auto-deploy completado." },
+      { type: "fix", text: "Flow de reset password <strong>verificado funcionando en producción</strong>. El bug residual era cache de bundle: el Metro server de Expo seguía sirviendo el JS antiguo (sin <code>redirectTo</code>) hasta reiniciar la app. <em>Recordatorio: cualquier cambio en <code>authStore</code> u otros archivos del bundle requiere reload Metro / reinstalar dev build.</em>" },
+      { type: "chore", text: "<strong>tactium-landing</strong>: refresh de screenshots con el nuevo sistema de logo. Reemplazadas las pantallas <code>splash.jpg</code> → <code>login.png</code> (Hero secundario), <code>club.jpg</code> → <code>club.png</code> y <code>equipos-club.jpg</code> → <code>equipos-club.png</code> (sección <em>Para clubs y federaciones</em>). Switch JPG→PNG para preservar crispness en el PhoneFrame; los archivos son ~5× más pesados, considerar webp/avif si el LCP empieza a sufrir." },
+      { type: "chore", text: "Commit <code>162a9a69</code> · <code>chore(landing): refresh screenshots with new logo system</code>. Push a <code>origin/main</code> completo, Vercel re-deploy en curso." },
+      { type: "feat", text: "<strong>Cuentas sociales creadas</strong>: Instagram <code>@tactium.io</code> (Creator account — sin dirección fiscal, Original Sound en Reels libre) y TikTok <code>@tactium.io</code> (Business — desbloquea website link en bio sin esperar a 1k followers)." },
+      { type: "chore", text: "<strong>tactium-landing</strong>: <code>structured-data.ts</code> añade IG + TikTok al <code>sameAs</code> del schema.org Organization (rich snippets en Google + LLMs citan perfiles oficiales). <code>BRAND_SOCIAL.md</code> actualizado para reflejar handles ya creados." },
+      { type: "decision", text: "<strong>Plan creativo social</strong> aparcado para después del primer post baseline: mockups de persona en pista de pádel con TACTIUM en móvil (skill <code>banana</code>) + videos con avatar IA (MCP <code>HIGGSFIELD</code>). Diferenciador vs competencia (Playtomic, MatchPoint) que usa stock genérico." },
+      { type: "chore", text: "Commit <code>7e2b1ee4</code> · <code>chore(social): link IG and TikTok handles (@tactium.io)</code>. Push completo." },
+      { type: "feat", text: "<strong>Primer post de TACTIUM publicado</strong>. Carrusel <em>welcome</em> de 5 slides (Pre-lanzamiento 2026 + 3 features + CTA) generado vía <code>app/dev/carousel</code> y subido a Instagram (<a href=\"https://www.instagram.com/p/DYU47WWDKwA/\">DYU47WWDKwA</a>) y TikTok. Caption y hashtags reutilizados de <code>posts.ts</code>." },
+      { type: "docs", text: "<code>CONTENT_CALENDAR.md</code> marca Post 1 como ✅ PUBLICADO 2026-05-14 con link de Instagram (TikTok pendiente)." },
+      { type: "chore", text: "Commit <code>1b49ac83</code> · <code>docs(content): mark welcome post as published 2026-05-14</code>. Push completo." },
+      { type: "decision", text: "<strong>Cierre de sesión 14 may.</strong> Próximo step antes del Paso B (Meta Business Suite): producir <em>mockups con persona en pista de pádel + móvil mostrando TACTIUM</em> con la skill <code>banana</code> para llenar la doble subida del viernes 15 may (mañana + tarde). Plan creativo en <code>tactium_social_content_creative_plan</code>." },
+    ],
+  },
+];
+
+/* ─────────────────────────────────────────────────────────────────
+   Render — no tocar a menos que cambies estilo/funcionalidad.
+   ───────────────────────────────────────────────────────────────── */
+const TYPE_LABELS = {
+  feat: "FEAT",
+  fix: "FIX",
+  chore: "CHORE",
+  docs: "DOCS",
+  decision: "DECISIÓN",
+};
+
+const MONTHS_ES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+function formatDate(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${String(d).padStart(2,"0")} ${MONTHS_ES[m-1]} ${y}`;
+}
+function shortDate(iso) {
+  const [, m, d] = iso.split("-").map(Number);
+  return `${String(d).padStart(2,"0")} ${MONTHS_ES[m-1]}`;
+}
+
+let activeFilter = "all";
+
+function render() {
+  const sorted = [...LOG].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  // Stats
+  const totalChanges = LOG.reduce((acc, e) => acc + e.changes.length, 0);
+  document.getElementById("stat-sessions").textContent = LOG.length;
+  document.getElementById("stat-changes").textContent = totalChanges;
+  document.getElementById("stat-last").textContent = sorted[0] ? shortDate(sorted[0].date) : "—";
+  document.getElementById("stat-streak").textContent = new Set(LOG.map(e => e.date)).size;
+
+  // Timeline
+  const tl = document.getElementById("timeline");
+  tl.innerHTML = "";
+
+  let visibleCount = 0;
+  for (const entry of sorted) {
+    const filtered = activeFilter === "all"
+      ? entry.changes
+      : entry.changes.filter(c => c.type === activeFilter);
+    if (!filtered.length) continue;
+    visibleCount++;
+
+    const el = document.createElement("article");
+    el.className = "entry";
+    el.innerHTML = `
+      <div class="entry-head">
+        <p class="entry-date">${formatDate(entry.date)}</p>
+      </div>
+      <h2 class="entry-title">${entry.title}</h2>
+      <ul class="changes">
+        ${filtered.map(c => `
+          <li class="change">
+            <span class="badge ${c.type}">${TYPE_LABELS[c.type] || c.type}</span>
+            <div class="change-text">${c.text}</div>
+          </li>
+        `).join("")}
+      </ul>
+    `;
+    tl.appendChild(el);
+  }
+
+  if (!visibleCount) {
+    tl.innerHTML = `<p class="empty">No hay entradas para este filtro.</p>`;
+  }
+}
+
+document.getElementById("filters").addEventListener("click", (e) => {
+  const btn = e.target.closest(".chip");
+  if (!btn) return;
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+  btn.classList.add("active");
+  activeFilter = btn.dataset.type;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
