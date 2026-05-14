@@ -17,7 +17,8 @@ export function organizationSchema(siteUrl: string) {
     description:
       "El sistema operativo del pádel federado. Gestión de equipos, alineaciones inteligentes con auto-balance por puntos FEP, hasta 5 variantes por jornada y notificaciones a jugadores.",
     sameAs: [
-      // Añadir cuentas sociales cuando existan
+      "https://instagram.com/tactium.io",
+      "https://tiktok.com/@tactium.io",
     ],
     contactPoint: {
       "@type": "ContactPoint",

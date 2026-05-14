@@ -20,10 +20,7 @@ Carpeta: `public/brand/social/avatars/`
 ## Instagram
 
 ### Handle / @username
-**Primera opción**: `@tactium.io` (o `@tactium.padel` si está cogido)
-**Backup**: `@tactium_app` o `@tactium.lab`
-
-> Verifica disponibilidad antes de crear el handle: https://www.instagram.com/tactium.io/
+**Creado** (2026-05-14): [`@tactium.io`](https://instagram.com/tactium.io) · cuenta **Creator** (no Business — evita pedir dirección fiscal y desbloquea Original Sound en Reels).
 
 ### Nombre visible (display name)
 ```
@@ -78,8 +75,7 @@ https://tactium.io
 ## TikTok
 
 ### Handle / @username
-**Primera opción**: `@tactium.io`
-**Backup**: `@tactium_padel`, `@tactium.lab`
+**Creado** (2026-05-14): [`@tactium.io`](https://tiktok.com/@tactium.io) · cuenta **Business** (desbloquea el website link en bio sin esperar a 1.000 seguidores).
 
 ### Display name
 ```
