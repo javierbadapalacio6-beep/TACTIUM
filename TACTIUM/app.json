@@ -13,14 +13,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.4padellab.tactium"
+      "bundleIdentifier": "io.tactium.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#030F0F"
       },
-      "package": "com.fourpadellab.tactium"
+      "package": "io.tactium.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
