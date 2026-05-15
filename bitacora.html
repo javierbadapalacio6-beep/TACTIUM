@@ -294,6 +294,21 @@ const LOG = [
       { type: "feat", text: "<strong>Soul Character TACTIUM-Pro · READY</strong> ✅ — entrenamiento completado en HIGGSFIELD (<code>soul_id 3b932123-dab1-42d5-85fb-ea05aeee74ff</code>, raw_status <code>completed</code>). Desde la próxima sesión generamos directamente con <code>model:'soul_2'</code> + ese soul_id, sin pasar reference cada vez. Memoria actualizada en <code>tactium-higgsfield-avatar-ids</code>." },
     ],
   },
+  {
+    date: "2026-05-15",
+    title: "Producción masiva con Soul + arranque stores",
+    changes: [
+      { type: "feat", text: "<strong>Soul TACTIUM-Pro validado en producción</strong>: primera generación con <code>model:'soul_2' + soul_id</code> (sin reference) mantiene identidad al 100%. Pala de pádel correcta, escenario coherente. Coste irrisorio (~0.5 cr/img)." },
+      { type: "feat", text: "<strong>4 Stories generadas</strong> con Soul (9:16, sin overlay textual): <em>walk al club</em>, <em>lineup-bench con TACTIUM en móvil</em>, <em>pre-match focus</em>, <em>celebración de punto</em>. Listas en <code>public/social/avatar/story-*.png</code> para subir nativas a IG/TikTok con stickers/sonidos del usuario." },
+      { type: "feat", text: "<strong>Primer Reel TACTIUM-Pro generado</strong> con HIGGSFIELD kling3_0 (5s · 720x1280 · sound on · 10 cr). Push-in al móvil del capitán armando lineup. Asset en <code>public/social/avatar/reel-lineup.mp4</code>. Kling3_0 disponible en starter (Seedance 2.0 sigue siendo Plus-only)." },
+      { type: "feat", text: "<strong>Carrusel B 'Built for federated padel'</strong>: 5 slides educacional combinando mockups Soul (hero-club, lineup-bench, capitan-lineup, admin-club) + slide CTA. Para slot Semana 2 del calendar." },
+      { type: "feat", text: "Renderer <code>image-overlay</code> ahora soporta dos modos: <strong>con</strong> eyebrow/title (gradient + footer) y <strong>sin</strong> (imagen limpia para Stories). Branch automático según presencia de texto en el slide." },
+      { type: "feat", text: "<strong>Dashboard <code>/dev/carousel</code> unificado</strong>: 6 posts visibles (welcome, vs-excel, bts-30-seg, un-dia-tactium, stories-day-1, built-for-federated) + nueva sección <em>Reels</em> con video embebido + caption sugerido. Punto único para descargar TODO el contenido." },
+      { type: "chore", text: "Commit <code>af200ede</code> · <code>feat(carousel): unify Soul-driven content in /dev/carousel</code> — 11 archivos, 177 insertions. Push completo, Vercel building." },
+      { type: "decision", text: "<strong>ARCads aparcado en plan starter</strong>: la API requiere plan Pro (no merece la pena para esta fase). Custom Actor en UI web sí permite subir las fotos del Soul. Pendiente: el usuario tiene el avatar entrenando en arcads.ai con las 8 fotos del Soul; cuando esté ready se generará el primer UGC ad con script <em>'Discusión del orden'</em> (22s · viernes noche · pain-point capitán federado)." },
+      { type: "decision", text: "<strong>Apple Developer + Google Play Console</strong> arranque hoy. Usuario decide cuenta <strong>Individual</strong> (persona física) — más rápido, sin D-U-N-S, app aparece como nombre legal. Si en futuro se constituye SL, migrar a Organization es viable pero requiere tramitar D-U-N-S y notificar a Apple." },
+    ],
+  },
 ];
 
 /* ─────────────────────────────────────────────────────────────────
