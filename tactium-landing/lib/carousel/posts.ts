@@ -239,6 +239,103 @@ Pre-lanzamiento abierto en tactium.io.`,
       },
     ],
   },
+
+  // ────────────────────────────────────────────────────────────────
+  // Post 5 · Stories Day 1 · 4 imágenes 9:16 con TACTIUM-Pro Soul
+  // Sin text overlay — el sticker / sonido lo añade el user en IG/TikTok.
+  // ────────────────────────────────────────────────────────────────
+  {
+    id: "stories-day-1",
+    internalTitle: "Stories Day 1 · 4 momentos con TACTIUM-Pro",
+    caption: `Stories sueltas para usar a lo largo del día.
+
+01 · Llegada al club — momento de "ya estoy aquí"
+02 · Lineup ready en el banquillo — ENSEÑA TACTIUM, mejor que un screenshot
+03 · Pre-match focus — concentración, AirPods, toalla
+04 · Victoria — fist celebración tras ganar punto
+
+Sticker IG recomendado: timer/cuenta atrás en la story 01, swipe-up con link en la 02, encuesta tonta en la 03, GIF de fuego en la 04.`,
+    hashtags: [
+      "padelfederado", "fep", "capitanpadel", "padelclub",
+      "padelespaña", "padellife",
+    ],
+    slides: [
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/story-walk.png",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/story-lineup.png",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/story-prematch.png",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/story-win.png",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // Post 6 · Built for federated padel (carrusel educacional)
+  // Mezcla mockups Soul + slides de texto. Para Semana 2 del calendar.
+  // ────────────────────────────────────────────────────────────────
+  {
+    id: "built-for-federated",
+    internalTitle: "Built for federated padel · educacional",
+    caption: `No somos una app de pádel.
+Somos la app del pádel federado.
+
+Otras apps reservan pista.
+Otras suben rankings.
+Otras consultan resultados.
+
+Pero ninguna entiende que tu federación tiene reglas distintas, que el orden por fuerza es un dolor cada semana, y que un capitán necesita gestionar plantilla, jornadas y comunicación desde un mismo sitio.
+
+TACTIUM se construyó desde dentro. Por un capitán federado, para capitanes federados.
+
+Pre-lanzamiento abierto en tactium.io.`,
+    hashtags: [
+      "padelfederado", "fep", "capitanpadel", "padelclub", "clubpadel",
+      "padelespaña", "padellife", "gestiondeportiva", "sportsapp",
+    ],
+    slides: [
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/hero-club.png",
+        eyebrow: "EL SISTEMA OPERATIVO",
+        title: "Built for federated padel.",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/lineup-bench.png",
+        eyebrow: "FEATURE · 01",
+        title: "Alineaciones por puntos FEP.",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/capitan-lineup.png",
+        eyebrow: "FEATURE · 02",
+        title: "Para capitanes que arman cada semana.",
+      },
+      {
+        kind: "image-overlay",
+        imagePath: "/social/avatar/admin-club.png",
+        eyebrow: "FEATURE · 03",
+        title: "Para clubs con varios equipos.",
+      },
+      {
+        kind: "cta",
+        eyebrow: "ÚNETE A LA BETA",
+        title: "Pre-lanzamiento abierto",
+        cta: "Link en bio",
+        url: "tactium.io",
+      },
+    ],
+  },
 ];
 
 export function getPost(id: string): CarouselPost | undefined {

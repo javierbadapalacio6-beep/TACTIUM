@@ -87,6 +87,56 @@ export default function CarouselDevPage() {
             </details>
           </section>
         ))}
+
+        {/* ─── Sección extra · Reels (videos) ────────────────────── */}
+        <section className="flex flex-col gap-6">
+          <header>
+            <h2 className="text-2xl font-bold tracking-tight">
+              Reels · video con TACTIUM-Pro
+            </h2>
+            <p className="font-mono text-xs text-[var(--color-text-faint)] mt-1">
+              MP4 9:16 generados con HIGGSFIELD kling3_0 · listos para IG Reel
+              + TikTok. Click derecho sobre el video → &quot;Guardar como…&quot;.
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="relative aspect-[1080/1350] rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-hair)] overflow-hidden">
+              <video
+                src="/social/avatar/reel-lineup.mp4"
+                controls
+                playsInline
+                loop
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-2 left-2 font-mono text-[10px] tracking-widest px-2 py-1 rounded bg-[var(--color-bg)]/70 backdrop-blur-sm">
+                01 · LINEUP
+              </div>
+              <a
+                href="/social/avatar/reel-lineup.mp4"
+                download="tactium-reel-lineup.mp4"
+                className="absolute bottom-2 right-2 font-mono text-[10px] tracking-widest px-2 py-1 rounded bg-[var(--color-accent)] text-[var(--color-text-inverse)]"
+              >
+                ↓ DESCARGAR
+              </a>
+            </div>
+          </div>
+
+          <details className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-hair)] p-4">
+            <summary className="cursor-pointer font-mono text-xs tracking-wider text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+              Caption sugerido para IG Reel
+            </summary>
+            <pre className="mt-4 whitespace-pre-wrap text-sm font-sans text-[var(--color-text-muted)] bg-[var(--color-bg-raised)] p-3 rounded">
+{`Cuando el partido empieza antes del primer punto.
+
+Mientras los demás aún discuten el orden, tú ya tienes la alineación. 30 segundos. Auto-balance por puntos FEP.
+
+Pre-lanzamiento abierto. Link en bio.
+
+#padelfederado #fep #capitanpadel #padelclub #padelespaña #reels`}
+            </pre>
+          </details>
+        </section>
       </div>
     </main>
   );

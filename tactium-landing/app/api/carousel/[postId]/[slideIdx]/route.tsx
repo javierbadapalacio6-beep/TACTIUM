@@ -282,6 +282,36 @@ function renderSlide(
     const imageUrl = slide.imagePath
       ? new URL(slide.imagePath, origin).toString()
       : "";
+    // Si no hay texto, sirve la imagen limpia (caso Stories sin sticker baked).
+    // Si hay eyebrow/title → composición completa con gradient + footer.
+    const hasText = Boolean(slide.eyebrow || slide.title);
+
+    if (!hasText) {
+      return (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            position: "relative",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt=""
+            width={W}
+            height={H}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        </div>
+      );
+    }
+
     return (
       <div
         style={{
