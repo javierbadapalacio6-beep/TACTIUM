@@ -18,7 +18,7 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconChevron, NeonDot, AmbientBackdrop, Toggle } from '@components/ui';
+import { IconChevron, NeonDot, Toggle } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
@@ -220,8 +220,16 @@ export const ProfileScreen = () => {
 
   return (
     <View style={styles.root}>
-      <AmbientBackdrop intensity={0.5} />
-
+      {/* AmbientBackdrop quitado intencionalmente: en iPhone con Expo Go,
+          react-native-svg con <RadialGradient> tiene coste de render
+          que dejaba el primer frame del Profile "stuck" (verde oscuro
+          sin contenido). El Stack wrapper (ProfileStack) ya absorbió
+          la parte principal del bug; quitando el SVG queda 100% limpio.
+          El fondo plano Colors.background sigue siendo el verde oscuro
+          de marca y el contenido (avatar gradient, cards, badges) aporta
+          la profundidad visual necesaria. Si en el futuro quisiéramos
+          recuperar el efecto, mejor con LinearGradient (más barato)
+          o moverlo al nivel del NavigationContainer. */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.eyebrow}>PERFIL</Text>
       </View>
