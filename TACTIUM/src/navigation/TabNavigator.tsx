@@ -201,10 +201,15 @@ export const TabNavigator = () => {
         tabBarBackground: () => null,
         // Botón con animación de press (scale-feedback + spring).
         tabBarButton: (props) => <AnimatedTabButton {...props} />,
-        // Transición entre tabs estilo "shift" — desplazamiento direccional
-        // según orden de pestañas + crossfade. Sigue las reglas
-        // `navigation-direction` + `motion-meaning` del UX guide.
-        animation: 'shift',
+        // Crossfade simple entre tabs. Antes usábamos `'shift'` (desplazamiento
+        // direccional), pero @react-navigation/bottom-tabs v7.x tiene un bug
+        // con `shift` + custom `tabBar` (nuestro FloatingTabBar): al montar
+        // una tab por primera vez, la pantalla se desplaza pero el contenido
+        // interno (ScrollView) no termina de renderizarse hasta una segunda
+        // interacción — queda visible solo el fondo del navigator (en Profile
+        // se veía el AmbientBackdrop verde oscuro sin contenido). `'fade'` es
+        // la animación default segura.
+        animation: 'fade',
       }}
     >
       {activeRole === 'club_admin' ? (
