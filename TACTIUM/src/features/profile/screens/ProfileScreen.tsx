@@ -76,21 +76,29 @@ export const ProfileScreen = () => {
   const [notifEnabled, setNotifEnabled] = useState<boolean | null>(null);
   const [notifSaving, setNotifSaving]   = useState(false);
 
-  // Hidratamos el flag desde DB al montar.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const p = await ProfileApi.fetchMyProfile();
-        if (!cancelled) setNotifEnabled(p?.notifications_enabled ?? true);
-      } catch {
-        if (!cancelled) setNotifEnabled(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Hidratamos el flag desde DB al primer focus de la pantalla. Usar
+  // useFocusEffect en vez de useEffect evita que el fetch compita con
+  // el primer paint en iPhone Expo Go (bridge legacy): el screen se
+  // pinta limpio y este fetch arranca después.
+  const notifLoadedRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (notifLoadedRef.current) return;
+      notifLoadedRef.current = true;
+      let cancelled = false;
+      (async () => {
+        try {
+          const p = await ProfileApi.fetchMyProfile();
+          if (!cancelled) setNotifEnabled(p?.notifications_enabled ?? true);
+        } catch {
+          if (!cancelled) setNotifEnabled(true);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const handleToggleNotifications = async (next: boolean) => {
     if (notifSaving) return;
@@ -163,35 +171,63 @@ export const ProfileScreen = () => {
     );
   };
 
-  useEffect(() => {
-    if (!team || !user) return;
-    const load = async () => {
-      setLoadingStats(true);
-      try {
-        const { data: memberData } = await supabase
-          .from('team_members')
-          .select('role')
-          .eq('team_id', team.id)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setRole((memberData?.role as TeamRole) ?? null);
+  // Carga de role + season + matchdays. Movido a useFocusEffect por la
+  // misma razón que el fetchMyProfile: en iPhone Expo Go los useEffect
+  // async durante el mount competían con el primer paint del screen y
+  // dejaban Profile "stuck" en verde oscuro al cambiar de tab.
+  // Re-fetchea cada vez que el team cambia O cuando se enfoca la pantalla
+  // por primera vez con un team válido — mantiene el comportamiento original.
+  const lastLoadedTeamIdRef = useRef<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (!team || !user) return;
+      // Skip si ya cargamos para este team (evita re-fetch innecesario
+      // al volver al Perfil sin haber cambiado de equipo).
+      if (lastLoadedTeamIdRef.current === team.id) return;
+      lastLoadedTeamIdRef.current = team.id;
+      let cancelled = false;
+      const load = async () => {
+        setLoadingStats(true);
+        try {
+          const { data: memberData } = await supabase
+            .from('team_members')
+            .select('role')
+            .eq('team_id', team.id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (cancelled) return;
+          setRole((memberData?.role as TeamRole) ?? null);
 
-        const season = await SeasonsApi.fetchActiveSeason(team.id);
-        setActiveSeason(season);
-        if (season) {
-          const list = await MatchdaysApi.fetchMatchdays(season.id);
-          setMatchdays(list);
-        } else {
-          setMatchdays([]);
+          const season = await SeasonsApi.fetchActiveSeason(team.id);
+          if (cancelled) return;
+          setActiveSeason(season);
+          if (season) {
+            const list = await MatchdaysApi.fetchMatchdays(season.id);
+            if (cancelled) return;
+            setMatchdays(list);
+          } else {
+            setMatchdays([]);
+          }
+        } catch (e) {
+          console.warn('ProfileScreen load error', e);
+        } finally {
+          if (!cancelled) setLoadingStats(false);
         }
-      } catch (e) {
-        console.warn('ProfileScreen load error', e);
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-    load();
-  }, [team, user]);
+      };
+      load();
+      return () => {
+        cancelled = true;
+      };
+    }, [team, user]),
+  );
+
+  // Cuando cambias de equipo (Profile montado en background), invalida la
+  // ref para forzar re-fetch al siguiente focus.
+  useEffect(() => {
+    if (team && lastLoadedTeamIdRef.current !== team.id) {
+      lastLoadedTeamIdRef.current = null;
+    }
+  }, [team]);
 
   const played  = matchdays.filter((m) => m.outcome !== null).length;
   const wins    = matchdays.filter((m) => m.outcome === 'win').length;
