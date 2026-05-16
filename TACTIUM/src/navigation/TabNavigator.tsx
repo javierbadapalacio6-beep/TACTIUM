@@ -232,6 +232,12 @@ export const TabNavigator = () => {
               tabBarIcon: ({ focused }) => (
                 <TabIcon Icon={IconUser} focused={focused} />
               ),
+              // Eager mount: necesario porque ProfileScreen va sin Stack
+              // wrapper, y en v7 los Tab.Screens directos con lazy default
+              // se quedan mid-mount al primer focus (verde oscuro sin
+              // contenido). Los tabs con Stack interno (HomeStack, ClubStack)
+              // no sufren este bug porque su Stack absorbe el mount cycle.
+              lazy: false,
             }}
           />
         </>
@@ -270,6 +276,9 @@ export const TabNavigator = () => {
                 tabBarIcon: ({ focused }) => (
                   <TabIcon Icon={IconTeam} focused={focused} />
                 ),
+                // Eager mount (ver nota en Profile arriba). Team también
+                // va sin Stack wrapper y sufría el mismo bug.
+                lazy: false,
               }}
             />
           ) : null}
@@ -282,6 +291,8 @@ export const TabNavigator = () => {
               tabBarIcon: ({ focused }) => (
                 <TabIcon Icon={IconUser} focused={focused} />
               ),
+              // Eager mount (ver nota en bloque club_admin arriba).
+              lazy: false,
             }}
           />
         </>
