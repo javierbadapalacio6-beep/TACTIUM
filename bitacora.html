@@ -320,6 +320,17 @@ const LOG = [
       { type: "decision", text: "<strong>Apple Paid Apps COMPLETO al 100% activo</strong>. Todos los formularios fiscales/legales firmados y activos. Pendiente solo la verificación automática de Apple del Acuerdo apps de pago + Banking Unicaja (24-72h, esperada lunes 18 may o martes 19 may). Mañana sábado retomamos por Google Payment Profile + Merchant Center." },
     ],
   },
+  {
+    date: "2026-05-16",
+    title: "Apple aprobado · arranque productos IAP",
+    changes: [
+      { type: "feat", text: "<strong>Apple Paid Apps APROBADO mucho antes de lo esperado</strong> ✅. Acuerdo apps de pago, Banking Unicaja (7346), W-8BEN, Beneficial Owner Certificate, DSA y DAC7 todos en estado <em>Activo</em>. Apple desbloqueado para crear Subscriptions IAP en App Store Connect." },
+      { type: "decision", text: "<strong>Estrategia de free trials definida</strong>: 14 días default para todos los nuevos suscriptores (Introductory Offer aplicada automáticamente) + 30 días via <em>Offer Codes</em> únicos para los top 100 de la waitlist (orden cronológico por created_at). Es el patrón estándar SaaS (Notion, Linear, Vercel). Guardado en memoria <code>tactium-iap-trial-strategy</code>." },
+      { type: "feat", text: "<strong>Subscription Group 'TACTIUM Pro'</strong> creado en App Store Connect. UN solo grupo para los 8 productos (permite upgrades/downgrades cleanly entre planes con prorrateo automático Apple). 4 Levels: 1=Capitán, 2=Club Starter, 3=Club Pro, 4=Club Elite." },
+      { type: "chore", text: "Comenzada creación del 1er producto IAP: <strong>Captain Monthly</strong> (Product ID <code>tactium_captain_monthly</code>, 4,99€/mes, Level 1, free trial 14 días). Localization Spanish (Spain) configurada — descubrimos que Apple limita descripciones IAP a <strong>55 caracteres</strong>, no 200. Tabla maestra de descripciones cortas (≤55 chars) preparada para los 4 planes." },
+      { type: "decision", text: "<strong>Cierre sesión 16 may</strong>. Usuario sigue creando los 7 productos IAP restantes en paralelo con Claude chat (no Claude Code) usando la tabla maestra ya entregada. Pendiente para próxima sesión Claude Code: (a) Google Payment Profile, (b) replicar los 8 productos en Google Play Console, (c) generar batch de 100 Offer Codes en cada store, (d) integración técnica IAP (RevenueCat/StoreKit) en sesión técnica posterior." },
+    ],
+  },
 ];
 
 /* ─────────────────────────────────────────────────────────────────
