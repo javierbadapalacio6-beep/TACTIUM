@@ -30,7 +30,7 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 
 import type { ClubStackScreenProps } from '@navigation/types';
 
-const CATS = ['1ª', '2ª', '3ª', '4ª'];
+const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª', '9ª', '10ª'];
 const GROUPS = ['A', 'B', 'C', 'D'];
 const GENDERS: { id: TeamGender; label: string }[] = [
   { id: 'masculino', label: 'Masculino' },
@@ -55,10 +55,15 @@ export const CreateTeamFromClubScreen = ({
 
   const [name, setName] = useState('');
   const [league, setLeague] = useState('');
-  const [cat, setCat] = useState('2ª');
-  const [gender, setGender] = useState<TeamGender>('masculino');
-  const [group, setGroup] = useState<string>('A');
-  const [hasGroup, setHasGroup] = useState(true);
+  // Sin valores por defecto: el usuario debe marcar conscientemente.
+  // Evita errores tipo "creé el equipo en 2ª masculino porque me lo dio
+  // ya seleccionado y no me di cuenta".
+  const [cat, setCat] = useState<string>('');
+  const [gender, setGender] = useState<TeamGender | null>(null);
+  const [group, setGroup] = useState<string>('');
+  // Grupo oculto por defecto. El usuario activa el toggle si su liga
+  // tiene grupos (A/B/C/D). La mayoría de ligas amateurs no.
+  const [hasGroup, setHasGroup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const valid = useMemo(
@@ -82,7 +87,9 @@ export const CreateTeamFromClubScreen = ({
         league: league.trim(),
         category: cat,
         group: hasGroup ? group : undefined,
-        gender,
+        // gender es opcional: si el usuario no marcó ninguno, no enviamos
+        // el campo (createTeam lo trata como undefined).
+        gender: gender ?? undefined,
         clubId: club.id,
         // No tocar el flag de onboarding: estamos creando un equipo
         // adicional desde el ClubDashboard. Si lo tocásemos, el
@@ -190,7 +197,14 @@ export const CreateTeamFromClubScreen = ({
         </Section>
 
         <Section label="Categoría">
-          <View style={styles.catGrid}>
+          {/* 10 categorías no caben con flex:1; pasamos a scroll horizontal
+              con cells de ancho fijo. El usuario desliza para ver hasta
+              la 10ª. Sin selección por defecto: el primer tap fija el valor. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catRowScroll}
+          >
             {CATS.map((c) => {
               const sel = cat === c;
               return (
@@ -198,7 +212,7 @@ export const CreateTeamFromClubScreen = ({
                   key={c}
                   onPress={() => setCat(c)}
                   style={[
-                    styles.catCell,
+                    styles.catCellFixed,
                     sel && {
                       backgroundColor: Colors.accent,
                       borderColor: Colors.accent,
@@ -216,7 +230,7 @@ export const CreateTeamFromClubScreen = ({
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         </Section>
 
         <Section label="Género">
@@ -408,6 +422,19 @@ const styles = StyleSheet.create({
   catGrid: { flexDirection: 'row', gap: 6 },
   catCell: {
     flex: 1,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Variante para scroll horizontal: ancho fijo en vez de flex:1, así
+  // las 10 categorías se desplazan limpiamente.
+  catRowScroll: { gap: 6, paddingRight: 8 },
+  catCellFixed: {
+    width: 64,
     height: 52,
     borderRadius: Radius.md,
     backgroundColor: Colors.bgCard,
