@@ -22,7 +22,7 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
-import { useTeamStore } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -66,6 +66,9 @@ export const ResultsScreen = ({
 }: HomeStackScreenProps<'Results'>) => {
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
+  // Solo captain/club_admin pueden cargar resultados. Players ven la pantalla
+  // pero todo en read-only (defense in depth — RLS de Supabase ya rechazaría).
+  const isCaptain = useTeamStore(selectIsCaptain);
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const matchdayId = route.params.matchdayId;
   const focus = route.params.focus ?? 0;
@@ -147,7 +150,7 @@ export const ResultsScreen = ({
 
   const closed = matchday?.status === 'finished';
   const started = matchday ? isMatchStarted(matchday) : false;
-  const canEdit = started && !closed;
+  const canEdit = started && !closed && isCaptain;
 
   // ── Score agregado ──
   const teamScore = useMemo(() => {

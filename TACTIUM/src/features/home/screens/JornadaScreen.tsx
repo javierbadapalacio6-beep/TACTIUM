@@ -42,7 +42,7 @@ import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
-import { useTeamStore } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import {
   formatLongDay,
   formatShortDay,
@@ -160,6 +160,9 @@ export const JornadaScreen = ({
 }: HomeStackScreenProps<'Jornada'>) => {
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
+  // Solo captain/club_admin pueden editar/cerrar/eliminar la jornada.
+  // Players ven la pantalla en read-only.
+  const isCaptain = useTeamStore(selectIsCaptain);
   const gate = usePremiumGate();
 
   const [matchday, setMatchday] = useState<MatchdaysApi.Matchday | null>(null);
@@ -384,7 +387,7 @@ export const JornadaScreen = ({
   //    hora oficial — al igual que la introducción de resultados).
   // Si faltan resultados pero el partido ya empezó, se cierra manualmente
   // con un sheet que pide el marcador final.
-  const canClose = !closed && matchStarted;
+  const canClose = isCaptain && !closed && matchStarted;
   const closeIsManual =
     !closed && (!lineupReady || score.played < courts);
   const dateObj = isoDateToDate(matchday.match_date);
@@ -409,7 +412,7 @@ export const JornadaScreen = ({
           <Text style={styles.backLabel}>Inicio</Text>
         </Pressable>
         <View style={styles.navRight}>
-          {!closed ? (
+          {!closed && isCaptain ? (
             <Pressable
               onPress={() => setEditing(true)}
               hitSlop={6}
@@ -614,8 +617,8 @@ export const JornadaScreen = ({
           </View>
         ) : null}
 
-        {/* Cerrar acta */}
-        {!closed ? (
+        {/* Cerrar acta — solo captain. Players no ven el botón. */}
+        {!closed && isCaptain ? (
           <>
             <Pressable
               onPress={gate(closeMatch, 'matchday_close')}
@@ -648,44 +651,47 @@ export const JornadaScreen = ({
           </>
         ) : null}
 
-        {/* === ELIMINAR JORNADA === */}
+        {/* === ELIMINAR JORNADA · solo captain === */}
         {/* Discreto al final. Confirma 2 veces (Alert) y borra en cascada
-            todas las dependencias (lineups, resultados). */}
-        <Pressable
-          onPress={() => {
-            Alert.alert(
-              'Eliminar jornada',
-              `Vas a borrar la jornada J·${String(matchday.jornada_number).padStart(2, '0')} vs ${matchday.opponent}. Se eliminarán también las alineaciones y resultados asociados. Esta acción no se puede deshacer.`,
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                  text: 'Eliminar',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await MatchdaysApi.deleteMatchday(matchday.id);
-                      if (navigation.canGoBack()) navigation.goBack();
-                      else navigation.navigate('HomeRoot');
-                    } catch (e: any) {
-                      Alert.alert(
-                        'No se pudo eliminar',
-                        e?.message ?? 'Inténtalo de nuevo.',
-                      );
-                    }
+            todas las dependencias (lineups, resultados). Players nunca ven
+            este botón — RLS de Supabase de todas formas rechazaría. */}
+        {isCaptain ? (
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                'Eliminar jornada',
+                `Vas a borrar la jornada J·${String(matchday.jornada_number).padStart(2, '0')} vs ${matchday.opponent}. Se eliminarán también las alineaciones y resultados asociados. Esta acción no se puede deshacer.`,
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  {
+                    text: 'Eliminar',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await MatchdaysApi.deleteMatchday(matchday.id);
+                        if (navigation.canGoBack()) navigation.goBack();
+                        else navigation.navigate('HomeRoot');
+                      } catch (e: any) {
+                        Alert.alert(
+                          'No se pudo eliminar',
+                          e?.message ?? 'Inténtalo de nuevo.',
+                        );
+                      }
+                    },
                   },
-                },
-              ],
-            );
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Eliminar jornada"
-          style={({ pressed }) => [
-            styles.deleteJornada,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Text style={styles.deleteJornadaLabel}>Eliminar jornada</Text>
-        </Pressable>
+                ],
+              );
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Eliminar jornada"
+            style={({ pressed }) => [
+              styles.deleteJornada,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={styles.deleteJornadaLabel}>Eliminar jornada</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       {/* === CTA === */}

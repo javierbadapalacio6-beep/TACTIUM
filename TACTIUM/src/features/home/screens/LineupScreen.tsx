@@ -36,7 +36,7 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import type { LineupVariant } from '@core/services/lineupVariants';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
-import { useTeamStore, type Player } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { HomeStackScreenProps } from '@navigation/types';
@@ -159,6 +159,11 @@ export const LineupScreen = ({
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
+  // Solo captain/club_admin pueden editar. El override de rol desde Profile
+  // (captain previsualizando como player) también desactiva la edición —
+  // RLS de Supabase de todas formas rechazaría a un player real, pero
+  // queremos defense in depth y no mostrarles botones que no funcionan.
+  const isCaptain = useTeamStore(selectIsCaptain);
   const gate = usePremiumGate();
   const matchdayId = route.params.matchdayId;
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
@@ -248,6 +253,10 @@ export const LineupScreen = ({
   }, [currentVariantId, courts]);
 
   const closed = matchday?.status === 'finished';
+  // Read-only abarca dos casos: acta cerrada o el user no es captain. A nivel
+  // funcional son indistinguibles para la UI (todo desactivado), pero el copy
+  // del hint difiere.
+  const canEdit = !closed && isCaptain;
 
   // ─── Variantes: handlers ─────────────────────────────────────
   const currentVariant = variants.find((v) => v.id === currentVariantId) ?? null;
@@ -260,7 +269,7 @@ export const LineupScreen = ({
   }, [matchdayId]);
 
   const handleAddVariant = useCallback(async () => {
-    if (variants.length >= 5 || variantBusy || closed) return;
+    if (variants.length >= 5 || variantBusy || !canEdit) return;
     setVariantBusy(true);
     try {
       // Calculamos el primer "Variante N" libre. No basta con length+1 porque
@@ -289,11 +298,11 @@ export const LineupScreen = ({
     } finally {
       setVariantBusy(false);
     }
-  }, [variants, variantBusy, closed, matchdayId, currentVariantId, reloadVariants]);
+  }, [variants, variantBusy, canEdit, matchdayId, currentVariantId, reloadVariants]);
 
   const handleSetActive = useCallback(
     async (variantId: string) => {
-      if (variantBusy || closed) return;
+      if (variantBusy || !canEdit) return;
       if (variantId === activeVariantId) return;
       setVariantBusy(true);
       try {
@@ -305,12 +314,12 @@ export const LineupScreen = ({
         setVariantBusy(false);
       }
     },
-    [variantBusy, closed, activeVariantId, reloadVariants],
+    [variantBusy, canEdit, activeVariantId, reloadVariants],
   );
 
   const handleDeleteVariant = useCallback(
     async (variant: LineupVariant) => {
-      if (variantBusy || closed) return;
+      if (variantBusy || !canEdit) return;
       if (variant.is_active) {
         Alert.alert(
           'No se puede eliminar',
@@ -348,12 +357,12 @@ export const LineupScreen = ({
         ],
       );
     },
-    [variantBusy, closed, currentVariantId, reloadVariants],
+    [variantBusy, canEdit, currentVariantId, matchdayId, reloadVariants],
   );
 
   const openVariantActions = useCallback(
     (variant: LineupVariant) => {
-      if (closed) return;
+      if (!canEdit) return;
       const isActive = variant.is_active;
       Alert.alert(
         variant.label,
@@ -380,7 +389,7 @@ export const LineupScreen = ({
         ],
       );
     },
-    [closed, handleSetActive, handleDeleteVariant],
+    [canEdit, handleSetActive, handleDeleteVariant],
   );
 
   const persistAll = useCallback(
@@ -467,7 +476,7 @@ export const LineupScreen = ({
   }, [slots]);
 
   const handleResetSlots = useCallback(() => {
-    if (closed || !currentVariantId) return;
+    if (!canEdit || !currentVariantId) return;
     const isAlreadyEmpty = slots.every((s) => filledLen(s) === 0);
     if (isAlreadyEmpty) return;
     Alert.alert(
@@ -488,7 +497,7 @@ export const LineupScreen = ({
         },
       ],
     );
-  }, [closed, currentVariantId, slots, courts, persistAll, pulseAll]);
+  }, [canEdit, currentVariantId, slots, courts, persistAll, pulseAll]);
 
   const flashAvatar = useCallback((...ids: (string | null)[]) => {
     const valid = ids.filter((id): id is string => Boolean(id));
@@ -507,7 +516,7 @@ export const LineupScreen = ({
   }, []);
 
   const onSlotTap = (court: number, slot: SlotIdx) => {
-    if (closed) return;
+    if (!canEdit) return;
     const idx = slots.findIndex((s) => s.court === court);
     if (idx === -1) return;
     const here = slot === 0 ? slots[idx].playerAId : slots[idx].playerBId;
@@ -549,7 +558,7 @@ export const LineupScreen = ({
   };
 
   const onSlotEmpty = (court: number, slot: SlotIdx) => {
-    if (closed || !sel) return;
+    if (!canEdit || !sel) return;
     const idx = slots.findIndex((s) => s.court === court);
     if (idx === -1) return;
     const next = slots.map((p) => ({ ...p }));
@@ -577,7 +586,7 @@ export const LineupScreen = ({
   };
 
   const onBenchTap = (id: string) => {
-    if (closed) return;
+    if (!canEdit) return;
     if (!sel) {
       setSel({ kind: 'bench', id });
       return;
@@ -604,7 +613,7 @@ export const LineupScreen = ({
   };
 
   const removeFromSlot = (court: number, slot: SlotIdx) => {
-    if (closed) return;
+    if (!canEdit) return;
     const idx = slots.findIndex((s) => s.court === court);
     if (idx === -1) return;
     const next = slots.map((p) => ({ ...p }));
@@ -616,7 +625,7 @@ export const LineupScreen = ({
   };
 
   const fillEmpty = () => {
-    if (closed) return;
+    if (!canEdit) return;
     const next = slots.map((p) => ({ ...p }));
     const empties: { court: number; slot: SlotIdx }[] = [];
     next.forEach((p) => {
@@ -688,7 +697,7 @@ export const LineupScreen = ({
   ]);
 
   const applySuggestion = () => {
-    if (!suggestion || closed) return;
+    if (!suggestion || !canEdit) return;
     const idx = slots.findIndex((s) => s.court === suggestion.court);
     if (idx === -1) return;
     const next = slots.map((p) => ({ ...p }));
@@ -744,6 +753,8 @@ export const LineupScreen = ({
       }`
     : closed
     ? 'Acta cerrada · solo lectura.'
+    : !isCaptain
+    ? 'Solo el capitán puede editar la alineación.'
     : autoSort
     ? 'Las parejas se ordenan por puntos automáticamente'
     : 'Toca un jugador para seleccionar';
@@ -767,46 +778,48 @@ export const LineupScreen = ({
         </Pressable>
 
         <View style={styles.headerRight}>
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation();
-              handleResetSlots();
-            }}
-            disabled={closed || filledCount === 0}
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.resetBtn,
-              (closed || filledCount === 0) && { opacity: 0.4 },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <IconTrash size={14} color={Colors.textMuted} />
-          </Pressable>
+          {isCaptain ? (
+            <>
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleResetSlots();
+                }}
+                disabled={!canEdit || filledCount === 0}
+                hitSlop={6}
+                style={({ pressed }) => [
+                  styles.resetBtn,
+                  (!canEdit || filledCount === 0) && { opacity: 0.4 },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <IconTrash size={14} color={Colors.textMuted} />
+              </Pressable>
 
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation();
-              setAutoSort((prev) => {
-                const next = !prev;
-                // Al activar, reordenamos las parejas existentes al instante
-                // para que el toggle se sienta inmediato y predecible.
-                if (next) {
-                  const sorted = sortByPoints(slots, playerById);
-                  setSlots(sorted);
-                  void persistAll(sorted);
-                  pulseAll();
-                }
-                return next;
-              });
-            }}
-            disabled={closed}
-            style={({ pressed }) => [
-              styles.autoSortBtn,
-              autoSort && styles.autoSortBtnOn,
-              pressed && { opacity: 0.85 },
-              closed && { opacity: 0.5 },
-            ]}
-          >
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setAutoSort((prev) => {
+                    const next = !prev;
+                    // Al activar, reordenamos las parejas existentes al instante
+                    // para que el toggle se sienta inmediato y predecible.
+                    if (next) {
+                      const sorted = sortByPoints(slots, playerById);
+                      setSlots(sorted);
+                      void persistAll(sorted);
+                      pulseAll();
+                    }
+                    return next;
+                  });
+                }}
+                disabled={!canEdit}
+                style={({ pressed }) => [
+                  styles.autoSortBtn,
+                  autoSort && styles.autoSortBtnOn,
+                  pressed && { opacity: 0.85 },
+                  !canEdit && { opacity: 0.5 },
+                ]}
+              >
             <IconBolt
               size={12}
               color={autoSort ? Colors.accent : Colors.textMuted}
@@ -820,6 +833,8 @@ export const LineupScreen = ({
               Auto-orden {autoSort ? '· ON' : '· OFF'}
             </Text>
           </Pressable>
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -927,7 +942,7 @@ export const LineupScreen = ({
             </Pressable>
           );
         })}
-        {variants.length < 5 && !closed ? (
+        {variants.length < 5 && canEdit ? (
           <Pressable
             onPress={handleAddVariant}
             disabled={variantBusy}
@@ -967,7 +982,7 @@ export const LineupScreen = ({
                 top={top}
                 pulsing={pulsing}
                 sel={sel}
-                disabled={closed}
+                disabled={!canEdit}
                 onSlotTap={(slot) => onSlotTap(sl.court, slot)}
                 onSlotEmpty={(slot) => onSlotEmpty(sl.court, slot)}
                 onRemove={(slot) => removeFromSlot(sl.court, slot)}
@@ -976,7 +991,7 @@ export const LineupScreen = ({
             );
           })}
 
-          {!closed && filledCount < courts ? (
+          {canEdit && filledCount < courts ? (
             <Pressable
               onPress={(e) => {
                 e.stopPropagation();
@@ -996,7 +1011,7 @@ export const LineupScreen = ({
         </Pressable>
       </ScrollView>
 
-      {suggestion && !sel && !closed ? (
+      {suggestion && !sel && canEdit ? (
         <Animated.View
           entering={FadeInDown.duration(320)}
           style={styles.suggestionWrap}
@@ -1036,7 +1051,7 @@ export const LineupScreen = ({
         teamPts={teamPts}
         onTap={onBenchTap}
         isAnimating={(id) => swapAnimIds.has(id)}
-        disabled={closed}
+        disabled={!canEdit}
       />
 
       <View
@@ -1046,13 +1061,13 @@ export const LineupScreen = ({
         ]}
       >
         <Pressable
-          disabled={!closed && filledCount < courts}
-          // Si el acta esta cerrada (closed), el boton actua como "Volver"
-          // sin pasar por el gate premium (no tiene sentido paywall al volver).
-          // Si no, gate envuelve la acción: si el user no tiene premium,
-          // abre PaywallScreen antes de ejecutar; si lo tiene, sigue como antes.
+          disabled={canEdit && filledCount < courts}
+          // Read-only modes (acta cerrada O usuario no capitán): el botón
+          // actúa como "Volver" sin paywall ni save.
+          // Captain con acta abierta: gate envuelve la acción y dispara
+          // paywall si no es premium.
           onPress={
-            closed
+            !canEdit
               ? () => {
                   if (navigation.canGoBack()) navigation.goBack();
                   else navigation.navigate('HomeRoot');
@@ -1080,14 +1095,13 @@ export const LineupScreen = ({
           }
           style={({ pressed }) => [
             styles.cta,
-            !closed && filledCount < courts && styles.ctaDisabled,
-            !closed && !allOk && filledCount === courts && styles.ctaWarn,
-            pressed && (closed || filledCount === courts) && { opacity: 0.85 },
+            canEdit && filledCount < courts && styles.ctaDisabled,
+            canEdit && !allOk && filledCount === courts && styles.ctaWarn,
+            pressed && (!canEdit || filledCount === courts) && { opacity: 0.85 },
           ]}
         >
-          {closed ? (
-            // Acta cerrada: el boton actua siempre como "Volver", sin importar
-            // el estado de fill o aviso de orden de parejas.
+          {!canEdit ? (
+            // Read-only (acta cerrada o no capitán): el botón siempre vuelve.
             <>
               <IconCheck size={15} color="#000" />
               <Text style={styles.ctaLabel}>Volver</Text>
