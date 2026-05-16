@@ -18,7 +18,7 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconChevron, NeonDot, AmbientBackdrop, Toggle } from '@components/ui';
+import { IconChevron, NeonDot, Toggle } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
@@ -220,8 +220,12 @@ export const ProfileScreen = () => {
 
   return (
     <View style={styles.root}>
-      <AmbientBackdrop intensity={0.5} />
-
+      {/* No usamos AmbientBackdrop aquí: combinado con bottom-tabs lazy mount
+          + custom FloatingTabBar dejaba el SVG <RadialGradient> visible pero
+          el resto de la pantalla mid-mount al primer focus del tab (bug
+          reportado 2026-05-16). El fondo plano Colors.background (verde
+          oscuro de marca) es suficiente: el avatar gradient, las cards y
+          los badges ya aportan profundidad visual. */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.eyebrow}>PERFIL</Text>
       </View>
