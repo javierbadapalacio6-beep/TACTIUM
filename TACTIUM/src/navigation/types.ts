@@ -44,9 +44,25 @@ export type ClubStackParamList = {
   CreateTeamFromClub: undefined;
 };
 
+// Tab dedicada al club_admin para navegar por los equipos del club en
+// modo SOLO LECTURA. El root es un listado de equipos; al elegir uno
+// se entra a ClubTeamPreview (dashboard curado por equipo) y desde ahí
+// se navega a Jornada/Lineup/Results (reusadas del HomeStack — quedan
+// read-only porque selectIsCaptain devuelve false para club_admin).
+export type ClubTeamsStackParamList = {
+  ClubTeamsRoot: undefined;
+  ClubTeamPreview: undefined;
+  // Jornada/Lineup/Results comparten params con HomeStack para reusar
+  // los mismos componentes sin cast de navigation.
+  Jornada: { matchdayId?: string };
+  Lineup: { matchdayId: string };
+  Results: { matchdayId: string; focus?: number };
+};
+
 // ─── Bottom Tabs ────────────────────────────────────────────────────
 export type TabParamList = {
   Club: undefined;
+  ClubTeams: undefined;
   Home: undefined;
   Seasons: undefined;
   Team: undefined;
@@ -88,6 +104,13 @@ export type ClubStackScreenProps<T extends keyof ClubStackParamList> =
     NativeStackScreenProps<ClubStackParamList, T>,
     TabScreenProps<keyof TabParamList>
   >;
+
+export type ClubTeamsStackScreenProps<
+  T extends keyof ClubTeamsStackParamList,
+> = CompositeScreenProps<
+  NativeStackScreenProps<ClubTeamsStackParamList, T>,
+  TabScreenProps<keyof TabParamList>
+>;
 
 export type AuthStackScreenProps<T extends keyof AuthStackParamList> =
   NativeStackScreenProps<AuthStackParamList, T>;

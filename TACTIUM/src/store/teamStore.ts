@@ -475,8 +475,14 @@ export const useTeamStore = create<TeamState>()(
 // Selectores derivados ergonómicos para las pantallas.
 export const selectIsClubAdmin = (s: TeamState): boolean =>
   s.activeRole === 'club_admin';
+// Captain = SOLO el modo activo captain. El club_admin previamente devolvía
+// true aquí (jerarquía) pero el modelo cambió: el club_admin VE TODO de
+// TODOS los equipos del club pero NO EDITA (es vista global, no gestión
+// operativa). Para editar, el gestor debe cambiar a Modo Capitán desde
+// Profile (los triggers DB lo hacen captain automático de cada team que
+// creó). Decisión 2026-05-16 — ver memory tactium-role-model.
 export const selectIsCaptain = (s: TeamState): boolean =>
-  s.activeRole === 'captain' || s.activeRole === 'club_admin';
+  s.activeRole === 'captain';
 export const selectIsPlayer = (s: TeamState): boolean =>
   s.activeRole === 'player';
 

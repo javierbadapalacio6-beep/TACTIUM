@@ -26,6 +26,7 @@ import {
 import { HomeStack } from './HomeStack';
 import { SeasonsStack } from './SeasonsStack';
 import { ClubStack } from './ClubStack';
+import { ClubTeamsStack } from './ClubTeamsStack';
 import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
 import { useTeamStore } from '@store/teamStore';
@@ -148,6 +149,9 @@ const HIDE_TAB_BAR_ON: ReadonlySet<string> = new Set([
   'Availability',
   'SeasonDetail',
   'CreateTeamFromClub',
+  // Vista de detalle del team desde el tab Equipos (club_admin) — oculta
+  // el tab bar para enfocar la lectura del team elegido.
+  'ClubTeamPreview',
 ]);
 
 const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
@@ -221,6 +225,16 @@ export const TabNavigator = () => {
               tabBarLabel: 'Club',
               tabBarIcon: ({ focused }) => (
                 <TabIcon Icon={IconClub} focused={focused} />
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="ClubTeams"
+            component={ClubTeamsStack}
+            options={{
+              tabBarLabel: 'Equipos',
+              tabBarIcon: ({ focused }) => (
+                <TabIcon Icon={IconTeam} focused={focused} />
               ),
             }}
           />
