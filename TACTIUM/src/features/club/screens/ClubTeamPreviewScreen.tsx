@@ -112,9 +112,6 @@ export const ClubTeamPreviewScreen = ({
           <IconBack size={16} color={Colors.text} />
           <Text style={styles.backLabel}>Equipos</Text>
         </Pressable>
-        <View style={styles.readBadge}>
-          <Text style={styles.readBadgeText}>SOLO LECTURA</Text>
-        </View>
       </View>
 
       <ScrollView
@@ -314,7 +311,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
   backBtn: {
     height: 36,
@@ -328,21 +324,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
-  readBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: 'rgba(192,132,252,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.40)',
-  },
-  readBadgeText: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    color: '#C084FC',
-  },
   scroll: { paddingHorizontal: 22, paddingTop: 14 },
   eyebrow: {
     fontFamily: Fonts.mono,

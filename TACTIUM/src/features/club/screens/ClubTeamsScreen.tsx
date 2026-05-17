@@ -93,7 +93,7 @@ export const ClubTeamsScreen = ({
         <View style={styles.brandRow}>
           <TactiumMark size={32} gradient />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.eyebrow}>EQUIPOS · MODO LECTURA</Text>
+            <Text style={styles.eyebrow}>EQUIPOS</Text>
             <Text style={styles.brandName} numberOfLines={1}>
               {club.name}
             </Text>
@@ -112,7 +112,6 @@ export const ClubTeamsScreen = ({
       >
         <Text style={styles.intro}>
           Selecciona un equipo para ver su jornada, alineación y resultados.
-          Los cambios solo los puede hacer el capitán de cada equipo.
         </Text>
 
         {loading ? (
