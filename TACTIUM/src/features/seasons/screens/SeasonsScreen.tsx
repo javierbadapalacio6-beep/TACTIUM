@@ -257,7 +257,10 @@ const ActiveSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => voi
       </View>
       <Text style={styles.activeName}>{season.name}</Text>
       <Text style={styles.activeMeta}>
-        {season.category ?? '—'} · {season.total_matchdays} jornadas
+        {season.category ?? '—'}
+        {season.total_matchdays != null
+          ? ` · ${season.total_matchdays} jornadas`
+          : ''}
       </Text>
 
       <View style={styles.progressTrack}>
@@ -316,94 +319,97 @@ const CreateSeasonSheet: React.FC<{
     }
   }, [open]);
 
-  // Parse + validación del número de jornadas.
+  // Parse + validación del número de jornadas. AHORA OPCIONAL — si está
+  // vacío se crea la temporada sin total (null en BD). Si se rellena,
+  // tiene que ser un entero entre 1 y 99.
   const matchdaysNum =
     matchdaysStr.trim() === '' ? null : Number(matchdaysStr);
   const matchdaysValid =
-    matchdaysNum !== null &&
-    Number.isFinite(matchdaysNum) &&
-    matchdaysNum >= 1 &&
-    matchdaysNum <= 99;
+    matchdaysStr.trim() === '' ||
+    (matchdaysNum !== null &&
+      Number.isFinite(matchdaysNum) &&
+      matchdaysNum >= 1 &&
+      matchdaysNum <= 99);
 
   const canSubmit = !!team && name.trim().length > 0 && matchdaysValid;
 
+  // Helper: insert seasons + manejo de respuesta. Encapsulado para reusar
+  // en el flow normal y en el "cerrar previa + reintentar".
+  const performInsert = async () => {
+    await SeasonsApi.createSeason(team!.id, {
+      name: name.trim(),
+      category: team!.category ?? undefined,
+      phase,
+      total_matchdays: matchdaysNum,
+      active: true,
+    });
+  };
+
   const doCreate = async () => {
-    if (!team || !canSubmit) return;
+    if (!team || !canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      await SeasonsApi.createSeason(team.id, {
-        name: name.trim(),
-        category: team.category ?? undefined,
-        phase,
-        total_matchdays: matchdaysNum as number,
-        active: true,
-      });
+      await performInsert();
+      // Éxito directo → cerramos sheet vía onCreated. Reset de submitting
+      // no hace falta porque el sheet se desmonta.
       onCreated();
+      return;
     } catch (e: any) {
-      // Postgres devuelve 23505 cuando viola `one_active_season_per_team`.
-      // Detectamos por code O por substring del mensaje (algunos clientes
-      // no propagan code limpio). Ofrecemos cerrar la activa y crear esta.
       const msg = String(e?.message ?? '');
       const isActiveConflict =
         e?.code === '23505' ||
         msg.includes('one_active_season_per_team');
-      if (isActiveConflict) {
-        try {
-          const current = await SeasonsApi.fetchActiveSeason(team.id);
-          Alert.alert(
-            'Ya hay una temporada activa',
-            current
-              ? `Tienes "${current.name}" en curso. ¿Quieres cerrarla y crear "${name.trim()}" como nueva temporada activa?`
-              : 'Ya tienes una temporada activa para este equipo. Ciérrala antes de crear otra.',
-            current
-              ? [
-                  { text: 'Cancelar', style: 'cancel' },
-                  {
-                    text: 'Cerrar y crear nueva',
-                    style: 'destructive',
-                    onPress: async () => {
-                      try {
-                        await SeasonsApi.closeSeason(current.id);
-                        // Reintenta la creación tras cerrar la previa.
-                        await SeasonsApi.createSeason(team.id, {
-                          name: name.trim(),
-                          category: team.category ?? undefined,
-                          phase,
-                          total_matchdays: matchdaysNum as number,
-                          active: true,
-                        });
-                        onCreated();
-                      } catch (e2: any) {
-                        Alert.alert(
-                          'No se pudo crear',
-                          e2?.message ?? 'Inténtalo de nuevo.',
-                        );
-                      } finally {
-                        setSubmitting(false);
-                      }
-                    },
-                  },
-                ]
-              : [{ text: 'OK' }],
-          );
-          // No reseteamos submitting aquí — el handler async del Alert lo
-          // hace cuando termine, o cuando el user cancela queda activo y
-          // necesitamos liberarlo.
-          if (!current) setSubmitting(false);
-        } catch {
-          setSubmitting(false);
-          Alert.alert(
-            'Ya hay una temporada activa',
-            'Ciérrala desde el detalle antes de crear otra.',
-          );
-        }
+
+      // CRÍTICO: liberar submitting ANTES de abrir el Alert. Si dejamos
+      // submitting=true mientras el Alert está abierto y el user cancela,
+      // el sheet queda con el spinner para siempre — bug reportado.
+      setSubmitting(false);
+
+      if (!isActiveConflict) {
+        Alert.alert('Error al crear temporada', msg || 'Inténtalo de nuevo.');
         return;
       }
-      setSubmitting(false);
-      Alert.alert('Error al crear temporada', msg || 'Inténtalo de nuevo.');
-      return;
+
+      // Conflict: ofrecemos cerrar la previa y reintentar.
+      let current: SeasonsApi.Season | null = null;
+      try {
+        current = await SeasonsApi.fetchActiveSeason(team.id);
+      } catch {
+        // Ignoramos — fallback al mensaje genérico abajo.
+      }
+      if (!current) {
+        Alert.alert(
+          'Ya hay una temporada activa',
+          'Ciérrala desde el detalle de la temporada antes de crear otra.',
+        );
+        return;
+      }
+      Alert.alert(
+        'Ya hay una temporada activa',
+        `Tienes "${current.name}" en curso. ¿Quieres cerrarla y crear "${name.trim()}" como nueva temporada activa?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Cerrar y crear nueva',
+            style: 'destructive',
+            onPress: async () => {
+              setSubmitting(true);
+              try {
+                await SeasonsApi.closeSeason(current!.id);
+                await performInsert();
+                onCreated();
+              } catch (e2: any) {
+                Alert.alert(
+                  'No se pudo crear',
+                  e2?.message ?? 'Inténtalo de nuevo.',
+                );
+                setSubmitting(false);
+              }
+            },
+          },
+        ],
+      );
     }
-    setSubmitting(false);
   };
 
   const submit = doCreate;
@@ -464,8 +470,8 @@ const CreateSeasonSheet: React.FC<{
 
       <Text style={styles.sheetLabel}>
         {phase === 'playoff'
-          ? 'NÚMERO DE ELIMINATORIAS'
-          : 'NÚMERO DE JORNADAS'}
+          ? 'NÚMERO DE ELIMINATORIAS · OPCIONAL'
+          : 'NÚMERO DE JORNADAS · OPCIONAL'}
       </Text>
       <View style={styles.sheetInputWrap}>
         <View style={styles.accentBar} />

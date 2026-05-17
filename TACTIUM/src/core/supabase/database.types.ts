@@ -275,6 +275,7 @@ export type Database = {
           score_for: number | null
           season_id: string
           status: Database["public"]["Enums"]["matchday_status"]
+          tanda: number | null
           updated_at: string
         }
         Insert: {
@@ -292,6 +293,7 @@ export type Database = {
           score_for?: number | null
           season_id: string
           status?: Database["public"]["Enums"]["matchday_status"]
+          tanda?: number | null
           updated_at?: string
         }
         Update: {
@@ -309,6 +311,7 @@ export type Database = {
           score_for?: number | null
           season_id?: string
           status?: Database["public"]["Enums"]["matchday_status"]
+          tanda?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -409,7 +412,7 @@ export type Database = {
           phase: Database["public"]["Enums"]["season_phase"]
           start_date: string | null
           team_id: string
-          total_matchdays: number
+          total_matchdays: number | null
           updated_at: string
         }
         Insert: {
@@ -422,7 +425,7 @@ export type Database = {
           phase?: Database["public"]["Enums"]["season_phase"]
           start_date?: string | null
           team_id: string
-          total_matchdays?: number
+          total_matchdays?: number | null
           updated_at?: string
         }
         Update: {
@@ -435,7 +438,7 @@ export type Database = {
           phase?: Database["public"]["Enums"]["season_phase"]
           start_date?: string | null
           team_id?: string
-          total_matchdays?: number
+          total_matchdays?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -669,6 +672,39 @@ export type Database = {
           },
         ]
       }
+      waitlist: {
+        Row: {
+          accepts_privacy: boolean
+          created_at: string
+          email: string
+          id: string
+          locale: string | null
+          referrer: string | null
+          source: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          accepts_privacy?: boolean
+          created_at?: string
+          email: string
+          id?: string
+          locale?: string | null
+          referrer?: string | null
+          source?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          accepts_privacy?: boolean
+          created_at?: string
+          email?: string
+          id?: string
+          locale?: string | null
+          referrer?: string | null
+          source?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       lineup_pairs: {
@@ -734,6 +770,12 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       claim_player: {
         Args: { p_player_id: string }
@@ -748,6 +790,12 @@ export type Database = {
           team_id: string
           updated_at: string
           user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       clone_lineup_variant_pairs: {
@@ -771,7 +819,14 @@ export type Database = {
           score_for: number | null
           season_id: string
           status: Database["public"]["Enums"]["matchday_status"]
+          tanda: number | null
           updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "matchdays"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       create_team_invitation: {
@@ -790,10 +845,25 @@ export type Database = {
           used_at: string | null
           used_by: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "team_invitations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       fn_has_premium_access: {
         Args: { p_team_id: string; p_user_id: string }
         Returns: boolean
+      }
+      fn_start_trial_for_subject: {
+        Args: {
+          p_payer_user_id: string
+          p_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          p_subject_id: string
+          p_subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+        }
+        Returns: undefined
       }
       list_unclaimed_players: {
         Args: { p_team_id: string }
@@ -809,6 +879,12 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       redeem_team_invitation: {
         Args: { invitation_code: string }
@@ -822,6 +898,12 @@ export type Database = {
           team_id: string
           used_at: string | null
           used_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "team_invitations"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       renumber_season_matchdays: {
@@ -838,6 +920,12 @@ export type Database = {
           matchday_id: string
           updated_at: string
         }
+        SetofOptions: {
+          from: "*"
+          to: "lineup_variants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_player_self_availability: {
         Args: { p_available: boolean; p_player_id: string }
@@ -853,6 +941,12 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       unclaim_player: {
         Args: { p_player_id: string }
@@ -867,6 +961,12 @@ export type Database = {
           team_id: string
           updated_at: string
           user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       whoami: { Args: never; Returns: Json }

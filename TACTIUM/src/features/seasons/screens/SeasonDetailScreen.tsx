@@ -454,6 +454,7 @@ const MatchdayRow: React.FC<{
             {m.match_date ?? '—'}
             {m.match_time ? ` · ${m.match_time.slice(0, 5)}` : ''}
             {' · '}{m.is_home ? 'CASA' : 'FUERA'}
+            {m.tanda != null ? ` · T${m.tanda}` : ''}
           </Text>
         </View>
 
@@ -506,6 +507,9 @@ const AddMatchdaySheet: React.FC<{
   const [matchDate, setMatchDate] = useState<Date | null>(null);
   const [matchTime, setMatchTime] = useState<Date | null>(null);
   const [isHome, setIsHome] = useState(true);
+  // Tanda opcional: turno horario en el que juega el equipo dentro de la
+  // jornada (1, 2, 3...). Muchas ligas no la usan — input opcional.
+  const [tandaStr, setTandaStr] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   React.useEffect(() => {
@@ -515,6 +519,7 @@ const AddMatchdaySheet: React.FC<{
       setMatchDate(null);
       setMatchTime(null);
       setIsHome(true);
+      setTandaStr('');
     }
   }, [open]);
 
@@ -522,6 +527,8 @@ const AddMatchdaySheet: React.FC<{
     if (!opponent.trim() || submitting) return;
     setSubmitting(true);
     try {
+      const tandaNum =
+        tandaStr.trim() === '' ? null : Number(tandaStr);
       await MatchdaysApi.createMatchday(seasonId, {
         jornada_number: nextJornadaNumber,
         opponent: opponent.trim(),
@@ -529,6 +536,7 @@ const AddMatchdaySheet: React.FC<{
         match_time: matchTime ? dateToIsoTime(matchTime) : undefined,
         is_home: isHome,
         location: location.trim() || undefined,
+        tanda: tandaNum,
       });
       // Renumera por fecha: si la nueva jornada es retroactiva, se "encaja"
       // en su posición cronológica y las posteriores se desplazan.
@@ -633,6 +641,20 @@ const AddMatchdaySheet: React.FC<{
         allowClear
       />
 
+      <Text style={styles.sheetLabel}>TANDA · OPCIONAL</Text>
+      <View style={styles.sheetInputWrap}>
+        <TextInput
+          value={tandaStr}
+          onChangeText={(v) =>
+            setTandaStr(v.replace(/[^0-9]/g, '').slice(0, 2))
+          }
+          keyboardType="number-pad"
+          placeholder="ej. 1, 2, 3…"
+          placeholderTextColor={Colors.textFaint}
+          style={styles.sheetInput}
+        />
+      </View>
+
     </BottomSheet>
   );
 };
@@ -653,6 +675,9 @@ const EditMatchdaySheet: React.FC<{
     m.match_time ? isoTimeToDate(m.match_time) : null,
   );
   const [isHome, setIsHome]       = useState(m.is_home);
+  const [tandaStr, setTandaStr]   = useState(
+    m.tanda != null ? String(m.tanda) : '',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting]     = useState(false);
 
@@ -664,6 +689,7 @@ const EditMatchdaySheet: React.FC<{
       // de Jornada (al rellenar resultados set a set o al cerrar el acta).
       const newDateIso = matchDate ? dateToIsoDate(matchDate) : null;
       const dateChanged = newDateIso !== (m.match_date ?? null);
+      const tandaNum = tandaStr.trim() === '' ? null : Number(tandaStr);
 
       await MatchdaysApi.updateMatchday(m.id, {
         opponent: opponent.trim(),
@@ -671,6 +697,7 @@ const EditMatchdaySheet: React.FC<{
         match_time: matchTime ? dateToIsoTime(matchTime) : null,
         is_home: isHome,
         location: location.trim() || null,
+        tanda: tandaNum,
       });
 
       // Si cambió la fecha, reordenamos toda la temporada.
@@ -817,6 +844,20 @@ const EditMatchdaySheet: React.FC<{
         label="HORA DEL PARTIDO"
         allowClear
       />
+
+      <Text style={styles.sheetLabel}>TANDA · OPCIONAL</Text>
+      <View style={styles.sheetInputWrap}>
+        <TextInput
+          value={tandaStr}
+          onChangeText={(v) =>
+            setTandaStr(v.replace(/[^0-9]/g, '').slice(0, 2))
+          }
+          keyboardType="number-pad"
+          placeholder="ej. 1, 2, 3…"
+          placeholderTextColor={Colors.textFaint}
+          style={styles.sheetInput}
+        />
+      </View>
     </BottomSheet>
   );
 };

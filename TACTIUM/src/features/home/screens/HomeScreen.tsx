@@ -335,7 +335,11 @@ export const HomeScreen = ({
                 value={activeSeason ? activeSeason.name.replace('Temporada ', '') : '—'}
                 hint={
                   activeSeason
-                    ? `${activeSeason.category ?? '—'} · ${activeSeason.total_matchdays} jornadas`
+                    ? `${activeSeason.category ?? '—'}${
+                        activeSeason.total_matchdays != null
+                          ? ` · ${activeSeason.total_matchdays} jornadas`
+                          : ''
+                      }`
                     : 'Sin temporada activa'
                 }
                 onPress={goSeasons}

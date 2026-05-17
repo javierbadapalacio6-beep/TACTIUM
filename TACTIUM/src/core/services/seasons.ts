@@ -43,10 +43,10 @@ export async function createSeason(
     name: string;
     category?: string;
     phase?: SeasonPhase;
-    // total_matchdays YA NO tiene default 18. La UI lo pide explícito al
-    // capitán para evitar que se cree "una temporada de 18 jornadas" sin
-    // querer cuando en realidad eran 14 o 22 o lo que sea.
-    total_matchdays: number;
+    // total_matchdays es ahora OPCIONAL. Algunas temporadas (ej. playoffs
+    // que dependen del cuadro final) no saben el total hasta avanzar.
+    // BD migrada para permitir null y sin default 18.
+    total_matchdays?: number | null;
     active?: boolean;
   },
 ): Promise<Season> {
@@ -55,7 +55,7 @@ export async function createSeason(
     name: input.name,
     category: input.category ?? null,
     phase: input.phase ?? 'liga',
-    total_matchdays: input.total_matchdays,
+    total_matchdays: input.total_matchdays ?? null,
     active: input.active ?? false,
   };
   const { data, error } = await supabase
