@@ -94,6 +94,23 @@ export const ClubDashboardScreen = ({
     setMembersSheet({ teamId, teamName });
   };
 
+  // Tap en una card de Próxima jornada o Último resultado: fijamos el
+  // team activo al del card (para que JornadaScreen lo lea desde el store)
+  // y navegamos al detalle. Como activeRole sigue siendo club_admin, las
+  // pantallas Jornada/Lineup/Results quedan read-only.
+  const setActiveTeam = useTeamStore((s) => s.setActiveTeam);
+  const openMatchday = useCallback(
+    async (teamId: string, matchdayId: string) => {
+      try {
+        await setActiveTeam(teamId);
+        navigation.navigate('Jornada', { matchdayId });
+      } catch (e) {
+        console.warn('ClubDashboard openMatchday', e);
+      }
+    },
+    [navigation, setActiveTeam],
+  );
+
   if (!club) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + 18 }]}>
@@ -162,7 +179,13 @@ export const ClubDashboardScreen = ({
                   contentContainerStyle={styles.hScrollContent}
                 >
                   {upcomingCards.map((o) => (
-                    <NextMatchdayCard key={o.team.id} overview={o} />
+                    <NextMatchdayCard
+                      key={o.team.id}
+                      overview={o}
+                      onPress={() =>
+                        openMatchday(o.team.id, o.nextMatchday!.id)
+                      }
+                    />
                   ))}
                 </ScrollView>
               </View>
@@ -181,7 +204,13 @@ export const ClubDashboardScreen = ({
                   contentContainerStyle={styles.hScrollContent}
                 >
                   {lastResultCards.map((o) => (
-                    <LastResultCard key={o.team.id} overview={o} />
+                    <LastResultCard
+                      key={o.team.id}
+                      overview={o}
+                      onPress={() =>
+                        openMatchday(o.team.id, o.lastResult!.id)
+                      }
+                    />
                   ))}
                 </ScrollView>
               </View>
@@ -266,13 +295,22 @@ const SectionHeader: React.FC<{
 // ─── NextMatchdayCard ───────────────────────────────────────────────────────
 const NextMatchdayCard: React.FC<{
   overview: ClubTeamOverview;
-}> = ({ overview }) => {
+  onPress: () => void;
+}> = ({ overview, onPress }) => {
   const md = overview.nextMatchday!;
   const dateLabel = formatShortDate(md.match_date);
   const timeLabel = md.match_time ? md.match_time.slice(0, 5) : null;
 
   return (
-    <View style={styles.upcomingCard}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Ver jornada ${md.jornada_number} de ${overview.team.name} vs ${md.opponent}`}
+      style={({ pressed }) => [
+        styles.upcomingCard,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
       <View style={styles.cardTopRow}>
         <Text style={styles.cardJornada}>
           J·{String(md.jornada_number).padStart(2, '0')}
@@ -295,14 +333,15 @@ const NextMatchdayCard: React.FC<{
           {overview.team.name}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 };
 
 // ─── LastResultCard ─────────────────────────────────────────────────────────
 const LastResultCard: React.FC<{
   overview: ClubTeamOverview;
-}> = ({ overview }) => {
+  onPress: () => void;
+}> = ({ overview, onPress }) => {
   const md = overview.lastResult!;
   const tint =
     md.outcome === 'win'
@@ -318,7 +357,16 @@ const LastResultCard: React.FC<{
   const rightScore = isHome ? md.score_against : md.score_for;
 
   return (
-    <View style={[styles.resultCard, { borderColor: `${tint}66` }]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Ver detalle de jornada ${md.jornada_number} ${overview.team.name} vs ${md.opponent}`}
+      style={({ pressed }) => [
+        styles.resultCard,
+        { borderColor: `${tint}66` },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
       <View style={styles.cardTopRow}>
         <Text
           style={[
@@ -364,7 +412,7 @@ const LastResultCard: React.FC<{
           {overview.team.name}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 };
 

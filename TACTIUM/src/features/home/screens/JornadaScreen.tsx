@@ -320,10 +320,36 @@ export const JornadaScreen = ({
     setManualCloseOpen(true);
   };
 
-  // Marcador obligatorio para cerrar el acta manualmente:
-  // ambos campos deben tener un valor numérico válido.
+  // Marcador obligatorio para cerrar el acta manualmente. Reglas:
+  //   - Ambos campos rellenos con número >= 0.
+  //   - Ambos <= courts (no tiene sentido marcar 10-0 en una federación de 3).
+  //   - Suma === courts (todas las pistas tienen un resultado al cerrar).
+  // El clamp por court se hace también al teclear (onChangeText).
+  const scoreForNum = manualScoreFor.trim() === '' ? null : Number(manualScoreFor);
+  const scoreAgainstNum =
+    manualScoreAgainst.trim() === '' ? null : Number(manualScoreAgainst);
+  const manualScoreFilled = scoreForNum !== null && scoreAgainstNum !== null;
+  const manualScoreSum = manualScoreFilled
+    ? (scoreForNum as number) + (scoreAgainstNum as number)
+    : null;
+  const manualScoreSumOk = manualScoreSum === courts;
+  const manualScoreInRange =
+    manualScoreFilled &&
+    (scoreForNum as number) >= 0 &&
+    (scoreForNum as number) <= courts &&
+    (scoreAgainstNum as number) >= 0 &&
+    (scoreAgainstNum as number) <= courts;
   const manualScoreReady =
-    manualScoreFor.trim() !== '' && manualScoreAgainst.trim() !== '';
+    manualScoreFilled && manualScoreInRange && manualScoreSumOk;
+
+  // Clamp helper: digits únicamente y máximo `courts` (1 dígito basta para
+  // federaciones hasta 9 pistas; 2 dígitos por si crecen).
+  const clampScore = (raw: string): string => {
+    const digits = raw.replace(/[^0-9]/g, '').slice(0, 2);
+    if (digits === '') return '';
+    const n = Math.min(Number(digits), courts);
+    return String(n);
+  };
 
   const handleManualClose = async (outcome: 'win' | 'draw' | 'loss') => {
     if (!matchday || !manualScoreReady) return;
@@ -695,6 +721,10 @@ export const JornadaScreen = ({
       </ScrollView>
 
       {/* === CTA === */}
+      {/* Si la jornada está cerrada y disputada, la alineación con resultados
+          ya se ve arriba en las parejas — no tiene sentido un botón "Ver
+          alineación" que abre LineupScreen vacío de info nueva. Mejor un
+          "Volver" claro que cierra el flow. */}
       <View
         style={[
           styles.ctaWrap,
@@ -702,15 +732,25 @@ export const JornadaScreen = ({
         ]}
       >
         <Pressable
-          onPress={() =>
-            navigation.navigate('Lineup', { matchdayId: matchday.id })
+          onPress={
+            closed
+              ? () => {
+                  if (navigation.canGoBack()) navigation.goBack();
+                  else navigation.navigate('HomeRoot');
+                }
+              : () =>
+                  navigation.navigate('Lineup', { matchdayId: matchday.id })
           }
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
         >
-          <IconCourt size={20} color="#000" />
+          {closed ? (
+            <IconCheck size={18} color="#000" />
+          ) : (
+            <IconCourt size={20} color="#000" />
+          )}
           <Text style={styles.ctaLabel}>
             {closed
-              ? 'Ver alineación'
+              ? 'Volver'
               : lineupReady
               ? 'Editar alineación'
               : 'Crear alineación'}
@@ -756,9 +796,7 @@ export const JornadaScreen = ({
               <Text style={styles.manualScoreSlotLabel}>NOSOTROS</Text>
               <TextInput
                 value={manualScoreFor}
-                onChangeText={(v) =>
-                  setManualScoreFor(v.replace(/[^0-9]/g, '').slice(0, 2))
-                }
+                onChangeText={(v) => setManualScoreFor(clampScore(v))}
                 keyboardType="number-pad"
                 placeholder="—"
                 placeholderTextColor={Colors.textFaint}
@@ -771,9 +809,7 @@ export const JornadaScreen = ({
               <Text style={styles.manualScoreSlotLabel}>RIVAL</Text>
               <TextInput
                 value={manualScoreAgainst}
-                onChangeText={(v) =>
-                  setManualScoreAgainst(v.replace(/[^0-9]/g, '').slice(0, 2))
-                }
+                onChangeText={(v) => setManualScoreAgainst(clampScore(v))}
                 keyboardType="number-pad"
                 placeholder="—"
                 placeholderTextColor={Colors.textFaint}
@@ -819,9 +855,14 @@ export const JornadaScreen = ({
           })}
         </View>
 
-        {!manualScoreReady ? (
+        {!manualScoreFilled ? (
           <Text style={styles.manualCloseHint}>
             Introduce el marcador (Nosotros · Rival) para poder cerrar el acta.
+          </Text>
+        ) : !manualScoreSumOk ? (
+          <Text style={styles.manualCloseHint}>
+            El marcador debe sumar {courts} (total de pistas). Llevas{' '}
+            {manualScoreSum}.
           </Text>
         ) : null}
 

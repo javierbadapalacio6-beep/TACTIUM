@@ -42,6 +42,13 @@ export type ProfileStackParamList = {
 export type ClubStackParamList = {
   ClubRoot: undefined;
   CreateTeamFromClub: undefined;
+  // Reusadas del HomeStack para que el ClubDashboard pueda navegar
+  // directo a una jornada (ej. tap en card de últimos resultados) sin
+  // cambiar de tab. Quedan read-only automáticamente para club_admin
+  // porque selectIsCaptain devuelve false desde 2026-05-16.
+  Jornada: { matchdayId?: string };
+  Lineup: { matchdayId: string };
+  Results: { matchdayId: string; focus?: number };
 };
 
 // Tab dedicada al club_admin para navegar por los equipos del club en
