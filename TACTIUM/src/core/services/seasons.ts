@@ -43,7 +43,10 @@ export async function createSeason(
     name: string;
     category?: string;
     phase?: SeasonPhase;
-    total_matchdays?: number;
+    // total_matchdays YA NO tiene default 18. La UI lo pide explícito al
+    // capitán para evitar que se cree "una temporada de 18 jornadas" sin
+    // querer cuando en realidad eran 14 o 22 o lo que sea.
+    total_matchdays: number;
     active?: boolean;
   },
 ): Promise<Season> {
@@ -52,12 +55,34 @@ export async function createSeason(
     name: input.name,
     category: input.category ?? null,
     phase: input.phase ?? 'liga',
-    total_matchdays: input.total_matchdays ?? 18,
+    total_matchdays: input.total_matchdays,
     active: input.active ?? false,
   };
   const { data, error } = await supabase
     .from('seasons')
     .insert(payload)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Cierra (archiva) una temporada. La marca `active=false` y fija `end_date`
+ * a hoy si todavía estaba null. Tras esto la temporada aparece en el
+ * histórico y el unique index `one_active_season_per_team` libera el slot
+ * para que el capitán pueda crear la siguiente fase (playoff tras liga,
+ * por ejemplo) sin colisión.
+ *
+ * NO borra jornadas ni resultados — el histórico queda intacto para
+ * consultarlo en read-only.
+ */
+export async function closeSeason(id: string): Promise<Season> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('seasons')
+    .update({ active: false, end_date: today })
+    .eq('id', id)
     .select()
     .single();
   if (error) throw error;

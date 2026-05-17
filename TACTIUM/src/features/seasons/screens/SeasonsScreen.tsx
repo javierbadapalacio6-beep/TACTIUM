@@ -289,7 +289,7 @@ const PastSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => void 
 };
 
 const PHASE_OPTIONS: { id: SeasonsApi.SeasonPhase; label: string; sub: string }[] = [
-  { id: 'liga', label: 'Liga regular', sub: '18 jornadas' },
+  { id: 'liga', label: 'Liga regular', sub: 'Jornadas en orden' },
   { id: 'playoff', label: 'Playoff', sub: 'Eliminatorias' },
   { id: 'mixto', label: 'Liga + Playoff', sub: 'Formato completo' },
 ];
@@ -302,6 +302,9 @@ const CreateSeasonSheet: React.FC<{
   const team = useTeamStore((s) => s.team);
   const [name, setName] = useState('');
   const [phase, setPhase] = useState<SeasonsApi.SeasonPhase>('liga');
+  // Número de jornadas: vacío por defecto. El capitán lo introduce
+  // explícito; algunas ligas son 14, otras 18, otras 22 o lo que sea.
+  const [matchdaysStr, setMatchdaysStr] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   React.useEffect(() => {
@@ -309,26 +312,101 @@ const CreateSeasonSheet: React.FC<{
       const yr = new Date().getFullYear();
       setName(`Temporada ${String(yr).slice(2)}/${String(yr + 1).slice(2)}`);
       setPhase('liga');
+      setMatchdaysStr('');
     }
   }, [open]);
 
-  const submit = async () => {
-    if (!team || !name.trim() || submitting) return;
+  // Parse + validación del número de jornadas.
+  const matchdaysNum =
+    matchdaysStr.trim() === '' ? null : Number(matchdaysStr);
+  const matchdaysValid =
+    matchdaysNum !== null &&
+    Number.isFinite(matchdaysNum) &&
+    matchdaysNum >= 1 &&
+    matchdaysNum <= 99;
+
+  const canSubmit = !!team && name.trim().length > 0 && matchdaysValid;
+
+  const doCreate = async () => {
+    if (!team || !canSubmit) return;
     setSubmitting(true);
     try {
       await SeasonsApi.createSeason(team.id, {
         name: name.trim(),
         category: team.category ?? undefined,
         phase,
+        total_matchdays: matchdaysNum as number,
         active: true,
       });
       onCreated();
     } catch (e: any) {
-      Alert.alert('Error al crear temporada', e?.message ?? '');
-    } finally {
+      // Postgres devuelve 23505 cuando viola `one_active_season_per_team`.
+      // Detectamos por code O por substring del mensaje (algunos clientes
+      // no propagan code limpio). Ofrecemos cerrar la activa y crear esta.
+      const msg = String(e?.message ?? '');
+      const isActiveConflict =
+        e?.code === '23505' ||
+        msg.includes('one_active_season_per_team');
+      if (isActiveConflict) {
+        try {
+          const current = await SeasonsApi.fetchActiveSeason(team.id);
+          Alert.alert(
+            'Ya hay una temporada activa',
+            current
+              ? `Tienes "${current.name}" en curso. ¿Quieres cerrarla y crear "${name.trim()}" como nueva temporada activa?`
+              : 'Ya tienes una temporada activa para este equipo. Ciérrala antes de crear otra.',
+            current
+              ? [
+                  { text: 'Cancelar', style: 'cancel' },
+                  {
+                    text: 'Cerrar y crear nueva',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await SeasonsApi.closeSeason(current.id);
+                        // Reintenta la creación tras cerrar la previa.
+                        await SeasonsApi.createSeason(team.id, {
+                          name: name.trim(),
+                          category: team.category ?? undefined,
+                          phase,
+                          total_matchdays: matchdaysNum as number,
+                          active: true,
+                        });
+                        onCreated();
+                      } catch (e2: any) {
+                        Alert.alert(
+                          'No se pudo crear',
+                          e2?.message ?? 'Inténtalo de nuevo.',
+                        );
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    },
+                  },
+                ]
+              : [{ text: 'OK' }],
+          );
+          // No reseteamos submitting aquí — el handler async del Alert lo
+          // hace cuando termine, o cuando el user cancela queda activo y
+          // necesitamos liberarlo.
+          if (!current) setSubmitting(false);
+        } catch {
+          setSubmitting(false);
+          Alert.alert(
+            'Ya hay una temporada activa',
+            'Ciérrala desde el detalle antes de crear otra.',
+          );
+        }
+        return;
+      }
       setSubmitting(false);
+      Alert.alert('Error al crear temporada', msg || 'Inténtalo de nuevo.');
+      return;
     }
+    setSubmitting(false);
   };
+
+  const submit = doCreate;
 
   return (
     <BottomSheet open={open} onClose={onClose}>
@@ -384,13 +462,33 @@ const CreateSeasonSheet: React.FC<{
         })}
       </View>
 
+      <Text style={styles.sheetLabel}>
+        {phase === 'playoff'
+          ? 'NÚMERO DE ELIMINATORIAS'
+          : 'NÚMERO DE JORNADAS'}
+      </Text>
+      <View style={styles.sheetInputWrap}>
+        <View style={styles.accentBar} />
+        <TextInput
+          value={matchdaysStr}
+          onChangeText={(v) =>
+            setMatchdaysStr(v.replace(/[^0-9]/g, '').slice(0, 2))
+          }
+          keyboardType="number-pad"
+          placeholder={phase === 'playoff' ? 'ej. 4' : 'ej. 18'}
+          placeholderTextColor={Colors.textFaint}
+          style={styles.sheetInput}
+          maxLength={2}
+        />
+      </View>
+
       <Pressable
-        disabled={submitting || !name.trim()}
+        disabled={submitting || !canSubmit}
         onPress={submit}
         style={({ pressed }) => [
           styles.sheetCta,
-          (submitting || !name.trim()) && { opacity: 0.4 },
-          pressed && !submitting && { opacity: 0.85 },
+          (submitting || !canSubmit) && { opacity: 0.4 },
+          pressed && !submitting && canSubmit && { opacity: 0.85 },
         ]}
       >
         {submitting ? (

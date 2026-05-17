@@ -32,7 +32,7 @@ import {
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
 import { matchdayState, type MatchdayVisualState } from '@core/utils/matchday';
-import { useTeamStore } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import type { ScannedMatchday } from '@core/services/imageRecognition';
 
 import type { SeasonsStackScreenProps } from '@navigation/types';
@@ -49,6 +49,7 @@ export const SeasonDetailScreen = ({
   const seasonId = route.params.id;
 
   const team = useTeamStore((s) => s.team);
+  const isCaptain = useTeamStore(selectIsCaptain);
   const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
   const [matchdays, setMatchdays] = useState<MatchdaysApi.Matchday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,11 @@ export const SeasonDetailScreen = ({
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [editing, setEditing] = useState<MatchdaysApi.Matchday | null>(null);
+  const [closingSeason, setClosingSeason] = useState(false);
+
+  // Edición permitida solo si la temporada está activa Y el usuario es
+  // captain. Temporadas archivadas son siempre read-only.
+  const canEditSeason = season?.active === true && isCaptain;
 
   const handleBulkMatchdays = async (scanned: ScannedMatchday[]) => {
     // El trigger BD renumera automáticamente tras cada INSERT, así que
@@ -106,6 +112,41 @@ export const SeasonDetailScreen = ({
   const losses = matchdays.filter((m) => m.outcome === 'loss').length;
   const played = wins + draws + losses;
   const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
+  const allDisputed =
+    matchdays.length > 0 &&
+    matchdays.every((m) => m.outcome !== null);
+
+  // ── Cerrar temporada ──────────────────────────────────────────────
+  const confirmCloseSeason = useCallback(() => {
+    if (!season || closingSeason) return;
+    const pending = matchdays.filter((m) => m.outcome === null).length;
+    const baseMsg = `La temporada "${season.name}" pasará al histórico. Las jornadas y resultados quedarán visibles en solo lectura.`;
+    const warning =
+      pending > 0
+        ? `\n\nAVISO: aún quedan ${pending} ${pending === 1 ? 'jornada' : 'jornadas'} sin disputar. Si las cierras ahora se mantendrán sin resultado en el histórico.`
+        : '';
+    Alert.alert('Cerrar temporada', `${baseMsg}${warning}`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar temporada',
+        style: 'destructive',
+        onPress: async () => {
+          setClosingSeason(true);
+          try {
+            const updated = await SeasonsApi.closeSeason(season.id);
+            setSeason(updated);
+          } catch (e: any) {
+            Alert.alert(
+              'No se pudo cerrar',
+              e?.message ?? 'Inténtalo de nuevo.',
+            );
+          } finally {
+            setClosingSeason(false);
+          }
+        },
+      },
+    ]);
+  }, [season, matchdays, closingSeason]);
 
   // ── Estado visual por jornada ─────────────────────────────────────
   // Memoizamos el estado por id; como las jornadas no cambian de fecha
@@ -160,22 +201,32 @@ export const SeasonDetailScreen = ({
           <Text style={styles.navBtnLabel}>Temporadas</Text>
         </Pressable>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pressable
-            onPress={() => setScanning(true)}
-            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.scanBtnIcon}>📷</Text>
-            <Text style={styles.scanBtnLabel}>Escanear</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setAdding(true)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Añadir jornada"
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-          >
-            <IconPlus size={16} color={Colors.accent} />
-          </Pressable>
+          {canEditSeason ? (
+            <>
+              <Pressable
+                onPress={() => setScanning(true)}
+                style={({ pressed }) => [
+                  styles.scanBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.scanBtnIcon}>📷</Text>
+                <Text style={styles.scanBtnLabel}>Escanear</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setAdding(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Añadir jornada"
+                style={({ pressed }) => [
+                  styles.addBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <IconPlus size={16} color={Colors.accent} />
+              </Pressable>
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -262,14 +313,14 @@ export const SeasonDetailScreen = ({
                     params: { matchdayId: m.id },
                   })
                 }
-                onEdit={() => setEditing(m)}
+                onEdit={canEditSeason ? () => setEditing(m) : undefined}
               />
             ))}
           </View>
         )}
 
-        {/* ── Dashed add button ── */}
-        {!loading && (
+        {/* ── Dashed add button (solo si captain + temporada activa) ── */}
+        {!loading && canEditSeason ? (
           <Pressable
             onPress={() => setAdding(true)}
             style={({ pressed }) => [styles.dashedAdd, pressed && { opacity: 0.7 }]}
@@ -277,7 +328,45 @@ export const SeasonDetailScreen = ({
             <IconPlus size={14} color={Colors.accent} />
             <Text style={styles.dashedAddText}>Crear nueva jornada</Text>
           </Pressable>
-        )}
+        ) : null}
+
+        {/* ── Cerrar temporada (solo captain con temporada activa) ──
+            Disponible siempre que esté activa; si quedan jornadas sin
+            disputar se avisa en el Alert pero se permite. */}
+        {!loading && canEditSeason ? (
+          <Pressable
+            onPress={confirmCloseSeason}
+            disabled={closingSeason}
+            style={({ pressed }) => [
+              styles.closeSeasonBtn,
+              closingSeason && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {closingSeason ? (
+              <ActivityIndicator color={Colors.error} size="small" />
+            ) : (
+              <Text style={styles.closeSeasonLabel}>
+                {allDisputed
+                  ? 'Cerrar temporada · todas disputadas'
+                  : 'Cerrar temporada'}
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
+
+        {/* ── Archivada · resumen final ──
+            Cuando la temporada está cerrada, una banda discreta indica
+            cuándo se cerró y refuerza que la pantalla es solo lectura.
+            Los stats agregados ya viven en el strip de arriba. */}
+        {!loading && season && !season.active ? (
+          <View style={styles.archivedNote}>
+            <Text style={styles.archivedNoteTitle}>Temporada archivada</Text>
+            <Text style={styles.archivedNoteText}>
+              {`Cerrada${season.end_date ? ` el ${season.end_date}` : ''}. Jornadas y resultados visibles en solo lectura.`}
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* ── Sheets ── */}
@@ -326,7 +415,8 @@ const MatchdayRow: React.FC<{
   isNext: boolean;
   isLast: boolean;
   onOpen: () => void;
-  onEdit: () => void;
+  // onEdit es opcional: temporadas archivadas no muestran el botón pencil.
+  onEdit?: () => void;
 }> = ({ matchday: m, state, isNext, isLast, onOpen, onEdit }) => {
   const outcomeMeta = m.outcome
     ? {
@@ -389,14 +479,16 @@ const MatchdayRow: React.FC<{
         )}
       </Pressable>
 
-      {/* Edit button */}
-      <Pressable
-        onPress={onEdit}
-        hitSlop={8}
-        style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.5 }]}
-      >
-        <IconPencil size={14} color={Colors.textFaint} />
-      </Pressable>
+      {/* Edit button — solo si onEdit existe (temporada activa). */}
+      {onEdit ? (
+        <Pressable
+          onPress={onEdit}
+          hitSlop={8}
+          style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.5 }]}
+        >
+          <IconPencil size={14} color={Colors.textFaint} />
+        </Pressable>
+      ) : null}
     </View>
   );
 };
@@ -1030,6 +1122,53 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dashedAddText: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+
+  // Cerrar temporada — discreto al final, color error suave para
+  // marcar que es una acción no reversible. Aparece sólo cuando la
+  // temporada está activa Y el usuario es captain.
+  closeSeasonBtn: {
+    marginTop: 10,
+    marginHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: `${Colors.error}40`,
+    backgroundColor: `${Colors.error}0D`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeSeasonLabel: {
+    color: Colors.error,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+
+  // Banda informativa cuando la temporada está archivada — confirma
+  // visualmente que la pantalla es solo lectura y muestra la fecha de
+  // cierre si está disponible.
+  archivedNote: {
+    marginTop: 14,
+    marginHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+  },
+  archivedNoteTitle: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  archivedNoteText: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 18,
+  },
 
   // Sheet shared
   sheetEyebrow: {
