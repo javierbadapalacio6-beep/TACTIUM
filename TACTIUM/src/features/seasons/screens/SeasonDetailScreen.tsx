@@ -119,13 +119,19 @@ export const SeasonDetailScreen = ({
     matchdays.every((m) => m.outcome !== null);
 
   // ── Cerrar temporada ──────────────────────────────────────────────
+  // Cerrar una temporada con jornadas sin cerrar es VÁLIDO: la temporada
+  // se archiva (no se pueden añadir jornadas nuevas, no se pueden editar
+  // los meta-datos de la temporada) PERO las jornadas individuales que
+  // sigan sin outcome se pueden seguir abriendo desde la lista, registrar
+  // resultados y cerrar acta normalmente. El Alert lo aclara explícitamente
+  // para que el capitán cierre sin miedo a "perder" jornadas pendientes.
   const confirmCloseSeason = useCallback(() => {
     if (!season || closingSeason) return;
     const pending = matchdays.filter((m) => m.outcome === null).length;
-    const baseMsg = `La temporada "${season.name}" pasará al histórico. Las jornadas y resultados quedarán visibles en solo lectura.`;
+    const baseMsg = `La temporada "${season.name}" pasará al histórico. No podrás añadir jornadas nuevas, pero las ya creadas siguen visibles.`;
     const warning =
       pending > 0
-        ? `\n\nAVISO: aún quedan ${pending} ${pending === 1 ? 'jornada' : 'jornadas'} sin disputar. Si las cierras ahora se mantendrán sin resultado en el histórico.`
+        ? `\n\nAún ${pending === 1 ? 'queda 1 jornada' : `quedan ${pending} jornadas`} sin cerrar. No pasa nada — ${pending === 1 ? 'podrás abrirla' : 'podrás abrirlas'} más adelante desde la lista para registrar resultados o cerrar el acta cuando quieras.`
         : '';
     Alert.alert('Cerrar temporada', `${baseMsg}${warning}`, [
       { text: 'Cancelar', style: 'cancel' },
