@@ -547,9 +547,6 @@ export const JornadaScreen = ({
                   <Text style={styles.metaPrimary}>
                     Tandas {matchday.tandas}
                   </Text>
-                  <Text style={styles.metaSecondary}>
-                    Distribución de parejas
-                  </Text>
                 </View>
               </>
             ) : null}
