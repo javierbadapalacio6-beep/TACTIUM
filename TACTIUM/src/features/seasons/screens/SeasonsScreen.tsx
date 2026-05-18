@@ -23,6 +23,7 @@ import {
   BottomSheet,
 } from '@components/ui';
 import * as SeasonsApi from '@core/services/seasons';
+import type * as TeamsApi from '@core/services/teams';
 import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
@@ -159,6 +160,7 @@ export const SeasonsScreen = ({
               <ActiveSeasonCard
                 key={s.id}
                 season={s}
+                team={team}
                 onPress={() => navigation.navigate('SeasonDetail', { id: s.id })}
               />
             ))}
@@ -195,6 +197,7 @@ export const SeasonsScreen = ({
                     <PastSeasonCard
                       key={s.id}
                       season={s}
+                      team={team}
                       onPress={() => navigation.navigate('SeasonDetail', { id: s.id })}
                     />
                   ))}
@@ -233,10 +236,27 @@ export const SeasonsScreen = ({
   );
 };
 
-const ActiveSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => void }> = ({
-  season,
-  onPress,
-}) => {
+// Mapping de fase a etiqueta compacta. Usado tanto en cards activas
+// (eyebrow) como históricas (badge cuadrado izquierda).
+function phaseShortLabel(phase: SeasonsApi.SeasonPhase): string {
+  if (phase === 'mixto') return 'L+P';
+  if (phase === 'playoff') return 'P';
+  return 'L';
+}
+
+// Línea meta común: nombre del equipo · liga · categoría. Filter Boolean
+// evita bullets sueltos cuando algún dato falta.
+function buildSeasonMeta(team: TeamsApi.Team | null): string {
+  if (!team) return '—';
+  const parts = [team.name, team.league, team.category].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
+const ActiveSeasonCard: React.FC<{
+  season: SeasonsApi.Season;
+  team: TeamsApi.Team | null;
+  onPress: () => void;
+}> = ({ season, team, onPress }) => {
   const pct = season.total_matchdays
     ? Math.round((1 / season.total_matchdays) * 100)
     : 0;
@@ -253,15 +273,12 @@ const ActiveSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => voi
       />
       <View style={styles.activeRow}>
         <NeonDot size={6} />
-        <Text style={styles.activeBadge}>ACTIVA · {season.phase.toUpperCase()}</Text>
+        <Text style={styles.activeBadge}>
+          ACTIVA · {phaseShortLabel(season.phase)}
+        </Text>
       </View>
       <Text style={styles.activeName}>{season.name}</Text>
-      <Text style={styles.activeMeta}>
-        {season.category ?? '—'}
-        {season.total_matchdays != null
-          ? ` · ${season.total_matchdays} jornadas`
-          : ''}
-      </Text>
+      <Text style={styles.activeMeta}>{buildSeasonMeta(team)}</Text>
 
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${pct}%` }]} />
@@ -270,21 +287,24 @@ const ActiveSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => voi
   );
 };
 
-const PastSeasonCard: React.FC<{ season: SeasonsApi.Season; onPress: () => void }> = ({
-  season,
-  onPress,
-}) => {
+const PastSeasonCard: React.FC<{
+  season: SeasonsApi.Season;
+  team: TeamsApi.Team | null;
+  onPress: () => void;
+}> = ({ season, team, onPress }) => {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.pastCard, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.pastBadge}>
-        <Text style={styles.pastBadgeText}>{season.phase.slice(0, 4).toUpperCase()}</Text>
+        <Text style={styles.pastBadgeText}>{phaseShortLabel(season.phase)}</Text>
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.pastName}>{season.name}</Text>
-        <Text style={styles.pastMeta}>{season.category ?? '—'}</Text>
+        <Text style={styles.pastMeta} numberOfLines={1}>
+          {buildSeasonMeta(team)}
+        </Text>
       </View>
       <IconChevron size={14} color={Colors.textFaint} />
     </Pressable>
