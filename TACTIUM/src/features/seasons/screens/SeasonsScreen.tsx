@@ -316,6 +316,11 @@ const CreateSeasonSheet: React.FC<{
       setName(`Temporada ${String(yr).slice(2)}/${String(yr + 1).slice(2)}`);
       setPhase('liga');
       setMatchdaysStr('');
+      // Reset del flag de submitting: el sheet vive permanentemente
+      // montado (controlado por `open`), por lo que un submitting=true
+      // del cierre anterior persistía al reabrir y dejaba el spinner
+      // girando indefinidamente. Reset al abrir = estado limpio.
+      setSubmitting(false);
     }
   }, [open]);
 

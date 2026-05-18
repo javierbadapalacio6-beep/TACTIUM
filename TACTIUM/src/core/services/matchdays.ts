@@ -94,9 +94,10 @@ export async function updateMatchday(
     is_home?: boolean;
     location?: string | null;
     outcome?: MatchOutcome | null;
-    // Tanda u orden del partido dentro de la jornada (turno horario).
-    // Opcional — null para liberarla.
-    tanda?: number | null;
+    // Distribución de las parejas en tandas horarias dentro de la
+    // jornada. Formato "N-N-N" (ej. "1-1-1" para 3 parejas en 3 tandas).
+    // Opcional — null si la liga no usa tandas.
+    tandas?: string | null;
   },
 ): Promise<Matchday> {
   const { data, error } = await supabase
@@ -144,9 +145,9 @@ export async function createMatchday(
     match_time?: string;
     is_home?: boolean;
     location?: string;
-    // Tanda u orden del partido dentro de la jornada. Opcional — algunas
-    // ligas no la usan.
-    tanda?: number | null;
+    // Distribución de las parejas en tandas horarias dentro de la jornada.
+    // Formato "N-N-N". Opcional.
+    tandas?: string | null;
   },
 ): Promise<Matchday> {
   const payload: MatchdayInsert = {
@@ -157,7 +158,7 @@ export async function createMatchday(
     match_time: input.match_time ?? null,
     is_home: input.is_home ?? true,
     location: input.location ?? null,
-    tanda: input.tanda ?? null,
+    tandas: input.tandas ?? null,
   };
   const { data, error } = await supabase
     .from('matchdays')

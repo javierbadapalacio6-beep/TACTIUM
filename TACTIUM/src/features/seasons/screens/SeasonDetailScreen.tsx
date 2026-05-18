@@ -32,6 +32,8 @@ import {
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
 import { matchdayState, type MatchdayVisualState } from '@core/utils/matchday';
+import { tandasOptions } from '@core/utils/tandas';
+import { getCourtsForCompetition } from '@core/data/federations';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import type { ScannedMatchday } from '@core/services/imageRecognition';
 
@@ -454,7 +456,7 @@ const MatchdayRow: React.FC<{
             {m.match_date ?? '—'}
             {m.match_time ? ` · ${m.match_time.slice(0, 5)}` : ''}
             {' · '}{m.is_home ? 'CASA' : 'FUERA'}
-            {m.tanda != null ? ` · T${m.tanda}` : ''}
+            {m.tandas ? ` · ${m.tandas}` : ''}
           </Text>
         </View>
 
@@ -502,14 +504,23 @@ const AddMatchdaySheet: React.FC<{
   nextJornadaNumber: number;
   onCreated: () => void;
 }> = ({ open, onClose, seasonId, nextJornadaNumber, onCreated }) => {
+  const team = useTeamStore((s) => s.team);
+  const courts = React.useMemo(
+    () => getCourtsForCompetition(team?.federation, team?.league, team?.gender),
+    [team?.federation, team?.league, team?.gender],
+  );
+  const tandaChoices = React.useMemo(
+    () => tandasOptions(courts),
+    [courts],
+  );
+
   const [opponent, setOpponent] = useState('');
   const [location, setLocation] = useState('');
   const [matchDate, setMatchDate] = useState<Date | null>(null);
   const [matchTime, setMatchTime] = useState<Date | null>(null);
   const [isHome, setIsHome] = useState(true);
-  // Tanda opcional: turno horario en el que juega el equipo dentro de la
-  // jornada (1, 2, 3...). Muchas ligas no la usan — input opcional.
-  const [tandaStr, setTandaStr] = useState('');
+  // Distribución de tandas opcional. null = sin especificar.
+  const [tandas, setTandas] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   React.useEffect(() => {
@@ -519,7 +530,10 @@ const AddMatchdaySheet: React.FC<{
       setMatchDate(null);
       setMatchTime(null);
       setIsHome(true);
-      setTandaStr('');
+      setTandas(null);
+      // Reset del flag de submitting — mismo bug que en CreateSeasonSheet:
+      // sheet permanentemente montado deja el spinner residual al reabrir.
+      setSubmitting(false);
     }
   }, [open]);
 
@@ -527,8 +541,6 @@ const AddMatchdaySheet: React.FC<{
     if (!opponent.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const tandaNum =
-        tandaStr.trim() === '' ? null : Number(tandaStr);
       await MatchdaysApi.createMatchday(seasonId, {
         jornada_number: nextJornadaNumber,
         opponent: opponent.trim(),
@@ -536,7 +548,7 @@ const AddMatchdaySheet: React.FC<{
         match_time: matchTime ? dateToIsoTime(matchTime) : undefined,
         is_home: isHome,
         location: location.trim() || undefined,
-        tanda: tandaNum,
+        tandas,
       });
       // Renumera por fecha: si la nueva jornada es retroactiva, se "encaja"
       // en su posición cronológica y las posteriores se desplazan.
@@ -641,19 +653,14 @@ const AddMatchdaySheet: React.FC<{
         allowClear
       />
 
-      <Text style={styles.sheetLabel}>TANDA · OPCIONAL</Text>
-      <View style={styles.sheetInputWrap}>
-        <TextInput
-          value={tandaStr}
-          onChangeText={(v) =>
-            setTandaStr(v.replace(/[^0-9]/g, '').slice(0, 2))
-          }
-          keyboardType="number-pad"
-          placeholder="ej. 1, 2, 3…"
-          placeholderTextColor={Colors.textFaint}
-          style={styles.sheetInput}
-        />
-      </View>
+      <Text style={styles.sheetLabel}>
+        TANDAS · OPCIONAL ({courts} parejas)
+      </Text>
+      <TandasPicker
+        value={tandas}
+        options={tandaChoices}
+        onChange={setTandas}
+      />
 
     </BottomSheet>
   );
@@ -666,6 +673,16 @@ const EditMatchdaySheet: React.FC<{
   onSaved: () => void;
   onDeleted: () => void;
 }> = ({ matchday: m, onClose, onSaved, onDeleted }) => {
+  const team = useTeamStore((s) => s.team);
+  const courts = React.useMemo(
+    () => getCourtsForCompetition(team?.federation, team?.league, team?.gender),
+    [team?.federation, team?.league, team?.gender],
+  );
+  const tandaChoices = React.useMemo(
+    () => tandasOptions(courts),
+    [courts],
+  );
+
   const [opponent, setOpponent]   = useState(m.opponent);
   const [location, setLocation]   = useState(m.location ?? '');
   const [matchDate, setMatchDate] = useState<Date | null>(
@@ -675,9 +692,7 @@ const EditMatchdaySheet: React.FC<{
     m.match_time ? isoTimeToDate(m.match_time) : null,
   );
   const [isHome, setIsHome]       = useState(m.is_home);
-  const [tandaStr, setTandaStr]   = useState(
-    m.tanda != null ? String(m.tanda) : '',
-  );
+  const [tandas, setTandas]       = useState<string | null>(m.tandas ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting]     = useState(false);
 
@@ -689,7 +704,6 @@ const EditMatchdaySheet: React.FC<{
       // de Jornada (al rellenar resultados set a set o al cerrar el acta).
       const newDateIso = matchDate ? dateToIsoDate(matchDate) : null;
       const dateChanged = newDateIso !== (m.match_date ?? null);
-      const tandaNum = tandaStr.trim() === '' ? null : Number(tandaStr);
 
       await MatchdaysApi.updateMatchday(m.id, {
         opponent: opponent.trim(),
@@ -697,7 +711,7 @@ const EditMatchdaySheet: React.FC<{
         match_time: matchTime ? dateToIsoTime(matchTime) : null,
         is_home: isHome,
         location: location.trim() || null,
-        tanda: tandaNum,
+        tandas,
       });
 
       // Si cambió la fecha, reordenamos toda la temporada.
@@ -845,20 +859,74 @@ const EditMatchdaySheet: React.FC<{
         allowClear
       />
 
-      <Text style={styles.sheetLabel}>TANDA · OPCIONAL</Text>
-      <View style={styles.sheetInputWrap}>
-        <TextInput
-          value={tandaStr}
-          onChangeText={(v) =>
-            setTandaStr(v.replace(/[^0-9]/g, '').slice(0, 2))
-          }
-          keyboardType="number-pad"
-          placeholder="ej. 1, 2, 3…"
-          placeholderTextColor={Colors.textFaint}
-          style={styles.sheetInput}
-        />
-      </View>
+      <Text style={styles.sheetLabel}>
+        TANDAS · OPCIONAL ({courts} parejas)
+      </Text>
+      <TandasPicker
+        value={tandas}
+        options={tandaChoices}
+        onChange={setTandas}
+      />
     </BottomSheet>
+  );
+};
+
+// ─── TandasPicker ────────────────────────────────────────────────────
+// Selector visual: chip "Sin tanda" + un chip por cada composición
+// posible del número de parejas. Scroll horizontal porque N≥5 genera 16+
+// opciones que no caben de un golpe.
+const TandasPicker: React.FC<{
+  value: string | null;
+  options: string[];
+  onChange: (v: string | null) => void;
+}> = ({ value, options, onChange }) => {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ gap: 6, paddingRight: 16 }}
+    >
+      <Pressable
+        onPress={() => onChange(null)}
+        style={({ pressed }) => [
+          styles.tandaChip,
+          value === null && styles.tandaChipActive,
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text
+          style={[
+            styles.tandaChipLabel,
+            value === null && styles.tandaChipLabelActive,
+          ]}
+        >
+          Sin tanda
+        </Text>
+      </Pressable>
+      {options.map((opt) => {
+        const sel = value === opt;
+        return (
+          <Pressable
+            key={opt}
+            onPress={() => onChange(opt)}
+            style={({ pressed }) => [
+              styles.tandaChip,
+              sel && styles.tandaChipActive,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text
+              style={[
+                styles.tandaChipLabel,
+                sel && styles.tandaChipLabelActive,
+              ]}
+            >
+              {opt}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 };
 
@@ -1305,5 +1373,32 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
     fontSize: 16,
     fontWeight: '700',
+  },
+
+  // Tandas picker
+  tandaChip: {
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tandaChipActive: {
+    backgroundColor: Colors.accent10,
+    borderColor: Colors.accent,
+  },
+  tandaChipLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    color: Colors.textMuted,
+  },
+  tandaChipLabelActive: {
+    color: Colors.accent,
   },
 });

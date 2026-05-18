@@ -275,7 +275,7 @@ export type Database = {
           score_for: number | null
           season_id: string
           status: Database["public"]["Enums"]["matchday_status"]
-          tanda: number | null
+          tandas: string | null
           updated_at: string
         }
         Insert: {
@@ -293,7 +293,7 @@ export type Database = {
           score_for?: number | null
           season_id: string
           status?: Database["public"]["Enums"]["matchday_status"]
-          tanda?: number | null
+          tandas?: string | null
           updated_at?: string
         }
         Update: {
@@ -311,7 +311,7 @@ export type Database = {
           score_for?: number | null
           season_id?: string
           status?: Database["public"]["Enums"]["matchday_status"]
-          tanda?: number | null
+          tandas?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -819,7 +819,7 @@ export type Database = {
           score_for: number | null
           season_id: string
           status: Database["public"]["Enums"]["matchday_status"]
-          tanda: number | null
+          tandas: string | null
           updated_at: string
         }
         SetofOptions: {
