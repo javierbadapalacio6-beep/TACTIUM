@@ -533,6 +533,26 @@ export const JornadaScreen = ({
             <View style={styles.metaContent}>
               <Text style={styles.metaMuted}>{venueLabel}</Text>
             </View>
+
+            {/* Tandas (distribución de las parejas en turnos). Solo se
+                muestra si el capitán fijó la tanda en la jornada — para
+                muchas ligas amateur no aplica y mostrar 'Sin tanda' sería
+                ruido visual. */}
+            {matchday.tandas ? (
+              <>
+                <View style={styles.metaIcon}>
+                  <IconCourt size={14} color={Colors.textMuted} />
+                </View>
+                <View style={styles.metaContent}>
+                  <Text style={styles.metaPrimary}>
+                    Tandas {matchday.tandas}
+                  </Text>
+                  <Text style={styles.metaSecondary}>
+                    Distribución de parejas
+                  </Text>
+                </View>
+              </>
+            ) : null}
           </View>
         </View>
 
