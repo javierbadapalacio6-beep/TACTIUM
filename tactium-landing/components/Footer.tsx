@@ -29,6 +29,12 @@ export function Footer() {
           >
             Términos
           </Link>
+          <Link
+            href="/legal/eliminar-cuenta"
+            className="hover:text-[var(--color-text)] transition"
+          >
+            Eliminar cuenta
+          </Link>
           <a
             href="mailto:hola@tactium.io"
             className="hover:text-[var(--color-text)] transition"
