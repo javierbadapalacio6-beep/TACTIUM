@@ -45,3 +45,4 @@ export { ToastHost } from './Toast';
 export { OfflineBanner } from './OfflineBanner';
 export { PremiumGateButton } from './PremiumGateButton';
 export { TrialExpiringBanner } from './TrialExpiringBanner';
+export { ResponsiveFrame } from './ResponsiveFrame';
