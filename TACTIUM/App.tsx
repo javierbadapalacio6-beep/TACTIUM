@@ -1,9 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
+
+import { AnimatedSplash } from './src/components/brand/AnimatedSplash';
+
+// Evita que el splash NATIVO se auto-oculte: lo mantenemos hasta que el
+// AnimatedSplash (overlay JS) esté montado y llame a hideAsync(), para un
+// handoff sin parpadeo. Se llama a nivel de módulo (lo antes posible).
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 import { RootNavigator } from './src/navigation';
 import { Colors } from './src/core/theme/colors';
@@ -31,6 +39,9 @@ const navTheme = {
 };
 
 export default function App() {
+  // Overlay del splash animado: visible hasta que su animación de salida
+  // termina. La app se monta debajo desde el principio (hidrata mientras).
+  const [splashVisible, setSplashVisible] = useState(true);
   const isHydrating = useAuthStore((s) => s.isHydrating);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const userId = useAuthStore((s) => s.user?.id ?? null);
@@ -55,6 +66,16 @@ export default function App() {
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
+
+  // Backstop: si por lo que sea el AnimatedSplash no llegara a ocultar el
+  // splash nativo, lo forzamos pasados unos segundos para no dejar la app
+  // colgada en la pantalla de arranque. hideAsync es idempotente.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     // Suscribe NetInfo. El propio store evita duplicar listeners si
@@ -170,6 +191,12 @@ export default function App() {
           </ResponsiveFrame>
         </NavigationContainer>
       </SafeAreaProvider>
+      {/* Splash animado por encima de todo. Se desmonta solo al terminar
+          su fade-out. Va fuera del SafeAreaProvider para cubrir notch y
+          home indicator a sangre completa. */}
+      {splashVisible ? (
+        <AnimatedSplash onFinish={() => setSplashVisible(false)} />
+      ) : null}
     </GestureHandlerRootView>
   );
 }
