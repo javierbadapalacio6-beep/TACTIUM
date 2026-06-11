@@ -1,47 +1,18 @@
 import React from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Colors } from '../../core/theme/colors';
-
-/** Ancho (en pt) a partir del cual tratamos la pantalla como "grande"
- *  (tablet / iPad). Los teléfonos —incluido el Pro Max (~430pt)— quedan
- *  por debajo; los iPad en vertical (≥744pt) por encima. */
-export const LARGE_SCREEN_MIN = 700;
-
-/** Ancho máximo de la columna de contenido en pantallas grandes. */
-const CONTENT_MAX_WIDTH = 720;
 
 /**
- * En teléfonos no hace nada (devuelve los hijos tal cual).
+ * Antes constreñía la app a una columna centrada (maxWidth 720) en
+ * tablet/iPad. Tras probarlo en iPad real se decidió que la app ocupe
+ * TODO el ancho de la pantalla → ahora es un passthrough (full-bleed).
  *
- * En tablets/iPad centra TODA la app en una columna de ancho máximo sobre
- * el fondo de marca, evitando que los layouts flex se estiren de borde a
- * borde. Es la solución "phone-app en tablet" hecha a propósito: un único
- * punto de control en vez de retocar las ~24 pantallas. Se puede sustituir
- * por layouts master-detail en una Fase 2 sin tocar este contrato.
+ * Se conserva el componente como único punto de control: si en una Fase 2
+ * se quiere volver a la columna centrada o a un layout master-detail,
+ * basta con reimplementar aquí sin tocar `App.tsx` ni las pantallas.
+ *
+ *   import { useWindowDimensions, View, StyleSheet } from 'react-native';
+ *   const { width } = useWindowDimensions();
+ *   if (width >= 700) return <View style={...centrado, maxWidth:720...}>{children}</View>;
  */
 export function ResponsiveFrame({ children }: { children: React.ReactNode }) {
-  const { width } = useWindowDimensions();
-  if (width < LARGE_SCREEN_MIN) return <>{children}</>;
-  return (
-    <View style={styles.outer}>
-      <View style={styles.inner}>{children}</View>
-    </View>
-  );
+  return <>{children}</>;
 }
-
-const styles = StyleSheet.create({
-  outer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    backgroundColor: Colors.background,
-  },
-  inner: {
-    flex: 1,
-    maxWidth: CONTENT_MAX_WIDTH,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.hair,
-    overflow: 'hidden',
-  },
-});

@@ -116,11 +116,6 @@ const styles = StyleSheet.create({
   },
   sheetWrap: {
     width: '100%',
-    // En tablet/iPad el Modal ocupa toda la pantalla; capamos el ancho y
-    // centramos para que el sheet quede alineado con la columna de la app
-    // (ResponsiveFrame). En teléfono 100% < maxWidth → sin efecto.
-    maxWidth: 720,
-    alignSelf: 'center',
     // SIN flex: 1. Si lo pones, el sheetWrap se reparte la pantalla 50/50
     // con el scrim (que también tiene flex:1), y el sheet acaba en el
     // centro vertical con una franja grande vacía encima. Dejándolo sin
