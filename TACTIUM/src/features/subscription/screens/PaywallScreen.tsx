@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,12 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Alert,
+  BackHandler,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { Colors } from '@core/theme/colors';
@@ -31,16 +35,27 @@ import {
   type PlanDescriptor,
   type PlanTier,
 } from '@core/subscriptions/plans';
-import { mockPurchasePlan } from '@core/services/subscriptions';
+import { pollForRecentSubscription } from '@core/services/subscriptions';
+import { supabase } from '@core/supabase/client';
+import {
+  getCurrentOffering,
+  purchasePackage,
+  resolvePackage,
+  restorePurchases,
+  setSubjectAttributes,
+  type PurchasesOffering,
+} from '@core/purchases';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
-// Value props mostradas en el hero. Mantener entre 3-4 para no saturar.
+// Value props centradas en el dolor real del capitán amateur (WhatsApp,
+// Excel, calendarios mal cuadrados), no en features genéricas. Mantener
+// entre 3-4 para no saturar.
 const VALUE_PROPS = [
-  'Alineaciones inteligentes con auto-balance por puntos',
-  'Variantes de alineación ilimitadas por jornada',
-  'Histórico completo de temporadas y jugadores',
-  'Notificaciones push a tus jugadores convocados',
+  'Convocatorias en 1 toque, sin chats de 80 mensajes',
+  'Parejas equilibradas por puntos automáticamente',
+  'Calendario y rankings escaneados desde la federación',
+  'Tus jugadores avisan si pueden o no, sin perseguir a nadie',
 ];
 
 // Default tier highlighted en cada flow.
@@ -48,22 +63,116 @@ const DEFAULT_CLUB_TIER: PlanTier = 'club_pro';
 
 export const PaywallScreen = ({
   navigation,
+  route,
 }: RootStackScreenProps<'Paywall'>) => {
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.user?.id ?? null);
+  const signOut = useAuthStore((s) => s.signOut);
   const activeRole = useTeamStore((s) => s.activeRole);
+  const createTeam = useTeamStore((s) => s.createTeam);
   const club = useClubStore(selectActiveClub);
   const addOptimistic = useSubscriptionStore((s) => s.addOptimistic);
+  const refreshSubs = useSubscriptionStore((s) => s.refresh);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
+  // Modo onboarding: PaywallScreen vive en dos stacks (RootStack como modal
+  // y OnboardingStack como gate obligatorio). El marcador es `nextScreen`
+  // — solo el OnboardingStack lo pasa. En modo onboarding:
+  //  · no hay X de cerrar (no se puede saltar el gate),
+  //  · al iniciar trial hacemos replace(nextScreen) en vez de goBack,
+  //  · ocultamos el link "Continuar gratis" y lo sustituimos por "Salir
+  //    y cerrar sesión",
+  //  · bloqueamos el back de hardware Android.
+  const params = route.params as
+    | {
+        nextScreen?: string;
+        intent?: 'captain' | 'club';
+        pendingTeam?: {
+          name: string;
+          federation?: string;
+          league?: string;
+          category?: string;
+          group?: string;
+          gender?: 'masculino' | 'femenino' | 'mixto';
+        };
+      }
+    | undefined;
+  const nextScreen = params?.nextScreen;
+  const isOnboarding = Boolean(nextScreen);
+  // El flow Capitán empaqueta los datos de CreateTeam aquí: tras success
+  // del trial creamos el team (el trigger DB ya pasa porque la sub user/
+  // captain acaba de insertarse) y navegamos a AddPlayers.
+  const pendingTeam = params?.pendingTeam;
+  // En onboarding `activeRole` puede ser null (justo tras CreateClub aún
+  // no hay team, y deriveRawRole(null,…) = null). Usamos `intent` como
+  // verdad para decidir qué familia de planes mostrar. Fuera de onboarding
+  // (modal de upgrade desde Profile) sí confiamos en activeRole, que ya
+  // está poblado para entonces.
+  const intent = params?.intent;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isOnboarding) return undefined;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => sub.remove();
+    }, [isOnboarding]),
+  );
+
+  const handleExitOnboarding = () => {
+    Alert.alert(
+      'Salir del registro',
+      'Esto cerrará tu sesión. Podrás volver más tarde para elegir tu plan.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Salir',
+          style: 'destructive',
+          onPress: () => signOut(),
+        },
+      ],
+    );
+  };
+
   // Modo: club_admin ve los 3 tier de club; el resto ve solo plan capitán.
-  const showClubPlans = activeRole === 'club_admin';
+  // En onboarding el activeRole aún no es fiable (no hay team), así que
+  // usamos la `intent` que el flow nos pasó (club vs captain).
+  const showClubPlans = isOnboarding
+    ? intent === 'club'
+    : activeRole === 'club_admin';
 
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
   const [selectedTier, setSelectedTier] = useState<PlanTier>(
     showClubPlans ? DEFAULT_CLUB_TIER : 'captain',
   );
   const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  // Offering de RC. `null` significa "no cargado aún o no disponible".
+  // En simulator iOS y en sandbox sin Sandbox Tester logueado, RC devuelve
+  // null y el CTA muestra toast de error en handleStartTrial.
+  const [offering, setOffering] = useState<PurchasesOffering | null>(null);
+  const [offeringLoaded, setOfferingLoaded] = useState(false);
+
+  // Carga el offering al mount. No bloquea la UI: las cards muestran
+  // precios del módulo `plans.ts` (= source of truth display, ya en sync
+  // con App Store Connect). El offering sólo lo necesitamos al pulsar el
+  // CTA para resolver qué `PurchasesPackage` lanzar al SDK.
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentOffering()
+      .then((o) => {
+        if (!cancelled) {
+          setOffering(o);
+          setOfferingLoaded(true);
+        }
+      })
+      .catch((e) => {
+        console.warn('Paywall: getCurrentOffering failed', e);
+        if (!cancelled) setOfferingLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visiblePlans: PlanDescriptor[] = useMemo(
     () => (showClubPlans ? CLUB_PLANS : [CAPTAIN_PLAN]),
@@ -81,6 +190,55 @@ export const PaywallScreen = ({
       : selectedPlan.priceMonthlyEur;
   const yearlyDiscount = annualDiscountPercent(selectedPlan);
 
+  // ¿Hay ya una sub premium activa PARA EL SUBJECT que estamos por
+  // suscribir? Si sí, este flujo es un cambio de plan (no un trial nuevo)
+  // — el copy del CTA y el disclaimer deben reflejarlo. Caso típico:
+  // el club_admin está dentro de los 14 días de prueba y quiere subir
+  // de Starter a Pro; no debemos decirle "Empezar prueba 14 días" como
+  // si fuese su primera compra.
+  const existingSubForSubject = useMemo(() => {
+    const subjectType = showClubPlans ? 'club' : 'user';
+    const subjectId = showClubPlans ? club?.id : userId;
+    if (!subjectId) return null;
+    return (
+      subscriptions
+        .filter(
+          (s) =>
+            s.subject_type === subjectType &&
+            s.subject_id === subjectId &&
+            PREMIUM_STATUSES.includes(s.status),
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.current_period_end).getTime() -
+            new Date(a.current_period_end).getTime(),
+        )[0] ?? null
+    );
+  }, [subscriptions, showClubPlans, club?.id, userId]);
+
+  const isInTrial = existingSubForSubject?.status === 'trialing';
+
+  // Días restantes del trial activo (si aplica). Preferimos `trial_end` y
+  // caemos a `current_period_end` (en trial suelen coincidir).
+  const trialDaysLeft = useMemo(() => {
+    if (!isInTrial || !existingSubForSubject) return null;
+    const endIso =
+      existingSubForSubject.trial_end ??
+      existingSubForSubject.current_period_end;
+    if (!endIso) return null;
+    const ms = new Date(endIso).getTime() - Date.now();
+    return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+  }, [isInTrial, existingSubForSubject]);
+
+  const trialDaysLabel =
+    trialDaysLeft == null
+      ? null
+      : trialDaysLeft === 0
+        ? 'hoy termina tu prueba'
+        : trialDaysLeft === 1
+          ? 'te queda 1 día de prueba'
+          : `te quedan ${trialDaysLeft} días de prueba`;
+
   const handleStartTrial = async () => {
     if (!userId) {
       toast.error('No hay sesión activa');
@@ -92,29 +250,120 @@ export const PaywallScreen = ({
     }
     setPurchasing(true);
     try {
-      // Detectamos si ya había sub premium previa PARA EL MISMO subject.
-      // Si sí → es un cambio de plan, no un trial nuevo:
-      //   - `mockPurchasePlan` preservará trial_end (no regalamos otro trial).
-      //   - El TrialStartedModal NO aparecerá (subject ya saludado).
-      //   - Damos feedback inmediato vía toast aquí mismo.
-      // Si no → primera compra:
-      //   - TrialStartedModal aparece y dispara su propio toast al cerrar.
       const subjectType = showClubPlans ? 'club' : 'user';
       const subjectId = showClubPlans ? (club?.id as string) : userId;
-      const hadExistingPremium = subscriptions.some(
+      // Anotamos el id de la sub activa PREVIA para que el polling tras
+      // la compra distinga una fila nueva (insertada por el webhook) de
+      // la que ya estaba (cambio de plan dentro del trial).
+      const previousSub = subscriptions.find(
         (s) =>
           s.subject_type === subjectType &&
           s.subject_id === subjectId &&
           PREMIUM_STATUSES.includes(s.status),
       );
+      const hadExistingPremium = Boolean(previousSub);
 
-      const sub = await mockPurchasePlan(userId, {
-        tier: selectedPlan.tier,
-        billingPeriod: billing,
-        clubId: showClubPlans ? club?.id : null,
-        startTrial: true,
-      });
-      addOptimistic(sub);
+      // Resolver package real del offering. Si RC no expone el package
+      // (simulator, sandbox sin tester logueado, o productos mal
+      // configurados en RC dashboard), pkg será null y abortamos con
+      // toast de error. NO usamos fallback mock — enmascara configs
+      // rotas que en producción dejarían a los usuarios pagando algo
+      // que en realidad no se cobra.
+      const pkg = offering
+        ? resolvePackage(offering, selectedPlan.tier, billing)
+        : null;
+
+      let resultSub: Awaited<ReturnType<typeof pollForRecentSubscription>> =
+        null;
+
+      if (pkg) {
+        // ── Flow REAL RevenueCat ─────────────────────────────────────────
+        // 1) Setear attrs custom ANTES de purchase. El webhook RC →
+        //    Supabase los lee del primer evento INITIAL_PURCHASE para
+        //    decidir si la sub es del user o de un club concreto.
+        if (subjectType === 'club') {
+          await setSubjectAttributes('club', subjectId);
+        } else {
+          await setSubjectAttributes('user', subjectId);
+        }
+        // 2) StoreKit toma el control: muestra sheet nativo, gestiona
+        //    Face ID, intro offer (free trial 14 días si está configurado
+        //    en App Store Connect). Si el user cancela, lanza userCancelled.
+        try {
+          await purchasePackage(pkg);
+        } catch (e: any) {
+          if (e?.userCancelled) {
+            return;
+          }
+          throw e;
+        }
+        // 3) Esperar a que el webhook escriba la sub en DB. Buscamos por
+        //    payer_user_id + plan_tier (no por subject) porque para
+        //    planes club_* RC suele insertar la fila con subject_type='user'
+        //    (los attrs $target_subject_* no propagan a tiempo).
+        resultSub = await pollForRecentSubscription({
+          payerUserId: userId,
+          expectedTier: selectedPlan.tier,
+          previousSubId: previousSub?.id ?? null,
+        });
+        if (resultSub) {
+          // 4) Si era flow club y la fila quedó como subject=user,
+          //    llamamos al RPC `link_subscription_to_club` para moverla
+          //    al club destino. Idempotente — si ya está apuntando al
+          //    club correcto (renewal, restore), no-op.
+          if (subjectType === 'club') {
+            try {
+              const { data: relinked, error: relinkErr } = await supabase.rpc(
+                'link_subscription_to_club',
+                {
+                  p_subscription_id: resultSub.id,
+                  p_club_id: subjectId,
+                },
+              );
+              if (relinkErr) throw relinkErr;
+              if (relinked) {
+                resultSub = (relinked as unknown) as typeof resultSub;
+              }
+            } catch (e) {
+              console.warn('link_subscription_to_club failed', e);
+              // No es fatal: la sub queda como user, el user reintentará
+              // crear team y verá el bloqueo. El siguiente refresh con
+              // attrs ya propagados o un manual relink resolverá.
+            }
+          }
+          addOptimistic(resultSub);
+        } else {
+          // Webhook tardó >10s. La compra está hecha (StoreKit confirmó)
+          // pero la fila en DB aún no llegó. Toast informativo y dejamos
+          // que Realtime la traiga al store cuando aparezca.
+          toast.warn(
+            'Compra completada',
+            'Sincronizando tu suscripción... actualiza en unos segundos.',
+          );
+        }
+      } else {
+        // RC no expone el package que pedimos. Distinguimos los dos
+        // sub-casos para que el log del usuario (y nuestra propia
+        // depuración) deje claro DÓNDE está la config rota:
+        //   · offering null   → RC no devuelve current offering
+        //     (App-Specific Shared Secret vacío en RC, App Store Server
+        //     API Key sin subir, productos no aprobados en App Store
+        //     Connect, o SDK aún sin configurar para este user).
+        //   · pkg null pero offering OK → el offering "default" existe
+        //     pero le falta el package `<tier>_<billing>` esperado
+        //     (mal nombrado en RC dashboard, o no añadido al offering
+        //     current).
+        const why = !offering
+          ? 'No se pudo conectar con la tienda. Revisa tu conexión y vuelve a intentarlo.'
+          : `El plan ${selectedPlan.displayName} ${billing === 'monthly' ? 'Mensual' : 'Anual'} no está disponible ahora mismo. Inténtalo más tarde.`;
+        toast.error('Productos no disponibles', why);
+        console.warn(
+          'Paywall: pkg null →',
+          !offering ? 'offering null' : 'package no encontrado en offering',
+          { tier: selectedPlan.tier, billing },
+        );
+        return;
+      }
 
       if (hadExistingPremium) {
         toast.success(
@@ -123,7 +372,38 @@ export const PaywallScreen = ({
         );
       }
 
-      navigation.goBack();
+      // Flow Capitán: el form de CreateTeam pasó los datos como
+      // `pendingTeam`; ahora que la sub user/captain ya existe el trigger
+      // DB nos deja INSERT del team. Si la creación falla aquí, la sub
+      // queda creada pero el team no — el user puede reintentarlo desde
+      // el siguiente flow (no es bloqueante).
+      if (pendingTeam) {
+        try {
+          await createTeam(pendingTeam);
+        } catch (e: any) {
+          toast.error(
+            'No se pudo crear el equipo',
+            e?.message ?? 'Inténtalo de nuevo.',
+          );
+          return;
+        }
+      }
+
+      // Sincroniza el store con la DB antes de navegar. No basta con
+      // `addOptimistic` (solo corre si el polling encontró la fila) ni con
+      // Realtime (puede llegar tarde/fallar): si no refrescamos aquí, la
+      // siguiente pantalla puede ver el store vacío y mostrar "sin
+      // suscripción activa" justo después de haber pagado. El trigger DB
+      // `subscriptions_auto_link_club` ya garantiza que la fila de un plan
+      // club_* esté en subject_type='club', así que este fetch trae la sub
+      // ya enlazada al club.
+      await refreshSubs(userId);
+
+      if (isOnboarding && nextScreen) {
+        (navigation as any).replace(nextScreen);
+      } else {
+        navigation.goBack();
+      }
     } catch (e: any) {
       toast.error(
         'No se pudo iniciar la prueba',
@@ -134,13 +414,83 @@ export const PaywallScreen = ({
     }
   };
 
-  const handleRestore = () => {
-    // Cuando integremos RevenueCat SDK real → Purchases.restorePurchases().
-    // De momento solo refrescamos lo persistido en DB.
-    toast.info(
-      'Restaurar compras',
-      'Disponible tras la integración del SDK de RevenueCat.',
-    );
+  const handleRestore = async () => {
+    if (!userId) {
+      toast.error('No hay sesión activa');
+      return;
+    }
+    setRestoring(true);
+    try {
+      const info = await restorePurchases();
+      const activeEntitlements = Object.values(info.entitlements.active);
+      if (activeEntitlements.length === 0) {
+        toast.info(
+          'Sin compras previas',
+          'No encontramos suscripciones en esta cuenta de Apple.',
+        );
+        return;
+      }
+
+      // Sync directo con la RPC `sync_subscription_from_revenuecat`. En
+      // teoría el webhook RC → Supabase ya creó la fila cuando Apple notificó
+      // RC del restore. En la práctica hay edge cases (sub fantasma de un
+      // user borrado en testing, eventos perdidos, race conditions) donde el
+      // webhook no aterriza la fila. La RPC es idempotente (UPSERT por
+      // original_transaction_id) — si el webhook ya creó la sub, esto solo
+      // refresca su estado al snapshot fresco del SDK Apple.
+      let syncedCount = 0;
+      for (const ent of activeEntitlements) {
+        const productId = ent.productIdentifier;
+        const originalPurchaseDateMs = ent.originalPurchaseDate
+          ? new Date(ent.originalPurchaseDate).getTime()
+          : Date.now();
+        // Stable id basado en (product, fecha de compra) para que Restore
+        // múltiples sea idempotente vía el ON CONFLICT del UPSERT.
+        const stableTxnId = `restore_${productId}_${originalPurchaseDateMs}`;
+        const expirationAtMs = ent.expirationDate
+          ? new Date(ent.expirationDate).getTime()
+          : null;
+
+        const { error: syncErr } = await supabase.rpc(
+          'sync_subscription_from_revenuecat',
+          {
+            p_product_id: productId,
+            p_original_transaction_id: stableTxnId,
+            p_period_type: ent.periodType,
+            p_purchased_at_ms: originalPurchaseDateMs,
+            p_expiration_at_ms: expirationAtMs,
+          },
+        );
+        if (syncErr) {
+          console.warn(
+            'sync_subscription_from_revenuecat failed',
+            ent.identifier,
+            syncErr,
+          );
+          continue;
+        }
+        syncedCount++;
+      }
+
+      if (syncedCount > 0) {
+        // Refresh el store para que la UI repinte con la sub sincronizada
+        // sin esperar a Realtime.
+        await refreshSubs(userId);
+        toast.success(
+          'Compras restauradas',
+          'Tu suscripción se ha vinculado a esta cuenta.',
+        );
+      } else {
+        toast.warn(
+          'Compras detectadas',
+          'No se pudo sincronizar. Inténtalo en unos segundos.',
+        );
+      }
+    } catch (e: any) {
+      toast.error('No se pudo restaurar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setRestoring(false);
+    }
   };
 
   return (
@@ -152,18 +502,24 @@ export const PaywallScreen = ({
         entering={FadeIn.duration(220)}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
-        <Pressable
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Cerrar"
-          hitSlop={10}
-          style={({ pressed }) => [
-            styles.closeBtn,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <IconX size={14} color={Colors.text} />
-        </Pressable>
+        {isOnboarding ? (
+          // Hard gate: sin botón de cerrar. El usuario solo sale vía
+          // "Empezar prueba" o "Salir y cerrar sesión" en el footer.
+          <View style={{ width: 36 }} />
+        ) : (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar"
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.closeBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <IconX size={14} color={Colors.text} />
+          </Pressable>
+        )}
         <View style={styles.headerCenter}>
           <Text style={styles.eyebrow}>TACTIUM PRO</Text>
         </View>
@@ -182,14 +538,27 @@ export const PaywallScreen = ({
           entering={FadeInDown.duration(280).delay(60)}
           style={styles.hero}
         >
-          <TactiumMark size={64} gradient />
+          <TactiumMark size={64} />
+          {isInTrial && trialDaysLabel ? (
+            <View style={styles.trialPill}>
+              <Text style={styles.trialPillText}>
+                EN PRUEBA · {trialDaysLabel.toUpperCase()}
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.heroTitle}>
-            Pásate a {showClubPlans ? 'Club' : 'Capitán'}
+            {isInTrial
+              ? 'Mejora tu plan'
+              : showClubPlans
+                ? 'Tu club, sin Excel ni WhatsApp'
+                : 'Tu próxima alineación, en 90 segundos'}
           </Text>
           <Text style={styles.heroLede}>
-            {showClubPlans
-              ? 'Gestiona todos los equipos del club desde un solo plan, con herramientas pro para tus capitanes.'
-              : 'Saca el máximo a tu equipo con alineaciones inteligentes, variantes ilimitadas e histórico completo.'}
+            {isInTrial
+              ? 'Sigues dentro de tu prueba gratuita: al cambiar de plan no empieza una nueva, mantienes los días que te quedan.'
+              : showClubPlans
+                ? 'Tus capitanes convocan, equilibran parejas y registran resultados desde un solo sitio. Tú lo ves todo.'
+                : 'Convoca, equilibra parejas por puntos y envía notificaciones en menos de 2 minutos por jornada.'}
           </Text>
         </Animated.View>
 
@@ -206,6 +575,20 @@ export const PaywallScreen = ({
               <Text style={styles.valueText}>{label}</Text>
             </View>
           ))}
+        </Animated.View>
+
+        {/* === SOCIAL PROOF ===
+            Mientras no tengamos números reales (post-launch), un copy
+            honesto y específico es mejor que una métrica inventada. Lo
+            cambiaremos a algo como "+200 capitanes alinean en TACTIUM"
+            cuando lo tengamos. Hoy: el "para quién" sin mentir. */}
+        <Animated.View
+          entering={FadeInDown.duration(280).delay(180)}
+          style={styles.socialProof}
+        >
+          <Text style={styles.socialProofText}>
+            Hecho con capitanes federados de toda España
+          </Text>
         </Animated.View>
 
         {/* === BILLING TOGGLE === */}
@@ -253,6 +636,21 @@ export const PaywallScreen = ({
                 ? (plan.priceYearlyEur / 12).toFixed(2).replace('.', ',')
                 : plan.priceMonthlyEur.toFixed(2).replace('.', ',');
             const showBadge = plan.tier === DEFAULT_CLUB_TIER && showClubPlans;
+            // Sub-line concreta de fit por tier — orienta al cap/admin
+            // indeciso hacia el tier que probablemente le toque.
+            const fitLine =
+              plan.tier === 'captain'
+                ? 'Para 1 capitán · gestiona tu equipo'
+                : plan.tier === 'club_starter'
+                  ? 'Hasta 3 equipos · clubes pequeños'
+                  : plan.tier === 'club_pro'
+                    ? 'Hasta 10 equipos · la mayoría de clubes federados'
+                    : 'Hasta 25 equipos · escuelas y academias';
+            // Ahorro anual en € (concreto, mejor que solo "-20%").
+            const yearlySavings =
+              billing === 'yearly'
+                ? plan.priceMonthlyEur * 12 - plan.priceYearlyEur
+                : 0;
             return (
               <Pressable
                 key={plan.tier}
@@ -266,15 +664,13 @@ export const PaywallScreen = ({
                 <View style={styles.planCardHeader}>
                   <View>
                     <Text style={styles.planTitle}>{plan.displayName}</Text>
-                    <Text style={styles.planQuota}>
-                      {plan.tier === 'captain'
-                        ? 'Para 1 capitán'
-                        : `Hasta ${plan.teamQuota} equipos`}
-                    </Text>
+                    <Text style={styles.planQuota}>{fitLine}</Text>
                   </View>
                   {showBadge ? (
                     <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedBadgeText}>RECOM.</Text>
+                      <Text style={styles.recommendedBadgeText}>
+                        MÁS ELEGIDO
+                      </Text>
                     </View>
                   ) : null}
                 </View>
@@ -287,6 +683,11 @@ export const PaywallScreen = ({
                     </Text>
                   ) : null}
                 </View>
+                {billing === 'yearly' && yearlySavings > 0 ? (
+                  <Text style={styles.planSavings}>
+                    Ahorras {formatEur(yearlySavings)} al año
+                  </Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -298,11 +699,41 @@ export const PaywallScreen = ({
           style={styles.disclaimer}
         >
           <Text style={styles.disclaimerText}>
-            Pago tras {TRIAL_DURATION_DAYS} días de prueba.{' '}
-            {formatEur(price)}/
-            {billing === 'monthly' ? 'mes' : 'año'} con renovación automática.
-            Cancela en cualquier momento desde Ajustes.
+            {isInTrial && trialDaysLabel
+              ? `Ya estás en prueba gratuita: ${trialDaysLabel}. Al terminar pagarás ${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'} con renovación automática. Cancela en cualquier momento desde Ajustes.`
+              : existingSubForSubject
+                ? `Cambiarás tu plan a ${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'} con renovación automática. El cambio se gestiona a través de tu cuenta de App Store. Cancela en cualquier momento desde Ajustes.`
+                : `Pago tras ${TRIAL_DURATION_DAYS} días de prueba. ${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'} con renovación automática. Cancela en cualquier momento desde Ajustes.`}
           </Text>
+          {/* Enlaces legales funcionales en el punto de compra: Apple
+              Guideline 3.1.2(c) los exige junto al precio/duración. */}
+          <View style={styles.legalLinks}>
+            <Pressable
+              onPress={() =>
+                Linking.openURL('https://tactium.io/legal/terminos').catch(() =>
+                  toast.error('No se pudo abrir', 'Comprueba tu conexión.'),
+                )
+              }
+              hitSlop={6}
+              accessibilityRole="link"
+              accessibilityLabel="Términos de uso"
+            >
+              <Text style={styles.legalLink}>Términos de uso</Text>
+            </Pressable>
+            <Text style={styles.footerLinkSep}>·</Text>
+            <Pressable
+              onPress={() =>
+                Linking.openURL('https://tactium.io/legal/privacidad').catch(
+                  () => toast.error('No se pudo abrir', 'Comprueba tu conexión.'),
+                )
+              }
+              hitSlop={6}
+              accessibilityRole="link"
+              accessibilityLabel="Política de privacidad"
+            >
+              <Text style={styles.legalLink}>Política de privacidad</Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </ScrollView>
 
@@ -323,27 +754,66 @@ export const PaywallScreen = ({
             <ActivityIndicator color={Colors.textInverse} />
           ) : (
             <Text style={styles.ctaLabel}>
-              Empezar prueba {TRIAL_DURATION_DAYS} días
+              {existingSubForSubject
+                ? isInTrial
+                  ? 'Mejorar plan ahora'
+                  : 'Cambiar de plan'
+                : `Probar gratis ${TRIAL_DURATION_DAYS} días`}
             </Text>
           )}
         </Pressable>
+        {/* Trust line bajo el CTA: lo importante (sin compromiso, sin
+            cargo durante el trial) merece estar pegado a la acción, no
+            relegado al disclaimer legal de 11px más abajo. */}
+        {!existingSubForSubject ? (
+          <Text style={styles.trustLine}>
+            14 días gratis · Sin compromiso · Cancela cuando quieras
+          </Text>
+        ) : null}
         <View style={styles.footerLinks}>
+          {isOnboarding ? (
+            <Pressable
+              onPress={handleExitOnboarding}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Salir y cerrar sesión"
+            >
+              <Text style={styles.footerLink}>Salir y cerrar sesión</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={
+                existingSubForSubject
+                  ? 'Mantener plan actual'
+                  : 'Continuar gratis'
+              }
+            >
+              <Text style={styles.footerLink}>
+                {existingSubForSubject
+                  ? 'Mantener plan actual'
+                  : 'Continuar gratis'}
+              </Text>
+            </Pressable>
+          )}
+          <Text style={styles.footerLinkSep}>·</Text>
           <Pressable
             onPress={handleRestore}
+            disabled={restoring || purchasing}
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Restaurar compras"
           >
-            <Text style={styles.footerLink}>Restaurar compras</Text>
-          </Pressable>
-          <Text style={styles.footerLinkSep}>·</Text>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Continuar gratis"
-          >
-            <Text style={styles.footerLink}>Continuar gratis</Text>
+            <Text
+              style={[
+                styles.footerLink,
+                (restoring || purchasing) && { opacity: 0.5 },
+              ]}
+            >
+              {restoring ? 'Restaurando…' : 'Restaurar compras'}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -405,6 +875,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 320,
   },
+  trialPill: {
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+  },
+  trialPillText: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
 
   // Value props
   valueProps: {
@@ -415,6 +901,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
+  },
+  socialProof: {
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  socialProofText: {
+    fontFamily: Fonts.mono,
+    color: Colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   checkDot: {
     width: 22,
@@ -557,6 +1055,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Fonts.mono,
   },
+  planSavings: {
+    color: Colors.accent,
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 0.3,
+    fontWeight: '600',
+    marginTop: 4,
+  },
   planCheckmark: {
     position: 'absolute',
     top: 14,
@@ -573,6 +1079,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     textAlign: 'center',
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  legalLink: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
 
   // Footer
@@ -601,6 +1120,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.1,
+  },
+  trustLine: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginTop: 10,
   },
   footerLinks: {
     flexDirection: 'row',
