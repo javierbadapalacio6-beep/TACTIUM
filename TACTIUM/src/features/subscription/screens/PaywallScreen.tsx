@@ -342,7 +342,10 @@ export const PaywallScreen = ({
                 : `Pasarás a ${selectedPlan.displayName} al renovar. Hasta entonces mantienes tu plan actual.`,
             );
           }
-          await refreshSubs(userId);
+          // No bloqueamos la navegación con el refresh: el optimistic ya
+          // muestra el plan al instante. Reconciliamos con la DB en segundo
+          // plano (cuando el webhook actualice la fila).
+          void refreshSubs(userId);
           if (isOnboarding && nextScreen) {
             (navigation as any).replace(nextScreen);
           } else {
