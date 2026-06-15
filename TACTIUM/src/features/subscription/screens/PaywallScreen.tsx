@@ -298,18 +298,62 @@ export const PaywallScreen = ({
         // 2) StoreKit toma el control: muestra sheet nativo, gestiona
         //    Face ID, intro offer (free trial 14 días si está configurado
         //    en App Store Connect). Si el user cancela, lanza userCancelled.
-        try {
-          await purchasePackage(pkg);
-        } catch (e: any) {
-          if (e?.userCancelled) {
-            return;
-          }
+        const purchase = await purchasePackage(pkg).catch((e: any) => {
+          if (e?.userCancelled) return null;
           throw e;
+        });
+        if (!purchase) {
+          return; // el usuario canceló el sheet de compra
         }
-        // 3) Esperar a que el webhook escriba la sub en DB. Buscamos por
-        //    payer_user_id + plan_tier (no por subject) porque para
-        //    planes club_* RC suele insertar la fila con subject_type='user'
-        //    (los attrs $target_subject_* no propagan a tiempo).
+        const info = purchase;
+
+        // 3) CAMBIO DE PLAN: no esperamos al webhook (que antes caducaba el
+        //    polling porque ACTUALIZA la fila existente, no crea una nueva).
+        //    Usamos el `customerInfo` que RC devuelve al instante: Apple
+        //    aplica los UPGRADES ya (el entitlement del nuevo tier queda
+        //    activo) y DIFIERE los downgrades al final del periodo (el nuevo
+        //    tier aún no aparece). Así el cambio se refleja al momento o se
+        //    comunica claro, sin esperas raras.
+        if (hadExistingPremium && previousSub) {
+          const upgraded = Boolean(info.entitlements.active[selectedPlan.tier]);
+          if (upgraded) {
+            addOptimistic({
+              ...previousSub,
+              id: `optimistic_${previousSub.id}`,
+              plan_tier: selectedPlan.tier,
+              billing_period: billing,
+              status:
+                previousSub.status === 'trialing' ? 'trialing' : 'active',
+            });
+            toast.success(
+              'Plan actualizado',
+              `Ahora: ${selectedPlan.displayName}`,
+            );
+          } else {
+            const renew = previousSub.current_period_end
+              ? new Date(previousSub.current_period_end).toLocaleDateString(
+                  'es-ES',
+                )
+              : null;
+            toast.info(
+              'Cambio programado',
+              renew
+                ? `Pasarás a ${selectedPlan.displayName} al renovar (${renew}). Hasta entonces mantienes tu plan actual.`
+                : `Pasarás a ${selectedPlan.displayName} al renovar. Hasta entonces mantienes tu plan actual.`,
+            );
+          }
+          await refreshSubs(userId);
+          if (isOnboarding && nextScreen) {
+            (navigation as any).replace(nextScreen);
+          } else {
+            navigation.goBack();
+          }
+          return;
+        }
+
+        // 4) TRIAL/COMPRA NUEVA: esperar a que el webhook escriba la fila.
+        //    Buscamos por payer_user_id + plan_tier (para club_* RC suele
+        //    insertar la fila con subject_type='user' y luego la relinkeamos).
         resultSub = await pollForRecentSubscription({
           payerUserId: userId,
           expectedTier: selectedPlan.tier,
@@ -372,13 +416,6 @@ export const PaywallScreen = ({
           { tier: selectedPlan.tier, billing },
         );
         return;
-      }
-
-      if (hadExistingPremium) {
-        toast.success(
-          'Plan actualizado',
-          `Ahora: ${selectedPlan.displayName}`,
-        );
       }
 
       // Flow Capitán: el form de CreateTeam pasó los datos como
