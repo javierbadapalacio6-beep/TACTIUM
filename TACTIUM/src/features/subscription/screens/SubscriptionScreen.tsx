@@ -219,6 +219,15 @@ export const SubscriptionScreen = ({
                   {formatDate(mySub.current_period_end)}
                 </Text>
               </View>
+              {mySub.scheduled_plan_tier ? (
+                <View style={styles.scheduledNotice}>
+                  <Text style={styles.scheduledText}>
+                    Cambio programado: pasarás a{' '}
+                    {PLAN_BY_TIER[mySub.scheduled_plan_tier].displayName} el{' '}
+                    {formatDate(mySub.current_period_end)}.
+                  </Text>
+                </View>
+              ) : null}
               {clubCovering ? (
                 <View style={styles.coverNotice}>
                   <View style={styles.coverDot}>
@@ -513,6 +522,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     flex: 1,
+  },
+  scheduledNotice: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.warning + '14',
+    borderWidth: 1,
+    borderColor: Colors.warning + '40',
+  },
+  scheduledText: {
+    color: Colors.warning,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
   },
 
   // Recuperación de pago (grace period)

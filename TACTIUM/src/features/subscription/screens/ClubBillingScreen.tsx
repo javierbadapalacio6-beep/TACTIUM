@@ -175,6 +175,15 @@ export const ClubBillingScreen = ({
                   {formatDate(clubSub.current_period_end)}
                 </Text>
               </View>
+              {clubSub.scheduled_plan_tier ? (
+                <View style={styles.scheduledNotice}>
+                  <Text style={styles.scheduledText}>
+                    Cambio programado: pasarás a{' '}
+                    {PLAN_BY_TIER[clubSub.scheduled_plan_tier].displayName} el{' '}
+                    {formatDate(clubSub.current_period_end)}.
+                  </Text>
+                </View>
+              ) : null}
             </>
           ) : (
             <>
@@ -459,6 +468,20 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     color: Colors.text,
     fontSize: 13,
+    fontWeight: '600',
+  },
+  scheduledNotice: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.warning + '14',
+    borderWidth: 1,
+    borderColor: Colors.warning + '40',
+  },
+  scheduledText: {
+    color: Colors.warning,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '600',
   },
 

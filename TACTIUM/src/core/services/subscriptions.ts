@@ -21,7 +21,8 @@ export type SubscriptionInsert = Database['public']['Tables']['subscriptions']['
 export const SUB_VISIBLE_COLS =
   'id, subject_type, subject_id, payer_user_id, plan_tier, billing_period, ' +
   'status, current_period_start, current_period_end, trial_end, ' +
-  'cancel_at_period_end, product_id, platform, created_at, updated_at';
+  'cancel_at_period_end, scheduled_plan_tier, product_id, platform, ' +
+  'created_at, updated_at';
 
 export async function fetchMySubscriptions(): Promise<Subscription[]> {
   const { data, error } = await supabase

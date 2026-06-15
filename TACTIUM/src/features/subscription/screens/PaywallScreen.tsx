@@ -317,11 +317,14 @@ export const PaywallScreen = ({
         if (hadExistingPremium && previousSub) {
           const upgraded = Boolean(info.entitlements.active[selectedPlan.tier]);
           if (upgraded) {
+            // Upgrade aplicado: reflejo el plan nuevo y limpio cualquier
+            // downgrade que estuviera programado (lo supera).
             addOptimistic({
               ...previousSub,
               id: `optimistic_${previousSub.id}`,
               plan_tier: selectedPlan.tier,
               billing_period: billing,
+              scheduled_plan_tier: null,
               status:
                 previousSub.status === 'trialing' ? 'trialing' : 'active',
             });
@@ -330,6 +333,22 @@ export const PaywallScreen = ({
               `Ahora: ${selectedPlan.displayName}`,
             );
           } else {
+            // Downgrade diferido por Apple: lo persistimos como cambio
+            // PROGRAMADO (RPC) para mostrarlo de forma fija en Mi suscripción,
+            // y lo reflejamos al instante de forma optimista.
+            supabase
+              .rpc('set_scheduled_plan_change', {
+                p_subscription_id: previousSub.id,
+                p_tier: selectedPlan.tier,
+              })
+              .then(({ error }) => {
+                if (error) console.warn('set_scheduled_plan_change', error);
+              });
+            addOptimistic({
+              ...previousSub,
+              id: `optimistic_${previousSub.id}`,
+              scheduled_plan_tier: selectedPlan.tier,
+            });
             const renew = previousSub.current_period_end
               ? new Date(previousSub.current_period_end).toLocaleDateString(
                   'es-ES',

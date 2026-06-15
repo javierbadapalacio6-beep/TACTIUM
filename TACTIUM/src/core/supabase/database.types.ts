@@ -503,6 +503,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
+          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -522,6 +523,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
+          scheduled_plan_tier?: Database["public"]["Enums"]["subscription_plan_tier"] | null
           status?: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -541,6 +543,7 @@ export type Database = {
           platform?: Database["public"]["Enums"]["subscription_platform"]
           product_id?: string
           revenuecat_customer_id?: string
+          scheduled_plan_tier?: Database["public"]["Enums"]["subscription_plan_tier"] | null
           status?: Database["public"]["Enums"]["subscription_status"]
           subject_id?: string
           subject_type?: Database["public"]["Enums"]["subscription_subject_type"]
@@ -889,6 +892,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
+          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -985,6 +989,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_scheduled_plan_change: {
+        Args: {
+          p_subscription_id: string
+          p_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+        }
+        Returns: undefined
+      }
       start_subscription_trial: {
         Args: {
           p_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
@@ -1004,6 +1015,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
+          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -1046,6 +1058,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
+          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
