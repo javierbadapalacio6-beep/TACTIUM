@@ -15,6 +15,32 @@ export type OnboardingStackParamList = {
   CreateTeamsForClub: undefined;
   CreateTeam: { clubId?: string } | undefined;
   AddPlayers: undefined;
+  // Paywall en onboarding es un gate OBLIGATORIO entre crear el subject
+  // (club/team) y los siguientes pasos. Sin sub no se llega a tabs ni a
+  // CreateTeamsForClub/AddPlayers. nextScreen indica a dónde saltar tras
+  // un trial/compra exitosa — el PaywallScreen hace navigation.replace
+  // para que el back NO devuelva al pago.
+  Paywall: {
+    intent: 'captain' | 'club';
+    // `nextScreen` tras iniciar trial:
+    //  · CreateTeamsForClub → flow Club (club ya creado antes del paywall).
+    //  · AddPlayers         → flow Capitán (el paywall recibe `pendingTeam`
+    //    en params, crea el team tras success y enseguida navega aquí).
+    nextScreen: 'CreateTeamsForClub' | 'AddPlayers';
+    // Solo flow Capitán: datos del form de CreateTeam que esperan ser
+    // insertados tras arrancar el trial. Permite mostrar paywall después
+    // de que el usuario haya rellenado el form (sunk-cost → menos abandono)
+    // mientras seguimos respetando el trigger DB `enforce_team_quota`
+    // que exige sub activa antes del INSERT.
+    pendingTeam?: {
+      name: string;
+      federation?: string;
+      league?: string;
+      category?: string;
+      group?: string;
+      gender?: 'masculino' | 'femenino' | 'mixto';
+    };
+  };
 };
 
 // ─── Home Stack (nested under Home tab) ─────────────────────────────
@@ -28,7 +54,10 @@ export type HomeStackParamList = {
 
 export type SeasonsStackParamList = {
   SeasonsRoot: undefined;
-  SeasonDetail: { id: string };
+  // `autoOpen` permite que otros screens (ej. el empty state de Home)
+  // naveguen aquí abriendo directamente un sheet sin que el user tenga
+  // que descubrir el botón. 'scan' = ScanSheet de calendario.
+  SeasonDetail: { id: string; autoOpen?: 'scan' };
 };
 
 export type TeamStackParamList = {
@@ -85,6 +114,7 @@ export type RootStackParamList = {
   Paywall: { intent?: string } | undefined;
   Subscription: undefined;
   ClubBilling: undefined;
+  MyData: undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

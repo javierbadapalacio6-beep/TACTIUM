@@ -37,7 +37,7 @@ import { useClubStore } from '@store/clubStore';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
-const CATS = ['1ª', '2ª', '3ª', '4ª'];
+const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª', '9ª', '10ª'];
 const GROUPS = ['A', 'B', 'C', 'D'];
 const GENDERS: { id: TeamGender; label: string }[] = [
   { id: 'masculino', label: 'Masculino' },
@@ -60,11 +60,15 @@ export const CreateTeamScreen = ({
   const [name, setName] = useState('');
   const [federation, setFederation] = useState<Federation | null>(null);
   const [federationPickerOpen, setFederationPickerOpen] = useState(false);
+  // league y group son OPCIONALES en onboarding: se pueden completar luego
+  // desde TeamScreen → ajustes del equipo. Reduce el form de 6 campos a 4
+  // requeridos (name, federation, cat, gender) y baja la fricción en el
+  // momento más sensible del funnel.
   const [league, setLeague] = useState('');
   const [cat, setCat] = useState('2ª');
   const [gender, setGender] = useState<TeamGender>('masculino');
   const [group, setGroup] = useState<string>('A');
-  const [hasGroup, setHasGroup] = useState(true);
+  const [hasGroup, setHasGroup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const courts = useMemo(
@@ -74,35 +78,38 @@ export const CreateTeamScreen = ({
 
   const valid = useMemo(
     () =>
-      Boolean(
-        name.trim() &&
-          federation &&
-          league.trim() &&
-          cat &&
-          (!hasGroup || group),
-      ),
-    [name, federation, league, cat, group, hasGroup],
+      Boolean(name.trim() && federation && cat && (!hasGroup || group)),
+    [name, federation, cat, group, hasGroup],
   );
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (!valid || submitting) return;
+
+    const teamData = {
+      name: name.trim(),
+      federation: federation?.code,
+      league: league.trim() || undefined,
+      category: cat,
+      group: hasGroup ? group : undefined,
+      gender,
+    };
+
+    // Reverse trial: el 1er equipo (independiente o de club existente) es
+    // GRATIS — lo creamos directamente y entramos a la app, sin pasar por el
+    // paywall. Las acciones productivas (jornada, alineación, invitaciones…)
+    // dispararán el trial. El trigger DB `enforce_team_quota` permite este
+    // primer equipo sin sub activa.
     setSubmitting(true);
-    try {
-      await createTeam({
-        name: name.trim(),
-        federation: federation?.code,
-        league: league.trim(),
-        category: cat,
-        group: hasGroup ? group : undefined,
-        gender,
-        clubId,
-      });
-      navigation.navigate('AddPlayers');
-    } catch (e: any) {
-      Alert.alert('Error al crear equipo', e?.message ?? 'Inténtalo de nuevo.');
-    } finally {
-      setSubmitting(false);
-    }
+    (async () => {
+      try {
+        await createTeam(clubId ? { ...teamData, clubId } : teamData);
+        navigation.navigate('AddPlayers');
+      } catch (e: any) {
+        Alert.alert('Error al crear equipo', e?.message ?? 'Inténtalo de nuevo.');
+      } finally {
+        setSubmitting(false);
+      }
+    })();
   };
 
   return (
@@ -199,7 +206,7 @@ export const CreateTeamScreen = ({
           </Pressable>
         </Section>
 
-        <Section label="Liga">
+        <Section label="Liga · Opcional">
           <PlainInput
             value={league}
             onChangeText={setLeague}

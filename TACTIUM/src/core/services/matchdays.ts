@@ -16,23 +16,42 @@ export async function fetchMatchdays(seasonId: string): Promise<Matchday[]> {
 }
 
 export async function fetchUpcomingMatchday(seasonId: string): Promise<Matchday | null> {
-  // "Próxima" = no terminada, sin outcome y con fecha futura (o sin fecha
-  // programada todavía). Las jornadas pasadas sin acta NO son candidatas:
-  // pertenecen al filtro "Jugadas · pendiente acta".
+  // "Próxima jornada" = la cronológicamente más cercana a hoy entre las
+  // no terminadas. Estrategia en dos pasadas:
+  //   1) Futura más próxima (match_date ≥ hoy o sin fecha). Si la hay → esa.
+  //   2) Fallback: pasada más reciente (match_date < hoy). Cubre el caso
+  //      típico del capitán amateur que escanea su calendario al final del
+  //      año y todas las jornadas son del pasado — antes la Home decía
+  //      "Aún no hay jornadas" pese a tener 10 importadas.
+  // Mantenemos el filtro `status != 'finished'` para no proponer como
+  // "próxima" una jornada cuya acta ya está cerrada.
   const today = new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase
+
+  const { data: future, error: futureErr } = await supabase
     .from('matchdays')
     .select('*')
     .eq('season_id', seasonId)
     .neq('status', 'finished')
-    .is('outcome', null)
     .or(`match_date.is.null,match_date.gte.${today}`)
     .order('match_date', { ascending: true, nullsFirst: false })
     .order('jornada_number', { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (error) throw error;
-  return data;
+  if (futureErr) throw futureErr;
+  if (future) return future;
+
+  const { data: past, error: pastErr } = await supabase
+    .from('matchdays')
+    .select('*')
+    .eq('season_id', seasonId)
+    .neq('status', 'finished')
+    .lt('match_date', today)
+    .order('match_date', { ascending: false })
+    .order('jornada_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pastErr) throw pastErr;
+  return past;
 }
 
 export async function fetchMatchday(id: string): Promise<Matchday | null> {

@@ -12,6 +12,10 @@ export interface EntitlementContext {
   role: TeamRole | null;
   // `null` si el team no pertenece a ningún club.
   clubId: string | null;
+  // Cobertura dura: para equipos de club, el plan cubre un nº de equipos y el
+  // gestor los marca como `covered`. Un equipo NO cubierto queda read-only
+  // aunque el club pague. Irrelevante para equipos independientes.
+  teamCovered?: boolean;
   // Subscripciones del usuario y de los clubs que ve. La función filtra
   // localmente — el caller debe asegurarse de que las haya cargado.
   subscriptions: Subscription[];
@@ -19,7 +23,10 @@ export interface EntitlementContext {
 
 export type EntitlementResult =
   | { allowed: true; source: 'player_free' | 'club_inherited' | 'captain_self' }
-  | { allowed: false; reason: 'no_user' | 'no_subscription' };
+  | {
+      allowed: false;
+      reason: 'no_user' | 'no_subscription' | 'not_covered';
+    };
 
 /**
  * Decide si un user tiene acceso premium para un team concreto.
@@ -45,24 +52,31 @@ export function hasPremiumAccess(
     return { allowed: false, reason: 'no_user' };
   }
 
-  // 1) Herencia desde club
+  // 1) Player siempre free (no paga; la cobertura es cosa del gestor/capitán).
+  //    Va ANTES que la herencia de club para no bloquear a un jugador por que
+  //    su equipo no esté cubierto.
+  if (ctx.role === 'player') {
+    return { allowed: true, source: 'player_free' };
+  }
+
+  // 2) Herencia desde club, con COBERTURA DURA: el club debe tener sub activa
+  //    Y el equipo debe estar cubierto por el plan.
   if (ctx.clubId) {
-    const hit = ctx.subscriptions.find(
+    const clubSub = ctx.subscriptions.find(
       (s) =>
         s.subject_type === 'club' &&
         s.subject_id === ctx.clubId &&
         PREMIUM_STATUSES.includes(s.status) &&
         new Date(s.current_period_end) > now,
     );
-    if (hit) return { allowed: true, source: 'club_inherited' };
+    if (clubSub) {
+      if (ctx.teamCovered) return { allowed: true, source: 'club_inherited' };
+      // El club paga pero este equipo no está en el plan → read-only.
+      return { allowed: false, reason: 'not_covered' };
+    }
   }
 
-  // 2) Player siempre free
-  if (ctx.role === 'player') {
-    return { allowed: true, source: 'player_free' };
-  }
-
-  // 3) Captain/admin con sub propia
+  // 3) Captain/admin con sub propia (equipo independiente)
   if (ctx.role === 'captain' || ctx.role === 'admin') {
     const hit = ctx.subscriptions.find(
       (s) =>

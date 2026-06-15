@@ -220,6 +220,7 @@ export type Database = {
           court_number: number
           created_at: string
           forfeit: boolean
+          forfeit_us: boolean
           id: string
           matchday_id: string
           set_number: number
@@ -231,6 +232,7 @@ export type Database = {
           court_number: number
           created_at?: string
           forfeit?: boolean
+          forfeit_us?: boolean
           id?: string
           matchday_id: string
           set_number: number
@@ -242,6 +244,7 @@ export type Database = {
           court_number?: number
           created_at?: string
           forfeit?: boolean
+          forfeit_us?: boolean
           id?: string
           matchday_id?: string
           set_number?: number
@@ -626,6 +629,7 @@ export type Database = {
         Row: {
           category: string | null
           club_id: string | null
+          covered: boolean
           created_at: string
           federation: string | null
           gender: Database["public"]["Enums"]["team_gender"]
@@ -639,6 +643,7 @@ export type Database = {
         Insert: {
           category?: string | null
           club_id?: string | null
+          covered?: boolean
           created_at?: string
           federation?: string | null
           gender?: Database["public"]["Enums"]["team_gender"]
@@ -652,6 +657,7 @@ export type Database = {
         Update: {
           category?: string | null
           club_id?: string | null
+          covered?: boolean
           created_at?: string
           federation?: string | null
           gender?: Database["public"]["Enums"]["team_gender"]
@@ -829,6 +835,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cover_team: { Args: { p_team_id: string }; Returns: undefined }
       create_team_invitation: {
         Args: {
           target_role?: Database["public"]["Enums"]["team_role"]
@@ -852,6 +859,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_club: { Args: { p_club_id: string }; Returns: undefined }
+      delete_team: { Args: { p_team_id: string }; Returns: undefined }
       fn_has_premium_access: {
         Args: { p_team_id: string; p_user_id: string }
         Returns: boolean
@@ -864,6 +873,34 @@ export type Database = {
           p_subject_type: Database["public"]["Enums"]["subscription_subject_type"]
         }
         Returns: undefined
+      }
+      link_subscription_to_club: {
+        Args: { p_club_id: string; p_subscription_id: string }
+        Returns: {
+          billing_period: Database["public"]["Enums"]["subscription_billing_period"]
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string
+          current_period_start: string | null
+          id: string
+          original_transaction_id: string
+          payer_user_id: string
+          plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          platform: Database["public"]["Enums"]["subscription_platform"]
+          product_id: string
+          revenuecat_customer_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+          trial_end: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "subscriptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       list_unclaimed_players: {
         Args: { p_team_id: string }
@@ -944,6 +981,80 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "players"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      start_subscription_trial: {
+        Args: {
+          p_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          p_subject_id: string
+          p_subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+        }
+        Returns: {
+          billing_period: Database["public"]["Enums"]["subscription_billing_period"]
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string
+          current_period_start: string | null
+          id: string
+          original_transaction_id: string
+          payer_user_id: string
+          plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          platform: Database["public"]["Enums"]["subscription_platform"]
+          product_id: string
+          revenuecat_customer_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+          trial_end: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "subscriptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      delete_my_account: {
+        Args: never
+        Returns: Json
+      }
+      export_my_data: {
+        Args: never
+        Returns: Json
+      }
+      sync_subscription_from_revenuecat: {
+        Args: {
+          p_expiration_at_ms: number
+          p_original_transaction_id: string
+          p_period_type: string
+          p_product_id: string
+          p_purchased_at_ms: number
+        }
+        Returns: {
+          billing_period: Database["public"]["Enums"]["subscription_billing_period"]
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string
+          current_period_start: string | null
+          id: string
+          original_transaction_id: string
+          payer_user_id: string
+          plan_tier: Database["public"]["Enums"]["subscription_plan_tier"]
+          platform: Database["public"]["Enums"]["subscription_platform"]
+          product_id: string
+          revenuecat_customer_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subscription_subject_type"]
+          trial_end: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "subscriptions"
           isOneToOne: true
           isSetofReturn: false
         }

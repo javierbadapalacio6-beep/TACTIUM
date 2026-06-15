@@ -22,7 +22,11 @@ export const TeamStack = () => (
     screenOptions={{
       headerShown: false,
       contentStyle: { backgroundColor: Colors.background },
-      animation: 'fade',
+      // `animation: 'none'`: el TabNavigator ya hace fade entre tabs, no
+      // duplicamos aquí (dos fades superpuestos en nav rápida dejan un
+      // frame opacity 0). El wrapper Stack sigue cumpliendo su función
+      // (absorber el mount cycle) sin animación propia.
+      animation: 'none',
     }}
   >
     <Stack.Screen name="TeamRoot" component={TeamScreen} />

@@ -51,6 +51,18 @@ export async function updateClub(id: string, patch: ClubUpdate): Promise<Club> {
   return data;
 }
 
+/**
+ * Borra un club y TODO su árbol en cascada (equipos, temporadas, jornadas,
+ * alineaciones, actas, miembros, invitaciones, accesos de capitanes/jugadores)
+ * vía el RPC `delete_club` (SECURITY DEFINER). El RPC valida que el caller es
+ * el owner y bloquea si el club tiene sub premium activa (hay que cancelarla
+ * en la tienda primero). Irreversible.
+ */
+export async function deleteClub(clubId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_club', { p_club_id: clubId });
+  if (error) throw error;
+}
+
 export async function fetchClubMembers(clubId: string): Promise<ClubMember[]> {
   const { data, error } = await supabase
     .from('club_members')

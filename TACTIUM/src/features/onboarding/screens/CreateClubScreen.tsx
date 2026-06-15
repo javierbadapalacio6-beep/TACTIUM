@@ -57,6 +57,9 @@ export const CreateClubScreen = ({
         name: name.trim(),
         federation: federation?.code,
       });
+      // Reverse trial: entramos directos a crear el primer equipo del club
+      // (gratis, 1 equipo). El paywall se disparará al añadir equipos extra
+      // o al ejecutar acciones productivas (jornada, alineación, etc.).
       navigation.replace('CreateTeamsForClub');
     } catch (e: any) {
       Alert.alert('Error al crear club', e?.message ?? 'Inténtalo de nuevo.');
@@ -159,7 +162,7 @@ export const CreateClubScreen = ({
           </View>
           <View style={styles.previewFooter}>
             <Text style={styles.previewFooterText}>
-              Siguiente paso: crear el primer equipo del club.
+              Después: tus capitanes alinean en 90 segundos.
             </Text>
           </View>
         </View>

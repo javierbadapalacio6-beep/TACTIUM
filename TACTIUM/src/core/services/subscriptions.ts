@@ -14,13 +14,26 @@ export type SubscriptionInsert = Database['public']['Tables']['subscriptions']['
  * o club admin). Incluye expiradas/canceladas para mostrar histórico en
  * SubscriptionScreen; el filtrado de "activa" se hace en cliente.
  */
+// Columnas que el cliente tiene permiso de leer. `revenuecat_customer_id`
+// y `original_transaction_id` están REVOKE a nivel DB para `authenticated`
+// — solo service_role las ve. Si añades campo nuevo, edita SOLO esta
+// constante; el store la importa.
+export const SUB_VISIBLE_COLS =
+  'id, subject_type, subject_id, payer_user_id, plan_tier, billing_period, ' +
+  'status, current_period_start, current_period_end, trial_end, ' +
+  'cancel_at_period_end, product_id, platform, created_at, updated_at';
+
 export async function fetchMySubscriptions(): Promise<Subscription[]> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('*')
+    .select(SUB_VISIBLE_COLS)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data ?? [];
+  // Cast vía `unknown` porque supabase-js no infiere el shape de
+  // `Subscription` cuando se pasa una string de columnas; los dos
+  // campos PII no aparecerán en runtime (revoke a nivel DB), pero el
+  // resto del código del cliente ya está auditado para no leerlos.
+  return ((data ?? []) as unknown) as Subscription[];
 }
 
 /**
@@ -32,7 +45,7 @@ export async function fetchActiveClubSubscription(
 ): Promise<Subscription | null> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('*')
+    .select(SUB_VISIBLE_COLS)
     .eq('subject_type', 'club')
     .eq('subject_id', clubId)
     .in('status', ['trialing', 'active', 'grace_period'])
@@ -40,7 +53,53 @@ export async function fetchActiveClubSubscription(
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return (data as unknown) as Subscription | null;
+}
+
+// ── Polling tras compra RC ──────────────────────────────────────────────────
+
+/**
+ * Espera a que el webhook RC → Supabase escriba la sub recién comprada.
+ *
+ * Importante: buscamos por `payer_user_id + plan_tier`, NO por
+ * `subject_type + subject_id`. Razón: el webhook puede insertar la fila
+ * con `subject_type='user'` aunque el plan sea club_*, porque RC no
+ * propaga subscriber_attributes a tiempo en el primer evento. El cliente
+ * arregla el subject vía `link_subscription_to_club` justo después; pero
+ * primero tiene que ENCONTRAR la fila. Filtrar por payer+tier la encuentra
+ * sin importar cómo viniera el subject.
+ *
+ * Devuelve `null` si pasa el timeout sin ver fila en DB — el caller debe
+ * mostrar warning "compra OK, sincronizando" pero no bloquear al user.
+ */
+export async function pollForRecentSubscription(args: {
+  payerUserId: string;
+  expectedTier: PlanTier;
+  /** sub activa que YA existía antes de la compra (para descartarla). */
+  previousSubId?: string | null;
+  timeoutMs?: number;
+  intervalMs?: number;
+}): Promise<Subscription | null> {
+  const timeout = args.timeoutMs ?? 10000;
+  const interval = args.intervalMs ?? 1000;
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const { data } = await supabase
+      .from('subscriptions')
+      .select(SUB_VISIBLE_COLS)
+      .eq('payer_user_id', args.payerUserId)
+      .eq('plan_tier', args.expectedTier)
+      .in('status', ['trialing', 'active', 'grace_period'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const row = (data as unknown) as Subscription | null;
+    if (row && row.id !== args.previousSubId) {
+      return row;
+    }
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  return null;
 }
 
 // ── Compra MOCK (sólo dev hasta integrar RevenueCat SDK real) ───────────────
@@ -108,6 +167,23 @@ export async function mockPurchasePlan(
         PREMIUM_STATUSES.includes(s.status),
     );
 
+  // ─── Trial onboarding · RPC real ─────────────────────────────────────────
+  // Si no hay sub previa para este subject y el caller pide startTrial,
+  // arrancamos el trial vía RPC `start_subscription_trial` (security
+  // definer). Esto sustituye a los triggers DB clubs_start_trial /
+  // teams_start_trial que existían hasta 2026-05-21 — el paywall ahora es
+  // la source of truth del plan elegido. Devuelve la fila real persistida.
+  if (!existing && args.startTrial) {
+    const { data, error } = await supabase.rpc('start_subscription_trial', {
+      p_subject_type: subjectType,
+      p_subject_id: subjectId,
+      p_plan_tier: args.tier,
+    });
+    if (error) throw error;
+    if (!data) throw new Error('RPC start_subscription_trial devolvió null');
+    return data as Subscription;
+  }
+
   // Estado final: si hay sub existente la respetamos; si no, depende del
   // flag startTrial pasado por el caller.
   const status = existing
@@ -167,10 +243,13 @@ export async function mockPurchasePlan(
   // `__DEV__` ambient. Por ahora devolvemos la fila construida para que la
   // UI pueda hacer optimistic update vía el store y el usuario vea el
   // gating funcionando end-to-end sin tocar Supabase.
+  // `.select()` post-insert también debe pedir columnas explícitas para
+  // no romperse contra el REVOKE de revenuecat_customer_id y
+  // original_transaction_id.
   const { data, error } = await supabase
     .from('subscriptions')
     .insert(insertPayload)
-    .select()
+    .select(SUB_VISIBLE_COLS)
     .single();
 
   if (error) {
@@ -187,7 +266,7 @@ export async function mockPurchasePlan(
     }
     throw error;
   }
-  return data;
+  return (data as unknown) as Subscription;
 }
 
 /**

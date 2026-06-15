@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,8 @@ import {
 } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
+import { useSubscriptionStore } from '@store/subscriptionStore';
+import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
 import type { TeamGender } from '@core/services/teams';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
@@ -47,8 +49,37 @@ export const CreateTeamsForClubScreen = ({
   const teams = useTeamStore((s) => s.teams);
   const createTeam = useTeamStore((s) => s.createTeam);
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
+  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
   const clubTeams = club ? teams.filter((t) => t.club_id === club.id) : [];
+
+  // Plan activo del club + cuántos equipos cubre. El paywall del onboarding
+  // ya creó la sub justo antes de llegar aquí, así que esperamos encontrarla.
+  // Mismo patrón que CreateTeamFromClubScreen post-onboarding — sin ello,
+  // el usuario podía crear N equipos saltándose el quota del plan.
+  const clubSub = useMemo(() => {
+    if (!club) return null;
+    return (
+      subscriptions
+        .filter(
+          (s) =>
+            s.subject_type === 'club' &&
+            s.subject_id === club.id &&
+            PREMIUM_STATUSES.includes(s.status),
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.current_period_end).getTime() -
+            new Date(a.current_period_end).getTime(),
+        )[0] ?? null
+    );
+  }, [subscriptions, club]);
+  const currentPlan = clubSub ? PLAN_BY_TIER[clubSub.plan_tier] : null;
+  // Reverse trial: el club monta su estructura LIBRE (hasta 25, tope de
+  // cordura). El tier es cobertura/pricing blanda; la monetización va por los
+  // gates de operación (invitar, temporada, jornada, alineación, resultados).
+  const MAX_CLUB_TEAMS = 25;
+  const quotaReached = clubTeams.length >= MAX_CLUB_TEAMS;
 
   const [adding, setAdding] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -63,6 +94,14 @@ export const CreateTeamsForClubScreen = ({
 
   const onAdd = async () => {
     if (!canAdd || submitting || !club) return;
+    // Estructura libre: solo frenamos en el tope de cordura (25 equipos/club).
+    if (quotaReached) {
+      Alert.alert(
+        'Máximo de equipos alcanzado',
+        'Un club puede tener hasta 25 equipos.',
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       await createTeam({
@@ -139,9 +178,17 @@ export const CreateTeamsForClubScreen = ({
 
       <View style={styles.counter}>
         <Text style={styles.counterText}>
-          {String(clubTeams.length).padStart(2, '0')} equipos
+          {currentPlan
+            ? `${String(clubTeams.length).padStart(2, '0')} / ${String(
+                currentPlan.teamQuota,
+              ).padStart(2, '0')} equipos`
+            : `${String(clubTeams.length).padStart(2, '0')} equipos`}
         </Text>
-        <Text style={styles.counterSum}>{club.federation ?? '—'}</Text>
+        <Text style={styles.counterSum}>
+          {currentPlan
+            ? currentPlan.shortLabel.toUpperCase()
+            : club.federation ?? '—'}
+        </Text>
       </View>
 
       <ScrollView
@@ -192,10 +239,10 @@ export const CreateTeamsForClubScreen = ({
                 />
                 <Pressable
                   onPress={onAdd}
-                  disabled={submitting || !canAdd}
+                  disabled={submitting || !canAdd || quotaReached}
                   style={[
                     styles.confirm,
-                    (!canAdd || submitting) && { opacity: 0.4 },
+                    (!canAdd || submitting || quotaReached) && { opacity: 0.4 },
                   ]}
                 >
                   {submitting ? (
@@ -329,6 +376,18 @@ export const CreateTeamsForClubScreen = ({
                   <Text style={styles.cancelInlineText}>Cancelar</Text>
                 </Pressable>
               ) : null}
+            </View>
+          ) : quotaReached ? (
+            // Visualmente cerrado: el usuario ve por qué no puede añadir más
+            // sin tener que pulsar nada y recibir un Alert sorpresa.
+            <View style={styles.quotaLockedRow}>
+              <Text style={styles.quotaLockedText}>
+                Has alcanzado el máximo del plan
+                {currentPlan ? ` ${currentPlan.shortLabel}` : ''}.
+              </Text>
+              <Text style={styles.quotaLockedHint}>
+                Podrás mejorar el plan después desde Perfil.
+              </Text>
             </View>
           ) : (
             <Pressable onPress={() => setAdding(true)} style={styles.addRowBtn}>
@@ -589,6 +648,26 @@ const styles = StyleSheet.create({
     color: Colors.accent,
     fontSize: 15,
     fontWeight: '600',
+  },
+  quotaLockedRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    borderRadius: Radius.md,
+    borderStyle: 'dashed',
+    gap: 4,
+  },
+  quotaLockedText: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  quotaLockedHint: {
+    color: Colors.textFaint,
+    fontSize: 11,
+    lineHeight: 15,
   },
 
   cta: { paddingHorizontal: 20, paddingTop: 12 },

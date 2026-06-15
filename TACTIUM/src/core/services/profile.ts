@@ -32,3 +32,39 @@ export async function setNotificationsEnabled(
     .eq('id', userId);
   if (error) throw error;
 }
+
+/**
+ * Elimina la cuenta del user logueado. Llama a la RPC SECURITY DEFINER
+ * `delete_my_account` que:
+ *  - Borra SIEMPRE (Apple 5.1.1(v): la eliminación debe poder completarse).
+ *    Si hay sub activa de App Store/Google Play, esa sigue viva y se cancela
+ *    aparte — el cliente avisa antes. Devuelve `had_active_subscription`.
+ *  - Hace DELETE FROM auth.users → CASCADE limpia profiles, clubs, teams,
+ *    seasons, matchdays, lineups, etc.
+ *
+ * Requisito Apple Guideline 5.1.1(v) y Google equivalente: si la app
+ * permite registro, DEBE permitir eliminar la cuenta desde la propia app.
+ *
+ * Tras llamar, el caller debe hacer `signOut()` para limpiar el JWT
+ * caducado del cliente.
+ */
+/**
+ * Volcado completo de datos personales del user logueado (GDPR Art.20
+ * portability). Llama a la RPC SECURITY DEFINER `export_my_data` y
+ * devuelve el JSON tal cual. El caller decide qué hacer con él
+ * (compartirlo via Share sheet, mostrar en pantalla, etc.).
+ */
+export async function exportMyData(): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc('export_my_data');
+  if (error) throw error;
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+export async function deleteMyAccount(): Promise<void> {
+  // El RPC borra la cuenta SIEMPRE (Apple 5.1.1(v) exige que la eliminación
+  // pueda completarse). Si había una sub activa de App Store/Google Play,
+  // esa sigue viva y se cancela aparte — el cliente ya lo avisa antes de
+  // llamar aquí. Solo propagamos errores reales (red, auth).
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) throw error;
+}

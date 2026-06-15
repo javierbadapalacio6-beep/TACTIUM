@@ -16,6 +16,7 @@ import { BottomSheet } from '@components/ui';
 import * as InvitationsApi from '@core/services/invitations';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
+import { toast } from '@store/toastStore';
 
 export const RedeemInvitationSheet: React.FC<{
   open: boolean;
@@ -43,6 +44,14 @@ export const RedeemInvitationSheet: React.FC<{
       finishOnboarding();
       setCode('');
       onClose();
+      // Toast post-redeem: orienta al user recién unido sobre qué hacer.
+      // El PlayerClaimGate ya abrirá automáticamente el sheet de reclamar
+      // slot si era role=player; este toast cubre el caso de captain
+      // invitado y refuerza el siguiente paso para players también.
+      toast.success(
+        '¡Te has unido al equipo!',
+        'Marca tu disponibilidad para la próxima jornada cuando puedas.',
+      );
       onRedeemed?.();
     } catch (e: any) {
       Alert.alert('Código inválido', e?.message ?? 'Inténtalo de nuevo.');

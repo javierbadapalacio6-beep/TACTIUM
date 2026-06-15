@@ -21,6 +21,8 @@ import {
 } from '@components/ui';
 import * as TeamMembersApi from '@core/services/teamMembers';
 import * as InvitationsApi from '@core/services/invitations';
+import { useTeamGate } from '@core/hooks/usePremiumGate';
+import { useTeamStore } from '@store/teamStore';
 import * as PlayersApi from '@core/services/players';
 
 const ROLE_LABEL: Record<TeamMembersApi.TeamRole, string> = {
@@ -84,6 +86,43 @@ export const TeamMembersSheet: React.FC<{
     }
     return m;
   }, [players]);
+
+  // Reverse trial + cobertura dura: invitar es premium y se gatea contra el
+  // equipo de ESTE sheet (no el activo). Si el equipo no está cubierto, el
+  // gate ofrece cubrirlo o mejorar el plan.
+  const teamGate = useTeamGate();
+  const teams = useTeamStore((s) => s.teams);
+  const deleteTeamAction = useTeamStore((s) => s.deleteTeam);
+  const sheetTeam = teams.find((t) => t.id === teamId) ?? null;
+  const gateInvite = (role: InvitationsApi.InvitableRole) =>
+    sheetTeam
+      ? teamGate(sheetTeam, () => handleCreateInvitation(role), 'invite_create')
+      : () => handleCreateInvitation(role);
+
+  const handleDeleteTeam = () => {
+    if (!teamId) return;
+    Alert.alert(
+      'Borrar equipo',
+      `Se eliminará "${
+        teamName ?? 'este equipo'
+      }" y todo su contenido (jugadores, temporadas, jornadas y actas). No se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTeamAction(teamId);
+              onClose();
+            } catch (e: any) {
+              Alert.alert('No se pudo borrar', e?.message ?? 'Inténtalo de nuevo.');
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleCreateInvitation = async (role: InvitationsApi.InvitableRole) => {
     if (!teamId || generating) return;
@@ -354,7 +393,7 @@ export const TeamMembersSheet: React.FC<{
 
         <View style={styles.inviteCtas}>
           <Pressable
-            onPress={() => handleCreateInvitation('captain')}
+            onPress={gateInvite('captain')}
             disabled={generating || !teamId}
             style={({ pressed }) => [
               styles.inviteBtn,
@@ -369,7 +408,7 @@ export const TeamMembersSheet: React.FC<{
             </Text>
           </Pressable>
           <Pressable
-            onPress={() => handleCreateInvitation('player')}
+            onPress={gateInvite('player')}
             disabled={generating || !teamId}
             style={({ pressed }) => [
               styles.inviteBtn,
@@ -428,6 +467,21 @@ export const TeamMembersSheet: React.FC<{
             })}
           </View>
         ) : null}
+
+        {/* Borrar equipo (cascada irreversible) */}
+        {teamId ? (
+          <Pressable
+            onPress={handleDeleteTeam}
+            accessibilityRole="button"
+            accessibilityLabel="Borrar equipo"
+            style={({ pressed }) => [
+              styles.deleteTeamBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={styles.deleteTeamLabel}>Borrar equipo</Text>
+          </Pressable>
+        ) : null}
       </View>
     </BottomSheet>
   );
@@ -458,6 +512,21 @@ const styles = StyleSheet.create({
   loader: {
     paddingVertical: 24,
     alignItems: 'center',
+  },
+  deleteTeamBtn: {
+    marginTop: 20,
+    height: 46,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.error + '55',
+    backgroundColor: Colors.error + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteTeamLabel: {
+    color: Colors.error,
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyCard: {
     paddingVertical: 24,

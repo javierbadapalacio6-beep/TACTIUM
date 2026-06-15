@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '@core/supabase/client';
+import { SUB_VISIBLE_COLS } from '@core/services/subscriptions';
+import { PREMIUM_STATUSES } from '@core/subscriptions/plans';
 import {
   hasPremiumAccess,
   daysUntilTrialEnd,
@@ -15,6 +17,9 @@ import {
 export interface TeamLikeForEntitlement {
   id: string;
   club_id: string | null;
+  // Cobertura dura para equipos de club (ver hasPremiumAccess). Opcional para
+  // no romper callers que pasan un team mínimo; se trata como no-cubierto.
+  covered?: boolean;
 }
 
 export interface MembershipLike {
@@ -59,7 +64,7 @@ export const useSubscriptionStore = create<State>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('subscriptions')
-        .select('*')
+        .select(SUB_VISIBLE_COLS)
         .order('created_at', { ascending: false });
       if (error) throw error;
       // Conservamos las optimistic locales junto a las de DB, pero
@@ -67,7 +72,10 @@ export const useSubscriptionStore = create<State>((set, get) => ({
       // hay tanto fila DB como optimistic, mantenemos la optimistic. Esto
       // permite que el mock dev refleje cambios de plan al instante sin
       // que el siguiente refresh "resucite" la fila DB original.
-      const dbSubs = data ?? [];
+      // Cast vía unknown: el select con string explícito no preserva el
+      // tipo `Subscription` (PII revocada a nivel DB). Ningún consumer
+      // del store lee revenuecat_customer_id ni original_transaction_id.
+      const dbSubs = ((data ?? []) as unknown) as Subscription[];
       const optimistic = get().subscriptions.filter((s) =>
         s.id.startsWith('optimistic_'),
       );
@@ -152,6 +160,7 @@ export const useSubscriptionStore = create<State>((set, get) => ({
       userId,
       role,
       clubId: team?.club_id ?? null,
+      teamCovered: team?.covered ?? false,
       subscriptions: get().subscriptions,
     });
   },
@@ -162,7 +171,7 @@ export const useSubscriptionStore = create<State>((set, get) => ({
 
   hasAnyActiveSub: () => {
     return get().subscriptions.some((s) =>
-      ['trialing', 'active', 'grace_period'].includes(s.status),
+      PREMIUM_STATUSES.includes(s.status),
     );
   },
 }));
@@ -187,6 +196,7 @@ export function selectIsPremium(
     userId,
     role,
     clubId: team?.club_id ?? null,
+    teamCovered: team?.covered ?? false,
     subscriptions: state.subscriptions,
   });
 }

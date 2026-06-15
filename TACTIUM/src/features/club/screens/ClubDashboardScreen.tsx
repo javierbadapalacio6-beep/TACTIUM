@@ -18,6 +18,11 @@ import { IconPlus, IconPencil, NeonDot } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
+import { DeleteClubSheet } from '@features/club/components/DeleteClubSheet';
+import { toast } from '@store/toastStore';
+import { useSubscriptionStore } from '@store/subscriptionStore';
+import { clubCoverage } from '@core/entitlements/coverage';
+import { useTeamGate } from '@core/hooks/usePremiumGate';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
 
@@ -46,33 +51,66 @@ export const ClubDashboardScreen = ({
   } | null>(null);
   const [overviews, setOverviews] = useState<ClubTeamOverview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteClub = useClubStore((s) => s.deleteClub);
+  const reloadTeams = useTeamStore((s) => s.loadForUser);
+
+  const handleDeleteClub = async () => {
+    if (!club || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteClub(club.id);
+      await reloadTeams();
+      setDeleteOpen(false);
+      toast.success('Club borrado', 'Se ha eliminado el club y su contenido.');
+    } catch (e: any) {
+      toast.error('No se pudo borrar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const clubTeams = useMemo(
     () => (club ? teams.filter((t) => t.club_id === club.id) : []),
     [teams, club],
   );
 
-  const reload = useCallback(async () => {
-    if (clubTeams.length === 0) {
-      setOverviews([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
-      setOverviews(data);
-    } catch (e) {
-      console.warn('club overview', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [clubTeams]);
+  // Cobertura dura: cuántos equipos cubre el plan y cuántos van usados.
+  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
+  const coverage = clubCoverage(club?.id ?? null, teams, subscriptions);
+  // Gate POR EQUIPO (no el activo): tocar un equipo no cubierto ofrece cubrirlo.
+  const teamGate = useTeamGate();
 
+  // Refresh con cancellation guard: si el user navega tabs rápido, el
+  // useFocusEffect dispara reload() varias veces. Sin guard, el primer
+  // fetch que termina con datos stale puede pisar el state correcto y
+  // dejar la pantalla con loading colgado o data desfasada. El cleanup
+  // del useFocusEffect marca `cancelled = true` cuando la screen pierde
+  // foco; los setState posteriores se ignoran.
   useFocusEffect(
     useCallback(() => {
-      reload();
-    }, [reload]),
+      if (clubTeams.length === 0) {
+        setOverviews([]);
+        setLoading(false);
+        return;
+      }
+      let cancelled = false;
+      (async () => {
+        setLoading(true);
+        try {
+          const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
+          if (!cancelled) setOverviews(data);
+        } catch (e) {
+          if (!cancelled) console.warn('club overview', e);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [clubTeams]),
   );
 
   // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
@@ -224,6 +262,12 @@ export const ClubDashboardScreen = ({
               onAdd={() => navigation.navigate('CreateTeamFromClub')}
               addLabel="Crear nuevo equipo"
             />
+            {coverage.hasActiveSub ? (
+              <Text style={styles.coverageLine}>
+                Cubiertos por tu plan: {coverage.used}/{coverage.quota}
+                {!coverage.hasFreeSlot ? ' · mejora el plan para más' : ''}
+              </Text>
+            ) : null}
             {overviews.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>Aún no hay equipos</Text>
@@ -238,11 +282,37 @@ export const ClubDashboardScreen = ({
                     key={o.team.id}
                     overview={o}
                     last={idx === overviews.length - 1}
-                    onManage={() => openManage(o.team.id, o.team.name)}
+                    uncovered={coverage.hasActiveSub && !o.team.covered}
+                    onManage={teamGate(
+                      o.team,
+                      () => openManage(o.team.id, o.team.name),
+                      'club_manage_team',
+                    )}
                   />
                 ))}
               </View>
             )}
+
+            {/* ZONA DE PELIGRO · borrar club (cascada irreversible) */}
+            {club ? (
+              <View style={styles.dangerZone}>
+                <Text style={styles.dangerEyebrow}>ZONA DE PELIGRO</Text>
+                <Pressable
+                  onPress={() => setDeleteOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Borrar club"
+                  style={({ pressed }) => [
+                    styles.deleteClubBtn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={styles.deleteClubLabel}>Borrar club</Text>
+                </Pressable>
+                <Text style={styles.dangerHint}>
+                  Elimina el club y todo su contenido. No se puede deshacer.
+                </Text>
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -252,6 +322,14 @@ export const ClubDashboardScreen = ({
         teamId={membersSheet?.teamId ?? null}
         teamName={membersSheet?.teamName ?? null}
         onClose={() => setMembersSheet(null)}
+      />
+
+      <DeleteClubSheet
+        visible={deleteOpen}
+        clubName={club?.name ?? ''}
+        loading={deleting}
+        onConfirm={handleDeleteClub}
+        onCancel={() => setDeleteOpen(false)}
       />
     </View>
   );
@@ -420,8 +498,9 @@ const LastResultCard: React.FC<{
 const TeamRow: React.FC<{
   overview: ClubTeamOverview;
   last: boolean;
+  uncovered?: boolean;
   onManage: () => void;
-}> = ({ overview, last, onManage }) => {
+}> = ({ overview, last, uncovered, onManage }) => {
   const { team, playersCount } = overview;
   const meta =
     [team.category, team.gender, team.group_name && `Grupo ${team.group_name}`]
@@ -454,9 +533,14 @@ const TeamRow: React.FC<{
         <Text style={styles.teamKpi} numberOfLines={1}>
           {playersCount} {playersCount === 1 ? 'jugador' : 'jugadores'}
         </Text>
+        {uncovered ? (
+          <Text style={styles.uncoveredBadge} numberOfLines={1}>
+            NO CUBIERTO · toca para cubrir
+          </Text>
+        ) : null}
       </View>
       <View style={styles.manageBtn}>
-        <IconPencil size={14} color={Colors.accent} />
+        <IconPencil size={14} color={uncovered ? Colors.warning : Colors.accent} />
       </View>
     </Pressable>
   );
@@ -731,6 +815,57 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.hair,
     overflow: 'hidden',
+  },
+  dangerZone: {
+    marginHorizontal: 22,
+    marginTop: 34,
+    alignItems: 'center',
+  },
+  dangerEyebrow: {
+    fontFamily: Fonts.mono,
+    color: Colors.error,
+    fontSize: 11,
+    letterSpacing: 2,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  deleteClubBtn: {
+    alignSelf: 'stretch',
+    height: 50,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.error + '66',
+    backgroundColor: Colors.error + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteClubLabel: {
+    color: Colors.error,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dangerHint: {
+    color: Colors.textFaint,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  coverageLine: {
+    fontFamily: Fonts.mono,
+    color: Colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.3,
+    marginHorizontal: 22,
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  uncoveredBadge: {
+    fontFamily: Fonts.mono,
+    color: Colors.warning,
+    fontSize: 10,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    marginTop: 3,
   },
   row: {
     flexDirection: 'row',

@@ -19,10 +19,12 @@ import {
   IconChevron,
   IconX,
   IconSearch,
+  IconShare,
   BottomSheet,
   ScanSheet,
   Toggle,
 } from '@components/ui';
+import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
@@ -33,6 +35,8 @@ import {
   sanitizePtsInput,
 } from '@core/utils/validation';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
+import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 
@@ -48,15 +52,39 @@ export const TeamScreen = () => {
   const [editing, setEditing] = useState<Player | null>(null);
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  // Reverse trial: invitar jugadores con código es premium → gate al paywall.
+  const gate = usePremiumGate();
+  const openInvite = gate(() => setInviting(true), 'invite_create');
 
   const handleBulkPlayers = async (scanned: ScannedPlayer[]) => {
-    for (const p of scanned) {
-      await addPlayer({
-        name: p.name.trim(),
-        pts: p.pts ?? 0,
-        position: p.position ?? 'Ambos',
-        available: true,
+    // UPSERT por nombre normalizado: si el jugador ya existe en la
+    // plantilla, actualizamos sus puntos (caso típico: re-escanear el
+    // ranking FEP al subir nueva tirada de puntos). Si no, INSERT.
+    try {
+      const { added, updated } = await bulkUpsertPlayers({
+        scanned,
+        existing: players,
+        addPlayer,
+        updatePlayer,
       });
+      if (added > 0 && updated > 0) {
+        toast.success(
+          'Plantilla actualizada',
+          `${updated} ${updated === 1 ? 'actualizado' : 'actualizados'} · ${added} ${added === 1 ? 'nuevo' : 'nuevos'}`,
+        );
+      } else if (updated > 0) {
+        toast.success(
+          'Puntos actualizados',
+          `${updated} ${updated === 1 ? 'jugador' : 'jugadores'}`,
+        );
+      } else if (added > 0) {
+        toast.success(
+          `${added} ${added === 1 ? 'jugador añadido' : 'jugadores añadidos'}`,
+        );
+      }
+    } catch (e: any) {
+      toast.error('Error al importar', e?.message ?? 'Inténtalo de nuevo.');
     }
   };
 
@@ -94,6 +122,15 @@ export const TeamScreen = () => {
             'EQUIPO'}
         </Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={openInvite}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Invitar jugadores con código"
+            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconShare size={14} color={Colors.accent} />
+          </Pressable>
           <Pressable
             onPress={() => setScanning(true)}
             style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
@@ -330,6 +367,13 @@ export const TeamScreen = () => {
         teamName={team?.name}
         onConfirm={handleBulkPlayers}
       />
+
+      <InvitePlayersSheet
+        open={inviting}
+        teamId={team?.id ?? null}
+        teamName={team?.name ?? null}
+        onClose={() => setInviting(false)}
+      />
     </View>
   );
 };
@@ -429,7 +473,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
           value={pts}
           onChangeText={(v) => setPts(sanitizePtsInput(v))}
           keyboardType="number-pad"
-          maxLength={4}
+          maxLength={5}
           style={[styles.sheetInput, { fontFamily: Fonts.mono }]}
           placeholderTextColor={Colors.textFaint}
         />
@@ -539,7 +583,7 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
           value={pts}
           onChangeText={(v) => setPts(sanitizePtsInput(v))}
           keyboardType="number-pad"
-          maxLength={4}
+          maxLength={5}
           style={[styles.sheetInput, { fontFamily: Fonts.mono }]}
         />
       </FormRow>

@@ -13,6 +13,7 @@ import { PlayerClaimGate } from '@features/onboarding/components/PlayerClaimGate
 import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
 import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
 import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
+import { MyDataScreen } from '@features/profile/screens/MyDataScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -80,6 +81,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="ClubBilling"
               component={ClubBillingScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="MyData"
+              component={MyDataScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

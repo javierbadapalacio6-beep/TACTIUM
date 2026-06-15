@@ -146,11 +146,14 @@ export const TrialStartedModal: React.FC = () => {
   const trialEnd = currentSub.trial_end ?? currentSub.current_period_end;
   const postTrialPrice = formatEur(plan.priceMonthlyEur);
 
+  // Tras arrancar el trial, lo que más activa al capitán es la pista
+  // concreta de QUÉ hacer ahora. Sustituimos value-props genéricas por
+  // un mini-checklist de los 3 pasos que llevan al "aha moment" (lineup
+  // sugerida con parejas equilibradas tras escanear el calendario).
   const valueProps = [
-    'Alineaciones inteligentes con auto-balance',
-    'Variantes ilimitadas por jornada',
-    'Histórico completo de temporadas',
-    'Notificaciones push a tus jugadores',
+    'Añade los jugadores de tu equipo',
+    'Escanea el calendario de tu liga',
+    'Recibe tu primera alineación sugerida',
   ];
 
   return (

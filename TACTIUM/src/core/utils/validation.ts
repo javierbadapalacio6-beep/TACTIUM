@@ -2,7 +2,11 @@
 // regla (ej. cap de pts) se aplique en todas las pantallas.
 
 export const PTS_MIN = 0;
-export const PTS_MAX = 1000;
+// Top mundial federado está sobre los 15000-20000 pts y subiendo. 99999
+// es un sanity upper-bound (5 dígitos) contra entradas absurdas (typos, OCR
+// mal leído), no un cap real. Si la escala FEP cambia a futuro, sube esto
+// (y el maxLength de los inputs de pts) sin tocar nada más.
+export const PTS_MAX = 99999;
 
 export const NAME_MAX_LENGTH = 64;
 export const TEAM_NAME_MAX_LENGTH = 50;

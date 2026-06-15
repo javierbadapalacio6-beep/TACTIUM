@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
+import { supabase } from '@core/supabase/client';
 import * as TeamsApi from '@core/services/teams';
 import * as PlayersApi from '@core/services/players';
 import * as TeamMembersApi from '@core/services/teamMembers';
@@ -72,6 +74,12 @@ interface TeamState {
     keepOnboardingState?: boolean;
   }) => Promise<Team>;
 
+  /** Cubre un equipo de club con el plan (permanente) y recarga teams. */
+  coverTeam: (teamId: string) => Promise<void>;
+
+  /** Borra un equipo (cascada) y recarga teams. */
+  deleteTeam: (teamId: string) => Promise<void>;
+
   addPlayer: (data: {
     name: string;
     pts: number;
@@ -88,6 +96,19 @@ interface TeamState {
    * seguir usando `setPlayerAvail`.
    */
   setSelfAvail: (id: string, available: boolean) => Promise<void>;
+
+  // ── Realtime ──────────────────────────────────────────────────────────
+  // Canal Supabase suscrito a cambios en `players` del team activo. El
+  // caso clave es que un player se marque (no) disponible desde su móvil
+  // y el captain lo vea en su Lineup/Availability sin recargar.
+  playersChannel: RealtimeChannel | null;
+  /**
+   * Sustituye el canal previo (si lo hay) por uno nuevo filtrado al teamId
+   * dado. Llamar con teamId distinto al actual cierra el viejo y abre uno
+   * nuevo. Refresca `players` ante cualquier evento INSERT/UPDATE/DELETE.
+   */
+  subscribePlayersRealtime: (teamId: string) => void;
+  unsubscribePlayersRealtime: () => void;
 }
 
 /**
@@ -210,6 +231,13 @@ function findFirstTeamForRole(
   return null;
 }
 
+// Module-level guard contra race conditions en `setActiveTeam`. Cada
+// llamada actualiza esta ref antes de empezar el fetch; los sets que
+// vienen detrás solo se aplican si su teamId sigue siendo "el último
+// pedido". Sin esto, taps rápidos entre teams dejaban la pantalla en
+// blanco al pisarse las promises (player con team_id desfasado).
+let lastSetActiveTeamRequest: string | null = null;
+
 export const useTeamStore = create<TeamState>()(
   persist(
     (set, get) => ({
@@ -280,7 +308,9 @@ export const useTeamStore = create<TeamState>()(
         }
       },
 
-      reset: () =>
+      reset: () => {
+        const ch = get().playersChannel;
+        if (ch) ch.unsubscribe();
         set({
           team: null,
           players: [],
@@ -295,7 +325,9 @@ export const useTeamStore = create<TeamState>()(
           hasLoadedOnce: false,
           isOnboarding: false,
           error: null,
-        }),
+          playersChannel: null,
+        });
+      },
 
       finishOnboarding: () => set({ isOnboarding: false }),
 
@@ -303,30 +335,42 @@ export const useTeamStore = create<TeamState>()(
         const teams = get().teams;
         const team = teams.find((t) => t.id === teamId);
         if (!team) throw new Error('Equipo no encontrado');
+
+        // Race-condition guard: si el user hace tap rápido entre teams
+        // (típico al navegar Club ↔ ClubTeams ↔ Equipo en cascada), dos
+        // `setActiveTeam` corren en paralelo y la promise que termina
+        // segunda pisa el state correcto → pantallas en blanco porque
+        // `team.id !== players[0].team_id`. Trackeamos el último teamId
+        // pedido en una ref de módulo y descartamos los sets desfasados.
+        lastSetActiveTeamRequest = teamId;
+
+        // Optimistic primer set: cambiamos team + activeTeamId YA y
+        // limpiamos players/myPlayer para que las pantallas vean estado
+        // de "cargando" en lugar de datos del team anterior.
+        set({
+          team,
+          activeTeamId: team.id,
+          players: [],
+          myPlayerId: null,
+          myPlayerLoaded: false,
+        });
+
         const players = await PlayersApi.fetchPlayers(team.id);
+        if (lastSetActiveTeamRequest !== teamId) return;
+
         const clubIds = useClubStore.getState().clubs.map((c) => c.id);
         const memberships = get().memberships;
-
-        // Si el override actual ya no aplica al nuevo team, se limpia.
         let override = get().activeRoleOverride;
         if (override && !roleAppliesToTeam(override, team, memberships, clubIds)) {
           override = null;
         }
         const activeRole = deriveActiveRole(team, memberships, clubIds, override);
 
-        // Reset claim hasta resolver — evita ventana en la que el gate
-        // antiguo decida sobre el nuevo equipo.
-        set({
-          team,
-          activeTeamId: team.id,
-          players,
-          activeRole,
-          activeRoleOverride: override,
-          myPlayerId: null,
-          myPlayerLoaded: false,
-        });
+        if (lastSetActiveTeamRequest !== teamId) return;
+        set({ players, activeRole, activeRoleOverride: override });
 
         const myPlayer = await resolveMyPlayerId(team, activeRole);
+        if (lastSetActiveTeamRequest !== teamId) return;
         set({ myPlayerId: myPlayer.id, myPlayerLoaded: myPlayer.loaded });
       },
 
@@ -399,6 +443,19 @@ export const useTeamStore = create<TeamState>()(
         return team;
       },
 
+      coverTeam: async (teamId) => {
+        await TeamsApi.coverTeam(teamId);
+        // Recargamos para traer el flag `covered` actualizado a todos los teams.
+        await get().loadForUser();
+      },
+
+      deleteTeam: async (teamId) => {
+        await TeamsApi.deleteTeam(teamId);
+        // loadForUser se auto-cura: si el equipo borrado era el activo, elige
+        // otro (o deja null si no quedan).
+        await get().loadForUser();
+      },
+
       addPlayer: async (data) => {
         const team = get().team;
         if (!team) throw new Error('No team selected');
@@ -456,6 +513,64 @@ export const useTeamStore = create<TeamState>()(
             ),
           }));
           throw e;
+        }
+      },
+
+      // ── Realtime: players del team activo ────────────────────────────
+      playersChannel: null,
+
+      subscribePlayersRealtime: (teamId) => {
+        // Cierra el canal previo si existía (típico al cambiar de equipo
+        // activo o al re-login con otro usuario). `removeChannel` libera
+        // la referencia interna del cliente — `unsubscribe()` solo cierra
+        // el WS, y reusar el mismo topic luego lanza:
+        //   "cannot add postgres_changes callbacks after subscribe()".
+        const existing = get().playersChannel;
+        if (existing) supabase.removeChannel(existing);
+
+        // Refetch completo de players ante cualquier evento. La lista por
+        // equipo es pequeña (<30) así que un refetch es más simple y
+        // robusto que aplicar el diff manualmente (especialmente para
+        // INSERT/DELETE que requerirían reordenar). RLS ya filtra a lo
+        // que el user puede ver.
+        const refresh = async () => {
+          try {
+            const players = await PlayersApi.fetchPlayers(teamId);
+            // Solo aplicamos si seguimos en el mismo team activo — un
+            // evento late de un team anterior no debe pisar el actual.
+            if (get().activeTeamId === teamId) {
+              set({ players });
+            }
+          } catch (e) {
+            console.warn('players realtime refresh', e);
+          }
+        };
+
+        // Sufijo random en el topic: en dev StrictMode dispara este
+        // efecto dos veces y reusar el mismo nombre devuelve el canal
+        // anterior medio-vivo, que ya está marcado como suscrito.
+        const topic = `players:team:${teamId}:${Math.random().toString(36).slice(2, 8)}`;
+        const channel = supabase
+          .channel(topic)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'players',
+              filter: `team_id=eq.${teamId}`,
+            },
+            refresh,
+          )
+          .subscribe();
+        set({ playersChannel: channel });
+      },
+
+      unsubscribePlayersRealtime: () => {
+        const ch = get().playersChannel;
+        if (ch) {
+          supabase.removeChannel(ch);
+          set({ playersChannel: null });
         }
       },
     }),

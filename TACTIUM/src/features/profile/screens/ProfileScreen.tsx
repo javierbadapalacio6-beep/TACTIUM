@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Pressable,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useNavigation, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,13 +27,17 @@ import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
+import { initialsOf } from '@core/utils/format';
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as PlayersApi from '@core/services/players';
 import * as ProfileApi from '@core/services/profile';
+import * as AvatarApi from '@core/services/avatar';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
+import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import type { Database } from '@core/supabase/database.types';
 import type { RootStackParamList } from '@navigation/types';
 
@@ -70,52 +76,48 @@ export const ProfileScreen = () => {
   const [loadingStats, setLoadingStats] = useState(true);
   const [redeemOpen, setRedeemOpen]     = useState(false);
   const [claimOpen, setClaimOpen]       = useState(false);
+  const [inviteOpen, setInviteOpen]     = useState(false);
+  // Reverse trial: invitar jugadores es premium → gate al paywall. Canjear /
+  // vincularse con código (redeem) sigue siendo gratis (el jugador no paga).
+  const gate = usePremiumGate();
+  const openInvite = gate(() => setInviteOpen(true), 'invite_create');
   const [unlinking, setUnlinking]       = useState(false);
-  // Notificaciones: state local sincronizado con profiles.notifications_enabled.
-  // Optimistic on toggle, revert on error.
-  const [notifEnabled, setNotifEnabled] = useState<boolean | null>(null);
-  const [notifSaving, setNotifSaving]   = useState(false);
+  const [deleting, setDeleting]         = useState(false);
+  // Avatar: URL pública del avatar actual + flag de subida en curso.
+  // Se hidrata desde profiles.avatar_url en el focus effect que ya carga
+  // el profile (notif flag). Cambia tras uploadMyAvatar/deleteMyAvatar.
+  const [avatarUrl, setAvatarUrl]       = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy]     = useState(false);
+  // Guard de carga del profile (avatar). Una sola hidratación por ciclo de
+  // focus. Antes este guard vivía sobre el flag de notificaciones, retirado
+  // del UI hasta que exista push real — el toggle solo persistía un booleano
+  // sin disparar ninguna notificación, así que prometía algo que no ocurre.
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  // Hidratamos el flag desde DB al primer focus de la pantalla. Usar
-  // useFocusEffect en vez de useEffect evita que el fetch compita con
-  // el primer paint en iPhone Expo Go (bridge legacy): el screen se
-  // pinta limpio y este fetch arranca después.
-  const notifLoadedRef = useRef(false);
+  // Hidratamos el avatar del profile SOLO una vez por ciclo de focus. Sin
+  // ref-guard: el state es la fuente de verdad. Antes había una
+  // `notifLoadedRef` que quedaba stale cuando la screen pierde+gana focus
+  // rápido y dejaba Profile en blanco al revisitar.
   useFocusEffect(
     useCallback(() => {
-      if (notifLoadedRef.current) return;
-      notifLoadedRef.current = true;
+      if (profileLoaded) return;
       let cancelled = false;
       (async () => {
         try {
           const p = await ProfileApi.fetchMyProfile();
-          if (!cancelled) setNotifEnabled(p?.notifications_enabled ?? true);
+          if (!cancelled) {
+            setAvatarUrl(p?.avatar_url ?? null);
+            setProfileLoaded(true);
+          }
         } catch {
-          if (!cancelled) setNotifEnabled(true);
+          if (!cancelled) setProfileLoaded(true);
         }
       })();
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [profileLoaded]),
   );
-
-  const handleToggleNotifications = async (next: boolean) => {
-    if (notifSaving) return;
-    setNotifEnabled(next); // optimistic
-    setNotifSaving(true);
-    try {
-      await ProfileApi.setNotificationsEnabled(next);
-    } catch (e: any) {
-      setNotifEnabled(!next); // revert
-      toast.error(
-        'No se pudo guardar',
-        e?.message ?? 'Inténtalo de nuevo.',
-      );
-    } finally {
-      setNotifSaving(false);
-    }
-  };
 
   const openExternalUrl = (url: string) => {
     Linking.openURL(url).catch(() =>
@@ -171,20 +173,17 @@ export const ProfileScreen = () => {
     );
   };
 
-  // Carga de role + season + matchdays. Movido a useFocusEffect por la
-  // misma razón que el fetchMyProfile: en iPhone Expo Go los useEffect
-  // async durante el mount competían con el primer paint del screen y
-  // dejaban Profile "stuck" en verde oscuro al cambiar de tab.
-  // Re-fetchea cada vez que el team cambia O cuando se enfoca la pantalla
-  // por primera vez con un team válido — mantiene el comportamiento original.
-  const lastLoadedTeamIdRef = useRef<string | null>(null);
+  // Carga de role + season + matchdays. Refetcha en CADA focus + cuando
+  // cambian team o user. Antes había una `lastLoadedTeamIdRef` que
+  // intentaba evitar re-fetch innecesario, pero el ref quedaba stale en
+  // navegación rápida (Inicio → Profile → Inicio → Profile) y dejaba
+  // Profile en blanco con `loadingStats` perdido. La optimización del
+  // ref ahorraba ~200ms cada N focus; el coste del bug compensaba.
+  // Si la performance importa más adelante, mejor cachear por team.id
+  // en un store global con TTL que con un ref imperativo.
   useFocusEffect(
     useCallback(() => {
       if (!team || !user) return;
-      // Skip si ya cargamos para este team (evita re-fetch innecesario
-      // al volver al Perfil sin haber cambiado de equipo).
-      if (lastLoadedTeamIdRef.current === team.id) return;
-      lastLoadedTeamIdRef.current = team.id;
       let cancelled = false;
       const load = async () => {
         setLoadingStats(true);
@@ -221,14 +220,6 @@ export const ProfileScreen = () => {
     }, [team, user]),
   );
 
-  // Cuando cambias de equipo (Profile montado en background), invalida la
-  // ref para forzar re-fetch al siguiente focus.
-  useEffect(() => {
-    if (team && lastLoadedTeamIdRef.current !== team.id) {
-      lastLoadedTeamIdRef.current = null;
-    }
-  }, [team]);
-
   const played  = matchdays.filter((m) => m.outcome !== null).length;
   const wins    = matchdays.filter((m) => m.outcome === 'win').length;
   const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
@@ -238,18 +229,146 @@ export const ProfileScreen = () => {
     user?.email?.split('@')[0] ??
     'Capitán';
 
-  const initials = displayName
-    .split(' ')
-    .map((p: string) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const initials = initialsOf(displayName);
 
   const confirmLogout = () => {
     Alert.alert('Cerrar sesión', '¿Estás seguro?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Cerrar sesión', style: 'destructive', onPress: () => signOut() },
     ]);
+  };
+
+  // ─── Avatar · pick / upload / remove ───────────────────────────────────
+  // Sube una imagen al bucket `avatars`. ImagePicker ya devuelve el URI
+  // local; el service uploadMyAvatar lo convierte a ArrayBuffer, sube al
+  // bucket, hace cleanup de archivos antiguos y actualiza profiles.
+  const handlePickedImage = async (uri: string) => {
+    setAvatarBusy(true);
+    try {
+      const url = await AvatarApi.uploadMyAvatar(uri);
+      setAvatarUrl(url);
+      toast.success('Foto actualizada');
+    } catch (e: any) {
+      Alert.alert(
+        'No se pudo subir',
+        e?.message ?? 'Inténtalo de nuevo.',
+      );
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permiso requerido',
+        'Necesitamos acceso a la cámara para hacer una foto.',
+      );
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    await handlePickedImage(result.assets[0].uri);
+  };
+
+  const handlePickFromLibrary = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permiso requerido',
+        'Necesitamos acceso a tus fotos para elegir una.',
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    await handlePickedImage(result.assets[0].uri);
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarBusy(true);
+    try {
+      await AvatarApi.deleteMyAvatar();
+      setAvatarUrl(null);
+      toast.success('Foto eliminada');
+    } catch (e: any) {
+      Alert.alert(
+        'No se pudo eliminar',
+        e?.message ?? 'Inténtalo de nuevo.',
+      );
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const openAvatarPicker = () => {
+    if (avatarBusy) return;
+    const buttons: any[] = [
+      { text: 'Hacer foto', onPress: handleTakePhoto },
+      { text: 'Elegir de galería', onPress: handlePickFromLibrary },
+    ];
+    if (avatarUrl) {
+      buttons.push({
+        text: 'Quitar foto',
+        style: 'destructive',
+        onPress: handleRemoveAvatar,
+      });
+    }
+    buttons.push({ text: 'Cancelar', style: 'cancel' });
+    Alert.alert('Foto de perfil', undefined, buttons);
+  };
+
+  const confirmDeleteAccount = () => {
+    if (deleting) return;
+    Alert.alert(
+      'Eliminar cuenta',
+      'Esto borrará tu perfil, equipos, jornadas, alineaciones, resultados e invitaciones.\n\nESTA ACCIÓN ES IRREVERSIBLE.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Continuar',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '¿Seguro al 100%?',
+              'No podremos recuperar tus datos. Si tienes una suscripción activa, seguirá activa: cancélala en App Store o Google Play para dejar de pagar.',
+              [
+                { text: 'Volver', style: 'cancel' },
+                {
+                  text: 'Sí, eliminar cuenta',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    try {
+                      await ProfileApi.deleteMyAccount();
+                      await signOut();
+                    } catch (e: any) {
+                      Alert.alert(
+                        'No se puede eliminar',
+                        e?.message ?? 'Inténtalo de nuevo.',
+                      );
+                    } finally {
+                      setDeleting(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const teamMeta = [team?.category, team?.league].filter(Boolean).join(' · ') || null;
@@ -280,16 +399,42 @@ export const ProfileScreen = () => {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Avatar */}
+        {/* Avatar — pressable: abre Alert con cámara/galería/quitar. */}
         <View style={styles.avatarBlock}>
-          <LinearGradient
-            colors={[Colors.primary, Colors.bgCard2]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.avatar}
+          <Pressable
+            onPress={openAvatarPicker}
+            disabled={avatarBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Cambiar foto de perfil"
+            style={({ pressed }) => [
+              styles.avatarPressable,
+              pressed && !avatarBusy && { opacity: 0.85 },
+            ]}
           >
-            <Text style={styles.avatarText}>{initials}</Text>
-          </LinearGradient>
+            {avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <LinearGradient
+                colors={[Colors.primary, Colors.bgCard2]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatar}
+              >
+                <Text style={styles.avatarText}>{initials}</Text>
+              </LinearGradient>
+            )}
+            {/* Badge cámara: indicador visual de que es interactivo. */}
+            <View style={styles.avatarEditBadge}>
+              {avatarBusy ? (
+                <ActivityIndicator size="small" color={Colors.accent} />
+              ) : (
+                <Text style={styles.avatarEditBadgeIcon}>📷</Text>
+              )}
+            </View>
+          </Pressable>
           <Text style={styles.name}>{displayName}</Text>
           <Text style={styles.email}>{user?.email ?? '—'}</Text>
           {role ? (
@@ -430,49 +575,77 @@ export const ProfileScreen = () => {
           </>
         ) : null}
 
-        {/* Suscripción */}
-        <SubscriptionCard
-          activeRole={activeRole}
-          userId={userId}
-          onPressUser={() => navigation.navigate('Subscription')}
-          onPressClub={() => navigation.navigate('ClubBilling')}
-        />
+        {/* Suscripción · Oculta para captains invitados por un club
+            (team.club_id !== null). Ese capitán está cubierto por la sub
+            del club que lo invitó — no paga nada por su cuenta, y darle
+            opciones de gestión solo confunde. La sub real la gestiona el
+            club_admin desde su Modo Club. Para el captain independiente
+            (club_id === null) sí mostramos: tiene su plan Capitán propio. */}
+        {!(activeRole === 'captain' && team?.club_id) ? (
+          <SubscriptionCard
+            activeRole={activeRole}
+            userId={userId}
+            canBeClubAdmin={availableRoles.includes('club_admin')}
+            onSwitchToClubMode={() => setActiveRoleOverride('club_admin')}
+            onPressUser={() => navigation.navigate('Subscription')}
+            onPressClub={() => navigation.navigate('ClubBilling')}
+          />
+        ) : null}
 
         {/* Invitaciones */}
         <Text style={styles.sectionLabel}>INVITACIONES</Text>
-        <Pressable
-          onPress={() => setRedeemOpen(true)}
-          style={({ pressed }) => [
-            styles.redeemCard,
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <View style={styles.redeemBadge}>
-            <Text style={styles.redeemBadgeText}>+</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.redeemTitle}>Unirme con código</Text>
-            <Text style={styles.redeemHint} numberOfLines={1}>
-              Si te han invitado a otro equipo
-            </Text>
-          </View>
-          <IconChevron size={14} color={Colors.textFaint} />
-        </Pressable>
+        {/* "Invitar jugadores" solo aplica a captain con equipo activo:
+             el club_admin tiene su propio flujo desde el ClubDashboard
+             (TeamMembersSheet con roles), y el player no puede invitar. */}
+        <View style={styles.invitationsStack}>
+          {activeRole === 'captain' && team ? (
+            <Pressable
+              onPress={openInvite}
+              style={({ pressed }) => [
+                styles.redeemCard,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <View style={styles.redeemBadge}>
+                <Text style={styles.redeemBadgeText}>↗</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.redeemTitle}>Invitar jugadores</Text>
+                <Text style={styles.redeemHint} numberOfLines={1}>
+                  Genera códigos para que se unan a tu equipo
+                </Text>
+              </View>
+              <IconChevron size={14} color={Colors.textFaint} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => setRedeemOpen(true)}
+            style={({ pressed }) => [
+              styles.redeemCard,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.redeemBadge}>
+              <Text style={styles.redeemBadgeText}>+</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.redeemTitle}>Unirme con código</Text>
+              <Text style={styles.redeemHint} numberOfLines={1}>
+                Si te han invitado a otro equipo
+              </Text>
+            </View>
+            <IconChevron size={14} color={Colors.textFaint} />
+          </Pressable>
+        </View>
 
         {/* Cuenta */}
         <Text style={styles.sectionLabel}>CUENTA</Text>
         <SettingsList
           items={[
             {
-              label: 'Notificaciones',
-              trailing: 'toggle',
-              value: notifEnabled ?? true,
-              onToggle: handleToggleNotifications,
-              accessibilityLabel: 'Activar o desactivar notificaciones push',
+              label: 'Mis datos',
+              onPress: () => navigation.navigate('MyData'),
             },
-            { label: 'Apariencia', detail: 'Oscuro', trailing: 'soon' },
-            { label: 'Idioma', detail: 'Español', trailing: 'soon' },
-            { label: 'Privacidad', trailing: 'soon' },
           ]}
         />
 
@@ -480,12 +653,23 @@ export const ProfileScreen = () => {
         <SettingsList
           items={[
             {
-              label: 'Centro de ayuda',
-              onPress: () => openExternalUrl('https://tactium.io/help'),
+              label: 'Preguntas frecuentes',
+              onPress: () => openExternalUrl('https://tactium.io/#faq'),
             },
             {
-              label: 'Términos y privacidad',
-              onPress: () => openExternalUrl('https://tactium.io/legal'),
+              label: 'Contactar con soporte',
+              onPress: () =>
+                openExternalUrl('mailto:hola@tactium.io?subject=Soporte%20TACTIUM'),
+            },
+            {
+              label: 'Términos de uso',
+              onPress: () =>
+                openExternalUrl('https://tactium.io/legal/terminos'),
+            },
+            {
+              label: 'Política de privacidad',
+              onPress: () =>
+                openExternalUrl('https://tactium.io/legal/privacidad'),
             },
             { label: 'Versión', detail: '1.0.0', trailing: 'static' },
           ]}
@@ -498,6 +682,36 @@ export const ProfileScreen = () => {
           <Text style={styles.logoutLabel}>Cerrar sesión</Text>
         </Pressable>
 
+        {/* ── ZONA DE PELIGRO · Eliminar cuenta ───────────────────────────
+            Requisito Apple Guideline 5.1.1(v) y Google equivalente: si la
+            app permite registro, DEBE permitir eliminar la cuenta desde la
+            propia app. Doble confirmación (alert + alert) para evitar
+            accidentes irreversibles. Bloqueado server-side si hay sub
+            premium activa (Apple/Google seguirían cobrando). */}
+        <Text style={styles.dangerLabel}>ZONA DE PELIGRO</Text>
+        <Pressable
+          onPress={confirmDeleteAccount}
+          disabled={deleting}
+          accessibilityRole="button"
+          accessibilityLabel="Eliminar mi cuenta"
+          style={({ pressed }) => [
+            styles.deleteAccount,
+            pressed && !deleting && { opacity: 0.85 },
+            deleting && { opacity: 0.5 },
+          ]}
+        >
+          {deleting ? (
+            <ActivityIndicator size="small" color={Colors.error} />
+          ) : (
+            <Text style={styles.deleteAccountLabel}>Eliminar cuenta</Text>
+          )}
+        </Pressable>
+        <Text style={styles.deleteAccountHint}>
+          Borrarás tu perfil y todos tus datos. Si tienes una suscripción
+          activa, recuerda cancelarla en App Store o Google Play para dejar
+          de pagar.
+        </Text>
+
         <Text style={styles.signature}>
           {'TACTIUM · ' + players.length + ' JUGADORES' + (activeSeason ? ' · ' + activeSeason.name.toUpperCase() : '')}
         </Text>
@@ -506,6 +720,13 @@ export const ProfileScreen = () => {
       <RedeemInvitationSheet
         open={redeemOpen}
         onClose={() => setRedeemOpen(false)}
+      />
+
+      <InvitePlayersSheet
+        open={inviteOpen}
+        teamId={team?.id ?? null}
+        teamName={team?.name ?? null}
+        onClose={() => setInviteOpen(false)}
       />
 
       <ClaimPlayerSheet
@@ -534,9 +755,18 @@ const ProfileStat: React.FC<{ label: string; value: string; highlight?: boolean 
 const SubscriptionCard: React.FC<{
   activeRole: ActiveRole | null;
   userId: string | null;
+  canBeClubAdmin: boolean;
+  onSwitchToClubMode: () => void;
   onPressUser: () => void;
   onPressClub: () => void;
-}> = ({ activeRole, userId, onPressUser, onPressClub }) => {
+}> = ({
+  activeRole,
+  userId,
+  canBeClubAdmin,
+  onSwitchToClubMode,
+  onPressUser,
+  onPressClub,
+}) => {
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
   // Sub activa propia o del club: mostramos lo más relevante.
@@ -561,7 +791,38 @@ const SubscriptionCard: React.FC<{
 
   const plan = activeSub ? PLAN_BY_TIER[activeSub.plan_tier] : null;
   const isClubAdmin = activeRole === 'club_admin';
-  const onPress = isClubAdmin ? onPressClub : onPressUser;
+  // Caso especial: el usuario es club_admin a nivel de permisos pero está
+  // operando en modo capitán. La gestión de suscripción del club vive en
+  // Modo Club, así que en vez de abrir SubscriptionScreen (que es la sub
+  // individual) le proponemos cambiar de modo. Evita pagar dos planes.
+  const isClubAdminInCaptainMode = canBeClubAdmin && activeRole === 'captain';
+  const handlePress = () => {
+    if (isClubAdminInCaptainMode) {
+      Alert.alert(
+        'Estás en modo capitán',
+        'La suscripción del club se gestiona desde Modo Club. ¿Cambiamos de modo?',
+        [
+          { text: 'Ahora no', style: 'cancel' },
+          {
+            text: 'Cambiar a Modo Club',
+            onPress: () => {
+              onSwitchToClubMode();
+              // Tras el switch, el componente re-renderiza con activeRole
+              // = 'club_admin' y el siguiente tap del usuario abrirá
+              // ClubBillingScreen directamente. No navegamos aquí para
+              // que el usuario confirme visualmente el cambio antes.
+            },
+          },
+        ],
+      );
+      return;
+    }
+    if (isClubAdmin) {
+      onPressClub();
+    } else {
+      onPressUser();
+    }
+  };
 
   // Días restantes si la sub está en trial. `null` si no aplica.
   // Usamos `trial_end` cuando exista, si no caemos a `current_period_end`
@@ -593,7 +854,7 @@ const SubscriptionCard: React.FC<{
     <>
       <Text style={styles.sectionLabel}>SUSCRIPCIÓN</Text>
       <Pressable
-        onPress={onPress}
+        onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel={
           activeSub
@@ -742,12 +1003,35 @@ const styles = StyleSheet.create({
   scroll:  { paddingHorizontal: 22, paddingTop: 18 },
 
   avatarBlock: { alignItems: 'center', marginBottom: 24 },
+  avatarPressable: {
+    marginBottom: 14,
+    position: 'relative',
+  },
   avatar: {
     width: 96, height: 96, borderRadius: 48,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: Colors.accent40,
     shadowColor: Colors.accent, shadowOpacity: 0.25, shadowRadius: 30, shadowOffset: { width: 0, height: 0 },
-    marginBottom: 14,
+  },
+  avatarImage: {
+    width: 96, height: 96, borderRadius: 48,
+    borderWidth: 2, borderColor: Colors.accent40,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 2,
+    borderColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEditBadgeIcon: {
+    fontSize: 14,
   },
   avatarText:   { color: Colors.accent, fontSize: 32, fontWeight: '700', letterSpacing: -0.5 },
   name:         { color: Colors.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 },
@@ -795,6 +1079,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginTop: 8,
     lineHeight: 16,
+  },
+  invitationsStack: {
+    gap: 10,
   },
   redeemCard: {
     flexDirection: 'row',
@@ -986,5 +1273,42 @@ const styles = StyleSheet.create({
 
   logout:      { marginTop: 24, height: 52, borderRadius: Radius.lg, borderWidth: 1, borderColor: 'rgba(255,107,107,0.4)', alignItems: 'center', justifyContent: 'center' },
   logoutLabel: { color: Colors.error, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
+
+  dangerLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 3,
+    color: Colors.error,
+    fontWeight: '500',
+    marginTop: 36,
+    marginBottom: 10,
+    opacity: 0.7,
+  },
+  deleteAccount: {
+    height: 48,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.25)',
+    backgroundColor: 'rgba(255,107,107,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteAccountLabel: {
+    color: Colors.error,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  deleteAccountHint: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    lineHeight: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 12,
+  },
+
   signature:   { fontFamily: Fonts.mono, color: Colors.textFaint, fontSize: 10, letterSpacing: 1.5, textAlign: 'center', marginTop: 20 },
 });

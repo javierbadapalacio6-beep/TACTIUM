@@ -25,7 +25,7 @@ interface Props {
 
 const LOGO = 124;
 const GLOW = 300;
-const HOLD_MS = 820; // tiempo que el logo permanece quieto antes de salir
+const HOLD_MS = 1500; // tiempo que el logo permanece quieto antes de salir
 
 /** Glow neón suave (radial) detrás del logo. */
 function Glow() {
@@ -93,7 +93,7 @@ export function AnimatedSplash({ onFinish }: Props) {
       exitDelay,
       withTiming(
         0,
-        { duration: 460, easing: Easing.in(Easing.cubic) },
+        { duration: 600, easing: Easing.in(Easing.cubic) },
         (finished) => {
           if (finished) runOnJS(onFinish)();
         },

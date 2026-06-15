@@ -34,6 +34,7 @@ import {
 import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore } from '@store/teamStore';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -151,6 +152,21 @@ export const HomeScreen = ({
 
   const goSeasons = () => navigation.getParent()?.navigate('Seasons');
   const goTeam = () => navigation.getParent()?.navigate('Team');
+  // Atajo al aha moment del capitán: abrir directamente el ScanSheet de
+  // matchdays sin tener que descubrir la pestaña Temporadas. Solo tiene
+  // sentido si ya hay activeSeason — sin temporada no hay dónde colgar
+  // los matchdays escaneados.
+  // Reverse trial: escanear es premium. El gate comprueba la sub al pulsar →
+  // bloquea al usuario sin sub activa (nuevo o caducado) aunque ya tenga
+  // temporada. Sin esto, un trial cancelado seguiría escaneando gratis.
+  const gate = usePremiumGate();
+  const goScanCalendar = gate(() => {
+    if (!activeSeason) return;
+    navigation.getParent()?.navigate('Seasons', {
+      screen: 'SeasonDetail',
+      params: { id: activeSeason.id, autoOpen: 'scan' },
+    });
+  }, 'calendar_scan');
 
   return (
     <View style={styles.root}>
@@ -267,21 +283,34 @@ export const HomeScreen = ({
               {isPlayer
                 ? 'El capitán todavía no ha planificado jornadas.'
                 : activeSeason
-                  ? 'Crea la primera jornada desde Temporadas para empezar a planificar.'
+                  ? 'Escanea el calendario de tu liga y TACTIUM importa todas las jornadas de un golpe.'
                   : 'Crea una temporada activa desde la pestaña Temporadas.'}
             </Text>
             {canEdit ? (
               <Pressable
-                onPress={goSeasons}
+                onPress={activeSeason ? goScanCalendar : goSeasons}
                 style={({ pressed }) => [
                   styles.heroEmptyCta,
                   pressed && { opacity: 0.85 },
                 ]}
               >
                 <Text style={styles.heroEmptyCtaLabel}>
-                  {activeSeason ? 'Añadir jornada' : 'Crear temporada'}
+                  {activeSeason ? 'Escanear calendario' : 'Crear temporada'}
                 </Text>
                 <IconArrowRight size={14} color="#001810" />
+              </Pressable>
+            ) : null}
+            {canEdit && activeSeason ? (
+              <Pressable
+                onPress={goSeasons}
+                style={({ pressed }) => [
+                  styles.heroEmptySecondary,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.heroEmptySecondaryLabel}>
+                  Añadir manualmente
+                </Text>
               </Pressable>
             ) : null}
           </View>
@@ -649,6 +678,17 @@ const styles = StyleSheet.create({
     color: '#001810',
     fontSize: 14,
     fontWeight: '700',
+  },
+  heroEmptySecondary: {
+    marginTop: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  heroEmptySecondaryLabel: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
   },
   primaryCta: {
     height: 56,

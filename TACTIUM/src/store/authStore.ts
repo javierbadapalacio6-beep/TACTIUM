@@ -4,6 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session, User } from '@supabase/supabase-js';
 
 import { supabase } from '@core/supabase/client';
+import {
+  signInWithApple as svcSignInWithApple,
+  signInWithGoogle as svcSignInWithGoogle,
+  CANCELLED,
+} from '@core/services/socialAuth';
 
 interface AuthState {
   session: Session | null;
@@ -21,6 +26,8 @@ interface AuthState {
     fullName?: string,
   ) => Promise<{ error?: string }>;
   sendPasswordReset: (email: string) => Promise<{ error?: string }>;
+  signInWithApple: () => Promise<{ error?: string; cancelled?: boolean }>;
+  signInWithGoogle: () => Promise<{ error?: string; cancelled?: boolean }>;
   signOut: () => Promise<void>;
   markWelcomeSeen: () => void;
   setAuthError: (msg: string | null) => void;
@@ -54,11 +61,30 @@ export const useAuthStore = create<AuthState>()(
           });
         }
 
+        // Recuperamos lo persistido por Supabase en AsyncStorage. Esto NO
+        // hace red — solo lee el blob local.
         const { data } = await supabase.auth.getSession();
+
+        // Verificación servidor-side: el refresh token persistido puede
+        // apuntar a una sesión que ya no existe (típico cuando borras al
+        // usuario del dashboard de Supabase Auth mientras la app aún tenía
+        // cacheada su sesión). `getUser()` hace round-trip al servidor y
+        // devuelve error si la sesión ya no es válida. Si lo es, limpiamos
+        // localmente para que la próxima auto-renovación no lance
+        // `AuthApiError: Invalid Refresh Token: Refresh Token Not Found`.
+        let validSession = data.session;
+        if (validSession) {
+          const { error: userError } = await supabase.auth.getUser();
+          if (userError) {
+            await supabase.auth.signOut().catch(() => {});
+            validSession = null;
+          }
+        }
+
         set({
-          session: data.session,
-          user: data.session?.user ?? null,
-          isAuthenticated: !!data.session,
+          session: validSession,
+          user: validSession?.user ?? null,
+          isAuthenticated: !!validSession,
           isHydrating: false,
         });
 
@@ -103,6 +129,28 @@ export const useAuthStore = create<AuthState>()(
           redirectTo: 'https://tactium.io/auth/reset-password',
         });
         if (error) return { error: error.message };
+        return {};
+      },
+
+      signInWithApple: async () => {
+        set({ authError: null });
+        const { error } = await svcSignInWithApple();
+        if (error === CANCELLED) return { cancelled: true };
+        if (error) {
+          set({ authError: error });
+          return { error };
+        }
+        return {};
+      },
+
+      signInWithGoogle: async () => {
+        set({ authError: null });
+        const { error } = await svcSignInWithGoogle();
+        if (error === CANCELLED) return { cancelled: true };
+        if (error) {
+          set({ authError: error });
+          return { error };
+        }
         return {};
       },
 

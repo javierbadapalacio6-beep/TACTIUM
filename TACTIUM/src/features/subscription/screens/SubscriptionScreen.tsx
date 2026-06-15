@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import {
   type SubscriptionStatus,
 } from '@core/subscriptions/plans';
 import type { Subscription } from '@core/entitlements/hasPremiumAccess';
+import { restorePurchases, presentCodeRedemption } from '@core/purchases';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
@@ -62,6 +63,8 @@ export const SubscriptionScreen = ({
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const activeRole = useTeamStore((s) => s.activeRole);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
+  const refreshSubs = useSubscriptionStore((s) => s.refresh);
+  const [restoring, setRestoring] = useState(false);
 
   // Sub del propio user (subject_type='user'). La activa más reciente.
   const mySub = useMemo<Subscription | null>(() => {
@@ -100,11 +103,37 @@ export const SubscriptionScreen = ({
     );
   };
 
-  const handleRestore = () => {
-    toast.info(
-      'Restaurar compras',
-      'Disponible tras la integración del SDK de RevenueCat.',
-    );
+  const handleRestore = async () => {
+    setRestoring(true);
+    try {
+      const info = await restorePurchases();
+      const hasAny = Object.keys(info.entitlements.active).length > 0;
+      if (hasAny) {
+        toast.success(
+          'Compras restauradas',
+          'Tu suscripción se ha vinculado a esta cuenta.',
+        );
+        if (userId) await refreshSubs(userId);
+      } else {
+        toast.info(
+          'Sin compras previas',
+          'No encontramos suscripciones en esta cuenta de Apple.',
+        );
+      }
+    } catch (e: any) {
+      toast.error('No se pudo restaurar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleRedeemCode = async () => {
+    try {
+      await presentCodeRedemption();
+      if (userId) await refreshSubs(userId);
+    } catch (e: any) {
+      toast.error('No se pudo abrir el canje', e?.message ?? 'Inténtalo de nuevo.');
+    }
   };
 
   const handleCancel = () => {
@@ -223,6 +252,35 @@ export const SubscriptionScreen = ({
           )}
         </View>
 
+        {/* === RECUPERACIÓN DE PAGO (grace period) ===
+            El webhook BILLING_ISSUE deja la sub en grace_period: el cobro de
+            renovación falló pero el acceso sigue unos días. Prompt claro para
+            que el usuario arregle el método de pago y no perdamos un pagador
+            por una tarjeta caducada (churn involuntario). */}
+        {status === 'grace_period' ? (
+          <View style={styles.billingIssueCard}>
+            <Text style={styles.billingIssueTitle}>
+              Hay un problema con tu pago
+            </Text>
+            <Text style={styles.billingIssueText}>
+              No pudimos renovar tu suscripción. Actualiza tu método de pago en{' '}
+              {Platform.OS === 'ios' ? 'App Store' : 'Google Play'} para no
+              perder el acceso a TACTIUM Pro.
+            </Text>
+            <Pressable
+              onPress={openStoreSubscriptions}
+              style={({ pressed }) => [
+                styles.billingIssueBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.billingIssueBtnLabel}>
+                Actualizar método de pago
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* === CTA PRINCIPAL === */}
         {!mySub || status === 'expired' || status === 'canceled' ? (
           <Pressable
@@ -263,9 +321,14 @@ export const SubscriptionScreen = ({
             onPress={openStoreSubscriptions}
           />
           <ActionRow
-            label="Restaurar compras"
-            sub="Recupera tu plan si reinstalaste la app"
+            label={restoring ? 'Restaurando…' : 'Restaurar compras'}
+            sub="Recupera tu suscripción si cambiaste de dispositivo"
             onPress={handleRestore}
+          />
+          <ActionRow
+            label="Canjear código"
+            sub="Introduce un código promocional o de invitación"
+            onPress={handleRedeemCode}
           />
           {mySub && !mySub.cancel_at_period_end && status !== 'expired' ? (
             <ActionRow
@@ -280,8 +343,8 @@ export const SubscriptionScreen = ({
         {/* === LEGAL === */}
         <View style={styles.legalBlock}>
           <Text style={styles.legalText}>
-            Términos de uso y Política de Privacidad disponibles en
-            tactium.io/legal
+            Términos de uso y Política de Privacidad disponibles en tu Perfil,
+            sección Soporte.
           </Text>
         </View>
       </ScrollView>
@@ -450,6 +513,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     flex: 1,
+  },
+
+  // Recuperación de pago (grace period)
+  billingIssueCard: {
+    backgroundColor: Colors.warning + '14',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.warning + '55',
+    padding: 16,
+    marginBottom: 14,
+  },
+  billingIssueTitle: {
+    color: Colors.warning,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  billingIssueText: {
+    color: Colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  billingIssueBtn: {
+    height: 44,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.warning,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+  },
+  billingIssueBtnLabel: {
+    color: Colors.textInverse,
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // CTAs

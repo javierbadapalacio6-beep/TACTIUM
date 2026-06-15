@@ -31,11 +31,14 @@ import {
 } from '@components/ui';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
+import * as LineupsApi from '@core/services/lineups';
 import { matchdayState, type MatchdayVisualState } from '@core/utils/matchday';
 import { tandasOptions } from '@core/utils/tandas';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import type { ScannedMatchday } from '@core/services/imageRecognition';
+
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { SeasonsStackScreenProps } from '@navigation/types';
 
@@ -57,9 +60,18 @@ export const SeasonDetailScreen = ({
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [adding, setAdding] = useState(false);
-  const [scanning, setScanning] = useState(false);
+  const [scanning, setScanning] = useState(
+    route.params.autoOpen === 'scan',
+  );
   const [editing, setEditing] = useState<MatchdaysApi.Matchday | null>(null);
   const [closingSeason, setClosingSeason] = useState(false);
+
+  // Reverse trial: crear jornada / escanear son acciones premium. El gate
+  // comprueba la sub EN EL MOMENTO de la acción → bloquea tanto al usuario
+  // nuevo como al que canceló/caducó teniendo ya la temporada creada.
+  const gate = usePremiumGate();
+  const openAddMatchday = gate(() => setAdding(true), 'matchday_create');
+  const openScan = gate(() => setScanning(true), 'calendar_scan');
 
   // Edición permitida solo si la temporada está activa Y el usuario es
   // captain. Temporadas archivadas son siempre read-only.
@@ -125,36 +137,83 @@ export const SeasonDetailScreen = ({
   // sigan sin outcome se pueden seguir abriendo desde la lista, registrar
   // resultados y cerrar acta normalmente. El Alert lo aclara explícitamente
   // para que el capitán cierre sin miedo a "perder" jornadas pendientes.
-  const confirmCloseSeason = useCallback(() => {
+  const confirmCloseSeason = useCallback(async () => {
     if (!season || closingSeason) return;
-    const pending = matchdays.filter((m) => m.outcome === null).length;
-    const baseMsg = `La temporada "${season.name}" pasará al histórico. No podrás añadir jornadas nuevas, pero las ya creadas siguen visibles.`;
-    const warning =
-      pending > 0
-        ? `\n\nAún ${pending === 1 ? 'queda 1 jornada' : `quedan ${pending} jornadas`} sin cerrar. No pasa nada — ${pending === 1 ? 'podrás abrirla' : 'podrás abrirlas'} más adelante desde la lista para registrar resultados o cerrar el acta cuando quieras.`
-        : '';
-    Alert.alert('Cerrar temporada', `${baseMsg}${warning}`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar temporada',
-        style: 'destructive',
-        onPress: async () => {
-          setClosingSeason(true);
-          try {
-            const updated = await SeasonsApi.closeSeason(season.id);
-            setSeason(updated);
-          } catch (e: any) {
-            Alert.alert(
-              'No se pudo cerrar',
-              e?.message ?? 'Inténtalo de nuevo.',
-            );
-          } finally {
-            setClosingSeason(false);
-          }
+    setClosingSeason(true);
+    try {
+      // Pre-cálculo para el Alert: contamos jornadas sin alineación
+      // completa y jornadas sin resultado (outcome=null). Solo cuentan
+      // las jornadas que NO están ya finalizadas — una jornada finalizada
+      // tiene acta cerrada y no tiene sentido marcarla como pendiente.
+      const courts = getCourtsForCompetition(
+        team?.federation,
+        team?.league,
+        team?.gender,
+      );
+      const liveMatchdays = matchdays.filter((m) => m.status !== 'finished');
+      const lineupCompletion = await LineupsApi.fetchLineupCompletionByMatchdays(
+        liveMatchdays.map((m) => m.id),
+        courts,
+      );
+      const pendingLineup = liveMatchdays.filter(
+        (m) => !lineupCompletion.get(m.id),
+      ).length;
+      const pendingResult = matchdays.filter((m) => m.outcome === null).length;
+
+      const baseMsg = `La temporada "${season.name}" pasará al histórico. No podrás añadir jornadas nuevas ni editar alineaciones, pero los resultados pendientes podrás registrarlos cuando quieras.`;
+
+      const parts: string[] = [];
+      if (pendingLineup > 0) {
+        parts.push(
+          pendingLineup === 1
+            ? '1 jornada sin alineación'
+            : `${pendingLineup} jornadas sin alineación`,
+        );
+      }
+      if (pendingResult > 0) {
+        parts.push(
+          pendingResult === 1
+            ? '1 jornada sin resultado'
+            : `${pendingResult} jornadas sin resultado`,
+        );
+      }
+      const warning =
+        parts.length > 0
+          ? `\n\nTienes ${parts.join(' y ')}. Al cerrar ya no podrás editar las alineaciones, pero sí registrar los resultados pendientes.`
+          : '';
+
+      Alert.alert('Cerrar temporada', `${baseMsg}${warning}`, [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+          onPress: () => setClosingSeason(false),
         },
-      },
-    ]);
-  }, [season, matchdays, closingSeason]);
+        {
+          text: 'Cerrar temporada',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updated = await SeasonsApi.closeSeason(season.id);
+              setSeason(updated);
+            } catch (e: any) {
+              Alert.alert(
+                'No se pudo cerrar',
+                e?.message ?? 'Inténtalo de nuevo.',
+              );
+            } finally {
+              setClosingSeason(false);
+            }
+          },
+        },
+      ]);
+    } catch (e: any) {
+      setClosingSeason(false);
+      Alert.alert(
+        'No se pudo preparar el cierre',
+        e?.message ?? 'Inténtalo de nuevo.',
+      );
+    }
+  }, [season, matchdays, closingSeason, team]);
 
   // ── Estado visual por jornada ─────────────────────────────────────
   // Memoizamos el estado por id; como las jornadas no cambian de fecha
@@ -212,7 +271,7 @@ export const SeasonDetailScreen = ({
           {canEditSeason ? (
             <>
               <Pressable
-                onPress={() => setScanning(true)}
+                onPress={openScan}
                 style={({ pressed }) => [
                   styles.scanBtn,
                   pressed && { opacity: 0.7 },
@@ -222,7 +281,7 @@ export const SeasonDetailScreen = ({
                 <Text style={styles.scanBtnLabel}>Escanear</Text>
               </Pressable>
               <Pressable
-                onPress={() => setAdding(true)}
+                onPress={openAddMatchday}
                 hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="Añadir jornada"
@@ -321,7 +380,11 @@ export const SeasonDetailScreen = ({
                     params: { matchdayId: m.id },
                   })
                 }
-                onEdit={canEditSeason ? () => setEditing(m) : undefined}
+                onEdit={
+                  canEditSeason
+                    ? gate(() => setEditing(m), 'matchday_edit')
+                    : undefined
+                }
               />
             ))}
           </View>
@@ -330,7 +393,7 @@ export const SeasonDetailScreen = ({
         {/* ── Dashed add button (solo si captain + temporada activa) ── */}
         {!loading && canEditSeason ? (
           <Pressable
-            onPress={() => setAdding(true)}
+            onPress={openAddMatchday}
             style={({ pressed }) => [styles.dashedAdd, pressed && { opacity: 0.7 }]}
           >
             <IconPlus size={14} color={Colors.accent} />

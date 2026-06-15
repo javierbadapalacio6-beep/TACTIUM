@@ -42,6 +42,7 @@ import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import {
   formatLongDay,
@@ -136,7 +137,14 @@ const matchOutcome = (
     .filter((r) => r.court_number === court)
     .sort((a, b) => a.set_number - b.set_number);
   if (sets.length === 0) return { state: 'pending', summary: '' };
-  if (sets.some((s) => s.forfeit)) return { state: 'lost', summary: 'W.O.' };
+  const foRow = sets.find((s) => s.forfeit);
+  if (foRow) {
+    // W.O.: si no nos presentamos (forfeit_us) lo perdemos; si no vino el
+    // rival, lo ganamos (punto para nosotros).
+    return foRow.forfeit_us
+      ? { state: 'lost', summary: 'W.O.' }
+      : { state: 'won', summary: 'W.O.' };
+  }
   let usWon = 0;
   let themWon = 0;
   const setStrings: string[] = [];
@@ -222,9 +230,10 @@ export const JornadaScreen = ({
     }, [load]),
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Realtime: cualquier cambio en lineups/results/matchday del matchday
+  // actual dispara un refetch. Cubre subir alineación, meter sets o cerrar
+  // acta desde otro dispositivo.
+  useMatchdayRealtime({ matchdayId: matchday?.id, onChange: load });
 
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const closed = matchday?.status === 'finished';
@@ -270,6 +279,18 @@ export const JornadaScreen = ({
     () => (matchday ? isMatchStarted(matchday) : false),
     [matchday],
   );
+
+  // Eje rol × estado para el CTA inferior. canEditLineup gobierna si el
+  // tap navega a Lineup en modo editable; navigateToLineup decide si tiene
+  // sentido siquiera abrir la pantalla (player con alineación ya creada
+  // entra en read-only; player sin alineación, no — el botón cambia a
+  // "Volver" para no enviarle a una pantalla vacía sin opción de actuar).
+  // La season cerrada bloquea edición de alineación pero NO de resultados:
+  // un capitán con temporada archivada puede ver la alineación (read-only)
+  // pero no editarla; los resultados siguen accesibles por otra vía.
+  const seasonClosed = season ? !season.active : false;
+  const canEditLineup = !closed && !seasonClosed && isCaptain;
+  const navigateToLineup = !closed && (canEditLineup || lineupReady);
 
   const status: Status = useMemo(() => {
     if (closed) {
@@ -450,7 +471,11 @@ export const JornadaScreen = ({
               <IconPencil size={14} color={Colors.text} />
             </Pressable>
           ) : null}
-          {lineupReady ? (
+          {isCaptain && lineupReady ? (
+            // Compartir la alineación es una acción "de capitán" — solo
+            // el cap decide cuándo notificar al equipo. Players ya la
+            // reciben/ven via realtime; no necesitan re-compartirla y
+            // mostrarles el botón sugería ambigüedad sobre quién manda.
             <Pressable
               onPress={() => setShowShare(true)}
               hitSlop={6}
@@ -573,10 +598,14 @@ export const JornadaScreen = ({
               );
               return;
             }
-            navigation.navigate('Results', {
-              matchdayId: matchday.id,
-              focus: 0,
-            });
+            gate(
+              () =>
+                navigation.navigate('Results', {
+                  matchdayId: matchday.id,
+                  focus: 0,
+                }),
+              'results_edit',
+            )();
           }}
         />
 
@@ -635,12 +664,14 @@ export const JornadaScreen = ({
                 pts={pair?.pair_points ?? null}
                 outcome={out}
                 disabled={!lineupReady || closed || !matchStarted}
-                onPress={() =>
-                  navigation.navigate('Results', {
-                    matchdayId: matchday.id,
-                    focus: i,
-                  })
-                }
+                onPress={gate(
+                  () =>
+                    navigation.navigate('Results', {
+                      matchdayId: matchday.id,
+                      focus: i,
+                    }),
+                  'results_edit',
+                )}
               />
             );
           })}
@@ -737,11 +768,16 @@ export const JornadaScreen = ({
         ) : null}
       </ScrollView>
 
-      {/* === CTA === */}
-      {/* Si la jornada está cerrada y disputada, la alineación con resultados
-          ya se ve arriba en las parejas — no tiene sentido un botón "Ver
-          alineación" que abre LineupScreen vacío de info nueva. Mejor un
-          "Volver" claro que cierra el flow. */}
+      {/* === CTA ===
+          Depende de DOS ejes: estado de la jornada (cerrada vs abierta) y
+          rol del usuario (capitán vs resto). Combinaciones:
+           · Cerrada                  → "Volver" (el resultado ya se ve arriba).
+           · Abierta · capitán        → "Editar/Crear alineación" (puede editar).
+           · Abierta · player/admin   → "Ver alineación" si existe, "Volver"
+             si no — entrar a una pantalla read-only vacía no aporta nada y
+             confunde (el bug que motivó este cambio: un player veía "Crear
+             alineación" y entraba a una pantalla que internamente bloqueaba
+             edición). */}
       <View
         style={[
           styles.ctaWrap,
@@ -750,27 +786,31 @@ export const JornadaScreen = ({
       >
         <Pressable
           onPress={
-            closed
-              ? () => {
+            navigateToLineup
+              ? () =>
+                  navigation.navigate('Lineup', { matchdayId: matchday.id })
+              : () => {
                   if (navigation.canGoBack()) navigation.goBack();
                   else navigation.navigate('HomeRoot');
                 }
-              : () =>
-                  navigation.navigate('Lineup', { matchdayId: matchday.id })
           }
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
         >
-          {closed ? (
-            <IconCheck size={18} color="#000" />
-          ) : (
+          {navigateToLineup ? (
             <IconCourt size={20} color="#000" />
+          ) : (
+            <IconCheck size={18} color="#000" />
           )}
           <Text style={styles.ctaLabel}>
             {closed
               ? 'Volver'
+              : canEditLineup
+              ? lineupReady
+                ? 'Editar alineación'
+                : 'Crear alineación'
               : lineupReady
-              ? 'Editar alineación'
-              : 'Crear alineación'}
+              ? 'Ver alineación'
+              : 'Volver'}
           </Text>
         </Pressable>
       </View>

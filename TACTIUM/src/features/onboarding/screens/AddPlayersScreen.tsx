@@ -28,6 +28,8 @@ import {
 } from '@components/ui';
 import { useTeamStore, type Side } from '@store/teamStore';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
+import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
+import { toast } from '@store/toastStore';
 import {
   NAME_MAX_LENGTH,
   isValidName,
@@ -58,21 +60,34 @@ export const AddPlayersScreen = ({
   const [newPts, setNewPts] = useState('');
   const [newSide, setNewSide] = useState<Side>('Drive');
 
-  // Inserción en bloque cuando el OCR devuelve la lista de jugadores. Misma
-  // lógica que en TeamScreen: insertamos uno a uno para que addPlayer del
-  // store mantenga sincronía con DB (y errores individuales no rompan todo).
+  // UPSERT por nombre: misma lógica que TeamScreen post-onboarding. En
+  // onboarding la plantilla está vacía normalmente, pero si el user
+  // vuelve atrás y re-escanea, evita duplicados.
   const handleBulkPlayers = async (scanned: ScannedPlayer[]) => {
-    for (const p of scanned) {
-      try {
-        await addPlayer({
-          name: p.name.trim(),
-          pts: p.pts ?? 0,
-          position: p.position ?? 'Ambos',
-        });
-      } catch (e) {
-        // Continuamos con el resto si uno falla; el toast del store ya avisa.
-        console.warn('AddPlayersScreen bulk player failed', e);
+    try {
+      const { added, updated } = await bulkUpsertPlayers({
+        scanned,
+        existing: players,
+        addPlayer,
+        updatePlayer,
+      });
+      if (added > 0 && updated > 0) {
+        toast.success(
+          'Plantilla actualizada',
+          `${updated} ${updated === 1 ? 'actualizado' : 'actualizados'} · ${added} ${added === 1 ? 'nuevo' : 'nuevos'}`,
+        );
+      } else if (updated > 0) {
+        toast.success(
+          'Puntos actualizados',
+          `${updated} ${updated === 1 ? 'jugador' : 'jugadores'}`,
+        );
+      } else if (added > 0) {
+        toast.success(
+          `${added} ${added === 1 ? 'jugador añadido' : 'jugadores añadidos'}`,
+        );
       }
+    } catch (e: any) {
+      console.warn('AddPlayersScreen bulk upsert failed', e);
     }
   };
 
@@ -235,7 +250,7 @@ export const AddPlayersScreen = ({
                   placeholder="Pts"
                   placeholderTextColor={Colors.textFaint}
                   keyboardType="number-pad"
-                  maxLength={4}
+                  maxLength={5}
                   style={[
                     styles.addField,
                     { width: 64, fontFamily: Fonts.mono, textAlign: 'center' },
@@ -294,7 +309,7 @@ export const AddPlayersScreen = ({
           onPress={handleFinish}
           style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
         >
-          <Text style={styles.ctaLabel}>Entrar al equipo</Text>
+          <Text style={styles.ctaLabel}>Empezar a alinear</Text>
           <IconArrowRight size={18} color="#000" />
         </Pressable>
       </View>

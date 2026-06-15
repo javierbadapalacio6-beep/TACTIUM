@@ -41,14 +41,16 @@ export async function upsertSet(
 }
 
 /**
- * Marca una pista como W.O. (no presentado): inserta los `sets` esperados con
- * forfeit=true y us=them=null. Si forfeit=false, elimina las filas de la pista
- * para volver al estado "sin resultado".
+ * Marca una pista como W.O.: inserta los `sets` esperados con forfeit=true y
+ * us=them=null. `forfeitUs` indica la dirección: false = el rival no se
+ * presentó (ganamos la pista), true = no nos presentamos (la perdemos). Si
+ * forfeit=false, elimina las filas de la pista (vuelve a "sin resultado").
  */
 export async function setCourtForfeit(
   matchdayId: string,
   courtNumber: number,
   forfeit: boolean,
+  forfeitUs = false,
   sets = 3,
 ): Promise<void> {
   if (forfeit) {
@@ -59,6 +61,7 @@ export async function setCourtForfeit(
       us: null,
       them: null,
       forfeit: true,
+      forfeit_us: forfeitUs,
     }));
     const { error } = await supabase
       .from('match_results')

@@ -34,7 +34,9 @@ import {
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
+import * as SeasonsApi from '@core/services/seasons';
 import type { LineupVariant } from '@core/services/lineupVariants';
+import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
 import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
@@ -181,6 +183,10 @@ export const LineupScreen = ({
   );
 
   const [matchday, setMatchday] = useState<MatchdaysApi.Matchday | null>(null);
+  // La season se carga junto al matchday para saber si está archivada y
+  // bloquear edición de alineación cuando lo está (los resultados siguen
+  // editables — eso vive en ResultsScreen).
+  const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
   const [variants, setVariants] = useState<LineupVariant[]>([]);
   const [currentVariantId, setCurrentVariantId] = useState<string | null>(null);
   const [variantBusy, setVariantBusy] = useState(false);
@@ -212,6 +218,11 @@ export const LineupScreen = ({
         setVariants(vars);
         const initial = vars.find((v) => v.is_active) ?? vars[0] ?? null;
         setCurrentVariantId(initial?.id ?? null);
+        // Encadenamos el fetch de la season (depende de md.season_id).
+        if (md?.season_id) {
+          const s = await SeasonsApi.fetchSeasonById(md.season_id);
+          if (!cancelled) setSeason(s);
+        }
       } catch (e) {
         console.warn('Lineup variants fetch', e);
       } finally {
@@ -253,10 +264,14 @@ export const LineupScreen = ({
   }, [currentVariantId, courts]);
 
   const closed = matchday?.status === 'finished';
-  // Read-only abarca dos casos: acta cerrada o el user no es captain. A nivel
-  // funcional son indistinguibles para la UI (todo desactivado), pero el copy
-  // del hint difiere.
-  const canEdit = !closed && isCaptain;
+  // La season cerrada bloquea edición de alineación pero NO de resultados.
+  // El usuario quiere poder ponerse al día con actas pendientes después de
+  // cerrar (decisión de producto). Aquí solo nos afecta a la alineación.
+  const seasonClosed = season ? !season.active : false;
+  // Read-only abarca: acta cerrada, season archivada o el user no es captain.
+  // A nivel funcional son indistinguibles para la UI (todo desactivado), pero
+  // el copy del hint difiere.
+  const canEdit = !closed && !seasonClosed && isCaptain;
 
   // ─── Variantes: handlers ─────────────────────────────────────
   const currentVariant = variants.find((v) => v.id === currentVariantId) ?? null;
@@ -267,6 +282,46 @@ export const LineupScreen = ({
     setVariants(vars);
     return vars;
   }, [matchdayId]);
+
+  // Realtime: cuando llega un cambio externo sobre este matchday
+  // (otro device subiendo la alineación, cambiando variante activa,
+  // marcando un set o cerrando acta) refrescamos variantes + lineup
+  // de la variante visible + el propio matchday (para el status).
+  useMatchdayRealtime({
+    matchdayId,
+    onChange: async () => {
+      try {
+        const [vars, md] = await Promise.all([
+          reloadVariants(),
+          MatchdaysApi.fetchMatchday(matchdayId),
+        ]);
+        setMatchday(md);
+        // Si el lineup no cambia de variante visible, repintamos la
+        // que estamos viendo. Si no había, caemos a la activa.
+        const target =
+          currentVariantId ??
+          vars.find((v) => v.is_active)?.id ??
+          vars[0]?.id ??
+          null;
+        if (target) {
+          const lineup = await LineupsApi.fetchLineup(target);
+          const arr: SlotState[] = Array.from({ length: courts }).map(
+            (_, i) => {
+              const found = lineup.find((p) => p.court_number === i + 1);
+              return {
+                court: i + 1,
+                playerAId: found?.player_a_id ?? null,
+                playerBId: found?.player_b_id ?? null,
+              };
+            },
+          );
+          setSlots(arr);
+        }
+      } catch (e) {
+        console.warn('Lineup realtime refresh', e);
+      }
+    },
+  });
 
   const handleAddVariant = useCallback(async () => {
     if (variants.length >= 5 || variantBusy || !canEdit) return;
@@ -283,10 +338,10 @@ export const LineupScreen = ({
       let nextNum = 1;
       while (used.has(nextNum)) nextNum += 1;
 
-      const created = await LineupVariantsApi.createVariantWithClone(
+      // Variante nueva SIEMPRE vacía (empieza de cero), no clona la actual.
+      const created = await LineupVariantsApi.createVariant(
         matchdayId,
         `Variante ${nextNum}`,
-        currentVariantId ?? undefined,
       );
       const vars = await reloadVariants();
       setCurrentVariantId(created.id);
@@ -298,7 +353,7 @@ export const LineupScreen = ({
     } finally {
       setVariantBusy(false);
     }
-  }, [variants, variantBusy, canEdit, matchdayId, currentVariantId, reloadVariants]);
+  }, [variants, variantBusy, canEdit, matchdayId, reloadVariants]);
 
   const handleSetActive = useCallback(
     async (variantId: string) => {
@@ -753,6 +808,8 @@ export const LineupScreen = ({
       }`
     : closed
     ? 'Acta cerrada · solo lectura.'
+    : seasonClosed
+    ? 'Temporada archivada · alineación en solo lectura.'
     : !isCaptain
     ? 'Solo el capitán puede editar la alineación.'
     : autoSort

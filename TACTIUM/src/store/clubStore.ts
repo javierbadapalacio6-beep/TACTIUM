@@ -16,6 +16,7 @@ interface ClubState {
   reset: () => void;
   setActiveClub: (clubId: string | null) => void;
   createClub: (input: { name: string; federation?: string }) => Promise<Club>;
+  deleteClub: (clubId: string) => Promise<void>;
 }
 
 export const useClubStore = create<ClubState>()((set, get) => ({
@@ -56,6 +57,16 @@ export const useClubStore = create<ClubState>()((set, get) => ({
     const club = await ClubsApi.createClub(input);
     set((s) => ({ clubs: [...s.clubs, club], activeClubId: club.id }));
     return club;
+  },
+
+  deleteClub: async (clubId) => {
+    await ClubsApi.deleteClub(clubId);
+    set((s) => {
+      const clubs = s.clubs.filter((c) => c.id !== clubId);
+      const activeClubId =
+        s.activeClubId === clubId ? (clubs[0]?.id ?? null) : s.activeClubId;
+      return { clubs, activeClubId };
+    });
   },
 }));
 

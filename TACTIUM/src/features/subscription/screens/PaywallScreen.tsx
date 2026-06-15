@@ -42,9 +42,11 @@ import {
   purchasePackage,
   resolvePackage,
   restorePurchases,
+  presentCodeRedemption,
   setSubjectAttributes,
   type PurchasesOffering,
 } from '@core/purchases';
+import { TrialTimeline } from '../components/TrialTimeline';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
@@ -141,6 +143,8 @@ export const PaywallScreen = ({
     : activeRole === 'club_admin';
 
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
+  // Hoja de confirmación con la línea de tiempo del trial (Apple HIG).
+  const [showTimeline, setShowTimeline] = useState(false);
   const [selectedTier, setSelectedTier] = useState<PlanTier>(
     showClubPlans ? DEFAULT_CLUB_TIER : 'captain',
   );
@@ -189,6 +193,11 @@ export const PaywallScreen = ({
       ? selectedPlan.priceYearlyEur
       : selectedPlan.priceMonthlyEur;
   const yearlyDiscount = annualDiscountPercent(selectedPlan);
+  // Importe FACTURADO formateado para la hoja de confirmación (elemento de
+  // precio prominente, coherente con el fix de 3.1.2(c) en las cards).
+  const billedLabel = `${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'}`;
+  // Avisamos ~2 días antes de que termine el trial.
+  const reminderDays = Math.max(1, TRIAL_DURATION_DAYS - 2);
 
   // ¿Hay ya una sub premium activa PARA EL SUBJECT que estamos por
   // suscribir? Si sí, este flujo es un cambio de plan (no un trial nuevo)
@@ -411,6 +420,29 @@ export const PaywallScreen = ({
       );
     } finally {
       setPurchasing(false);
+    }
+  };
+
+  // Canje de Offer Code / código promocional (top-100 waitlist, 30 días).
+  // iOS abre la hoja nativa; Android, la página de canje de Play. Tras
+  // volver refrescamos por si el webhook ya creó la sub.
+  const handleRedeemCode = async () => {
+    try {
+      await presentCodeRedemption();
+      if (userId) await refreshSubs(userId);
+    } catch (e: any) {
+      toast.error('No se pudo abrir el canje', e?.message ?? 'Inténtalo de nuevo.');
+    }
+  };
+
+  // CTA principal: un trial NUEVO pasa primero por la hoja de confirmación
+  // con la línea de tiempo (Hoy → recordatorio → cobro). Un cambio de plan
+  // (ya hay sub activa para el subject) va directo a la compra, sin timeline.
+  const onCtaPress = () => {
+    if (existingSubForSubject) {
+      handleStartTrial();
+    } else {
+      setShowTimeline(true);
     }
   };
 
@@ -674,15 +706,30 @@ export const PaywallScreen = ({
                     </View>
                   ) : null}
                 </View>
+                {/* Apple 3.1.2(c): el IMPORTE FACTURADO debe ser el elemento
+                    de precio más prominente. En anual mostramos el total/año
+                    en grande; el equivalente mensual va aparte, subordinado en
+                    tamaño y posición. En mensual lo facturado = lo mostrado. */}
                 <View style={styles.planPriceRow}>
-                  <Text style={styles.planPrice}>{monthlyEquiv}</Text>
-                  <Text style={styles.planPriceSuffix}>€/mes</Text>
                   {billing === 'yearly' ? (
-                    <Text style={styles.planAnnualHint}>
-                      · {formatEur(plan.priceYearlyEur)} / año
-                    </Text>
-                  ) : null}
+                    <>
+                      <Text style={styles.planPrice}>
+                        {formatEur(plan.priceYearlyEur)}
+                      </Text>
+                      <Text style={styles.planPriceSuffix}>/año</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.planPrice}>{monthlyEquiv}</Text>
+                      <Text style={styles.planPriceSuffix}>€/mes</Text>
+                    </>
+                  )}
                 </View>
+                {billing === 'yearly' ? (
+                  <Text style={styles.planAnnualHint}>
+                    ≈ {monthlyEquiv} €/mes
+                  </Text>
+                ) : null}
                 {billing === 'yearly' && yearlySavings > 0 ? (
                   <Text style={styles.planSavings}>
                     Ahorras {formatEur(yearlySavings)} al año
@@ -743,7 +790,7 @@ export const PaywallScreen = ({
       >
         <Pressable
           disabled={purchasing}
-          onPress={handleStartTrial}
+          onPress={onCtaPress}
           style={({ pressed }) => [
             styles.cta,
             purchasing && { opacity: 0.5 },
@@ -815,8 +862,34 @@ export const PaywallScreen = ({
               {restoring ? 'Restaurando…' : 'Restaurar compras'}
             </Text>
           </Pressable>
+          <Text style={styles.footerLinkSep}>·</Text>
+          <Pressable
+            onPress={handleRedeemCode}
+            disabled={purchasing}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Canjear código"
+          >
+            <Text
+              style={[styles.footerLink, purchasing && { opacity: 0.5 }]}
+            >
+              Canjear código
+            </Text>
+          </Pressable>
         </View>
       </View>
+
+      {/* Hoja de confirmación: línea de tiempo del trial antes de comprar. */}
+      <TrialTimeline
+        visible={showTimeline}
+        planName={selectedPlan.displayName}
+        billedLabel={billedLabel}
+        trialDays={TRIAL_DURATION_DAYS}
+        reminderDays={reminderDays}
+        loading={purchasing}
+        onConfirm={handleStartTrial}
+        onCancel={() => setShowTimeline(false)}
+      />
     </View>
   );
 };
@@ -1054,6 +1127,7 @@ const styles = StyleSheet.create({
     color: Colors.textFaint,
     fontSize: 11,
     fontFamily: Fonts.mono,
+    marginTop: 4,
   },
   planSavings: {
     color: Colors.accent,

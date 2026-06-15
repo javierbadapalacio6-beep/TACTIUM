@@ -47,6 +47,9 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
   const signIn = useAuthStore((s) => s.signInWithPassword);
   const signUp = useAuthStore((s) => s.signUpWithPassword);
   const sendPasswordReset = useAuthStore((s) => s.sendPasswordReset);
+  const signInApple = useAuthStore((s) => s.signInWithApple);
+  const signInGoogle = useAuthStore((s) => s.signInWithGoogle);
+  const [oauthBusy, setOauthBusy] = useState<null | 'apple' | 'google'>(null);
 
   // Cuando el teclado está abierto, ya cubre el home indicator y la
   // clearance extra del footer (insets+24) deja un hueco visible feo.
@@ -98,11 +101,25 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
     }
   };
 
-  const handleOAuthStub = (provider: 'Apple' | 'Google') => {
-    Alert.alert(
-      `${provider} próximamente`,
-      `Configura el proveedor ${provider} en el dashboard de Supabase para activarlo.`,
-    );
+  const handleApple = async () => {
+    if (oauthBusy) return;
+    setOauthBusy('apple');
+    const { error, cancelled } = await signInApple();
+    setOauthBusy(null);
+    // Éxito → onAuthStateChange navega solo. Cancelar → silencio.
+    if (error && !cancelled) {
+      Alert.alert('No se pudo iniciar sesión', error);
+    }
+  };
+
+  const handleGoogle = async () => {
+    if (oauthBusy) return;
+    setOauthBusy('google');
+    const { error, cancelled } = await signInGoogle();
+    setOauthBusy(null);
+    if (error && !cancelled) {
+      Alert.alert('No se pudo iniciar sesión', error);
+    }
   };
 
   const handleForgotPassword = () => {
@@ -169,9 +186,11 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
         <ChoiceView
           insetTop={insets.top}
           insetBottom={insets.bottom}
-          onApple={() => handleOAuthStub('Apple')}
-          onGoogle={() => handleOAuthStub('Google')}
+          onApple={handleApple}
+          onGoogle={handleGoogle}
           onEmail={() => setMode('email')}
+          busy={oauthBusy}
+          showApple={Platform.OS === 'ios'}
         />
       ) : (
         <EmailView
@@ -204,6 +223,8 @@ interface ChoiceProps {
   onApple: () => void;
   onGoogle: () => void;
   onEmail: () => void;
+  busy: null | 'apple' | 'google';
+  showApple: boolean;
 }
 
 const ChoiceView: React.FC<ChoiceProps> = ({
@@ -212,6 +233,8 @@ const ChoiceView: React.FC<ChoiceProps> = ({
   onApple,
   onGoogle,
   onEmail,
+  busy,
+  showApple,
 }) => {
   return (
     <View style={[styles.container, { paddingTop: insetTop }]}>
@@ -225,32 +248,50 @@ const ChoiceView: React.FC<ChoiceProps> = ({
       </View>
 
       <View style={[styles.actions, { paddingBottom: insetBottom + 28 }]}>
-        <Pressable
-          onPress={onApple}
-          style={({ pressed }) => [
-            styles.providerBtn,
-            { backgroundColor: '#fff' },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <IconApple size={18} color="#000" />
-          <Text style={[styles.providerLabel, { color: '#000' }]}>
-            Continuar con Apple
-          </Text>
-        </Pressable>
+        {showApple ? (
+          <Pressable
+            onPress={onApple}
+            disabled={!!busy}
+            style={({ pressed }) => [
+              styles.providerBtn,
+              { backgroundColor: '#fff' },
+              pressed && { opacity: 0.85 },
+              !!busy && { opacity: 0.6 },
+            ]}
+          >
+            {busy === 'apple' ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <>
+                <IconApple size={18} color="#000" />
+                <Text style={[styles.providerLabel, { color: '#000' }]}>
+                  Continuar con Apple
+                </Text>
+              </>
+            )}
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={onGoogle}
+          disabled={!!busy}
           style={({ pressed }) => [
             styles.providerBtn,
             styles.providerGhost,
             pressed && { opacity: 0.85 },
+            !!busy && { opacity: 0.6 },
           ]}
         >
-          <IconGoogle size={18} />
-          <Text style={[styles.providerLabel, { color: Colors.text }]}>
-            Continuar con Google
-          </Text>
+          {busy === 'google' ? (
+            <ActivityIndicator size="small" color={Colors.text} />
+          ) : (
+            <>
+              <IconGoogle size={18} />
+              <Text style={[styles.providerLabel, { color: Colors.text }]}>
+                Continuar con Google
+              </Text>
+            </>
+          )}
         </Pressable>
 
         <View style={styles.divider}>

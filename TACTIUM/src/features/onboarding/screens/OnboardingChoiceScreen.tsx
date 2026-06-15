@@ -76,7 +76,7 @@ export const OnboardingChoiceScreen = ({
             hitSlop={10}
             style={{ paddingHorizontal: 6 }}
           >
-            <Text style={styles.exitLink}>Salir</Text>
+            <Text style={styles.exitLink}>Cerrar sesión</Text>
           </Pressable>
         </Animated.View>
       </View>
@@ -130,7 +130,7 @@ export const OnboardingChoiceScreen = ({
           >
             <ChoiceCard
               title="Equipo independiente"
-              description="Un solo equipo. Empieza rápido sin estructura adicional."
+              description="Tú gestionas, tú alineas. Listo en 2 minutos."
               badge="RÁPIDO"
               badgeAccent
               priceLabel="Tras prueba: 4,99 €/mes"
@@ -178,10 +178,10 @@ export const OnboardingChoiceScreen = ({
             <View style={styles.freeBadge}>
               <Text style={styles.freeBadgeText}>SIEMPRE GRATIS</Text>
             </View>
-            <Text style={styles.redeemTitle}>Tengo un código de invitación</Text>
+            <Text style={styles.redeemTitle}>Me han invitado</Text>
             <Text style={styles.redeemHint}>
-              Jugadores y capitanes invitados a un club{'\n'}
-              acceden sin pagar nada.
+              Tengo un código de invitación{'\n'}
+              de un capitán o un club.
             </Text>
           </Pressable>
         </Animated.View>

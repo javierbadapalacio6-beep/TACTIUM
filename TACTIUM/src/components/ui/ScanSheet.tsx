@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import {
   type ScannedPlayer,
   type ScannedMatchday,
 } from '@core/services/imageRecognition';
+import { PTS_MIN, PTS_MAX } from '@core/utils/validation';
 
 import { BottomSheet } from './BottomSheet';
 import {
@@ -62,10 +63,16 @@ export const ScanSheet: React.FC<Props> = (props) => {
   const { open, onClose, mode, teamName } = props;
   const [step, setStep] = useState<Step>('idle');
   const [items, setItems] = useState<Item[]>([]);
+  // Guard sincrónico contra doble tap: `setStep('loading')` no se aplica
+  // hasta el siguiente render, así que dos taps rápidos en el mismo tick
+  // ven `step==='idle'` y disparan dos pickers (el segundo cuelga el
+  // primero → CTA pillado). El ref se actualiza en el mismo tick.
+  const busyRef = useRef(false);
 
   const reset = () => {
     setStep('idle');
     setItems([]);
+    busyRef.current = false;
   };
 
   const close = () => {
@@ -75,6 +82,11 @@ export const ScanSheet: React.FC<Props> = (props) => {
   };
 
   const pickAndScan = async (source: 'camera' | 'library' | 'file') => {
+    // Guard sincrónico: si ya hay un picker abierto, ignorar el tap.
+    // Tiene que ser ref (no state) porque setStep no se aplica hasta el
+    // siguiente render — sin esto, doble tap rápido = doble picker.
+    if (busyRef.current) return;
+    busyRef.current = true;
     // Cambiamos a 'loading' ANTES de abrir el picker. Eso desmonta el
     // PopoverMenu y monta el BottomSheet con el spinner, de modo que en
     // cuanto el usuario cierra el picker (o incluso mientras está abierto)
@@ -140,6 +152,11 @@ export const ScanSheet: React.FC<Props> = (props) => {
         source === 'file' ? 'Error al procesar archivo' : 'Error al procesar imagen',
         e?.message ?? 'Error desconocido',
       );
+    } finally {
+      // Siempre liberar el lock: cancelación, éxito, error, permiso
+      // denegado, lo que sea. Sin esto un picker fallido dejaría el ref
+      // bloqueado y los siguientes taps no harían nada.
+      busyRef.current = false;
     }
   };
 
@@ -180,7 +197,7 @@ export const ScanSheet: React.FC<Props> = (props) => {
             name: p.name.trim().replace(/\s+/g, ' '),
             pts:
               p.pts != null
-                ? Math.min(Math.max(p.pts, 0), 1000)
+                ? Math.min(Math.max(p.pts, PTS_MIN), PTS_MAX)
                 : undefined,
           }))
           .filter((p) => p.name.length >= 2);

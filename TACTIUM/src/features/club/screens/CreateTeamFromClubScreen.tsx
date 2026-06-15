@@ -79,6 +79,10 @@ export const CreateTeamFromClubScreen = ({
 
   const handleSave = async () => {
     if (!valid || submitting || !club) return;
+
+    // Reverse trial: crear equipos del club es LIBRE (estructura, hasta 25 por
+    // el trigger DB). El tope del tier limita CUBRIR/operar, no crear — el gate
+    // de cobertura se encarga al gestionar cada equipo desde el ClubDashboard.
     setSubmitting(true);
     try {
       await createTeam({

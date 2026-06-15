@@ -7,17 +7,10 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-
 import { Colors } from '@core/theme/colors';
 import { Typography } from '@core/theme/typography';
 import { Radius } from '@core/theme/spacing';
-import { useAuthStore } from '@store/authStore';
-import { useTeamStore } from '@store/teamStore';
-import { useSubscriptionStore } from '@store/subscriptionStore';
-
-import type { RootStackParamList } from '@navigation/types';
+import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 type Variant = 'primary' | 'secondary' | 'destructive' | 'ghost' | 'subtle';
 
@@ -61,26 +54,11 @@ export const PremiumGateButton: React.FC<Props> = ({
   style,
   intent,
 }) => {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const userId = useAuthStore((s) => s.user?.id ?? null);
-  const role = useTeamStore((s) => s.activeRole);
-  const team = useTeamStore((s) => s.team);
-  const isPremiumFn = useSubscriptionStore((s) => s.isPremium);
-
-  const entitlement = isPremiumFn(
-    userId,
-    role === 'club_admin' ? 'admin' : role,
-    team ? { id: team.id, club_id: team.club_id } : null,
-  );
-
-  const handlePress = () => {
-    if (!entitlement.allowed) {
-      navigation.navigate('Paywall', { intent });
-      return;
-    }
-    onPress();
-  };
+  // Reutiliza el gate central (incluye la cobertura dura: si el equipo de club
+  // no está cubierto, ofrece cubrirlo o mejorar el plan en vez de ir directo
+  // al paywall).
+  const gate = usePremiumGate();
+  const handlePress = gate(onPress, intent);
 
   const isDisabled = disabled || isLoading;
   const labelColor =

@@ -7,6 +7,26 @@ export type TeamUpdate = Database['public']['Tables']['teams']['Update'];
 export type TeamGender = Database['public']['Enums']['team_gender'];
 
 /**
+ * Marca un equipo de club como CUBIERTO por el plan (permanente). El RPC
+ * `cover_team` valida que el caller es el gestor del club y que quedan plazas
+ * según el tier; si no, lanza error. Idempotente.
+ */
+export async function coverTeam(teamId: string): Promise<void> {
+  const { error } = await supabase.rpc('cover_team', { p_team_id: teamId });
+  if (error) throw error;
+}
+
+/**
+ * Borra un equipo y su árbol en cascada (jugadores, temporadas, jornadas,
+ * alineaciones, actas, miembros, invitaciones). Vía RPC `delete_team` que
+ * valida propiedad. Irreversible.
+ */
+export async function deleteTeam(teamId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_team', { p_team_id: teamId });
+  if (error) throw error;
+}
+
+/**
  * Devuelve todos los equipos visibles para el usuario.
  * RLS garantiza que solo aparecen los equipos donde es miembro directo
  * (team_members) o club_admin del club al que pertenece el equipo.

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import * as MatchdaysApi from '@core/services/matchdays';
 import * as MatchResultsApi from '@core/services/matchResults';
 import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
+import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
@@ -36,16 +37,20 @@ interface SetCell {
 interface Match {
   sets: SetCell[];
   forfeit: boolean;
+  // Dirección del W.O.: true = no nos presentamos (derrota); false = no se
+  // presentó el rival (victoria, punto para nosotros). Solo si forfeit=true.
+  forfeitUs: boolean;
 }
 
 const buildEmptyMatches = (courts: number): Match[] =>
   Array.from({ length: courts }, () => ({
     sets: Array.from({ length: SETS }, () => ({ us: '', them: '' })),
     forfeit: false,
+    forfeitUs: false,
   }));
 
 const matchOutcome = (m: Match): 'won' | 'lost' | null => {
-  if (m.forfeit) return 'lost';
+  if (m.forfeit) return m.forfeitUs ? 'lost' : 'won';
   let usWon = 0;
   let themWon = 0;
   m.sets.forEach((s) => {
@@ -106,47 +111,56 @@ export const ResultsScreen = ({
     setExpanded((e) => Math.min(e, courts - 1));
   }, [courts]);
 
+  // Refetch reusable: lo llama el mount inicial y también el realtime
+  // cuando llega un cambio externo (otro device metiendo sets, captain
+  // cerrando acta, lineup cambiando para repintar las parejas del header).
+  const reload = useCallback(async () => {
+    try {
+      const activeVariant =
+        await LineupVariantsApi.fetchActiveVariant(matchdayId);
+      const [md, results, lineup] = await Promise.all([
+        MatchdaysApi.fetchMatchday(matchdayId),
+        MatchResultsApi.fetchResults(matchdayId),
+        activeVariant
+          ? LineupsApi.fetchLineup(activeVariant.id)
+          : Promise.resolve([]),
+      ]);
+      setMatchday(md);
+      setPairs(lineup);
+      const next = buildEmptyMatches(courts);
+      results.forEach((r) => {
+        const ci = r.court_number - 1;
+        const si = r.set_number - 1;
+        if (ci < 0 || ci >= courts || si < 0 || si >= SETS) return;
+        if (r.forfeit) {
+          next[ci].forfeit = true;
+          next[ci].forfeitUs = r.forfeit_us;
+        }
+        next[ci].sets[si] = {
+          us: r.us !== null ? String(r.us) : '',
+          them: r.them !== null ? String(r.them) : '',
+        };
+      });
+      matchesRef.current = next;
+      setMatches(next);
+    } catch (e) {
+      console.warn('Results fetch', e);
+    }
+  }, [matchdayId, courts]);
+
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     (async () => {
-      setLoading(true);
-      try {
-        // ResultsScreen también opera sobre la variante activa.
-        const activeVariant =
-          await LineupVariantsApi.fetchActiveVariant(matchdayId);
-        const [md, results, lineup] = await Promise.all([
-          MatchdaysApi.fetchMatchday(matchdayId),
-          MatchResultsApi.fetchResults(matchdayId),
-          activeVariant
-            ? LineupsApi.fetchLineup(activeVariant.id)
-            : Promise.resolve([]),
-        ]);
-        if (cancelled) return;
-        setMatchday(md);
-        setPairs(lineup);
-        const next = buildEmptyMatches(courts);
-        results.forEach((r) => {
-          const ci = r.court_number - 1;
-          const si = r.set_number - 1;
-          if (ci < 0 || ci >= courts || si < 0 || si >= SETS) return;
-          if (r.forfeit) next[ci].forfeit = true;
-          next[ci].sets[si] = {
-            us: r.us !== null ? String(r.us) : '',
-            them: r.them !== null ? String(r.them) : '',
-          };
-        });
-        matchesRef.current = next;
-        setMatches(next);
-      } catch (e) {
-        console.warn('Results fetch', e);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await reload();
+      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [matchdayId, courts]);
+  }, [reload]);
+
+  useMatchdayRealtime({ matchdayId, onChange: reload });
 
   const closed = matchday?.status === 'finished';
   const started = matchday ? isMatchStarted(matchday) : false;
@@ -297,13 +311,18 @@ export const ResultsScreen = ({
 
   const toggleForfeit = async (court: number) => {
     if (!canEdit) return;
-    const next = !matchesRef.current[court].forfeit;
+    const cur = matchesRef.current[court];
+    const next = !cur.forfeit;
+    // Al activar, por defecto W.O. a NUESTRO favor (el rival no se presentó),
+    // que es el caso normal en el acta propia. Se conserva la dirección previa.
+    const forfeitUs = next ? cur.forfeitUs : false;
     const nextMatches: Match[] = matchesRef.current.map((m, i) =>
       i !== court
         ? m
         : {
             ...m,
             forfeit: next,
+            forfeitUs,
             sets: next ? m.sets.map(() => ({ us: '', them: '' })) : m.sets,
           },
     );
@@ -311,12 +330,48 @@ export const ResultsScreen = ({
     setMatches(nextMatches);
     setSavingForfeit(court);
     try {
-      await MatchResultsApi.setCourtForfeit(matchdayId, court + 1, next, SETS);
+      await MatchResultsApi.setCourtForfeit(
+        matchdayId,
+        court + 1,
+        next,
+        forfeitUs,
+        SETS,
+      );
     } catch (e: any) {
       Alert.alert('No se pudo guardar', e?.message ?? '');
-      // Rollback en caso de fallo de red.
       const rollback = matchesRef.current.map((m, i) =>
         i !== court ? m : { ...m, forfeit: !next },
+      );
+      matchesRef.current = rollback;
+      setMatches(rollback);
+    } finally {
+      setSavingForfeit(null);
+    }
+  };
+
+  // Cambia la dirección del W.O. (ganado/perdido) sin desactivarlo.
+  const setForfeitDirection = async (court: number, forfeitUs: boolean) => {
+    if (!canEdit) return;
+    const cur = matchesRef.current[court];
+    if (!cur.forfeit || cur.forfeitUs === forfeitUs) return;
+    const nextMatches = matchesRef.current.map((m, i) =>
+      i !== court ? m : { ...m, forfeitUs },
+    );
+    matchesRef.current = nextMatches;
+    setMatches(nextMatches);
+    setSavingForfeit(court);
+    try {
+      await MatchResultsApi.setCourtForfeit(
+        matchdayId,
+        court + 1,
+        true,
+        forfeitUs,
+        SETS,
+      );
+    } catch (e: any) {
+      Alert.alert('No se pudo guardar', e?.message ?? '');
+      const rollback = matchesRef.current.map((m, i) =>
+        i !== court ? m : { ...m, forfeitUs: cur.forfeitUs },
       );
       matchesRef.current = rollback;
       setMatches(rollback);
@@ -474,6 +529,7 @@ export const ResultsScreen = ({
                 }}
                 onPersistCell={(setIdx) => flushCell(ci, setIdx)}
                 onToggleForfeit={() => toggleForfeit(ci)}
+                onSetForfeitDirection={(fu) => setForfeitDirection(ci, fu)}
               />
             );
           })}
@@ -515,6 +571,7 @@ const ResultRow: React.FC<{
   onUpdateCell: (setIdx: number, side: 'us' | 'them', value: string) => void;
   onPersistCell: (setIdx: number) => void;
   onToggleForfeit: () => void;
+  onSetForfeitDirection: (forfeitUs: boolean) => void;
 }> = ({
   court,
   match,
@@ -532,6 +589,7 @@ const ResultRow: React.FC<{
   onUpdateCell,
   onPersistCell,
   onToggleForfeit,
+  onSetForfeitDirection,
 }) => {
   const tint =
     outcome === 'won'
@@ -553,7 +611,9 @@ const ResultRow: React.FC<{
     .join('  ');
 
   const summaryText = match.forfeit
-    ? 'No presentado'
+    ? match.forfeitUs
+      ? 'W.O. en contra'
+      : 'W.O. a favor'
     : setSummary || 'Sin resultado';
 
   return (
@@ -647,7 +707,7 @@ const ResultRow: React.FC<{
                 styles.forfeitTrack,
                 {
                   backgroundColor: match.forfeit
-                    ? Colors.error
+                    ? Colors.accent
                     : 'rgba(232,245,239,0.12)',
                 },
               ]}
@@ -663,16 +723,62 @@ const ResultRow: React.FC<{
               style={[
                 styles.forfeitLabel,
                 {
-                  color: match.forfeit ? Colors.error : Colors.textMuted,
+                  color: match.forfeit ? Colors.accent : Colors.textMuted,
                 },
               ]}
             >
-              No presentado / W.O.
+              W.O. (no presentado)
             </Text>
             {savingForfeit ? (
               <ActivityIndicator size="small" color={Colors.accent} />
             ) : null}
           </Pressable>
+
+          {/* Dirección del W.O.: ¿quién no se presentó? Define el punto. */}
+          {match.forfeit ? (
+            <View style={styles.foDirRow}>
+              <Pressable
+                disabled={disabled}
+                onPress={() =>
+                  !disabled && !savingForfeit && onSetForfeitDirection(false)
+                }
+                style={[
+                  styles.foDirBtn,
+                  !match.forfeitUs && styles.foDirBtnWon,
+                  disabled && { opacity: 0.4 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.foDirText,
+                    !match.forfeitUs && { color: Colors.accent },
+                  ]}
+                >
+                  Ganado · no vino el rival
+                </Text>
+              </Pressable>
+              <Pressable
+                disabled={disabled}
+                onPress={() =>
+                  !disabled && !savingForfeit && onSetForfeitDirection(true)
+                }
+                style={[
+                  styles.foDirBtn,
+                  match.forfeitUs && styles.foDirBtnLost,
+                  disabled && { opacity: 0.4 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.foDirText,
+                    match.forfeitUs && { color: Colors.error },
+                  ]}
+                >
+                  Perdido · no vinimos
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {!match.forfeit ? (
             <>
@@ -1029,6 +1135,36 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: '500',
+  },
+  foDirRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 12,
+  },
+  foDirBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    backgroundColor: Colors.bgCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  foDirBtnWon: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.accent10,
+  },
+  foDirBtnLost: {
+    borderColor: Colors.error,
+    backgroundColor: Colors.error + '14',
+  },
+  foDirText: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 
   // Cabecera con nombres de equipos (LOCAL · ... | VISIT. · ...)

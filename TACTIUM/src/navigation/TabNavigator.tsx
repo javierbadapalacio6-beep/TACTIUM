@@ -205,15 +205,25 @@ export const TabNavigator = () => {
         tabBarBackground: () => null,
         // Botón con animación de press (scale-feedback + spring).
         tabBarButton: (props) => <AnimatedTabButton {...props} />,
-        // Crossfade simple entre tabs. Antes usábamos `'shift'` (desplazamiento
-        // direccional), pero @react-navigation/bottom-tabs v7.x tiene un bug
-        // con `shift` + custom `tabBar` (nuestro FloatingTabBar): al montar
-        // una tab por primera vez, la pantalla se desplaza pero el contenido
-        // interno (ScrollView) no termina de renderizarse hasta una segunda
-        // interacción — queda visible solo el fondo del navigator (en Profile
-        // se veía el AmbientBackdrop verde oscuro sin contenido). `'fade'` es
-        // la animación default segura.
-        animation: 'fade',
+        // `animation: 'none'`: con `'shift'` se veía el bug del lazy mount;
+        // con `'fade'` aún quedaba un edge case donde nav rápida entre tabs
+        // dejaba opacity 0 (Profile salía blanco). `none` cambia
+        // instantáneo entre tabs — menos sutil visualmente, pero 100%
+        // robusto. La animación bonita entre stacks la sigue dando el
+        // `slide_from_right` de los stacks internos para drill-down.
+        animation: 'none',
+        // Pre-montamos las 3 tabs al arrancar (vs. `lazy: true` default que
+        // monta solo al primer focus). Sin esto, navegar rápido entre tabs
+        // disparaba el lazy-mount del stack interno a mitad de la animación
+        // `fade` y la pantalla quedaba con tab bar visible pero contenido
+        // vacío. Coste: ~50-100 KB extra de RAM por tener las 3 montadas;
+        // aceptable porque solo tenemos 2 stacks por rol.
+        lazy: false,
+        // Defensa adicional: no congelar el render de la tab al perder
+        // focus. `freezeOnBlur: true` (que es default cuando hay
+        // react-native-screens) puede causar que al re-focus haya un
+        // frame con contenido stale o vacío en navegaciones muy rápidas.
+        freezeOnBlur: false,
       }}
     >
       {activeRole === 'club_admin' ? (

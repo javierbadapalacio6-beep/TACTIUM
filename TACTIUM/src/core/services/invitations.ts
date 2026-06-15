@@ -23,6 +23,44 @@ export async function fetchTeamInvitations(
 }
 
 /**
+ * Versión extendida con el perfil del usuario que canjeó cada código
+ * (cuando `used_by` está poblado). Hace dos queries y mergea — no hay
+ * FK declarada entre `team_invitations.used_by` y `profiles`, así que
+ * PostgREST no puede hacer el join implícito.
+ */
+export interface TeamInvitationWithRedeemer extends TeamInvitation {
+  redeemer: { id: string; full_name: string | null; email: string | null } | null;
+}
+
+export async function fetchTeamInvitationsWithRedeemers(
+  teamId: string,
+): Promise<TeamInvitationWithRedeemer[]> {
+  const invitations = await fetchTeamInvitations(teamId);
+  const userIds = Array.from(
+    new Set(
+      invitations
+        .map((i) => i.used_by)
+        .filter((u): u is string => u !== null),
+    ),
+  );
+  if (userIds.length === 0) {
+    return invitations.map((i) => ({ ...i, redeemer: null }));
+  }
+  const { data: profiles, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .in('id', userIds);
+  if (error) throw error;
+  const byId = new Map(
+    (profiles ?? []).map((p) => [p.id, p] as const),
+  );
+  return invitations.map((i) => ({
+    ...i,
+    redeemer: i.used_by ? byId.get(i.used_by) ?? null : null,
+  }));
+}
+
+/**
  * Crea una invitación. La BD genera el code y valida is_team_admin.
  */
 export async function createInvitation(
