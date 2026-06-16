@@ -73,6 +73,8 @@ export const PaywallScreen = ({
   const activeRole = useTeamStore((s) => s.activeRole);
   const createTeam = useTeamStore((s) => s.createTeam);
   const club = useClubStore(selectActiveClub);
+  const clubs = useClubStore((s) => s.clubs);
+  const activeTeam = useTeamStore((s) => s.team);
   const addOptimistic = useSubscriptionStore((s) => s.addOptimistic);
   const refreshSubs = useSubscriptionStore((s) => s.refresh);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
@@ -138,9 +140,17 @@ export const PaywallScreen = ({
   // Modo: club_admin ve los 3 tier de club; el resto ve solo plan capitán.
   // En onboarding el activeRole aún no es fiable (no hay team), así que
   // usamos la `intent` que el flow nos pasó (club vs captain).
+  // Un dueño de club se suscribe a NIVEL CLUB, aunque haya cambiado su rol
+  // activo a "capitán" para operar sus equipos. Si el equipo activo es de un
+  // club que el usuario posee, el paywall ofrece planes Club (no Capitán) —
+  // si no, un dueño de club podría comprar por error un plan Capitán (que NO
+  // cubre equipos de club, ver hasPremiumAccess).
+  const ownsActiveTeamClub = Boolean(
+    activeTeam?.club_id && clubs.some((c) => c.id === activeTeam.club_id),
+  );
   const showClubPlans = isOnboarding
     ? intent === 'club'
-    : activeRole === 'club_admin';
+    : activeRole === 'club_admin' || ownsActiveTeamClub;
 
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
   // Hoja de confirmación con la línea de tiempo del trial (Apple HIG).

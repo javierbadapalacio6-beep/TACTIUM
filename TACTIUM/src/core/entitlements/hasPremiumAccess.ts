@@ -76,8 +76,15 @@ export function hasPremiumAccess(
     }
   }
 
-  // 3) Captain/admin con sub propia (equipo independiente)
-  if (ctx.role === 'captain' || ctx.role === 'admin') {
+  // 3) Captain/admin con sub propia — SOLO para equipos INDEPENDIENTES (sin
+  //    club). Un equipo de CLUB solo es premium vía la sub del club; una sub
+  //    de Capitán del admin NO lo cubre. Si no, un dueño de club podría pagar
+  //    un plan Capitán (barato) para colar sus equipos de club saltándose la
+  //    sub de club que le corresponde.
+  if (
+    ctx.clubId == null &&
+    (ctx.role === 'captain' || ctx.role === 'admin')
+  ) {
     const hit = ctx.subscriptions.find(
       (s) =>
         s.subject_type === 'user' &&
