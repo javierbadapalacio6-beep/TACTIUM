@@ -164,6 +164,31 @@ export async function getCurrentOffering(): Promise<PurchasesOffering | null> {
 }
 
 /**
+ * DIAGNÓSTICO temporal: devuelve un string legible con el estado real de los
+ * offerings (o el error exacto), para depurar "Productos no disponibles" en
+ * dispositivo sin tener que mirar logcat. Quitar cuando esté resuelto.
+ */
+export async function diagnoseOfferings(): Promise<string> {
+  try {
+    const configured = await Purchases.getAppUserID().catch(() => null);
+    const offerings = await Purchases.getOfferings();
+    const all = Object.keys(offerings.all ?? {});
+    const cur = offerings.current;
+    const pkgs = cur ? cur.availablePackages.length : 0;
+    const prods = cur
+      ? cur.availablePackages
+          .map((p) => `${p.identifier}:${p.product?.priceString ?? 'NO_PRICE'}`)
+          .join(' | ')
+      : '';
+    return `appUserID=${configured ? 'OK' : 'NULL'}\ncurrent=${
+      cur?.identifier ?? 'NULL'
+    } · pkgs=${pkgs}\nall=[${all.join(', ')}]\n${prods}`;
+  } catch (e: any) {
+    return `ERROR getOfferings:\n${e?.code ?? ''} ${e?.message ?? String(e)}`;
+  }
+}
+
+/**
  * Dispara la compra de un package. iOS muestra el sheet nativo de
  * StoreKit; tras éxito devuelve el `CustomerInfo` actualizado con los
  * entitlements activos. Si el user cancela, Purchases lanza
