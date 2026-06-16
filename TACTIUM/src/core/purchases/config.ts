@@ -14,4 +14,4 @@ export const REVENUECAT_IOS_API_KEY = 'appl_HgGvdsLGLkZLREwiZllDmuZmHFE';
 // (Project settings → API keys → Public app-specific API key for
 // Android, formato `goog_...`) y pegarla aquí. El init del SDK ya
 // detecta plataforma y elige la correcta.
-export const REVENUECAT_ANDROID_API_KEY = 'goog_cKsinXjSnlhnzPSJDNEdoOXeBul';
+export const REVENUECAT_ANDROID_API_KEY = 'goog_wPVXlAWzxhBSMMfBInpOgJVmAqN';
