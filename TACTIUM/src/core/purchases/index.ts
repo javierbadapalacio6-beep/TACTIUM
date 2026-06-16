@@ -184,7 +184,13 @@ export async function diagnoseOfferings(): Promise<string> {
       cur?.identifier ?? 'NULL'
     } · pkgs=${pkgs}\nall=[${all.join(', ')}]\n${prods}`;
   } catch (e: any) {
-    return `ERROR getOfferings:\n${e?.code ?? ''} ${e?.message ?? String(e)}`;
+    return [
+      'ERROR getOfferings:',
+      `code=${e?.code ?? '?'}`,
+      `readable=${e?.readableErrorCode ?? '?'}`,
+      `msg=${e?.message ?? ''}`,
+      `underlying=${e?.underlyingErrorMessage ?? '—'}`,
+    ].join('\n');
   }
 }
 
