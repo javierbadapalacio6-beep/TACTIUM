@@ -200,9 +200,32 @@ export async function diagnoseOfferings(): Promise<string> {
  * entitlements activos. Si el user cancela, Purchases lanza
  * `userCancelled=true` — el caller debe distinguirlo de error real.
  */
+export interface AndroidPlanChange {
+  /** Producto Android de la sub ACTUAL a reemplazar (`productId:basePlanId`). */
+  oldProductIdentifier: string;
+  /** true = downgrade → se aplica a la renovación (DEFERRED); false = upgrade
+   *  → inmediato con proración. */
+  isDowngrade: boolean;
+}
+
 export async function purchasePackage(
   pkg: PurchasesPackage,
+  androidChange?: AndroidPlanChange | null,
 ): Promise<CustomerInfo> {
+  // En Android los planes son suscripciones SEPARADAS (no un grupo como iOS),
+  // así que cambiar de plan exige REEMPLAZAR la sub existente; si no, Google
+  // rechaza con "ya tienes una suscripción activa". Pasamos el producto viejo
+  // + el proration mode (upgrade inmediato / downgrade diferido). iOS no lo
+  // necesita: StoreKit gestiona el grupo de suscripción solo.
+  if (Platform.OS === 'android' && androidChange) {
+    const result = await Purchases.purchasePackage(pkg, null, {
+      oldProductIdentifier: androidChange.oldProductIdentifier,
+      prorationMode: androidChange.isDowngrade
+        ? Purchases.PRORATION_MODE.DEFERRED
+        : Purchases.PRORATION_MODE.IMMEDIATE_WITH_TIME_PRORATION,
+    });
+    return result.customerInfo;
+  }
   const result = await Purchases.purchasePackage(pkg);
   return result.customerInfo;
 }

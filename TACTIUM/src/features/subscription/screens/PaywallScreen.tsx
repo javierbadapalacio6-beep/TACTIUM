@@ -9,6 +9,7 @@ import {
   Alert,
   BackHandler,
   Linking,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -306,13 +307,33 @@ export const PaywallScreen = ({
         } else {
           await setSubjectAttributes('user', subjectId);
         }
-        // 2) StoreKit toma el control: muestra sheet nativo, gestiona
-        //    Face ID, intro offer (free trial 14 días si está configurado
-        //    en App Store Connect). Si el user cancela, lanza userCancelled.
-        const purchase = await purchasePackage(pkg).catch((e: any) => {
-          if (e?.userCancelled) return null;
-          throw e;
-        });
+        // 2) StoreKit/Play toma el control: muestra sheet nativo, gestiona
+        //    Face ID/biometría, intro offer (trial 14 días). Si el user
+        //    cancela, lanza userCancelled.
+        //    ANDROID · cambio de plan: los planes son subs SEPARADAS, así que
+        //    hay que decirle a Google que REEMPLACE la actual (si no, rechaza
+        //    con "ya tienes una activa"). Upgrade=inmediato, downgrade=diferido.
+        const TIER_RANK: Record<string, number> = {
+          captain: 0,
+          club_starter: 1,
+          club_pro: 2,
+          club_elite: 3,
+        };
+        const androidChange =
+          Platform.OS === 'android' && hadExistingPremium && previousSub
+            ? {
+                oldProductIdentifier: `${previousSub.product_id}:${previousSub.billing_period}`,
+                isDowngrade:
+                  TIER_RANK[selectedPlan.tier] <
+                  TIER_RANK[previousSub.plan_tier],
+              }
+            : null;
+        const purchase = await purchasePackage(pkg, androidChange).catch(
+          (e: any) => {
+            if (e?.userCancelled) return null;
+            throw e;
+          },
+        );
         if (!purchase) {
           return; // el usuario canceló el sheet de compra
         }
