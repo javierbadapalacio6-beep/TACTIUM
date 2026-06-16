@@ -215,7 +215,11 @@ export const CreateTeamScreen = ({
         </Section>
 
         <Section label="Categoría">
-          <View style={styles.catGrid}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catScrollContent}
+          >
             {CATS.map((c) => {
               const sel = cat === c;
               return (
@@ -224,6 +228,7 @@ export const CreateTeamScreen = ({
                   onPress={() => setCat(c)}
                   style={[
                     styles.catCell,
+                    styles.catScrollCell,
                     sel && {
                       backgroundColor: Colors.accent,
                       borderColor: Colors.accent,
@@ -241,7 +246,7 @@ export const CreateTeamScreen = ({
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         </Section>
 
         <Section label="Género">
@@ -552,6 +557,15 @@ const styles = StyleSheet.create({
   catGrid: {
     flexDirection: 'row',
     gap: 6,
+  },
+  catScrollContent: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingRight: 4,
+  },
+  catScrollCell: {
+    flex: 0,
+    width: 56,
   },
   catCell: {
     flex: 1,
