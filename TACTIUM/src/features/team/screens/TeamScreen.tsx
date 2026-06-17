@@ -590,9 +590,9 @@ const EditPlayerSheet: React.FC<EditProps> = ({
         <View style={styles.photoCircle}>
           {photoBusy ? (
             <ActivityIndicator color={Colors.accent} />
-          ) : photo ?? player?.profile_avatar_url ? (
+          ) : player?.profile_avatar_url ?? photo ? (
             <Image
-              source={{ uri: (photo ?? player?.profile_avatar_url) as string }}
+              source={{ uri: (player?.profile_avatar_url ?? photo) as string }}
               style={styles.photoImg}
               resizeMode="cover"
             />

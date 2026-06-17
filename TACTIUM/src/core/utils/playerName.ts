@@ -19,12 +19,12 @@ interface PhotoLike {
 }
 
 /**
- * Foto a mostrar de un jugador. Precedencia: la que subió el capitán
- * (`photo_url`, override explícito) y, si no hay, la del perfil del propio
- * jugador (`profile_avatar_url`). null = sin foto → iniciales.
+ * Foto a mostrar de un jugador. Precedencia: la del PERFIL del propio
+ * jugador (`profile_avatar_url`, es su cara y la mantiene él) y, si no tiene,
+ * la que subió el capitán (`photo_url`, respaldo). null = sin foto → iniciales.
  */
 export function photoOf(p: PhotoLike): string | null {
-  return p.photo_url ?? p.profile_avatar_url ?? null;
+  return p.profile_avatar_url ?? p.photo_url ?? null;
 }
 
 /** Nombre completo a mostrar: alias si lo hay, si no el nombre tal cual. */
