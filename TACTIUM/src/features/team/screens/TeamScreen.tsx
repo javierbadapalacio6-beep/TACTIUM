@@ -310,36 +310,18 @@ export const TeamScreen = () => {
                   )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={styles.rowNameRow}>
-                    <Text style={styles.rowName}>{displayName(p)}</Text>
-                    {!p.available ? (
-                      <View style={styles.bajaBadge}>
-                        <Text style={styles.bajaBadgeText}>BAJA</Text>
-                      </View>
-                    ) : null}
-                  </View>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {displayName(p)}
+                  </Text>
                   <Text style={styles.rowMeta}>
                     {p.position} · {p.pts} pts
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.ptsPill,
-                    i < 2 && {
-                      backgroundColor: Colors.accent10,
-                      borderColor: Colors.accent40,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.ptsPillText,
-                      { color: i < 2 ? Colors.accent : Colors.text },
-                    ]}
-                  >
-                    {p.pts}
-                  </Text>
-                </View>
+                {!p.available ? (
+                  <View style={styles.bajaBadge}>
+                    <Text style={styles.bajaBadgeText}>BAJA</Text>
+                  </View>
+                ) : null}
                 <IconChevron size={14} color={Colors.textFaint} />
               </Pressable>
             ))

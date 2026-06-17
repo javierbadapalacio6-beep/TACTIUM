@@ -31,6 +31,8 @@ import {
   IconCheck,
   IconPlus,
   IconTrash,
+  BottomSheet,
+  Toggle,
 } from '@components/ui';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as LineupsApi from '@core/services/lineups';
@@ -210,6 +212,13 @@ export const LineupScreen = ({
   const [pairStats, setPairStats] = useState<PairStatsMap | undefined>(
     undefined,
   );
+  // Filtros del generador de parejas.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [genOpts, setGenOpts] = useState({
+    useChemistry: true,
+    usePosition: true,
+    strongestOnCourt1: true,
+  });
 
   // Carga inicial: matchday + variantes. La variante activa pasa a ser
   // currentVariantId por defecto.
@@ -730,16 +739,17 @@ export const LineupScreen = ({
   // desde cero respetando posición. Si ya hay parejas montadas, confirma
   // antes de sobrescribir el trabajo manual del capitán.
   const runGenerate = useCallback(() => {
-    const { slots: generated, warnings } = generateLineup(
-      players,
-      courts,
-      pairStats,
-    );
+    const { slots: generated, warnings } = generateLineup(players, courts, {
+      stats: genOpts.useChemistry ? pairStats : undefined,
+      usePosition: genOpts.usePosition,
+      strongestOnCourt1: genOpts.strongestOnCourt1,
+    });
     const next: SlotState[] = generated.map((g) => ({
       court: g.court,
       playerAId: g.playerAId,
       playerBId: g.playerBId,
     }));
+    setFiltersOpen(false);
     commit(next);
     pulseAll();
     setSel(null);
@@ -749,24 +759,13 @@ export const LineupScreen = ({
       setAutoDelta('alineación generada');
       setTimeout(() => setAutoDelta(null), 2400);
     }
-  }, [players, courts, pairStats, commit, pulseAll]);
+  }, [players, courts, pairStats, genOpts, commit, pulseAll]);
 
+  // El botón abre el panel de filtros; el generado real se lanza desde ahí.
   const handleGenerate = useCallback(() => {
     if (!canEdit || !currentVariantId) return;
-    const hasAny = slots.some((s) => filledLen(s) > 0);
-    if (!hasAny) {
-      runGenerate();
-      return;
-    }
-    Alert.alert(
-      'Generar alineación',
-      'Se sustituirán las parejas actuales de esta variante por una alineación generada (Drive+Revés, ordenada por fuerza). ¿Continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Generar', onPress: runGenerate },
-      ],
-    );
-  }, [canEdit, currentVariantId, slots, runGenerate]);
+    setFiltersOpen(true);
+  }, [canEdit, currentVariantId]);
 
   const suggestion = useMemo(() => {
     if (!allOk || filledCount < courts || benchPlayers.length === 0)
@@ -1266,9 +1265,69 @@ export const LineupScreen = ({
           )}
         </Pressable>
       </View>
+
+      <BottomSheet open={filtersOpen} onClose={() => setFiltersOpen(false)}>
+        <Text style={styles.filterEyebrow}>GENERAR</Text>
+        <Text style={styles.filterTitle}>Crear parejas</Text>
+        <Text style={styles.filterLede}>
+          Elige cómo formar las parejas. Puedes ajustarlo y volver a generar
+          cuando quieras.
+        </Text>
+
+        <FilterRow
+          label="Emparejar Drive + Revés"
+          hint="Si lo desactivas, empareja solo por nivel"
+          value={genOpts.usePosition}
+          onChange={(v) => setGenOpts((o) => ({ ...o, usePosition: v }))}
+        />
+        <FilterRow
+          label="Priorizar química"
+          hint={
+            pairStats && pairStats.size > 0
+              ? 'Mantiene juntas las parejas que más ganan'
+              : 'Aún no hay historial de jornadas cerradas'
+          }
+          value={genOpts.useChemistry}
+          onChange={(v) => setGenOpts((o) => ({ ...o, useChemistry: v }))}
+        />
+        <FilterRow
+          label="Pareja fuerte en la pista 1"
+          hint="Pirámide. Desactiva para ponerla en la última pista"
+          value={genOpts.strongestOnCourt1}
+          onChange={(v) =>
+            setGenOpts((o) => ({ ...o, strongestOnCourt1: v }))
+          }
+        />
+
+        <Pressable
+          onPress={runGenerate}
+          style={({ pressed }) => [
+            styles.filterCta,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <IconBolt size={15} color="#001810" />
+          <Text style={styles.filterCtaText}>Generar alineación</Text>
+        </Pressable>
+      </BottomSheet>
     </Pressable>
   );
 };
+
+const FilterRow: React.FC<{
+  label: string;
+  hint: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}> = ({ label, hint, value, onChange }) => (
+  <View style={styles.filterRow}>
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text style={styles.filterLabel}>{label}</Text>
+      <Text style={styles.filterHint}>{hint}</Text>
+    </View>
+    <Toggle value={value} onChange={onChange} />
+  </View>
+);
 
 // ============= BALANCE FILL =============
 
@@ -1482,7 +1541,7 @@ const CourtRow: React.FC<CourtRowProps> = ({
             <CourtBarFill pct={pctOfMax} color={tint} />
           </View>
           {top && validation.state !== 'err' ? (
-            <Text style={styles.titularLabel}>PAREJA TITULAR</Text>
+            <Text style={styles.titularLabel}>PAREJA Nº1</Text>
           ) : null}
           {errorMsg ? (
             <Animated.Text
@@ -2150,6 +2209,63 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     fontSize: 10,
     letterSpacing: 0.3,
+  },
+  filterEyebrow: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    letterSpacing: 2,
+    fontWeight: '500',
+  },
+  filterTitle: {
+    color: Colors.text,
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginTop: 4,
+  },
+  filterLede: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderColor: Colors.hair,
+  },
+  filterLabel: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  filterHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  filterCta: {
+    height: 52,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+  },
+  filterCtaText: {
+    color: '#001810',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   suggestionWrap: { paddingHorizontal: 16, paddingBottom: 8 },
   suggestionBtn: {

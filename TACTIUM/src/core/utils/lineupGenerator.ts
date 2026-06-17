@@ -89,6 +89,15 @@ interface Candidate {
   pts: number;
 }
 
+export interface GenerateOptions {
+  /** Química por historial. Si se pasa, se prioriza mantener parejas ganadoras. */
+  stats?: PairStatsMap;
+  /** Emparejar respetando Drive+Revés. false = emparejar solo por nivel. */
+  usePosition?: boolean;
+  /** true (def): la pareja más fuerte a la pista 1 (pirámide). */
+  strongestOnCourt1?: boolean;
+}
+
 /**
  * Genera una alineación completa a partir de los jugadores disponibles.
  *
@@ -108,8 +117,9 @@ interface Candidate {
 export function generateLineup(
   players: Player[],
   courts: number,
-  stats?: PairStatsMap,
+  options: GenerateOptions = {},
 ): GenerateResult {
+  const { stats, usePosition = true, strongestOnCourt1 = true } = options;
   const warnings: string[] = [];
   const avail = players.filter((p) => p.available && p.active);
 
@@ -122,7 +132,9 @@ export function generateLineup(
       candidates.push({
         a,
         b,
-        tier: positionTier(a, b),
+        // Si no se empareja por posición, todas las parejas valen igual de
+        // tier y mandan química + puntos.
+        tier: usePosition ? positionTier(a, b) : 1,
         chem: chemistryBonus(a.id, b.id, stats),
         pts: a.pts + b.pts,
       });
@@ -146,8 +158,10 @@ export function generateLineup(
     chosen.push({ a: c.a, b: c.b, tier: c.tier });
   }
 
-  // Pirámide: parejas de más a menos puntos → pista 1..N.
+  // Pirámide: parejas de más a menos puntos → pista 1..N. Si el usuario
+  // prefiere la pareja fuerte abajo, invertimos el orden de pistas.
   chosen.sort((p, q) => q.a.pts + q.b.pts - (p.a.pts + p.b.pts));
+  if (!strongestOnCourt1) chosen.reverse();
 
   const slots: GeneratedSlot[] = chosen.map((pair, idx) => {
     // Jugador de más puntos como A (consistente con sortByPoints de la UI).
