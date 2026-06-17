@@ -1,7 +1,13 @@
 import { supabase } from '@core/supabase/client';
 import type { Database } from '@core/supabase/database.types';
 
-export type Player = Database['public']['Tables']['players']['Row'];
+// Player de plantilla + avatar del perfil del usuario vinculado (si lo hay).
+// `profile_avatar_url` NO está en la tabla: se mezcla al cargar desde
+// `profiles` para que la foto que el jugador subió a su cuenta aparezca en
+// el equipo sin que el capitán tenga que subirla.
+export type Player = Database['public']['Tables']['players']['Row'] & {
+  profile_avatar_url?: string | null;
+};
 export type PlayerInsert = Database['public']['Tables']['players']['Insert'];
 export type PlayerUpdate = Database['public']['Tables']['players']['Update'];
 export type PlayerPosition = Database['public']['Enums']['player_position'];
@@ -15,7 +21,30 @@ export async function fetchPlayers(teamId: string): Promise<Player[]> {
     .order('pts', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  const players = data ?? [];
+
+  // Mezcla el avatar del perfil de cada jugador vinculado (RLS
+  // `profiles_teammate_select` deja al capitán/club leerlos).
+  const userIds = Array.from(
+    new Set(
+      players
+        .map((p) => p.user_id)
+        .filter((u): u is string => u !== null),
+    ),
+  );
+  if (userIds.length === 0) return players;
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, avatar_url')
+    .in('id', userIds);
+  const avatarById = new Map(
+    (profiles ?? []).map((pr) => [pr.id, pr.avatar_url] as const),
+  );
+  return players.map((p) => ({
+    ...p,
+    profile_avatar_url: p.user_id ? avatarById.get(p.user_id) ?? null : null,
+  }));
 }
 
 export async function createPlayer(

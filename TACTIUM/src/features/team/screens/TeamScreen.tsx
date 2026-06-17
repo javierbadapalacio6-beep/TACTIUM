@@ -41,7 +41,7 @@ import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { uploadPlayerPhoto, removePlayerPhoto } from '@core/services/playerPhoto';
-import { displayName, initialsOf } from '@core/utils/playerName';
+import { displayName, initialsOf, photoOf } from '@core/utils/playerName';
 
 const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 
@@ -297,9 +297,9 @@ export const TeamScreen = () => {
                   </Text>
                 </View>
                 <View style={styles.rowAvatar}>
-                  {p.photo_url ? (
+                  {photoOf(p) ? (
                     <Image
-                      source={{ uri: p.photo_url }}
+                      source={{ uri: photoOf(p) as string }}
                       style={styles.rowAvatarImg}
                       resizeMode="cover"
                     />
@@ -590,9 +590,9 @@ const EditPlayerSheet: React.FC<EditProps> = ({
         <View style={styles.photoCircle}>
           {photoBusy ? (
             <ActivityIndicator color={Colors.accent} />
-          ) : photo ? (
+          ) : photo ?? player?.profile_avatar_url ? (
             <Image
-              source={{ uri: photo }}
+              source={{ uri: (photo ?? player?.profile_avatar_url) as string }}
               style={styles.photoImg}
               resizeMode="cover"
             />

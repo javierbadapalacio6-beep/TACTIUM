@@ -45,7 +45,7 @@ import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { generateLineup, type PairStatsMap } from '@core/utils/lineupGenerator';
 import { fetchPairStats } from '@core/services/pairStats';
-import { shortName, initialsOf } from '@core/utils/playerName';
+import { shortName, initialsOf, photoOf } from '@core/utils/playerName';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -1672,7 +1672,7 @@ const SlotTile: React.FC<SlotTileProps> = ({
         initials={initials}
         selected={selected}
         animating={animating}
-        photoUrl={player.photo_url}
+        photoUrl={photoOf(player)}
       />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.slotName} numberOfLines={1}>
@@ -1822,7 +1822,7 @@ const BenchChip: React.FC<BenchChipProps> = ({
         animating={animating}
         size={26}
         fontSize={10}
-        photoUrl={player.photo_url}
+        photoUrl={photoOf(player)}
       />
       <View>
         <Text style={styles.benchChipName} numberOfLines={1}>

@@ -13,6 +13,20 @@ interface NameLike {
   name: string;
 }
 
+interface PhotoLike {
+  photo_url?: string | null;
+  profile_avatar_url?: string | null;
+}
+
+/**
+ * Foto a mostrar de un jugador. Precedencia: la que subió el capitán
+ * (`photo_url`, override explícito) y, si no hay, la del perfil del propio
+ * jugador (`profile_avatar_url`). null = sin foto → iniciales.
+ */
+export function photoOf(p: PhotoLike): string | null {
+  return p.photo_url ?? p.profile_avatar_url ?? null;
+}
+
 /** Nombre completo a mostrar: alias si lo hay, si no el nombre tal cual. */
 export function displayName(p: NameLike): string {
   const alias = p.alias?.trim();
