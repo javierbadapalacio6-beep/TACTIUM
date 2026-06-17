@@ -176,12 +176,12 @@ export const OnboardingChoiceScreen = ({
             ]}
           >
             <View style={styles.freeBadge}>
-              <Text style={styles.freeBadgeText}>SIEMPRE GRATIS</Text>
+              <Text style={styles.freeBadgeText}>SOY JUGADOR</Text>
             </View>
-            <Text style={styles.redeemTitle}>Me han invitado</Text>
+            <Text style={styles.redeemTitle}>Me han invitado a un equipo</Text>
             <Text style={styles.redeemHint}>
-              Tengo un código de invitación{'\n'}
-              de un capitán o un club.
+              Mi capitán o club ya tiene equipo creado{'\n'}
+              y me ha enviado una invitación para unirme.
             </Text>
           </Pressable>
         </Animated.View>

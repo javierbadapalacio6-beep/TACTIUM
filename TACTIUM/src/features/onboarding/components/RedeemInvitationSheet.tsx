@@ -70,10 +70,11 @@ export const RedeemInvitationSheet: React.FC<{
         }
       }}
     >
-      <Text style={styles.eyebrow}>INVITACIÓN</Text>
-      <Text style={styles.title}>Introduce tu código</Text>
+      <Text style={styles.eyebrow}>INVITACIÓN DE EQUIPO</Text>
+      <Text style={styles.title}>Únete a tu equipo</Text>
       <Text style={styles.lede}>
-        El gestor de tu club o el capitán te ha enviado un código de 8 caracteres.
+        El gestor de tu club o tu capitán ha creado el equipo y te ha enviado
+        una invitación de 8 caracteres para unirte como jugador.
       </Text>
 
       <View style={styles.input}>
