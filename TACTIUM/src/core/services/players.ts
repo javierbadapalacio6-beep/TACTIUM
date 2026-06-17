@@ -20,7 +20,13 @@ export async function fetchPlayers(teamId: string): Promise<Player[]> {
 
 export async function createPlayer(
   teamId: string,
-  input: { name: string; pts: number; position: PlayerPosition; available?: boolean },
+  input: {
+    name: string;
+    pts: number;
+    position: PlayerPosition;
+    available?: boolean;
+    alias?: string | null;
+  },
 ): Promise<Player> {
   const payload: PlayerInsert = {
     team_id: teamId,
@@ -28,6 +34,7 @@ export async function createPlayer(
     pts: input.pts,
     position: input.position,
     available: input.available ?? true,
+    alias: input.alias?.trim() ? input.alias.trim() : null,
   };
 
   const { data, error } = await supabase

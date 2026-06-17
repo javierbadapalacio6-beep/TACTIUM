@@ -7,7 +7,10 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -37,6 +40,8 @@ import {
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { uploadPlayerPhoto, removePlayerPhoto } from '@core/services/playerPhoto';
+import { displayName, initialsOf } from '@core/utils/playerName';
 
 const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 
@@ -291,9 +296,22 @@ export const TeamScreen = () => {
                     #{String(i + 1).padStart(2, '0')}
                   </Text>
                 </View>
+                <View style={styles.rowAvatar}>
+                  {p.photo_url ? (
+                    <Image
+                      source={{ uri: p.photo_url }}
+                      style={styles.rowAvatarImg}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.rowAvatarInitials}>
+                      {initialsOf(p)}
+                    </Text>
+                  )}
+                </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={styles.rowNameRow}>
-                    <Text style={styles.rowName}>{p.name}</Text>
+                    <Text style={styles.rowName}>{displayName(p)}</Text>
                     {!p.available ? (
                       <View style={styles.bajaBadge}>
                         <Text style={styles.bajaBadgeText}>BAJA</Text>
@@ -331,7 +349,18 @@ export const TeamScreen = () => {
 
       <EditPlayerSheet
         player={editing}
+        teamId={team?.id ?? null}
         onClose={() => setEditing(null)}
+        onPhotoChange={(url) => {
+          if (editing) {
+            // El service ya escribió photo_url en BD; sincronizamos el store
+            // local para que la lista/alineación repinten sin recargar.
+            updatePlayer(editing.id, { photo_url: url });
+            setEditing((prev) =>
+              prev ? { ...prev, photo_url: url } : prev,
+            );
+          }
+        }}
         onSave={(patch) => {
           if (editing) {
             updatePlayer(editing.id, patch);
@@ -420,29 +449,116 @@ const Kpi: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
 
 interface EditProps {
   player: Player | null;
+  teamId: string | null;
   onClose: () => void;
   onSave: (patch: Partial<Player>) => void;
   onRemove: () => void;
+  // Notifica al padre el nuevo photo_url (o null) tras subir/quitar foto,
+  // para que el store refresque sin reabrir el sheet.
+  onPhotoChange: (url: string | null) => void;
 }
 const EditPlayerSheet: React.FC<EditProps> = ({
   player,
+  teamId,
   onClose,
   onSave,
   onRemove,
+  onPhotoChange,
 }) => {
   const [name, setName] = useState('');
+  const [alias, setAlias] = useState('');
   const [pts, setPts] = useState('');
   const [pos, setPos] = useState<Side>('Drive');
   const [avail, setAvail] = useState(true);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   React.useEffect(() => {
     if (player) {
       setName(player.name);
+      setAlias(player.alias ?? '');
       setPts(String(player.pts));
       setPos(player.position);
       setAvail(player.available);
+      setPhoto(player.photo_url ?? null);
     }
   }, [player]);
+
+  const doUploadPhoto = async (uri: string) => {
+    if (!player || !teamId) return;
+    setPhotoBusy(true);
+    try {
+      const url = await uploadPlayerPhoto(teamId, player.id, uri);
+      setPhoto(url);
+      onPhotoChange(url);
+      toast.success('Foto actualizada', player.name);
+    } catch (e: any) {
+      Alert.alert('No se pudo subir', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const pickPhoto = (source: 'camera' | 'library') => async () => {
+    const perm =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permiso requerido',
+        source === 'camera'
+          ? 'Necesitamos acceso a la cámara.'
+          : 'Necesitamos acceso a tus fotos.',
+      );
+      return;
+    }
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    await doUploadPhoto(result.assets[0].uri);
+  };
+
+  const onPhotoPress = () => {
+    if (photoBusy || !player || !teamId) return;
+    Alert.alert('Foto del jugador', undefined, [
+      { text: 'Hacer foto', onPress: pickPhoto('camera') },
+      { text: 'Elegir de galería', onPress: pickPhoto('library') },
+      ...(photo
+        ? [
+            {
+              text: 'Quitar foto',
+              style: 'destructive' as const,
+              onPress: async () => {
+                setPhotoBusy(true);
+                try {
+                  await removePlayerPhoto(teamId, player.id);
+                  setPhoto(null);
+                  onPhotoChange(null);
+                } catch (e: any) {
+                  Alert.alert('No se pudo quitar', e?.message ?? '');
+                } finally {
+                  setPhotoBusy(false);
+                }
+              },
+            },
+          ]
+        : []),
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
 
   return (
     <BottomSheet
@@ -461,6 +577,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
             onPress={() =>
               onSave({
                 name: normalizeName(name),
+                alias: alias.trim() ? alias.trim() : null,
                 pts: parsePts(pts),
                 position: pos,
                 available: avail,
@@ -478,7 +595,35 @@ const EditPlayerSheet: React.FC<EditProps> = ({
       }
     >
       <Text style={styles.sheetEyebrow}>EDITAR</Text>
-      <Text style={styles.sheetTitle}>{player?.name ?? ''}</Text>
+      <Text style={styles.sheetTitle}>{player ? displayName(player) : ''}</Text>
+
+      <Pressable
+        onPress={onPhotoPress}
+        disabled={photoBusy}
+        style={({ pressed }) => [
+          styles.photoPick,
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <View style={styles.photoCircle}>
+          {photoBusy ? (
+            <ActivityIndicator color={Colors.accent} />
+          ) : photo ? (
+            <Image
+              source={{ uri: photo }}
+              style={styles.photoImg}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={styles.photoInitials}>
+              {player ? initialsOf(player) : ''}
+            </Text>
+          )}
+        </View>
+        <Text style={styles.photoPickLabel}>
+          {photo ? 'Cambiar foto' : 'Añadir foto'}
+        </Text>
+      </Pressable>
 
       <FormRow label="NOMBRE">
         <TextInput
@@ -486,6 +631,17 @@ const EditPlayerSheet: React.FC<EditProps> = ({
           onChangeText={setName}
           maxLength={NAME_MAX_LENGTH}
           autoCapitalize="words"
+          style={styles.sheetInput}
+          placeholderTextColor={Colors.textFaint}
+        />
+      </FormRow>
+      <FormRow label="ALIAS (OPCIONAL)">
+        <TextInput
+          value={alias}
+          onChangeText={setAlias}
+          maxLength={40}
+          autoCapitalize="words"
+          placeholder="Cómo le llaman en el equipo"
           style={styles.sheetInput}
           placeholderTextColor={Colors.textFaint}
         />
@@ -546,16 +702,23 @@ const EditPlayerSheet: React.FC<EditProps> = ({
 interface AddProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (data: { name: string; pts: number; position: Side }) => void;
+  onAdd: (data: {
+    name: string;
+    pts: number;
+    position: Side;
+    alias?: string | null;
+  }) => void;
 }
 const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
   const [name, setName] = useState('');
+  const [alias, setAlias] = useState('');
   const [pts, setPts] = useState('300');
   const [pos, setPos] = useState<Side>('Drive');
 
   React.useEffect(() => {
     if (open) {
       setName('');
+      setAlias('');
       setPts('300');
       setPos('Drive');
     }
@@ -571,6 +734,7 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
           onPress={() =>
             onAdd({
               name: normalizeName(name),
+              alias: alias.trim() ? alias.trim() : null,
               pts: parsePts(pts),
               position: pos,
             })
@@ -596,6 +760,17 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
           maxLength={NAME_MAX_LENGTH}
           autoCapitalize="words"
           placeholder="Player 13"
+          style={styles.sheetInput}
+          placeholderTextColor={Colors.textFaint}
+        />
+      </FormRow>
+      <FormRow label="ALIAS (OPCIONAL)">
+        <TextInput
+          value={alias}
+          onChangeText={setAlias}
+          maxLength={40}
+          autoCapitalize="words"
+          placeholder="Cómo le llaman en el equipo"
           style={styles.sheetInput}
           placeholderTextColor={Colors.textFaint}
         />
@@ -787,6 +962,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  rowAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.accent15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  rowAvatarImg: {
+    width: 34,
+    height: 34,
+  },
+  rowAvatarInitials: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.accent,
+  },
   rowNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -905,6 +1099,37 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     marginTop: 4,
     marginBottom: 12,
+  },
+  photoPick: {
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+  photoCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: Colors.accent15,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  photoImg: {
+    width: 84,
+    height: 84,
+  },
+  photoInitials: {
+    fontFamily: Fonts.mono,
+    fontSize: 26,
+    fontWeight: '700',
+    color: Colors.accent,
+  },
+  photoPickLabel: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '600',
   },
   formLabel: {
     fontFamily: Fonts.mono,

@@ -85,6 +85,7 @@ interface TeamState {
     pts: number;
     position: Side;
     available?: boolean;
+    alias?: string | null;
   }) => Promise<Player>;
 
   updatePlayer: (id: string, patch: Partial<Player>) => Promise<void>;

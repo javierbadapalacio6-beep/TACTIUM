@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -40,7 +41,9 @@ import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
 import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
-import { generateLineup } from '@core/utils/lineupGenerator';
+import { generateLineup, type PairStatsMap } from '@core/utils/lineupGenerator';
+import { fetchPairStats } from '@core/services/pairStats';
+import { shortName, initialsOf } from '@core/utils/playerName';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -202,6 +205,11 @@ export const LineupScreen = ({
   const [swapAnimIds, setSwapAnimIds] = useState<Set<string>>(new Set());
   const [autoDelta, setAutoDelta] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Química por historial (Fase 2). Best-effort: si falla, el generador
+  // sigue funcionando solo con posición + puntos.
+  const [pairStats, setPairStats] = useState<PairStatsMap | undefined>(
+    undefined,
+  );
 
   // Carga inicial: matchday + variantes. La variante activa pasa a ser
   // currentVariantId por defecto.
@@ -234,6 +242,21 @@ export const LineupScreen = ({
       cancelled = true;
     };
   }, [matchdayId]);
+
+  // Química por historial del equipo (para el generador). Best-effort.
+  useEffect(() => {
+    const teamId = team?.id;
+    if (!teamId) return;
+    let cancelled = false;
+    fetchPairStats(teamId)
+      .then((m) => {
+        if (!cancelled) setPairStats(m);
+      })
+      .catch((e) => console.warn('pair stats fetch', e));
+    return () => {
+      cancelled = true;
+    };
+  }, [team?.id]);
 
   // Cargar lineup cada vez que cambia la variante seleccionada.
   useEffect(() => {
@@ -707,7 +730,11 @@ export const LineupScreen = ({
   // desde cero respetando posición. Si ya hay parejas montadas, confirma
   // antes de sobrescribir el trabajo manual del capitán.
   const runGenerate = useCallback(() => {
-    const { slots: generated, warnings } = generateLineup(players, courts);
+    const { slots: generated, warnings } = generateLineup(
+      players,
+      courts,
+      pairStats,
+    );
     const next: SlotState[] = generated.map((g) => ({
       court: g.court,
       playerAId: g.playerAId,
@@ -722,7 +749,7 @@ export const LineupScreen = ({
       setAutoDelta('alineación generada');
       setTimeout(() => setAutoDelta(null), 2400);
     }
-  }, [players, courts, commit, pulseAll]);
+  }, [players, courts, pairStats, commit, pulseAll]);
 
   const handleGenerate = useCallback(() => {
     if (!canEdit || !currentVariantId) return;
@@ -1295,7 +1322,15 @@ const Avatar: React.FC<{
   animating: boolean;
   size?: number;
   fontSize?: number;
-}> = ({ initials, selected, animating, size = 26, fontSize = 10 }) => {
+  photoUrl?: string | null;
+}> = ({
+  initials,
+  selected,
+  animating,
+  size = 26,
+  fontSize = 10,
+  photoUrl,
+}) => {
   const scale = useSharedValue(1);
   const rotate = useSharedValue(0);
 
@@ -1329,20 +1364,29 @@ const Avatar: React.FC<{
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: bg,
+          overflow: 'hidden',
         },
         aStyle,
       ]}
     >
-      <Text
-        style={{
-          fontFamily: Fonts.mono,
-          fontSize,
-          fontWeight: '600',
-          color: fg,
-        }}
-      >
-        {initials}
-      </Text>
+      {photoUrl ? (
+        <Image
+          source={{ uri: photoUrl }}
+          style={{ width: size, height: size }}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text
+          style={{
+            fontFamily: Fonts.mono,
+            fontSize,
+            fontWeight: '600',
+            color: fg,
+          }}
+        >
+          {initials}
+        </Text>
+      )}
     </Animated.View>
   );
 };
@@ -1543,11 +1587,7 @@ const SlotTile: React.FC<SlotTileProps> = ({
     );
   }
 
-  const firstName = player.name.split(' ')[0];
-  const lastInitial = player.name.split(' ')[1]?.[0] ?? '';
-  const initials = (player.name.split(' ')[1] || player.name)
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = initialsOf(player);
 
   return (
     <Pressable
@@ -1569,10 +1609,15 @@ const SlotTile: React.FC<SlotTileProps> = ({
         disabled && { opacity: 0.7 },
       ]}
     >
-      <Avatar initials={initials} selected={selected} animating={animating} />
+      <Avatar
+        initials={initials}
+        selected={selected}
+        animating={animating}
+        photoUrl={player.photo_url}
+      />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.slotName} numberOfLines={1}>
-          {firstName} {lastInitial ? `${lastInitial}.` : ''}
+          {shortName(player)}
         </Text>
         <Text style={styles.slotMeta}>
           {player.position} · <Text style={styles.slotPts}>{player.pts}</Text>
@@ -1695,11 +1740,7 @@ const BenchChip: React.FC<BenchChipProps> = ({
   disabled,
   onTap,
 }) => {
-  const initials = (player.name.split(' ')[1] || player.name)
-    .slice(0, 2)
-    .toUpperCase();
-  const firstName = player.name.split(' ')[0];
-  const lastInitial = player.name.split(' ')[1]?.[0] ?? '';
+  const initials = initialsOf(player);
   return (
     <Pressable
       onPress={(e) => {
@@ -1722,10 +1763,11 @@ const BenchChip: React.FC<BenchChipProps> = ({
         animating={animating}
         size={26}
         fontSize={10}
+        photoUrl={player.photo_url}
       />
       <View>
         <Text style={styles.benchChipName} numberOfLines={1}>
-          {firstName} {lastInitial ? `${lastInitial}.` : ''}
+          {shortName(player)}
         </Text>
         <Text style={styles.benchChipMeta}>
           {player.position} · {player.pts}

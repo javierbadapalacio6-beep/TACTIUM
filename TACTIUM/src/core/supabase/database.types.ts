@@ -330,10 +330,12 @@ export type Database = {
       players: {
         Row: {
           active: boolean
+          alias: string | null
           available: boolean
           created_at: string
           id: string
           name: string
+          photo_url: string | null
           position: Database["public"]["Enums"]["player_position"]
           pts: number
           team_id: string
@@ -342,10 +344,12 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          alias?: string | null
           available?: boolean
           created_at?: string
           id?: string
           name: string
+          photo_url?: string | null
           position?: Database["public"]["Enums"]["player_position"]
           pts?: number
           team_id: string
@@ -354,10 +358,12 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          alias?: string | null
           available?: boolean
           created_at?: string
           id?: string
           name?: string
+          photo_url?: string | null
           position?: Database["public"]["Enums"]["player_position"]
           pts?: number
           team_id?: string
@@ -950,6 +956,15 @@ export type Database = {
       renumber_season_matchdays: {
         Args: { target_season: string }
         Returns: undefined
+      }
+      team_pair_stats: {
+        Args: { p_team_id: string }
+        Returns: {
+          player_a: string
+          player_b: string
+          wins: number
+          played: number
+        }[]
       }
       set_active_lineup_variant: {
         Args: { p_variant_id: string }
