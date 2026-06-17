@@ -40,6 +40,7 @@ import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
 import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { generateLineup } from '@core/utils/lineupGenerator';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -701,6 +702,45 @@ export const LineupScreen = ({
     setSel(null);
   };
 
+  // Genera una alineación completa consciente de la posición (Drive+Revés).
+  // A diferencia de `fillEmpty` (solo puntos), esto arma TODAS las parejas
+  // desde cero respetando posición. Si ya hay parejas montadas, confirma
+  // antes de sobrescribir el trabajo manual del capitán.
+  const runGenerate = useCallback(() => {
+    const { slots: generated, warnings } = generateLineup(players, courts);
+    const next: SlotState[] = generated.map((g) => ({
+      court: g.court,
+      playerAId: g.playerAId,
+      playerBId: g.playerBId,
+    }));
+    commit(next);
+    pulseAll();
+    setSel(null);
+    if (warnings.length > 0) {
+      Alert.alert('Alineación generada con avisos', warnings.join('\n'));
+    } else {
+      setAutoDelta('alineación generada');
+      setTimeout(() => setAutoDelta(null), 2400);
+    }
+  }, [players, courts, commit, pulseAll]);
+
+  const handleGenerate = useCallback(() => {
+    if (!canEdit || !currentVariantId) return;
+    const hasAny = slots.some((s) => filledLen(s) > 0);
+    if (!hasAny) {
+      runGenerate();
+      return;
+    }
+    Alert.alert(
+      'Generar alineación',
+      'Se sustituirán las parejas actuales de esta variante por una alineación generada (Drive+Revés, ordenada por fuerza). ¿Continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Generar', onPress: runGenerate },
+      ],
+    );
+  }, [canEdit, currentVariantId, slots, runGenerate]);
+
   const suggestion = useMemo(() => {
     if (!allOk || filledCount < courts || benchPlayers.length === 0)
       return null;
@@ -1020,6 +1060,25 @@ export const LineupScreen = ({
           onPress={(e) => e.stopPropagation()}
           style={{ gap: 8 }}
         >
+          {canEdit ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                handleGenerate();
+              }}
+              style={({ pressed }) => [
+                styles.generateBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <IconBolt size={14} color={Colors.accent} />
+              <Text style={styles.generateLabel}>
+                Generar alineación
+              </Text>
+              <Text style={styles.generateHint}>Drive + Revés · por fuerza</Text>
+            </Pressable>
+          ) : null}
+
           {slots.map((sl, ci) => {
             const v = validation[ci];
             const total = ptsArr[ci];
@@ -2025,6 +2084,30 @@ const styles = StyleSheet.create({
     color: Colors.accent,
     fontSize: 13,
     fontWeight: '500',
+  },
+  generateBtn: {
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accent50,
+    backgroundColor: Colors.accent15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  generateLabel: {
+    color: Colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  generateHint: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    opacity: 0.7,
+    fontSize: 10,
+    letterSpacing: 0.3,
   },
   suggestionWrap: { paddingHorizontal: 16, paddingBottom: 8 },
   suggestionBtn: {

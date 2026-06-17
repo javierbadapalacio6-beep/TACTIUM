@@ -257,7 +257,29 @@ export const TeamScreen = () => {
             shown.map((p, i) => (
               <Pressable
                 key={p.id}
-                onPress={() => setEditing(p)}
+                onPress={() =>
+                  Alert.alert(p.name, undefined, [
+                    {
+                      text: 'Editar jugador',
+                      onPress: () => setEditing(p),
+                    },
+                    {
+                      text: p.available
+                        ? 'Marcar como no disponible'
+                        : 'Marcar como disponible',
+                      onPress: () => {
+                        updatePlayer(p.id, { available: !p.available });
+                        toast.success(
+                          p.available
+                            ? 'Marcado como no disponible'
+                            : 'Marcado como disponible',
+                          p.name,
+                        );
+                      },
+                    },
+                    { text: 'Cancelar', style: 'cancel' },
+                  ])
+                }
                 style={({ pressed }) => [
                   styles.row,
                   i < shown.length - 1 && styles.rowDividerInline,
@@ -480,7 +502,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
       </FormRow>
       <FormRow label="POSICIÓN">
         <View style={styles.posRow}>
-          {SIDES.slice(0, 2).map((p) => {
+          {SIDES.map((p) => {
             const sel = pos === p;
             return (
               <Pressable
@@ -589,7 +611,7 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
       </FormRow>
       <FormRow label="POSICIÓN">
         <View style={styles.posRow}>
-          {SIDES.slice(0, 2).map((p) => {
+          {SIDES.map((p) => {
             const sel = pos === p;
             return (
               <Pressable
