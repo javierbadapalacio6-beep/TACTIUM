@@ -43,7 +43,11 @@ import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
 import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
-import { generateLineup, type PairStatsMap } from '@core/utils/lineupGenerator';
+import {
+  generateLineupOptions,
+  type LineupOption,
+  type PairStatsMap,
+} from '@core/utils/lineupGenerator';
 import { fetchPairStats } from '@core/services/pairStats';
 import { shortName, initialsOf, photoOf } from '@core/utils/playerName';
 
@@ -212,13 +216,10 @@ export const LineupScreen = ({
   const [pairStats, setPairStats] = useState<PairStatsMap | undefined>(
     undefined,
   );
-  // Filtros del generador de parejas.
+  // Generador de parejas: panel de alternativas (preview sin confirmar).
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [genOpts, setGenOpts] = useState({
-    useChemistry: true,
-    usePosition: true,
-    strongestOnCourt1: true,
-  });
+  // Único modificador global: emparejar respetando Drive+Revés.
+  const [genUsePosition, setGenUsePosition] = useState(true);
 
   // Carga inicial: matchday + variantes. La variante activa pasa a ser
   // currentVariantId por defecto.
@@ -503,8 +504,11 @@ export const LineupScreen = ({
   );
 
   const commit = useCallback(
-    (next: SlotState[]) => {
-      const final = autoSort ? sortByPoints(next, playerById) : next;
+    (next: SlotState[], opts?: { skipSort?: boolean }) => {
+      // El generador decide su propio orden de pistas (pirámide o invertido
+      // según el toggle), así que con skipSort respetamos ese orden tal cual.
+      const final =
+        autoSort && !opts?.skipSort ? sortByPoints(next, playerById) : next;
       setSlots(final);
       void persistAll(final);
       return final;
@@ -734,34 +738,53 @@ export const LineupScreen = ({
     setSel(null);
   };
 
-  // Genera una alineación completa consciente de la posición (Drive+Revés).
-  // A diferencia de `fillEmpty` (solo puntos), esto arma TODAS las parejas
-  // desde cero respetando posición. Si ya hay parejas montadas, confirma
-  // antes de sobrescribir el trabajo manual del capitán.
-  const runGenerate = useCallback(() => {
-    const { slots: generated, warnings } = generateLineup(players, courts, {
-      stats: genOpts.useChemistry ? pairStats : undefined,
-      usePosition: genOpts.usePosition,
-      strongestOnCourt1: genOpts.strongestOnCourt1,
-    });
-    const next: SlotState[] = generated.map((g) => ({
-      court: g.court,
-      playerAId: g.playerAId,
-      playerBId: g.playerBId,
-    }));
-    setFiltersOpen(false);
-    commit(next);
-    pulseAll();
-    setSel(null);
-    if (warnings.length > 0) {
-      Alert.alert('Alineación generada con avisos', warnings.join('\n'));
-    } else {
-      setAutoDelta('alineación generada');
-      setTimeout(() => setAutoDelta(null), 2400);
-    }
-  }, [players, courts, pairStats, genOpts, commit, pulseAll]);
+  // Alternativas de alineación para previsualizar (Pirámide / Sacrificio /
+  // Equilibrada / Química…). Se recalculan en vivo al abrir el panel o cambiar
+  // el toggle de posición. Consciente de la posición (Drive+Revés), a
+  // diferencia de `fillEmpty` que solo mira puntos.
+  const genOptions = useMemo<LineupOption[]>(
+    () =>
+      filtersOpen
+        ? generateLineupOptions(players, courts, {
+            stats: pairStats,
+            usePosition: genUsePosition,
+            mustOrder,
+          })
+        : [],
+    [filtersOpen, players, courts, pairStats, genUsePosition, mustOrder],
+  );
 
-  // El botón abre el panel de filtros; el generado real se lanza desde ahí.
+  // Aplica la alternativa elegida. El generador ya fijó el orden de pistas, así
+  // que guardamos sin reordenar (skipSort) y sincronizamos el Auto-orden: si la
+  // estrategia mantiene la pirámide por puntos, lo dejamos ON; si el orden es
+  // intencional (sacrificio / equilibrada abajo), lo apagamos para que una
+  // edición manual posterior no vuelva a piramidar y lo deshaga.
+  const applyOption = useCallback(
+    (opt: LineupOption) => {
+      const next: SlotState[] = opt.result.slots.map((g) => ({
+        court: g.court,
+        playerAId: g.playerAId,
+        playerBId: g.playerBId,
+      }));
+      setFiltersOpen(false);
+      setAutoSort(opt.pyramidOrder);
+      commit(next, { skipSort: true });
+      pulseAll();
+      setSel(null);
+      if (opt.result.warnings.length > 0) {
+        Alert.alert(
+          'Alineación generada con avisos',
+          opt.result.warnings.join('\n'),
+        );
+      } else {
+        setAutoDelta('alineación generada');
+        setTimeout(() => setAutoDelta(null), 2400);
+      }
+    },
+    [commit, pulseAll],
+  );
+
+  // El botón abre el panel de alternativas; el generado real se aplica desde ahí.
   const handleGenerate = useCallback(() => {
     if (!canEdit || !currentVariantId) return;
     setFiltersOpen(true);
@@ -1268,47 +1291,71 @@ export const LineupScreen = ({
 
       <BottomSheet open={filtersOpen} onClose={() => setFiltersOpen(false)}>
         <Text style={styles.filterEyebrow}>GENERAR</Text>
-        <Text style={styles.filterTitle}>Crear parejas</Text>
+        <Text style={styles.filterTitle}>Elige una alineación</Text>
         <Text style={styles.filterLede}>
-          Elige cómo formar las parejas. Puedes ajustarlo y volver a generar
-          cuando quieras.
+          Varias formas de armar las parejas. Mira cada una y toca la que
+          quieras — no se aplica hasta que la elijas.
         </Text>
 
         <FilterRow
           label="Emparejar Drive + Revés"
           hint="Si lo desactivas, empareja solo por nivel"
-          value={genOpts.usePosition}
-          onChange={(v) => setGenOpts((o) => ({ ...o, usePosition: v }))}
-        />
-        <FilterRow
-          label="Priorizar química"
-          hint={
-            pairStats && pairStats.size > 0
-              ? 'Mantiene juntas las parejas que más ganan'
-              : 'Aún no hay historial de jornadas cerradas'
-          }
-          value={genOpts.useChemistry}
-          onChange={(v) => setGenOpts((o) => ({ ...o, useChemistry: v }))}
-        />
-        <FilterRow
-          label="Pareja fuerte en la pista 1"
-          hint="Pirámide. Desactiva para ponerla en la última pista"
-          value={genOpts.strongestOnCourt1}
-          onChange={(v) =>
-            setGenOpts((o) => ({ ...o, strongestOnCourt1: v }))
-          }
+          value={genUsePosition}
+          onChange={setGenUsePosition}
         />
 
-        <Pressable
-          onPress={runGenerate}
-          style={({ pressed }) => [
-            styles.filterCta,
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <IconBolt size={15} color="#001810" />
-          <Text style={styles.filterCtaText}>Generar alineación</Text>
-        </Pressable>
+        <View style={styles.optionList}>
+          {genOptions.map((opt) => (
+            <Pressable
+              key={opt.key}
+              onPress={() => applyOption(opt)}
+              style={({ pressed }) => [
+                styles.optionCard,
+                pressed && { opacity: 0.85, borderColor: Colors.accent50 },
+              ]}
+            >
+              <View style={styles.optionHead}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.optionLabel}>{opt.label}</Text>
+                  <Text style={styles.optionHint}>{opt.hint}</Text>
+                </View>
+                <View style={styles.optionUse}>
+                  <IconBolt size={12} color={Colors.accent} />
+                  <Text style={styles.optionUseText}>Usar</Text>
+                </View>
+              </View>
+
+              <View style={styles.optionPreview}>
+                {opt.result.slots.map((s) => {
+                  const a = s.playerAId ? playerById.get(s.playerAId) : null;
+                  const b = s.playerBId ? playerById.get(s.playerBId) : null;
+                  return (
+                    <View key={s.court} style={styles.optionRow}>
+                      <Text style={styles.optionCourt}>{s.court}</Text>
+                      <Text style={styles.optionPair} numberOfLines={1}>
+                        {a ? shortName(a) : '—'}
+                        <Text style={styles.optionPts}>
+                          {a ? ` ${a.pts}` : ''}
+                        </Text>
+                        {'  ·  '}
+                        {b ? shortName(b) : '—'}
+                        <Text style={styles.optionPts}>
+                          {b ? ` ${b.pts}` : ''}
+                        </Text>
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {opt.result.warnings.length > 0 ? (
+                <Text style={styles.optionWarn} numberOfLines={2}>
+                  {opt.result.warnings.join(' · ')}
+                </Text>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
       </BottomSheet>
     </Pressable>
   );
@@ -2266,6 +2313,88 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+  // ── Alternativas del generador (tarjetas con preview) ──────────────
+  optionList: {
+    gap: 10,
+    marginTop: 4,
+  },
+  optionCard: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    backgroundColor: Colors.background,
+    padding: 14,
+    gap: 10,
+  },
+  optionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  optionLabel: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  optionHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  optionUse: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.accent15,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+  },
+  optionUseText: {
+    color: Colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  optionPreview: {
+    gap: 4,
+    borderTopWidth: 1,
+    borderColor: Colors.hair,
+    paddingTop: 10,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  optionCourt: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
+    width: 16,
+    textAlign: 'center',
+  },
+  optionPair: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 13,
+    letterSpacing: -0.1,
+  },
+  optionPts: {
+    fontFamily: Fonts.mono,
+    color: Colors.textMuted,
+    fontSize: 11,
+  },
+  optionWarn: {
+    color: Colors.warning,
+    fontSize: 11,
+    lineHeight: 15,
   },
   suggestionWrap: { paddingHorizontal: 16, paddingBottom: 8 },
   suggestionBtn: {
