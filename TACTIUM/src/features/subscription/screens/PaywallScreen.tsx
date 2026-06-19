@@ -30,7 +30,6 @@ import {
   CLUB_PLANS,
   PREMIUM_STATUSES,
   TRIAL_DURATION_DAYS,
-  annualDiscountPercent,
   formatEur,
   type BillingPeriod,
   type PlanDescriptor,
@@ -40,6 +39,7 @@ import { pollForRecentSubscription } from '@core/services/subscriptions';
 import { supabase } from '@core/supabase/client';
 import {
   getCurrentOffering,
+  getOfferingPrices,
   diagnoseOfferings,
   purchasePackage,
   resolvePackage,
@@ -168,10 +168,11 @@ export const PaywallScreen = ({
   const [offering, setOffering] = useState<PurchasesOffering | null>(null);
   const [offeringLoaded, setOfferingLoaded] = useState(false);
 
-  // Carga el offering al mount. No bloquea la UI: las cards muestran
-  // precios del módulo `plans.ts` (= source of truth display, ya en sync
-  // con App Store Connect). El offering sólo lo necesitamos al pulsar el
-  // CTA para resolver qué `PurchasesPackage` lanzar al SDK.
+  // Carga el offering al mount. No bloquea la UI: hasta que llega, las cards
+  // muestran los precios de `plans.ts` como fallback; en cuanto está, se
+  // repintan con el precio REAL del store (`priceOf`) para que lo mostrado
+  // coincida siempre con lo cobrado (evita el descuadre app↔Play). El offering
+  // también lo necesitamos al pulsar el CTA para resolver el `PurchasesPackage`.
   useEffect(() => {
     let cancelled = false;
     getCurrentOffering()
@@ -200,14 +201,38 @@ export const PaywallScreen = ({
     [visiblePlans, selectedTier],
   );
 
-  const price =
-    billing === 'yearly'
-      ? selectedPlan.priceYearlyEur
-      : selectedPlan.priceMonthlyEur;
-  const yearlyDiscount = annualDiscountPercent(selectedPlan);
+  // Precios reales del store (RC). Vacío hasta que carga el offering.
+  const storePrices = useMemo(() => getOfferingPrices(offering), [offering]);
+
+  // Resuelve el precio a MOSTRAR para un plan × periodo: el real del store si
+  // está disponible, si no el hardcodeado de `plans.ts`. `formatted` ya viene
+  // localizado por el store (moneda + símbolo correctos) → mostrado == cobrado.
+  const priceOf = useCallback(
+    (plan: PlanDescriptor, period: BillingPeriod) => {
+      const fallback =
+        period === 'yearly' ? plan.priceYearlyEur : plan.priceMonthlyEur;
+      const store = storePrices[plan.tier]?.[period];
+      return {
+        amount: store?.amount ?? fallback,
+        formatted: store?.formatted ?? formatEur(fallback),
+        perMonth: store?.perMonth ?? null,
+        perMonthString: store?.perMonthString ?? null,
+      };
+    },
+    [storePrices],
+  );
+
+  const selectedPrice = priceOf(selectedPlan, billing);
+  // Descuento anual calculado con los precios REALES (mensual×12 vs anual).
+  const yearlyDiscount = useMemo(() => {
+    const m = priceOf(selectedPlan, 'monthly').amount;
+    const y = priceOf(selectedPlan, 'yearly').amount;
+    if (m <= 0) return 0;
+    return Math.round(((m * 12 - y) / (m * 12)) * 100);
+  }, [priceOf, selectedPlan]);
   // Importe FACTURADO formateado para la hoja de confirmación (elemento de
   // precio prominente, coherente con el fix de 3.1.2(c) en las cards).
-  const billedLabel = `${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'}`;
+  const billedLabel = `${selectedPrice.formatted}/${billing === 'monthly' ? 'mes' : 'año'}`;
   // Avisamos ~2 días antes de que termine el trial.
   const reminderDays = Math.max(1, TRIAL_DURATION_DAYS - 2);
 
@@ -757,10 +782,12 @@ export const PaywallScreen = ({
         >
           {visiblePlans.map((plan) => {
             const sel = plan.tier === selectedTier;
-            const monthlyEquiv =
-              billing === 'yearly'
-                ? (plan.priceYearlyEur / 12).toFixed(2).replace('.', ',')
-                : plan.priceMonthlyEur.toFixed(2).replace('.', ',');
+            const pYear = priceOf(plan, 'yearly');
+            const pMonth = priceOf(plan, 'monthly');
+            // Equivalente mensual del plan anual: preferimos el string ya
+            // localizado del store; si no hay, lo derivamos del total/12.
+            const monthlyEquivLabel =
+              pYear.perMonthString ?? formatEur(pYear.amount / 12);
             const showBadge = plan.tier === DEFAULT_CLUB_TIER && showClubPlans;
             // Sub-line concreta de fit por tier — orienta al cap/admin
             // indeciso hacia el tier que probablemente le toque.
@@ -772,11 +799,9 @@ export const PaywallScreen = ({
                   : plan.tier === 'club_pro'
                     ? 'Hasta 10 equipos · la mayoría de clubes federados'
                     : 'Hasta 25 equipos · escuelas y academias';
-            // Ahorro anual en € (concreto, mejor que solo "-20%").
+            // Ahorro anual (concreto, mejor que solo "-20%"), con precios reales.
             const yearlySavings =
-              billing === 'yearly'
-                ? plan.priceMonthlyEur * 12 - plan.priceYearlyEur
-                : 0;
+              billing === 'yearly' ? pMonth.amount * 12 - pYear.amount : 0;
             return (
               <Pressable
                 key={plan.tier}
@@ -807,21 +832,19 @@ export const PaywallScreen = ({
                 <View style={styles.planPriceRow}>
                   {billing === 'yearly' ? (
                     <>
-                      <Text style={styles.planPrice}>
-                        {formatEur(plan.priceYearlyEur)}
-                      </Text>
+                      <Text style={styles.planPrice}>{pYear.formatted}</Text>
                       <Text style={styles.planPriceSuffix}>/año</Text>
                     </>
                   ) : (
                     <>
-                      <Text style={styles.planPrice}>{monthlyEquiv}</Text>
-                      <Text style={styles.planPriceSuffix}>€/mes</Text>
+                      <Text style={styles.planPrice}>{pMonth.formatted}</Text>
+                      <Text style={styles.planPriceSuffix}>/mes</Text>
                     </>
                   )}
                 </View>
                 {billing === 'yearly' ? (
                   <Text style={styles.planAnnualHint}>
-                    ≈ {monthlyEquiv} €/mes
+                    ≈ {monthlyEquivLabel}/mes
                   </Text>
                 ) : null}
                 {billing === 'yearly' && yearlySavings > 0 ? (
@@ -841,10 +864,10 @@ export const PaywallScreen = ({
         >
           <Text style={styles.disclaimerText}>
             {isInTrial && trialDaysLabel
-              ? `Ya estás en prueba gratuita: ${trialDaysLabel}. Al terminar pagarás ${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'} con renovación automática. Cancela en cualquier momento desde Ajustes.`
+              ? `Ya estás en prueba gratuita: ${trialDaysLabel}. Al terminar pagarás ${billedLabel} con renovación automática. Cancela en cualquier momento desde Ajustes.`
               : existingSubForSubject
-                ? `Cambiarás tu plan a ${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'} con renovación automática. El cambio se gestiona a través de tu cuenta de App Store. Cancela en cualquier momento desde Ajustes.`
-                : `Pago tras ${TRIAL_DURATION_DAYS} días de prueba. ${formatEur(price)}/${billing === 'monthly' ? 'mes' : 'año'} con renovación automática. Cancela en cualquier momento desde Ajustes.`}
+                ? `Cambiarás tu plan a ${billedLabel} con renovación automática. El cambio se gestiona a través de tu cuenta de App Store. Cancela en cualquier momento desde Ajustes.`
+                : `Pago tras ${TRIAL_DURATION_DAYS} días de prueba. ${billedLabel} con renovación automática. Cancela en cualquier momento desde Ajustes.`}
           </Text>
           {/* Enlaces legales funcionales en el punto de compra: Apple
               Guideline 3.1.2(c) los exige junto al precio/duración. */}

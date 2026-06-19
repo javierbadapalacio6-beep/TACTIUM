@@ -66,6 +66,59 @@ export function resolvePackage(
 }
 
 /**
+ * Precio REAL de un producto tal y como lo cobra el store, ya localizado.
+ * `formatted`/`perMonthString` vienen del propio StoreKit/Play (símbolo y
+ * moneda correctos para la región del usuario), así que lo que se muestra
+ * coincide SIEMPRE con lo que se cobra. Los numéricos son para cálculos
+ * (descuento anual, ahorro).
+ */
+export interface StorePrice {
+  /** Importe facturado (total del periodo) en moneda local. */
+  amount: number;
+  /** Importe facturado formateado y localizado por el store ("47,99 €"). */
+  formatted: string;
+  /** Equivalente mensual numérico (lo da RC para anuales). */
+  perMonth: number | null;
+  /** Equivalente mensual formateado y localizado ("3,99 €"). */
+  perMonthString: string | null;
+  currencyCode: string;
+}
+
+export type OfferingPrices = Partial<
+  Record<PlanTier, Partial<Record<BillingPeriod, StorePrice>>>
+>;
+
+/**
+ * Extrae del offering los precios reales de cada plan × periodo. La UI debe
+ * preferir esto sobre los precios hardcodeados de `plans.ts` (que pueden
+ * divergir de lo que el store cobra, p.ej. si Play tiene otro precio). Cae a
+ * vacío si el offering no está cargado (simulator, sandbox sin tester); el
+ * caller hace fallback a `plans.ts` por tier que falte.
+ */
+export function getOfferingPrices(
+  offering: PurchasesOffering | null,
+): OfferingPrices {
+  const out: OfferingPrices = {};
+  if (!offering) return out;
+  (Object.keys(PKG_ID_BY_TIER_BILLING) as PlanTier[]).forEach((tier) => {
+    (['monthly', 'yearly'] as BillingPeriod[]).forEach((billing) => {
+      const product = resolvePackage(offering, tier, billing)?.product;
+      if (!product || typeof product.price !== 'number' || !product.priceString)
+        return;
+      const byTier = out[tier] ?? (out[tier] = {});
+      byTier[billing] = {
+        amount: product.price,
+        formatted: product.priceString,
+        perMonth: product.pricePerMonth ?? null,
+        perMonthString: product.pricePerMonthString ?? null,
+        currencyCode: product.currencyCode,
+      };
+    });
+  });
+  return out;
+}
+
+/**
  * Setea atributos custom que viajan con TODOS los eventos del webhook RC
  * → Supabase (`subscriber_attributes` en el payload). El webhook los lee
  * vía `resolveSubject(event)` y decide si la sub es del propio user o de
