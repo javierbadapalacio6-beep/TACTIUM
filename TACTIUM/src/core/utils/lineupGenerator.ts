@@ -350,8 +350,8 @@ export function generateLineupOptions(
       key: 'equilibrada',
       label: 'Equilibrada',
       hint: mustOrder
-        ? 'Junta cada fuerte con un flojo: el top baja de pista respetando el orden por puntos'
-        : 'Cada pareja: un fuerte y un flojo',
+        ? 'Empareja a los de más puntos con los de menos: el top baja de pista sin romper el orden'
+        : 'Cada pareja: uno de más puntos y otro de menos',
       // Ordena por puntos de pareja descendente → compatible con el orden
       // obligatorio (y con el Auto-orden de la pantalla).
       pyramidOrder: true,
@@ -396,7 +396,7 @@ export function generateLineupOptions(
       {
         key: 'equilibrada-abajo',
         label: 'Equilibrada ↓',
-        hint: 'Fuerte+flojo, las de más nivel en las últimas pistas',
+        hint: 'Empareja más y menos puntos; las parejas fuertes en las últimas pistas',
         pyramidOrder: false,
         result: generateLineup(players, courts, {
           ...base,
