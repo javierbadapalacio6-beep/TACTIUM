@@ -430,14 +430,58 @@ export const PaywallScreen = ({
           return;
         }
 
-        // 4) TRIAL/COMPRA NUEVA: esperar a que el webhook escriba la fila.
+        // 4) TRIAL/COMPRA NUEVA · ACTIVACIÓN DETERMINISTA.
+        //    No dependemos del webhook RC→Supabase para activar (puede tardar
+        //    o fallar el enlace, p.ej. si el app_user_id quedó desincronizado).
+        //    Sincronizamos YA desde el `customerInfo` que devuelve la compra,
+        //    la misma vía que "Restaurar compras" (RPC idempotente que reconcilia
+        //    por payer+tier; el webhook luego deduplica). El polling queda solo
+        //    como respaldo si esta sync directa no devolviera fila.
+        const purchasedEnt =
+          Object.values(info.entitlements.active).find(
+            (e) =>
+              e.productIdentifier === selectedPlan.productIdMonthly ||
+              e.productIdentifier === selectedPlan.productIdYearly,
+          ) ?? Object.values(info.entitlements.active)[0];
+        if (purchasedEnt) {
+          try {
+            const purchasedAtMs = purchasedEnt.originalPurchaseDate
+              ? new Date(purchasedEnt.originalPurchaseDate).getTime()
+              : Date.now();
+            const expirationAtMs = purchasedEnt.expirationDate
+              ? new Date(purchasedEnt.expirationDate).getTime()
+              : null;
+            const stableTxnId = `purchase_${purchasedEnt.productIdentifier}_${purchasedAtMs}`;
+            const { data: synced, error: syncErr } = await supabase.rpc(
+              'sync_subscription_from_revenuecat',
+              {
+                p_product_id: purchasedEnt.productIdentifier,
+                p_original_transaction_id: stableTxnId,
+                p_period_type: purchasedEnt.periodType,
+                p_purchased_at_ms: purchasedAtMs,
+                p_expiration_at_ms: expirationAtMs as number,
+              },
+            );
+            if (syncErr) {
+              console.warn('auto-sync tras compra falló', syncErr);
+            } else if (synced) {
+              resultSub = (synced as unknown) as typeof resultSub;
+            }
+          } catch (e) {
+            console.warn('auto-sync tras compra excepción', e);
+          }
+        }
+
+        // Respaldo: si la sync directa no dio fila, esperamos al webhook.
         //    Buscamos por payer_user_id + plan_tier (para club_* RC suele
         //    insertar la fila con subject_type='user' y luego la relinkeamos).
-        resultSub = await pollForRecentSubscription({
-          payerUserId: userId,
-          expectedTier: selectedPlan.tier,
-          previousSubId: previousSub?.id ?? null,
-        });
+        if (!resultSub) {
+          resultSub = await pollForRecentSubscription({
+            payerUserId: userId,
+            expectedTier: selectedPlan.tier,
+            previousSubId: previousSub?.id ?? null,
+          });
+        }
         if (resultSub) {
           // 4) Si era flow club y la fila quedó como subject=user,
           //    llamamos al RPC `link_subscription_to_club` para moverla
@@ -609,7 +653,7 @@ export const PaywallScreen = ({
             p_original_transaction_id: stableTxnId,
             p_period_type: ent.periodType,
             p_purchased_at_ms: originalPurchaseDateMs,
-            p_expiration_at_ms: expirationAtMs,
+            p_expiration_at_ms: expirationAtMs as number,
           },
         );
         if (syncErr) {
