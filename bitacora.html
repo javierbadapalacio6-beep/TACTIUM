@@ -247,6 +247,71 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-06-20",
+    title: "Builds a tienda: iOS 1.0.1 a revisión (fix del train de versión) y Android a PRUEBA CERRADA por API. Landing pasada a \"descárgala ya\". Fix borrado de cuenta (temporada archivada). Kit de respuestas Play Console.",
+    changes: [
+      { type: "fix", text: "<strong>🔴 Submit iOS fallaba: el \"train\" 1.0.0 estaba cerrado</strong>. Tras aprobar Apple la 1.0.0, rechaza nuevos builds con <code>CFBundleShortVersionString 1.0.0</code> (errores 90062 / 90186, \"Invalid Pre-Release Train\"). EAS no mostraba el detalle (lo saqué de la web de la submission). Fix: subir <code>app.json</code> a <strong>1.0.1</strong>, recompilar y reenviar → <strong>build 12 (1.0.1) en revisión de Apple</strong>, con todo embebido (auto-sync, generador, etc.). Nota: runtimeVersion pasa a 1.0.1 (el build embebe todo el JS; los 1.0.0 siguen con su OTA)." },
+
+      { type: "feat", text: "<strong>🤖 Android a PRUEBA CERRADA por API</strong>. Build de producción <strong>vc9</strong> subido a prueba interna y promovido a la pista <code>alpha</code> (cerrada) sin recompilar, vía la API de edits (<code>promote-play-closed.cjs</code>). La app estaba en BORRADOR en Play (la cerrada exige ficha + formularios completos, que la interna no) → se completaron y se publicó: <strong>prueba cerrada en revisión de Google</strong>. Camino a producción: 12 testers · 14 días." },
+
+      { type: "fix", text: "<strong>🔴 Segundo bug de borrado de cuenta: temporada archivada</strong>. El trigger <code>enforce_season_active_for_lineup_edits</code> bloquea INSERT/UPDATE/DELETE de <code>lineups</code> y <code>lineup_variants</code> si la temporada está archivada → rompía el borrado de cuenta de un usuario con temporadas archivadas. Fix: los RPCs <code>delete_my_account</code>/<code>delete_team</code>/<code>delete_club</code> activan un flag de transacción <code>app.bypass_season_guard</code> que el trigger respeta solo en ese contexto. Borrado de cuenta confirmado OK de punta a punta." },
+
+      { type: "feat", text: "<strong>Landing: de pre-lanzamiento a \"descárgala ya\"</strong>. Nuevo <code>AppStoreBadge</code> (badge App Store → ficha iOS); Hero/FinalCta/Header sin waitlist; metadata OG, imagen OG social, FAQ y Términos actualizados a versión lanzada (Términos importa: Apple enlaza ahí en la compra). Commit + push a <code>main</code> → Vercel redepliega." },
+
+      { type: "decision", text: "<strong>Verificación de auto-sync de compra</strong>. Confirmado que el fallo de \"no activa la sub tras comprar\" era por correr el <strong>JS viejo embebido</strong> (reinstalar de tienda + comprar antes de que aplicara el OTA). El fix (auto-sync desde customerInfo) ya va por OTA para usuarios actuales y embebido en los builds nuevos (iOS 1.0.1 / Android vc9). Para descargas nuevas que compren en la primera sesión, el build embebido lo cubre." },
+
+      { type: "chore", text: "<strong>Kit de respuestas para Play Console</strong> (no se pueden rellenar por API: son declaraciones del desarrollador). Preparadas a partir del código: <strong>Seguridad de datos</strong> (recoge nombre, email, id de usuario, fotos opcionales, historial de compras; NO comparte; cifrado en tránsito; borrado disponible), <strong>clasificación</strong> (PEGI 3), <strong>público</strong> (18+), <strong>acceso</strong> (credenciales demo), <strong>anuncios</strong> (No), y <strong>sin ID de publicidad</strong> (ni ads ni analítica; RevenueCat no lo usa por defecto)." },
+
+      { type: "feat", text: "<strong>Prueba gratis Android verificada</strong>. Confirmado por ASC API que iOS tiene los 8 productos en un único grupo \"TACTIUM PRO\" (1 prueba por usuario); y creadas por API las ofertas <code>freetrial14</code> (14 días, once-per-user) en los 8 productos Android, que faltaban. Scripts útiles conservados en <code>TACTIUM/</code> (check-asc-*, set-play-prices, create-play-trials, promote-play-closed, inspect-play-tracks)." },
+    ],
+  },
+  {
+    date: "2026-06-19",
+    title: "🚀 Apple aprueba la 1.0(10) y se publica TODO a producción (OTA): Jugadores 2.0 + generador + paywall precio real + auto-sync de compra. Precios de Play aplanados por API. Prueba gratis en Android. Limpieza de usuarios + fix de borrado en cascada. Alias en la jornada.",
+    changes: [
+      { type: "feat", text: "<strong>🍎 Apple APROBÓ la 1.0(10)</strong> (\"eligible for distribution\"). Se levanta el bloqueo y se <strong>publica TODO el bloque pendiente por OTA</strong> a <code>production</code> (iOS 1.0(10) + Android): Jugadores 2.0, generador de alineación 2.0, paywall con precio real y auto-sync de compra. Todo JS, mismo <code>runtimeVersion 1.0.0</code> → sin build nuevo. Update group <code>e7a5aab4-…</code>." },
+
+      { type: "fix", text: "<strong>💶 Descuadre de precios en Google Play — RESUELTO por API</strong>. Google cobraba MÁS por un <strong>\"aumento de ubicación\"</strong> (recargo por país, relativo a la base) → la zona euro descuadraba (Austria 59,99 € vs España 47,99 €). <code>convertRegionPrices</code> NO sirve (re-infla). Solución: <code>set-play-prices.cjs</code> fija el precio EUR explícito en las <strong>33 regiones EUR</strong> de los 8 productos → <strong>zona euro plana</strong> e igual a <code>plans.ts</code>/iOS. (En la UE el precio es con IVA incluido; el número que pones = lo que paga el cliente.) Service account con permiso temporal de edición, luego revocado." },
+
+      { type: "feat", text: "<strong>Paywall muestra el precio REAL del store</strong>. Nuevo <code>getOfferingPrices()</code> en <code>core/purchases</code> + helper <code>priceOf()</code> en <code>PaywallScreen</code> (precio real de RevenueCat, fallback a <code>plans.ts</code>) en cards, \"≈/mes\", ahorro anual, descuento y TrialTimeline. Display == cobrado, sin descuadre futuro. Verificado en dispositivo: los precios salen correctos. Commit <code>d3a53c2e</code>." },
+
+      { type: "fix", text: "<strong>🔴 Activación tras compra no era fiable</strong>. La compra se completaba en la tienda pero la app no activaba el premium (dependía del webhook RC→Supabase, que puede tardar o no enlazar si el <code>app_user_id</code> quedó desincronizado; \"Restaurar compras\" sí funcionaba). Fix: tras una compra nueva, la app <strong>sincroniza al instante desde el <code>customerInfo</code></strong> (misma vía que Restaurar, vía RPC <code>sync_subscription_from_revenuecat</code>); el webhook queda de respaldo. Commit <code>146e8605</code>." },
+
+      { type: "feat", text: "<strong>Prueba gratuita de 14 días en ANDROID (faltaba)</strong>. Los 8 productos de Play NO tenían oferta de prueba (al usuario se le habría cobrado el día 1). Creadas por API (<code>create-play-trials.cjs</code>): oferta <code>freetrial14</code>, fase de 14 días (<code>P2W</code>) gratis en 173 regiones, elegibilidad <code>anySubscriptionInApp</code> → <strong>una sola prueba por usuario para cualquier plan</strong>. iOS ya estaba bien: 8 productos en un único grupo \"TACTIUM PRO\" (verificado por ASC API)." },
+
+      { type: "decision", text: "<strong>Gestión de prueba/abuso — no hay que programar nada</strong>. Las tiendas ya dan la prueba <strong>una sola vez por usuario</strong> (grupo de suscripción en iOS, <code>anySubscriptionInApp</code> en Android): tras usarla, re-suscribirse cobra desde el día 1 (sin nueva prueba). \"Cancelar y seguir accediendo los 14 días\" es el comportamiento estándar correcto (cancelar solo evita el cobro). Se descarta forzar \"cancelar = perder acceso\" (hostil y sin abuso real que prevenir)." },
+
+      { type: "fix", text: "<strong>🔴 Bug de borrado en cascada (cuenta/equipo/club) — RESUELTO</strong>. Borrar un usuario/equipo/club con jornadas fallaba (<code>lineups</code> tiene FK a <code>matchdays</code> CASCADE y a <code>players</code> SET NULL; el SET NULL revalida un matchday ya borrado). Rompía el borrado de cuenta, que <strong>Apple exige (5.1.1(v))</strong>, y también el botón del dashboard de Supabase. Fix en los RPCs <code>delete_my_account</code>, <code>delete_team</code> y <code>delete_club</code>: pre-borran <code>lineups</code>+<code>availability</code> antes. La app no necesitó cambios." },
+
+      { type: "chore", text: "<strong>Limpieza de usuarios de prueba para producción</strong>. Borrados los usuarios de test por SQL (el botón del dashboard fallaba por el bug anterior). Conservados solo <code>apple.review@tactium.io</code> (demo Apple) y Ana Herranz. Backup previo de las suscripciones en <code>play-backup/</code>." },
+
+      { type: "feat", text: "<strong>Alias también en la pantalla de la jornada</strong>. La vista de BD <code>lineup_pairs</code> mostraba el nombre crudo del ranking FEP (\"APELLIDOS NOMBRE\"). Ahora usa <code>COALESCE(NULLIF(alias,''), name)</code> → muestra el alias si existe, en jornada/alineación/resultados a la vez. Cambio de BD: aplicado al instante, sin OTA." },
+
+      { type: "chore", text: "<strong>Dev build + build interno de Android</strong>. Lanzado dev build de Android (con <code>EAS_NO_VCS=1</code> por estar TACTIUM en subcarpeta de un repo git con varios proyectos; si no, EAS no encuentra <code>package.json</code>). Build de producción (versionCode 8) subido a la <strong>prueba interna</strong> de Play para probar la compra real (necesita license tester + track de Play; el dev build no permite compras)." },
+
+      { type: "fix", text: "<strong>Wording del generador</strong>: \"un fuerte y un flojo\" → \"uno de más puntos y otro de menos\" (más neutro). Commit <code>8913066c</code>." },
+    ],
+  },
+  {
+    date: "2026-06-18",
+    title: "Generador de alineación 2.0: varias alternativas con preview (Pirámide / Equilibrada fuerte+flojo / Química) + fix del orden que ignoraba el toggle · consciente del orden obligatorio FEP",
+    changes: [
+      { type: "decision", text: "<strong>⚠️ Sigue PENDIENTE de publicar (bloque Jugadores 2.0)</strong>. Commiteado en <code>main</code> (<code>2c11d8f9</code>) pero NO se sube: la <strong>1.0(10)</strong> está en revisión por Apple (3.1.1). No publicar OTA a producción mientras esté en revisión — comparte runtimeVersion 1.0.0. Se sube todo el bloque junto tras la aprobación." },
+
+      { type: "fix", text: "<strong>🔴 El toggle \"pareja fuerte en pista 1\" no funcionaba</strong>. Al generar, <code>commit()</code> re-piramidaba el resultado con <code>sortByPoints</code> cuando el Auto-orden estaba ON (default en federaciones con orden obligatorio), deshaciendo el orden del generador → el de más puntos SIEMPRE acababa de pareja 1. <code>commit()</code> acepta ahora <code>{ skipSort }</code> y el generado se guarda sin reordenar; además se sincroniza el Auto-orden con la estrategia elegida." },
+
+      { type: "feat", text: "<strong>🚀 Generador con VARIAS alternativas y preview (sin confirmar)</strong>. El botón \"Generar alineación\" ya no crea una sola: abre un panel con varias estrategias, <strong>cada una con preview de parejas y pistas</strong>; solo se aplica al tocar \"Usar\". Nueva función <code>generateLineupOptions()</code> en <code>lineupGenerator.ts</code> que arma y <strong>deduplica</strong> las alternativas. UI rehecha en <code>LineupScreen</code> (tarjetas-preview + único toggle global \"Emparejar Drive+Revés\")." },
+
+      { type: "feat", text: "<strong>Emparejado equilibrado (fuerte + flojo)</strong>. Nuevo modo <code>pairing: 'strong' | 'balanced'</code> en <code>generateLineup</code>. <strong>Equilibrada</strong> junta a cada jugador fuerte con el compañero compatible MÁS flojo (mejor tier de posición → menos puntos → química), respetando Drive+Revés. Así un jugador top (p.ej. 5000) tira de uno de 2000 y su pareja queda más abajo." },
+
+      { type: "decision", text: "<strong>Consciente del ORDEN OBLIGATORIO (FEP)</strong>. En federaciones con orden por puntos una pareja fuerte JAMÁS puede ir abajo (sería ilegal), así que <code>generateLineupOptions</code> recibe <code>mustOrder</code> y oculta Sacrificio / Equilibrada↓. La forma LEGAL de bajar a un top es emparejarlo con uno flojo: la SUMA de la pareja cae y la pirámide por puntos la coloca sola en una pista inferior — eso es justo lo que hace \"Equilibrada\" (marcada como orden-pirámide, compatible con el orden obligatorio)." },
+
+      { type: "feat", text: "<strong>Estrategias ofrecidas</strong>: <strong>Pirámide</strong> (fuerte-con-fuerte, mejores arriba), <strong>Equilibrada</strong> (fuerte+flojo, baja a los top sin romper el orden), <strong>Química</strong> (solo si hay historial de jornadas cerradas; prioriza parejas que más ganan), y — solo SIN orden obligatorio — <strong>Sacrificio</strong> y <strong>Equilibrada↓</strong> (fuertes literalmente en las últimas pistas)." },
+
+      { type: "chore", text: "<strong>Apple · 1.0(10) enviada a revisión</strong> por el usuario (respuesta del 3.1.1 pegada en el Centro de Resolución + binario asignado). A la espera del veredicto. Typecheck limpio salvo el error PREEXISTENTE de <code>PaywallScreen:587</code> (number|null, no rompe build)." },
+    ],
+  },
+  {
     date: "2026-06-17",
     title: "Jugadores 2.0 (alias + foto + foto de perfil→equipo) · química por historial · generador de parejas con filtros · fix escáner IA · ajustes UI plantilla/alineación",
     changes: [
