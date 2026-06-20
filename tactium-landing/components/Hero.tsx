@@ -1,5 +1,5 @@
 import { TactiumMarkAnimated } from "./TactiumMarkAnimated";
-import { WaitlistForm } from "./WaitlistForm";
+import { AppStoreBadge } from "./AppStoreBadge";
 import { HeroAnimator } from "./HeroAnimator";
 import { HeroAuroraCursor } from "./HeroAuroraCursor";
 import { PhoneFrame } from "./PhoneFrame";
@@ -40,7 +40,7 @@ export function Hero() {
           >
             <TactiumMarkAnimated size={48} />
             <span className="font-mono text-[11px] tracking-[0.25em] font-medium text-[var(--color-accent)]">
-              PRE-LANZAMIENTO · 2026
+              YA DISPONIBLE EN iOS
             </span>
           </div>
 
@@ -68,7 +68,7 @@ export function Hero() {
             data-hero="form"
             className="max-w-md mt-2 scroll-mt-28"
           >
-            <WaitlistForm source="hero" />
+            <AppStoreBadge />
             <p className="mt-3 text-xs text-[var(--color-text-faint)] font-mono tracking-wide">
               14 DÍAS GRATIS · CANCELA CUANDO QUIERAS
             </p>

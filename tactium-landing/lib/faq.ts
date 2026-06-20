@@ -5,12 +5,12 @@ export interface FaqItem {
 
 export const FAQ_QUESTIONS: FaqItem[] = [
   {
-    q: "¿Cuándo se lanza TACTIUM?",
-    a: "Estamos en pre-lanzamiento durante 2026. Apúntate al waitlist y te avisaremos en cuanto abramos la beta privada.",
+    q: "¿Dónde puedo descargar TACTIUM?",
+    a: "Ya está disponible en el App Store para iPhone y iPad. La versión de Android llegará muy pronto a Google Play.",
   },
   {
-    q: "¿En qué plataformas estará disponible?",
-    a: "Lanzamos primero en iOS y Android. La web (esta landing) será solo informativa y para gestionar la suscripción.",
+    q: "¿En qué plataformas está disponible?",
+    a: "Disponible en iOS (App Store); Android llega pronto. La web (esta landing) es solo informativa y para gestionar la suscripción.",
   },
   {
     q: "¿Qué federaciones soporta?",

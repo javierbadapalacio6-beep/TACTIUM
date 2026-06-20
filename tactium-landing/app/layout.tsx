@@ -54,7 +54,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     title: "TACTIUM · Alineaciones inteligentes para tu equipo de pádel",
     description:
-      "Alineaciones con auto-balance por puntos, hasta 5 variantes por jornada y notificaciones a tus jugadores. Únete al waitlist.",
+      "Alineaciones con auto-balance por puntos, hasta 5 variantes por jornada y notificaciones a tus jugadores. Ya disponible en el App Store. 14 días gratis.",
     siteName: "TACTIUM",
     images: [
       {

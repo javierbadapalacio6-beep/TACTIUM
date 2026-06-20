@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TactiumMark } from "./TactiumMark";
+import { APP_STORE_URL } from "./AppStoreBadge";
 
 // Header sticky con blur backdrop. Mobile-first: en small screens el nav
 // se oculta y queda solo el CTA. Desktop muestra los anchors.
@@ -49,10 +50,12 @@ export function Header() {
         </nav>
 
         <a
-          href="#hero-form"
+          href={APP_STORE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-sm font-medium px-4 h-9 inline-flex items-center rounded-full bg-[var(--color-accent-10)] border border-[var(--color-accent-40)] text-[var(--color-accent)] hover:bg-[var(--color-accent-25)] transition"
         >
-          Únete a la beta
+          Descargar
         </a>
       </div>
     </header>

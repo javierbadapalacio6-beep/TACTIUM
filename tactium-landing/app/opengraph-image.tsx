@@ -85,7 +85,7 @@ export default async function OpengraphImage() {
               textTransform: "uppercase",
             }}
           >
-            PRE-LANZAMIENTO · 2026
+            YA DISPONIBLE EN iOS
           </div>
           <div
             style={{

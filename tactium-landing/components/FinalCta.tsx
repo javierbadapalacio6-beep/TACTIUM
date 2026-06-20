@@ -1,8 +1,8 @@
 import { TactiumMark } from "./TactiumMark";
-import { WaitlistForm } from "./WaitlistForm";
+import { AppStoreBadge } from "./AppStoreBadge";
 
-// CTA final con segundo formulario. Estrategia: el usuario que ha llegado
-// hasta abajo está más caliente — segunda oportunidad de convertir.
+// CTA final. Estrategia: el usuario que ha llegado hasta abajo está más
+// caliente — segunda oportunidad de convertir, ahora con descarga directa.
 export function FinalCta() {
   return (
     <section className="relative py-16 sm:py-24 border-t border-[var(--color-hair)] overflow-hidden">
@@ -14,12 +14,10 @@ export function FinalCta() {
           <span className="text-[var(--color-accent)]">de tu equipo</span>
         </h2>
         <p className="text-lg text-[var(--color-text-muted)] max-w-xl">
-          Apúntate al waitlist. Los primeros 100 capitanes y clubs tendrán 30
-          días extra de prueba al lanzar.
+          Descárgala gratis y prueba 14 días con acceso completo. Sin tarjeta
+          para empezar, cancela cuando quieras.
         </p>
-        <div className="w-full max-w-md">
-          <WaitlistForm source="final-cta" />
-        </div>
+        <AppStoreBadge />
       </div>
     </section>
   );
