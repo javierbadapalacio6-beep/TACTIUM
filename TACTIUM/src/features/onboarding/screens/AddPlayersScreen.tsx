@@ -29,6 +29,7 @@ import {
 import { useTeamStore, type Side } from '@store/teamStore';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
+import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
 import { toast } from '@store/toastStore';
 import {
   NAME_MAX_LENGTH,
@@ -56,6 +57,7 @@ export const AddPlayersScreen = ({
   const [adding, setAdding] = useState(false);
   const [submittingAdd, setSubmittingAdd] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [importingFcp, setImportingFcp] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPts, setNewPts] = useState('');
   const [newSide, setNewSide] = useState<Side>('Drive');
@@ -174,6 +176,29 @@ export const AddPlayersScreen = ({
             <Text style={styles.scanShortcutTitle}>Escanear plantilla</Text>
             <Text style={styles.scanShortcutHint}>
               Importa varios jugadores de una captura del ranking
+            </Text>
+          </View>
+          <IconArrowRight size={14} color={Colors.accent} />
+        </Pressable>
+
+        {/* Atajo: volcar la plantilla oficial desde la Federación Cántabra. */}
+        <Pressable
+          onPress={() => setImportingFcp(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Importar desde la Federación Cántabra"
+          style={({ pressed }) => [
+            styles.scanShortcut,
+            { marginTop: 10 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <View style={styles.scanShortcutIcon}>
+            <Text style={{ fontSize: 14 }}>🏛️</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.scanShortcutTitle}>Importar de la Federación</Text>
+            <Text style={styles.scanShortcutHint}>
+              Vuelca tu plantilla cántabra con los puntos oficiales
             </Text>
           </View>
           <IconArrowRight size={14} color={Colors.accent} />
@@ -320,6 +345,12 @@ export const AddPlayersScreen = ({
         mode="ranking"
         teamName={team?.name}
         onConfirm={handleBulkPlayers}
+      />
+
+      <ImportFcpSheet
+        open={importingFcp}
+        onClose={() => setImportingFcp(false)}
+        onImport={handleBulkPlayers}
       />
     </KeyboardAvoidingView>
   );

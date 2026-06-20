@@ -28,6 +28,7 @@ import {
   Toggle,
 } from '@components/ui';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
+import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
@@ -58,6 +59,7 @@ export const TeamScreen = () => {
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [importingFcp, setImportingFcp] = useState(false);
   // Reverse trial: invitar jugadores con código es premium → gate al paywall.
   const gate = usePremiumGate();
   const openInvite = gate(() => setInviting(true), 'invite_create');
@@ -135,6 +137,15 @@ export const TeamScreen = () => {
             style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
           >
             <IconShare size={14} color={Colors.accent} />
+          </Pressable>
+          <Pressable
+            onPress={() => setImportingFcp(true)}
+            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Importar desde la Federación Cántabra"
+          >
+            <Text style={styles.scanBtnIcon}>🏛️</Text>
+            <Text style={styles.scanBtnLabel}>FCP</Text>
           </Pressable>
           <Pressable
             onPress={() => setScanning(true)}
@@ -399,6 +410,12 @@ export const TeamScreen = () => {
         mode="ranking"
         teamName={team?.name}
         onConfirm={handleBulkPlayers}
+      />
+
+      <ImportFcpSheet
+        open={importingFcp}
+        onClose={() => setImportingFcp(false)}
+        onImport={handleBulkPlayers}
       />
 
       <InvitePlayersSheet
