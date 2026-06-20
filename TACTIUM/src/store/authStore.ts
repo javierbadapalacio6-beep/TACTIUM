@@ -9,6 +9,7 @@ import {
   signInWithGoogle as svcSignInWithGoogle,
   CANCELLED,
 } from '@core/services/socialAuth';
+import { unregisterPushToken } from '@core/push';
 
 interface AuthState {
   session: Session | null;
@@ -155,6 +156,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signOut: async () => {
+        // Borrar el push token de este device ANTES de cerrar sesión (la RLS
+        // exige auth.uid()); si no, el usuario seguiría recibiendo avisos aquí.
+        await unregisterPushToken().catch(() => {});
         await supabase.auth.signOut();
         set({ session: null, user: null, isAuthenticated: false });
       },

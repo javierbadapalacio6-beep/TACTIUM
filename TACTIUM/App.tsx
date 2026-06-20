@@ -21,6 +21,7 @@ import { useClubStore } from './src/store/clubStore';
 import { useConnectionStore } from './src/store/connectionStore';
 import { useSubscriptionStore } from './src/store/subscriptionStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
+import { maybePromptForPush } from './src/core/push';
 import { ToastHost, OfflineBanner, ResponsiveFrame } from './src/components/ui';
 import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
 
@@ -120,6 +121,9 @@ export default function App() {
         await refreshSubs(userId);
         if (cancelled) return;
         subscribeSubsRealtime(userId);
+        if (cancelled) return;
+        // Avisos push: priming + registro del token (no bloquea el arranque).
+        void maybePromptForPush(userId);
       })();
       return () => {
         cancelled = true;

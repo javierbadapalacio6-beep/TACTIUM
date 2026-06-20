@@ -49,6 +49,7 @@ import {
   type PairStatsMap,
 } from '@core/utils/lineupGenerator';
 import { fetchPairStats } from '@core/services/pairStats';
+import { notifyPush } from '@core/push';
 import { shortName, initialsOf, photoOf } from '@core/utils/playerName';
 
 import type { HomeStackScreenProps } from '@navigation/types';
@@ -1239,6 +1240,9 @@ export const LineupScreen = ({
                 }
               : gate(() => {
                   const back = () => {
+                    // Avisar a los convocados de que la alineación está lista
+                    // (best-effort; solo el capitán y con alineación completa).
+                    if (matchdayId) void notifyPush('lineup_published', matchdayId);
                     if (navigation.canGoBack()) navigation.goBack();
                     else navigation.navigate('HomeRoot');
                   };

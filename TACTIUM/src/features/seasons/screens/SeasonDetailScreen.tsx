@@ -35,6 +35,7 @@ import * as LineupsApi from '@core/services/lineups';
 import { matchdayState, type MatchdayVisualState } from '@core/utils/matchday';
 import { tandasOptions } from '@core/utils/tandas';
 import { getCourtsForCompetition } from '@core/data/federations';
+import { notifyPush } from '@core/push';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import type { ScannedMatchday } from '@core/services/imageRecognition';
 
@@ -610,7 +611,7 @@ const AddMatchdaySheet: React.FC<{
     if (!opponent.trim() || submitting) return;
     setSubmitting(true);
     try {
-      await MatchdaysApi.createMatchday(seasonId, {
+      const created = await MatchdaysApi.createMatchday(seasonId, {
         jornada_number: nextJornadaNumber,
         opponent: opponent.trim(),
         match_date: matchDate ? dateToIsoDate(matchDate) : undefined,
@@ -622,6 +623,9 @@ const AddMatchdaySheet: React.FC<{
       // Renumera por fecha: si la nueva jornada es retroactiva, se "encaja"
       // en su posición cronológica y las posteriores se desplazan.
       await MatchdaysApi.renumberSeasonMatchdays(seasonId);
+      // Avisa a la plantilla de la nueva jornada (best-effort; solo alta manual,
+      // NO en la importación masiva de calendario para no spamear).
+      void notifyPush('matchday_created', created.id);
       onCreated();
     } catch (e: any) {
       Alert.alert('Error al crear jornada', e?.message ?? '');
