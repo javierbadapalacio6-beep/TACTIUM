@@ -1,0 +1,41 @@
+# .easignore · qué EXCLUIR del tarball que se sube a EAS Build.
+# Sigue la sintaxis de .gitignore. Lo que entra aquí NO se sube al
+# build remoto. Útil para evitar:
+#  · directorios con symlinks que rompen el upload en Windows
+#  · archivos pesados que no aportan al bundle
+#  · secretos que no deben llegar al servidor de Expo
+
+# Tooling de desarrollo local — symlinks rompen el tarball en Windows.
+.agents/
+.claude/
+
+# Logs y caches
+*.log
+.expo/
+.expo-shared/
+
+# Tests / docs que no afectan al runtime
+__tests__/
+*.md
+!app.json
+
+# IDEs
+.idea/
+.vscode/
+
+# Builds locales
+*.ipa
+*.apk
+*.aab
+
+# Service account key de Google Play (API) — NUNCA debe ir al build de la app.
+google-service-account.json
+# Clave de service account de Firebase (FCM v1) — secreto del servidor de push,
+# NO debe ir embebida en la app.
+*firebase-adminsdk*.json
+# OJO: google-services.json (config de Firebase/FCM) SÍ debe subir al build
+# Android (lo necesita expo-notifications). No lo excluyas aquí.
+
+# Plataformas nativas regeneradas (managed workflow)
+ios/
+android/
