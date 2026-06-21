@@ -30,6 +30,7 @@ import { useTeamStore, type Side } from '@store/teamStore';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
 import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
+import { FCP_ENABLED } from '@core/config/featureFlags';
 import { toast } from '@store/toastStore';
 import {
   NAME_MAX_LENGTH,
@@ -182,27 +183,29 @@ export const AddPlayersScreen = ({
         </Pressable>
 
         {/* Atajo: volcar la plantilla oficial desde la Federación Cántabra. */}
-        <Pressable
-          onPress={() => setImportingFcp(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Importar desde la Federación Cántabra"
-          style={({ pressed }) => [
-            styles.scanShortcut,
-            { marginTop: 10 },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <View style={styles.scanShortcutIcon}>
-            <Text style={{ fontSize: 14 }}>🏛️</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.scanShortcutTitle}>Importar de la Federación</Text>
-            <Text style={styles.scanShortcutHint}>
-              Vuelca tu plantilla cántabra con los puntos oficiales
-            </Text>
-          </View>
-          <IconArrowRight size={14} color={Colors.accent} />
-        </Pressable>
+        {FCP_ENABLED && (
+          <Pressable
+            onPress={() => setImportingFcp(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Importar desde la Federación Cántabra"
+            style={({ pressed }) => [
+              styles.scanShortcut,
+              { marginTop: 10 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.scanShortcutIcon}>
+              <Text style={{ fontSize: 14 }}>🏛️</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.scanShortcutTitle}>Importar de la Federación</Text>
+              <Text style={styles.scanShortcutHint}>
+                Vuelca tu plantilla cántabra con los puntos oficiales
+              </Text>
+            </View>
+            <IconArrowRight size={14} color={Colors.accent} />
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.counter}>

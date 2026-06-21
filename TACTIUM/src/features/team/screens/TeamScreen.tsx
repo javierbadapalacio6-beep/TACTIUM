@@ -29,6 +29,7 @@ import {
 } from '@components/ui';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
+import { FCP_ENABLED } from '@core/config/featureFlags';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
@@ -138,15 +139,17 @@ export const TeamScreen = () => {
           >
             <IconShare size={14} color={Colors.accent} />
           </Pressable>
-          <Pressable
-            onPress={() => setImportingFcp(true)}
-            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Importar desde la Federación Cántabra"
-          >
-            <Text style={styles.scanBtnIcon}>🏛️</Text>
-            <Text style={styles.scanBtnLabel}>FCP</Text>
-          </Pressable>
+          {FCP_ENABLED && (
+            <Pressable
+              onPress={() => setImportingFcp(true)}
+              style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Importar desde la Federación Cántabra"
+            >
+              <Text style={styles.scanBtnIcon}>🏛️</Text>
+              <Text style={styles.scanBtnLabel}>FCP</Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={() => setScanning(true)}
             style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
