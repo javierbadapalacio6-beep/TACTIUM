@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -81,7 +82,14 @@ export const OnboardingChoiceScreen = ({
         </Animated.View>
       </View>
 
-      <View style={styles.body}>
+      <ScrollView
+        style={styles.bodyScroll}
+        contentContainerStyle={[
+          styles.body,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <Animated.Text
           style={styles.eyebrow}
           entering={FadeInDown.delay(STAGGER_STEP * 2)
@@ -185,17 +193,17 @@ export const OnboardingChoiceScreen = ({
             </Text>
           </Pressable>
         </Animated.View>
-      </View>
 
-      <Animated.View
-        style={[styles.footer, { paddingBottom: insets.bottom + 22 }]}
-        entering={FadeIn.delay(STAGGER_STEP * 9).duration(260)}
-      >
-        <Text style={styles.footnote}>
-          Sólo el capitán independiente paga su plan.{'\n'}
-          Podrás cambiar entre equipos más adelante.
-        </Text>
-      </Animated.View>
+        <Animated.View
+          style={styles.footer}
+          entering={FadeIn.delay(STAGGER_STEP * 9).duration(260)}
+        >
+          <Text style={styles.footnote}>
+            Sólo el capitán independiente paga su plan.{'\n'}
+            Podrás cambiar entre equipos más adelante.
+          </Text>
+        </Animated.View>
+      </ScrollView>
 
       <RedeemInvitationSheet
         open={redeemOpen}
@@ -269,8 +277,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
   },
-  body: {
+  bodyScroll: {
     flex: 1,
+  },
+  body: {
+    // flexGrow (no flex:1) para que el contenido fluya y haga scroll cuando
+    // no cabe en pantallas pequeñas, pero ocupe todo el alto cuando sobra.
+    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 28,
   },
@@ -338,7 +351,7 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.hair,
+    backgroundColor: Colors.hairStrong,
   },
   dividerText: {
     fontFamily: Fonts.mono,
@@ -459,7 +472,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   footer: {
-    paddingHorizontal: 24,
+    // Anclado al fondo cuando sobra espacio; empujado por el scroll cuando no.
+    marginTop: 'auto',
+    paddingTop: 20,
   },
   footnote: {
     color: Colors.textFaint,
