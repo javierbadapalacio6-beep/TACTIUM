@@ -247,6 +247,21 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-06-21",
+    title: "Apple aprueba la 1.0.1. Antes de reenviar el build de push, se BLINDA el FCP tras un feature flag (no entra a producción hasta estar pulido) + bump a 1.0.2. Fix de layout del onboarding en Android (pantalla de elección se salía).",
+    changes: [
+      { type: "decision", text: "<strong>🍎 Apple APROBÓ la 1.0.1</strong> (build 12, \"eligible for distribution\"). Pero ayer se siguió tocando el conector FCP, así que <strong>NO se lleva nada nuevo a producción hasta que el FCP esté bien estructurado y funcional</strong>. El problema: las <strong>push notifications</strong> exigen un <strong>build nativo nuevo</strong> (no OTA), y un binario <strong>congela el JS del momento de compilar</strong> → compilarlo desde <code>main</code> embebería el FCP a medias. Hay que separar las dos cosas." },
+
+      { type: "feat", text: "<strong>🛡️ Conector FCP blindado tras un feature flag</strong>. Nuevo <code>src/core/config/featureFlags.ts</code> con <code>FCP_ENABLED = false</code>: el código del conector <strong>viaja en el binario pero inerte e invisible</strong> (se ocultan los dos únicos puntos de entrada — el icono <strong>🏛️</strong> de la pestaña Equipo en <code>TeamScreen</code> y el atajo \"Importar de la Federación\" del onboarding en <code>AddPlayersScreen</code>). El revisor de Apple/Google no lo ve y ningún usuario lo ve. Cuando esté pulido: <code>FCP_ENABLED = true</code> + <code>eas update</code> → se enciende al instante por OTA, sin pasar por review." },
+
+      { type: "decision", text: "<strong>Bump 1.0.1 → 1.0.2</strong> (<code>app.json</code>). Como <code>runtimeVersion.policy = \"appVersion\"</code>, subir la versión crea un <strong>nuevo tren de OTA</strong> que <strong>aísla a los usuarios de la 1.0.1 aprobada</strong>: aunque se lance un <code>eas update</code> a producción desde <code>main</code>, va al tren 1.0.2 (el build de push), nunca a los de la 1.0.1. Doble seguridad junto al flag apagado. Se descartó la alternativa de compilar el push desde el commit anterior al FCP (cirugía de git frágil, sin ventaja)." },
+
+      { type: "fix", text: "<strong>🔴 Layout del onboarding se salía de pantalla en Android</strong>. En la <strong>pantalla de elección</strong> (<code>OnboardingChoiceScreen</code>) el contenido se desbordaba detrás de la barra de navegación y el texto de \"Me han invitado\" se solapaba; además el divisor \"O\" (con líneas casi invisibles) parecía un \"0\" suelto. Causa: era la <strong>única</strong> pantalla del onboarding construida con un <code>View</code> de altura fija (<code>flex:1</code>) <strong>sin <code>ScrollView</code></strong>. Fix: cuerpo envuelto en <code>ScrollView</code> (<code>flexGrow</code> + <code>paddingBottom</code> con <code>insets.bottom</code>), footer movido dentro y anclado abajo, y líneas del divisor a <code>hairStrong</code>." },
+
+      { type: "chore", text: "<strong>Pasada de revisión al resto del onboarding</strong>: <code>CreateClub</code>, <code>CreateTeam</code>, <code>CreateTeamsForClub</code> y <code>AddPlayers</code> ya eran robustas — todas con <code>ScrollView</code> + <code>KeyboardAvoidingView</code> (<code>behavior</code> solo iOS, el patrón correcto en Android) + CTA fijo con <code>paddingBottom: insets.bottom + 22</code>. No hubo que tocar nada más. Todo el trabajo va en la rama <code>feat/push-1.0.2-fcp-flag</code> (commits <code>93b57ff7</code> + <code>316f05e3</code>), typecheck limpio. Pendiente: lanzar el build nativo 1.0.2 (push embebido + FCP oculto) y reenviar a review." },
+    ],
+  },
+  {
     date: "2026-06-20",
     title: "App WEB completa (Next.js: todas las pantallas + 3D/animaciones), push notifications (MVP), y CONECTOR Federación Cántabra (importar plantilla con puntos, por género y categoría/grupo). FCP deja 2 pendientes.",
     changes: [
