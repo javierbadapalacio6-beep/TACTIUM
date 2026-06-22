@@ -88,10 +88,12 @@ export const ProfileScreen = () => {
   // el profile (notif flag). Cambia tras uploadMyAvatar/deleteMyAvatar.
   const [avatarUrl, setAvatarUrl]       = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy]     = useState(false);
-  // Guard de carga del profile (avatar). Una sola hidratación por ciclo de
-  // focus. Antes este guard vivía sobre el flag de notificaciones, retirado
-  // del UI hasta que exista push real — el toggle solo persistía un booleano
-  // sin disparar ninguna notificación, así que prometía algo que no ocurre.
+  // Toggle de notificaciones push (profiles.notifications_enabled). El backend
+  // YA lo respeta: send-push y el cron diario de recordatorios filtran por él.
+  // Default true; se hidrata del profile en el focus effect de abajo.
+  const [notifEnabled, setNotifEnabled] = useState(true);
+  // Guard de carga del profile (avatar + flag de notificaciones). Una sola
+  // hidratación por ciclo de focus; el state es la fuente de verdad.
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Hidratamos el avatar del profile SOLO una vez por ciclo de focus. Sin
@@ -107,6 +109,7 @@ export const ProfileScreen = () => {
           const p = await ProfileApi.fetchMyProfile();
           if (!cancelled) {
             setAvatarUrl(p?.avatar_url ?? null);
+            setNotifEnabled(p?.notifications_enabled ?? true);
             setProfileLoaded(true);
           }
         } catch {
@@ -145,6 +148,16 @@ export const ProfileScreen = () => {
       }
     }, []),
   );
+
+  // Toggle de notificaciones: update optimista + persistencia; revierte si
+  // falla. El backend (send-push + cron) ya filtra por notifications_enabled.
+  const handleToggleNotifications = useCallback((next: boolean) => {
+    setNotifEnabled(next);
+    ProfileApi.setNotificationsEnabled(next).catch(() => {
+      setNotifEnabled(!next);
+      toast.error('No se pudo guardar', 'Inténtalo de nuevo.');
+    });
+  }, []);
 
   const handleUnlink = () => {
     if (!myPlayerId || unlinking) return;
@@ -638,6 +651,24 @@ export const ProfileScreen = () => {
           </Pressable>
         </View>
 
+        {/* Notificaciones */}
+        <Text style={styles.sectionLabel}>NOTIFICACIONES</Text>
+        <SettingsList
+          items={[
+            {
+              label: 'Avisos del equipo',
+              trailing: 'toggle',
+              value: notifEnabled,
+              onToggle: handleToggleNotifications,
+              accessibilityLabel: 'Activar o desactivar las notificaciones del equipo',
+            },
+          ]}
+        />
+        <Text style={styles.notifHint}>
+          Nueva jornada, alineación publicada y recordatorios para confirmar tu
+          disponibilidad. Puedes desactivarlos cuando quieras.
+        </Text>
+
         {/* Cuenta */}
         <Text style={styles.sectionLabel}>CUENTA</Text>
         <SettingsList
@@ -671,7 +702,7 @@ export const ProfileScreen = () => {
               onPress: () =>
                 openExternalUrl('https://tactium.io/legal/privacidad'),
             },
-            { label: 'Versión', detail: '1.0.0', trailing: 'static' },
+            { label: 'Versión', detail: '1.0.2', trailing: 'static' },
           ]}
         />
 
@@ -1269,6 +1300,15 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  notifHint: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    lineHeight: 14,
+    marginTop: 8,
+    paddingHorizontal: 4,
   },
 
   logout:      { marginTop: 24, height: 52, borderRadius: Radius.lg, borderWidth: 1, borderColor: 'rgba(255,107,107,0.4)', alignItems: 'center', justifyContent: 'center' },
