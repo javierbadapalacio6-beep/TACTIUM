@@ -247,6 +247,23 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-06-22",
+    title: "🚀 1.0.2 a REVISIÓN en ambas tiendas (iOS build 14 + Android vc11 a pista cerrada). Sistema de notificaciones push completo: 4 tipos (2 client-triggered + 2 recordatorios diarios por cron) y toggle conectado. Seguridad de datos de Play actualizada (token push).",
+    changes: [
+      { type: "feat", text: "<strong>🚀 Build 1.0.2 a revisión en AMBAS tiendas</strong>. Lanzados los builds de producción por EAS (<code>EAS_NO_VCS=1</code>, autoIncrement). <strong>iOS build 14</strong> subido a App Store Connect y <strong>enviado a revisión de Apple</strong>; <strong>Android vc11</strong> subido a <code>internal</code> y <strong>promovido a la pista cerrada (<code>alpha</code>) vía API</strong> (<code>promote-vc11-alpha.cjs</code>, edits API) → en revisión de Google. Submits automatizados con <code>eas submit --id</code>." },
+
+      { type: "fix", text: "<strong>🔴 El primer build de iOS (build 13) falló: provisioning sin capability de Push</strong>. <code>XCODE_BUILD_ERROR</code>: <em>\"Provisioning profile doesn't support the Push Notifications capability / doesn't include the aps-environment entitlement\"</em>. Causa: al añadir push, la app declara la capability, pero el profile (del 27-may, anterior) no la tenía; el build se lanzó con <code>--non-interactive</code>, que <strong>se salta la gestión de credenciales con Apple</strong>. El mismo commit compiló bien en Android (el código era correcto). Fix: relanzar <code>eas build -p ios</code> en <strong>modo interactivo</strong> (login Apple + 2FA) → EAS activó Push en el App ID y regeneró el profile con <code>aps-environment</code> → <strong>build 14 OK</strong>. Arreglo de una sola vez." },
+
+      { type: "feat", text: "<strong>🔔 Sistema de notificaciones push completo (4 tipos, todo server-side → sin build/OTA)</strong>. (1) <strong>Jornada publicada</strong> y (2) <strong>Alineación publicada</strong>: client-triggered, los dispara la app del capitán vía edge function <code>send-push</code>. (3) <strong>Recordatorio de disponibilidad</strong> a jugadores que no han confirmado (ventana 7 días) y (4) <strong>Recordatorio al capitán de crear la alineación</strong> de jornadas sin alineación (ventana 3 días): por <strong>cron diario a las 19:00 España</strong>. Cada destinatario recibe 1 push con la jornada más próxima pendiente (y \"y N más\")." },
+
+      { type: "feat", text: "<strong>Toggle <code>notifications_enabled</code> conectado + recordatorios por cron</strong>. <code>send-push</code> v2 filtra por <code>profiles.notifications_enabled</code> (default true) antes de resolver tokens. Nuevos recordatorios: función SQL <code>send_daily_reminders(avail_days, lineup_days)</code> (SECURITY DEFINER, revocada a anon/authenticated) que detecta jugadores sin fila en <code>availability</code> y capitanes sin <code>lineup_variant</code> activo con parejas, y envía a Expo vía <code>net.http_post</code> (pg_net) en lotes de 100. Programada con <strong>pg_cron</strong> (job <code>daily-reminders</code>, <code>0 17 * * *</code> UTC). Activadas las extensiones <code>pg_cron</code> + <code>pg_net</code>." },
+
+      { type: "chore", text: "<strong>Seguridad de datos de Play actualizada para el token push</strong>. Declarado <strong>\"IDs de dispositivo o de otro tipo\"</strong>: se recoge, NO se comparte, no temporal, <strong>opcional</strong> (el usuario puede denegar el permiso), finalidad <em>Funcionalidad de la aplicación</em>. Hecho antes de promover vc11 para que el formulario sea coherente con el release." },
+
+      { type: "decision", text: "<strong>⏳ Limitación aceptada y pendientes</strong>. (a) El <strong>toggle de avisos NO está en la UI</strong> (se retiró hasta tener push real); el filtro funciona en servidor, pero el usuario solo puede silenciar desde los ajustes del SO → reañadir el switch en perfil queda para un OTA. (b) El cron NO poda tokens muertos (sí lo hace <code>send-push</code>). (c) <strong>19:00 = horario de verano</strong>; en octubre cambiar el cron a <code>0 18 * * *</code> para clavar las 19:00. (d) Memoria <code>tactium_push_notifications</code> creada (el sistema vive en Supabase, no en el repo)." },
+    ],
+  },
+  {
     date: "2026-06-21",
     title: "Apple aprueba la 1.0.1. Antes de reenviar el build de push, se BLINDA el FCP tras un feature flag (no entra a producción hasta estar pulido) + bump a 1.0.2. Fix de layout del onboarding en Android (pantalla de elección se salía).",
     changes: [
