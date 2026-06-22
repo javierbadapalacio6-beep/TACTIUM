@@ -261,6 +261,8 @@ const LOG = [
       { type: "chore", text: "<strong>Seguridad de datos de Play actualizada para el token push</strong>. Declarado <strong>\"IDs de dispositivo o de otro tipo\"</strong>: se recoge, NO se comparte, no temporal, <strong>opcional</strong> (el usuario puede denegar el permiso), finalidad <em>Funcionalidad de la aplicación</em>. Hecho antes de promover vc11 para que el formulario sea coherente con el release." },
 
       { type: "decision", text: "<strong>⏳ Limitación aceptada y pendientes</strong>. (a) El <strong>toggle de avisos NO está en la UI</strong> (se retiró hasta tener push real); el filtro funciona en servidor, pero el usuario solo puede silenciar desde los ajustes del SO → reañadir el switch en perfil queda para un OTA. (b) El cron NO poda tokens muertos (sí lo hace <code>send-push</code>). (c) <strong>19:00 = horario de verano</strong>; en octubre cambiar el cron a <code>0 18 * * *</code> para clavar las 19:00. (d) Memoria <code>tactium_push_notifications</code> creada (el sistema vive en Supabase, no en el repo)." },
+
+      { type: "feat", text: "<strong>Toggle de avisos reañadido en Perfil (commit <code>ca5628d8</code>)</strong>. Resuelto el pendiente (a): switch <strong>\"Avisos del equipo\"</strong> en <code>ProfileScreen</code> (sección NOTIFICACIONES) que escribe <code>profiles.notifications_enabled</code> (update optimista, revierte si falla); el backend ya lo respeta → apagarlo corta los 4 tipos. De paso, la versión mostrada pasa a 1.0.2. JS puro. <strong>⏳ NO publicado por OTA todavía</strong>: la 1.0.2 está en revisión (no se cambia el JS bajo revisión) → publicar <code>eas update --branch production</code> en cuanto Apple/Google aprueben y esté live." },
     ],
   },
   {
