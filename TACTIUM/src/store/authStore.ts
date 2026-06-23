@@ -25,7 +25,7 @@ interface AuthState {
     email: string,
     password: string,
     fullName?: string,
-  ) => Promise<{ error?: string }>;
+  ) => Promise<{ error?: string; needsConfirmation?: boolean }>;
   sendPasswordReset: (email: string) => Promise<{ error?: string }>;
   signInWithApple: () => Promise<{ error?: string; cancelled?: boolean }>;
   signInWithGoogle: () => Promise<{ error?: string; cancelled?: boolean }>;
@@ -110,7 +110,7 @@ export const useAuthStore = create<AuthState>()(
 
       signUpWithPassword: async (email, password, fullName) => {
         set({ authError: null });
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: fullName ? { full_name: fullName } : undefined },
@@ -119,7 +119,12 @@ export const useAuthStore = create<AuthState>()(
           set({ authError: error.message });
           return { error: error.message };
         }
-        return {};
+        // Si la confirmación de email está DESACTIVADA en Supabase, signUp ya
+        // devuelve sesión y onAuthStateChange mete al usuario directo. Solo
+        // hace falta el aviso "revisa tu email" cuando NO hay sesión (= la
+        // confirmación está activada). Así el mensaje se ajusta solo a la
+        // config de Supabase sin tocar la app.
+        return { needsConfirmation: !data.session };
       },
 
       sendPasswordReset: async (email) => {

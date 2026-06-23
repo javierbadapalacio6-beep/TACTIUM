@@ -80,24 +80,33 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
   const handleEmail = async () => {
     if (!valid || submitting) return;
     setSubmitting(true);
-    const { error } = isSignup
-      ? await signUp(email.trim(), pass, name.trim())
-      : await signIn(email.trim(), pass);
-    setSubmitting(false);
 
-    if (error) {
-      Alert.alert(
-        isSignup ? 'No se pudo crear la cuenta' : 'No se pudo iniciar sesión',
-        error,
+    if (isSignup) {
+      const { error, needsConfirmation } = await signUp(
+        email.trim(),
+        pass,
+        name.trim(),
       );
+      setSubmitting(false);
+      if (error) {
+        Alert.alert('No se pudo crear la cuenta', error);
+        return;
+      }
+      // Solo avisamos de revisar el email cuando Supabase exige confirmación.
+      // Si está desactivada, ya hay sesión y onAuthStateChange navega solo.
+      if (needsConfirmation) {
+        Alert.alert(
+          'Cuenta creada',
+          'Revisa tu email para confirmar la cuenta antes de iniciar sesión.',
+        );
+      }
       return;
     }
 
-    if (isSignup) {
-      Alert.alert(
-        'Cuenta creada',
-        'Revisa tu email para confirmar la cuenta antes de iniciar sesión.',
-      );
+    const { error } = await signIn(email.trim(), pass);
+    setSubmitting(false);
+    if (error) {
+      Alert.alert('No se pudo iniciar sesión', error);
     }
   };
 
