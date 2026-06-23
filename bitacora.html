@@ -247,6 +247,19 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-06-23",
+    title: "🍎 1.0.2 APROBADA y live en iOS (Android en prueba cerrada). Verificadas las notificaciones en real (jornada/alineación avisan a los jugadores). 3 OTAs a production: toggle de avisos, ocultar suscripción a jugadores y arreglo del aviso de confirmación de email.",
+    changes: [
+      { type: "feat", text: "<strong>🍎 1.0.2 aprobada y publicada en App Store</strong> (Android sigue en revisión de prueba cerrada). Lanzado el primer <strong>OTA a <code>production</code></strong> (runtimeVersion 1.0.2): el <strong>toggle de avisos en Perfil</strong> ya funcional para los usuarios (update group <code>58201fc5</code>). Verificado en dispositivo." },
+
+      { type: "feat", text: "<strong>✅ Notificaciones push verificadas en real</strong>. Confirmado en producción: al <strong>crear jornada</strong> y al <strong>publicar alineación</strong>, los jugadores reciben el aviso (los 2 disparadores client-triggered vía <code>send-push</code>, con el filtro del toggle aplicado). Los 2 recordatorios por cron (disponibilidad 7d / crear alineación 3d) se disparan solos a las 19:00 si hay pendientes." },
+
+      { type: "fix", text: "<strong>No mostrar suscripción a los jugadores (rol player)</strong>. La tarjeta SUSCRIPCIÓN en Perfil aparecía también en modo jugador (\"Probar TACTIUM Pro · 14 días\"), invitando a un plan que no les aplica — la app es <strong>gratis para los participantes</strong>. Se oculta cuando <code>activeRole === 'player'</code> (si el usuario es además capitán/club en otro equipo, gestiona su plan al cambiar de modo). Commit <code>c873f5e2</code> + OTA <code>d8d476f4</code>." },
+
+      { type: "fix", text: "<strong>Signup: no pedir \"revisa tu email\" si la confirmación está desactivada</strong>. El alta mostraba SIEMPRE el aviso de confirmar email, pero con la confirmación off en Supabase el <code>signUp</code> devuelve sesión y el usuario entra directo → confundía. <code>signUpWithPassword</code> ahora devuelve <code>needsConfirmation</code> (= no hay sesión) y <code>LoginScreen</code> solo muestra el mensaje en ese caso → se ajusta solo a la config de Supabase. Commit <code>fcacd4b2</code> + OTA <code>28ee1901</code>." },
+    ],
+  },
+  {
     date: "2026-06-22",
     title: "🚀 1.0.2 a REVISIÓN en ambas tiendas (iOS build 14 + Android vc11 a pista cerrada). Sistema de notificaciones push completo: 4 tipos (2 client-triggered + 2 recordatorios diarios por cron) y toggle conectado. Seguridad de datos de Play actualizada (token push).",
     changes: [
