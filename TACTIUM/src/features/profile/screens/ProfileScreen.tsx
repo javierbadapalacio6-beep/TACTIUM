@@ -588,13 +588,17 @@ export const ProfileScreen = () => {
           </>
         ) : null}
 
-        {/* Suscripción · Oculta para captains invitados por un club
-            (team.club_id !== null). Ese capitán está cubierto por la sub
-            del club que lo invitó — no paga nada por su cuenta, y darle
-            opciones de gestión solo confunde. La sub real la gestiona el
-            club_admin desde su Modo Club. Para el captain independiente
-            (club_id === null) sí mostramos: tiene su plan Capitán propio. */}
-        {!(activeRole === 'captain' && team?.club_id) ? (
+        {/* Suscripción · NO se muestra a los jugadores (rol player): para
+            ellos la app es gratis, son participantes y no pagan ningún plan.
+            Si el mismo usuario fuera además capitán/club en otro equipo,
+            gestiona su plan al cambiar a ese modo.
+            También oculta para captains invitados por un club
+            (team.club_id !== null): ese capitán está cubierto por la sub del
+            club que lo invitó — no paga por su cuenta y darle opciones de
+            gestión solo confunde (la sub real la gestiona el club_admin desde
+            Modo Club). Para el captain independiente (club_id === null) sí se
+            muestra: tiene su plan Capitán propio. */}
+        {activeRole !== 'player' && !(activeRole === 'captain' && team?.club_id) ? (
           <SubscriptionCard
             activeRole={activeRole}
             userId={userId}
