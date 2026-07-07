@@ -46,7 +46,7 @@ import {
 // jugador y el contenido del futuro perfil público. Los amistosos se
 // sumarán en F5b (requiere RPC de lectura + picker con user_id).
 
-type Scope = 'activa' | 'todas';
+type Scope = 'activa' | 'todas' | 'amistosos';
 
 export const MyStatsScreen = () => {
   const insets = useSafeAreaInsets();
@@ -85,9 +85,11 @@ export const MyStatsScreen = () => {
       setMe(player);
       setSeasons(allSeasons);
       const ids =
-        scope === 'activa'
-          ? allSeasons.filter((s) => s.active).map((s) => s.id)
-          : allSeasons.map((s) => s.id);
+        scope === 'amistosos'
+          ? [] // el ámbito amistosos no necesita datos de liga
+          : scope === 'activa'
+            ? allSeasons.filter((s) => s.active).map((s) => s.id)
+            : allSeasons.map((s) => s.id);
       const b = await fetchLeagueStatsBundle(ids);
       setBundle(b);
       setStats(player ? computePlayerLeagueStats(player.id, b) : null);
@@ -247,14 +249,18 @@ export const MyStatsScreen = () => {
           {(
             [
               { id: 'activa', label: 'Activa' },
-              { id: 'todas', label: 'Histórico' },
+              { id: 'todas', label: 'Todas' },
+              { id: 'amistosos', label: 'Amistosos' },
             ] as const
           ).map((s) => {
             const sel = scope === s.id;
             return (
               <Pressable
                 key={s.id}
-                onPress={() => setScope(s.id)}
+                onPress={() => {
+                  setScope(s.id);
+                  if (s.id === 'amistosos') setView('yo');
+                }}
                 style={[
                   styles.scopeChip,
                   sel && {
@@ -275,6 +281,8 @@ export const MyStatsScreen = () => {
             );
           })}
 
+          {scope !== 'amistosos' ? (
+            <>
           <View style={styles.filterDivider} />
 
           {(
@@ -307,6 +315,8 @@ export const MyStatsScreen = () => {
               </Pressable>
             );
           })}
+            </>
+          ) : null}
         </View>
 
         {loading ? (
@@ -370,7 +380,48 @@ export const MyStatsScreen = () => {
           </View>
         ) : (
           <>
-            {!hasSeasons || !stats || stats.played === 0 ? (
+            {scope === 'amistosos' ? (
+              casual && casual.played > 0 ? (
+                <>
+                  <View style={styles.hero}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.heroPct}>{casual.winRate}%</Text>
+                      <Text style={styles.heroLabel}>DE VICTORIAS</Text>
+                    </View>
+                    <View style={styles.heroRight}>
+                      <Text style={styles.heroRecord}>
+                        {casual.won}
+                        <Text style={{ color: Colors.textFaint }}> V · </Text>
+                        {casual.lost}
+                        <Text style={{ color: Colors.textFaint }}> D</Text>
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.grid}>
+                    <StatCell
+                      label="PARTIDOS"
+                      value={String(casual.played)}
+                    />
+                    <StatCell
+                      label="AMISTOSOS"
+                      value={String(casual.amistosos)}
+                    />
+                    <StatCell
+                      label="ENTRENOS"
+                      value={String(casual.entrenos)}
+                    />
+                  </View>
+                </>
+              ) : (
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptyTitle}>Sin amistosos todavía</Text>
+                  <Text style={styles.emptyText}>
+                    Registra un amistoso desde la Home (o canjea un código de
+                    partido) y tus números aparecerán aquí.
+                  </Text>
+                </View>
+              )
+            ) : !hasSeasons || !stats || stats.played === 0 ? (
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>
                   Sin partidos de liga todavía
@@ -490,7 +541,7 @@ export const MyStatsScreen = () => {
               </>
             )}
 
-            {casual && casual.played > 0 ? (
+            {scope !== 'amistosos' && casual && casual.played > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>AMISTOSOS</Text>
                 <View style={[styles.card, styles.partnerCard]}>
@@ -555,7 +606,7 @@ export const MyStatsScreen = () => {
             ) : null}
 
             {/* Compartir (solo con números de liga) */}
-            {stats && stats.played > 0 ? (
+            {scope !== 'amistosos' && stats && stats.played > 0 ? (
               <>
             {photoUri && stats ? (
               <View style={{ alignItems: 'center', marginTop: 20 }}>

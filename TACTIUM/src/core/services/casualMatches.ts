@@ -45,6 +45,8 @@ export interface MyCasualStats {
   won: number;
   lost: number;
   winRate: number | null;
+  amistosos: number;
+  entrenos: number;
 }
 
 /**
@@ -64,32 +66,50 @@ export async function fetchMyCasualStats(
     .eq('user_id', userId);
   if (e1) throw new Error(e1.message);
   const parts = (partsRaw ?? []) as { match_id: string; side: number }[];
-  if (parts.length === 0) return { played: 0, won: 0, lost: 0, winRate: null };
+  if (parts.length === 0)
+    return {
+      played: 0,
+      won: 0,
+      lost: 0,
+      winRate: null,
+      amistosos: 0,
+      entrenos: 0,
+    };
 
   const ids = [...new Set(parts.map((p) => p.match_id))];
   const { data: matchesRaw, error: e2 } = await from('casual_matches')
-    .select('id, winner_side')
+    .select('id, winner_side, type')
     .in('id', ids);
   if (e2) throw new Error(e2.message);
-  const winnerById = new Map(
-    ((matchesRaw ?? []) as { id: string; winner_side: number | null }[]).map(
-      (m) => [m.id, m.winner_side],
-    ),
+  const matchById = new Map(
+    (
+      (matchesRaw ?? []) as {
+        id: string;
+        winner_side: number | null;
+        type: string | null;
+      }[]
+    ).map((m) => [m.id, m]),
   );
 
   let played = 0;
   let won = 0;
+  let amistosos = 0;
+  let entrenos = 0;
   for (const p of parts) {
-    const w = winnerById.get(p.match_id);
-    if (w == null) continue; // sin ganador (empate/incompleto) no computa
+    const m = matchById.get(p.match_id);
+    if (!m || m.winner_side == null) continue; // sin ganador no computa
     played++;
-    if (w === p.side) won++;
+    if (m.winner_side === p.side) won++;
+    if (m.type === 'entreno') entrenos++;
+    else amistosos++;
   }
   return {
     played,
     won,
     lost: played - won,
     winRate: played > 0 ? Math.round((won / played) * 100) : null,
+    amistosos,
+    entrenos,
   };
 }
 
