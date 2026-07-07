@@ -23,6 +23,8 @@ import {
   createCasualMatch,
   type CasualParticipant,
 } from '@core/services/casualMatches';
+import * as ImagePicker from 'expo-image-picker';
+import { PhotoShareCard, sharePhotoCard } from '@components/share/PhotoShareCard';
 
 // Amistoso EQUIPO vs EQUIPO (F4 · plan de escalado): registro rápido de
 // 1–5 partidos de dobles contra otro equipo. Cada partido se persiste como
@@ -146,6 +148,10 @@ export const AmistosoScreen = () => {
   const [partidos, setPartidos] = useState<PartidoInput[]>([emptyPartido()]);
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  // Foto del partido (estilo Strava): se comparte compuesta con el
+  // resultado y la marca. Opcional, se elige tras guardar.
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const photoCardRef = React.useRef<View>(null);
 
   const setCount = (n: number) =>
     setPartidos((prev) => {
@@ -273,6 +279,33 @@ export const AmistosoScreen = () => {
       // cancelado por el usuario
     }
   };
+
+  const pickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    setPhotoUri(result.assets[0].uri);
+  };
+
+  const photoTitle = isColegas
+    ? `${partidos[0]?.pair || 'Nosotros'} ${marcador.us}–${marcador.them} ${
+        partidos[0]?.opp || 'Rival'
+      }`
+    : `${team?.name ?? 'Nosotros'} ${marcador.us}–${marcador.them} ${
+        rivalTeam || 'Rival'
+      }`;
+  const photoDetail = isColegas
+    ? setsToString(partidos[0]?.sets ?? [])
+    : `${validPartidos.length} ${
+        validPartidos.length === 1 ? 'partido' : 'partidos'
+      }`;
 
   return (
     <View style={styles.root}>
@@ -432,11 +465,55 @@ export const AmistosoScreen = () => {
           </Pressable>
         ) : (
           <View style={{ gap: 8 }}>
+            {photoUri ? (
+              <View style={{ alignItems: 'center', marginBottom: 6 }}>
+                <PhotoShareCard
+                  ref={photoCardRef}
+                  photoUri={photoUri}
+                  title={photoTitle}
+                  subtitle={`Amistoso · ${new Date().toLocaleDateString(
+                    'es-ES',
+                    { day: 'numeric', month: 'short' },
+                  )}`}
+                  detail={photoDetail}
+                />
+              </View>
+            ) : null}
+            {photoUri ? (
+              <Pressable
+                onPress={() => sharePhotoCard(photoCardRef, photoUri, shareText)}
+                style={({ pressed }) => [
+                  styles.cta,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.ctaLabel}>Compartir foto + resultado</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={pickPhoto}
+                style={({ pressed }) => [
+                  styles.ctaGhost,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.ctaGhostLabel}>
+                  📸 Añadir foto del partido
+                </Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={shareWhatsapp}
-              style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [
+                photoUri ? styles.ctaGhost : styles.cta,
+                pressed && { opacity: 0.85 },
+              ]}
             >
-              <Text style={styles.ctaLabel}>Compartir por WhatsApp</Text>
+              <Text
+                style={photoUri ? styles.ctaGhostLabel : styles.ctaLabel}
+              >
+                Compartir por WhatsApp
+              </Text>
             </Pressable>
             <Pressable
               onPress={shareNative}

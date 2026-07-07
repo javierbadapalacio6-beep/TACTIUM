@@ -19,6 +19,8 @@ import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { fetchMyPlayer, type Player } from '@core/services/players';
 import { fetchSeasons, type Season } from '@core/services/seasons';
+import * as ImagePicker from 'expo-image-picker';
+import { PhotoShareCard, sharePhotoCard } from '@components/share/PhotoShareCard';
 import {
   fetchLeagueStatsBundle,
   computePlayerLeagueStats,
@@ -49,6 +51,8 @@ export const MyStatsScreen = () => {
   // Vista: mis números o ranking interno de la plantilla (pique sano =
   // retención). El ranking usa el MISMO bundle, cero consultas extra.
   const [view, setView] = useState<'yo' | 'plantilla'>('yo');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const photoCardRef = React.useRef<View>(null);
 
   const load = useCallback(async () => {
     if (!team || !userId) {
@@ -105,6 +109,17 @@ export const MyStatsScreen = () => {
     } catch {
       // cancelado
     }
+  };
+
+  const pickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    setPhotoUri(result.assets[0].uri);
   };
 
   const ranking = useMemo(() => {
@@ -386,14 +401,57 @@ export const MyStatsScreen = () => {
             ) : null}
 
             {/* Compartir */}
+            {photoUri && stats ? (
+              <View style={{ alignItems: 'center', marginTop: 20 }}>
+                <PhotoShareCard
+                  ref={photoCardRef}
+                  photoUri={photoUri}
+                  title={`${stats.winRate}% de victorias`}
+                  subtitle={`${me?.name ?? ''} · ${team?.name ?? ''}`}
+                  detail={`${stats.won}V–${stats.lost}D · ${stats.played} PJ${
+                    stats.currentStreak >= 3
+                      ? ` · 🔥${stats.currentStreak}`
+                      : ''
+                  }`}
+                />
+              </View>
+            ) : null}
+
+            {photoUri ? (
+              <Pressable
+                onPress={() =>
+                  sharePhotoCard(photoCardRef, photoUri, shareText)
+                }
+                style={({ pressed }) => [
+                  styles.shareBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.shareBtnLabel}>
+                  Compartir foto + stats
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleShare}
+                style={({ pressed }) => [
+                  styles.shareBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.shareBtnLabel}>Compartir mis números</Text>
+              </Pressable>
+            )}
             <Pressable
-              onPress={handleShare}
+              onPress={pickPhoto}
               style={({ pressed }) => [
-                styles.shareBtn,
-                pressed && { opacity: 0.85 },
+                styles.photoBtn,
+                pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={styles.shareBtnLabel}>Compartir mis números</Text>
+              <Text style={styles.photoBtnLabel}>
+                {photoUri ? 'Cambiar foto' : '📸 Añadir foto del partido'}
+              </Text>
             </Pressable>
 
             <Text style={styles.footNote}>
@@ -598,6 +656,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shareBtnLabel: { color: '#001810', fontSize: 15, fontWeight: '700' },
+  photoBtn: {
+    marginTop: 8,
+    height: 44,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoBtnLabel: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
   footNote: {
     color: Colors.textFaint,
     fontSize: 11,
