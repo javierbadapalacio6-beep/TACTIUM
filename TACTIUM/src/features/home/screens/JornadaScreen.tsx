@@ -42,7 +42,7 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
-import { captureRef } from 'react-native-view-shot';
+import { captureViewSafe } from '@components/share/PhotoShareCard';
 import { LineupShareCard } from '../components/LineupShareCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
@@ -1424,8 +1424,19 @@ const ShareLineupSheet: React.FC<{
   // Comparte la tarjeta de marca como IMAGEN (view-shot). Si el binario
   // actual no incluye el módulo nativo, degradamos a texto con aviso.
   const shareImage = async () => {
+    const uri = await captureViewSafe(cardRef, {
+      format: 'png',
+      quality: 1,
+    });
+    if (!uri) {
+      Alert.alert(
+        'Imagen disponible en el próximo build',
+        'Este binario aún no incluye la captura de imagen. Te comparto el texto mientras tanto.',
+      );
+      await shareNative();
+      return;
+    }
     try {
-      const uri = await captureRef(cardRef, { format: 'png', quality: 1 });
       await Share.share(
         Platform.OS === 'ios'
           ? { url: uri }
@@ -1433,11 +1444,7 @@ const ShareLineupSheet: React.FC<{
       );
       onClose();
     } catch {
-      Alert.alert(
-        'Imagen disponible en el próximo build',
-        'Este binario aún no incluye la captura de imagen. Te comparto el texto mientras tanto.',
-      );
-      await shareNative();
+      // cancelado
     }
   };
 

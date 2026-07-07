@@ -9,8 +9,39 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { captureRef } from 'react-native-view-shot';
 import * as ImagePicker from 'expo-image-picker';
+
+// ⚠️ view-shot se carga PEREZOSAMENTE: con TurboModules, importar el
+// módulo cuando el binario no lo incluye LANZA al evaluar el bundle y
+// tumba la app entera al arrancar. Con require() protegido, el binario
+// viejo funciona (fallback foto+texto) y el nuevo captura de verdad.
+type CaptureRefFn = (
+  ref: unknown,
+  options?: { format?: string; quality?: number },
+) => Promise<string>;
+
+let captureRefSafe: CaptureRefFn | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  captureRefSafe = (
+    require('react-native-view-shot') as { captureRef: CaptureRefFn }
+  ).captureRef;
+} catch {
+  captureRefSafe = null;
+}
+
+/** Captura una vista como imagen; null si el binario no trae view-shot. */
+export async function captureViewSafe(
+  ref: React.RefObject<View | null>,
+  options?: { format?: string; quality?: number },
+): Promise<string | null> {
+  if (!captureRefSafe) return null;
+  try {
+    return await captureRefSafe(ref, options);
+  } catch {
+    return null;
+  }
+}
 
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
@@ -111,12 +142,12 @@ export async function sharePhotoCard(
   photoUri: string,
   text: string,
 ): Promise<void> {
-  let uri = photoUri;
-  try {
-    uri = await captureRef(ref, { format: 'jpg', quality: 0.92 });
-  } catch {
-    // view-shot no disponible en este binario → foto original + texto.
-  }
+  // Compuesta si el binario lo permite; si no, foto original + texto.
+  const captured = await captureViewSafe(ref, {
+    format: 'jpg',
+    quality: 0.92,
+  });
+  const uri = captured ?? photoUri;
   try {
     await Share.share(
       Platform.OS === 'ios'
