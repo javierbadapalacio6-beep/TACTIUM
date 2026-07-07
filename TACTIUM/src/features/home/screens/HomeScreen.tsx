@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ import {
 import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore } from '@store/teamStore';
+import { useAuthStore } from '@store/authStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { HomeStackScreenProps } from '@navigation/types';
@@ -51,6 +52,10 @@ export const HomeScreen = ({
   const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
   const [nextMatchday, setNextMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   const [lineupFilled, setLineupFilled] = useState(0);
+  // Alineación oficial completa de la próxima jornada: permite mostrar al
+  // JUGADOR su card personal ("Juegas la P2 con Marco") — F6 del plan.
+  const [lineupPairs, setLineupPairs] = useState<LineupsApi.LineupPair[]>([]);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
 
   // Al cambiar de equipo activo, el contenido se reemplaza. Si el usuario
   // estaba scrolleado, la nueva data podría tener distinta altura y el
@@ -71,6 +76,7 @@ export const HomeScreen = ({
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       setNextMatchday(null);
       setLineupFilled(0);
+      setLineupPairs([]);
       setActiveSeason(null);
     }
     prevTeamIdRef.current = currentId;
@@ -120,15 +126,19 @@ export const HomeScreen = ({
                   (p) => p.player_a_id && p.player_b_id,
                 ).length;
                 setLineupFilled(filled);
+                setLineupPairs(lineup);
               } else {
                 setLineupFilled(0);
+                setLineupPairs([]);
               }
             } else {
               setLineupFilled(0);
+              setLineupPairs([]);
             }
           } else {
             setNextMatchday(null);
             setLineupFilled(0);
+            setLineupPairs([]);
           }
         } catch (e) {
           console.warn('Home fetch', e);
@@ -145,6 +155,26 @@ export const HomeScreen = ({
     team?.league,
     team?.gender,
   );
+
+  // Card personal del jugador: su pareja en la alineación oficial.
+  const myPlayerId = useMemo(
+    () => players.find((pl) => pl.user_id === userId)?.id ?? null,
+    [players, userId],
+  );
+  const myPair = useMemo(() => {
+    if (!myPlayerId) return null;
+    return (
+      lineupPairs.find(
+        (pr) =>
+          pr.player_a_id === myPlayerId || pr.player_b_id === myPlayerId,
+      ) ?? null
+    );
+  }, [lineupPairs, myPlayerId]);
+  const myPartnerName = myPair
+    ? myPair.player_a_id === myPlayerId
+      ? myPair.player_b_name
+      : myPair.player_a_name
+    : null;
 
   const avail = players.filter((p) => p.available).length;
   const total = players.length || 1;
@@ -315,6 +345,47 @@ export const HomeScreen = ({
             ) : null}
           </View>
         )}
+
+        {isPlayer && nextMatchday && myPair ? (
+          <Pressable
+            onPress={() =>
+              navigation.navigate('Jornada', { matchdayId: nextMatchday.id })
+            }
+            style={({ pressed }) => [
+              styles.myMatch,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <View style={styles.myMatchCourt}>
+              <Text style={styles.myMatchCourtTxt}>
+                P{myPair.court_number}
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.myMatchTitle} numberOfLines={1}>
+                Juegas con {myPartnerName ?? '—'}
+              </Text>
+              <Text style={styles.myMatchMeta} numberOfLines={1}>
+                vs. {nextMatchday.opponent}
+                {nextMatchday.match_time
+                  ? ` · ${nextMatchday.match_time.slice(0, 5)}`
+                  : ''}
+                {' · '}
+                {nextMatchday.is_home ? 'Local' : 'Visitante'}
+              </Text>
+            </View>
+            <IconChevron size={14} color={Colors.textFaint} />
+          </Pressable>
+        ) : isPlayer &&
+          nextMatchday &&
+          myPlayerId &&
+          lineupFilled > 0 ? (
+          <View style={styles.myMatchOut}>
+            <Text style={styles.myMatchOutTxt}>
+              Esta jornada no estás en la alineación. ¡La próxima cae! 💪
+            </Text>
+          </View>
+        ) : null}
 
         {nextMatchday && canEdit ? (
           <Pressable
@@ -526,6 +597,45 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 14,
   },
+  myMatch: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  myMatchCourt: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Colors.accent15,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myMatchCourtTxt: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  myMatchTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
+  myMatchMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  myMatchOut: {
+    marginTop: 12,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    padding: 14,
+  },
+  myMatchOutTxt: { color: Colors.textMuted, fontSize: 13, lineHeight: 18 },
   eyebrowFaint: {
     fontFamily: Fonts.mono,
     fontSize: 11,
