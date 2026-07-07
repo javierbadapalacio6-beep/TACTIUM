@@ -29,6 +29,7 @@ import {
   sharePhotoCard,
   pickMatchPhoto,
 } from '@components/share/PhotoShareCard';
+import { DOWNLOAD_URL } from '@core/config/referral';
 
 // Amistoso EQUIPO vs EQUIPO (F4 · plan de escalado): registro rápido de
 // 1–5 partidos de dobles contra otro equipo. Cada partido se persiste como
@@ -253,7 +254,7 @@ export const AmistosoScreen = () => {
         })
         .filter(Boolean),
       ``,
-      `Organiza tus amistosos con TACTIUM · tactium.io`,
+      `Organiza tus amistosos con TACTIUM: ${DOWNLOAD_URL}`,
     ];
     return lines.join('\n');
   }, [team, rivalTeam, partidos, marcador, isSingle, isEntreno]);
@@ -382,7 +383,7 @@ export const AmistosoScreen = () => {
       `🎾 ${quien}: he registrado nuestro partido en TACTIUM.`,
       ``,
       `Instálate la app y tus partidos contarán en tus estadísticas`,
-      `(victorias, rachas, % y más): https://tactium.io`,
+      `(victorias, rachas, % y más): ${DOWNLOAD_URL}`,
     ].join('\n');
     try {
       await Share.share({ message: msg });

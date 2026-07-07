@@ -28,6 +28,7 @@ import {
   sharePhotoCard,
   pickMatchPhoto,
 } from '@components/share/PhotoShareCard';
+import { DOWNLOAD_URL } from '@core/config/referral';
 import {
   fetchLeagueStatsBundle,
   computePlayerLeagueStats,
@@ -111,7 +112,7 @@ export const MyStatsScreen = () => {
       }%)${streak}`,
       `Sets: ${stats.setsWon}–${stats.setsLost}`,
       ``,
-      `La app del capitán de pádel · tactium.io`,
+      `La app del capitán de pádel: ${DOWNLOAD_URL}`,
     ].join('\n');
   }, [stats, me, team]);
 

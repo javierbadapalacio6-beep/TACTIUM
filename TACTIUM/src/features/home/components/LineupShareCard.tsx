@@ -9,6 +9,7 @@ import { TactiumMark } from '@components/brand/TactiumMark';
 import type * as MatchdaysApi from '@core/services/matchdays';
 import type * as SeasonsApi from '@core/services/seasons';
 import type * as LineupsApi from '@core/services/lineups';
+import { DOWNLOAD_URL } from '@core/config/referral';
 
 // Tarjeta de alineación pensada para COMPARTIR como imagen por WhatsApp:
 // marca TACTIUM + QR de descarga. Cada alineación compartida es un anuncio
@@ -17,7 +18,9 @@ import type * as LineupsApi from '@core/services/lineups';
 // Se renderiza como preview dentro del ShareLineupSheet y se captura con
 // react-native-view-shot cuando el binario lo incluye (fallback: texto).
 
-const APP_URL = 'https://tactium.io';
+// El QR lleva a la DESCARGA directa; 'tactium.io' queda como texto de
+// marca en el pie de la tarjeta.
+const APP_URL = DOWNLOAD_URL;
 
 interface Props {
   teamName: string;

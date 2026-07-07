@@ -10,6 +10,12 @@ export const CAPTAIN_OFFER_CODE = ''; // p. ej. 'CAPITAN1MES' — vacío = sin p
 
 const APP_STORE_ID = '6769825905';
 
+// Enlace de DESCARGA directo (mejor conversión que la landing: un clic
+// menos). Cuando Android esté publicado, cambiar por un enlace
+// inteligente (p. ej. https://tactium.io/app con redirección por
+// plataforma en la landing) para no mandar a un Android a la App Store.
+export const DOWNLOAD_URL = `https://apps.apple.com/es/app/tactium/id${APP_STORE_ID}`;
+
 /** Enlace de canje directo del offer code en App Store. */
 export function offerRedeemUrl(code: string): string {
   return `https://apps.apple.com/redeem?ctx=offercodes&id=${APP_STORE_ID}&code=${code}`;
@@ -32,7 +38,7 @@ export function buildCaptainInviteMessage(fromTeam?: string | null): string {
       `Canjéalo aquí: ${offerRedeemUrl(CAPTAIN_OFFER_CODE)}`,
     );
   } else {
-    lines.push(`Pruébala 14 días gratis: https://tactium.io`);
+    lines.push(`Pruébala 14 días gratis: ${DOWNLOAD_URL}`);
   }
   return lines.join('\n');
 }
