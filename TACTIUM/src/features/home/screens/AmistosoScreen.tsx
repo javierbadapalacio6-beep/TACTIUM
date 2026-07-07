@@ -462,6 +462,10 @@ export const AmistosoScreen = () => {
                 ))}
               </ScrollView>
             ) : null}
+            <Text style={styles.guestHint}>
+              Toca un chip de tu plantilla (🔗 suma en sus stats) o escribe
+              cualquier nombre: colegas de fuera del equipo también valen.
+            </Text>
             <Field
               label="PAREJA RIVAL"
               value={p.opp}
@@ -634,6 +638,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rosterChipText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
+  guestHint: {
+    color: Colors.textFaint,
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 10,
+    marginTop: -2,
+  },
   fieldLabel: {
     fontFamily: Fonts.mono,
     color: Colors.textFaint,
