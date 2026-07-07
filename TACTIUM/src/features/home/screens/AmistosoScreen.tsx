@@ -358,6 +358,39 @@ export const AmistosoScreen = () => {
     }
   };
 
+  // Nombres del partido SIN cuenta TACTIUM (ni vínculo de plantilla, ni
+  // soy yo): son los objetivos de la invitación post-partido — el gancho
+  // de adquisición del plan (cada partido guardado recluta jugadores).
+  const unlinkedNames = useMemo(() => {
+    const out: string[] = [];
+    for (const p of partidos) {
+      for (const n of [p.a1, p.a2, p.b1, p.b2]) {
+        const name = n.trim();
+        if (!name) continue;
+        if (myName && name.toLowerCase() === myName.toLowerCase()) continue;
+        if (linkByName(name)) continue;
+        if (!out.some((x) => x.toLowerCase() === name.toLowerCase()))
+          out.push(name);
+      }
+    }
+    return out;
+  }, [partidos, myName, linkByName]);
+
+  const shareInvite = async () => {
+    const quien = unlinkedNames.slice(0, 3).join(', ');
+    const msg = [
+      `🎾 ${quien}: he registrado nuestro partido en TACTIUM.`,
+      ``,
+      `Instálate la app y tus partidos contarán en tus estadísticas`,
+      `(victorias, rachas, % y más): https://tactium.io`,
+    ].join('\n');
+    try {
+      await Share.share({ message: msg });
+    } catch {
+      // cancelado
+    }
+  };
+
   const pickPhoto = async () => {
     const uri = await pickMatchPhoto();
     if (uri) setPhotoUri(uri);
@@ -657,6 +690,24 @@ export const AmistosoScreen = () => {
             >
               <Text style={styles.ctaGhostLabel}>Otras apps</Text>
             </Pressable>
+            {unlinkedNames.length > 0 ? (
+              <Pressable
+                onPress={shareInvite}
+                style={({ pressed }) => [
+                  styles.inviteBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.inviteBtnLabel}>
+                  🎁 Invita a {unlinkedNames.length}{' '}
+                  {unlinkedNames.length === 1 ? 'jugador' : 'jugadores'} sin
+                  TACTIUM
+                </Text>
+                <Text style={styles.inviteBtnHint}>
+                  Si se instalan la app, sus partidos contarán en sus stats
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
       </ScrollView>
@@ -716,10 +767,11 @@ const styles = StyleSheet.create({
   },
   slotPairRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   slotInput: { flex: 1 },
-  rosterRow: { gap: 6, paddingBottom: 10, marginTop: -2 },
+  rosterRow: { gap: 6, paddingVertical: 4, paddingRight: 8 },
   rosterChip: {
-    paddingHorizontal: 10,
-    height: 30,
+    paddingHorizontal: 12,
+    minHeight: 34,
+    paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: Colors.bgRaised,
     borderWidth: 1,
@@ -731,9 +783,9 @@ const styles = StyleSheet.create({
   guestHint: {
     color: Colors.textFaint,
     fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 16,
+    marginTop: 2,
     marginBottom: 10,
-    marginTop: -2,
   },
   fieldLabel: {
     fontFamily: Fonts.mono,
@@ -836,4 +888,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ctaGhostLabel: { color: Colors.textMuted, fontSize: 14, fontWeight: '600' },
+  inviteBtn: {
+    marginTop: 4,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    backgroundColor: Colors.accent15,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  inviteBtnLabel: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  inviteBtnHint: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    marginTop: 3,
+    textAlign: 'center',
+  },
 });
