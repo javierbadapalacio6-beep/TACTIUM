@@ -360,16 +360,20 @@ export const MyStatsScreen = () => {
               jugador. A partir de ahí, cada partido de liga contará aquí.
             </Text>
           </View>
-        ) : !hasSeasons || !stats || stats.played === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyTitle}>Sin partidos todavía</Text>
-            <Text style={styles.emptyText}>
-              Cuando juegues jornadas de liga con alineación y resultado, tus
-              números aparecerán aquí solos.
-            </Text>
-          </View>
         ) : (
           <>
+            {!hasSeasons || !stats || stats.played === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyTitle}>
+                  Sin partidos de liga todavía
+                </Text>
+                <Text style={styles.emptyText}>
+                  Cuando juegues jornadas de liga con alineación y resultado,
+                  tus números aparecerán aquí solos.
+                </Text>
+              </View>
+            ) : (
+              <>
             {/* Hero: % victorias */}
             <View style={styles.hero}>
               <View style={{ flex: 1 }}>
@@ -475,6 +479,9 @@ export const MyStatsScreen = () => {
             ) : null}
 
             {/* Amistosos vinculados */}
+              </>
+            )}
+
             {casual && casual.played > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>AMISTOSOS</Text>
@@ -493,7 +500,9 @@ export const MyStatsScreen = () => {
               </>
             ) : null}
 
-            {/* Compartir */}
+            {/* Compartir (solo con números de liga) */}
+            {stats && stats.played > 0 ? (
+              <>
             {photoUri && stats ? (
               <View style={{ alignItems: 'center', marginTop: 20 }}>
                 <PhotoShareCard
@@ -546,6 +555,8 @@ export const MyStatsScreen = () => {
                 {photoUri ? 'Cambiar foto' : '📸 Añadir foto del partido'}
               </Text>
             </Pressable>
+              </>
+            ) : null}
 
             <Text style={styles.footNote}>
               Liga: partidos con alineación y resultado. Amistosos: solo los
