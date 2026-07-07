@@ -44,10 +44,10 @@ export const CreateClubScreen = ({
   const [federationPickerOpen, setFederationPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const valid = useMemo(
-    () => Boolean(name.trim() && federation),
-    [name, federation],
-  );
+  // La federación es OPCIONAL: hay clubs cuyos equipos juegan solo ligas
+  // privadas (SNP, LAPI, interempresas). Cada equipo elige después su
+  // competición en el selector.
+  const valid = useMemo(() => Boolean(name.trim()), [name]);
 
   const handleNext = async () => {
     if (!valid || submitting) return;
@@ -117,7 +117,7 @@ export const CreateClubScreen = ({
           </View>
         </Section>
 
-        <Section label="Federación">
+        <Section label="Federación · Opcional">
           <Pressable
             onPress={() => setFederationPickerOpen(true)}
             style={({ pressed }) => [
@@ -137,7 +137,7 @@ export const CreateClubScreen = ({
                 </>
               ) : (
                 <Text style={styles.selectorPlaceholder}>
-                  Selecciona federación
+                  Sin federación · SNP, LAPI, ligas privadas
                 </Text>
               )}
             </View>
@@ -203,13 +203,36 @@ const FederationPickerSheet: React.FC<{
   open: boolean;
   selected: Federation | null;
   onClose: () => void;
-  onPick: (f: Federation) => void;
+  onPick: (f: Federation | null) => void;
 }> = ({ open, selected, onClose, onPick }) => {
   return (
     <BottomSheet open={open} onClose={onClose}>
       <Text style={styles.sheetEyebrow}>FEDERACIÓN</Text>
       <Text style={styles.sheetTitle}>Selecciona federación</Text>
       <View style={{ gap: 6 }}>
+        <Pressable
+          onPress={() => onPick(null)}
+          style={[
+            styles.fedRow,
+            !selected && {
+              backgroundColor: Colors.accent10,
+              borderColor: Colors.accent50,
+            },
+          ]}
+        >
+          <View style={styles.fedBadge}>
+            <Text style={styles.fedBadgeText}>—</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.fedName} numberOfLines={1}>
+              Sin federación
+            </Text>
+            <Text style={styles.fedRegion}>
+              SNP, LAPI, interempresas, ligas de club…
+            </Text>
+          </View>
+          {!selected ? <IconCheck size={16} color={Colors.accent} /> : null}
+        </Pressable>
         {FEDERATIONS.map((f) => {
           const sel = selected?.code === f.code;
           return (
