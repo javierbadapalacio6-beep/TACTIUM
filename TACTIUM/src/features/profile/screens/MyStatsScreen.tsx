@@ -370,7 +370,7 @@ export const MyStatsScreen = () => {
               })}
             </View>
           )
-        ) : !me ? (
+        ) : !me && scope !== 'amistosos' ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>Aún no estás vinculado</Text>
             <Text style={styles.emptyText}>
