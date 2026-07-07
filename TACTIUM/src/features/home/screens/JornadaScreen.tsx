@@ -40,7 +40,7 @@ import * as MatchdaysApi from '@core/services/matchdays';
 import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
-import { getCourtsForCompetition } from '@core/data/federations';
+import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
@@ -236,6 +236,8 @@ export const JornadaScreen = ({
   useMatchdayRealtime({ matchdayId: matchday?.id, onChange: load });
 
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
+  // Marcador ponderado (SNP/Seniors): puntos por partido según la pista.
+  const pointsScheme = getPointsScheme(team?.federation, team?.league);
   const closed = matchday?.status === 'finished';
   const lineupReady = useMemo(() => {
     if (!matchday) return false;
@@ -274,6 +276,21 @@ export const JornadaScreen = ({
     }
     return { won, lost, played };
   }, [matchday, results, courts, isHome]);
+
+  // Marcador en PUNTOS para ligas ponderadas (SNP: 3/3/2/2/2 · Seniors:
+  // 3/3/2). Solo presentación: los standings oficiales los lleva la liga.
+  const weighted = useMemo(() => {
+    if (!pointsScheme) return null;
+    let us = 0;
+    let them = 0;
+    for (let c = 1; c <= courts; c++) {
+      const out = matchOutcome(results, c, isHome);
+      const pts = pointsScheme[c - 1] ?? 2;
+      if (out.state === 'won') us += pts;
+      else if (out.state === 'lost') them += pts;
+    }
+    return { us, them };
+  }, [pointsScheme, results, courts, isHome]);
 
   const matchStarted = useMemo(
     () => (matchday ? isMatchStarted(matchday) : false),
@@ -609,6 +626,15 @@ export const JornadaScreen = ({
           }}
         />
 
+        {weighted && score.played > 0 ? (
+          <Text style={styles.weightedText}>
+            Marcador en puntos: {weighted.us} – {weighted.them}
+            {weighted.us === weighted.them && score.played === courts
+              ? '  (empate)'
+              : ''}
+          </Text>
+        ) : null}
+
         {/* === ALINEACIÓN HEADER === */}
         <View style={styles.lineupHeader}>
           <View>
@@ -682,11 +708,23 @@ export const JornadaScreen = ({
           <View style={styles.ruleBox}>
             <IconAlert size={14} color={Colors.textFaint} />
             <Text style={styles.ruleText}>
-              Pareja con{' '}
-              <Text style={{ color: Colors.text, fontWeight: '500' }}>
-                más puntos
-              </Text>{' '}
-              en P1. Orden descendente.
+              {pointsScheme ? (
+                <>
+                  Orden automático por{' '}
+                  <Text style={{ color: Colors.text, fontWeight: '500' }}>
+                    suma de puntos
+                  </Text>
+                  . P1 y P2 valen 3 puntos; el resto, 2.
+                </>
+              ) : (
+                <>
+                  Pareja con{' '}
+                  <Text style={{ color: Colors.text, fontWeight: '500' }}>
+                    más puntos
+                  </Text>{' '}
+                  en P1. Orden descendente.
+                </>
+              )}
             </Text>
           </View>
         ) : null}
@@ -1864,6 +1902,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   // Rule box
+  weightedText: {
+    marginTop: 10,
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    letterSpacing: 0.4,
+  },
   ruleBox: {
     marginTop: 16,
     paddingHorizontal: 14,

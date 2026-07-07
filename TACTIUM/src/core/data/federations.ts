@@ -341,3 +341,26 @@ export function describeCompetitionFormat(
     order ? 'orden de fuerza' : 'sin orden de fuerza'
   }`;
 }
+
+/**
+ * Esquema de puntos por partido para competiciones con marcador PONDERADO
+ * (verificado contra normativas 2025-26; ver docs/formatos-snp-verificados.md):
+ *
+ *   - SNP:          P1=3, P2=3, P3=2, P4=2, P5=2 → 12 puntos en juego
+ *                   (empate 6-6 posible en Fase Regular; en playoffs
+ *                   desempata el resultado de la pareja 3).
+ *   - SNP Seniors:  P1=3, P2=3, P3=2 → 8 puntos en juego.
+ *
+ * Devuelve null para competiciones con marcador clásico por partidos
+ * ganados (federadas, LAPI, personalizadas). QSNP tampoco pondera.
+ */
+export function getPointsScheme(
+  _federationCode: string | null | undefined,
+  leagueName: string | null | undefined,
+): number[] | null {
+  if (!leagueName) return null;
+  const ln = leagueName.toLowerCase();
+  if (ln.includes('qsnp') || ln.includes('qseries')) return null;
+  if (!ln.includes('snp')) return null;
+  return ln.includes('senior') ? [3, 3, 2] : [3, 3, 2, 2, 2];
+}
