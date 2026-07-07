@@ -213,7 +213,11 @@ export const MyStatsScreen = () => {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 60 },
+          {
+            paddingTop: insets.top + 12,
+            // Tab bar flotante: 64 + offset 12 + colchón 32
+            paddingBottom: insets.bottom + 64 + 12 + 32,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
