@@ -150,7 +150,13 @@ export const AmistosoScreen = () => {
       prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)),
     );
 
+  // Marcador global: con UN solo partido lo natural es el resultado en
+  // SETS (2-0); con varios partidos, cuenta de partidos ganados (3-1).
   const marcador = useMemo(() => {
+    if (partidos.length === 1) {
+      const r = setsResult(partidos[0].sets);
+      return { us: r.us, them: r.them, unit: 'sets' as const };
+    }
     let us = 0;
     let them = 0;
     for (const p of partidos) {
@@ -159,7 +165,7 @@ export const AmistosoScreen = () => {
       if (r.won) us++;
       else them++;
     }
-    return { us, them };
+    return { us, them, unit: 'partidos' as const };
   }, [partidos]);
 
   const shareText = useMemo(() => {
@@ -167,7 +173,7 @@ export const AmistosoScreen = () => {
       `🎾 *TACTIUM · Amistoso*`,
       `${team?.name ?? 'Nuestro equipo'} ${marcador.us} – ${marcador.them} ${
         rivalTeam || 'Rival'
-      }`,
+      } (${marcador.unit})`,
       ``,
       ...partidos
         .map((p, i) => {
@@ -340,6 +346,9 @@ export const AmistosoScreen = () => {
           <Text style={styles.scoreBig}>
             {marcador.us} <Text style={styles.scoreSep}>–</Text> {marcador.them}
           </Text>
+          <Text style={styles.scoreUnit}>
+            {marcador.unit === 'sets' ? 'SETS' : 'PARTIDOS'}
+          </Text>
         </View>
 
         {savedCount == null ? (
@@ -508,6 +517,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   scoreSep: { color: Colors.textFaint },
+  scoreUnit: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 10,
+    letterSpacing: 2,
+    marginTop: 2,
+  },
   cta: {
     marginTop: 18,
     height: 52,
