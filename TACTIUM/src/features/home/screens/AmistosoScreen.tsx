@@ -22,6 +22,7 @@ import { useTeamStore, selectIsPlayer } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import {
   createCasualMatch,
+  fetchClaimCode,
   type CasualParticipant,
 } from '@core/services/casualMatches';
 import {
@@ -179,6 +180,9 @@ export const AmistosoScreen = () => {
   // Foto del partido (estilo Strava): se comparte compuesta con el
   // resultado y la marca. Opcional, se elige tras guardar.
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // Código de reclamo del partido guardado: va en la invitación para que
+  // el colega, al registrarse, canjee el partido en Stats.
+  const [claimCode, setClaimCode] = useState<string | null>(null);
   const photoCardRef = React.useRef<View>(null);
 
   const setCount = (n: number) =>
@@ -297,6 +301,7 @@ export const AmistosoScreen = () => {
     setSaving(true);
     let ok = 0;
     try {
+      let firstMatchId: string | null = null;
       for (const p of validPartidos) {
         const participants: CasualParticipant[] = [
           {
@@ -319,15 +324,20 @@ export const AmistosoScreen = () => {
             user_id: isEntreno ? linkByName(p.b2) : null,
           },
         ];
-        await createCasualMatch({
+        const createdId = await createCasualMatch({
           type: isEntreno ? 'entreno' : 'amistoso',
           sets: setsToNumeric(p.sets),
           participants,
           visibility: 'public',
         });
+        if (!firstMatchId) firstMatchId = createdId;
         ok++;
       }
       setSavedCount(ok);
+      // Código de reclamo (si la migración está aplicada) para 1 partido.
+      if (firstMatchId && ok === 1) {
+        fetchClaimCode(firstMatchId).then(setClaimCode);
+      }
       Alert.alert(
         '¡Amistoso guardado!',
         `${ok} ${ok === 1 ? 'partido registrado' : 'partidos registrados'}. ¿Compartes el resumen con el otro equipo?`,
@@ -384,6 +394,12 @@ export const AmistosoScreen = () => {
       ``,
       `Instálate la app y tus partidos contarán en tus estadísticas`,
       `(victorias, rachas, % y más): ${DOWNLOAD_URL}`,
+      ...(claimCode
+        ? [
+            ``,
+            `Al registrarte, canjea este código en la pestaña Stats y ESTE partido pasa a tu cuenta: ${claimCode}`,
+          ]
+        : []),
     ].join('\n');
     try {
       await Share.share({ message: msg });

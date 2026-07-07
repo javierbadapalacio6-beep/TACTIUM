@@ -93,6 +93,64 @@ export async function fetchMyCasualStats(
   };
 }
 
+// ── Códigos de reclamo (migración 20260707_claim_codes.sql) ────────
+// El invitado sin cuenta recibe el código del partido; al registrarse lo
+// canjea en Stats y sus participaciones pasan a su cuenta.
+
+type AnyRpc = (
+  fn: string,
+  args: Record<string, unknown>,
+) => Promise<{ data: unknown; error: { message: string } | null }>;
+
+export interface ClaimableParticipant {
+  participant_id: string;
+  name: string;
+  side: number;
+  played_on: string | null;
+}
+
+/** Código de reclamo de un partido recién creado (null si la migración
+ *  aún no está aplicada). */
+export async function fetchClaimCode(matchId: string): Promise<string | null> {
+  try {
+    const from = supabase.from as unknown as AnyFrom;
+    const { data, error } = await from('casual_matches')
+      .select('claim_code')
+      .eq('id', matchId);
+    if (error) return null;
+    const rows = (data ?? []) as { claim_code: string | null }[];
+    return rows[0]?.claim_code ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Participaciones sin dueño de un código (para elegir "cuál soy yo"). */
+export async function getClaimableParticipants(
+  code: string,
+): Promise<ClaimableParticipant[]> {
+  const rpc = supabase.rpc as unknown as AnyRpc;
+  const { data, error } = await rpc('get_claimable_participants', {
+    p_code: code.trim(),
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ClaimableParticipant[];
+}
+
+/** Vincula la participación elegida al usuario autenticado. */
+export async function claimCasualParticipant(
+  code: string,
+  participantId: string,
+): Promise<boolean> {
+  const rpc = supabase.rpc as unknown as AnyRpc;
+  const { data, error } = await rpc('claim_casual_participant', {
+    p_code: code.trim(),
+    p_participant_id: participantId,
+  });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
+
 export async function createCasualMatch(
   input: CreateCasualMatchInput,
 ): Promise<string> {

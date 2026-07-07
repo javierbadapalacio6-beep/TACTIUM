@@ -7,9 +7,10 @@ import {
   Pressable,
   ActivityIndicator,
   Share,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
@@ -20,6 +21,8 @@ import { useAuthStore } from '@store/authStore';
 import { fetchMyPlayer, type Player } from '@core/services/players';
 import {
   fetchMyCasualStats,
+  getClaimableParticipants,
+  claimCasualParticipant,
   type MyCasualStats,
 } from '@core/services/casualMatches';
 import { fetchSeasons, type Season } from '@core/services/seasons';
@@ -97,6 +100,66 @@ export const MyStatsScreen = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  // La pestaña Stats queda MONTADA (tabs con lazy:false): sin esto, al
+  // guardar un amistoso y volver aquí no se refrescaban los números.
+  const focusReload = useCallback(() => {
+    load();
+  }, [load]);
+  useFocusEffect(focusReload);
+
+  // Canje de código de partido: el invitado que acaba de registrarse
+  // introduce el código y elige su nombre → el partido pasa a su cuenta.
+  const redeemCode = () => {
+    Alert.prompt(
+      'Código de partido',
+      'Introduce el código que te pasaron (p. ej. K7M2XQ)',
+      async (raw) => {
+        const code = (raw ?? '').trim();
+        if (!code) return;
+        try {
+          const parts = await getClaimableParticipants(code);
+          if (parts.length === 0) {
+            Alert.alert(
+              'Nada que reclamar',
+              'El código no es válido o el partido ya fue reclamado.',
+            );
+            return;
+          }
+          Alert.alert('¿Quién eres tú?', 'Elige tu nombre en ese partido:', [
+            ...parts.slice(0, 4).map((pt) => ({
+              text: pt.name,
+              onPress: async () => {
+                try {
+                  const ok = await claimCasualParticipant(
+                    code,
+                    pt.participant_id,
+                  );
+                  if (ok) {
+                    Alert.alert(
+                      '¡Partido reclamado!',
+                      'Ya cuenta en tus estadísticas.',
+                    );
+                    load();
+                  } else {
+                    Alert.alert('No se pudo reclamar', 'Inténtalo de nuevo.');
+                  }
+                } catch {
+                  Alert.alert('No se pudo reclamar', 'Inténtalo de nuevo.');
+                }
+              },
+            })),
+            { text: 'Cancelar', style: 'cancel' },
+          ]);
+        } catch {
+          Alert.alert(
+            'Función no disponible',
+            'Los códigos de partido se activan al aplicar la migración 20260707_claim_codes.sql en Supabase.',
+          );
+        }
+      },
+    );
+  };
 
   const shareText = useMemo(() => {
     if (!stats || !me) return '';
@@ -484,6 +547,12 @@ export const MyStatsScreen = () => {
               Liga: partidos con alineación y resultado. Amistosos: solo los
               registrados eligiéndote de la plantilla (chip 🔗).
             </Text>
+
+            <Pressable onPress={redeemCode} hitSlop={8}>
+              <Text style={styles.claimLink}>
+                🎟️ ¿Tienes un código de partido? Canjéalo aquí
+              </Text>
+            </Pressable>
           </>
         )}
       </ScrollView>
@@ -692,6 +761,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   photoBtnLabel: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
+  claimLink: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 14,
+  },
   footNote: {
     color: Colors.textFaint,
     fontSize: 11,
