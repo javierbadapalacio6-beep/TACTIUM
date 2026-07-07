@@ -72,16 +72,16 @@ const LEAGUE_RULES: LeagueRule[] = [
   // Ligas privadas — verificado contra normativas oficiales 2025-26 (jul 2026).
   // ¡ORDEN CRÍTICO!: 'qsnp' y 'snp seniors' contienen 'snp', deben ir antes.
   //
-  // LAPI: 3 partidos por enfrentamiento (dossier jugador LAPI).
-  { pattern: 'lapi', rules: { masculino: 3, femenino: 3 } },
+  // LAPI: 3 partidos por enfrentamiento (Normativa España 2025-26).
+  { pattern: 'lapi', rules: { masculino: 3, femenino: 3, mixto: 3 } },
   // QSNP (QSeries): liga de PAREJAS — 1 único partido por enfrentamiento.
-  { pattern: 'qsnp',    rules: { masculino: 1, femenino: 1 } },
-  { pattern: 'qseries', rules: { masculino: 1, femenino: 1 } },
+  { pattern: 'qsnp',    rules: { masculino: 1, femenino: 1, mixto: 1 } },
+  { pattern: 'qseries', rules: { masculino: 1, femenino: 1, mixto: 1 } },
   // SNP Seniors: 3 partidos, 6 jugadores (+40 años; pareja debe sumar ≥90).
-  { pattern: 'snp seniors', rules: { masculino: 3, femenino: 3 } },
-  { pattern: 'seniors',     rules: { masculino: 3, femenino: 3 } },
+  { pattern: 'snp seniors', rules: { masculino: 3, femenino: 3, mixto: 3 } },
+  { pattern: 'seniors',     rules: { masculino: 3, femenino: 3, mixto: 3 } },
   // SNP: 5 partidos, 10 jugadores por eliminatoria (Normativa XII, epígrafe 15).
-  { pattern: 'snp',  rules: { masculino: 5, femenino: 5 } },
+  { pattern: 'snp',  rules: { masculino: 5, femenino: 5, mixto: 5 } },
 
   // Extremadura — campeonatos oficiales concentrados (5M/3F)
   { pattern: 'campeonato extremeño',  rules: { masculino: 5, femenino: 3 } },
@@ -123,6 +123,16 @@ export function getCourtsForCompetition(
 
   if (leagueName) {
     const ln = leagueName.toLowerCase();
+
+    // Formato personalizado embebido en el nombre de liga (p. ej.
+    // "Liga de mi club · 4 partidos · sin orden"). Lo explícito gana
+    // a cualquier patrón de liga conocida.
+    const custom = ln.match(CUSTOM_COURTS_RE);
+    if (custom) {
+      const n = parseInt(custom[1], 10);
+      if (n >= 1 && n <= 6) return n;
+    }
+
     for (const rule of LEAGUE_RULES) {
       if (ln.includes(rule.pattern)) {
         const v = rule.rules[g];
@@ -187,6 +197,12 @@ export function requiresStrengthOrder(
 ): boolean {
   if (leagueName) {
     const ln = leagueName.toLowerCase();
+
+    // Formato personalizado embebido en el nombre de liga: lo explícito
+    // ("sin orden" / "con orden") gana a cualquier patrón conocido.
+    if (CUSTOM_NO_ORDER_RE.test(ln)) return false;
+    if (CUSTOM_WITH_ORDER_RE.test(ln)) return true;
+
     for (const rule of STRENGTH_ORDER_BY_LEAGUE) {
       if (ln.includes(rule.pattern)) return rule.required;
     }
@@ -222,3 +238,106 @@ export const FEDERATIONS: Federation[] = [
   { code: 'FPCe',  name: 'Federación de Pádel de Ceuta',                    shortName: 'FPCe',  region: 'Ceuta' },
   { code: 'FPMe',  name: 'Federación de Pádel de Melilla',                  shortName: 'FPMe',  region: 'Melilla' },
 ];
+
+// ─── Tipos de competición (selector de creación de equipo) ──────────────
+// Client-side sobre el esquema actual: cada preset escribe un valor
+// canónico en `team.league` que los motores de arriba ya saben interpretar.
+// La plantilla personalizada embebe su formato en el propio nombre de liga
+// ("Mi liga · 4 partidos · sin orden") — legible para el usuario y parseable
+// por CUSTOM_COURTS_RE / CUSTOM_NO_ORDER_RE sin necesidad de migración.
+
+const CUSTOM_COURTS_RE = /(\d)\s*partido/i;
+const CUSTOM_NO_ORDER_RE = /sin\s+orden/i;
+const CUSTOM_WITH_ORDER_RE = /con\s+orden/i;
+
+export type CompetitionKind =
+  | 'federada'
+  | 'snp'
+  | 'snp_seniors'
+  | 'lapi'
+  | 'personalizada';
+
+export interface CompetitionPreset {
+  id: CompetitionKind;
+  label: string;
+  /** Valor canónico para team.league; null = lo define el usuario. */
+  leagueValue: string | null;
+  needsFederation: boolean;
+  /** Resumen corto del formato para selector y preview. */
+  blurb: string;
+}
+
+// Formatos verificados contra normativas oficiales 2025-26
+// (ver docs/formatos-snp-verificados.md).
+export const COMPETITION_PRESETS: CompetitionPreset[] = [
+  {
+    id: 'federada',
+    label: 'Federada',
+    leagueValue: null,
+    needsFederation: true,
+    blurb: 'Liga oficial de tu federación autonómica',
+  },
+  {
+    id: 'snp',
+    label: 'SNP',
+    leagueValue: 'SNP',
+    needsFederation: false,
+    blurb: '5 partidos · orden automático por puntos',
+  },
+  {
+    id: 'snp_seniors',
+    label: 'SNP Seniors',
+    leagueValue: 'SNP Seniors',
+    needsFederation: false,
+    blurb: '3 partidos · +40 años',
+  },
+  {
+    id: 'lapi',
+    label: 'LAPI',
+    leagueValue: 'LAPI',
+    needsFederation: false,
+    blurb: '3 partidos · cruces por sorteo',
+  },
+  {
+    id: 'personalizada',
+    label: 'Otra liga',
+    leagueValue: null,
+    needsFederation: false,
+    blurb: 'Interempresas, liga de club… tú defines el formato',
+  },
+];
+
+export function getCompetitionPreset(id: CompetitionKind): CompetitionPreset {
+  return COMPETITION_PRESETS.find((p) => p.id === id) ?? COMPETITION_PRESETS[0];
+}
+
+/**
+ * Compone el valor de team.league para la plantilla personalizada.
+ * El formato queda embebido de forma legible y parseable:
+ * "Liga interempresas · 4 partidos · sin orden".
+ */
+export function composeCustomLeague(
+  name: string,
+  courts: number,
+  strengthOrder: boolean,
+): string {
+  const base = name.trim() || 'Liga propia';
+  const orden = strengthOrder ? 'con orden' : 'sin orden';
+  return `${base} · ${courts} partidos · ${orden}`;
+}
+
+/**
+ * Resumen del formato efectivo ("5 partidos · orden de fuerza") para
+ * previews. Única fuente de verdad: los mismos motores que usa la alineación.
+ */
+export function describeCompetitionFormat(
+  federationCode: string | null | undefined,
+  leagueName: string | null | undefined,
+  gender: TeamGender | null | undefined,
+): string {
+  const courts = getCourtsForCompetition(federationCode, leagueName, gender);
+  const order = requiresStrengthOrder(federationCode, leagueName, gender);
+  return `${courts} ${courts === 1 ? 'partido' : 'partidos'} · ${
+    order ? 'orden de fuerza' : 'sin orden de fuerza'
+  }`;
+}

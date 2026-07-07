@@ -27,9 +27,14 @@ import {
 } from '@components/ui';
 import {
   FEDERATIONS,
+  COMPETITION_PRESETS,
   type Federation,
   type TeamGender,
+  type CompetitionKind,
+  getCompetitionPreset,
   getCourtsForCompetition,
+  composeCustomLeague,
+  describeCompetitionFormat,
 } from '@core/data/federations';
 import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
@@ -58,6 +63,10 @@ export const CreateTeamScreen = ({
   );
 
   const [name, setName] = useState('');
+  // Tipo de competición: federada (default) / SNP / SNP Seniors / LAPI /
+  // personalizada. Los presets no federados escriben un valor canónico
+  // en team.league que el motor de reglas ya interpreta (sin migración).
+  const [comp, setComp] = useState<CompetitionKind>('federada');
   const [federation, setFederation] = useState<Federation | null>(null);
   const [federationPickerOpen, setFederationPickerOpen] = useState(false);
   // league y group son OPCIONALES en onboarding: se pueden completar luego
@@ -65,21 +74,46 @@ export const CreateTeamScreen = ({
   // requeridos (name, federation, cat, gender) y baja la fricción en el
   // momento más sensible del funnel.
   const [league, setLeague] = useState('');
+  // Plantilla personalizada ("Otra liga"): formato definido por el capitán.
+  const [customCourts, setCustomCourts] = useState(3);
+  const [customOrder, setCustomOrder] = useState(false);
   const [cat, setCat] = useState('2ª');
   const [gender, setGender] = useState<TeamGender>('masculino');
   const [group, setGroup] = useState<string>('A');
   const [hasGroup, setHasGroup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const preset = getCompetitionPreset(comp);
+  const isFederada = comp === 'federada';
+
+  // Valor efectivo de team.league según el tipo de competición.
+  const effectiveLeague = useMemo(() => {
+    if (isFederada) return league.trim();
+    if (preset.leagueValue) return preset.leagueValue;
+    return composeCustomLeague(league, customCourts, customOrder);
+  }, [isFederada, preset, league, customCourts, customOrder]);
+
+  const effectiveFederation = isFederada ? federation?.code : undefined;
+
   const courts = useMemo(
-    () => getCourtsForCompetition(federation?.code, league, gender),
-    [federation, league, gender],
+    () => getCourtsForCompetition(effectiveFederation, effectiveLeague, gender),
+    [effectiveFederation, effectiveLeague, gender],
+  );
+
+  const formatBlurb = useMemo(
+    () => describeCompetitionFormat(effectiveFederation, effectiveLeague, gender),
+    [effectiveFederation, effectiveLeague, gender],
   );
 
   const valid = useMemo(
     () =>
-      Boolean(name.trim() && federation && cat && (!hasGroup || group)),
-    [name, federation, cat, group, hasGroup],
+      Boolean(
+        name.trim() &&
+          (!isFederada || federation) &&
+          cat &&
+          (!hasGroup || group),
+      ),
+    [name, isFederada, federation, cat, group, hasGroup],
   );
 
   const handleNext = () => {
@@ -87,8 +121,8 @@ export const CreateTeamScreen = ({
 
     const teamData = {
       name: name.trim(),
-      federation: federation?.code,
-      league: league.trim() || undefined,
+      federation: effectiveFederation,
+      league: effectiveLeague || undefined,
       category: cat,
       group: hasGroup ? group : undefined,
       gender,
@@ -180,39 +214,138 @@ export const CreateTeamScreen = ({
           </View>
         </Section>
 
-        <Section label="Federación">
-          <Pressable
-            onPress={() => setFederationPickerOpen(true)}
-            style={({ pressed }) => [
-              styles.selector,
-              pressed && { opacity: 0.85 },
-            ]}
+        <Section label="Competición">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catScrollContent}
           >
-            <View style={{ flex: 1, minWidth: 0 }}>
-              {federation ? (
-                <>
-                  <Text style={styles.selectorValue} numberOfLines={1}>
-                    {federation.name}
+            {COMPETITION_PRESETS.map((p) => {
+              const sel = comp === p.id;
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setComp(p.id)}
+                  style={[
+                    styles.compCell,
+                    sel && {
+                      backgroundColor: Colors.accent,
+                      borderColor: Colors.accent,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.compCellText,
+                      { color: sel ? '#000' : Colors.text },
+                    ]}
+                  >
+                    {p.label}
                   </Text>
-                  <Text style={styles.selectorMeta}>
-                    {federation.region} · {federation.shortName}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.selectorPlaceholder}>Selecciona federación</Text>
-              )}
-            </View>
-            <IconChevron size={14} color={Colors.textFaint} />
-          </Pressable>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Text style={styles.compBlurb}>{preset.blurb}</Text>
         </Section>
 
-        <Section label="Liga · Opcional">
-          <PlainInput
-            value={league}
-            onChangeText={setLeague}
-            placeholder="Liga por equipos absoluta"
-          />
-        </Section>
+        {isFederada ? (
+          <>
+            <Section label="Federación">
+              <Pressable
+                onPress={() => setFederationPickerOpen(true)}
+                style={({ pressed }) => [
+                  styles.selector,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  {federation ? (
+                    <>
+                      <Text style={styles.selectorValue} numberOfLines={1}>
+                        {federation.name}
+                      </Text>
+                      <Text style={styles.selectorMeta}>
+                        {federation.region} · {federation.shortName}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.selectorPlaceholder}>Selecciona federación</Text>
+                  )}
+                </View>
+                <IconChevron size={14} color={Colors.textFaint} />
+              </Pressable>
+            </Section>
+
+            <Section label="Liga · Opcional">
+              <PlainInput
+                value={league}
+                onChangeText={setLeague}
+                placeholder="Liga por equipos absoluta"
+              />
+            </Section>
+          </>
+        ) : null}
+
+        {comp === 'personalizada' ? (
+          <>
+            <Section label="Nombre de la liga · Opcional">
+              <PlainInput
+                value={league}
+                onChangeText={setLeague}
+                placeholder="Liga interempresas, liga del club…"
+              />
+            </Section>
+
+            <Section label="Partidos por jornada">
+              <View style={styles.catGrid}>
+                {[2, 3, 4, 5].map((n) => {
+                  const sel = customCourts === n;
+                  return (
+                    <Pressable
+                      key={n}
+                      onPress={() => setCustomCourts(n)}
+                      style={[
+                        styles.catCell,
+                        sel && {
+                          backgroundColor: Colors.accent,
+                          borderColor: Colors.accent,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.catCellText,
+                          { color: sel ? '#000' : Colors.text },
+                        ]}
+                      >
+                        {n}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Section>
+
+            <Section
+              label="Orden de fuerza"
+              right={
+                <View style={styles.groupToggle}>
+                  <Toggle value={customOrder} onChange={setCustomOrder} size="sm" />
+                  <Text style={styles.groupToggleText}>
+                    {customOrder ? 'Se valida' : 'Libre'}
+                  </Text>
+                </View>
+              }
+            >
+              <Text style={styles.compHint}>
+                {customOrder
+                  ? 'La pareja 1 deberá sumar más puntos que la 2, y así sucesivamente.'
+                  : 'Podrás alinear las parejas en el orden que quieras.'}
+              </Text>
+            </Section>
+          </>
+        ) : null}
 
         <Section label="Categoría">
           <ScrollView
@@ -330,17 +463,19 @@ export const CreateTeamScreen = ({
                 {name || 'Sin nombre'}
               </Text>
               <Text style={styles.previewMeta} numberOfLines={1}>
-                {[cat, hasGroup && `Grupo ${group}`, league]
+                {[cat, hasGroup && `Grupo ${group}`, isFederada ? league : effectiveLeague]
                   .filter(Boolean)
                   .join(' · ') || 'Configura categoría'}
               </Text>
             </View>
             <NeonDot size={7} />
           </View>
-          {federation ? (
+          {(isFederada ? federation : true) ? (
             <View style={styles.previewFooter}>
               <Text style={styles.previewFooterText}>
-                {federation.shortName} · {federation.region} · {courts} pistas
+                {isFederada && federation
+                  ? `${federation.shortName} · ${federation.region} · ${formatBlurb}`
+                  : `${preset.label} · ${formatBlurb}`}
               </Text>
             </View>
           ) : null}
@@ -581,6 +716,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: -0.4,
+  },
+  compCell: {
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compCellText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  compBlurb: {
+    color: Colors.textFaint,
+    fontSize: 12,
+    marginTop: 8,
+    lineHeight: 16,
+  },
+  compHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
   },
   sectionHeader: {
     flexDirection: 'row',
