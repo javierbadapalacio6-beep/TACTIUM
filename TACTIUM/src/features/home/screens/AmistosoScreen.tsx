@@ -36,21 +36,35 @@ import {
 // la marca y alcanza al equipo rival.
 
 type SetPair = [string, string]; // [nuestros juegos, juegos rival]
-type PartidoInput = { pair: string; opp: string; sets: SetPair[] };
+// Cada jugador en su propio SLOT (sin escribir "Nombre / Nombre"):
+// a1/a2 = nuestra pareja · b1/b2 = pareja rival.
+type PartidoInput = {
+  a1: string;
+  a2: string;
+  b1: string;
+  b2: string;
+  sets: SetPair[];
+};
 
 const emptySets = (): SetPair[] => [
   ['', ''],
   ['', ''],
   ['', ''],
 ];
-const emptyPartido = (): PartidoInput => ({ pair: '', opp: '', sets: emptySets() });
+const emptyPartido = (): PartidoInput => ({
+  a1: '',
+  a2: '',
+  b1: '',
+  b2: '',
+  sets: emptySets(),
+});
+
+const ourStr = (p?: PartidoInput) =>
+  [p?.a1, p?.a2].filter(Boolean).join(' / ');
+const rivalStr = (p?: PartidoInput) =>
+  [p?.b1, p?.b2].filter(Boolean).join(' / ');
 
 const clean = (v: string) => v.replace(/[^0-9]/g, '').slice(0, 1);
-
-const splitPair = (s: string): [string, string] => {
-  const parts = s.split('/').map((x) => x.trim());
-  return [parts[0] ?? '', parts[1] ?? ''];
-};
 
 const setsToNumeric = (sets: SetPair[]): [number, number][] =>
   sets
@@ -194,8 +208,8 @@ export const AmistosoScreen = () => {
 
   const shareText = useMemo(() => {
     const headline = isColegas
-      ? `${partidos[0]?.pair || 'Nosotros'} ${marcador.us} – ${marcador.them} ${
-          partidos[0]?.opp || 'Rival'
+      ? `${ourStr(partidos[0]) || 'Nosotros'} ${marcador.us} – ${marcador.them} ${
+          rivalStr(partidos[0]) || 'Rival'
         } (${marcador.unit})`
       : `${team?.name ?? 'Nuestro equipo'} ${marcador.us} – ${marcador.them} ${
           rivalTeam || 'Rival'
@@ -209,7 +223,7 @@ export const AmistosoScreen = () => {
           const r = setsResult(p.sets);
           const score = setsToString(p.sets);
           if (!score) return null;
-          return `P${i + 1} — ${p.pair || '—'} vs ${p.opp || '—'}: ${score} ${
+          return `P${i + 1} — ${ourStr(p) || '—'} vs ${rivalStr(p) || '—'}: ${score} ${
             r.decided ? (r.won ? '✅' : '❌') : ''
           }`;
         })
@@ -237,12 +251,12 @@ export const AmistosoScreen = () => {
   const linkByName = (name: string): string | null =>
     userIdByName.get(name.trim().toLowerCase()) ?? null;
 
-  const appendToPair = (i: number, name: string) => {
-    const current = partidos[i]?.pair ?? '';
-    const [a, b] = splitPair(current);
-    if (!a) update(i, { pair: name });
-    else if (!b) update(i, { pair: `${a} / ${name}` });
-    else update(i, { pair: `${b} / ${name}` });
+  const fillOurSlot = (i: number, name: string) => {
+    const p = partidos[i];
+    if (!p) return;
+    if (!p.a1.trim()) update(i, { a1: name });
+    else if (!p.a2.trim()) update(i, { a2: name });
+    else update(i, { a2: name }); // ambos llenos → sustituye al 2º
   };
 
   const handleSave = async () => {
@@ -257,18 +271,16 @@ export const AmistosoScreen = () => {
     let ok = 0;
     try {
       for (const p of validPartidos) {
-        const [a0, a1] = splitPair(p.pair);
-        const [b0, b1] = splitPair(p.opp);
         const participants: CasualParticipant[] = [
           {
             side: 0,
             slot: 0,
-            name: a0 || (team?.name ?? 'Nosotros'),
-            user_id: linkByName(a0),
+            name: p.a1.trim() || (team?.name ?? 'Nosotros'),
+            user_id: linkByName(p.a1),
           },
-          { side: 0, slot: 1, name: a1, user_id: linkByName(a1) },
-          { side: 1, slot: 0, name: b0 || (rivalTeam || 'Rival') },
-          { side: 1, slot: 1, name: b1 },
+          { side: 0, slot: 1, name: p.a2.trim(), user_id: linkByName(p.a2) },
+          { side: 1, slot: 0, name: p.b1.trim() || (rivalTeam || 'Rival') },
+          { side: 1, slot: 1, name: p.b2.trim() },
         ];
         await createCasualMatch({
           type: 'amistoso',
@@ -316,8 +328,8 @@ export const AmistosoScreen = () => {
   };
 
   const photoTitle = isColegas
-    ? `${partidos[0]?.pair || 'Nosotros'} ${marcador.us}–${marcador.them} ${
-        partidos[0]?.opp || 'Rival'
+    ? `${ourStr(partidos[0]) || 'Nosotros'} ${marcador.us}–${marcador.them} ${
+        rivalStr(partidos[0]) || 'Rival'
       }`
     : `${team?.name ?? 'Nosotros'} ${marcador.us}–${marcador.them} ${
         rivalTeam || 'Rival'
@@ -436,12 +448,25 @@ export const AmistosoScreen = () => {
             {!isColegas ? (
               <Text style={styles.partidoLabel}>PARTIDO {i + 1}</Text>
             ) : null}
-            <Field
-              label={isColegas ? 'TU PAREJA (tú y tu compañero)' : 'NUESTRA PAREJA'}
-              value={p.pair}
-              onChangeText={(t) => update(i, { pair: t })}
-              placeholder="Nombre / Nombre"
-            />
+            <Text style={styles.fieldLabel}>
+              {isColegas ? 'TU PAREJA (TÚ Y TU COMPAÑERO)' : 'NUESTRA PAREJA'}
+            </Text>
+            <View style={styles.slotPairRow}>
+              <TextInput
+                style={[styles.input, styles.slotInput]}
+                value={p.a1}
+                onChangeText={(t) => update(i, { a1: t })}
+                placeholder="Jugador 1"
+                placeholderTextColor={Colors.textFaint}
+              />
+              <TextInput
+                style={[styles.input, styles.slotInput]}
+                value={p.a2}
+                onChangeText={(t) => update(i, { a2: t })}
+                placeholder="Jugador 2"
+                placeholderTextColor={Colors.textFaint}
+              />
+            </View>
             {players.length > 0 ? (
               <ScrollView
                 horizontal
@@ -451,7 +476,7 @@ export const AmistosoScreen = () => {
                 {players.map((pl) => (
                   <Pressable
                     key={pl.id}
-                    onPress={() => appendToPair(i, pl.name)}
+                    onPress={() => fillOurSlot(i, pl.name)}
                     style={styles.rosterChip}
                   >
                     <Text style={styles.rosterChipText}>
@@ -466,12 +491,23 @@ export const AmistosoScreen = () => {
               Toca un chip de tu plantilla (🔗 suma en sus stats) o escribe
               cualquier nombre: colegas de fuera del equipo también valen.
             </Text>
-            <Field
-              label="PAREJA RIVAL"
-              value={p.opp}
-              onChangeText={(t) => update(i, { opp: t })}
-              placeholder="Nombre / Nombre"
-            />
+            <Text style={styles.fieldLabel}>PAREJA RIVAL</Text>
+            <View style={styles.slotPairRow}>
+              <TextInput
+                style={[styles.input, styles.slotInput]}
+                value={p.b1}
+                onChangeText={(t) => update(i, { b1: t })}
+                placeholder="Rival 1"
+                placeholderTextColor={Colors.textFaint}
+              />
+              <TextInput
+                style={[styles.input, styles.slotInput]}
+                value={p.b2}
+                onChangeText={(t) => update(i, { b2: t })}
+                placeholder="Rival 2"
+                placeholderTextColor={Colors.textFaint}
+              />
+            </View>
             <Text style={styles.fieldLabel}>RESULTADO</Text>
             <ScoreSlots sets={p.sets} onChange={(s) => update(i, { sets: s })} />
           </View>
@@ -481,7 +517,7 @@ export const AmistosoScreen = () => {
         <View style={styles.scoreCard}>
           <Text style={styles.scoreTeams} numberOfLines={1}>
             {isColegas
-              ? `${partidos[0]?.pair || 'Nosotros'} · ${partidos[0]?.opp || 'Rival'}`
+              ? `${ourStr(partidos[0]) || 'Nosotros'} · ${rivalStr(partidos[0]) || 'Rival'}`
               : `${team?.name ?? 'Nosotros'} · ${rivalTeam || 'Rival'}`}
           </Text>
           <Text style={styles.scoreBig}>
@@ -626,6 +662,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 10,
   },
+  slotPairRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  slotInput: { flex: 1 },
   rosterRow: { gap: 6, paddingBottom: 10, marginTop: -2 },
   rosterChip: {
     paddingHorizontal: 10,
