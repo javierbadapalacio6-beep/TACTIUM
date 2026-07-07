@@ -18,7 +18,7 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack } from '@components/ui';
-import { useTeamStore } from '@store/teamStore';
+import { useTeamStore, selectIsPlayer } from '@store/teamStore';
 import {
   createCasualMatch,
   type CasualParticipant,
@@ -132,6 +132,15 @@ export const AmistosoScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const team = useTeamStore((s) => s.team);
+  const isPlayer = useTeamStore(selectIsPlayer);
+
+  // Dos modos: 'colegas' = UN partido entre amigos (default para jugador);
+  // 'equipos' = enfrentamiento equipo vs equipo de 1-5 partidos (default
+  // para capitán/admin).
+  const [mode, setMode] = useState<'colegas' | 'equipos'>(
+    isPlayer ? 'colegas' : 'equipos',
+  );
+  const isColegas = mode === 'colegas';
 
   const [rivalTeam, setRivalTeam] = useState('');
   const [partidos, setPartidos] = useState<PartidoInput[]>([emptyPartido()]);
@@ -144,6 +153,11 @@ export const AmistosoScreen = () => {
       while (next.length < n) next.push(emptyPartido());
       return next;
     });
+
+  const switchMode = (m: 'colegas' | 'equipos') => {
+    setMode(m);
+    if (m === 'colegas') setCount(1);
+  };
 
   const update = (i: number, patch: Partial<PartidoInput>) =>
     setPartidos((prev) =>
@@ -169,11 +183,16 @@ export const AmistosoScreen = () => {
   }, [partidos]);
 
   const shareText = useMemo(() => {
+    const headline = isColegas
+      ? `${partidos[0]?.pair || 'Nosotros'} ${marcador.us} – ${marcador.them} ${
+          partidos[0]?.opp || 'Rival'
+        } (${marcador.unit})`
+      : `${team?.name ?? 'Nuestro equipo'} ${marcador.us} – ${marcador.them} ${
+          rivalTeam || 'Rival'
+        } (${marcador.unit})`;
     const lines = [
       `🎾 *TACTIUM · Amistoso*`,
-      `${team?.name ?? 'Nuestro equipo'} ${marcador.us} – ${marcador.them} ${
-        rivalTeam || 'Rival'
-      } (${marcador.unit})`,
+      headline,
       ``,
       ...partidos
         .map((p, i) => {
@@ -189,7 +208,7 @@ export const AmistosoScreen = () => {
       `Organiza tus amistosos con TACTIUM · tactium.io`,
     ];
     return lines.join('\n');
-  }, [team, rivalTeam, partidos, marcador]);
+  }, [team, rivalTeam, partidos, marcador, isColegas]);
 
   const validPartidos = partidos.filter(
     (p) => setsToNumeric(p.sets).length > 0,
@@ -273,56 +292,98 @@ export const AmistosoScreen = () => {
           <IconBack size={20} color={Colors.text} />
         </Pressable>
 
-        <Text style={styles.eyebrow}>AMISTOSO · EQUIPO VS EQUIPO</Text>
+        <Text style={styles.eyebrow}>
+          {isColegas ? 'AMISTOSO · ENTRE COLEGAS' : 'AMISTOSO · EQUIPO VS EQUIPO'}
+        </Text>
         <Text style={styles.title}>Registrar amistoso</Text>
         <Text style={styles.lede}>
-          Se juega hoy, cuenta como amistoso y no afecta a tu liga. Comparte el
-          resumen con el equipo rival al terminar.
+          {isColegas
+            ? 'Un partido entre amigos: cuenta como amistoso y no afecta a tu liga.'
+            : 'Se juega hoy, cuenta como amistoso y no afecta a tu liga. Comparte el resumen con el equipo rival al terminar.'}
         </Text>
 
-        <View style={styles.section}>
-          <Field
-            label="EQUIPO RIVAL"
-            value={rivalTeam}
-            onChangeText={setRivalTeam}
-            placeholder="CD Rival Pádel"
-          />
-
-          <Text style={styles.fieldLabel}>PARTIDOS</Text>
-          <View style={styles.countRow}>
-            {[1, 2, 3, 4, 5].map((n) => {
-              const sel = partidos.length === n;
-              return (
-                <Pressable
-                  key={n}
-                  onPress={() => setCount(n)}
+        <View style={styles.countRow}>
+          {(
+            [
+              { id: 'colegas', label: 'Entre colegas' },
+              { id: 'equipos', label: 'Equipo vs equipo' },
+            ] as const
+          ).map((m) => {
+            const sel = mode === m.id;
+            return (
+              <Pressable
+                key={m.id}
+                onPress={() => switchMode(m.id)}
+                style={[
+                  styles.countChip,
+                  { marginTop: 16 },
+                  sel && {
+                    backgroundColor: Colors.accent,
+                    borderColor: Colors.accent,
+                  },
+                ]}
+              >
+                <Text
                   style={[
-                    styles.countChip,
-                    sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
-                    },
+                    styles.countChipText,
+                    { fontSize: 13 },
+                    { color: sel ? '#000' : Colors.text },
                   ]}
                 >
-                  <Text
+                  {m.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {!isColegas ? (
+          <View style={styles.section}>
+            <Field
+              label="EQUIPO RIVAL"
+              value={rivalTeam}
+              onChangeText={setRivalTeam}
+              placeholder="CD Rival Pádel"
+            />
+
+            <Text style={styles.fieldLabel}>PARTIDOS</Text>
+            <View style={styles.countRow}>
+              {[1, 2, 3, 4, 5].map((n) => {
+                const sel = partidos.length === n;
+                return (
+                  <Pressable
+                    key={n}
+                    onPress={() => setCount(n)}
                     style={[
-                      styles.countChipText,
-                      { color: sel ? '#000' : Colors.text },
+                      styles.countChip,
+                      sel && {
+                        backgroundColor: Colors.accent,
+                        borderColor: Colors.accent,
+                      },
                     ]}
                   >
-                    {n}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.countChipText,
+                        { color: sel ? '#000' : Colors.text },
+                      ]}
+                    >
+                      {n}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        ) : null}
 
         {partidos.map((p, i) => (
           <View key={i} style={styles.section}>
-            <Text style={styles.partidoLabel}>PARTIDO {i + 1}</Text>
+            {!isColegas ? (
+              <Text style={styles.partidoLabel}>PARTIDO {i + 1}</Text>
+            ) : null}
             <Field
-              label="NUESTRA PAREJA"
+              label={isColegas ? 'TU PAREJA (tú y tu compañero)' : 'NUESTRA PAREJA'}
               value={p.pair}
               onChangeText={(t) => update(i, { pair: t })}
               placeholder="Nombre / Nombre"
@@ -341,7 +402,9 @@ export const AmistosoScreen = () => {
         {/* Marcador global */}
         <View style={styles.scoreCard}>
           <Text style={styles.scoreTeams} numberOfLines={1}>
-            {team?.name ?? 'Nosotros'} · {rivalTeam || 'Rival'}
+            {isColegas
+              ? `${partidos[0]?.pair || 'Nosotros'} · ${partidos[0]?.opp || 'Rival'}`
+              : `${team?.name ?? 'Nosotros'} · ${rivalTeam || 'Rival'}`}
           </Text>
           <Text style={styles.scoreBig}>
             {marcador.us} <Text style={styles.scoreSep}>–</Text> {marcador.them}
