@@ -23,7 +23,9 @@ import { useAuthStore } from '@store/authStore';
 import {
   createCasualMatch,
   fetchClaimCode,
+  fetchMyFrequentPartners,
   type CasualParticipant,
+  type FrequentPartner,
 } from '@core/services/casualMatches';
 import {
   PhotoShareCard,
@@ -183,7 +185,17 @@ export const AmistosoScreen = () => {
   // Código de reclamo del partido guardado: va en la invitación para que
   // el colega, al registrarse, canjee el partido en Stats.
   const [claimCode, setClaimCode] = useState<string | null>(null);
+  // Colegas frecuentes: gente de tus amistosos anteriores (fuera de la
+  // plantilla). Si reclamaron su cuenta, se vinculan solos al repetir.
+  const [recent, setRecent] = useState<FrequentPartner[]>([]);
   const photoCardRef = React.useRef<View>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchMyFrequentPartners(userId)
+      .then(setRecent)
+      .catch(() => setRecent([]));
+  }, [userId]);
 
   const setCount = (n: number) =>
     setPartidos((prev) => {
@@ -272,11 +284,35 @@ export const AmistosoScreen = () => {
   // chips de abajo rellenan el nombre exacto para garantizar el match.
   const userIdByName = useMemo(() => {
     const m = new Map<string, string>();
+    // Historial primero; la plantilla tiene prioridad si hay colisión.
+    for (const fp of recent) {
+      if (fp.user_id) m.set(fp.name.trim().toLowerCase(), fp.user_id);
+    }
     for (const pl of players) {
       if (pl.user_id) m.set(pl.name.trim().toLowerCase(), pl.user_id);
     }
     return m;
-  }, [players]);
+  }, [players, recent]);
+
+  // Chips: plantilla + colegas recientes (sin duplicar nombres ni a mí).
+  const chipPeople = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { key: string; name: string; linked: boolean }[] = [];
+    for (const pl of players) {
+      const k = pl.name.trim().toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ key: `pl-${pl.id}`, name: pl.name, linked: !!pl.user_id });
+    }
+    for (const fp of recent) {
+      const k = fp.name.trim().toLowerCase();
+      if (seen.has(k)) continue;
+      if (myName && k === myName.trim().toLowerCase()) continue;
+      seen.add(k);
+      out.push({ key: `fp-${k}`, name: fp.name, linked: !!fp.user_id });
+    }
+    return out;
+  }, [players, recent, myName]);
   const linkByName = (name: string): string | null =>
     userIdByName.get(name.trim().toLowerCase()) ?? null;
 
@@ -570,21 +606,21 @@ export const AmistosoScreen = () => {
                 placeholderTextColor={Colors.textFaint}
               />
             </View>
-            {players.length > 0 ? (
+            {chipPeople.length > 0 ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.rosterRow}
               >
-                {players.map((pl) => (
+                {chipPeople.map((cp) => (
                   <Pressable
-                    key={pl.id}
-                    onPress={() => fillOurSlot(i, pl.name)}
+                    key={cp.key}
+                    onPress={() => fillOurSlot(i, cp.name)}
                     style={styles.rosterChip}
                   >
                     <Text style={styles.rosterChipText}>
-                      {pl.user_id ? '🔗 ' : ''}
-                      {pl.name}
+                      {cp.linked ? '🔗 ' : ''}
+                      {cp.name}
                     </Text>
                   </Pressable>
                 ))}
@@ -593,7 +629,7 @@ export const AmistosoScreen = () => {
             <Text style={styles.guestHint}>
               {isEntreno
                 ? 'Toca los chips para colocar a los cuatro: rellenan Pareja A y luego Pareja B. Los 🔗 suman en sus stats.'
-                : 'Toca un chip de tu plantilla (🔗 suma en sus stats) o escribe cualquier nombre: colegas de fuera también valen.'}
+                : 'Chips: tu plantilla y tus colegas habituales (🔗 = suma en sus stats). O escribe cualquier nombre nuevo.'}
             </Text>
             <Text style={styles.fieldLabel}>
               {isEntreno ? 'PAREJA B' : 'PAREJA RIVAL'}

@@ -234,11 +234,11 @@ export const MyStatsScreen = () => {
         <Text style={styles.eyebrow}>MIS ESTADÍSTICAS · LIGA</Text>
         <Text style={styles.title}>{me?.name ?? 'Tus números'}</Text>
 
-        {/* Ámbito */}
+        {/* Filtros en UNA línea: ámbito ‖ vista */}
         <View style={styles.scopeRow}>
           {(
             [
-              { id: 'activa', label: 'Temporada activa' },
+              { id: 'activa', label: 'Activa' },
               { id: 'todas', label: 'Histórico' },
             ] as const
           ).map((s) => {
@@ -266,13 +266,13 @@ export const MyStatsScreen = () => {
               </Pressable>
             );
           })}
-        </View>
 
-        <View style={[styles.scopeRow, { marginTop: 8 }]}>
+          <View style={styles.filterDivider} />
+
           {(
             [
-              { id: 'yo', label: 'Mis números' },
-              { id: 'plantilla', label: 'Ranking plantilla' },
+              { id: 'yo', label: 'Yo' },
+              { id: 'plantilla', label: 'Plantilla' },
             ] as const
           ).map((v) => {
             const sel = view === v.id;
@@ -608,10 +608,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.6,
   },
-  scopeRow: { flexDirection: 'row', gap: 6, marginTop: 16 },
+  scopeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  filterDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: Colors.hairStrong,
+    marginHorizontal: 2,
+  },
   scopeChip: {
     flex: 1,
-    height: 40,
+    height: 36,
     borderRadius: 10,
     backgroundColor: Colors.bgCard,
     borderWidth: 1,
@@ -619,7 +630,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scopeChipText: { fontSize: 13, fontWeight: '600' },
+  scopeChipText: { fontSize: 12.5, fontWeight: '600' },
   loader: { paddingTop: 60, alignItems: 'center' },
   emptyBox: {
     marginTop: 24,

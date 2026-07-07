@@ -93,6 +93,54 @@ export async function fetchMyCasualStats(
   };
 }
 
+// ── Colegas frecuentes ──────────────────────────────────────────────
+// "Seguir" ligero SIN red social: la gente con la que YA has jugado
+// amistosos, derivada de tu historial. Si un colega reclamó su cuenta
+// (user_id), volver a elegirlo vincula sus nuevos partidos a sus stats.
+
+export interface FrequentPartner {
+  name: string;
+  user_id: string | null;
+  times: number;
+}
+
+export async function fetchMyFrequentPartners(
+  userId: string,
+): Promise<FrequentPartner[]> {
+  const from = supabase.from as unknown as AnyFrom;
+
+  const { data: mineRaw, error: e1 } = await from('casual_match_participants')
+    .select('match_id')
+    .eq('user_id', userId);
+  if (e1) throw new Error(e1.message);
+  const ids = [
+    ...new Set(((mineRaw ?? []) as { match_id: string }[]).map((r) => r.match_id)),
+  ];
+  if (ids.length === 0) return [];
+
+  const { data: allRaw, error: e2 } = await from('casual_match_participants')
+    .select('name, user_id')
+    .in('match_id', ids);
+  if (e2) throw new Error(e2.message);
+
+  const map = new Map<string, FrequentPartner>();
+  for (const r of (allRaw ?? []) as { name: string | null; user_id: string | null }[]) {
+    const name = (r.name ?? '').trim();
+    if (!name || r.user_id === userId) continue;
+    const key = name.toLowerCase();
+    const cur = map.get(key);
+    if (cur) {
+      cur.times++;
+      if (!cur.user_id && r.user_id) cur.user_id = r.user_id;
+    } else {
+      map.set(key, { name, user_id: r.user_id, times: 1 });
+    }
+  }
+  return [...map.values()]
+    .sort((a, b) => b.times - a.times)
+    .slice(0, 12);
+}
+
 // ── Códigos de reclamo (migración 20260707_claim_codes.sql) ────────
 // El invitado sin cuenta recibe el código del partido; al registrarse lo
 // canjea en Stats y sus participaciones pasan a su cuenta.
