@@ -30,6 +30,13 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
 import type { TeamGender } from '@core/services/teams';
+import {
+  COMPETITION_PRESETS,
+  type CompetitionKind,
+  getCompetitionPreset,
+  composeCustomLeague,
+  describeCompetitionFormat,
+} from '@core/data/federations';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -84,13 +91,29 @@ export const CreateTeamsForClubScreen = ({
   const [adding, setAdding] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [newName, setNewName] = useState('');
+  // Tipo de competición del equipo a añadir (mismo patrón client-side que
+  // CreateTeamScreen: los presets escriben un valor canónico en league).
+  const [newComp, setNewComp] = useState<CompetitionKind>('federada');
+  const [newCustomCourts, setNewCustomCourts] = useState(3);
+  const [newCustomOrder, setNewCustomOrder] = useState(false);
   const [newLeague, setNewLeague] = useState('');
   const [newGender, setNewGender] = useState<TeamGender>('masculino');
   const [newCat, setNewCat] = useState('2ª');
   const [newHasGroup, setNewHasGroup] = useState(false);
   const [newGroup, setNewGroup] = useState('A');
 
-  const canAdd = newName.trim().length > 0 && newLeague.trim().length > 0;
+  const newPreset = getCompetitionPreset(newComp);
+  const effLeague =
+    newComp === 'federada'
+      ? newLeague.trim()
+      : newPreset.leagueValue ??
+        composeCustomLeague(newLeague, newCustomCourts, newCustomOrder);
+  const effFederation =
+    newComp === 'federada' ? club?.federation ?? undefined : undefined;
+  const formatHint = describeCompetitionFormat(effFederation, effLeague, newGender);
+  const canAdd =
+    newName.trim().length > 0 &&
+    (newComp !== 'federada' || newLeague.trim().length > 0);
 
   const onAdd = async () => {
     if (!canAdd || submitting || !club) return;
@@ -106,8 +129,8 @@ export const CreateTeamsForClubScreen = ({
     try {
       await createTeam({
         name: newName.trim(),
-        federation: club.federation ?? undefined,
-        league: newLeague.trim(),
+        federation: effFederation,
+        league: effLeague || undefined,
         category: newCat,
         group: newHasGroup ? newGroup : undefined,
         gender: newGender,
@@ -253,13 +276,102 @@ export const CreateTeamsForClubScreen = ({
                 </Pressable>
               </View>
 
-              <TextInput
-                value={newLeague}
-                onChangeText={setNewLeague}
-                placeholder="Liga (ej. Liga Andaluza por equipos absoluta)"
-                placeholderTextColor={Colors.textFaint}
-                style={styles.addField}
-              />
+              <Text style={styles.miniLabel}>COMPETICIÓN</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipScrollContent}
+              >
+                {COMPETITION_PRESETS.map((p) => {
+                  const sel = newComp === p.id;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => setNewComp(p.id)}
+                      style={[
+                        styles.chipFixed,
+                        sel && {
+                          backgroundColor: Colors.accent,
+                          borderColor: Colors.accent,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          { color: sel ? '#000' : Colors.text },
+                        ]}
+                      >
+                        {p.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              <Text style={styles.formatHint}>{formatHint}</Text>
+
+              {newComp === 'federada' ? (
+                <TextInput
+                  value={newLeague}
+                  onChangeText={setNewLeague}
+                  placeholder="Liga (ej. Liga Andaluza por equipos absoluta)"
+                  placeholderTextColor={Colors.textFaint}
+                  style={styles.addField}
+                />
+              ) : null}
+
+              {newComp === 'personalizada' ? (
+                <>
+                  <TextInput
+                    value={newLeague}
+                    onChangeText={setNewLeague}
+                    placeholder="Nombre de la liga (opcional)"
+                    placeholderTextColor={Colors.textFaint}
+                    style={styles.addField}
+                  />
+                  <Text style={styles.miniLabel}>PARTIDOS POR JORNADA</Text>
+                  <View style={styles.chipRow}>
+                    {[2, 3, 4, 5].map((n) => {
+                      const sel = newCustomCourts === n;
+                      return (
+                        <Pressable
+                          key={n}
+                          onPress={() => setNewCustomCourts(n)}
+                          style={[
+                            styles.chip,
+                            sel && {
+                              backgroundColor: Colors.accent,
+                              borderColor: Colors.accent,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.chipText,
+                              { color: sel ? '#000' : Colors.text },
+                            ]}
+                          >
+                            {n}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.groupHeader}>
+                    <Text style={styles.miniLabel}>ORDEN DE FUERZA</Text>
+                    <View style={styles.groupToggle}>
+                      <Toggle
+                        value={newCustomOrder}
+                        onChange={setNewCustomOrder}
+                        size="sm"
+                      />
+                      <Text style={styles.groupToggleText}>
+                        {newCustomOrder ? 'Se valida' : 'Libre'}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : null}
 
               <Text style={styles.miniLabel}>GÉNERO</Text>
               <View style={styles.chipRow}>
@@ -573,6 +685,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1.4,
     fontWeight: '500',
+  },
+  formatHint: {
+    color: Colors.textFaint,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: -2,
   },
   groupHeader: {
     flexDirection: 'row',
