@@ -69,9 +69,19 @@ interface LeagueRule {
 }
 
 const LEAGUE_RULES: LeagueRule[] = [
-  // Ligas privadas. TODO: confirmar formato real con cada organización.
+  // Ligas privadas — verificado contra normativas oficiales 2025-26 (jul 2026).
+  // ¡ORDEN CRÍTICO!: 'qsnp' y 'snp seniors' contienen 'snp', deben ir antes.
+  //
+  // LAPI: 3 partidos por enfrentamiento (dossier jugador LAPI).
   { pattern: 'lapi', rules: { masculino: 3, femenino: 3 } },
-  { pattern: 'snp',  rules: { masculino: 3, femenino: 3 } },
+  // QSNP (QSeries): liga de PAREJAS — 1 único partido por enfrentamiento.
+  { pattern: 'qsnp',    rules: { masculino: 1, femenino: 1 } },
+  { pattern: 'qseries', rules: { masculino: 1, femenino: 1 } },
+  // SNP Seniors: 3 partidos, 6 jugadores (+40 años; pareja debe sumar ≥90).
+  { pattern: 'snp seniors', rules: { masculino: 3, femenino: 3 } },
+  { pattern: 'seniors',     rules: { masculino: 3, femenino: 3 } },
+  // SNP: 5 partidos, 10 jugadores por eliminatoria (Normativa XII, epígrafe 15).
+  { pattern: 'snp',  rules: { masculino: 5, femenino: 5 } },
 
   // Extremadura — campeonatos oficiales concentrados (5M/3F)
   { pattern: 'campeonato extremeño',  rules: { masculino: 5, femenino: 3 } },
@@ -149,9 +159,18 @@ interface LeagueStrengthRule {
 }
 
 const STRENGTH_ORDER_BY_LEAGUE: LeagueStrengthRule[] = [
-  // Ligas privadas: el capitán suele tener libertad táctica.
+  // Verificado contra normativas 2025-26. ¡ORDEN CRÍTICO!: patrones que
+  // contienen 'snp' van antes que 'snp'.
   { pattern: 'lapi',         required: false },
-  { pattern: 'snp',          required: false },
+  // QSNP: 1 solo partido → orden irrelevante.
+  { pattern: 'qsnp',         required: false },
+  { pattern: 'qseries',      required: false },
+  // SNP y SNP Seniors: el sistema oficial ordena las parejas AUTOMÁTICAMENTE
+  // por suma de puntos ranking SNP (pareja 1 = mayor suma; el capitán no
+  // puede alterarlo, solo reordenar bloques empatados). Nuestra validación
+  // P1 ≥ P2 ≥ … por puntos combinados replica exactamente esa semántica,
+  // usando los pts del equipo como proxy del ranking SNP.
+  { pattern: 'snp',          required: true },
   { pattern: 'myburgerking', required: false },
   { pattern: 'popeyes',      required: false },
 ];
