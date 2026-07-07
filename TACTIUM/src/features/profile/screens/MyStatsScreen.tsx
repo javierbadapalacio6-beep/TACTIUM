@@ -66,6 +66,9 @@ export const MyStatsScreen = () => {
   const [view, setView] = useState<'yo' | 'plantilla'>('yo');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [casual, setCasual] = useState<MyCasualStats | null>(null);
+  // Diagnóstico: si la carga de amistosos falla, mostramos el motivo en
+  // pantalla en vez de tragarlo (imprescindible mientras probamos).
+  const [casualError, setCasualError] = useState<string | null>(null);
   // Mis colegas: la gente con la que has jugado amistosos. 🔗 = tiene
   // cuenta vinculada (sus partidos le cuentan); sin 🔗 = invítale.
   const [partners, setPartners] = useState<FrequentPartner[]>([]);
@@ -95,8 +98,14 @@ export const MyStatsScreen = () => {
       setStats(player ? computePlayerLeagueStats(player.id, b) : null);
       // Amistosos vinculados (F5b): independientes de la temporada.
       fetchMyCasualStats(userId)
-        .then(setCasual)
-        .catch(() => setCasual(null));
+        .then((c) => {
+          setCasual(c);
+          setCasualError(null);
+        })
+        .catch((e) => {
+          setCasual(null);
+          setCasualError(String((e as Error)?.message ?? e));
+        });
       fetchMyFrequentPartners(userId)
         .then(setPartners)
         .catch(() => setPartners([]));
@@ -418,6 +427,16 @@ export const MyStatsScreen = () => {
                   <Text style={styles.emptyText}>
                     Registra un amistoso desde la Home (o canjea un código de
                     partido) y tus números aparecerán aquí.
+                  </Text>
+                  {casualError ? (
+                    <Text style={styles.debugError}>⚠️ {casualError}</Text>
+                  ) : null}
+                  <Text style={styles.debugError}>
+                    {casualError
+                      ? ''
+                      : `debug: user ${userId ? userId.slice(0, 8) : 'null'} · casual ${
+                          casual ? `${casual.played} partidos` : 'null'
+                        }`}
                   </Text>
                 </View>
               )
@@ -913,6 +932,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     marginTop: 8,
+  },
+  debugError: {
+    color: '#ff6b6b',
+    fontSize: 11,
+    marginTop: 8,
+    fontFamily: Fonts.mono,
   },
   claimLink: {
     color: Colors.accent,
