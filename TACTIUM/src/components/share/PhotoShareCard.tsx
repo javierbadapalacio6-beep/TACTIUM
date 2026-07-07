@@ -1,7 +1,16 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Share, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  Share,
+  Platform,
+  Alert,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { captureRef } from 'react-native-view-shot';
+import * as ImagePicker from 'expo-image-picker';
 
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
@@ -56,6 +65,41 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
   ),
 );
 PhotoShareCard.displayName = 'PhotoShareCard';
+
+/**
+ * Foto del partido: cámara (hazla en la pista) o galería. Devuelve la
+ * URI o null si el usuario cancela / no da permiso.
+ */
+export function pickMatchPhoto(): Promise<string | null> {
+  const fromCamera = async (): Promise<string | null> => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
+      return null;
+    }
+    const r = await ImagePicker.launchCameraAsync({ quality: 0.85 });
+    return r.canceled ? null : (r.assets?.[0]?.uri ?? null);
+  };
+  const fromLibrary = async (): Promise<string | null> => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.');
+      return null;
+    }
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    return r.canceled ? null : (r.assets?.[0]?.uri ?? null);
+  };
+  return new Promise((resolve) => {
+    Alert.alert('Foto del partido', '¿De dónde sacamos la foto?', [
+      { text: '📷 Hacer foto', onPress: () => fromCamera().then(resolve) },
+      { text: '🖼️ De la galería', onPress: () => fromLibrary().then(resolve) },
+      { text: 'Cancelar', style: 'cancel', onPress: () => resolve(null) },
+    ]);
+  });
+}
 
 /**
  * Comparte la tarjeta como imagen COMPUESTA (foto + resultado). Si la

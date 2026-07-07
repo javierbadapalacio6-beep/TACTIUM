@@ -23,8 +23,11 @@ import {
   createCasualMatch,
   type CasualParticipant,
 } from '@core/services/casualMatches';
-import * as ImagePicker from 'expo-image-picker';
-import { PhotoShareCard, sharePhotoCard } from '@components/share/PhotoShareCard';
+import {
+  PhotoShareCard,
+  sharePhotoCard,
+  pickMatchPhoto,
+} from '@components/share/PhotoShareCard';
 
 // Amistoso EQUIPO vs EQUIPO (F4 · plan de escalado): registro rápido de
 // 1–5 partidos de dobles contra otro equipo. Cada partido se persiste como
@@ -281,17 +284,8 @@ export const AmistosoScreen = () => {
   };
 
   const pickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    setPhotoUri(result.assets[0].uri);
+    const uri = await pickMatchPhoto();
+    if (uri) setPhotoUri(uri);
   };
 
   const photoTitle = isColegas

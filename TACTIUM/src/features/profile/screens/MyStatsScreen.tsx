@@ -19,8 +19,11 @@ import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { fetchMyPlayer, type Player } from '@core/services/players';
 import { fetchSeasons, type Season } from '@core/services/seasons';
-import * as ImagePicker from 'expo-image-picker';
-import { PhotoShareCard, sharePhotoCard } from '@components/share/PhotoShareCard';
+import {
+  PhotoShareCard,
+  sharePhotoCard,
+  pickMatchPhoto,
+} from '@components/share/PhotoShareCard';
 import {
   fetchLeagueStatsBundle,
   computePlayerLeagueStats,
@@ -112,14 +115,8 @@ export const MyStatsScreen = () => {
   };
 
   const pickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    setPhotoUri(result.assets[0].uri);
+    const uri = await pickMatchPhoto();
+    if (uri) setPhotoUri(uri);
   };
 
   const ranking = useMemo(() => {
