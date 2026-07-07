@@ -10,6 +10,7 @@ import {
   TextInput,
   Share,
   Linking,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +42,8 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
+import { captureRef } from 'react-native-view-shot';
+import { LineupShareCard } from '../components/LineupShareCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
@@ -1416,6 +1419,28 @@ const ShareLineupSheet: React.FC<{
     `Recuerda confirmar disponibilidad 🟢`,
   ].join('\n');
 
+  const cardRef = React.useRef<View>(null);
+
+  // Comparte la tarjeta de marca como IMAGEN (view-shot). Si el binario
+  // actual no incluye el módulo nativo, degradamos a texto con aviso.
+  const shareImage = async () => {
+    try {
+      const uri = await captureRef(cardRef, { format: 'png', quality: 1 });
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { url: uri }
+          : ({ message: text, url: uri } as never),
+      );
+      onClose();
+    } catch {
+      Alert.alert(
+        'Imagen disponible en el próximo build',
+        'Este binario aún no incluye la captura de imagen. Te comparto el texto mientras tanto.',
+      );
+      await shareNative();
+    }
+  };
+
   const shareWhatsapp = async () => {
     const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
     const can = await Linking.canOpenURL(url);
@@ -1440,11 +1465,37 @@ const ShareLineupSheet: React.FC<{
       <Text style={styles.sheetEyebrow}>COMPARTIR ALINEACIÓN</Text>
       <Text style={styles.sheetTitle}>Avisa al equipo</Text>
 
-      <View style={styles.sharePreview}>
-        <Text style={styles.sharePreviewText}>{text}</Text>
+      <View style={styles.shareCardWrap}>
+        <View ref={cardRef} collapsable={false}>
+          <LineupShareCard
+            teamName={teamName}
+            matchday={matchday}
+            season={season}
+            pairs={pairs}
+            shortDate={shortDate}
+            time={time}
+          />
+        </View>
       </View>
 
       <View style={styles.shareGrid}>
+        <Pressable
+          onPress={shareImage}
+          style={({ pressed }) => [
+            styles.shareCell,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <View
+            style={[styles.shareCellIcon, { backgroundColor: Colors.accent15 }]}
+          >
+            <Text style={{ fontSize: 22 }}>🖼️</Text>
+          </View>
+          <Text style={[styles.shareCellLabel, { color: Colors.accent }]}>
+            Imagen
+          </Text>
+        </Pressable>
+
         <Pressable
           onPress={shareWhatsapp}
           style={({ pressed }) => [
@@ -2061,6 +2112,10 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   // Share sheet
+  shareCardWrap: {
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   sharePreview: {
     marginTop: 12,
     padding: 14,
