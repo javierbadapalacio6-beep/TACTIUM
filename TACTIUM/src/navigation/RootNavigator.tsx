@@ -23,6 +23,7 @@ export const RootNavigator = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const team = useTeamStore((s) => s.team);
   const isOnboarding = useTeamStore((s) => s.isOnboarding);
+  const soloMode = useTeamStore((s) => s.soloMode);
   const hasLoadedOnce = useTeamStore((s) => s.hasLoadedOnce);
   const isLoading = useTeamStore((s) => s.isLoading);
 
@@ -38,7 +39,8 @@ export const RootNavigator = () => {
     );
   }
 
-  const showMainTabs = isAuthenticated && !!team && !isOnboarding;
+  const showMainTabs =
+    isAuthenticated && (!!team || soloMode) && !isOnboarding;
 
   return (
     <>
@@ -51,7 +53,7 @@ export const RootNavigator = () => {
       >
         {!isAuthenticated ? (
           <Stack.Screen name="AuthFlow" component={AuthStack} />
-        ) : !team || isOnboarding ? (
+        ) : !showMainTabs ? (
           <Stack.Screen name="OnboardingFlow" component={OnboardingStack} />
         ) : (
           <>

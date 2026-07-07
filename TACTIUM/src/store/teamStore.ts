@@ -7,6 +7,8 @@ import { supabase } from '@core/supabase/client';
 import * as TeamsApi from '@core/services/teams';
 import * as PlayersApi from '@core/services/players';
 import * as TeamMembersApi from '@core/services/teamMembers';
+import { hasCasualHistory } from '@core/services/casualMatches';
+import { setSoloModeRemote, getSoloModeRemote } from '@core/services/profile';
 
 import { useAuthStore } from './authStore';
 import { useClubStore } from './clubStore';
@@ -48,9 +50,17 @@ interface TeamState {
   isLoading: boolean;
   hasLoadedOnce: boolean;
   isOnboarding: boolean;
+  // Modo jugador suelto (F8): el usuario entra SIN equipo (amistosos +
+  // stats + canje de codigos). Se desactiva solo al unirse a un equipo.
+  soloMode: boolean;
+  // Flujo "de jugador a gestor": muestra la elección SOLO con las cards
+  // de crear equipo/club y un volver. Transitorio (no se persiste).
+  soloUpgrade: boolean;
   error: string | null;
 
   loadForUser: () => Promise<void>;
+  setSoloMode: (v: boolean) => void;
+  setSoloUpgrade: (v: boolean) => void;
   reset: () => void;
   finishOnboarding: () => void;
   setActiveTeam: (teamId: string) => Promise<void>;
@@ -254,7 +264,16 @@ export const useTeamStore = create<TeamState>()(
       isLoading: false,
       hasLoadedOnce: false,
       isOnboarding: false,
+      soloMode: false,
+      soloUpgrade: false,
       error: null,
+
+      setSoloMode: (v) => {
+        set({ soloMode: v });
+        // La cuenta recuerda la elección en cualquier dispositivo.
+        void setSoloModeRemote(v);
+      },
+      setSoloUpgrade: (v) => set({ soloUpgrade: v }),
 
       loadForUser: async () => {
         set({ isLoading: true, error: null });
@@ -265,7 +284,16 @@ export const useTeamStore = create<TeamState>()(
           ]);
 
           if (teams.length === 0) {
+            // Jugador suelto que vuelve a entrar: su elección local se
+            // borró en el logout, pero si su cuenta ya tiene amistosos
+            // entra directo a su modo sin re-pasar por la bienvenida.
+            const solo =
+              !get().soloUpgrade &&
+              (get().soloMode ||
+                (await getSoloModeRemote()) ||
+                (await hasCasualHistory()));
             set({
+              soloMode: solo,
               team: null,
               players: [],
               teams: [],
@@ -280,6 +308,10 @@ export const useTeamStore = create<TeamState>()(
             });
             return;
           }
+
+          // Tener equipo desactiva el modo suelto (se unio por invitacion).
+          if (get().soloMode || get().soloUpgrade)
+            set({ soloMode: false, soloUpgrade: false });
 
           const persistedId = get().activeTeamId;
           const team =
@@ -325,6 +357,10 @@ export const useTeamStore = create<TeamState>()(
           isLoading: false,
           hasLoadedOnce: false,
           isOnboarding: false,
+          // El modo suelto es una elección POR USUARIO: al cerrar sesión se
+          // limpia para que la siguiente cuenta no lo herede del dispositivo.
+          soloMode: false,
+          soloUpgrade: false,
           error: null,
           playersChannel: null,
         });
@@ -583,6 +619,7 @@ export const useTeamStore = create<TeamState>()(
       partialize: (s) => ({
         activeTeamId: s.activeTeamId,
         activeRoleOverride: s.activeRoleOverride,
+        soloMode: s.soloMode,
       }),
     },
   ),

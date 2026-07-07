@@ -23,6 +23,7 @@ import { TactiumMark } from '@components/brand/TactiumMark';
 import { AmbientBackdrop, NeonDot } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
+import { useTeamStore } from '@store/teamStore';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 
 // Timings de la secuencia de entrada — inspirado en stagger de anime.js
@@ -40,6 +41,13 @@ export const OnboardingChoiceScreen = ({
   const signOut = useAuthStore((s) => s.signOut);
   const clubs = useClubStore((s) => s.clubs);
   const [redeemOpen, setRedeemOpen] = useState(false);
+  const setSoloMode = useTeamStore((st) => st.setSoloMode);
+  const soloUpgrade = useTeamStore((st) => st.soloUpgrade);
+  const setSoloUpgrade = useTeamStore((st) => st.setSoloUpgrade);
+  const backToSolo = () => {
+    setSoloUpgrade(false);
+    setSoloMode(true);
+  };
 
   // Si el usuario ya tiene un club pero salió antes de crear los equipos,
   // saltamos la elección y vamos directo al paso de equipos del club.
@@ -67,18 +75,28 @@ export const OnboardingChoiceScreen = ({
           </Animated.Text>
         </Animated.View>
         <Animated.View entering={FadeIn.delay(220).duration(220)}>
-          <Pressable
-            onPress={() =>
-              Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Salir', style: 'destructive', onPress: () => signOut() },
-              ])
-            }
-            hitSlop={10}
-            style={{ paddingHorizontal: 6 }}
-          >
-            <Text style={styles.exitLink}>Cerrar sesión</Text>
-          </Pressable>
+          {soloUpgrade ? (
+            <Pressable
+              onPress={backToSolo}
+              hitSlop={10}
+              style={{ paddingHorizontal: 6 }}
+            >
+              <Text style={styles.exitLink}>← Volver</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() =>
+                Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Salir', style: 'destructive', onPress: () => signOut() },
+                ])
+              }
+              hitSlop={10}
+              style={{ paddingHorizontal: 6 }}
+            >
+              <Text style={styles.exitLink}>Cerrar sesión</Text>
+            </Pressable>
+          )}
         </Animated.View>
       </View>
 
@@ -96,7 +114,7 @@ export const OnboardingChoiceScreen = ({
             .duration(320)
             .easing(Easing.out(Easing.cubic))}
         >
-          BIENVENIDO
+          {soloUpgrade ? 'DE JUGADOR A GESTOR' : 'BIENVENIDO'}
         </Animated.Text>
         <Animated.Text
           style={styles.title}
@@ -104,7 +122,7 @@ export const OnboardingChoiceScreen = ({
             .duration(380)
             .easing(Easing.out(Easing.cubic))}
         >
-          ¿Cómo vas a empezar?
+          {soloUpgrade ? 'Crea tu equipo o tu club' : '¿Cómo vas a empezar?'}
         </Animated.Text>
         <Animated.Text
           style={styles.lede}
@@ -112,7 +130,9 @@ export const OnboardingChoiceScreen = ({
             .duration(320)
             .easing(Easing.out(Easing.cubic))}
         >
-          Puedes gestionar un único equipo o estructurar varios bajo un club.
+          {soloUpgrade
+            ? 'Tus amistosos y tus stats se conservan: es la misma cuenta, con más poderes.'
+            : 'Gestiona un equipo o un club — o entra como jugador: amistosos, tu liga y tus stats. Gratis.'}
         </Animated.Text>
 
         {/* Pill explicando trial: genérica (sin precio) porque el coste
@@ -162,6 +182,8 @@ export const OnboardingChoiceScreen = ({
           </Animated.View>
         </View>
 
+        {!soloUpgrade ? (
+          <>
         <Animated.View
           style={styles.divider}
           entering={FadeIn.delay(STAGGER_STEP * 7).duration(280)}
@@ -193,6 +215,34 @@ export const OnboardingChoiceScreen = ({
             </Text>
           </Pressable>
         </Animated.View>
+
+        {/* Modo jugador suelto (F8): entrar SIN equipo ni invitación.
+            Es la puerta del loop de amistosos: el invitado de un partido
+            se instala, entra por aquí y canjea su código en Stats. */}
+        <Animated.View
+          entering={FadeInUp.delay(STAGGER_STEP * 8.5)
+            .duration(320)
+            .easing(Easing.out(Easing.cubic))}
+        >
+          <Pressable
+            onPress={() => setSoloMode(true)}
+            style={({ pressed }) => [
+              styles.redeem,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.freeBadge}>
+              <Text style={styles.freeBadgeText}>GRATIS</Text>
+            </View>
+            <Text style={styles.redeemTitle}>Juego por mi cuenta</Text>
+            <Text style={styles.redeemHint}>
+              Registra amistosos con tus colegas, canjea un código de{'\n'}
+              partido y sigue tus estadísticas. Sin equipo ni invitación.
+            </Text>
+          </Pressable>
+        </Animated.View>
+          </>
+        ) : null}
 
         <Animated.View
           style={styles.footer}

@@ -17,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack } from '@components/ui';
+import { IconBack, IconLink, IconGift, IconCamera } from '@components/ui';
 import { useTeamStore, selectIsPlayer } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import {
@@ -167,8 +167,9 @@ export const AmistosoScreen = () => {
   //                 stats suman a ambos lados.
   //  · 'equipos'  → enfrentamiento 1-5 partidos contra otro club. Lo
   //                 registra el capitán/admin — los jugadores no lo ven.
+  // Sin equipo (jugador suelto) solo existe el modo colegas.
   const [mode, setMode] = useState<'colegas' | 'entreno' | 'equipos'>(
-    isPlayer ? 'colegas' : 'equipos',
+    !team ? 'colegas' : isPlayer ? 'colegas' : 'equipos',
   );
   const isColegas = mode === 'colegas';
   const isEntreno = mode === 'entreno';
@@ -211,9 +212,14 @@ export const AmistosoScreen = () => {
 
   // En colegas/entreno, tu propio nombre va pre-rellenado en el primer
   // hueco (eres quien registra el partido → tu vínculo está garantizado).
+  const authName = useAuthStore((s) => {
+    const meta = (s.user?.user_metadata ?? {}) as { full_name?: string };
+    return (meta.full_name ?? '').trim() || null;
+  });
   const myName = useMemo(
-    () => players.find((pl) => pl.user_id === userId)?.name ?? null,
-    [players, userId],
+    () =>
+      players.find((pl) => pl.user_id === userId)?.name ?? authName ?? null,
+    [players, userId, authName],
   );
   useEffect(() => {
     if (!myName || mode === 'equipos') return;
@@ -313,8 +319,14 @@ export const AmistosoScreen = () => {
     }
     return out;
   }, [players, recent, myName]);
-  const linkByName = (name: string): string | null =>
-    userIdByName.get(name.trim().toLowerCase()) ?? null;
+  const linkByName = (name: string): string | null => {
+    const k = name.trim().toLowerCase();
+    // Mi propio hueco SIEMPRE vinculado a mi cuenta: en una cuenta nueva
+    // (jugador suelto) no hay plantilla ni historial de los que sacar el
+    // user_id, y sin esto el partido se guarda sin contar en mis stats.
+    if (userId && myName && k === myName.trim().toLowerCase()) return userId;
+    return userIdByName.get(k) ?? null;
+  };
 
   const fillOurSlot = (i: number, name: string) => {
     const p = partidos[i];
@@ -496,19 +508,22 @@ export const AmistosoScreen = () => {
           {isEntreno
             ? 'Partido interno del equipo: los cuatro son de la plantilla y suma en las stats de todos los vinculados.'
             : isColegas
-              ? 'Un partido entre amigos: cuenta como amistoso y no afecta a tu liga.'
+              ? team
+                ? 'Un partido entre amigos: cuenta como amistoso y no afecta a tu liga.'
+                : 'Un partido entre amigos: se guarda con su marcador y suma en tus estadísticas.'
               : 'Se juega hoy, cuenta como amistoso y no afecta a tu liga. Comparte el resumen con el equipo rival al terminar.'}
         </Text>
 
         <View style={styles.countRow}>
-          {(
-            [
-              { id: 'colegas' as const, label: 'Colegas' },
-              { id: 'entreno' as const, label: 'Entreno' },
-              ...(isPlayer
-                ? []
-                : [{ id: 'equipos' as const, label: 'Equipos' }]),
-            ]
+          {(team
+            ? [
+                { id: 'colegas' as const, label: 'Colegas' },
+                { id: 'entreno' as const, label: 'Entreno' },
+                ...(isPlayer
+                  ? []
+                  : [{ id: 'equipos' as const, label: 'Equipos' }]),
+              ]
+            : []
           ).map((m) => {
             const sel = mode === m.id;
             return (
@@ -618,18 +633,18 @@ export const AmistosoScreen = () => {
                     onPress={() => fillOurSlot(i, cp.name)}
                     style={styles.rosterChip}
                   >
-                    <Text style={styles.rosterChipText}>
-                      {cp.linked ? '🔗 ' : ''}
-                      {cp.name}
-                    </Text>
+                    {cp.linked ? (
+                      <IconLink size={11} color={Colors.accent} />
+                    ) : null}
+                    <Text style={styles.rosterChipText}>{cp.name}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
             ) : null}
             <Text style={styles.guestHint}>
               {isEntreno
-                ? 'Toca los chips para colocar a los cuatro: rellenan Pareja A y luego Pareja B. Los 🔗 suman en sus stats.'
-                : 'Chips: tu plantilla y tus colegas habituales (🔗 = suma en sus stats). O escribe cualquier nombre nuevo.'}
+                ? 'Toca los chips para colocar a los cuatro: rellenan Pareja A y luego Pareja B. Los vinculados suman en sus stats.'
+                : 'Chips: tu plantilla y tus colegas habituales (el eslabón = suma en sus stats). O escribe cualquier nombre nuevo.'}
             </Text>
             <Text style={styles.fieldLabel}>
               {isEntreno ? 'PAREJA B' : 'PAREJA RIVAL'}
@@ -720,9 +735,12 @@ export const AmistosoScreen = () => {
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <Text style={styles.ctaGhostLabel}>
-                  📸 Añadir foto del partido
-                </Text>
+                <View style={styles.ctaGhostRow}>
+                  <IconCamera size={15} color={Colors.text} />
+                  <Text style={styles.ctaGhostLabel}>
+                    Añadir foto del partido
+                  </Text>
+                </View>
               </Pressable>
             )}
             <Pressable
@@ -755,11 +773,14 @@ export const AmistosoScreen = () => {
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={styles.inviteBtnLabel}>
-                  🎁 Invita a {unlinkedNames.length}{' '}
-                  {unlinkedNames.length === 1 ? 'jugador' : 'jugadores'} sin
-                  TACTIUM
-                </Text>
+                <View style={styles.inviteBtnRow}>
+                  <IconGift size={16} color={Colors.accent} />
+                  <Text style={styles.inviteBtnLabel}>
+                    Invita a {unlinkedNames.length}{' '}
+                    {unlinkedNames.length === 1 ? 'jugador' : 'jugadores'} sin
+                    TACTIUM
+                  </Text>
+                </View>
                 <Text style={styles.inviteBtnHint}>
                   Si se instalan la app, sus partidos contarán en sus stats
                 </Text>
@@ -826,6 +847,9 @@ const styles = StyleSheet.create({
   slotInput: { flex: 1 },
   rosterRow: { gap: 6, paddingVertical: 4, paddingRight: 8 },
   rosterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 12,
     minHeight: 34,
     paddingVertical: 6,
@@ -833,7 +857,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgRaised,
     borderWidth: 1,
     borderColor: Colors.hairStrong,
-    alignItems: 'center',
     justifyContent: 'center',
   },
   rosterChipText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
@@ -944,6 +967,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  ctaGhostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
   ctaGhostLabel: { color: Colors.textMuted, fontSize: 14, fontWeight: '600' },
   inviteBtn: {
     marginTop: 4,
@@ -954,6 +983,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
+  },
+  inviteBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
   },
   inviteBtnLabel: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
   inviteBtnHint: {

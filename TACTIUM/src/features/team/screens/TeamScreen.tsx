@@ -25,8 +25,7 @@ import {
   IconShare,
   BottomSheet,
   ScanSheet,
-  Toggle,
-} from '@components/ui';
+  Toggle, IconCamera } from '@components/ui';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
 import { FCP_ENABLED } from '@core/config/featureFlags';
@@ -142,7 +141,7 @@ export const TeamScreen = () => {
           {FCP_ENABLED && (
             <Pressable
               onPress={() => setImportingFcp(true)}
-              style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [styles.fcpBtn, pressed && { opacity: 0.7 }]}
               accessibilityRole="button"
               accessibilityLabel="Importar desde la Federación Cántabra"
             >
@@ -154,8 +153,7 @@ export const TeamScreen = () => {
             onPress={() => setScanning(true)}
             style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
           >
-            <Text style={styles.scanBtnIcon}>📷</Text>
-            <Text style={styles.scanBtnLabel}>Escanear</Text>
+            <IconCamera size={16} color={Colors.accent} />
           </Pressable>
           <Pressable
             onPress={() => setAdding(true)}
@@ -851,7 +849,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scanBtn: {
+  fcpBtn: {
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
@@ -861,6 +859,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  scanBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scanBtnIcon: { fontSize: 14 },
   scanBtnLabel: {

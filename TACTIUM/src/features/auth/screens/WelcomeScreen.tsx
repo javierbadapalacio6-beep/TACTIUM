@@ -28,7 +28,13 @@ import { useAuthStore } from '@store/authStore';
 
 import type { AuthStackScreenProps } from '@navigation/types';
 
-import { HeroVisual, AvailVisual, LineupVisual, SeasonVisual } from './welcome-visuals';
+import {
+  HeroVisual,
+  AvailVisual,
+  LineupVisual,
+  SeasonVisual,
+  CasualVisual,
+} from './welcome-visuals';
 
 type Slide = {
   tag: string;
@@ -61,6 +67,12 @@ const slides: Slide[] = [
     title: 'Lleva el control\nde la liga',
     body: 'Jornadas, resultados, racha y tasa de victoria. Toda la temporada en una sola pantalla.',
     Visual: SeasonVisual,
+  },
+  {
+    tag: '04 · TU JUEGO',
+    title: 'Tus partidos,\ntus números',
+    body: 'También sin equipo: registra amistosos con tus colegas, comparte la foto del partido y sigue tus stats. Gratis para jugadores.',
+    Visual: CasualVisual,
   },
 ];
 

@@ -20,7 +20,7 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconChevron, NeonDot, Toggle } from '@components/ui';
+import { IconChevron, NeonDot, Toggle, IconCamera } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
@@ -57,6 +57,8 @@ export const ProfileScreen = () => {
   const userId  = useAuthStore((s) => s.user?.id ?? null);
   const signOut = useAuthStore((s) => s.signOut);
   const team    = useTeamStore((s) => s.team);
+  const setSoloMode = useTeamStore((s) => s.setSoloMode);
+  const setSoloUpgrade = useTeamStore((s) => s.setSoloUpgrade);
   const players = useTeamStore((s) => s.players);
   const activeRole              = useTeamStore((s) => s.activeRole);
   const memberships             = useTeamStore((s) => s.memberships);
@@ -444,7 +446,7 @@ export const ProfileScreen = () => {
               {avatarBusy ? (
                 <ActivityIndicator size="small" color={Colors.accent} />
               ) : (
-                <Text style={styles.avatarEditBadgeIcon}>📷</Text>
+                <IconCamera size={13} color={Colors.text} />
               )}
             </View>
           </Pressable>
@@ -458,7 +460,9 @@ export const ProfileScreen = () => {
           ) : null}
         </View>
 
-        {/* Team */}
+        {/* Team (oculto en modo jugador suelto) */}
+        {team ? (
+          <>
         <Text style={styles.sectionLabel}>EQUIPO ACTUAL</Text>
         <View style={styles.teamCard}>
           <TactiumMark size={42} gradient />
@@ -486,6 +490,8 @@ export const ProfileScreen = () => {
             <Text style={styles.noSeasonText}>Sin temporada activa</Text>
           </View>
         )}
+          </>
+        ) : null}
 
         {/* Mi jugador (solo en rol player) */}
         {isPlayer ? (
@@ -598,7 +604,7 @@ export const ProfileScreen = () => {
             gestión solo confunde (la sub real la gestiona el club_admin desde
             Modo Club). Para el captain independiente (club_id === null) sí se
             muestra: tiene su plan Capitán propio. */}
-        {activeRole !== 'player' && !(activeRole === 'captain' && team?.club_id) ? (
+        {team && activeRole !== 'player' && !(activeRole === 'captain' && team.club_id) ? (
           <SubscriptionCard
             activeRole={activeRole}
             userId={userId}
@@ -615,6 +621,31 @@ export const ProfileScreen = () => {
              el club_admin tiene su propio flujo desde el ClubDashboard
              (TeamMembersSheet con roles), y el player no puede invitar. */}
         <View style={styles.invitationsStack}>
+          {/* Jugador suelto → gestor: vuelve a la elección inicial para
+              crear su equipo o su club (sus amistosos se conservan). */}
+          {!team ? (
+            <Pressable
+              onPress={() => {
+                setSoloUpgrade(true);
+                setSoloMode(false);
+              }}
+              style={({ pressed }) => [
+                styles.redeemCard,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <View style={styles.redeemBadge}>
+                <Text style={styles.redeemBadgeText}>+</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.redeemTitle}>Crear un equipo o club</Text>
+                <Text style={styles.redeemHint} numberOfLines={1}>
+                  Pasa a gestionar: plantilla, alineaciones y liga
+                </Text>
+              </View>
+              <IconChevron size={14} color={Colors.textFaint} />
+            </Pressable>
+          ) : null}
           {activeRole === 'captain' && team ? (
             <Pressable
               onPress={openInvite}
@@ -1068,9 +1099,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarEditBadgeIcon: {
-    fontSize: 14,
   },
   avatarText:   { color: Colors.accent, fontSize: 32, fontWeight: '700', letterSpacing: -0.5 },
   name:         { color: Colors.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 },

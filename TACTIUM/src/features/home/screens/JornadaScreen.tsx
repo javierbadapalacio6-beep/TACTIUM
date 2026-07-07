@@ -35,6 +35,7 @@ import {
   dateToIsoTime,
   isoDateToDate,
   isoTimeToDate,
+  IconImage,
 } from '@components/ui';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
@@ -1496,7 +1497,7 @@ const ShareLineupSheet: React.FC<{
           <View
             style={[styles.shareCellIcon, { backgroundColor: Colors.accent15 }]}
           >
-            <Text style={{ fontSize: 22 }}>🖼️</Text>
+            <IconImage size={20} color={Colors.accent} />
           </View>
           <Text style={[styles.shareCellLabel, { color: Colors.accent }]}>
             Imagen

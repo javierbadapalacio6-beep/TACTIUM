@@ -442,7 +442,115 @@ export const SeasonVisual = () => {
   );
 };
 
+// Visual del slide del JUGADOR (F8): tarjeta de stats personales con el
+// % de victorias animado y un resultado de amistoso debajo. Mismo
+// lenguaje visual que MyStats — lo que verá de verdad dentro de la app.
+export const CasualVisual = () => {
+  const pct = useAnimatedCounter(71, 1000, 400);
+  const dots: boolean[] = [true, true, false, true, true];
+  return (
+    <View style={visualStyles.casualWrap}>
+      <View style={visualStyles.casualHero}>
+        <View style={{ flex: 1 }}>
+          <Text style={visualStyles.casualPct}>{pct}%</Text>
+          <Text style={visualStyles.casualLabel}>DE VICTORIAS</Text>
+        </View>
+        <View style={visualStyles.casualDots}>
+          {dots.map((w, i) => (
+            <View
+              key={i}
+              style={[
+                visualStyles.casualDot,
+                { backgroundColor: w ? Colors.accent : '#ff6b6b' },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+      <View style={visualStyles.casualRow}>
+        <View style={visualStyles.casualBadge}>
+          <Text style={visualStyles.casualBadgeTxt}>V</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={visualStyles.casualName}>vs Ruiz / Sanz</Text>
+          <Text style={visualStyles.casualMeta}>con Marco · amistoso</Text>
+        </View>
+        <Text style={visualStyles.casualSets}>6-4 6-3</Text>
+      </View>
+      <View style={visualStyles.casualPill}>
+        <Text style={visualStyles.casualPillTxt}>GRATIS PARA JUGADORES</Text>
+      </View>
+    </View>
+  );
+};
+
 const visualStyles = StyleSheet.create({
+  casualWrap: {
+    width: 300,
+    alignSelf: 'center',
+  },
+  casualHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    padding: 18,
+  },
+  casualPct: {
+    color: Colors.accent,
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  casualLabel: {
+    color: Colors.textFaint,
+    fontSize: 10,
+    letterSpacing: 2,
+    marginTop: 2,
+  },
+  casualDots: { flexDirection: 'row', gap: 5 },
+  casualDot: { width: 9, height: 9, borderRadius: 5 },
+  casualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    padding: 12,
+    marginTop: 10,
+  },
+  casualBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,255,170,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  casualBadgeTxt: { color: Colors.accent, fontSize: 12, fontWeight: '800' },
+  casualName: { color: Colors.text, fontSize: 13.5, fontWeight: '700' },
+  casualMeta: { color: Colors.textFaint, fontSize: 11.5, marginTop: 1 },
+  casualSets: { color: Colors.text, fontSize: 12.5, fontWeight: '700' },
+  casualPill: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    backgroundColor: Colors.accent10,
+  },
+  casualPillTxt: {
+    color: Colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
   heroLogo: {
     position: 'absolute',
     top: 0,

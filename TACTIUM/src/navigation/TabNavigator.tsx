@@ -191,6 +191,7 @@ const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
 
 export const TabNavigator = () => {
   const activeRole = useTeamStore((s) => s.activeRole);
+  const hasTeam = useTeamStore((s) => !!s.team);
 
   return (
     <Tab.Navigator
@@ -274,7 +275,7 @@ export const TabNavigator = () => {
             }}
           />
 
-          {activeRole !== 'player' ? (
+          {activeRole !== 'player' && hasTeam ? (
             <Tab.Screen
               name="Seasons"
               component={SeasonsStack}
@@ -287,7 +288,7 @@ export const TabNavigator = () => {
             />
           ) : null}
 
-          {activeRole !== 'player' ? (
+          {activeRole !== 'player' && hasTeam ? (
             <Tab.Screen
               name="Team"
               component={TeamStack}

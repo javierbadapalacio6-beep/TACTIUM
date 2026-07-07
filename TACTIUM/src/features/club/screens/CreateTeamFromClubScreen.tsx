@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -61,7 +61,14 @@ export const CreateTeamFromClubScreen = ({
   const [name, setName] = useState('');
   // Tipo de competición (F1): federada hereda la federación del club;
   // SNP/Seniors/LAPI/personalizada escriben un valor canónico en league.
-  const [comp, setComp] = useState<CompetitionKind>('federada');
+  const [comp, setComp] = useState<CompetitionKind>(
+    club?.federation ? 'federada' : 'snp',
+  );
+  // La elección del club manda (igual que en el onboarding del club).
+  useEffect(() => {
+    if (club?.federation) setComp('federada');
+    else setComp((c) => (c === 'federada' ? 'snp' : c));
+  }, [club?.federation]);
   const [customCourts, setCustomCourts] = useState(3);
   const [customOrder, setCustomOrder] = useState(false);
   const [league, setLeague] = useState('');
@@ -190,12 +197,24 @@ export const CreateTeamFromClubScreen = ({
         </Section>
 
         <Section label="Competición">
+          {club?.federation ? (
+            <View style={styles.federationReadonly}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.selectorValue} numberOfLines={1}>
+                  Federada{clubFederation ? ` · ${clubFederation.shortName}` : ''}
+                </Text>
+              </View>
+              <Text style={styles.federationLockedHint}>
+                HEREDADA DEL CLUB
+              </Text>
+            </View>
+          ) : (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.catRowScroll}
           >
-            {COMPETITION_PRESETS.map((p) => {
+            {COMPETITION_PRESETS.filter((p) => p.id !== 'federada').map((p) => {
               const sel = comp === p.id;
               return (
                 <Pressable
@@ -221,6 +240,7 @@ export const CreateTeamFromClubScreen = ({
               );
             })}
           </ScrollView>
+          )}
           <Text style={styles.compBlurb}>
             {preset.blurb} · {formatHint}
           </Text>

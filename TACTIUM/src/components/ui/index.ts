@@ -37,6 +37,10 @@ export {
   IconCamera,
   IconImage,
   IconFile,
+  IconRacket,
+  IconTicket,
+  IconGift,
+  IconLink,
 } from './Icon';
 export { DateField, TimeField, dateToIsoDate, dateToIsoTime, isoDateToDate, isoTimeToDate } from './DateTimeField';
 export { TeamSwitcher } from './TeamSwitcher';

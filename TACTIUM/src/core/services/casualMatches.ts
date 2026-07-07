@@ -57,7 +57,9 @@ export interface MyCasualStats {
 export async function fetchMyCasualStats(
   userId: string,
 ): Promise<MyCasualStats> {
-  const from = supabase.from as unknown as AnyFrom;
+  // .bind: sin él la función pierde su this interno (this.rest) →
+  // "Cannot read property 'rest' of undefined".
+  const from = supabase.from.bind(supabase) as unknown as AnyFrom;
 
   const { data: partsRaw, error: e1 } = await from(
     'casual_match_participants',
@@ -113,6 +115,27 @@ export async function fetchMyCasualStats(
   };
 }
 
+/**
+ * ¿La cuenta actual tiene alguna participación vinculada en amistosos?
+ * Lo usa el arranque para reactivar el modo jugador suelto al volver a
+ * iniciar sesión (la elección local se borra en el logout).
+ */
+export async function hasCasualHistory(): Promise<boolean> {
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    const uid = auth?.user?.id;
+    if (!uid) return false;
+    const from = supabase.from.bind(supabase) as unknown as AnyFrom;
+    const { data, error } = await from('casual_match_participants')
+      .select('match_id')
+      .eq('user_id', uid);
+    if (error) return false;
+    return ((data ?? []) as unknown[]).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // ── Colegas frecuentes ──────────────────────────────────────────────
 // "Seguir" ligero SIN red social: la gente con la que YA has jugado
 // amistosos, derivada de tu historial. Si un colega reclamó su cuenta
@@ -127,7 +150,9 @@ export interface FrequentPartner {
 export async function fetchMyFrequentPartners(
   userId: string,
 ): Promise<FrequentPartner[]> {
-  const from = supabase.from as unknown as AnyFrom;
+  // .bind: sin él la función pierde su this interno (this.rest) →
+  // "Cannot read property 'rest' of undefined".
+  const from = supabase.from.bind(supabase) as unknown as AnyFrom;
 
   const { data: mineRaw, error: e1 } = await from('casual_match_participants')
     .select('match_id')
@@ -181,7 +206,9 @@ export interface ClaimableParticipant {
  *  aún no está aplicada). */
 export async function fetchClaimCode(matchId: string): Promise<string | null> {
   try {
-    const from = supabase.from as unknown as AnyFrom;
+    // .bind: sin él la función pierde su this interno (this.rest) →
+  // "Cannot read property 'rest' of undefined".
+  const from = supabase.from.bind(supabase) as unknown as AnyFrom;
     const { data, error } = await from('casual_matches')
       .select('claim_code')
       .eq('id', matchId);
@@ -197,7 +224,7 @@ export async function fetchClaimCode(matchId: string): Promise<string | null> {
 export async function getClaimableParticipants(
   code: string,
 ): Promise<ClaimableParticipant[]> {
-  const rpc = supabase.rpc as unknown as AnyRpc;
+  const rpc = supabase.rpc.bind(supabase) as unknown as AnyRpc;
   const { data, error } = await rpc('get_claimable_participants', {
     p_code: code.trim(),
   });
@@ -210,7 +237,7 @@ export async function claimCasualParticipant(
   code: string,
   participantId: string,
 ): Promise<boolean> {
-  const rpc = supabase.rpc as unknown as AnyRpc;
+  const rpc = supabase.rpc.bind(supabase) as unknown as AnyRpc;
   const { data, error } = await rpc('claim_casual_participant', {
     p_code: code.trim(),
     p_participant_id: participantId,
@@ -219,10 +246,102 @@ export async function claimCasualParticipant(
   return data === true;
 }
 
+// ── Resultados de mis amistosos ───────────────────────────────────
+
+export interface CasualMatchSummary {
+  id: string;
+  playedOn: string | null;
+  type: string;
+  won: boolean;
+  /** Marcador desde MI perspectiva, p. ej. "6-4 6-3". */
+  sets: string;
+  /** Mi compañero en ese partido (si consta). */
+  partner: string | null;
+  /** Pareja rival, p. ej. "Ruiz / Sanz". */
+  rivals: string;
+}
+
+/** Mis amistosos con resultado, del más reciente al más antiguo. */
+export async function fetchMyCasualMatches(
+  userId: string,
+): Promise<CasualMatchSummary[]> {
+  const from = supabase.from.bind(supabase) as unknown as AnyFrom;
+
+  const { data: mineRaw, error: e1 } = await from('casual_match_participants')
+    .select('match_id, side')
+    .eq('user_id', userId);
+  if (e1) throw new Error(e1.message);
+  const mine = (mineRaw ?? []) as { match_id: string; side: number }[];
+  if (mine.length === 0) return [];
+  const sideByMatch = new Map(mine.map((r) => [r.match_id, r.side]));
+  const ids = [...sideByMatch.keys()];
+
+  const [mRes, pRes] = await Promise.all([
+    from('casual_matches')
+      .select('id, played_on, type, sets, winner_side')
+      .in('id', ids),
+    from('casual_match_participants')
+      .select('match_id, side, name, user_id')
+      .in('match_id', ids),
+  ]);
+  if (mRes.error) throw new Error(mRes.error.message);
+  if (pRes.error) throw new Error(pRes.error.message);
+
+  type PartRow = {
+    match_id: string;
+    side: number;
+    name: string | null;
+    user_id: string | null;
+  };
+  const partsByMatch = new Map<string, PartRow[]>();
+  for (const r of (pRes.data ?? []) as PartRow[]) {
+    const list = partsByMatch.get(r.match_id) ?? [];
+    list.push(r);
+    partsByMatch.set(r.match_id, list);
+  }
+
+  const out: CasualMatchSummary[] = [];
+  for (const m of (mRes.data ?? []) as {
+    id: string;
+    played_on: string | null;
+    type: string | null;
+    sets: [number, number][] | null;
+    winner_side: number | null;
+  }[]) {
+    if (m.winner_side == null) continue;
+    const side = sideByMatch.get(m.id) ?? 0;
+    const parts = partsByMatch.get(m.id) ?? [];
+    const partner =
+      parts.find((pt) => pt.side === side && pt.user_id !== userId)?.name ??
+      null;
+    const rivals = parts
+      .filter((pt) => pt.side !== side)
+      .map((pt) => pt.name)
+      .filter(Boolean)
+      .join(' / ');
+    // Los sets se guardan en perspectiva del lado 0 → volteamos si soy el 1.
+    const sets = (m.sets ?? [])
+      .map(([a, b]) => (side === 0 ? `${a}-${b}` : `${b}-${a}`))
+      .join(' ');
+    out.push({
+      id: m.id,
+      playedOn: m.played_on,
+      type: m.type ?? 'amistoso',
+      won: m.winner_side === side,
+      sets,
+      partner,
+      rivals,
+    });
+  }
+  return out
+    .sort((a, b) => (b.playedOn ?? '').localeCompare(a.playedOn ?? ''))
+    .slice(0, 20);
+}
+
 export async function createCasualMatch(
   input: CreateCasualMatchInput,
 ): Promise<string> {
-  const { data, error } = await (supabase.rpc as unknown as (
+  const { data, error } = await (supabase.rpc.bind(supabase) as unknown as (
     fn: string,
     args: Record<string, unknown>,
   ) => Promise<{ data: string | null; error: { message: string } | null }>)(

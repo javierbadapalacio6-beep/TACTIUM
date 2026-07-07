@@ -15,16 +15,18 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack } from '@components/ui';
+import { IconBack, IconLink, IconTicket } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { fetchMyPlayer, type Player } from '@core/services/players';
 import {
   fetchMyCasualStats,
+  fetchMyCasualMatches,
   fetchMyFrequentPartners,
   getClaimableParticipants,
   claimCasualParticipant,
   type MyCasualStats,
+  type CasualMatchSummary,
   type FrequentPartner,
 } from '@core/services/casualMatches';
 import { fetchSeasons, type Season } from '@core/services/seasons';
@@ -46,6 +48,12 @@ import {
 // jugador y el contenido del futuro perfil público. Los amistosos se
 // sumarán en F5b (requiere RPC de lectura + picker con user_id).
 
+const formatShortDate = (iso: string | null): string => {
+  if (!iso) return '';
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+};
+
 type Scope = 'activa' | 'todas' | 'amistosos';
 
 export const MyStatsScreen = () => {
@@ -55,7 +63,8 @@ export const MyStatsScreen = () => {
   const players = useTeamStore((s) => s.players);
   const userId = useAuthStore((s) => s.user?.id ?? null);
 
-  const [scope, setScope] = useState<Scope>('activa');
+  // Sin equipo (jugador suelto) el único ámbito con datos es amistosos.
+  const [scope, setScope] = useState<Scope>(team ? 'activa' : 'amistosos');
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<Player | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -66,25 +75,27 @@ export const MyStatsScreen = () => {
   const [view, setView] = useState<'yo' | 'plantilla'>('yo');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [casual, setCasual] = useState<MyCasualStats | null>(null);
-  // Diagnóstico: si la carga de amistosos falla, mostramos el motivo en
-  // pantalla en vez de tragarlo (imprescindible mientras probamos).
-  const [casualError, setCasualError] = useState<string | null>(null);
+  // Resultados de mis amistosos (lista, más reciente primero).
+  const [casualMatches, setCasualMatches] = useState<CasualMatchSummary[]>([]);
   // Mis colegas: la gente con la que has jugado amistosos. 🔗 = tiene
   // cuenta vinculada (sus partidos le cuentan); sin 🔗 = invítale.
   const [partners, setPartners] = useState<FrequentPartner[]>([]);
   const photoCardRef = React.useRef<View>(null);
 
   const load = useCallback(async () => {
-    if (!team || !userId) {
+    if (!userId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const [player, allSeasons] = await Promise.all([
-        fetchMyPlayer(team.id, userId),
-        fetchSeasons(team.id),
-      ]);
+      // Sin equipo no hay liga que consultar; los amistosos sí.
+      const [player, allSeasons] = team
+        ? await Promise.all([
+            fetchMyPlayer(team.id, userId),
+            fetchSeasons(team.id),
+          ])
+        : [null, [] as Season[]];
       setMe(player);
       setSeasons(allSeasons);
       const ids =
@@ -98,14 +109,11 @@ export const MyStatsScreen = () => {
       setStats(player ? computePlayerLeagueStats(player.id, b) : null);
       // Amistosos vinculados (F5b): independientes de la temporada.
       fetchMyCasualStats(userId)
-        .then((c) => {
-          setCasual(c);
-          setCasualError(null);
-        })
-        .catch((e) => {
-          setCasual(null);
-          setCasualError(String((e as Error)?.message ?? e));
-        });
+        .then(setCasual)
+        .catch(() => setCasual(null));
+      fetchMyCasualMatches(userId)
+        .then(setCasualMatches)
+        .catch(() => setCasualMatches([]));
       fetchMyFrequentPartners(userId)
         .then(setPartners)
         .catch(() => setPartners([]));
@@ -194,7 +202,7 @@ export const MyStatsScreen = () => {
       }%)${streak}`,
       `Sets: ${stats.setsWon}–${stats.setsLost}`,
       ``,
-      `La app del capitán de pádel: ${DOWNLOAD_URL}`,
+      `Sigue tus partidos y tus stats en TACTIUM: ${DOWNLOAD_URL}`,
     ].join('\n');
   }, [stats, me, team]);
 
@@ -250,15 +258,21 @@ export const MyStatsScreen = () => {
           </Pressable>
         ) : null}
 
-        <Text style={styles.eyebrow}>MIS ESTADÍSTICAS · LIGA</Text>
+        <Text style={styles.eyebrow}>
+          {team ? 'MIS ESTADÍSTICAS · LIGA' : 'MIS ESTADÍSTICAS'}
+        </Text>
         <Text style={styles.title}>{me?.name ?? 'Tus números'}</Text>
 
         {/* Filtros en UNA línea: ámbito ‖ vista */}
         <View style={styles.scopeRow}>
           {(
             [
-              { id: 'activa', label: 'Activa' },
-              { id: 'todas', label: 'Todas' },
+              ...(team
+                ? ([
+                    { id: 'activa', label: 'Activa' },
+                    { id: 'todas', label: 'Todas' },
+                  ] as const)
+                : []),
               { id: 'amistosos', label: 'Amistosos' },
             ] as const
           ).map((s) => {
@@ -279,6 +293,9 @@ export const MyStatsScreen = () => {
                 ]}
               >
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
                   style={[
                     styles.scopeChipText,
                     { color: sel ? '#000' : Colors.text },
@@ -314,6 +331,9 @@ export const MyStatsScreen = () => {
                 ]}
               >
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
                   style={[
                     styles.scopeChipText,
                     { color: sel ? '#000' : Colors.text },
@@ -420,6 +440,53 @@ export const MyStatsScreen = () => {
                       value={String(casual.entrenos)}
                     />
                   </View>
+
+                  {/* Resultados, del más reciente al más antiguo */}
+                  {casualMatches.length > 0 ? (
+                    <>
+                      <Text style={styles.sectionLabel}>RESULTADOS</Text>
+                      <View style={styles.card}>
+                        {casualMatches.map((cm) => (
+                          <View key={cm.id} style={styles.resultRow}>
+                            <View
+                              style={[
+                                styles.resultBadge,
+                                {
+                                  backgroundColor: cm.won
+                                    ? Colors.accent15
+                                    : 'rgba(255,107,107,0.12)',
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.resultBadgeTxt,
+                                  {
+                                    color: cm.won
+                                      ? Colors.accent
+                                      : Colors.error,
+                                  },
+                                ]}
+                              >
+                                {cm.won ? 'V' : 'D'}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={styles.rankName} numberOfLines={1}>
+                                vs {cm.rivals || 'rival'}
+                              </Text>
+                              <Text style={styles.rankMeta} numberOfLines={1}>
+                                {cm.partner ? `con ${cm.partner} · ` : ''}
+                                {formatShortDate(cm.playedOn)}
+                                {cm.type === 'entreno' ? ' · entreno' : ''}
+                              </Text>
+                            </View>
+                            <Text style={styles.resultSets}>{cm.sets}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  ) : null}
                 </>
               ) : (
                 <View style={styles.emptyBox}>
@@ -427,16 +494,6 @@ export const MyStatsScreen = () => {
                   <Text style={styles.emptyText}>
                     Registra un amistoso desde la Home (o canjea un código de
                     partido) y tus números aparecerán aquí.
-                  </Text>
-                  {casualError ? (
-                    <Text style={styles.debugError}>⚠️ {casualError}</Text>
-                  ) : null}
-                  <Text style={styles.debugError}>
-                    {casualError
-                      ? ''
-                      : `debug: user ${userId ? userId.slice(0, 8) : 'null'} · casual ${
-                          casual ? `${casual.played} partidos` : 'null'
-                        }`}
                   </Text>
                 </View>
               )
@@ -604,20 +661,23 @@ export const MyStatsScreen = () => {
                             : styles.colegaBadgeOff,
                         ]}
                       >
+                        {fp.user_id ? (
+                          <IconLink size={10} color={Colors.accent} />
+                        ) : null}
                         <Text
                           style={[
                             styles.colegaBadgeTxt,
                             { color: fp.user_id ? Colors.accent : Colors.textFaint },
                           ]}
                         >
-                          {fp.user_id ? '🔗 vinculado' : 'sin app'}
+                          {fp.user_id ? 'vinculado' : 'sin app'}
                         </Text>
                       </View>
                     </View>
                   ))}
                 </View>
                 <Text style={styles.colegaHint}>
-                  Se añaden solos al jugar contigo. 🔗 = sus partidos ya
+                  Se añaden solos al jugar contigo. El eslabón = sus partidos ya
                   cuentan en sus stats; "sin app": invítale al compartir el
                   próximo partido.
                 </Text>
@@ -676,7 +736,7 @@ export const MyStatsScreen = () => {
               ]}
             >
               <Text style={styles.photoBtnLabel}>
-                {photoUri ? 'Cambiar foto' : '📸 Añadir foto del partido'}
+                {photoUri ? 'Cambiar foto' : 'Añadir foto del partido'}
               </Text>
             </Pressable>
               </>
@@ -684,12 +744,13 @@ export const MyStatsScreen = () => {
 
             <Text style={styles.footNote}>
               Liga: partidos con alineación y resultado. Amistosos: solo los
-              registrados eligiéndote de la plantilla (chip 🔗).
+              registrados eligiéndote de la plantilla (chip vinculado).
             </Text>
 
-            <Pressable onPress={redeemCode} hitSlop={8}>
+            <Pressable onPress={redeemCode} hitSlop={8} style={styles.claimRow}>
+              <IconTicket size={16} color={Colors.accent} />
               <Text style={styles.claimLink}>
-                🎟️ ¿Tienes un código de partido? Canjéalo aquí
+                ¿Tienes un código de partido? Canjéalo aquí
               </Text>
             </Pressable>
           </>
@@ -758,6 +819,7 @@ const styles = StyleSheet.create({
   scopeChip: {
     flex: 1,
     height: 36,
+    paddingHorizontal: 6,
     borderRadius: 10,
     backgroundColor: Colors.bgCard,
     borderWidth: 1,
@@ -913,6 +975,9 @@ const styles = StyleSheet.create({
   photoBtnLabel: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
   colegaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   colegaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -933,18 +998,40 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginTop: 8,
   },
-  debugError: {
-    color: '#ff6b6b',
-    fontSize: 11,
-    marginTop: 8,
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.hair,
+  },
+  resultBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultBadgeTxt: { fontSize: 12, fontWeight: '800' },
+  resultSets: {
     fontFamily: Fonts.mono,
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  claimRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 14,
   },
   claimLink: {
     color: Colors.accent,
     fontSize: 13,
     fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 14,
+    lineHeight: 16,
   },
   footNote: {
     color: Colors.textFaint,

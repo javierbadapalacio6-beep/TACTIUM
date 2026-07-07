@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -93,7 +93,15 @@ export const CreateTeamsForClubScreen = ({
   const [newName, setNewName] = useState('');
   // Tipo de competición del equipo a añadir (mismo patrón client-side que
   // CreateTeamScreen: los presets escriben un valor canónico en league).
-  const [newComp, setNewComp] = useState<CompetitionKind>('federada');
+  const [newComp, setNewComp] = useState<CompetitionKind>(
+    club?.federation ? 'federada' : 'snp',
+  );
+  // La elección del club manda: con federación, los equipos la heredan
+  // (sin selector); sin federación, "Federada" no es una opción válida.
+  useEffect(() => {
+    if (club?.federation) setNewComp('federada');
+    else setNewComp((c) => (c === 'federada' ? 'snp' : c));
+  }, [club?.federation]);
   const [newCustomCourts, setNewCustomCourts] = useState(3);
   const [newCustomOrder, setNewCustomOrder] = useState(false);
   const [newLeague, setNewLeague] = useState('');
@@ -277,12 +285,23 @@ export const CreateTeamsForClubScreen = ({
               </View>
 
               <Text style={styles.miniLabel}>COMPETICIÓN</Text>
+              {club?.federation ? (
+                /* Federación elegida en el paso 1 → los equipos la heredan */
+                <View style={styles.inheritedComp}>
+                  <Text style={styles.inheritedCompText} numberOfLines={1}>
+                    Federada · {club.federation}
+                  </Text>
+                  <Text style={styles.inheritedCompHint}>
+                    HEREDADA DEL CLUB
+                  </Text>
+                </View>
+              ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipScrollContent}
               >
-                {COMPETITION_PRESETS.map((p) => {
+                {COMPETITION_PRESETS.filter((p) => p.id !== 'federada').map((p) => {
                   const sel = newComp === p.id;
                   return (
                     <Pressable
@@ -308,6 +327,7 @@ export const CreateTeamsForClubScreen = ({
                   );
                 })}
               </ScrollView>
+              )}
               <Text style={styles.formatHint}>{formatHint}</Text>
 
               {newComp === 'federada' ? (
@@ -685,6 +705,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1.4,
     fontWeight: '500',
+  },
+  inheritedComp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.bgRaised,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  inheritedCompText: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  inheritedCompHint: {
+    color: Colors.textFaint,
+    fontSize: 9,
+    letterSpacing: 1,
+    fontWeight: '700',
   },
   formatHint: {
     color: Colors.textFaint,

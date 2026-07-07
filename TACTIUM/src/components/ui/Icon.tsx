@@ -189,6 +189,97 @@ export const IconSearch = make(16, ({ color, strokeWidth }) => (
   </>
 ));
 
+// ── Iconos F8 (jugador/amistosos) — mismo lenguaje de trazo ─────────
+
+/** Pala de pádel con bola: el icono del amistoso. */
+export const IconRacket = make(20, ({ color, strokeWidth }) => (
+  <>
+    <Circle
+      cx="10"
+      cy="8.5"
+      r="5.5"
+      stroke={color}
+      strokeWidth={strokeWidth}
+    />
+    <Path
+      d="M13.9 12.6L18.5 18"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+    />
+    <Circle cx="8" cy="7" r="0.9" fill={color} />
+    <Circle cx="12" cy="7" r="0.9" fill={color} />
+    <Circle cx="10" cy="10" r="0.9" fill={color} />
+    <Circle cx="19" cy="6" r="2.4" stroke={color} strokeWidth={strokeWidth} />
+  </>
+));
+
+/** Ticket/código de partido. */
+export const IconTicket = make(18, ({ color, strokeWidth }) => (
+  <>
+    <Path
+      d="M4 8a2 2 0 002-2h12a2 2 0 002 2v2.5a1.5 1.5 0 000 3V16a2 2 0 00-2 2H6a2 2 0 00-2-2v-2.5a1.5 1.5 0 000-3V8z"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinejoin="round"
+    />
+    <Line
+      x1="14.5"
+      y1="7"
+      x2="14.5"
+      y2="17"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeDasharray="2 2.4"
+    />
+  </>
+));
+
+/** Regalo/invitación con premio. */
+export const IconGift = make(18, ({ color, strokeWidth }) => (
+  <>
+    <Rect
+      x="4"
+      y="9"
+      width="16"
+      height="4"
+      rx="1"
+      stroke={color}
+      strokeWidth={strokeWidth}
+    />
+    <Path
+      d="M6 13v6a1 1 0 001 1h10a1 1 0 001-1v-6M12 9v11"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M12 9C10.5 9 8 8.6 8 6.8 8 5.5 9 5 10 5c1.6 0 2 2.2 2 4zm0 0c1.5 0 4-.4 4-2.2C16 5.5 15 5 14 5c-1.6 0-2 2.2-2 4z"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinejoin="round"
+    />
+  </>
+));
+
+/** Eslabón: jugador vinculado a su cuenta. */
+export const IconLink = make(14, ({ color, strokeWidth }) => (
+  <>
+    <Path
+      d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1.2 1.2"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1.2-1.2"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+    />
+  </>
+));
+
 export const IconApple = ({ size = 18, color = '#000' }: IconProps) => (
   // viewBox 0 0 24 24 con el logo bien centrado y la hoja sin cortar.
   // El logo anterior tenía coordenadas negativas (la hoja) que el viewBox

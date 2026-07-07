@@ -247,6 +247,54 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-08",
+    title: "F8 \u00b7 El jugador suelto: registro sin c\u00f3digo de invitaci\u00f3n, probado de punta a punta (cuenta nueva \u2192 amistoso \u2192 canje \u2192 invitaci\u00f3n \u2192 equipo). Iconos propios en vez de emojis. PoC de an\u00e1lisis de v\u00eddeo: jugadores trackeables, bola no.",
+    changes: [
+      { type: "feat", text: "<strong>Modo jugador suelto completo (F8)</strong>. Carrusel de bienvenida con slide nuevo del jugador (04 \u00b7 TU JUEGO, con visual de stats animado); tarjeta <strong>\"Juego por mi cuenta\" (GRATIS)</strong> en la elecci\u00f3n de rol; Home propia (hero registrar amistoso + \u00daLTIMOS PARTIDOS con refresco al foco + canje + invitar); Stats en \u00e1mbito amistosos sin equipo; Perfil sin tarjeta de equipo ni suscripci\u00f3n." },
+
+      { type: "feat", text: "<strong>Los 3 caminos de salida del jugador suelto</strong>: (1) invitaci\u00f3n de capit\u00e1n/club \u2192 Canjear invitaci\u00f3n; (2) <strong>\"Crear un equipo o club\"</strong> en Perfil e Inicio \u2192 elecci\u00f3n en <strong>modo ampliaci\u00f3n</strong> (solo las 2 cards de gesti\u00f3n + \u2190 Volver); (3) volver a su modo con \"Juego por mi cuenta\". Sus amistosos y stats se conservan siempre (misma cuenta)." },
+
+      { type: "feat", text: "<strong>La cuenta recuerda su elecci\u00f3n</strong>: migraci\u00f3n <code>20260708_solo_mode.sql</code> APLICADA (columna en <code>profiles</code>). Arranque: con equipo \u2192 equipo; sin equipo pero con flag o amistosos \u2192 modo jugador directo; cuenta vac\u00eda \u2192 elecci\u00f3n. El flag local se limpia al cerrar sesi\u00f3n (no se hereda entre cuentas del mismo m\u00f3vil, bug detectado en pruebas)." },
+
+      { type: "fix", text: "<strong>Amistoso de cuenta nueva no contaba en stats</strong>: sin plantilla ni historial, <code>linkByName</code> no encontraba el user_id propio \u2192 ahora tu hueco se vincula SIEMPRE a tu cuenta. El partido hu\u00e9rfano se recuper\u00f3 canjeando su c\u00f3digo (de paso se valid\u00f3 el flujo de reclamo real)." },
+
+      { type: "feat", text: "<strong>Iconos propios en vez de emojis del sistema</strong>: 4 nuevos SVG en el set de la casa (pala de p\u00e1del, ticket, regalo, eslab\u00f3n) aplicados en Home suelto, atajos del capit\u00e1n, canje en Stats, badge \"vinculado\" y chips del Amistoso. Emojis solo en los mensajes de WhatsApp compartidos." },
+
+      { type: "decision", text: "<strong>PoC \"TACTIUM Video\" con partido real</strong> (22 min, m\u00f3vil tras el cristal, YOLOv8n ONNX + supervision, CPU): <strong>jugadores detectados y trackeados con IDs</strong> \u2192 mapas de calor/posicionamiento viables; <strong>bola 0 detecciones</strong> \u2192 har\u00eda falta modelo espec\u00edfico + GPU. Decisi\u00f3n: l\u00ednea futura, fuera de la ruta cr\u00edtica. Evidencia en <code>analisis-video/</code>." },
+
+      { type: "chore", text: "<strong>Prueba end-to-end del loop completada por Javier</strong>: cuenta nueva \u2192 bienvenida \u2192 jugador suelto \u2192 amistoso \u2192 canje de c\u00f3digo \u2192 invitaci\u00f3n del capit\u00e1n \u2192 equipo. Pendiente: commitear F8 (git no accesible en la sesi\u00f3n), Offer Codes, build EAS." },
+    ],
+  },
+  {
+    date: "2026-07-07",
+    title: "🚀 Sprint del plan de escalado COMPLETO (F1\u2013F7): amistosos con 3 modos, stats del jugador con pesta\u00f1a propia, c\u00f3digos de reclamo VIVOS en prod (migraciones aplicadas). La capa gratuita del jugador pasa de \"consultar la jornada\" a producto de retenci\u00f3n y adquisici\u00f3n.",
+    changes: [
+      { type: "docs", text: "<strong>📊 Plan de escalado + plan integral de producto</strong> como dashboards interactivos (<code>TACTIUM-plan-escalado.html</code> y <code>TACTIUM-plan-integral.html</code> en la carpeta ra\u00edz). Verificadas contra PDF oficial las normativas <strong>SNP / QSNP / SNP Seniors / LAPI</strong> (<code>docs/formatos-snp-verificados.md</code>). Hallazgo clave: LAPI es partner de Playtomic (canal cerrado) \u2192 el tiro comercial top-down es SNP." },
+
+      { type: "chore", text: "<strong>Repo saneado</strong>: rama del experimento Strava borrada (trabajo preservado en commits), la app restaurada al estado pre-Strava y TODO el sprint en rama nueva para poder descartarlo si no convence." },
+
+      { type: "feat", text: "<strong>F1 \u00b7 Selector de competici\u00f3n</strong> al crear equipo (Federada / SNP / SNP Seniors / LAPI / Personalizada 2\u20135 partidos con o sin orden) en las 3 v\u00edas de creaci\u00f3n; federaci\u00f3n ahora OPCIONAL al crear club. Motor en <code>federations.ts</code> con los formatos verificados: SNP 5 partidos con <strong>puntos ponderados 3-3-2-2-2</strong> y orden autom\u00e1tico por fuerza de pareja; Seniors 3; QSNP 1; LAPI 3 sin orden (sorteo)." },
+
+      { type: "feat", text: "<strong>F2 \u00b7 Marcador ponderado en jornada</strong> (\"Marcador en puntos: X \u2013 Y\") con el esquema de la competici\u00f3n, y rule box adaptado." },
+
+      { type: "feat", text: "<strong>F3+F7 \u00b7 Compartir con marca</strong>: tarjeta de alineaci\u00f3n (<code>LineupShareCard</code>) y <strong>foto del partido estilo Strava</strong> (<code>PhotoShareCard</code>, c\u00e1mara o galer\u00eda) con resultado y marca superpuestos. La imagen compuesta se activa con el pr\u00f3ximo build (view-shot); hasta entonces fallback transparente foto+texto. Todos los enlaces/QR apuntan a la <strong>descarga directa</strong> (<code>DOWNLOAD_URL</code> centralizado en <code>referral.ts</code>)." },
+
+      { type: "feat", text: "<strong>F4 \u00b7 🤝 Amistosos con 3 modos</strong>: <em>colegas</em> (nombres libres, solo t\u00fa necesitas TACTIUM), <em>entreno</em> (4 de plantilla, suma a ambos lados) y <em>equipos</em> (1\u20135 partidos vs otro club, solo capit\u00e1n/club). Slots individuales por jugador, chips de plantilla y colegas frecuentes, tu nombre pre-rellenado, marcador en sets." },
+
+      { type: "feat", text: "<strong>F5 \u00b7 Pesta\u00f1a Stats propia</strong> en la barra inferior: n\u00fameros de liga del jugador (PJ, V\u2013D, %, sets, por pista, mejor compa\u00f1ero, rachas, \u00faltimos 5), <strong>ranking interno de plantilla</strong>, filtros en una l\u00ednea (Activa/Todas/Amistosos \u2016 Yo/Plantilla) y \u00e1mbito <strong>Amistosos</strong> con hero, grid y lista de RESULTADOS (rival, compa\u00f1ero, sets desde tu perspectiva, V/D)." },
+
+      { type: "feat", text: "<strong>F6 \u00b7 Card \"Tu partido\"</strong> en la Home del jugador (pista, compa\u00f1ero, rival, hora, Local/Visitante) + atajo Amistoso para todos + <strong>\"Invita a un capit\u00e1n\"</strong> con mensaje listo (preparado para Offer Codes: <code>CAPTAIN_OFFER_CODE</code>)." },
+
+      { type: "feat", text: "<strong>🎟 C\u00f3digos de reclamo VIVOS en producci\u00f3n</strong>. Migraciones <code>20260707_claim_codes.sql</code> (c\u00f3digo por partido con backfill de los existentes + RPCs de canje) y <code>20260707_player_birthdate.sql</code> <strong>aplicadas en Supabase</strong> y verificadas. Loop completo: juegas con un colega sin app \u2192 invitaci\u00f3n por WhatsApp con descarga + c\u00f3digo \u2192 se registra \u2192 canjea en Stats eligiendo su nombre \u2192 <strong>sus partidos le esperan</strong> \u2192 queda como colega 🔗 y los siguientes se vinculan solos. Prueba en real ma\u00f1ana." },
+
+      { type: "fix", text: "<strong>Crash del dev client viejo al arrancar</strong>: con TurboModules, el import est\u00e1tico de un m\u00f3dulo nativo que el binario no trae (<code>RNViewShot</code>) tumba la app AL EVALUAR el bundle \u2192 carga perezosa con <code>require()</code> protegido (<code>captureViewSafe</code>). <code>react-native-qrcode-svg</code> ELIMINADA (no justificaba el riesgo en ruta cr\u00edtica; la tarjeta degrada a URL en texto; el QR volver\u00e1 con el build nuevo)." },
+
+      { type: "fix", text: "<strong>\"Cannot read property 'rest' of undefined\" en Stats\u2192Amistosos</strong>: guardar <code>supabase.from</code>/<code>rpc</code> en una variable les hace perder su <code>this</code> interno \u2192 <code>.bind(supabase)</code> en <code>casualMatches.ts</code>. Tambi\u00e9n: refresco al enfocar la pesta\u00f1a (<code>useFocusEffect</code>), chips que ya no parten \"Amistosos\" en dos l\u00edneas, y padding para que el contenido no quede bajo la barra de navegaci\u00f3n." },
+
+      { type: "chore", text: "<strong>Pendientes</strong>: commit del \u00faltimo fix (git no accesible en la sesi\u00f3n), campa\u00f1a de Offer Codes en App Store Connect (rellenar <code>CAPTAIN_OFFER_CODE</code>), build EAS nuevo (foto compuesta + c\u00e1mara + QR), y al aprobar Google Play cambiar <code>DOWNLOAD_URL</code> por enlace inteligente." },
+    ],
+  },
+  {
     date: "2026-06-23",
     title: "🍎 1.0.2 APROBADA y live en iOS (Android en prueba cerrada). Verificadas las notificaciones en real (jornada/alineación avisan a los jugadores). 3 OTAs a production: toggle de avisos, ocultar suscripción a jugadores y arreglo del aviso de confirmación de email.",
     changes: [

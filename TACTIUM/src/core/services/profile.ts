@@ -34,6 +34,42 @@ export async function setNotificationsEnabled(
 }
 
 /**
+ * Persiste en la CUENTA la elección "jugador suelto" (F8). Tolerante a
+ * que la migración 20260708_solo_mode.sql no esté aplicada (no lanza).
+ */
+export async function setSoloModeRemote(v: boolean): Promise<void> {
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    const userId = auth.user?.id;
+    if (!userId) return;
+    await supabase
+      .from('profiles')
+      .update({ solo_mode: v } as never)
+      .eq('id', userId);
+  } catch {
+    // best-effort
+  }
+}
+
+/** Lee el flag de jugador suelto de la cuenta (false si no existe aún). */
+export async function getSoloModeRemote(): Promise<boolean> {
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    const userId = auth.user?.id;
+    if (!userId) return false;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) return false;
+    return Boolean((data as { solo_mode?: boolean } | null)?.solo_mode);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Elimina la cuenta del user logueado. Llama a la RPC SECURITY DEFINER
  * `delete_my_account` que:
  *  - Borra SIEMPRE (Apple 5.1.1(v): la eliminación debe poder completarse).

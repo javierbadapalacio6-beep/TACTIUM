@@ -108,7 +108,7 @@ export const LineupShareCard: React.FC<Props> = ({
       {/* Footer con QR de descarga */}
       <View style={styles.footer}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.footerTitle}>La app del capitán de pádel</Text>
+          <Text style={styles.footerTitle}>La app de tu equipo de pádel</Text>
           <Text style={styles.footerUrl}>tactium.io</Text>
         </View>
         {QRCodeSafe ? (

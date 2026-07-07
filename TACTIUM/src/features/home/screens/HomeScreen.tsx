@@ -32,6 +32,8 @@ import {
   IconPin,
   NeonDot,
   TeamSwitcher,
+  IconGift,
+  IconRacket,
 } from '@components/ui';
 import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -459,17 +461,15 @@ export const HomeScreen = ({
           ) : null}
           {canEdit ? (
             <ActionRow
-              icon={<IconShare size={20} color={Colors.accent} />}
+              icon={<IconGift size={20} color={Colors.accent} />}
               title="Invita a un capitán"
-              value="🎁"
               hint="¿Conoces a otro capitán? Regálale dejar el Excel"
               onPress={inviteCaptain}
             />
           ) : null}
           <ActionRow
-            icon={<IconCourt size={20} color={Colors.accent} />}
+            icon={<IconRacket size={20} color={Colors.accent} />}
             title="Amistoso"
-            value="🤝"
             hint={
               canEdit
                 ? 'Registra un equipo vs equipo y compártelo'
@@ -543,14 +543,15 @@ const StatChip: React.FC<{
 const ActionRow: React.FC<{
   icon: React.ReactNode;
   title: string;
-  value: string;
+  /** Pill de la derecha; vacío u omitido = no se pinta (sin recuadro). */
+  value?: string;
   hint: string;
   onPress: () => void;
 }> = ({ icon, title, value, hint, onPress }) => (
   <Pressable
     onPress={onPress}
     accessibilityRole="button"
-    accessibilityLabel={`${title}. ${value}. ${hint}`}
+    accessibilityLabel={`${title}. ${value ?? ''}. ${hint}`}
     style={({ pressed }) => [
       styles.actionRow,
       pressed && { opacity: 0.85 },
@@ -561,9 +562,11 @@ const ActionRow: React.FC<{
       <Text style={styles.actionTitle}>{title}</Text>
       <Text style={styles.actionHint}>{hint}</Text>
     </View>
-    <View style={styles.actionPill}>
-      <Text style={styles.actionPillText}>{value}</Text>
-    </View>
+    {value ? (
+      <View style={styles.actionPill}>
+        <Text style={styles.actionPillText}>{value}</Text>
+      </View>
+    ) : null}
     <IconChevron size={14} color={Colors.textFaint} />
   </Pressable>
 );

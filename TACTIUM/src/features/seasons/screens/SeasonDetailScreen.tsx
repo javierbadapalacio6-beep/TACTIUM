@@ -27,8 +27,7 @@ import {
   dateToIsoDate,
   dateToIsoTime,
   isoDateToDate,
-  isoTimeToDate,
-} from '@components/ui';
+  isoTimeToDate, IconCamera } from '@components/ui';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
 import * as LineupsApi from '@core/services/lineups';
@@ -278,8 +277,7 @@ export const SeasonDetailScreen = ({
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <Text style={styles.scanBtnIcon}>📷</Text>
-                <Text style={styles.scanBtnLabel}>Escanear</Text>
+                <IconCamera size={16} color={Colors.accent} />
               </Pressable>
               <Pressable
                 onPress={openAddMatchday}
@@ -1037,18 +1035,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scanBtn: {
+    width: 36,
     height: 36,
-    paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: Colors.accent10,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    flexDirection: 'row',
+    borderColor: Colors.accent40,
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
   },
-  scanBtnIcon: { fontSize: 14 },
-  scanBtnLabel: { color: Colors.text, fontSize: 13, fontWeight: '500' },
 
   scroll: { paddingTop: 20 },
 
