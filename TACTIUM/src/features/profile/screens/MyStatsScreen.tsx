@@ -21,9 +21,11 @@ import { useAuthStore } from '@store/authStore';
 import { fetchMyPlayer, type Player } from '@core/services/players';
 import {
   fetchMyCasualStats,
+  fetchMyFrequentPartners,
   getClaimableParticipants,
   claimCasualParticipant,
   type MyCasualStats,
+  type FrequentPartner,
 } from '@core/services/casualMatches';
 import { fetchSeasons, type Season } from '@core/services/seasons';
 import {
@@ -64,6 +66,9 @@ export const MyStatsScreen = () => {
   const [view, setView] = useState<'yo' | 'plantilla'>('yo');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [casual, setCasual] = useState<MyCasualStats | null>(null);
+  // Mis colegas: la gente con la que has jugado amistosos. 🔗 = tiene
+  // cuenta vinculada (sus partidos le cuentan); sin 🔗 = invítale.
+  const [partners, setPartners] = useState<FrequentPartner[]>([]);
   const photoCardRef = React.useRef<View>(null);
 
   const load = useCallback(async () => {
@@ -90,6 +95,9 @@ export const MyStatsScreen = () => {
       fetchMyCasualStats(userId)
         .then(setCasual)
         .catch(() => setCasual(null));
+      fetchMyFrequentPartners(userId)
+        .then(setPartners)
+        .catch(() => setPartners([]));
     } catch (e) {
       console.warn('MyStats load', e);
     } finally {
@@ -500,6 +508,52 @@ export const MyStatsScreen = () => {
               </>
             ) : null}
 
+            {/* Mis colegas: con quién juegas y su estado de vínculo */}
+            {partners.length > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>MIS COLEGAS</Text>
+                <View style={styles.card}>
+                  {partners.slice(0, 8).map((fp) => (
+                    <View key={fp.name.toLowerCase()} style={styles.colegaRow}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.rankName} numberOfLines={1}>
+                          {fp.name}
+                        </Text>
+                        <Text style={styles.rankMeta}>
+                          {fp.times}{' '}
+                          {fp.times === 1
+                            ? 'partido juntos'
+                            : 'partidos juntos'}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.colegaBadge,
+                          fp.user_id
+                            ? styles.colegaBadgeOn
+                            : styles.colegaBadgeOff,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.colegaBadgeTxt,
+                            { color: fp.user_id ? Colors.accent : Colors.textFaint },
+                          ]}
+                        >
+                          {fp.user_id ? '🔗 vinculado' : 'sin app'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.colegaHint}>
+                  Se añaden solos al jugar contigo. 🔗 = sus partidos ya
+                  cuentan en sus stats; "sin app": invítale al compartir el
+                  próximo partido.
+                </Text>
+              </>
+            ) : null}
+
             {/* Compartir (solo con números de liga) */}
             {stats && stats.played > 0 ? (
               <>
@@ -787,6 +841,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   photoBtnLabel: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
+  colegaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  colegaBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  colegaBadgeOn: {
+    backgroundColor: Colors.accent15,
+    borderColor: Colors.accent40,
+  },
+  colegaBadgeOff: {
+    backgroundColor: Colors.bgRaised,
+    borderColor: Colors.hairStrong,
+  },
+  colegaBadgeTxt: { fontSize: 11, fontWeight: '700' },
+  colegaHint: {
+    color: Colors.textFaint,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 8,
+  },
   claimLink: {
     color: Colors.accent,
     fontSize: 13,
