@@ -23,6 +23,7 @@ import {
   fetchLeagueStatsBundle,
   computePlayerLeagueStats,
   type PlayerLeagueStats,
+  type LeagueStatsBundle,
 } from '@core/services/playerStats';
 
 // Mis estadísticas (F5a): números de LIGA del jugador, calculados de las
@@ -36,6 +37,7 @@ export const MyStatsScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const team = useTeamStore((s) => s.team);
+  const players = useTeamStore((s) => s.players);
   const userId = useAuthStore((s) => s.user?.id ?? null);
 
   const [scope, setScope] = useState<Scope>('activa');
@@ -43,6 +45,10 @@ export const MyStatsScreen = () => {
   const [me, setMe] = useState<Player | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [stats, setStats] = useState<PlayerLeagueStats | null>(null);
+  const [bundle, setBundle] = useState<LeagueStatsBundle | null>(null);
+  // Vista: mis números o ranking interno de la plantilla (pique sano =
+  // retención). El ranking usa el MISMO bundle, cero consultas extra.
+  const [view, setView] = useState<'yo' | 'plantilla'>('yo');
 
   const load = useCallback(async () => {
     if (!team || !userId) {
@@ -57,14 +63,13 @@ export const MyStatsScreen = () => {
       ]);
       setMe(player);
       setSeasons(allSeasons);
-      if (player) {
-        const ids =
-          scope === 'activa'
-            ? allSeasons.filter((s) => s.active).map((s) => s.id)
-            : allSeasons.map((s) => s.id);
-        const bundle = await fetchLeagueStatsBundle(ids);
-        setStats(computePlayerLeagueStats(player.id, bundle));
-      }
+      const ids =
+        scope === 'activa'
+          ? allSeasons.filter((s) => s.active).map((s) => s.id)
+          : allSeasons.map((s) => s.id);
+      const b = await fetchLeagueStatsBundle(ids);
+      setBundle(b);
+      setStats(player ? computePlayerLeagueStats(player.id, b) : null);
     } catch (e) {
       console.warn('MyStats load', e);
     } finally {
@@ -101,6 +106,19 @@ export const MyStatsScreen = () => {
       // cancelado
     }
   };
+
+  const ranking = useMemo(() => {
+    if (!bundle) return [];
+    return players
+      .map((pl) => ({ pl, s: computePlayerLeagueStats(pl.id, bundle) }))
+      .filter((r) => r.s.played > 0)
+      .sort(
+        (a, b) =>
+          (b.s.winRate ?? 0) - (a.s.winRate ?? 0) ||
+          b.s.won - a.s.won ||
+          b.s.played - a.s.played,
+      );
+  }, [players, bundle]);
 
   const hasSeasons =
     scope === 'activa' ? seasons.some((s) => s.active) : seasons.length > 0;
@@ -161,10 +179,90 @@ export const MyStatsScreen = () => {
           })}
         </View>
 
+        <View style={[styles.scopeRow, { marginTop: 8 }]}>
+          {(
+            [
+              { id: 'yo', label: 'Mis números' },
+              { id: 'plantilla', label: 'Ranking plantilla' },
+            ] as const
+          ).map((v) => {
+            const sel = view === v.id;
+            return (
+              <Pressable
+                key={v.id}
+                onPress={() => setView(v.id)}
+                style={[
+                  styles.scopeChip,
+                  sel && {
+                    backgroundColor: Colors.accent,
+                    borderColor: Colors.accent,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.scopeChipText,
+                    { color: sel ? '#000' : Colors.text },
+                  ]}
+                >
+                  {v.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         {loading ? (
           <View style={styles.loader}>
             <ActivityIndicator color={Colors.accent} />
           </View>
+        ) : view === 'plantilla' ? (
+          ranking.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>Sin partidos todavía</Text>
+              <Text style={styles.emptyText}>
+                El ranking de la plantilla se llena solo con las jornadas de
+                liga que tengan alineación y resultado.
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.card, { marginTop: 18 }]}>
+              {ranking.map((r, i) => {
+                const isMe = me != null && r.pl.id === me.id;
+                return (
+                  <View key={r.pl.id} style={styles.rankRow}>
+                    <Text
+                      style={[
+                        styles.rankPos,
+                        i === 0 && { color: Colors.accent },
+                      ]}
+                    >
+                      {i + 1}
+                    </Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[
+                          styles.rankName,
+                          isMe && { color: Colors.accent },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {r.pl.name}
+                        {isMe ? '  ·  tú' : ''}
+                      </Text>
+                      <Text style={styles.rankMeta}>
+                        {r.s.played} PJ · {r.s.won}V–{r.s.lost}D
+                        {r.s.currentStreak >= 3
+                          ? `  ·  🔥${r.s.currentStreak}`
+                          : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.rankPct}>{r.s.winRate}%</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )
         ) : !me ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>Aún no estás vinculado</Text>
@@ -443,6 +541,23 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
+  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rankPos: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 13,
+    fontWeight: '700',
+    width: 22,
+    textAlign: 'center',
+  },
+  rankName: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  rankMeta: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  rankPct: { color: Colors.text, fontSize: 16, fontWeight: '800' },
   courtRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   courtLabel: {
     fontFamily: Fonts.mono,
