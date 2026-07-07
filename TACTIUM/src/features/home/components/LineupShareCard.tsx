@@ -1,6 +1,23 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+// QR con carga PROTEGIDA: si la dependencia falta o es incompatible en
+// este entorno, mostramos la URL en texto en vez de tumbar la app
+// (LineupShareCard se importa desde JornadaScreen = ruta crítica).
+type QRCodeProps = {
+  value: string;
+  size?: number;
+  color?: string;
+  backgroundColor?: string;
+};
+let QRCodeSafe: React.ComponentType<QRCodeProps> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  QRCodeSafe = (
+    require('react-native-qrcode-svg') as { default: React.ComponentType<QRCodeProps> }
+  ).default;
+} catch {
+  QRCodeSafe = null;
+}
 
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
@@ -94,14 +111,16 @@ export const LineupShareCard: React.FC<Props> = ({
           <Text style={styles.footerTitle}>La app del capitán de pádel</Text>
           <Text style={styles.footerUrl}>tactium.io</Text>
         </View>
-        <View style={styles.qrWrap}>
-          <QRCode
-            value={APP_URL}
-            size={52}
-            color="#0B0F14"
-            backgroundColor="#FFFFFF"
-          />
-        </View>
+        {QRCodeSafe ? (
+          <View style={styles.qrWrap}>
+            <QRCodeSafe
+              value={APP_URL}
+              size={52}
+              color="#0B0F14"
+              backgroundColor="#FFFFFF"
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
