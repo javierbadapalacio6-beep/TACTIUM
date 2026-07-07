@@ -116,6 +116,7 @@ export type RootStackParamList = {
   Subscription: undefined;
   ClubBilling: undefined;
   MyData: undefined;
+  MyStats: undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

@@ -678,6 +678,10 @@ export const ProfileScreen = () => {
         <SettingsList
           items={[
             {
+              label: 'Mis estadísticas',
+              onPress: () => navigation.navigate('MyStats'),
+            },
+            {
               label: 'Mis datos',
               onPress: () => navigation.navigate('MyData'),
             },
