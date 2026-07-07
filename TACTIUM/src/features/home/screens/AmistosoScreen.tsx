@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack } from '@components/ui';
 import { useTeamStore, selectIsPlayer } from '@store/teamStore';
+import { useAuthStore } from '@store/authStore';
 import {
   createCasualMatch,
   type CasualParticipant,
@@ -154,13 +155,21 @@ export const AmistosoScreen = () => {
   const players = useTeamStore((s) => s.players);
   const isPlayer = useTeamStore(selectIsPlayer);
 
-  // Dos modos: 'colegas' = UN partido entre amigos (default para jugador);
-  // 'equipos' = enfrentamiento equipo vs equipo de 1-5 partidos (default
-  // para capitán/admin).
-  const [mode, setMode] = useState<'colegas' | 'equipos'>(
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+
+  // Tres modos:
+  //  · 'colegas'  → partido con amigos; solo el creador tiene TACTIUM.
+  //  · 'entreno'  → interno del equipo; los 4 son de la plantilla y sus
+  //                 stats suman a ambos lados.
+  //  · 'equipos'  → enfrentamiento 1-5 partidos contra otro club. Lo
+  //                 registra el capitán/admin — los jugadores no lo ven.
+  const [mode, setMode] = useState<'colegas' | 'entreno' | 'equipos'>(
     isPlayer ? 'colegas' : 'equipos',
   );
   const isColegas = mode === 'colegas';
+  const isEntreno = mode === 'entreno';
+  const isEquipos = mode === 'equipos';
+  const isSingle = !isEquipos; // colegas y entreno: un solo partido
 
   const [rivalTeam, setRivalTeam] = useState('');
   const [partidos, setPartidos] = useState<PartidoInput[]>([emptyPartido()]);
@@ -178,10 +187,25 @@ export const AmistosoScreen = () => {
       return next;
     });
 
-  const switchMode = (m: 'colegas' | 'equipos') => {
+  const switchMode = (m: 'colegas' | 'entreno' | 'equipos') => {
     setMode(m);
-    if (m === 'colegas') setCount(1);
+    if (m !== 'equipos') setCount(1);
   };
+
+  // En colegas/entreno, tu propio nombre va pre-rellenado en el primer
+  // hueco (eres quien registra el partido → tu vínculo está garantizado).
+  const myName = useMemo(
+    () => players.find((pl) => pl.user_id === userId)?.name ?? null,
+    [players, userId],
+  );
+  useEffect(() => {
+    if (!myName || mode === 'equipos') return;
+    setPartidos((prev) =>
+      prev[0] && !prev[0].a1.trim()
+        ? prev.map((p, i) => (i === 0 ? { ...p, a1: myName } : p))
+        : prev,
+    );
+  }, [myName, mode]);
 
   const update = (i: number, patch: Partial<PartidoInput>) =>
     setPartidos((prev) =>
@@ -207,7 +231,7 @@ export const AmistosoScreen = () => {
   }, [partidos]);
 
   const shareText = useMemo(() => {
-    const headline = isColegas
+    const headline = isSingle
       ? `${ourStr(partidos[0]) || 'Nosotros'} ${marcador.us} – ${marcador.them} ${
           rivalStr(partidos[0]) || 'Rival'
         } (${marcador.unit})`
@@ -215,7 +239,7 @@ export const AmistosoScreen = () => {
           rivalTeam || 'Rival'
         } (${marcador.unit})`;
     const lines = [
-      `🎾 *TACTIUM · Amistoso*`,
+      `🎾 *TACTIUM · ${isEntreno ? 'Entreno' : 'Amistoso'}*`,
       headline,
       ``,
       ...partidos
@@ -232,7 +256,7 @@ export const AmistosoScreen = () => {
       `Organiza tus amistosos con TACTIUM · tactium.io`,
     ];
     return lines.join('\n');
-  }, [team, rivalTeam, partidos, marcador, isColegas]);
+  }, [team, rivalTeam, partidos, marcador, isSingle, isEntreno]);
 
   const validPartidos = partidos.filter(
     (p) => setsToNumeric(p.sets).length > 0,
@@ -256,7 +280,9 @@ export const AmistosoScreen = () => {
     if (!p) return;
     if (!p.a1.trim()) update(i, { a1: name });
     else if (!p.a2.trim()) update(i, { a2: name });
-    else update(i, { a2: name }); // ambos llenos → sustituye al 2º
+    else if (isEntreno && !p.b1.trim()) update(i, { b1: name });
+    else if (isEntreno && !p.b2.trim()) update(i, { b2: name });
+    else update(i, { a2: name }); // llenos → sustituye al 2º propio
   };
 
   const handleSave = async () => {
@@ -279,11 +305,21 @@ export const AmistosoScreen = () => {
             user_id: linkByName(p.a1),
           },
           { side: 0, slot: 1, name: p.a2.trim(), user_id: linkByName(p.a2) },
-          { side: 1, slot: 0, name: p.b1.trim() || (rivalTeam || 'Rival') },
-          { side: 1, slot: 1, name: p.b2.trim() },
+          {
+            side: 1,
+            slot: 0,
+            name: p.b1.trim() || (rivalTeam || 'Rival'),
+            user_id: isEntreno ? linkByName(p.b1) : null,
+          },
+          {
+            side: 1,
+            slot: 1,
+            name: p.b2.trim(),
+            user_id: isEntreno ? linkByName(p.b2) : null,
+          },
         ];
         await createCasualMatch({
-          type: 'amistoso',
+          type: isEntreno ? 'entreno' : 'amistoso',
           sets: setsToNumeric(p.sets),
           participants,
           visibility: 'public',
@@ -327,14 +363,14 @@ export const AmistosoScreen = () => {
     if (uri) setPhotoUri(uri);
   };
 
-  const photoTitle = isColegas
+  const photoTitle = isSingle
     ? `${ourStr(partidos[0]) || 'Nosotros'} ${marcador.us}–${marcador.them} ${
         rivalStr(partidos[0]) || 'Rival'
       }`
     : `${team?.name ?? 'Nosotros'} ${marcador.us}–${marcador.them} ${
         rivalTeam || 'Rival'
       }`;
-  const photoDetail = isColegas
+  const photoDetail = isSingle
     ? setsToString(partidos[0]?.sets ?? [])
     : `${validPartidos.length} ${
         validPartidos.length === 1 ? 'partido' : 'partidos'
@@ -359,21 +395,30 @@ export const AmistosoScreen = () => {
         </Pressable>
 
         <Text style={styles.eyebrow}>
-          {isColegas ? 'AMISTOSO · ENTRE COLEGAS' : 'AMISTOSO · EQUIPO VS EQUIPO'}
+          {isEntreno
+            ? 'AMISTOSO · ENTRENAMIENTO'
+            : isColegas
+              ? 'AMISTOSO · ENTRE COLEGAS'
+              : 'AMISTOSO · EQUIPO VS EQUIPO'}
         </Text>
         <Text style={styles.title}>Registrar amistoso</Text>
         <Text style={styles.lede}>
-          {isColegas
-            ? 'Un partido entre amigos: cuenta como amistoso y no afecta a tu liga.'
-            : 'Se juega hoy, cuenta como amistoso y no afecta a tu liga. Comparte el resumen con el equipo rival al terminar.'}
+          {isEntreno
+            ? 'Partido interno del equipo: los cuatro son de la plantilla y suma en las stats de todos los vinculados.'
+            : isColegas
+              ? 'Un partido entre amigos: cuenta como amistoso y no afecta a tu liga.'
+              : 'Se juega hoy, cuenta como amistoso y no afecta a tu liga. Comparte el resumen con el equipo rival al terminar.'}
         </Text>
 
         <View style={styles.countRow}>
           {(
             [
-              { id: 'colegas', label: 'Entre colegas' },
-              { id: 'equipos', label: 'Equipo vs equipo' },
-            ] as const
+              { id: 'colegas' as const, label: 'Colegas' },
+              { id: 'entreno' as const, label: 'Entreno' },
+              ...(isPlayer
+                ? []
+                : [{ id: 'equipos' as const, label: 'Equipos' }]),
+            ]
           ).map((m) => {
             const sel = mode === m.id;
             return (
@@ -403,7 +448,7 @@ export const AmistosoScreen = () => {
           })}
         </View>
 
-        {!isColegas ? (
+        {isEquipos ? (
           <View style={styles.section}>
             <Field
               label="EQUIPO RIVAL"
@@ -445,11 +490,15 @@ export const AmistosoScreen = () => {
 
         {partidos.map((p, i) => (
           <View key={i} style={styles.section}>
-            {!isColegas ? (
+            {isEquipos ? (
               <Text style={styles.partidoLabel}>PARTIDO {i + 1}</Text>
             ) : null}
             <Text style={styles.fieldLabel}>
-              {isColegas ? 'TU PAREJA (TÚ Y TU COMPAÑERO)' : 'NUESTRA PAREJA'}
+              {isEntreno
+                ? 'PAREJA A'
+                : isColegas
+                  ? 'TU PAREJA (TÚ Y TU COMPAÑERO)'
+                  : 'NUESTRA PAREJA'}
             </Text>
             <View style={styles.slotPairRow}>
               <TextInput
@@ -488,10 +537,13 @@ export const AmistosoScreen = () => {
               </ScrollView>
             ) : null}
             <Text style={styles.guestHint}>
-              Toca un chip de tu plantilla (🔗 suma en sus stats) o escribe
-              cualquier nombre: colegas de fuera del equipo también valen.
+              {isEntreno
+                ? 'Toca los chips para colocar a los cuatro: rellenan Pareja A y luego Pareja B. Los 🔗 suman en sus stats.'
+                : 'Toca un chip de tu plantilla (🔗 suma en sus stats) o escribe cualquier nombre: colegas de fuera también valen.'}
             </Text>
-            <Text style={styles.fieldLabel}>PAREJA RIVAL</Text>
+            <Text style={styles.fieldLabel}>
+              {isEntreno ? 'PAREJA B' : 'PAREJA RIVAL'}
+            </Text>
             <View style={styles.slotPairRow}>
               <TextInput
                 style={[styles.input, styles.slotInput]}
@@ -516,7 +568,7 @@ export const AmistosoScreen = () => {
         {/* Marcador global */}
         <View style={styles.scoreCard}>
           <Text style={styles.scoreTeams} numberOfLines={1}>
-            {isColegas
+            {isSingle
               ? `${ourStr(partidos[0]) || 'Nosotros'} · ${rivalStr(partidos[0]) || 'Rival'}`
               : `${team?.name ?? 'Nosotros'} · ${rivalTeam || 'Rival'}`}
           </Text>
