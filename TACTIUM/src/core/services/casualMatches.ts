@@ -23,6 +23,76 @@ export type CreateCasualMatchInput = {
   participants: CasualParticipant[];
 };
 
+// ── Lectura: mis amistosos (F5b) ────────────────────────────────────
+// Los tipos generados aún no incluyen estas tablas → cast puntual del
+// query builder. RLS permite leer; filtramos por participación propia.
+
+type AnyFrom = (table: string) => {
+  select: (cols: string) => {
+    eq: (
+      col: string,
+      val: string,
+    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+    in: (
+      col: string,
+      vals: string[],
+    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  };
+};
+
+export interface MyCasualStats {
+  played: number;
+  won: number;
+  lost: number;
+  winRate: number | null;
+}
+
+/**
+ * Estadísticas de amistosos del usuario: partidos donde figura como
+ * participante VINCULADO (user_id). Los registrados como texto libre
+ * no cuentan — por eso el picker de plantilla importa.
+ */
+export async function fetchMyCasualStats(
+  userId: string,
+): Promise<MyCasualStats> {
+  const from = supabase.from as unknown as AnyFrom;
+
+  const { data: partsRaw, error: e1 } = await from(
+    'casual_match_participants',
+  )
+    .select('match_id, side')
+    .eq('user_id', userId);
+  if (e1) throw new Error(e1.message);
+  const parts = (partsRaw ?? []) as { match_id: string; side: number }[];
+  if (parts.length === 0) return { played: 0, won: 0, lost: 0, winRate: null };
+
+  const ids = [...new Set(parts.map((p) => p.match_id))];
+  const { data: matchesRaw, error: e2 } = await from('casual_matches')
+    .select('id, winner_side')
+    .in('id', ids);
+  if (e2) throw new Error(e2.message);
+  const winnerById = new Map(
+    ((matchesRaw ?? []) as { id: string; winner_side: number | null }[]).map(
+      (m) => [m.id, m.winner_side],
+    ),
+  );
+
+  let played = 0;
+  let won = 0;
+  for (const p of parts) {
+    const w = winnerById.get(p.match_id);
+    if (w == null) continue; // sin ganador (empate/incompleto) no computa
+    played++;
+    if (w === p.side) won++;
+  }
+  return {
+    played,
+    won,
+    lost: played - won,
+    winRate: played > 0 ? Math.round((won / played) * 100) : null,
+  };
+}
+
 export async function createCasualMatch(
   input: CreateCasualMatchInput,
 ): Promise<string> {

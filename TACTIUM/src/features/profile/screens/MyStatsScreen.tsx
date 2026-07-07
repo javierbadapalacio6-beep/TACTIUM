@@ -18,6 +18,10 @@ import { IconBack } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { fetchMyPlayer, type Player } from '@core/services/players';
+import {
+  fetchMyCasualStats,
+  type MyCasualStats,
+} from '@core/services/casualMatches';
 import { fetchSeasons, type Season } from '@core/services/seasons';
 import {
   PhotoShareCard,
@@ -55,6 +59,7 @@ export const MyStatsScreen = () => {
   // retención). El ranking usa el MISMO bundle, cero consultas extra.
   const [view, setView] = useState<'yo' | 'plantilla'>('yo');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [casual, setCasual] = useState<MyCasualStats | null>(null);
   const photoCardRef = React.useRef<View>(null);
 
   const load = useCallback(async () => {
@@ -77,6 +82,10 @@ export const MyStatsScreen = () => {
       const b = await fetchLeagueStatsBundle(ids);
       setBundle(b);
       setStats(player ? computePlayerLeagueStats(player.id, b) : null);
+      // Amistosos vinculados (F5b): independientes de la temporada.
+      fetchMyCasualStats(userId)
+        .then(setCasual)
+        .catch(() => setCasual(null));
     } catch (e) {
       console.warn('MyStats load', e);
     } finally {
@@ -397,6 +406,25 @@ export const MyStatsScreen = () => {
               </>
             ) : null}
 
+            {/* Amistosos vinculados */}
+            {casual && casual.played > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>AMISTOSOS</Text>
+                <View style={[styles.card, styles.partnerCard]}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.partnerName}>
+                      {casual.played}{' '}
+                      {casual.played === 1 ? 'partido' : 'partidos'}
+                    </Text>
+                    <Text style={styles.partnerMeta}>
+                      {casual.won}V–{casual.lost}D
+                    </Text>
+                  </View>
+                  <Text style={styles.partnerPct}>{casual.winRate}%</Text>
+                </View>
+              </>
+            ) : null}
+
             {/* Compartir */}
             {photoUri && stats ? (
               <View style={{ alignItems: 'center', marginTop: 20 }}>
@@ -452,8 +480,8 @@ export const MyStatsScreen = () => {
             </Pressable>
 
             <Text style={styles.footNote}>
-              Solo partidos de liga con resultado. Los amistosos contarán
-              pronto.
+              Liga: partidos con alineación y resultado. Amistosos: solo los
+              registrados eligiéndote de la plantilla (chip 🔗).
             </Text>
           </>
         )}

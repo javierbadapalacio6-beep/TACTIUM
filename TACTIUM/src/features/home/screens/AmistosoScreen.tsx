@@ -137,6 +137,7 @@ export const AmistosoScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const team = useTeamStore((s) => s.team);
+  const players = useTeamStore((s) => s.players);
   const isPlayer = useTeamStore(selectIsPlayer);
 
   // Dos modos: 'colegas' = UN partido entre amigos (default para jugador);
@@ -223,6 +224,27 @@ export const AmistosoScreen = () => {
     (p) => setsToNumeric(p.sets).length > 0,
   );
 
+  // Vínculo por nombre exacto con la plantilla: si el nombre coincide con
+  // un jugador RECLAMADO (user_id), el amistoso cuenta en sus stats. Los
+  // chips de abajo rellenan el nombre exacto para garantizar el match.
+  const userIdByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const pl of players) {
+      if (pl.user_id) m.set(pl.name.trim().toLowerCase(), pl.user_id);
+    }
+    return m;
+  }, [players]);
+  const linkByName = (name: string): string | null =>
+    userIdByName.get(name.trim().toLowerCase()) ?? null;
+
+  const appendToPair = (i: number, name: string) => {
+    const current = partidos[i]?.pair ?? '';
+    const [a, b] = splitPair(current);
+    if (!a) update(i, { pair: name });
+    else if (!b) update(i, { pair: `${a} / ${name}` });
+    else update(i, { pair: `${b} / ${name}` });
+  };
+
   const handleSave = async () => {
     if (validPartidos.length === 0) {
       Alert.alert(
@@ -238,8 +260,13 @@ export const AmistosoScreen = () => {
         const [a0, a1] = splitPair(p.pair);
         const [b0, b1] = splitPair(p.opp);
         const participants: CasualParticipant[] = [
-          { side: 0, slot: 0, name: a0 || (team?.name ?? 'Nosotros') },
-          { side: 0, slot: 1, name: a1 },
+          {
+            side: 0,
+            slot: 0,
+            name: a0 || (team?.name ?? 'Nosotros'),
+            user_id: linkByName(a0),
+          },
+          { side: 0, slot: 1, name: a1, user_id: linkByName(a1) },
           { side: 1, slot: 0, name: b0 || (rivalTeam || 'Rival') },
           { side: 1, slot: 1, name: b1 },
         ];
@@ -415,6 +442,26 @@ export const AmistosoScreen = () => {
               onChangeText={(t) => update(i, { pair: t })}
               placeholder="Nombre / Nombre"
             />
+            {players.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.rosterRow}
+              >
+                {players.map((pl) => (
+                  <Pressable
+                    key={pl.id}
+                    onPress={() => appendToPair(i, pl.name)}
+                    style={styles.rosterChip}
+                  >
+                    <Text style={styles.rosterChipText}>
+                      {pl.user_id ? '🔗 ' : ''}
+                      {pl.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
             <Field
               label="PAREJA RIVAL"
               value={p.opp}
@@ -575,6 +622,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 10,
   },
+  rosterRow: { gap: 6, paddingBottom: 10, marginTop: -2 },
+  rosterChip: {
+    paddingHorizontal: 10,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: Colors.bgRaised,
+    borderWidth: 1,
+    borderColor: Colors.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rosterChipText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
   fieldLabel: {
     fontFamily: Fonts.mono,
     color: Colors.textFaint,
