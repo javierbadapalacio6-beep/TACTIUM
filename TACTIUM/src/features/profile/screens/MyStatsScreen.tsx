@@ -114,13 +114,15 @@ export const MyStatsScreen = () => {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={styles.backBtn}
-        >
-          <IconBack size={20} color={Colors.text} />
-        </Pressable>
+        {navigation.canGoBack() ? (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={10}
+            style={styles.backBtn}
+          >
+            <IconBack size={20} color={Colors.text} />
+          </Pressable>
+        ) : null}
 
         <Text style={styles.eyebrow}>MIS ESTADÍSTICAS · LIGA</Text>
         <Text style={styles.title}>{me?.name ?? 'Tus números'}</Text>

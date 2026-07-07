@@ -103,6 +103,7 @@ export type TabParamList = {
   Home: undefined;
   Seasons: undefined;
   Team: undefined;
+  Stats: undefined;
   Profile: undefined;
 };
 

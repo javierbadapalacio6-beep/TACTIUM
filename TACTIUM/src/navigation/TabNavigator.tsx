@@ -19,6 +19,7 @@ import Animated, {
 import { Colors } from '@core/theme/colors';
 import {
   IconHome,
+  IconAnalytics,
   IconCalendar,
   IconTeam,
   IconUser,
@@ -29,6 +30,7 @@ import { ClubStack } from './ClubStack';
 import { ClubTeamsStack } from './ClubTeamsStack';
 import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
+import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
 import { useTeamStore } from '@store/teamStore';
 
 import type { TabParamList } from './types';
@@ -297,6 +299,19 @@ export const TabNavigator = () => {
               }}
             />
           ) : null}
+
+          {/* Stats personales: pieza de retención del jugador (F5a). No se
+              muestra a club_admin (cuenta de organización, no juega). */}
+          <Tab.Screen
+            name="Stats"
+            component={MyStatsScreen}
+            options={{
+              tabBarLabel: 'Stats',
+              tabBarIcon: ({ focused }) => (
+                <TabIcon Icon={IconAnalytics} focused={focused} />
+              ),
+            }}
+          />
 
           <Tab.Screen
             name="Profile"
