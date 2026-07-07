@@ -46,6 +46,7 @@ export type OnboardingStackParamList = {
 // ─── Home Stack (nested under Home tab) ─────────────────────────────
 export type HomeStackParamList = {
   HomeRoot: undefined;
+  Amistoso: undefined;
   Jornada: { matchdayId?: string };
   Lineup: { matchdayId: string };
   Results: { matchdayId: string; focus?: number };

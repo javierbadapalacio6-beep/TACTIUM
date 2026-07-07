@@ -373,6 +373,13 @@ export const HomeScreen = ({
                 }
                 onPress={goSeasons}
               />
+              <ActionRow
+                icon={<IconCourt size={20} color={Colors.accent} />}
+                title="Amistoso"
+                value="🎾"
+                hint="Registra un equipo vs equipo y compártelo"
+                onPress={() => navigation.navigate('Amistoso')}
+              />
             </>
           ) : null}
         </View>

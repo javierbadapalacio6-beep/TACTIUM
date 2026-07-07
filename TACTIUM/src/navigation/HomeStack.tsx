@@ -7,6 +7,7 @@ import { JornadaScreen } from '@features/home/screens/JornadaScreen';
 import { LineupScreen } from '@features/home/screens/LineupScreen';
 import { ResultsScreen } from '@features/home/screens/ResultsScreen';
 import { AvailabilityScreen } from '@features/home/screens/AvailabilityScreen';
+import { AmistosoScreen } from '@features/home/screens/AmistosoScreen';
 
 import type { HomeStackParamList } from './types';
 
@@ -26,6 +27,7 @@ export const HomeStack = () => {
       <Stack.Screen name="Lineup" component={LineupScreen} />
       <Stack.Screen name="Results" component={ResultsScreen} />
       <Stack.Screen name="Availability" component={AvailabilityScreen} />
+      <Stack.Screen name="Amistoso" component={AmistosoScreen} />
     </Stack.Navigator>
   );
 };
