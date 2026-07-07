@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   Pressable,
+  Share,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import {
   IconCalendar,
   IconArrowRight,
   IconCourt,
+  IconShare,
   IconTeam,
   IconAnalytics,
   IconChevron,
@@ -35,6 +37,7 @@ import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
+import { buildCaptainInviteMessage } from '@core/config/referral';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
 import type { HomeStackScreenProps } from '@navigation/types';
@@ -179,6 +182,14 @@ export const HomeScreen = ({
   const avail = players.filter((p) => p.available).length;
   const total = players.length || 1;
   const pct = Math.round((avail / total) * 100);
+
+  const inviteCaptain = async () => {
+    try {
+      await Share.share({ message: buildCaptainInviteMessage(team?.name) });
+    } catch {
+      // cancelado
+    }
+  };
 
   const goSeasons = () => navigation.getParent()?.navigate('Seasons');
   const goTeam = () => navigation.getParent()?.navigate('Team');
@@ -445,6 +456,15 @@ export const HomeScreen = ({
                 onPress={goSeasons}
               />
             </>
+          ) : null}
+          {canEdit ? (
+            <ActionRow
+              icon={<IconShare size={20} color={Colors.accent} />}
+              title="Invita a un capitán"
+              value="🎁"
+              hint="¿Conoces a otro capitán? Regálale dejar el Excel"
+              onPress={inviteCaptain}
+            />
           ) : null}
           <ActionRow
             icon={<IconCourt size={20} color={Colors.accent} />}
