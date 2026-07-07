@@ -449,7 +449,7 @@ export const HomeScreen = ({
           <ActionRow
             icon={<IconCourt size={20} color={Colors.accent} />}
             title="Amistoso"
-            value="🎾"
+            value="🤝"
             hint={
               canEdit
                 ? 'Registra un equipo vs equipo y compártelo'
