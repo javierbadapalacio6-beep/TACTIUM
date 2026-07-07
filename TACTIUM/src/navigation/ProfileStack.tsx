@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { Colors } from '@core/theme/colors';
 import { ProfileScreen } from '@features/profile/screens/ProfileScreen';
+import { VenuePanelScreen } from '@features/venue/screens/VenuePanelScreen';
+import { VenuePublicScreen } from '@features/venue/screens/VenuePublicScreen';
 
 // Stack wrapper de un solo screen para Profile. Ver nota en TeamStack.tsx
 // — mismo motivo: los Tab.Screens directos sin Stack se quedaban
@@ -24,5 +26,7 @@ export const ProfileStack = () => (
     }}
   >
     <Stack.Screen name="ProfileRoot" component={ProfileScreen} />
+    <Stack.Screen name="VenuePanel" component={VenuePanelScreen} />
+    <Stack.Screen name="VenuePublic" component={VenuePublicScreen} />
   </Stack.Navigator>
 );

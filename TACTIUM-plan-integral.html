@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTIUM · Plan Integral de Producto</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#131a22; --panel2:#1a232e; --border:#243140;
+    --text:#e8eef4; --muted:#8fa1b3; --lime:#c8f542; --lime-dim:#9bc433;
+    --green:#3ddc84; --amber:#ffb84d; --red:#ff6b6b; --blue:#5ab8ff;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.55;padding-bottom:80px}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px}
+  header{padding:36px 0 20px;border-bottom:1px solid var(--border);margin-bottom:24px}
+  header h1{font-size:1.9rem;letter-spacing:-.5px}
+  header h1 span{color:var(--lime)}
+  header p{color:var(--muted);margin-top:6px;max-width:800px}
+  .meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+  .meta div{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:.85rem;color:var(--muted)}
+  .meta b{color:var(--text)}
+  nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:26px;position:sticky;top:0;background:var(--bg);padding:12px 0;z-index:10;border-bottom:1px solid var(--border)}
+  nav button{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:10px 18px;border-radius:999px;cursor:pointer;font-size:.92rem;transition:.15s}
+  nav button:hover{color:var(--text);border-color:var(--lime-dim)}
+  nav button.active{background:var(--lime);color:#0b0f14;border-color:var(--lime);font-weight:600}
+  .tab{display:none}
+  .tab.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  h2{font-size:1.3rem;margin:8px 0 16px}
+  h2 span{color:var(--lime)}
+  .sub{color:var(--muted);margin-bottom:20px;max-width:840px}
+  .callout{background:linear-gradient(120deg,#18220f,#131a22);border:1px solid var(--lime-dim);border-radius:var(--radius);padding:18px 20px;margin:18px 0}
+  .callout.red{border-color:var(--red);background:linear-gradient(120deg,#241315,#131a22)}
+  .callout b{color:var(--lime)}
+  .callout.red b{color:var(--red)}
+
+  /* inventory */
+  .inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .inv-item{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+  .inv-item h3{font-size:.98rem;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .inv-item p{color:var(--muted);font-size:.85rem;margin-top:6px}
+  .inv-item code{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:.78rem;color:var(--blue)}
+  .pill{font-size:.7rem;padding:3px 9px;border-radius:999px;font-weight:700;white-space:nowrap}
+  .p-green{background:rgba(61,220,132,.15);color:var(--green)}
+  .p-amber{background:rgba(255,184,77,.15);color:var(--amber)}
+  .p-red{background:rgba(255,107,107,.15);color:var(--red)}
+
+  /* supuestos cards */
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .filters button{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:999px;cursor:pointer;font-size:.83rem}
+  .filters button.on{border-color:var(--lime);color:var(--lime)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:.15s;display:flex;flex-direction:column}
+  .card:hover{border-color:var(--lime-dim);transform:translateY(-2px)}
+  .card .head{padding:16px 18px 8px}
+  .card .head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+  .card h3{font-size:1.02rem}
+  .badge{font-size:.72rem;padding:4px 10px;border-radius:999px;white-space:nowrap;font-weight:600}
+  .b-green{background:rgba(61,220,132,.15);color:var(--green);border:1px solid var(--green)}
+  .b-amber{background:rgba(255,184,77,.13);color:var(--amber);border:1px solid var(--amber)}
+  .b-red{background:rgba(255,107,107,.13);color:var(--red);border:1px solid var(--red)}
+  .effort{display:flex;gap:4px;align-items:center;font-size:.75rem;color:var(--muted)}
+  .effort .bar{display:inline-flex;gap:2px}
+  .effort .seg{width:14px;height:6px;border-radius:3px;background:var(--border)}
+  .effort .seg.f{background:var(--lime)}
+  .card .body{padding:6px 18px 14px;color:var(--muted);font-size:.88rem;flex:1}
+  .card .more{padding:10px 18px;border-top:1px solid var(--border);font-size:.8rem;color:var(--lime);background:var(--panel2)}
+  .detail{display:none;padding:0 18px 16px;background:var(--panel2);font-size:.87rem}
+  .card.open .detail{display:block}
+  .detail h4{color:var(--lime);font-size:.82rem;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px}
+  .detail h4.have{color:var(--green)}
+  .detail h4.miss{color:var(--amber)}
+  .detail ul{padding-left:18px;color:var(--text)}
+  .detail li{margin-bottom:5px}
+  .detail .why{color:var(--muted);font-style:italic}
+  .detail code{background:#0b0f14;border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:.78rem;color:var(--blue)}
+
+  /* build order */
+  .phase{border-left:3px solid var(--border);margin-left:10px;padding:0 0 28px 24px;position:relative}
+  .phase:last-child{padding-bottom:0}
+  .phase::before{content:'';position:absolute;left:-11px;top:2px;width:19px;height:19px;border-radius:50%;background:var(--bg);border:3px solid var(--lime)}
+  .phase h3{font-size:1.1rem}
+  .phase .when{color:var(--lime);font-size:.82rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .phase .goal{color:var(--muted);font-size:.9rem;margin:4px 0 10px}
+  .phase ul{list-style:none}
+  .phase li{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.9rem;display:flex;gap:10px;align-items:baseline}
+  .phase li::before{content:'›';color:var(--lime);font-weight:700}
+  .phase .kpi{background:rgba(200,245,66,.07);border:1px dashed var(--lime-dim);border-radius:10px;padding:10px 14px;font-size:.85rem;margin-top:10px}
+  .phase .kpi b{color:var(--lime)}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem}
+  th{text-align:left;color:var(--lime);font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;border-bottom:1px solid var(--border)}
+  td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+  td.mut{color:var(--muted)}
+  .risk-item{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px}
+  .risk-item h3{font-size:1rem;margin-bottom:6px;display:flex;gap:10px;align-items:center}
+  .risk-item p{color:var(--muted);font-size:.9rem}
+  .risk-item p b{color:var(--text)}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .d-red{background:var(--red)} .d-amber{background:var(--amber)} .d-green{background:var(--green)}
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:.8rem}
+  @media(max-width:640px){ .cards,.inv{grid-template-columns:1fr} header h1{font-size:1.5rem} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>TACTIUM · <span>Plan Integral de Producto</span></h1>
+  <p>Auditoría real del código (Expo 54 · React Native 0.81 · Supabase · RevenueCat) contrastada con cada supuesto de expansión. No es una lista de deseos: cada valoración parte de lo que existe hoy en <b>src/</b> y en la base de datos.</p>
+  <div class="meta">
+    <div>🔍 Auditoría del código: <b>7 julio 2026</b></div>
+    <div>📊 Preparación global: <b>~75%</b> para multi-competición</div>
+    <div>🤖 Google Play: <b>en revisión</b></div>
+  </div>
+</header>
+
+<nav>
+  <button class="tabbtn active" data-tab="t0">📦 Qué tenemos</button>
+  <button class="tabbtn" data-tab="t1">🧩 Supuestos valorados</button>
+  <button class="tabbtn" data-tab="t2">🛠️ Orden de construcción</button>
+  <button class="tabbtn" data-tab="t3">⚠️ Riesgos y deuda técnica</button>
+</nav>
+
+<!-- ============ TAB 0: INVENTARIO ============ -->
+<section id="t0" class="tab active">
+  <h2>Inventario: lo que la app <span>ya tiene</span></h2>
+  <p class="sub">La gran sorpresa de la auditoría: <b>el "motor de plantillas" que planificamos ya existe en embrión</b>. La app se diseñó desde el día 1 con las reglas de competición separadas en <code style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:.85rem;color:var(--blue)">federations.ts</code>: 16 federaciones + 7 ligas privadas (LAPI y SNP incluidas). Eso cambia los plazos: la expansión a ligas no federadas se mide en <b>días, no meses</b>.</p>
+  <div class="inv" id="inventory"></div>
+
+  <div class="callout" style="margin-top:22px">
+    <b>Lectura global:</b> la arquitectura está por delante del negocio. Los tres huecos reales son (1) la interfaz de amistosos sin terminar, (2) cero i18n —todo en español incrustado— y (3) Android sin probar en dispositivos reales. Ninguno es un rediseño: son semanas acotadas de trabajo.
+  </div>
+</section>
+
+<!-- ============ TAB 1: SUPUESTOS ============ -->
+<section id="t1" class="tab">
+  <h2>Los 10 supuestos, <span>valorados uno a uno</span></h2>
+  <p class="sub">Cada tarjeta: qué tenemos ya (verificado en código), qué falta, esfuerzo estimado y veredicto. Haz clic para desplegar. La barra indica esfuerzo relativo (1 = horas, 5 = un mes o más).</p>
+  <div class="filters" id="filters">
+    <button data-f="all" class="on">Todos</button>
+    <button data-f="green">🟢 Listo / casi listo</button>
+    <button data-f="amber">🟡 Trabajo acotado</button>
+    <button data-f="red">🔴 Hueco importante</button>
+  </div>
+  <div class="cards" id="cards"></div>
+</section>
+
+<!-- ============ TAB 2: ORDEN ============ -->
+<section id="t2" class="tab">
+  <h2>Orden de <span>construcción</span></h2>
+  <p class="sub">Secuenciado por dependencias y por la ventana de temporada (sept–oct). Regla: primero lo que desbloquea ingresos en la ventana, después lo que multiplica mercado, al final lo que abre 2027.</p>
+  <div id="buildorder"></div>
+</section>
+
+<!-- ============ TAB 3: RIESGOS ============ -->
+<section id="t3" class="tab">
+  <h2>Riesgos y <span>deuda técnica</span></h2>
+  <p class="sub">Lo que la auditoría encontró que puede morder más adelante, ordenado por severidad real (no por ruido).</p>
+  <div id="risks"></div>
+</section>
+
+<footer>
+  Basado en auditoría directa del repositorio TACTIUM (src/, supabase/, app.json, eas.json, package.json) el 7 de julio de 2026. Estimaciones de esfuerzo para un desarrollador con Claude como copiloto. Complementa a TACTIUM-plan-escalado.html (estrategia de mercado).
+</footer>
+</div>
+
+<script>
+const INVENTORY = [
+ {s:'green', t:'Motor de reglas de competición', d:'<code>src/core/data/federations.ts</code> — 16 federaciones + 7 ligas privadas con nº de pistas por género y regla de orden de fuerza. LAPI y SNP ya figuran. Añadir una liga = 1 línea.'},
+ {s:'green', t:'Modelo de datos flexible', d:'<code>teams.federation</code> y <code>teams.league</code> son texto libre (no enums): las competiciones nuevas no exigen migración. Nº de parejas derivado en runtime, no incrustado.'},
+ {s:'green', t:'Alineaciones adaptativas (2–5 parejas)', d:'<code>LineupScreen</code> genera slots dinámicos con <code>getCourtsForCompetition()</code>. Auto-balance por puntos y validación de orden de fuerza desactivable por liga.'},
+ {s:'green', t:'Pagos (RevenueCat) en ambas plataformas', d:'<code>react-native-purchases</code> con API keys de iOS Y Android ya provisionadas. 4 planes × mensual/anual, trial 14d, webhooks a Supabase, reconciliación al abrir la app.'},
+ {s:'green', t:'Invitaciones con códigos', d:'RPC <code>create_team_invitation</code> / <code>redeem_team_invitation</code>, códigos con caducidad 7 días, roles capitán/jugador. Deep links <code>tactium://</code> configurados.'},
+ {s:'green', t:'Notificaciones push operativas', d:'<code>expo-notifications</code> + Edge Function <code>send-push</code>. Disparadores: jornada creada y alineación publicada. Canal Android ya definido.'},
+ {s:'green', t:'Sistema de rating y feed social', d:'<code>profiles.rating</code> (tipo ELO) con fiabilidad, feed con posts/kudos/comentarios, pizarra táctica. Base de gamificación ya sembrada.'},
+ {s:'amber', t:'Amistosos: tablas sí, interfaz a medias', d:'<code>casual_matches</code> + <code>casual_match_participants</code> existen en BD (tipos amistoso/entreno/torneo). Pero <code>ComposeScreen</code>/<code>PublishHubScreen</code> son un andamiaje sin flujo completo.'},
+ {s:'amber', t:'Android: configurado, jamás probado', d:'<code>app.json</code>, <code>eas.json</code>, <code>google-services.json</code> y billing keys listos; build en revisión en Play. Falta QA en dispositivos Android reales (billing, permisos, notificaciones).'},
+ {s:'amber', t:'Elección de competición por texto', d:'La app detecta la liga por subcadena en <code>teams.league</code> ("lapi", "snp"…). Si el capitán escribe otra cosa, cae en reglas federativas por defecto. Frágil para escalar.'},
+ {s:'red', t:'i18n: inexistente', d:'~200–300 cadenas en español incrustadas en los componentes. Sin librería de traducción. Es EL cuello de botella para internacional (salvo Portugal/México en fase temprana… que también necesitan PT y ajustes).'},
+ {s:'red', t:'Compartir alineación como imagen: no existe', d:'Hay <code>Share</code> nativo, pero no la generación de imagen bonita para WhatsApp — la pieza clave del loop viral del plan de escalado. Tampoco QR para invitaciones.'}
+];
+
+const SUPUESTOS = [
+ {v:'green', t:'1 · SNP (Series Nacionales de Pádel)', eff:1, tags:'2–3 días',
+  s:'El supuesto estrella resulta ser el más barato: la infraestructura ya lo soporta casi entero.',
+  have:['SNP ya está en LEAGUE_RULES con orden de fuerza desactivado','Alineaciones dinámicas soportan 5 parejas sin tocar nada','El marcador (gana quien llega a 3) encaja con la lógica outcome/score existente'],
+  miss:['⚠️ Verificar el nº de parejas: el código tiene SNP a 3/3, pero la normativa SNP habla de eliminatorias a 5 dobles — confirmar con la normativa vigente y corregir la línea si procede','Selector visual "SNP" en la creación de equipo (hoy depende de que el capitán escriba "snp")','Textos/onboarding que hablen al capitán SNP, no solo al federado'],
+  why:'Con 2–3 días de trabajo abres un mercado de ~2.500 equipos. El mejor ratio esfuerzo/mercado de todo el plan.'},
+ {v:'green', t:'2 · LAPI', eff:1, tags:'1–2 días',
+  s:'Ya está en las reglas (3 partidos, sin orden de fuerza). Prácticamente solo falta hacerlo visible.',
+  have:['LAPI en LEAGUE_RULES: 3 parejas, orden de fuerza off','Plantillas de 9–12 jugadores: el roster no tiene límite rígido'],
+  miss:['Selector visual en creación de equipo','Confirmar variantes de zona (Castilla y León, Andalucía, norte, centro) por si difieren en formato'],
+  why:'Coste marginal casi nulo. Se lanza junto a SNP en el mismo sprint.'},
+ {v:'green', t:'3 · Interempresas y ligas locales de club', eff:2, tags:'3–5 días',
+  s:'Mismo mecanismo: son formatos de 2–5 parejas que el motor ya digiere. El trabajo es de UX, no de motor.',
+  have:['MyBurgerKing, Popeyes, Liga MBK, Liga Foral… ya en LEAGUE_RULES — el patrón está probado','Reglas por subcadena extensibles sin migración de BD'],
+  miss:['El cambio estructural recomendado: campo competition_type (federada/snp/lapi/empresa/libre) en teams + selector en onboarding — elimina la fragilidad del texto libre para SIEMPRE','Plantilla "personalizada": nº de parejas y orden de fuerza elegibles a mano para ligas que no conocemos'],
+  why:'La plantilla personalizada es la jugada maestra: cubre cualquier liga local de club sin que tengas que añadir reglas tú. Es lo que convierte el motor en autoservicio.'},
+ {v:'amber', t:'4 · Amistosos (equipo vs equipo)', eff:3, tags:'1–2 semanas',
+  s:'La BD está lista; la interfaz no. Es el hueco entre "técnicamente posible" y "usable por un capitán normal".',
+  have:['Tablas casual_matches + participants (amistoso/entreno/torneo, sets en JSON, visibilidad)','Pantallas ComposeScreen y PublishHubScreen como andamiaje','Feed social donde publicar resultados'],
+  miss:['Flujo completo: crear amistoso → invitar al otro equipo → anotar sets → publicar → compartir','El "reto" entre equipos (invitación cruzada) no existe','Pulido y pruebas: es un andamiaje sin QA'],
+  why:'1–2 semanas de UI. Recuerda la regla estratégica: solo formato equipo vs equipo — nada de partidas abiertas (terreno Playtomic).'},
+ {v:'amber', t:'5 · Android / Google Play', eff:2, tags:'1–2 semanas de QA · en revisión',
+  s:'Mejor de lo esperado: no hay código por escribir, hay pruebas por hacer. El build ya está en revisión.',
+  have:['Config completa: app.json, eas.json, google-services.json, permisos','API key de RevenueCat para Android ya en el código','Canal de notificaciones Android definido','Checks Platform.OS en los puntos correctos'],
+  miss:['QA en 2–3 dispositivos Android reales: flujo de compra completo, permisos, push, deep links','Los 8 productos de suscripción en Play Console vinculados a RevenueCat','Plan B si la revisión de Google pide cambios (política de suscripciones es su tiquismiquis favorito)'],
+  why:'Riesgo bajo pero no cero: RevenueCat abstrae el billing, aunque nadie ha visto la app correr en un Android físico. Prueba el flujo de pago ANTES de anunciar el lanzamiento.'},
+ {v:'amber', t:'6 · Loop viral: imagen de alineación + QR', eff:2, tags:'~1 semana',
+  s:'La pieza de mayor ROI del plan de marketing no está construida. Compartir existe (Share nativo), la imagen bonita no.',
+  have:['Share sheet nativo ya importado en JornadaScreen','Deep links tactium:// para que el QR/enlace abra la app','Códigos de invitación funcionando'],
+  miss:['Render de la alineación como imagen (react-native-view-shot es el camino corto)','Marca + QR de descarga dentro de esa imagen','QR visual para los códigos de invitación'],
+  why:'Cada jornada hay miles de alineaciones comunicadas por WhatsApp. Que las tuyas lleven tu marca es publicidad gratuita y perfectamente segmentada. Prioridad alta pre-septiembre.'},
+ {v:'amber', t:'7 · Referidos con offer codes', eff:1, tags:'2–3 días + config en stores',
+  s:'Todo el rail de pagos lo soporta; falta la mecánica visible.',
+  have:['RevenueCat gestiona offers de App Store y Play','Paywall y gates (usePremiumGate) centralizados'],
+  miss:['Pantalla "Invita a un capitán" con el código','Offer codes creados en App Store Connect / Play Console','Momento de disparo: tras publicar la primera alineación'],
+  why:'Barato y encaja con la densidad social del nicho. Hazlo cuando haya masa mínima de capitanes activos (¿20+?) para que tenga a quién propagarse.'},
+ {v:'amber', t:'8 · Checkout web (Stripe) para clubs', eff:4, tags:'2–3 semanas · solo con 10+ clubs',
+  s:'Cero código hoy, pero el modelo de suscripciones lo permite sin rediseño: la tabla subscriptions ya es agnóstica de plataforma.',
+  have:['subscriptions.platform ya contempla origen múltiple; subject_type user/club separa B2B de B2C','Landing Next.js (tactium-landing) donde colgar el checkout','Reconciliación de estado al abrir la app ya existe'],
+  miss:['Integración Stripe completa: checkout, webhooks, facturas','Puente Stripe→Supabase para activar el plan sin pasar por RevenueCat','Cuidado legal anti-steering: la app no puede mencionar precios web'],
+  why:'Espera al disparador acordado (10+ clubs cerrados). Con planes de 240–385 €, el ahorro de comisión paga el desarrollo, pero antes no.'},
+ {v:'red', t:'9 · Internacional / i18n', eff:5, tags:'3–4 semanas + 1 semana por idioma',
+  s:'El hueco más caro. La app es 100% español incrustado: ~200–300 cadenas dentro de los componentes, sin librería de traducción.',
+  have:['Arquitectura limpia que facilita la extracción (features bien separadas)','El motor de reglas es agnóstico de país: añadir federaciones portuguesas/italianas es trivial una vez traducida la UI'],
+  miss:['Instalar react-i18next y extraer TODAS las cadenas a es.json (el grueso del trabajo)','Traducciones PT/IT/EN','Precios por país en las stores, fichas traducidas, soporte en otros idiomas'],
+  why:'Confirma la decisión estratégica: internacional es 2027. Pero hay una jugada barata ahora: exigir que TODO texto nuevo nazca ya en el sistema i18n (coste ~0 hoy, ahorra semanas mañana). La deuda de i18n solo crece.'},
+ {v:'red', t:'10 · ARENA / gamificación', eff:5, tags:'3–5 semanas · congelado',
+  s:'El prototipo HTML (6 juegos) no tiene NADA portado al código React Native. Integrarlo es reescribirlo.',
+  have:['Prototipo HTML completo con el design system de la app','Rating ELO y feed social como base de enganche ya en producción'],
+  miss:['Todo el port a React Native (3–5 semanas mínimo)','Decisión de alcance: 1 juego (Predicción) vs hub completo'],
+  why:'La auditoría confirma el veredicto estratégico: congelado hasta tener retención y ventas rodando. Cuando toque: SOLO Predicción, medirlo, y decidir. El hub completo es una trampa de tiempo deliciosa.'}
+];
+
+const BUILD = [
+ {when:'SPRINT 1 · 2 semanas (julio)', title:'La ventana manda: multi-liga + viral', goal:'Todo lo que multiplica el mercado direccionable antes de la pretemporada, aprovechando que es barato.',
+  items:['Campo competition_type + selector visual de competición en onboarding (federada / SNP / LAPI / empresa / personalizada) — mata la fragilidad del texto libre','Verificar nº de parejas SNP contra normativa vigente y corregir LEAGUE_RULES si procede','Plantilla personalizada (nº parejas + orden de fuerza manual) para ligas locales','Imagen de alineación compartible con marca + QR (react-native-view-shot)','QA Android en dispositivos reales mientras Google revisa: flujo de compra, push, deep links'],
+  kpi:'✅ Sale de aquí: un capitán de CUALQUIER liga española puede crear su equipo correctamente en <2 min, y cada alineación compartida lleva tu marca.'},
+ {when:'SPRINT 2 · 2 semanas (agosto)', title:'Conversión y propagación', goal:'Con Play publicado y la captación de clubs rodando, optimizar lo que convierte y lo que propaga.',
+  items:['Lanzamiento Android coordinado con los 8 productos en Play Console + RevenueCat verificado','Referidos: pantalla "Invita a un capitán" + offer codes en ambas stores','Petición de reseña tras publicar alineación (momento feliz) — alimenta el ASO','Disciplina i18n hacia delante: todo texto nuevo nace en el sistema de traducción','Instrumentar el funnel: eventos descarga→registro→trial→pago visibles en un panel'],
+  kpi:'✅ Sale de aquí: app en ambas stores con funnel medible y mecánica de referidos activa para la ventana sept–oct.'},
+ {when:'SPRINT 3 · 2–3 semanas (sept–oct)', title:'Amistosos, sin distraer de vender', goal:'Durante la ventana el 80% del tiempo es vender. El desarrollo se limita a rematar amistosos y apagar fuegos.',
+  items:['Completar flujo de amistosos: crear → retar a otro equipo → sets → publicar → compartir','El "reto" entre equipos como mecánica viral (equipo A invita a equipo B → capitán B descubre la app)','Soporte y fixes de lo que la temporada real saque a la luz (habrá cosas)'],
+  kpi:'✅ Sale de aquí: modo amistoso usable como gancho gratuito y cero regresiones en plena temporada.'},
+ {when:'SPRINT 4+ · nov 2026 → 2027', title:'Lo caro, ya con datos', goal:'Las inversiones grandes se deciden con los números de la ventana en la mano.',
+  items:['i18n completo (3–4 semanas) SOLO si la expansión internacional se confirma para 2027','Checkout web Stripe si se alcanzó el disparador de 10+ clubs','ARENA: portar SOLO Predicción y medir retención antes de nada más','Refactor del validador de orden de fuerza a módulo propio (1–2 días, antes de añadir más formatos)'],
+  kpi:'✅ Criterio: ninguna de estas piezas arranca sin que su disparador de negocio se haya cumplido.'}
+];
+
+const RISKS = [
+ {c:'red', t:'i18n: la deuda que crece sola',
+  p:'Cada pantalla nueva en español incrustado encarece la futura internacionalización. <b>Mitigación barata: desde hoy, texto nuevo = clave de traducción.</b> No arregla el pasado pero congela la deuda. El pasado (~200–300 cadenas) se paga en el Sprint 4 solo si internacional se confirma.'},
+ {c:'red', t:'Android sin probar en hardware real',
+  p:'La revisión de Google puede aprobar una app cuyo flujo de compra falle en un Samsung concreto. RevenueCat reduce el riesgo, no lo elimina. <b>QA de compra en 2–3 dispositivos físicos antes de anunciar el lanzamiento</b> — un lanzamiento Android roto en plena ventana de septiembre sería carísimo en reseñas.'},
+ {c:'amber', t:'Detección de liga por subcadena de texto',
+  p:'Si el capitán escribe "Liga LAPI Valladolid 2026", funciona; si escribe "L.A.P.I." o "liga de mi club", cae en reglas federativas equivocadas y <b>el usuario percibe un bug que en realidad es un texto libre</b>. El campo competition_type del Sprint 1 lo elimina de raíz. Es el cambio estructural más rentable del plan.'},
+ {c:'amber', t:'Dato SNP posiblemente incorrecto en el código',
+  p:'LEAGUE_RULES tiene SNP a 3 parejas; la normativa pública habla de eliminatorias a 5 dobles (gana quien llega a 3). Puede haber variantes por categoría/zona. <b>Verificar contra la normativa SNP 2026-27 antes de promocionar el soporte</b> — presentarse ante 2.500 equipos con el formato mal sería un estreno horrible.'},
+ {c:'amber', t:'Validación de orden de fuerza acoplada a LineupScreen',
+  p:'La regla vive repartida entre federations.ts y la pantalla de alineación. Aguanta bien los formatos actuales, pero <b>cada formato nuevo con reglas raras tocará la pantalla más delicada de la app</b>. Refactor de 1–2 días a módulo propio: hacerlo antes del tercer formato nuevo, no después.'},
+ {c:'green', t:'Lo que NO es un riesgo (y conviene saberlo)',
+  p:'El modelo de datos aguanta la expansión sin migraciones dolorosas (federation/league como texto, parejas en runtime, casual_matches ya en BD). Los pagos están bien resueltos (RevenueCat en ambas plataformas, webhooks, reconciliación). La deuda declarada es pequeña (3–4 TODOs). <b>No hay ningún rediseño arquitectónico pendiente: es rematar, no rehacer.</b>'}
+];
+
+// render inventory
+document.getElementById('inventory').innerHTML = INVENTORY.map(i=>{
+  const P={green:['p-green','✓ SÓLIDO'],amber:['p-amber','◐ A MEDIAS'],red:['p-red','✗ NO EXISTE']}[i.s];
+  return `<div class="inv-item"><h3>${i.t}<span class="pill ${P[0]}">${P[1]}</span></h3><p>${i.d}</p></div>`;
+}).join('');
+
+// render supuestos
+const cardsEl=document.getElementById('cards');
+const BADGE={green:['b-green','🟢 Listo / casi'],amber:['b-amber','🟡 Trabajo acotado'],red:['b-red','🔴 Hueco importante']};
+SUPUESTOS.forEach(st=>{
+  const c=document.createElement('div');c.className='card';c.dataset.v=st.v;
+  const segs=[1,2,3,4,5].map(n=>`<span class="seg ${n<=st.eff?'f':''}"></span>`).join('');
+  c.innerHTML=`<div class="head"><div class="head-top"><h3>${st.t}</h3><span class="badge ${BADGE[st.v][0]}">${BADGE[st.v][1]}</span></div>
+  <div class="effort">Esfuerzo <span class="bar">${segs}</span> · ${st.tags}</div></div>
+  <div class="body">${st.s}</div>
+  <div class="detail"><h4 class="have">✓ Ya lo tenemos</h4><ul>${st.have.map(x=>`<li>${x}</li>`).join('')}</ul>
+  <h4 class="miss">◯ Falta</h4><ul>${st.miss.map(x=>`<li>${x}</li>`).join('')}</ul>
+  <h4>Valoración</h4><p class="why">${st.why}</p></div>
+  <div class="more">▸ Ver evaluación completa</div>`;
+  c.addEventListener('click',()=>{c.classList.toggle('open');c.querySelector('.more').textContent=c.classList.contains('open')?'▾ Ocultar':'▸ Ver evaluación completa';});
+  cardsEl.appendChild(c);
+});
+
+// filters
+document.querySelectorAll('#filters button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#filters button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  document.querySelectorAll('.card').forEach(c=>{c.style.display=(b.dataset.f==='all'||c.dataset.v===b.dataset.f)?'flex':'none';});
+}));
+
+// build order
+document.getElementById('buildorder').innerHTML = BUILD.map(f=>`
+ <div class="phase"><div class="when">${f.when}</div><h3>${f.title}</h3><p class="goal">${f.goal}</p>
+ <ul>${f.items.map(i=>`<li>${i}</li>`).join('')}</ul><div class="kpi">${f.kpi}</div></div>`).join('');
+
+// risks
+document.getElementById('risks').innerHTML = RISKS.map(v=>`
+ <div class="risk-item"><h3><span class="dot d-${v.c}"></span>${v.t}</h3><p>${v.p}</p></div>`).join('');
+
+// tabs
+document.querySelectorAll('.tabbtn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tabbtn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}));
+</script>
+</body>
+</html>

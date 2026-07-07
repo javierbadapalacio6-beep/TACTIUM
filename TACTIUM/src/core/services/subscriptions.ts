@@ -3,6 +3,7 @@ import type { Database } from '@core/supabase/database.types';
 import type { BillingPeriod, PlanTier, SubjectType } from '@core/subscriptions/plans';
 import { PLAN_BY_TIER, PREMIUM_STATUSES, TRIAL_DURATION_DAYS } from '@core/subscriptions/plans';
 import { useSubscriptionStore } from '@store/subscriptionStore';
+import { getCustomerInfo } from '@core/purchases';
 
 export type Subscription = Database['public']['Tables']['subscriptions']['Row'];
 export type SubscriptionInsert = Database['public']['Tables']['subscriptions']['Insert'];
@@ -35,6 +36,52 @@ export async function fetchMySubscriptions(): Promise<Subscription[]> {
   // campos PII no aparecerán en runtime (revoke a nivel DB), pero el
   // resto del código del cliente ya está auditado para no leerlos.
   return ((data ?? []) as unknown) as Subscription[];
+}
+
+/**
+ * Reconcilia el estado REAL de RevenueCat (fuente de verdad: Apple/Google) con
+ * la fila de `subscriptions`, vía la RPC idempotente `sync_subscription_from_revenuecat`.
+ *
+ * Se llama AL ARRANCAR la app. Auto-cura suscripciones que el webhook no
+ * actualizó (conversión de prueba→pago, renovación, cambio de plan): sin esto,
+ * una fila creada por "restaurar compras" con id de transacción sintético
+ * quedaba huérfana de los eventos reales y se atascaba en `trialing` con fecha
+ * vencida (bug de billing de julio 2026). Al re-sincronizar desde el snapshot
+ * autoritativo del SDK en cada arranque, la fila refleja siempre la realidad.
+ *
+ * No lanza: los fallos se registran y se ignoran para no bloquear el arranque.
+ * Devuelve cuántas entitlements activas se sincronizaron.
+ */
+export async function reconcileSubscriptionFromStore(): Promise<number> {
+  let info;
+  try {
+    info = await getCustomerInfo();
+  } catch {
+    return 0; // SDK no configurado o sin red — silencioso, no bloquea arranque
+  }
+  const active = Object.values(info.entitlements.active);
+  let synced = 0;
+  for (const ent of active) {
+    const productId = ent.productIdentifier;
+    const purchasedAtMs = ent.originalPurchaseDate
+      ? new Date(ent.originalPurchaseDate).getTime()
+      : Date.now();
+    const expirationAtMs = ent.expirationDate
+      ? new Date(ent.expirationDate).getTime()
+      : null;
+    // Id estable por (producto, fecha de compra) → idempotente vía UPSERT.
+    const stableTxnId = `restore_${productId}_${purchasedAtMs}`;
+    const { error } = await supabase.rpc('sync_subscription_from_revenuecat', {
+      p_product_id: productId,
+      p_original_transaction_id: stableTxnId,
+      p_period_type: ent.periodType,
+      p_purchased_at_ms: purchasedAtMs,
+      p_expiration_at_ms: expirationAtMs as number,
+    });
+    if (error) console.warn('reconcileSubscriptionFromStore sync failed', ent.identifier, error);
+    else synced++;
+  }
+  return synced;
 }
 
 /**

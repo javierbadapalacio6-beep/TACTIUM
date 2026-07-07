@@ -59,6 +59,83 @@ export type Database = {
           },
         ]
       }
+      casual_match_participants: {
+        Row: {
+          created_at: string
+          id: string
+          match_id: string
+          name: string
+          side: number
+          slot: number
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          match_id: string
+          name?: string
+          side: number
+          slot: number
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          match_id?: string
+          name?: string
+          side?: number
+          slot?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "casual_match_participants_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "casual_matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      casual_matches: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          played_on: string
+          rated: boolean
+          sets: Json
+          type: Database["public"]["Enums"]["casual_match_type"]
+          updated_at: string
+          visibility: Database["public"]["Enums"]["match_visibility"]
+          winner_side: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          played_on?: string
+          rated?: boolean
+          sets?: Json
+          type?: Database["public"]["Enums"]["casual_match_type"]
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["match_visibility"]
+          winner_side?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          played_on?: string
+          rated?: boolean
+          sets?: Json
+          type?: Database["public"]["Enums"]["casual_match_type"]
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["match_visibility"]
+          winner_side?: number | null
+        }
+        Relationships: []
+      }
       club_members: {
         Row: {
           club_id: string
@@ -380,14 +457,148 @@ export type Database = {
           },
         ]
       }
+      post_comments: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          post_id: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          post_id: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_kudos: {
+        Row: {
+          created_at: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_kudos_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          author_id: string
+          body: string | null
+          casual_match_id: string | null
+          comments_count: number
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["post_kind"]
+          kudos_count: number
+          matchday_id: string | null
+          media_url: string | null
+          venue_id: string | null
+          visibility: Database["public"]["Enums"]["match_visibility"]
+        }
+        Insert: {
+          author_id: string
+          body?: string | null
+          casual_match_id?: string | null
+          comments_count?: number
+          created_at?: string
+          id?: string
+          kind: Database["public"]["Enums"]["post_kind"]
+          kudos_count?: number
+          matchday_id?: string | null
+          media_url?: string | null
+          venue_id?: string | null
+          visibility?: Database["public"]["Enums"]["match_visibility"]
+        }
+        Update: {
+          author_id?: string
+          body?: string | null
+          casual_match_id?: string | null
+          comments_count?: number
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["post_kind"]
+          kudos_count?: number
+          matchday_id?: string | null
+          media_url?: string | null
+          venue_id?: string | null
+          visibility?: Database["public"]["Enums"]["match_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_casual_match_id_fkey"
+            columns: ["casual_match_id"]
+            isOneToOne: false
+            referencedRelation: "casual_matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           email: string | null
           full_name: string | null
+          home_club: string | null
           id: string
+          level_display: number | null
           notifications_enabled: boolean
+          onboarded: boolean
+          preferred_side: Database["public"]["Enums"]["player_side"] | null
+          rated_matches: number
+          rating: number
+          rating_rd: number
+          rating_updated_at: string | null
+          reliability: number | null
           updated_at: string
         }
         Insert: {
@@ -395,8 +606,17 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          home_club?: string | null
           id: string
+          level_display?: number | null
           notifications_enabled?: boolean
+          onboarded?: boolean
+          preferred_side?: Database["public"]["Enums"]["player_side"] | null
+          rated_matches?: number
+          rating?: number
+          rating_rd?: number
+          rating_updated_at?: string | null
+          reliability?: number | null
           updated_at?: string
         }
         Update: {
@@ -404,9 +624,48 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          home_club?: string | null
           id?: string
+          level_display?: number | null
           notifications_enabled?: boolean
+          onboarded?: boolean
+          preferred_side?: Database["public"]["Enums"]["player_side"] | null
+          rated_matches?: number
+          rating?: number
+          rating_rd?: number
+          rating_updated_at?: string | null
+          reliability?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          device_name: string | null
+          id: string
+          platform: string | null
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_name?: string | null
+          id?: string
+          platform?: string | null
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_name?: string | null
+          id?: string
+          platform?: string | null
+          token?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -509,7 +768,9 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
-          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
+          scheduled_plan_tier:
+            | Database["public"]["Enums"]["subscription_plan_tier"]
+            | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -529,7 +790,9 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
-          scheduled_plan_tier?: Database["public"]["Enums"]["subscription_plan_tier"] | null
+          scheduled_plan_tier?:
+            | Database["public"]["Enums"]["subscription_plan_tier"]
+            | null
           status?: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -549,7 +812,9 @@ export type Database = {
           platform?: Database["public"]["Enums"]["subscription_platform"]
           product_id?: string
           revenuecat_customer_id?: string
-          scheduled_plan_tier?: Database["public"]["Enums"]["subscription_plan_tier"] | null
+          scheduled_plan_tier?:
+            | Database["public"]["Enums"]["subscription_plan_tier"]
+            | null
           status?: Database["public"]["Enums"]["subscription_status"]
           subject_id?: string
           subject_type?: Database["public"]["Enums"]["subscription_subject_type"]
@@ -687,6 +952,72 @@ export type Database = {
           },
         ]
       }
+      venues: {
+        Row: {
+          amenities: string[]
+          city: string | null
+          created_at: string
+          description: string | null
+          external_id: string | null
+          id: string
+          lat: number | null
+          lng: number | null
+          location: string | null
+          logo_url: string | null
+          name: string
+          num_courts: number | null
+          opening_hours: string | null
+          owner_id: string | null
+          phone: string | null
+          province: string | null
+          source: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          amenities?: string[]
+          city?: string | null
+          created_at?: string
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          location?: string | null
+          logo_url?: string | null
+          name: string
+          num_courts?: number | null
+          opening_hours?: string | null
+          owner_id?: string | null
+          phone?: string | null
+          province?: string | null
+          source?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          amenities?: string[]
+          city?: string | null
+          created_at?: string
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          location?: string | null
+          logo_url?: string | null
+          name?: string
+          num_courts?: number | null
+          opening_hours?: string | null
+          owner_id?: string | null
+          phone?: string | null
+          province?: string | null
+          source?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       waitlist: {
         Row: {
           accepts_privacy: boolean
@@ -775,10 +1106,12 @@ export type Database = {
         Args: { p_player_id: string }
         Returns: {
           active: boolean
+          alias: string | null
           available: boolean
           created_at: string
           id: string
           name: string
+          photo_url: string | null
           position: Database["public"]["Enums"]["player_position"]
           pts: number
           team_id: string
@@ -796,10 +1129,12 @@ export type Database = {
         Args: { p_player_id: string }
         Returns: {
           active: boolean
+          alias: string | null
           available: boolean
           created_at: string
           id: string
           name: string
+          photo_url: string | null
           position: Database["public"]["Enums"]["player_position"]
           pts: number
           team_id: string
@@ -844,7 +1179,36 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      complete_profile_onboarding: {
+        Args: {
+          p_full_name: string
+          p_home_club: string
+          p_level: number
+          p_side: Database["public"]["Enums"]["player_side"]
+        }
+        Returns: undefined
+      }
       cover_team: { Args: { p_team_id: string }; Returns: undefined }
+      create_casual_match: {
+        Args: {
+          p_participants: Json
+          p_played_on: string
+          p_sets: Json
+          p_type: Database["public"]["Enums"]["casual_match_type"]
+          p_visibility: Database["public"]["Enums"]["match_visibility"]
+        }
+        Returns: string
+      }
+      create_post: {
+        Args: {
+          p_body: string
+          p_kind: Database["public"]["Enums"]["post_kind"]
+          p_media_url: string
+          p_venue_id?: string
+          p_visibility: Database["public"]["Enums"]["match_visibility"]
+        }
+        Returns: string
+      }
       create_team_invitation: {
         Args: {
           target_role?: Database["public"]["Enums"]["team_role"]
@@ -868,8 +1232,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_venue: {
+        Args: {
+          p_city?: string
+          p_external_id?: string
+          p_lat?: number
+          p_lng?: number
+          p_location?: string
+          p_logo_url?: string
+          p_name: string
+          p_province?: string
+          p_website?: string
+        }
+        Returns: string
+      }
       delete_club: { Args: { p_club_id: string }; Returns: undefined }
+      delete_my_account: { Args: never; Returns: Json }
       delete_team: { Args: { p_team_id: string }; Returns: undefined }
+      export_my_data: { Args: never; Returns: Json }
       fn_has_premium_access: {
         Args: { p_team_id: string; p_user_id: string }
         Returns: boolean
@@ -883,6 +1263,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      level_from_rating: { Args: { p_rating: number }; Returns: number }
       link_subscription_to_club: {
         Args: { p_club_id: string; p_subscription_id: string }
         Returns: {
@@ -898,7 +1279,9 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
-          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
+          scheduled_plan_tier:
+            | Database["public"]["Enums"]["subscription_plan_tier"]
+            | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -912,14 +1295,20 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      list_feed: {
+        Args: { p_before?: string; p_limit?: number }
+        Returns: Json
+      }
       list_unclaimed_players: {
         Args: { p_team_id: string }
         Returns: {
           active: boolean
+          alias: string | null
           available: boolean
           created_at: string
           id: string
           name: string
+          photo_url: string | null
           position: Database["public"]["Enums"]["player_position"]
           pts: number
           team_id: string
@@ -932,6 +1321,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      list_venue_posts: {
+        Args: { p_limit?: number; p_venue_id: string }
+        Returns: Json
       }
       redeem_team_invitation: {
         Args: { invitation_code: string }
@@ -953,18 +1346,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      reliability_from_rd: { Args: { p_rd: number }; Returns: number }
       renumber_season_matchdays: {
         Args: { target_season: string }
         Returns: undefined
       }
-      team_pair_stats: {
-        Args: { p_team_id: string }
-        Returns: {
-          player_a: string
-          player_b: string
-          wins: number
-          played: number
-        }[]
+      send_daily_reminders: {
+        Args: { avail_days?: number; lineup_days?: number }
+        Returns: Json
       }
       set_active_lineup_variant: {
         Args: { p_variant_id: string }
@@ -987,10 +1376,12 @@ export type Database = {
         Args: { p_available: boolean; p_player_id: string }
         Returns: {
           active: boolean
+          alias: string | null
           available: boolean
           created_at: string
           id: string
           name: string
+          photo_url: string | null
           position: Database["public"]["Enums"]["player_position"]
           pts: number
           team_id: string
@@ -1030,7 +1421,9 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
-          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
+          scheduled_plan_tier:
+            | Database["public"]["Enums"]["subscription_plan_tier"]
+            | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -1043,14 +1436,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      delete_my_account: {
-        Args: never
-        Returns: Json
-      }
-      export_my_data: {
-        Args: never
-        Returns: Json
       }
       sync_subscription_from_revenuecat: {
         Args: {
@@ -1073,7 +1458,9 @@ export type Database = {
           platform: Database["public"]["Enums"]["subscription_platform"]
           product_id: string
           revenuecat_customer_id: string
-          scheduled_plan_tier: Database["public"]["Enums"]["subscription_plan_tier"] | null
+          scheduled_plan_tier:
+            | Database["public"]["Enums"]["subscription_plan_tier"]
+            | null
           status: Database["public"]["Enums"]["subscription_status"]
           subject_id: string
           subject_type: Database["public"]["Enums"]["subscription_subject_type"]
@@ -1087,14 +1474,25 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      team_pair_stats: {
+        Args: { p_team_id: string }
+        Returns: {
+          played: number
+          player_a: string
+          player_b: string
+          wins: number
+        }[]
+      }
       unclaim_player: {
         Args: { p_player_id: string }
         Returns: {
           active: boolean
+          alias: string | null
           available: boolean
           created_at: string
           id: string
           name: string
+          photo_url: string | null
           position: Database["public"]["Enums"]["player_position"]
           pts: number
           team_id: string
@@ -1108,13 +1506,37 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_venue: {
+        Args: {
+          p_amenities?: string[]
+          p_city?: string
+          p_description?: string
+          p_external_id?: string
+          p_id: string
+          p_lat?: number
+          p_lng?: number
+          p_location?: string
+          p_logo_url?: string
+          p_name?: string
+          p_num_courts?: number
+          p_opening_hours?: string
+          p_phone?: string
+          p_province?: string
+          p_website?: string
+        }
+        Returns: undefined
+      }
       whoami: { Args: never; Returns: Json }
     }
     Enums: {
+      casual_match_type: "amistoso" | "entreno" | "torneo"
       club_role: "admin"
       match_outcome: "win" | "draw" | "loss"
+      match_visibility: "public" | "followers" | "private"
       matchday_status: "upcoming" | "in_progress" | "finished"
       player_position: "Drive" | "Revés" | "Ambos"
+      player_side: "drive" | "reves" | "ambos"
+      post_kind: "text" | "photo" | "video" | "match_result" | "casual_match"
       season_phase: "liga" | "playoff" | "mixto"
       subscription_billing_period: "monthly" | "yearly"
       subscription_plan_tier:
@@ -1259,10 +1681,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      casual_match_type: ["amistoso", "entreno", "torneo"],
       club_role: ["admin"],
       match_outcome: ["win", "draw", "loss"],
+      match_visibility: ["public", "followers", "private"],
       matchday_status: ["upcoming", "in_progress", "finished"],
       player_position: ["Drive", "Revés", "Ambos"],
+      player_side: ["drive", "reves", "ambos"],
+      post_kind: ["text", "photo", "video", "match_result", "casual_match"],
       season_phase: ["liga", "playoff", "mixto"],
       subscription_billing_period: ["monthly", "yearly"],
       subscription_plan_tier: [

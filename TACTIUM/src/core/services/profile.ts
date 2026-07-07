@@ -2,6 +2,27 @@ import { supabase } from '@core/supabase/client';
 import type { Database } from '@core/supabase/database.types';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type PlayerSide = 'drive' | 'reves' | 'ambos';
+
+/**
+ * Completa el alta de perfil (Fase 1d): nombre, lado, nivel autoreportado y
+ * sede/club habitual. Siembra el rating desde el nivel vía RPC y marca
+ * `onboarded = true`. Solo el usuario logueado sobre su propio perfil.
+ */
+export async function completeProfileOnboarding(input: {
+  fullName: string;
+  side: PlayerSide;
+  level: number; // 0-7 autoreportado
+  homeClub?: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc('complete_profile_onboarding', {
+    p_full_name: input.fullName,
+    p_side: input.side,
+    p_level: input.level,
+    p_home_club: input.homeClub ?? '',
+  });
+  if (error) throw error;
+}
 
 export async function fetchMyProfile(): Promise<Profile | null> {
   const { data: auth } = await supabase.auth.getUser();

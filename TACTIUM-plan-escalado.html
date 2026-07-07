@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTIUM · Plan de Escalado 2026</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#131a22; --panel2:#1a232e; --border:#243140;
+    --text:#e8eef4; --muted:#8fa1b3; --lime:#c8f542; --lime-dim:#9bc433;
+    --green:#3ddc84; --amber:#ffb84d; --red:#ff6b6b; --blue:#5ab8ff;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.55;padding-bottom:80px}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px}
+
+  header{padding:36px 0 20px;border-bottom:1px solid var(--border);margin-bottom:24px}
+  header h1{font-size:1.9rem;letter-spacing:-.5px}
+  header h1 span{color:var(--lime)}
+  header p{color:var(--muted);margin-top:6px;max-width:760px}
+  .meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+  .meta div{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:.85rem;color:var(--muted)}
+  .meta b{color:var(--text)}
+
+  /* tabs */
+  nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:26px;position:sticky;top:0;background:var(--bg);padding:12px 0;z-index:10;border-bottom:1px solid var(--border)}
+  nav button{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:10px 18px;border-radius:999px;cursor:pointer;font-size:.92rem;transition:.15s}
+  nav button:hover{color:var(--text);border-color:var(--lime-dim)}
+  nav button.active{background:var(--lime);color:#0b0f14;border-color:var(--lime);font-weight:600}
+  .tab{display:none}
+  .tab.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  h2{font-size:1.3rem;margin:8px 0 16px}
+  h2 span{color:var(--lime)}
+  .sub{color:var(--muted);margin-bottom:20px;max-width:820px}
+
+  /* snapshot */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .stat .n{font-size:1.5rem;font-weight:700;color:var(--lime)}
+  .stat .l{color:var(--muted);font-size:.85rem;margin-top:4px}
+  .callout{background:linear-gradient(120deg,#18220f,#131a22);border:1px solid var(--lime-dim);border-radius:var(--radius);padding:18px 20px;margin:18px 0}
+  .callout.red{border-color:var(--red);background:linear-gradient(120deg,#241315,#131a22)}
+  .callout b{color:var(--lime)}
+  .callout.red b{color:var(--red)}
+
+  /* filters */
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .filters button{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:999px;cursor:pointer;font-size:.83rem}
+  .filters button.on{border-color:var(--lime);color:var(--lime)}
+
+  /* strategy cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:.15s;display:flex;flex-direction:column}
+  .card:hover{border-color:var(--lime-dim);transform:translateY(-2px)}
+  .card .head{padding:16px 18px 10px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .card h3{font-size:1.02rem}
+  .badge{font-size:.72rem;padding:4px 10px;border-radius:999px;white-space:nowrap;font-weight:600}
+  .b-green{background:rgba(61,220,132,.15);color:var(--green);border:1px solid var(--green)}
+  .b-amber{background:rgba(255,184,77,.13);color:var(--amber);border:1px solid var(--amber)}
+  .b-red{background:rgba(255,107,107,.13);color:var(--red);border:1px solid var(--red)}
+  .card .body{padding:0 18px 14px;color:var(--muted);font-size:.88rem;flex:1}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;padding:0 18px 14px}
+  .tag{font-size:.72rem;color:var(--blue);background:rgba(90,184,255,.1);border-radius:6px;padding:3px 8px}
+  .card .more{padding:10px 18px;border-top:1px solid var(--border);font-size:.8rem;color:var(--lime);background:var(--panel2)}
+  .detail{display:none;padding:0 18px 16px;background:var(--panel2);font-size:.87rem}
+  .card.open .detail{display:block}
+  .detail h4{color:var(--lime);font-size:.82rem;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px}
+  .detail ol{padding-left:20px;color:var(--text)}
+  .detail ol li{margin-bottom:6px}
+  .detail .why{color:var(--muted);font-style:italic}
+
+  /* roadmap */
+  .phase{border-left:3px solid var(--border);margin-left:10px;padding:0 0 28px 24px;position:relative}
+  .phase:last-child{padding-bottom:0}
+  .phase::before{content:'';position:absolute;left:-11px;top:2px;width:19px;height:19px;border-radius:50%;background:var(--bg);border:3px solid var(--lime)}
+  .phase h3{font-size:1.1rem}
+  .phase .when{color:var(--lime);font-size:.82rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .phase .goal{color:var(--muted);font-size:.9rem;margin:4px 0 10px}
+  .phase ul{list-style:none}
+  .phase li{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.9rem;display:flex;gap:10px;align-items:baseline}
+  .phase li::before{content:'›';color:var(--lime);font-weight:700}
+  .phase .kpi{background:rgba(200,245,66,.07);border:1px dashed var(--lime-dim);border-radius:10px;padding:10px 14px;font-size:.85rem;margin-top:10px}
+  .phase .kpi b{color:var(--lime)}
+
+  /* funnel */
+  .funnel{margin:20px 0}
+  .fstep{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+  .fbar{height:38px;border-radius:8px;background:linear-gradient(90deg,var(--lime),var(--lime-dim));display:flex;align-items:center;padding:0 14px;color:#0b0f14;font-weight:600;font-size:.85rem;min-width:120px;transition:width .6s ease}
+  .fnote{color:var(--muted);font-size:.83rem}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem}
+  th{text-align:left;color:var(--lime);font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;border-bottom:1px solid var(--border)}
+  td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+  td.mut{color:var(--muted)}
+
+  .verdict-item{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px}
+  .verdict-item h3{font-size:1rem;margin-bottom:6px;display:flex;gap:10px;align-items:center}
+  .verdict-item p{color:var(--muted);font-size:.9rem}
+  .verdict-item p b{color:var(--text)}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .d-red{background:var(--red)} .d-amber{background:var(--amber)} .d-green{background:var(--green)}
+
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:.8rem}
+  footer a{color:var(--blue)}
+  @media(max-width:640px){ .cards{grid-template-columns:1fr} header h1{font-size:1.5rem} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>TACTIUM · <span>Plan de Escalado</span></h1>
+  <p>Investigación y hoja de ruta para crecer en descargas y suscripciones de pago. Basado en el estado real del proyecto (julio 2026), el mercado del pádel federado en España y benchmarks de apps de suscripción.</p>
+  <div class="meta">
+    <div>📅 <b>Julio 2026</b> · La temporada federada arranca en sept–oct</div>
+    <div>📱 <b>iOS publicada</b> · Android pendiente</div>
+    <div>💶 Planes anuales <b>47,99 € – 384,99 €</b> · trial 14 días</div>
+  </div>
+</header>
+
+<nav>
+  <button class="tabbtn active" data-tab="t0">📍 Situación</button>
+  <button class="tabbtn" data-tab="t1">🎯 Abanico de estrategias</button>
+  <button class="tabbtn" data-tab="t2">🗓️ Roadmap por fases</button>
+  <button class="tabbtn" data-tab="t3">📊 Estructura y KPIs</button>
+  <button class="tabbtn" data-tab="t4">⚖️ Veredicto honesto</button>
+  <button class="tabbtn" data-tab="t5">🌍 Expansión: SNP · LAPI · Internacional</button>
+</nav>
+
+<!-- ============ TAB 0: SITUACIÓN ============ -->
+<section id="t0" class="tab active">
+  <h2>Dónde estás y cuánto mercado hay <span>de verdad</span></h2>
+  <p class="sub">Antes de elegir canales, hay que dimensionar el mercado real. TACTIUM no compite por los 6 millones de jugadores casuales: compite por los capitanes y clubs del pádel <b>federado</b>. Eso cambia todo el plan.</p>
+
+  <div class="grid">
+    <div class="stat"><div class="n">~109.000</div><div class="l">Licencias federadas en España (récord 2024, +8% anual)</div></div>
+    <div class="stat"><div class="n">~4.500</div><div class="l">Clubs de pádel en España (≈17.000–18.500 pistas)</div></div>
+    <div class="stat"><div class="n">~10–14k</div><div class="l">Equipos federados estimados (≈8–10 jugadores/equipo) = tu mercado directo de capitanes</div></div>
+    <div class="stat"><div class="n">~70%</div><div class="l">Cuota Android en España — hoy invisible para TACTIUM</div></div>
+  </div>
+
+  <div class="callout">
+    <b>La lectura importante:</b> tu mercado direccionable no son millones de personas, son <b>~10–14 mil capitanes y ~4.500 clubs</b>. Es un mercado de nicho que se gana con ventas directas, boca a boca y alianzas — no con publicidad masiva. La buena noticia: en un nicho así, con 300–500 equipos de pago ya tienes un negocio serio, y cada capitán conoce a otros 10 capitanes.
+  </div>
+
+  <div class="callout red">
+    <b>El bloqueo nº 1 es Android.</b> Sin la app en Google Play pierdes ~7 de cada 10 capitanes que intentan descargarla, y cualquier euro en marketing rinde a un tercio. Es la palanca de crecimiento más barata y de mayor impacto disponible ahora mismo. (Recuerda: Google exige el APK/AAB subido antes de crear las suscripciones.)
+  </div>
+
+  <h2 style="margin-top:28px">El factor <span>calendario</span></h2>
+  <p class="sub">Las ligas federadas arrancan en septiembre–octubre. Los capitanes deciden sus herramientas <b>al inicio de temporada</b>. Tienes una ventana de captación de oro entre <b>agosto y octubre de 2026</b>: todo el plan está pensado para llegar a esa ventana con Android publicado y la maquinaria de ventas rodando. Perder esa ventana significa esperar (casi) un año.</p>
+
+  <div class="funnel">
+    <h2>Funnel objetivo (benchmarks del sector)</h2>
+    <div class="fstep"><div class="fbar" style="width:100%">1.000 visitas a ficha</div><div class="fnote">Ads, emails, QR, boca a boca</div></div>
+    <div class="fstep"><div class="fbar" style="width:35%">~300 descargas</div><div class="fnote">30–35% de conversión de ficha bien optimizada</div></div>
+    <div class="fstep"><div class="fbar" style="width:14%">~90 trials</div><div class="fnote">~30% descarga→trial si el onboarding es claro</div></div>
+    <div class="fstep"><div class="fbar" style="width:5%">~27 de pago</div><div class="fnote">30–40% trial→pago es alcanzable con trial de 14 días (mediana del sector con trial largo: ~45%)</div></div>
+  </div>
+  <p class="sub">Con ticket medio ~100 €/año, esas 1.000 visitas valdrían ~2.700 €/año. La pregunta de cada canal es: <b>¿cuánto cuesta llevar 1.000 capitanes reales a la ficha?</b></p>
+</section>
+
+<!-- ============ TAB 1: ESTRATEGIAS ============ -->
+<section id="t1" class="tab">
+  <h2>Abanico de <span>estrategias</span></h2>
+  <p class="sub">13 vías de crecimiento evaluadas con honestidad. Haz clic en cada tarjeta para ver el plan de actuación paso a paso. Filtra por veredicto.</p>
+  <div class="filters" id="filters">
+    <button data-f="all" class="on">Todas</button>
+    <button data-f="green">🟢 Hazlo ya</button>
+    <button data-f="amber">🟡 Con matices</button>
+    <button data-f="red">🔴 Ahora no</button>
+  </div>
+  <div class="cards" id="cards"></div>
+</section>
+
+<!-- ============ TAB 2: ROADMAP ============ -->
+<section id="t2" class="tab">
+  <h2>Roadmap <span>por fases</span></h2>
+  <p class="sub">Secuencia pensada para llegar al inicio de la temporada federada (sept–oct) con el máximo de piezas funcionando. Cada fase tiene un objetivo medible: si no se cumple, no tiene sentido pasar a la siguiente.</p>
+  <div id="roadmap"></div>
+</section>
+
+<!-- ============ TAB 3: ESTRUCTURA ============ -->
+<section id="t3" class="tab">
+  <h2>Estructura de trabajo y <span>KPIs</span></h2>
+  <p class="sub">Siendo una persona (con Claude como copiloto), la estructura no es un organigrama: es una rutina semanal disciplinada y 6 números que se miran siempre.</p>
+
+  <h3 style="margin:18px 0 8px;color:var(--lime)">Semana tipo del fundador</h3>
+  <table>
+    <tr><th>Día</th><th>Bloque</th><th>Qué se hace</th></tr>
+    <tr><td><b>Lunes</b></td><td class="mut">Métricas + producto</td><td>Revisar los 6 KPIs, responder soporte, priorizar 1 mejora de producto de la semana</td></tr>
+    <tr><td><b>Martes–Jueves</b></td><td class="mut">Ventas (lo sagrado)</td><td>15–30 emails personalizados a clubs/día, seguimientos a 4–5 días, 2–5 demos de 10 min</td></tr>
+    <tr><td><b>Viernes</b></td><td class="mut">Canal de la fase</td><td>Según fase: ficha ASO, creatividades de ads, contenido, gestión de federaciones</td></tr>
+    <tr><td><b>Fin de semana</b></td><td class="mut">Terreno</td><td>1–2 visitas/mes a jornadas de liga o torneos: hablar con capitanes reales, QR, feedback</td></tr>
+  </table>
+
+  <h3 style="margin:24px 0 8px;color:var(--lime)">Los 6 números (dashboard semanal)</h3>
+  <table>
+    <tr><th>KPI</th><th>Qué mide</th><th>Objetivo orientativo</th></tr>
+    <tr><td><b>⭐ Equipos activos/semana</b></td><td class="mut">North Star: equipos con alineación publicada esa jornada</td><td>Crecimiento constante; es EL número</td></tr>
+    <tr><td><b>Descargas/semana</b></td><td class="mut">Volumen alto del funnel (App Store + Play)</td><td>Tendencia, por canal si es posible</td></tr>
+    <tr><td><b>Descarga → trial</b></td><td class="mut">Calidad del onboarding</td><td>&gt;25–30%</td></tr>
+    <tr><td><b>Trial → pago</b></td><td class="mut">Ajuste producto-precio</td><td>&gt;30% (mediana sector con trial largo ~45%)</td></tr>
+    <tr><td><b>Retención jornada a jornada</b></td><td class="mut">% de equipos que repiten alineación la siguiente jornada</td><td>&gt;80% — si baja, para todo y arregla producto</td></tr>
+    <tr><td><b>Churn / renovaciones</b></td><td class="mut">Cancelaciones y renovación anual</td><td>Vigilar sobre todo al acabar la temporada (mayo–junio)</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Regla de oro del gasto:</b> CAC &lt; 1/3 del valor anual del cliente. Si el plan medio son ~100 €/año, no pagues más de ~30 € por conseguir un suscriptor. Con venta directa a clubs (planes de 240–385 €) puedes permitirte invertir mucho más por cierre — por eso las ventas B2B son tu mejor canal ahora.
+  </div>
+
+  <h3 style="margin:24px 0 8px;color:var(--lime)">Presupuesto según escenario (mensual)</h3>
+  <table>
+    <tr><th>Escenario</th><th>Inversión</th><th>Dónde va</th></tr>
+    <tr><td><b>Mínimo viable</b></td><td>0–100 €</td><td class="mut">Emails a clubs, loop viral en producto, QR en clubs, ASO. Todo tiempo, casi nada de dinero</td></tr>
+    <tr><td><b>Recomendado</b></td><td>300–500 €</td><td class="mut">Lo anterior + Meta Ads 10–15 €/día (tras Android) + materiales para torneos</td></tr>
+    <tr><td><b>Agresivo</b></td><td>1.000–1.500 €</td><td class="mut">Lo anterior + patrocinio de una jornada interclubs + herramienta de email B2B + diseño de creatividades</td></tr>
+  </table>
+</section>
+
+<!-- ============ TAB 4: VEREDICTO ============ -->
+<section id="t4" class="tab">
+  <h2>Veredicto <span>honesto</span></h2>
+  <p class="sub">Me pediste sinceridad. Esto es lo que creo que no funcionaría, los riesgos reales, y el techo del negocio tal y como está planteado.</p>
+  <div id="verdicts"></div>
+</section>
+
+<!-- ============ TAB 5: EXPANSIÓN ============ -->
+<section id="t5" class="tab">
+  <h2>Abrir el mercado: <span>ligas no federadas, amistosos e internacional</span></h2>
+  <p class="sub">La puerta "×10" del veredicto, convertida en plan. La clave no es marketing: es UNA decisión de producto que abre los tres frentes a la vez.</p>
+
+  <div class="grid">
+    <div class="stat"><div class="n">~2.500</div><div class="l">Equipos en SNP (Series Nacionales de Pádel) · &gt;100k jugadores · 900 clubs · la mayor liga amateur por equipos del mundo</div></div>
+    <div class="stat"><div class="n">~25.000</div><div class="l">Usuarios en LAPI · 320+ clubs · equipos de 9–12 · nació como alternativa a la cuota federativa</div></div>
+    <div class="stat"><div class="n">4 países</div><div class="l">SNP ya opera en Portugal, Suecia, México e Italia — un puente internacional ya construido</div></div>
+    <div class="stat"><div class="n">×3–10</div><div class="l">Multiplicador de mercado: federado (~10–14k equipos) + SNP + LAPI + interempresas + ligas locales de club</div></div>
+  </div>
+
+  <div class="callout">
+    <b>El prerrequisito es de producto, no de marketing: el motor de plantillas de competición.</b> Hoy TACTIUM entiende un formato (federado, orden de fuerza). Para abrir todo lo demás hace falta que cada equipo elija su plantilla al crearse: <b>FEP</b> (la actual), <b>SNP</b> (5 dobles, gana quien llega a 3, sin orden de fuerza federativo), <b>LAPI</b> (3 partidos, plantillas 9–12), <b>Interempresas</b> y <b>Libre/Amistoso</b> (tú defines parejas y reglas). Una sola pieza de desarrollo convierte "la app del pádel federado" en <b>"la app del capitán de pádel"</b> sin perder tu profundidad reglamentaria. Todo lo de esta pestaña depende de ella.
+  </div>
+
+  <div class="phase">
+    <div class="when">OLA 1 · SNP y LAPI España — otoño 2026</div>
+    <h3>El mismo dolor, el doble de mercado, cero barrera de idioma</h3>
+    <p class="goal">El capitán SNP/LAPI gestiona plantillas de 8–12 y monta alineación cada jornada: dolor idéntico al federado. Y sus temporadas también arrancan en otoño.</p>
+    <ul>
+      <li>Construir la plantilla SNP primero (mayor volumen); si el modelo de datos lo permite, en beta para la ventana sept–oct</li>
+      <li>Bottom-up: tu prospección de clubs ya sirve — los equipos SNP juegan en 900 clubs; añade una variante del email para clubs con equipos SNP/LAPI</li>
+      <li>Top-down: contactar a la organización SNP y a LAPI para ser "la app del capitán" (tienen cultura de partner: adidas, HEAD, NACEX)</li>
+      <li>Pricing: este público huye de la cuota federativa → es más sensible al precio; considera un tier de entrada más barato o plan por temporada</li>
+      <li>Piloto medible: 20–30 equipos SNP de una zona, antes de empujar fuerte</li>
+    </ul>
+    <div class="kpi">⚠️ <b>Honestidad:</b> SNP y LAPI tienen plataforma oficial donde se reportan los resultados (LAPI usa Mi Club Pádel). NO compitas con el sistema del organizador: posiciónate como la herramienta <b>interna</b> del equipo (disponibilidad, alineación, el caos de WhatsApp) que complementa la plataforma oficial. Si el organizador te percibe como amenaza, puede cerrarte la puerta — por eso el contacto top-down conviene hacerlo pronto y en tono de aliado.</div>
+  </div>
+
+  <div class="phase">
+    <div class="when">OLA 2 · Amistosos — invierno 2026-27</div>
+    <h3>El modo gratuito que alimenta todo lo demás</h3>
+    <p class="goal">Los amistosos no son ingresos: son adquisición. Un "equipo vs equipo" amistoso compartido por WhatsApp es un anuncio gratuito perfectamente segmentado.</p>
+    <ul>
+      <li>Modo amistoso gratis con la plantilla Libre: reta a otro equipo, monta las parejas, comparte el resultado</li>
+      <li>Embudo explícito: al tercer amistoso, sugerir "¿Tu equipo juega liga? Gestiónala con TACTIUM"</li>
+      <li>Usa los amistosos como campo de pruebas de ARENA/gamificación cuando toque</li>
+    </ul>
+    <div class="kpi">⚠️ <b>Honestidad:</b> en partidas abiertas y quedadas chocas frontalmente con Playtomic — es SU terreno y lo perderías. Limítate al formato <b>equipo vs equipo</b> (que ellos no cubren) y no intentes ser un marketplace de reservas.</div>
+  </div>
+
+  <div class="phase">
+    <div class="when">OLA 3 · Internacional — 2027</div>
+    <h3>Entrar por donde SNP ya abrió la puerta, no por federaciones</h3>
+    <p class="goal">Abrir país por federación obliga a reconstruir el reglamento en cada mercado (lento, caro). Entrar donde SNP ya opera significa mismas reglas, misma plantilla de producto y capitanes ya organizados.</p>
+    <ul>
+      <li>Orden sugerido: <b>Portugal y México</b> primero (localización casi nula: ES/PT), luego <b>Italia</b> (2º mercado europeo, exige i18n) y <b>Suecia</b> (EN funciona)</li>
+      <li>Prerrequisitos técnicos baratos de adelantar: i18n en el código, precios por país en las stores, textos de ficha traducidos</li>
+      <li>Las federaciones extranjeras (FIP, nacionales) son la fase 2 internacional: repetir allí el playbook federativo español una vez el modo SNP demuestre tracción</li>
+      <li>Disparador para arrancar: retención &gt;80% y canal repetible en España — no antes</li>
+    </ul>
+    <div class="kpi">✅ <b>Criterio de éxito de toda la expansión:</b> que un capitán de cualquier liga, en cualquier país, pueda crear su equipo eligiendo plantilla en &lt;2 minutos sin que tú toques nada.</div>
+  </div>
+
+  <div class="callout red">
+    <b>Lo que no haría:</b> abrir los tres frentes a la vez este verano. La ventana federada de sept–oct sigue siendo la prioridad — es tu base de ingresos y tu prueba de retención. El motor de plantillas se construye en paralelo solo si no roba tiempo a las ventas; si hay que elegir, primero vender lo que ya existe. Expansión sin retención demostrada es multiplicar un cubo agujereado.
+  </div>
+</section>
+
+<footer>
+  Fuentes principales: Playtomic Global Padel Report 2026 (PwC), Padelnomics España 2026, RevenueCat State of Subscription Apps 2025/26, Business of Apps, seriesnacionalesdepadel.com, ligalapi.com. Elaborado el 7 de julio de 2026. Las cifras de mercado son estimaciones para orientar decisiones, no auditorías.
+</footer>
+</div>
+
+<script>
+const STRATEGIES = [
+ {v:'green', t:'1 · Lanzar en Google Play (Android)', tags:['Crítico','Coste ~25 $','2–4 semanas'],
+  s:'La palanca más barata y de mayor impacto. ~70% del mercado español usa Android: hoy 7 de cada 10 capitanes interesados no pueden ni descargarte.',
+  plan:['Generar el AAB de producción con EAS Build','Subirlo a Play Console (desbloquea la creación de suscripciones — Google lo exige antes, a diferencia de Apple)','Crear los 8 productos de suscripción espejo de los de Apple','Track interno → prueba cerrada (Google exige testers) → producción','Objetivo: publicado antes del 15 de agosto para llegar a la ventana de temporada'],
+  why:'Sin esto, todos los demás canales rinden a un tercio. Nada de lo que sigue tiene sentido priorizarlo por delante.'},
+
+ {v:'green', t:'2 · Venta directa a clubs (founder-led sales)', tags:['Coste ~0 €','Ya tienes el material','Continuo'],
+  s:'Tu canal principal los próximos 6 meses. Ya tienes el Excel de clubs y el email de prospección: falta ejecutar con disciplina. Un club = varios equipos = ticket de 240–385 €/año.',
+  plan:['15–30 emails/día personalizados ([CLUB], [NOMBRE]) desde subdominio aparte','Seguimiento breve a los 4–5 días (duplica la tasa de respuesta)','Demo de 10 min por videollamada con los equipos reales del club cargados','Cierre con trial de 14 días + oferta de onboarding: "te lo dejo configurado yo"','Registrar todo en una hoja: enviados, respuestas, demos, cierres — para conocer tu tasa de conversión real'],
+  why:'En B2B nicho, el boca a boca y la venta directa son el canal nº 1 (los datos del sector lo confirman: el 30% de la adquisición B2B viene de referencias, ningún canal de pago llega al 12%). Además hablar con 50 clubs te dará más aprendizaje de producto que cualquier analítica.'},
+
+ {v:'green', t:'3 · Loop viral capitán → jugador', tags:['Coste 0 €','Producto','Compuesto'],
+  s:'Tu mejor arma estructural. Cada capitán mete ~8-10 jugadores gratis en la app. Muchos de esos jugadores son capitanes de otros equipos o lo serán. Es el motor de crecimiento de Playtomic aplicado a tu nicho.',
+  plan:['Pulir la invitación de jugadores hasta que sea impecable (1 toque, sin fricción)','Alineación compartible como imagen bonita para WhatsApp con marca TACTIUM y QR','En la vista del jugador, CTA sutil: "¿Capitaneas otro equipo? Pruébalo gratis"','Notificación post-jornada al jugador con su resultado → hábito → visibilidad de marca','Medir coeficiente viral: ¿cuántos capitanes nuevos trae cada equipo activo?'],
+  why:'Los grupos de WhatsApp de equipos federados son el canal de distribución perfecto y gratuito. Cada alineación compartida es un anuncio segmentado al 100%.'},
+
+ {v:'green', t:'4 · Programa de referidos entre capitanes', tags:['Coste bajo','Offer codes','1 semana de setup'],
+  s:'Capitán trae capitán → ambos reciben 1 mes gratis (offer codes de App Store / Play). En un mundillo donde todos los capitanes se conocen de las jornadas, es pólvora.',
+  plan:['Crear offer codes en App Store Connect (y Play cuando esté)','Pantalla "Invita a un capitán" en la app + email a usuarios actuales','Mensaje post-primera-alineación: es el momento de máxima satisfacción','Llevar cuenta manual al principio; automatizar solo si funciona'],
+  why:'Coste marginal casi nulo y recompensa en producto (no en dinero), lo que atrae usuarios de calidad.'},
+
+ {v:'green', t:'5 · Presencia física: jornadas, torneos y QR', tags:['Coste 50–300 €','Fin de semana','Local'],
+  s:'Los capitanes están físicamente en las pistas cada fin de semana de liga. Ir donde están es barato y nadie más lo hace.',
+  plan:['Cartel A5 con QR "La app del capitán federado" en tablones de clubs aliados (pide permiso, funciona)','1–2 visitas/mes a jornadas interclubs: hablar con capitanes, enseñar la app en 30 segundos','Patrocinio pequeño de un torneo local (100–300 €): logo + mesa + QR','Recoger emails/teléfonos de capitanes interesados para seguimiento'],
+  why:'En un nicho geográficamente concentrado, 20 conversaciones cara a cara valen más que 10.000 impresiones.'},
+
+ {v:'green', t:'6 · Alianzas con federaciones territoriales', tags:['Coste 0–500 €','Ciclo lento (2–6 meses)','Alto impacto'],
+  s:'Una federación territorial que recomiende TACTIUM a sus capitanes te da acceso instantáneo y con sello oficial a todo tu mercado de esa región. Lento, pero transformador.',
+  plan:['Mapear federaciones territoriales (Madrid, Cataluña, Andalucía, Aragón…) y su tamaño','Empezar por UNA pequeña/mediana y accesible — más fácil cerrar y sirve de caso de éxito','Propuesta: temporada gratis o descuento para sus capitanes a cambio de difusión oficial (email, web, jornada de presentación)','Argumento clave: TACTIUM respeta el orden de fuerza y reglamento federativo — les facilita la vida a ellos también','Con el primer acuerdo cerrado, usarlo como palanca con las demás'],
+  why:'Es el equivalente al playbook de Playtomic con federaciones nacionales, a tu escala. Riesgo: los ciclos institucionales son lentos; por eso se trabaja en paralelo, no como plan A único.'},
+
+ {v:'amber', t:'7 · Meta Ads (Instagram/Facebook)', tags:['300–450 €/mes','Solo tras Android','Medición limitada'],
+  s:'Tu plan actual de Meta Ads es razonable, pero ejecutarlo HOY tiene dos problemas: sin Android desperdicias ~70% de las impresiones, y sin SKAN/medición no sabes qué funciona.',
+  plan:['ESPERAR a que Android esté publicado','Activar medición de instalaciones (SKAdNetwork en iOS; Play referrer en Android)','Arrancar con 10–15 €/día, 2 conjuntos (intereses pádel federado vs. Advantage+) como ya tienes planificado','Creatividad ganadora probable: vídeo casero "si eres capitán federado…" (UGC convierte mejor que diseño pulido)','Evaluar a los 30 días con CAC real: si supera ~30 € por suscriptor, pausar y volver a canales orgánicos'],
+  why:'Honestidad: el público "capitán de pádel federado" es tan pequeño (~10–14k personas) que Meta no puede segmentarlo bien. Los ads aquí sirven para acelerar el boca a boca, no como motor principal. Presupuesto pequeño, expectativas realistas.'},
+
+ {v:'amber', t:'8 · ASO (optimización de fichas)', tags:['Coste 0 €','1–2 días','Higiene necesaria'],
+  s:'Necesario pero no suficiente: casi nadie busca "app alineaciones pádel" en la App Store. El ASO aquí no genera demanda, convierte la demanda que llevas por otros canales.',
+  plan:['Título/subtítulo con keywords reales: "pádel federado", "capitán", "alineaciones", "equipos"','Screenshots que cuenten la historia en 3 segundos: alineación lista en 30 seg','Pedir reseña dentro de la app justo después de publicar una alineación (momento feliz)','Ficha de Play Store igual de cuidada desde el día 1','Vídeo preview de 15–20 seg con el flujo estrella'],
+  why:'Una ficha excelente puede duplicar la conversión visita→descarga (de ~20% a ~35%+). Eso multiplica el rendimiento de TODOS los demás canales. Pero por sí sola traerá pocas descargas: volumen de búsqueda mínimo.'},
+
+ {v:'amber', t:'9 · Contenido y comunidad de capitanes', tags:['Coste 0 €','Medio plazo (3–6 meses)','2–3 h/semana'],
+  s:'Convertirte en LA referencia del capitán federado: guías de reglamento, orden de fuerza por federación, newsletter/grupo de WhatsApp. Siembra lenta, cosecha fiel.',
+  plan:['3–4 guías SEO long-tail: "cómo hacer la alineación en liga federada [federación]", "orden de fuerza explicado"…','Newsletter quincenal o grupo WhatsApp/Telegram "Capitanes de pádel" (el grupo da más cercanía en este nicho)','Reutilizar cada guía como hilos/reels cortos','Responder dudas de reglamento en grupos de Facebook/foros de pádel federado (sin spamear: aportando)'],
+  why:'Refuerza autoridad y alimenta la venta B2B, pero tarda meses. No es el canal para la ventana de septiembre; es inversión para 2027.'},
+
+ {v:'amber', t:'10 · Checkout web (Stripe) para clubs', tags:['Ahorro 15–30% comisión','Requiere desarrollo','B2B'],
+  s:'Ya lo exploraste (modelo Spotify: pagan en web, entran en la app). Para clubs tiene sentido: evita la comisión de las stores en los tickets grandes y permite factura para el club.',
+  plan:['Solo para el plan club vendido por email/demo (el flujo B2B ya pasa por la web)','Página de pago en tactium.io con Stripe + factura automática','Respetar anti-steering: la app móvil no menciona precios web','Mantener IAP para el capitán individual que llega solo por la store'],
+  why:'En un plan de 385 €, la comisión de Apple/Google son 58–115 € al año. Con 50 clubs, hablamos de miles de euros. Pero es desarrollo y complejidad: hazlo cuando tengas ~10+ clubs cerrados, no antes.'},
+
+ {v:'amber', t:'11 · TACTIUM ARENA (gamificación)', tags:['Retención, no adquisición','No priorizar aún','2027'],
+  s:'Los minijuegos (Arena) pueden hacer que los jugadores abran la app entre jornadas → más retención → loop viral más fuerte. Pero no trae capitanes nuevos directamente.',
+  plan:['Congelar hasta que Android + ventas estén rodando','Cuando toque: lanzar 1 solo juego (Predicción encaja con la jornada) y medir si mueve retención','Si mueve retención de jugadores, expandir; si no, descartar sin pena'],
+  why:'Honestidad: es lo más divertido de construir y lo menos urgente para facturar. Peligro clásico de fundador técnico: refugiarse en producto en vez de vender.'},
+
+ {v:'red', t:'12 · Influencers y patrocinios grandes', tags:['CAC altísimo','Audiencia equivocada','Ahora no'],
+  s:'La audiencia de los influencers de pádel son jugadores casuales y fans de Premier Padel, no capitanes federados. Pagarías por miles de vistas de gente que jamás comprará.',
+  plan:['Descartado como canal de pago en 2026','Excepción válida y barata: micro-perfiles LOCALES (jugadores federados con 1–5k seguidores de su comunidad) a cambio de suscripción gratis, no de dinero'],
+  why:'El desajuste audiencia-comprador es total. Un patrocinio de 2.000 € rendiría menos que 2 meses de emails a clubs, que cuestan 0.'},
+
+ {v:'red', t:'13 · Expansión internacional (Italia, Suecia, Francia…)', tags:['Prematuro','2027','Primero PMF en España'],
+  s:'El pádel explota en Europa y la tentación es ir ya. Pero cada país tiene federaciones, reglamentos y órdenes de fuerza distintos: tu ventaja competitiva (profundidad reglamentaria) hay que reconstruirla por país.',
+  plan:['No abrir mercado nuevo hasta tener en España: retención jornada-a-jornada >80% y un canal de adquisición repetible','Mientras tanto, coste 0: preparar i18n en el código y observar qué país llega orgánicamente','Primer candidato lógico: Italia (2º mercado europeo, estructura federativa fuerte)'],
+  why:'Escalar antes de tener producto-mercado demostrado multiplica los costes de todo. España es el mercado nº 1 mundial: si no ganas aquí, no ganarás fuera.'}
+];
+
+const ROADMAP = [
+ {when:'FASE 0 · Julio – mediados de agosto', title:'Fundamentos (desbloquear)', goal:'Objetivo: eliminar los cuellos de botella que limitan todo lo demás.',
+  items:['Publicar TACTIUM en Google Play con las 8 suscripciones (estrategia 1)','Montar el dashboard de los 6 KPIs (aunque sea una hoja de cálculo)','Optimizar fichas de App Store y Play Store (estrategia 8)','Crear offer codes para el programa de referidos (estrategia 4)','Pulir el loop de invitación de jugadores y la alineación compartible por WhatsApp (estrategia 3)'],
+  kpi:'✅ Criterio de salida: app en ambas stores + funnel medible (descargas → trial → pago).'},
+ {when:'FASE 1 · Agosto – octubre (LA VENTANA)', title:'Tracción manual en pretemporada', goal:'Objetivo: 30–60 equipos de pago aprovechando el arranque de ligas. Todo el esfuerzo aquí.',
+  items:['Ventas a clubs a ritmo completo: 15–30 emails/día + demos (estrategia 2)','Presencia física en jornadas de pretemporada y torneos de verano con QR (estrategia 5)','Activar referidos con los capitanes existentes (estrategia 4)','Iniciar conversación con 1 federación territorial pequeña (estrategia 6 — ciclo largo, sembrar ya)','Meta Ads SOLO si Android ya está publicado: 10–15 €/día (estrategia 7)'],
+  kpi:'✅ Criterio de salida: 30+ equipos de pago y saber qué canal trajo cada uno. Retención jornada-a-jornada >80%.'},
+ {when:'FASE 2 · Noviembre – febrero 2027', title:'Sistematizar lo que funcionó', goal:'Objetivo: duplicar lo que trajo clientes en Fase 1 y apagar lo que no.',
+  items:['Escalar el canal ganador de Fase 1 (más volumen de emails, más ads, o más terreno — según datos)','Cerrar el acuerdo con la federación piloto y presentarlo como caso de éxito','Checkout web Stripe para clubs si hay 10+ clubs cerrados (estrategia 10)','Arrancar contenido/comunidad de capitanes con 2–3 h/semana (estrategia 9)','Preparar campaña de renovación y de segunda vuelta de liga'],
+  kpi:'✅ Criterio de salida: CAC conocido por canal, 100+ equipos de pago, primera federación firmada.'},
+ {when:'FASE 3 · Marzo 2027 en adelante', title:'Expansión', goal:'Objetivo: crecer sobre una base que ya funciona.',
+  items:['Renovaciones de temporada 2027-28 (el churn de mayo–junio es el examen final del producto)','Replicar el playbook federación-a-federación por territorios','Evaluar Italia como primer mercado internacional (estrategia 13)','Lanzar 1 juego de ARENA y medir impacto en retención (estrategia 11)','Explorar ampliar persona: ligas no federadas y amistosos (multiplica el TAM ×10)'],
+  kpi:'✅ Criterio de salida: renovación >70% y un playbook de entrada a territorio documentado.'}
+];
+
+const VERDICTS = [
+ {c:'red', t:'El techo del negocio, sin adornos',
+  p:'Con ~10–14k equipos federados en España y ticket medio ~100 €/año, el mercado total de capitanes ronda <b>1–1,5 M€/año</b> — y eso siendo líder absoluto. Los clubs suben el techo (ticket 240–385 €), pero la realidad es que TACTIUM España-federado es un <b>excelente negocio de nicho</b> (30–100k €/año es alcanzable), no un cohete. Para aspirar a más hay tres puertas: clubs como cliente principal, internacional, o ampliar a ligas no federadas y amistosos (esto último multiplica el mercado ×10 y deberías tenerlo en el radar de producto para 2027).'},
+ {c:'red', t:'Lo que NO haría con tu dinero',
+  p:'<b>Meta Ads antes de Android</b> (desperdicias 7 de cada 10 euros), <b>influencers y patrocinios grandes</b> (audiencia equivocada), <b>expansión internacional en 2026</b> (prematuro), y <b>seguir construyendo features/ARENA</b> antes de tener 30 equipos de pago. El riesgo nº 1 de este proyecto no es la competencia: es dedicar el verano a producto en vez de a vender.'},
+ {c:'amber', t:'El riesgo Playtomic',
+  p:'Playtomic tiene 4,7M jugadores, 6.500 clubs y acaba de levantar 70 M$. Si un día añaden un módulo de competición federada, tienen la distribución para aplastarte. Tu defensa: <b>profundidad reglamentaria</b> (orden de fuerza, normativa por federación — aburrido para ellos, crítico para el capitán) y <b>velocidad en el nicho</b>. También es una oportunidad: un TACTIUM con cientos de clubs es un candidato natural a adquisición. Muévete rápido precisamente porque ellos existen.'},
+ {c:'amber', t:'La retención manda sobre la adquisición',
+  p:'Sin retención, todo canal de captación es llenar un cubo agujereado. El número que decide si TACTIUM escala no son las descargas: es el <b>% de equipos que repiten alineación jornada tras jornada</b>. Si está por debajo del 80%, para el marketing y arregla el producto. Y ojo al patrón estacional: el examen real llegará en mayo–junio 2027, cuando acabe la liga y toque renovar.'},
+ {c:'green', t:'Por qué sí puede funcionar',
+  p:'El nicho es pequeño pero <b>denso y conectado</b>: todos los capitanes de una liga se ven las caras cada fin de semana, y el dolor (Excel + WhatsApp cada jornada) es real y recurrente. El producto tiene un loop viral natural (cada equipo arrastra 8–10 jugadores), el ticket anual soporta venta directa, y la ventana de septiembre da un momento claro de compra. Con Android publicado, disciplina de ventas en agosto–octubre y retención cuidada, llegar a 100+ equipos de pago en la temporada 2026-27 es un objetivo realista, no un brindis al sol.'}
+];
+
+// render cards
+const cardsEl = document.getElementById('cards');
+const BADGE = {green:['b-green','🟢 Hazlo ya'],amber:['b-amber','🟡 Con matices'],red:['b-red','🔴 Ahora no']};
+STRATEGIES.forEach(st=>{
+  const c=document.createElement('div');c.className='card';c.dataset.v=st.v;
+  c.innerHTML=`<div class="head"><h3>${st.t}</h3><span class="badge ${BADGE[st.v][0]}">${BADGE[st.v][1]}</span></div>
+  <div class="body">${st.s}</div>
+  <div class="tags">${st.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+  <div class="detail"><h4>Plan de actuación</h4><ol>${st.plan.map(p=>`<li>${p}</li>`).join('')}</ol>
+  <h4>Por qué / riesgos</h4><p class="why">${st.why}</p></div>
+  <div class="more">▸ Ver plan de actuación</div>`;
+  c.addEventListener('click',()=>{c.classList.toggle('open');c.querySelector('.more').textContent=c.classList.contains('open')?'▾ Ocultar plan':'▸ Ver plan de actuación';});
+  cardsEl.appendChild(c);
+});
+
+// filters
+document.querySelectorAll('#filters button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#filters button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  document.querySelectorAll('.card').forEach(c=>{c.style.display=(b.dataset.f==='all'||c.dataset.v===b.dataset.f)?'flex':'none';});
+}));
+
+// roadmap
+document.getElementById('roadmap').innerHTML = ROADMAP.map(f=>`
+ <div class="phase"><div class="when">${f.when}</div><h3>${f.title}</h3><p class="goal">${f.goal}</p>
+ <ul>${f.items.map(i=>`<li>${i}</li>`).join('')}</ul><div class="kpi">${f.kpi}</div></div>`).join('');
+
+// verdicts
+document.getElementById('verdicts').innerHTML = VERDICTS.map(v=>`
+ <div class="verdict-item"><h3><span class="dot d-${v.c}"></span>${v.t}</h3><p>${v.p}</p></div>`).join('');
+
+// tabs
+document.querySelectorAll('.tabbtn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tabbtn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}));
+</script>
+</body>
+</html>

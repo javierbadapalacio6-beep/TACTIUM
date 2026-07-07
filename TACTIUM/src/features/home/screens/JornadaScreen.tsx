@@ -829,7 +829,6 @@ export const JornadaScreen = ({
         open={showShare}
         onClose={() => setShowShare(false)}
         matchday={matchday}
-        season={season}
         pairs={pairs}
         teamName={team?.name ?? '—'}
       />
@@ -1350,32 +1349,31 @@ const ShareLineupSheet: React.FC<{
   open: boolean;
   onClose: () => void;
   matchday: MatchdaysApi.Matchday;
-  season: SeasonsApi.Season | null;
   pairs: LineupsApi.LineupPair[];
   teamName: string;
-}> = ({ open, onClose, matchday, season, pairs, teamName }) => {
+}> = ({ open, onClose, matchday, pairs, teamName }) => {
   const dateObj = isoDateToDate(matchday.match_date);
   const shortDate = dateObj ? formatShortDay(dateObj) : 'Fecha pendiente';
   const time = matchday.match_time?.slice(0, 5) ?? '';
 
+  const homePlace = matchday.is_home ? '🏠 Casa' : '✈️ Fuera';
+
   const text = [
-    `🎾 *TACTIUM · ${teamName} · J·${String(matchday.jornada_number).padStart(2, '0')}*`,
-    `${matchday.is_home ? 'Local' : 'Visitante'} · vs. ${matchday.opponent}`,
-    `${shortDate}${time ? ` · ${time}` : ''}${
-      season ? ` · ${season.name}` : ''
-    }`,
+    `💪 ¡Nos vemos en la pista!`,
+    `🎾 ${teamName} · J·${String(matchday.jornada_number).padStart(2, '0')} vs ${matchday.opponent}`,
+    `📅 ${shortDate}${time ? ` · ${time}` : ''} · ${homePlace}`,
     ``,
-    `*Alineación*`,
+    `Esta es la alineación 👇`,
     ...pairs
       .sort((a, b) => (a.court_number ?? 0) - (b.court_number ?? 0))
       .map(
         (p) =>
-          `P${p.court_number} — ${p.player_a_name ?? '—'} / ${
+          `🎾 Pareja ${p.court_number}: ${p.player_a_name ?? '—'} / ${
             p.player_b_name ?? '—'
           }${p.pair_points != null ? `  (${p.pair_points} pts)` : ''}`,
       ),
     ``,
-    `Recuerda confirmar disponibilidad 🟢`,
+    `¡A darlo todo! 🔥 Confirma tu disponibilidad 🟢`,
   ].join('\n');
 
   const shareWhatsapp = async () => {

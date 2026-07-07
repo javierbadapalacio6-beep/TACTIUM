@@ -43,3 +43,10 @@ next-env.d.ts
 # Native build artifacts (regenerados por expo prebuild)
 TACTIUM/ios/
 TACTIUM/android/
+
+# Binarios de build descargados (artefactos EAS) y claves
+builds/
+*.aab
+*.ipa
+*.apk
+*.p8

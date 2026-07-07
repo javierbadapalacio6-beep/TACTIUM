@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TACTIUM ARENA — Prototipo</title>
+<style>
+  :root{
+    --bg:#030F0F; --raised:#081818; --card:#0C2222; --card2:#0F2A28;
+    --primary:#03624C; --primary-dim:#02463A;
+    --accent:#00DF82; --accent-dim:#00B86B;
+    --text:#E8F5EF; --muted:rgba(232,245,239,.70); --faint:rgba(232,245,239,.50);
+    --border:rgba(232,245,239,.10); --hair:rgba(232,245,239,.06);
+    --warn:#F2C94C; --err:#FF6B6B;
+    --a10:rgba(0,223,130,.10); --a25:rgba(0,223,130,.25);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#010808;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);display:flex;justify-content:center}
+  .mono{font-family:'JetBrains Mono',Menlo,Consolas,monospace}
+  #phone{width:100%;max-width:430px;min-height:100dvh;background:var(--bg);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .screen{display:none;flex-direction:column;flex:1;padding:20px 18px 28px;animation:fade .25s ease}
+  .screen.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* ── Header ── */
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .back{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:8px 14px;font-size:14px;cursor:pointer}
+  .brand{font-size:12px;letter-spacing:3px;color:var(--accent);font-weight:700}
+  .chips{display:flex;gap:8px}
+  .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center}
+  .chip b{color:var(--accent)}
+
+  h1{font-size:26px;font-weight:800;letter-spacing:-.5px}
+  h2{font-size:19px;font-weight:700}
+  .sub{color:var(--muted);font-size:14px;margin-top:4px}
+
+  /* ── Hub cards ── */
+  .games{display:flex;flex-direction:column;gap:12px;margin-top:20px}
+  .gcard{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:18px;padding:16px;display:flex;gap:14px;align-items:center;cursor:pointer;transition:transform .1s}
+  .gcard:active{transform:scale(.98)}
+  .gicon{width:52px;height:52px;border-radius:14px;background:var(--a10);border:1px solid var(--a25);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+  .gcard h3{font-size:16px;font-weight:700}
+  .gcard p{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+  .gtag{margin-left:auto;font-size:10px;letter-spacing:1px;color:var(--accent);border:1px solid var(--a25);border-radius:999px;padding:4px 9px;white-space:nowrap;align-self:flex-start}
+
+  .rankbtn{margin-top:16px;background:var(--card);border:1px dashed var(--a25);border-radius:16px;padding:14px;text-align:center;color:var(--accent);font-weight:600;font-size:14px;cursor:pointer}
+  .proto{margin-top:auto;padding-top:18px;text-align:center;font-size:11px;color:var(--faint);letter-spacing:1px}
+
+  /* ── Buttons / options ── */
+  .btn{background:var(--accent);color:#001810;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;width:100%;margin-top:14px}
+  .btn.ghost{background:var(--card);color:var(--text);border:1px solid var(--border)}
+  .btn:disabled{opacity:.4}
+  .opts{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .opt{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;font-size:15px;color:var(--text);text-align:left;cursor:pointer;transition:all .15s}
+  .opt.correct{background:rgba(0,223,130,.15);border-color:var(--accent);color:var(--accent)}
+  .opt.wrong{background:rgba(255,107,107,.12);border-color:var(--err);color:var(--err)}
+  .opt:disabled{cursor:default}
+  .explain{margin-top:12px;background:var(--raised);border-left:3px solid var(--accent);border-radius:0 12px 12px 0;padding:12px 14px;font-size:13.5px;color:var(--muted);line-height:1.5;display:none}
+  .explain.show{display:block}
+
+  /* ── Progress / timer ── */
+  .meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--faint);margin-bottom:8px;letter-spacing:1px}
+  .bar{height:5px;background:var(--card);border-radius:99px;overflow:hidden;margin-bottom:16px}
+  .bar>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
+  .tbar>i{transition:width 1s linear}
+
+  /* ── Court ── */
+  .court-wrap{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:12px;margin-bottom:6px}
+  .legend{display:flex;gap:14px;justify-content:center;font-size:11px;color:var(--faint);margin-top:8px}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:99px;margin-right:4px}
+
+  /* ── Reflex arena ── */
+  #arena{position:relative;flex:1;min-height:420px;background:linear-gradient(180deg,#062b1f,#03624C22),var(--raised);border:1px solid var(--a25);border-radius:18px;overflow:hidden;touch-action:manipulation}
+  #arena .net{position:absolute;left:0;right:0;top:50%;height:2px;background:rgba(232,245,239,.18)}
+  #arena .line{position:absolute;background:rgba(232,245,239,.08)}
+  .ball{position:absolute;width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#d9ff5e,#9be51e 60%,#5e9612);box-shadow:0 0 18px rgba(155,229,30,.45);display:flex;align-items:center;justify-content:center;cursor:pointer;animation:pop .18s ease;user-select:none}
+  .ball.gold{background:radial-gradient(circle at 35% 30%,#ffe98a,var(--warn) 60%,#b8860b);box-shadow:0 0 22px rgba(242,201,76,.6)}
+  .ball::after{content:"";width:100%;height:18px;border:2px solid rgba(255,255,255,.55);border-radius:50%;border-top:none;border-bottom:none;position:absolute;transform:rotate(-30deg)}
+  @keyframes pop{from{transform:scale(.3)}to{transform:scale(1)}}
+  .hud{display:flex;justify-content:space-between;margin-bottom:12px}
+  .hudbox{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 14px;text-align:center;flex:1}
+  .hudbox+.hudbox{margin-left:8px}
+  .hudbox small{display:block;font-size:10px;letter-spacing:1.5px;color:var(--faint)}
+  .hudbox b{font-size:18px;color:var(--accent)}
+  .floatpts{position:absolute;font-weight:800;color:var(--accent);font-size:16px;pointer-events:none;animation:rise .7s ease forwards}
+  @keyframes rise{to{transform:translateY(-34px);opacity:0}}
+
+  /* ── Predict ── */
+  .match{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
+  .match .vs{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .pair{flex:1;background:var(--raised);border:1.5px solid var(--border);border-radius:12px;padding:11px 8px;text-align:center;font-size:13px;cursor:pointer;line-height:1.35}
+  .pair.sel{border-color:var(--accent);background:var(--a10);color:var(--accent)}
+  .pair.win{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .pair.lose{opacity:.45}
+  .vslab{font-size:11px;color:var(--faint);font-weight:700}
+  .mtag{font-size:10px;letter-spacing:1.5px;color:var(--faint)}
+  .mres{margin-top:8px;font-size:12.5px;display:none}
+  .mres.show{display:block}
+
+  /* ── Result / ranking ── */
+  .bigscore{text-align:center;margin:26px 0}
+  .bigscore .n{font-size:64px;font-weight:800;color:var(--accent);line-height:1}
+  .bigscore .l{font-size:12px;letter-spacing:3px;color:var(--faint);margin-top:6px}
+  .stats{display:flex;gap:10px;margin-top:8px}
+  .stat{flex:1;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;text-align:center}
+  .stat b{font-size:20px;display:block}
+  .stat small{font-size:10.5px;color:var(--faint);letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--hair)}
+  .row .pos{width:26px;font-weight:800;color:var(--faint)}
+  .row .nm{flex:1;font-size:14.5px}
+  .row .xp{color:var(--accent);font-weight:700;font-size:14px}
+  .row.me{background:var(--a10);border-radius:12px;border:1px solid var(--a25)}
+  .medal{font-size:16px}
+
+  /* ── Partido Arcade ── */
+  #mwrap{position:relative;flex:1;display:flex;flex-direction:column}
+  #mcanvas{width:100%;height:auto;border-radius:18px;border:1px solid var(--a25);background:#031410;touch-action:none;display:block}
+  #mmsg{position:absolute;left:10px;right:10px;top:40%;text-align:center;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 2px 12px #000;pointer-events:none;opacity:0;transition:opacity .25s;z-index:5}
+  .shotbar{display:flex;gap:8px;margin-top:10px}
+  .shot{flex:1;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:11px 0;color:var(--muted);font-weight:700;font-size:13px;cursor:pointer;text-align:center;user-select:none}
+  .shot.sel{border-color:var(--accent);color:var(--accent);background:var(--a10)}
+  #hitbar{position:relative;height:14px;border-radius:99px;margin-top:10px;border:1px solid var(--border);opacity:.22;transition:opacity .15s;
+    background:linear-gradient(90deg,#FF6B6B 0%,#F2C94C 24%,#00DF82 41%,#00DF82 59%,#F2C94C 76%,#FF6B6B 100%)}
+  #hitbar.on{opacity:1;box-shadow:0 0 12px rgba(0,223,130,.3)}
+  #hb-m{position:absolute;top:-4px;left:50%;width:4px;height:22px;background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,.8);transition:background .1s}
+
+  /* ── Padel Crush ── */
+  #cwrap{position:relative;margin-top:4px}
+  #cboard{position:relative;width:100%;border-radius:16px;background:var(--raised);border:1px solid var(--hair);overflow:hidden;touch-action:none}
+  .tile{position:absolute;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--card);border:1px solid var(--hair);cursor:pointer;transition:top .22s ease,left .22s ease,transform .15s,opacity .2s;user-select:none}
+  .tile.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--a25);transform:scale(1.1);z-index:2}
+  .tile.dead{opacity:0;transform:scale(.15)}
+  .tile.cross{box-shadow:inset 0 0 0 2px var(--warn)}
+  .tile.bomb{background:radial-gradient(circle,#1d3a33,var(--card));box-shadow:0 0 12px var(--a25)}
+  #cmsg{position:absolute;left:12px;right:12px;top:44%;text-align:center;font-weight:800;font-size:15px;color:var(--accent);background:rgba(3,15,15,.9);border:1px solid var(--a25);border-radius:12px;padding:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:6}
+</style>
+</head>
+<body>
+<div id="phone">
+
+  <!-- ══════════ HUB ══════════ -->
+  <div class="screen active" id="s-home">
+    <div class="topbar">
+      <span class="brand mono">TACTIUM · ARENA</span>
+      <div class="chips">
+        <span class="chip">⚡ <b id="hub-xp">0</b> XP</span>
+        <span class="chip">🔥 <b id="hub-streak">0</b></span>
+      </div>
+    </div>
+    <h1>Arena de juegos</h1>
+    <p class="sub">Entrena tu cabeza fuera de la pista. Gana XP y sube en el ranking del club.</p>
+    <div class="games">
+      <div class="gcard" onclick="Match.start()">
+        <div class="gicon">🎾</div>
+        <div><h3>Partido Arcade</h3><p>Juega un 2v2 de verdad: mueve a tu jugador y elige globo, plana o remate.</p></div>
+        <span class="gtag">NUEVO</span>
+      </div>
+      <div class="gcard" onclick="Crush.start()">
+        <div class="gicon">🧩</div>
+        <div><h3>Padel Crush</h3><p>Combina fichas de pádel, encadena remates y supera niveles.</p></div>
+        <span class="gtag">NUEVO</span>
+      </div>
+      <div class="gcard" onclick="Quiz.start()">
+        <div class="gicon">🎯</div>
+        <div><h3>Quiz Táctico</h3><p>Lee la jugada en pista y elige el golpe correcto.</p></div>
+        <span class="gtag">+XP ALTO</span>
+      </div>
+      <div class="gcard" onclick="Reflex.start()">
+        <div class="gicon">⚡</div>
+        <div><h3>Reflejos</h3><p>Golpea todas las bolas antes de que caigan. 45 segundos.</p></div>
+        <span class="gtag">ARCADE</span>
+      </div>
+      <div class="gcard" onclick="Trivia.start()">
+        <div class="gicon">🧠</div>
+        <div><h3>Trivial Pádel</h3><p>Reglas, historia y circuito profesional contrarreloj.</p></div>
+        <span class="gtag">DIARIO</span>
+      </div>
+      <div class="gcard" onclick="Predict.start()">
+        <div class="gicon">🔮</div>
+        <div><h3>Predicción</h3><p>Acierta los resultados de la jornada de tu club.</p></div>
+        <span class="gtag">JORNADA 12</span>
+      </div>
+    </div>
+    <div class="rankbtn" onclick="Rank.show()">🏆 Ver ranking del club</div>
+    <div class="proto mono">PROTOTIPO · TACTIUM LAB</div>
+  </div>
+
+  <!-- ══════════ QUIZ TÁCTICO ══════════ -->
+  <div class="screen" id="s-quiz">
+    <div class="topbar"><button class="back" onclick="go('s-home')">← Salir</button><span class="brand mono">QUIZ TÁCTICO</span><span class="chip">🎯 <b id="q-score">0</b></span></div>
+    <div class="meta mono"><span id="q-step">SITUACIÓN 1/8</span><span>+25 XP POR ACIERTO</span></div>
+    <div class="bar"><i id="q-bar" style="width:12%"></i></div>
+    <div class="court-wrap">
+      <svg id="q-court" viewBox="0 0 200 300" width="100%" height="230"></svg>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>Tú</span>
+        <span><i style="background:var(--accent-dim)"></i>Compañero</span>
+        <span><i style="background:var(--err)"></i>Rivales</span>
+        <span><i style="background:var(--warn)"></i>Bola</span>
+      </div>
+    </div>
+    <h2 id="q-q" style="margin-top:10px;font-size:16.5px"></h2>
+    <div class="opts" id="q-opts"></div>
+    <div class="explain" id="q-explain"></div>
+    <button class="btn" id="q-next" style="display:none" onclick="Quiz.next()">Siguiente →</button>
+  </div>
+
+  <!-- ══════════ REFLEJOS ══════════ -->
+  <div class="screen" id="s-reflex">
+    <div class="topbar"><button class="back" onclick="Reflex.quit()">← Salir</button><span class="brand mono">REFLEJOS</span><span class="chip">👆</span></div>
+    <div class="hud">
+      <div class="hudbox"><small>PUNTOS</small><b id="r-score">0</b></div>
+      <div class="hudbox"><small>COMBO</small><b id="r-combo">x1</b></div>
+      <div class="hudbox"><small>TIEMPO</small><b id="r-time">45</b></div>
+      <div class="hudbox"><small>VIDAS</small><b id="r-lives">❤❤❤</b></div>
+    </div>
+    <div id="arena">
+      <div class="net"></div>
+      <div class="line" style="left:50%;top:0;bottom:0;width:1px"></div>
+      <div class="line" style="left:8%;right:8%;top:26%;height:1px"></div>
+      <div class="line" style="left:8%;right:8%;bottom:26%;height:1px"></div>
+    </div>
+  </div>
+
+  <!-- ══════════ TRIVIAL ══════════ -->
+  <div class="screen" id="s-trivia">
+    <div class="topbar"><button class="back" onclick="Trivia.quit()">← Salir</button><span class="brand mono">TRIVIAL PÁDEL</span><span class="chip">🧠 <b id="t-score">0</b></span></div>
+    <div class="meta mono"><span id="t-step">PREGUNTA 1/10</span><span id="t-secs">15s</span></div>
+    <div class="bar tbar"><i id="t-bar" style="width:100%"></i></div>
+    <h2 id="t-q" style="min-height:72px"></h2>
+    <div class="opts" id="t-opts"></div>
+    <div class="explain" id="t-explain"></div>
+    <button class="btn" id="t-next" style="display:none" onclick="Trivia.next()">Siguiente →</button>
+  </div>
+
+  <!-- ══════════ PREDICCIÓN ══════════ -->
+  <div class="screen" id="s-predict">
+    <div class="topbar"><button class="back" onclick="go('s-home')">← Salir</button><span class="brand mono">PREDICCIÓN</span><span class="chip">🔮</span></div>
+    <h2>Jornada 12 · Liga del club</h2>
+    <p class="sub" style="margin-bottom:14px">Elige la pareja ganadora de cada partido. +50 XP por acierto.</p>
+    <div id="p-list"></div>
+    <button class="btn" id="p-go" disabled onclick="Predict.simulate()">Guardar y simular jornada</button>
+    <button class="btn ghost" id="p-done" style="display:none" onclick="Predict.finish()">Ver resumen →</button>
+  </div>
+
+  <!-- ══════════ PARTIDO ARCADE ══════════ -->
+  <div class="screen" id="s-match">
+    <div class="topbar"><button class="back" onclick="Match.quit()">← Salir</button><span class="brand mono">PARTIDO ARCADE</span><span class="chip mono">🎾 <b id="m-games">0-0</b></span></div>
+    <div class="meta mono" style="margin-bottom:8px"><span id="m-pts">TÚ 0 - 0 RIVAL</span><span id="m-serve">SACAS TÚ</span></div>
+    <div id="mwrap">
+      <canvas id="mcanvas" width="360" height="640"></canvas>
+      <div id="mmsg"></div>
+    </div>
+    <div id="hitbar"><i id="hb-m"></i></div>
+    <div class="shotbar">
+      <div class="shot" onclick="Match.swing('globo',this)">🌙 GLOBO</div>
+      <div class="shot sel" onclick="Match.swing('plana',this)">➡ PLANA</div>
+      <div class="shot" onclick="Match.swing('remate',this)">💥 REMATE</div>
+    </div>
+    <p class="sub" style="margin-top:8px;font-size:11.5px">Arrastra para mover a tu jugador. Cuando la bola venga hacia ti se activa la barra: pulsa un golpe con el marcador en la zona verde → ¡perfecto! Si no pulsas, tu jugador la devuelve floja. A 3 juegos.</p>
+  </div>
+
+  <!-- ══════════ PADEL CRUSH ══════════ -->
+  <div class="screen" id="s-crush">
+    <div class="topbar"><button class="back" onclick="Crush.quit()">← Salir</button><span class="brand mono">PADEL CRUSH</span><span class="chip">🧩 Nv <b id="c-level">1</b></span></div>
+    <div class="hud">
+      <div class="hudbox"><small>PUNTOS</small><b id="c-score">0</b></div>
+      <div class="hudbox"><small>OBJETIVO</small><b id="c-target">1200</b></div>
+      <div class="hudbox"><small>JUGADAS</small><b id="c-moves">20</b></div>
+    </div>
+    <div id="cwrap">
+      <div id="cboard"></div>
+      <div id="cmsg"></div>
+    </div>
+    <p class="sub" style="margin-top:10px;font-size:12px">Combina 3+. Línea de 4 = ficha 💥 remate (limpia fila y columna al estallar). Línea de 5 = 🌟 bola de oro (cámbiala por cualquier ficha y elimina todas las de ese tipo).</p>
+  </div>
+
+  <!-- ══════════ RESULTADO ══════════ -->
+  <div class="screen" id="s-result">
+    <div class="topbar"><span></span><span class="brand mono" id="res-title">RESULTADO</span><span></span></div>
+    <div class="bigscore"><div class="n" id="res-xp">+0</div><div class="l mono">XP GANADOS</div></div>
+    <h2 id="res-msg" style="text-align:center"></h2>
+    <div class="stats" id="res-stats"></div>
+    <button class="btn" onclick="Rank.show()">🏆 Ver ranking</button>
+    <button class="btn ghost" onclick="go('s-home')">Volver a la arena</button>
+  </div>
+
+  <!-- ══════════ RANKING ══════════ -->
+  <div class="screen" id="s-ranking">
+    <div class="topbar"><button class="back" onclick="go('s-home')">← Arena</button><span class="brand mono">RANKING CLUB</span><span class="chip">🏆</span></div>
+    <h2>Club Pádel Indoor Zaragoza</h2>
+    <p class="sub" style="margin-bottom:10px">Temporada 2026 · Arena semanal</p>
+    <div id="rank-list"></div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+/* ───────────────── ESTADO GLOBAL ───────────────── */
+const S = { xp: 0, streak: 1 };
+try {
+  const saved = JSON.parse(localStorage.getItem("tactium-arena") || "null");
+  if (saved) Object.assign(S, saved);
+} catch (e) {}
+function save() { try { localStorage.setItem("tactium-arena", JSON.stringify(S)); } catch (e) {} }
+function $(id) { return document.getElementById(id); }
+function go(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  $(id).classList.add("active");
+  refreshHub();
+}
+function refreshHub() { $("hub-xp").textContent = S.xp; $("hub-streak").textContent = S.streak; }
+function showResult(title, xpGained, msg, stats) {
+  S.xp += xpGained; save();
+  $("res-title").textContent = title;
+  $("res-xp").textContent = "+" + xpGained;
+  $("res-msg").textContent = msg;
+  $("res-stats").innerHTML = stats.map(s => `<div class="stat"><b>${s[1]}</b><small>${s[0]}</small></div>`).join("");
+  go("s-result");
+}
+
+/* ───────────────── QUIZ TÁCTICO ─────────────────
+   Pista vista cenital 10x20 → viewBox 200x300.
+   p = [tú, compañero, rival1, rival2] posiciones; b = bola; arrow = trayectoria entrante */
+const QUIZ = [
+  { p:[[60,210],[140,210],[60,70],[140,70]], b:[100,150], arrow:[[140,70],[70,190]],
+    q:"Estás en la red y te lanzan un globo que llegas a golpear de aire. ¿Qué haces?",
+    o:["Remate a máxima potencia","Bandeja para mantener la red","Dejarla botar y defender","Volea plana cruzada"], c:1,
+    e:"La bandeja es el golpe de control por excelencia: devuelves profundo sin perder la posición de red, que es donde se ganan los puntos en pádel." },
+  { p:[[60,260],[140,260],[60,60],[140,60]], b:[100,240], arrow:[[60,60],[100,235]],
+    q:"Tú y tu pareja estáis en el fondo y los rivales dominan la red. ¿Golpe ideal?",
+    o:["Passing shot fuerte al centro","Dejada corta","Globo profundo","Remate desde el fondo"], c:2,
+    e:"El globo profundo obliga a los rivales a retroceder y os permite subir a la red: es la forma clásica de invertir la posición dominante." },
+  { p:[[70,120],[140,190],[60,50],[140,60]], b:[75,100], arrow:[[60,50],[78,98]],
+    q:"Recibes una bola alta y franca muy cerca de la red. ¿Qué eliges?",
+    o:["Remate definitivo (por 3 o por 4)","Bandeja conservadora","Globo ofensivo","Chiquita al centro"], c:0,
+    e:"Bola alta y cerca de la red = luz verde. El remate por 3 (por encima del cristal lateral) o por 4 es la opción más rentable para cerrar el punto." },
+  { p:[[60,250],[140,250],[70,80],[140,70]], b:[80,230], arrow:[[70,80],[82,225]],
+    q:"Devuelves el saque y el sacador ya está subiendo a la red. ¿Mejor respuesta?",
+    o:["Golpe fuerte a su cuerpo","Chiquita baja a los pies","Globo corto","Dejada"], c:1,
+    e:"La chiquita (bola lenta y baja a los pies del que sube) le obliga a volear hacia arriba y te da tiempo para ganar tú la red." },
+  { p:[[60,110],[140,110],[40,70],[170,90]], b:[100,140], arrow:[[170,90],[102,138]],
+    q:"La pareja rival queda descolocada y se abre un pasillo central. ¿Dónde juegas?",
+    o:["Ángulo corto a la malla","Al centro, entre los dos","Globo al más alto","A la reja del lado abierto"], c:1,
+    e:"El centro reduce los ángulos de respuesta y genera duda sobre quién golpea. Regla de oro: 'en la duda, al medio'." },
+  { p:[[100,270],[150,240],[60,60],[140,60]], b:[100,285], arrow:[[140,60],[100,280]],
+    q:"Un globo te supera por completo. La bola va a botar y rebotar en la pared de fondo. ¿Qué haces?",
+    o:["Intentar rematarla de espaldas","Correr, dejarla rebotar en la pared y responder con globo","Dejarla ir, punto perdido","Golpearla antes del cristal sin control"], c:1,
+    e:"La pared es tu aliada: el rebote te da tiempo extra. Un globo tras la pared te permite recolocarte y seguir vivo en el punto." },
+  { p:[[70,110],[140,120],[60,60],[140,70]], b:[72,125], arrow:[[60,60],[71,122]],
+    q:"Estás en la red y recibes un golpe rápido a media altura, directo a tu cuerpo. ¿Qué haces?",
+    o:["Volea de bloqueo con mano firme","Remate improvisado","Girarte y dejarla pasar a la pared","Contraataque a máxima potencia"], c:0,
+    e:"Contra velocidad, control: la volea de bloqueo usa el ritmo de la bola rival. Añadir potencia a una bola rápida multiplica el error." },
+  { p:[[100,140],[185,220],[60,60],[140,60]], b:[110,160], arrow:[[140,60],[112,156]],
+    q:"Tu compañero ha sido sacado fuera de la pista y te llega una bola cómoda. ¿Qué priorizas?",
+    o:["Ganar el punto ya con un winner arriesgado","Globo profundo para dar tiempo a reorganizaros","Dejada sorpresa","Bola rápida al hueco"], c:1,
+    e:"Con la pareja rota, primero se reconstruye. El globo profundo compra tiempo, recoloca al equipo y evita regalar un contraataque al hueco." },
+];
+const Quiz = {
+  i:0, score:0,
+  start(){ this.i=0; this.score=0; $("q-score").textContent="0"; this.render(); go("s-quiz"); },
+  render(){
+    const d = QUIZ[this.i];
+    $("q-step").textContent = `SITUACIÓN ${this.i+1}/${QUIZ.length}`;
+    $("q-bar").style.width = ((this.i+1)/QUIZ.length*100)+"%";
+    $("q-q").textContent = d.q;
+    $("q-explain").className = "explain";
+    $("q-next").style.display = "none";
+    this.drawCourt(d);
+    $("q-opts").innerHTML = "";
+    d.o.forEach((txt,idx)=>{
+      const b = document.createElement("button");
+      b.className="opt"; b.textContent=txt;
+      b.onclick=()=>this.answer(idx,b);
+      $("q-opts").appendChild(b);
+    });
+  },
+  drawCourt(d){
+    const cols=["var(--accent)","var(--accent-dim)","var(--err)","var(--err)"];
+    let s=`<rect x="10" y="10" width="180" height="280" rx="6" fill="#062b1f" stroke="rgba(232,245,239,.25)" stroke-width="2"/>
+      <line x1="10" y1="150" x2="190" y2="150" stroke="rgba(232,245,239,.5)" stroke-width="2.5"/>
+      <line x1="100" y1="38" x2="100" y2="262" stroke="rgba(232,245,239,.15)" stroke-width="1.5"/>
+      <line x1="10" y1="66" x2="190" y2="66" stroke="rgba(232,245,239,.15)" stroke-width="1.5"/>
+      <line x1="10" y1="234" x2="190" y2="234" stroke="rgba(232,245,239,.15)" stroke-width="1.5"/>`;
+    if(d.arrow){
+      s+=`<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--warn)"/></marker></defs>
+      <line x1="${d.arrow[0][0]}" y1="${d.arrow[0][1]}" x2="${d.arrow[1][0]}" y2="${d.arrow[1][1]}" stroke="var(--warn)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah)" opacity=".85"/>`;
+    }
+    d.p.forEach((pt,i)=>{ s+=`<circle cx="${pt[0]}" cy="${pt[1]}" r="9" fill="${cols[i]}" stroke="rgba(0,0,0,.4)" stroke-width="1.5"/>`; });
+    s+=`<circle cx="${d.b[0]}" cy="${d.b[1]}" r="6" fill="var(--warn)"/>`;
+    $("q-court").innerHTML = s;
+  },
+  answer(idx,btn){
+    const d=QUIZ[this.i];
+    document.querySelectorAll("#q-opts .opt").forEach((b,i)=>{
+      b.disabled=true;
+      if(i===d.c) b.classList.add("correct");
+    });
+    if(idx===d.c){ this.score++; $("q-score").textContent=this.score; }
+    else btn.classList.add("wrong");
+    $("q-explain").textContent = d.e;
+    $("q-explain").className = "explain show";
+    $("q-next").style.display = "block";
+    $("q-next").textContent = this.i===QUIZ.length-1 ? "Ver resultado →" : "Siguiente →";
+  },
+  next(){
+    if(++this.i < QUIZ.length) return this.render();
+    const xp = this.score*25;
+    const msgs = this.score>=7 ? "Visión de juego de nivel WPT 🧠" : this.score>=5 ? "Buena lectura táctica. Sigue así." : "La táctica se entrena. ¡Repite el quiz!";
+    showResult("QUIZ TÁCTICO", xp, msgs, [["ACIERTOS",this.score+"/"+QUIZ.length],["PRECISIÓN",Math.round(this.score/QUIZ.length*100)+"%"],["XP/ACIERTO","25"]]);
+  }
+};
+
+/* ───────────────── REFLEJOS ───────────────── */
+const Reflex = {
+  score:0, combo:1, lives:3, time:45, timers:[],
+  start(){
+    this.score=0; this.combo=1; this.lives=3; this.time=45; this.clear();
+    $("r-score").textContent="0"; $("r-combo").textContent="x1"; $("r-time").textContent="45"; $("r-lives").textContent="❤❤❤";
+    document.querySelectorAll("#arena .ball,#arena .floatpts").forEach(b=>b.remove());
+    go("s-reflex");
+    this.timers.push(setInterval(()=>this.tick(),1000));
+    this.spawn();
+  },
+  tick(){
+    if(--this.time<=0) return this.end();
+    $("r-time").textContent=this.time;
+  },
+  spawn(){
+    if(this.time<=0) return;
+    const arena=$("arena");
+    const gold = Math.random()<0.15;
+    const ball=document.createElement("div");
+    ball.className="ball"+(gold?" gold":"");
+    const size = 58;
+    ball.style.left = Math.random()*(arena.clientWidth-size-10)+5+"px";
+    ball.style.top  = Math.random()*(arena.clientHeight-size-10)+5+"px";
+    // vida de la bola: se acorta según avanza el juego
+    const life = Math.max(650, 1500 - (45-this.time)*20);
+    const death = setTimeout(()=>{ ball.remove(); this.miss(); }, life);
+    ball.onpointerdown = (ev)=>{
+      ev.preventDefault(); clearTimeout(death);
+      const pts = (gold?25:10)*this.combo;
+      this.score+=pts; this.combo=Math.min(5,this.combo+1);
+      $("r-score").textContent=this.score; $("r-combo").textContent="x"+this.combo;
+      const f=document.createElement("div"); f.className="floatpts"; f.textContent="+"+pts;
+      f.style.left=ball.style.left; f.style.top=ball.style.top;
+      arena.appendChild(f); setTimeout(()=>f.remove(),700);
+      ball.remove();
+    };
+    arena.appendChild(ball);
+    this.timers.push(death);
+    // siguiente bola: cadencia creciente
+    const gap = Math.max(420, 950 - (45-this.time)*12);
+    this.timers.push(setTimeout(()=>this.spawn(), gap));
+  },
+  miss(){
+    this.combo=1; $("r-combo").textContent="x1";
+    if(--this.lives<=0){ $("r-lives").textContent=""; return this.end(); }
+    $("r-lives").textContent="❤".repeat(this.lives);
+  },
+  clear(){ this.timers.forEach(t=>{clearInterval(t);clearTimeout(t);}); this.timers=[]; },
+  quit(){ this.clear(); go("s-home"); },
+  end(){
+    this.clear();
+    document.querySelectorAll("#arena .ball").forEach(b=>b.remove());
+    const xp = Math.round(this.score/4);
+    const msg = this.score>=400 ? "¡Reflejos de volea profesional! ⚡" : this.score>=200 ? "Muy rápido. La red es tuya." : "Sigue entrenando la mano rápida.";
+    showResult("REFLEJOS", xp, msg, [["PUNTOS",this.score],["COMBO MÁX","x"+this.combo],["VIDAS",this.lives>0?this.lives:0]]);
+  }
+};
+
+/* ───────────────── TRIVIAL ───────────────── */
+const TRIVIA = [
+  { q:"¿Qué medidas tiene una pista de pádel?", o:["10 × 20 m","8 × 16 m","12 × 24 m","9 × 18 m"], c:0, e:"La pista mide 10 metros de ancho por 20 de largo, dividida por la red en dos campos de 10×10." },
+  { q:"¿Cómo se puntúa un partido de pádel?", o:["Al mejor de 21 puntos","Como en tenis: 15, 30, 40, juego","Por tiempo: 2 partes de 20 min","Sets a 6 juegos sin ventajas siempre"], c:1, e:"El pádel hereda la puntuación del tenis: 15, 30, 40, juego; sets a 6 juegos y partidos normalmente al mejor de 3 sets." },
+  { q:"¿Cómo debe ejecutarse el saque?", o:["Por encima del hombro","Sin bote previo","Tras un bote y golpeando por debajo de la cintura","Con la pala por encima de la cabeza"], c:2, e:"El saque es siempre tras botar la bola y con impacto a la altura o por debajo de la cintura, en diagonal." },
+  { q:"¿Qué altura tiene la red en el centro?", o:["1 metro","88 cm","92 cm","80 cm"], c:1, e:"88 cm en el centro y 92 cm en los extremos." },
+  { q:"¿Dónde y cuándo nació el pádel?", o:["España, 1975","Argentina, 1980","México, 1969","EE. UU., 1965"], c:2, e:"Enrique Corcuera lo creó en Acapulco (México) en 1969 al adaptar una pista en su casa." },
+  { q:"¿Qué es una 'bandeja'?", o:["Un globo defensivo","Un golpe de aire con efecto cortado para mantener la red","Un remate definitivo","Una dejada corta"], c:1, e:"La bandeja es el golpe aéreo de control del pádel: cortado, profundo y pensado para no perder la posición de red." },
+  { q:"¿Qué significa ganar un punto 'por 3'?", o:["Ganar 3 puntos seguidos","Sacar la bola del recinto por encima del cristal lateral tras el remate","Golpear 3 paredes","Un set ganado 6-3"], c:1, e:"El remate 'por 3' saca la bola por encima de la pared lateral (3 m). Si sale del recinto tras el bote, el punto suele ser tuyo, aunque el rival puede salir a buscarla." },
+  { q:"¿Puede jugarse la bola después de que rebote en tu propia pared?", o:["No, nunca","Sí, si antes botó en tu suelo una sola vez","Solo en el saque","Solo si toca la red antes"], c:1, e:"Es la esencia del pádel: tras un bote en el suelo, la bola puede jugarse después de rebotar en tus paredes." },
+  { q:"¿Cuál es el principal circuito profesional en 2026?", o:["World Padel Tour","Premier Padel","ATP Padel","Golden League"], c:1, e:"Premier Padel, respaldado por la FIP y Qatar Sports Investments, absorbió al World Padel Tour y es el circuito de referencia." },
+  { q:"Si la bola bota dos veces en tu campo…", o:["Se repite el punto","Punto para el rival","Puedes jugarla si no salió","Es 'let'"], c:1, e:"El doble bote acaba el punto: es del rival. Por eso las dejadas y bolas bajas son tan valiosas." },
+];
+const Trivia = {
+  i:0, score:0, secs:15, timer:null,
+  start(){ this.i=0; this.score=0; $("t-score").textContent="0"; this.render(); go("s-trivia"); },
+  render(){
+    const d=TRIVIA[this.i];
+    $("t-step").textContent=`PREGUNTA ${this.i+1}/${TRIVIA.length}`;
+    $("t-q").textContent=d.q;
+    $("t-explain").className="explain";
+    $("t-next").style.display="none";
+    $("t-opts").innerHTML="";
+    d.o.forEach((txt,idx)=>{
+      const b=document.createElement("button");
+      b.className="opt"; b.textContent=txt;
+      b.onclick=()=>this.answer(idx,b);
+      $("t-opts").appendChild(b);
+    });
+    this.secs=15;
+    $("t-secs").textContent="15s";
+    const bar=$("t-bar"); bar.style.transition="none"; bar.style.width="100%";
+    requestAnimationFrame(()=>{ bar.style.transition="width 1s linear"; });
+    clearInterval(this.timer);
+    this.timer=setInterval(()=>{
+      this.secs--;
+      $("t-secs").textContent=this.secs+"s";
+      bar.style.width=(this.secs/15*100)+"%";
+      if(this.secs<=0) this.answer(-1,null);
+    },1000);
+  },
+  answer(idx,btn){
+    clearInterval(this.timer);
+    const d=TRIVIA[this.i];
+    document.querySelectorAll("#t-opts .opt").forEach((b,i)=>{
+      b.disabled=true;
+      if(i===d.c) b.classList.add("correct");
+    });
+    if(idx===d.c){ this.score++; $("t-score").textContent=this.score; }
+    else if(btn) btn.classList.add("wrong");
+    $("t-explain").textContent=d.e;
+    $("t-explain").className="explain show";
+    $("t-next").style.display="block";
+    $("t-next").textContent = this.i===TRIVIA.length-1 ? "Ver resultado →" : "Siguiente →";
+  },
+  next(){
+    if(++this.i<TRIVIA.length) return this.render();
+    const xp=this.score*20;
+    const msg = this.score>=8 ? "Enciclopedia del pádel 📚" : this.score>=5 ? "Buen nivel. Casi perfecto." : "Cada partida se aprende algo nuevo.";
+    showResult("TRIVIAL PÁDEL", xp, msg, [["ACIERTOS",this.score+"/"+TRIVIA.length],["XP/ACIERTO","20"],["RACHA","🔥 "+S.streak]]);
+  },
+  quit(){ clearInterval(this.timer); go("s-home"); }
+};
+
+/* ───────────────── PREDICCIÓN ───────────────── */
+const MATCHES = [
+  { t:"GRUPO A · 19:00", a:"Marta / Lucía", b:"Sara / Andrea", pa:62 },
+  { t:"GRUPO A · 20:00", a:"Javier / Dani", b:"Sergio / Álex", pa:48 },
+  { t:"GRUPO B · 20:00", a:"Pablo / Iván", b:"Carlos / Rubén", pa:55 },
+  { t:"GRUPO B · 21:00", a:"Nuria / Elena", b:"Laura / Cris", pa:41 },
+];
+const Predict = {
+  picks:{}, done:false,
+  start(){
+    this.picks={}; this.done=false;
+    $("p-go").style.display="block"; $("p-go").disabled=true;
+    $("p-done").style.display="none";
+    $("p-list").innerHTML = MATCHES.map((m,i)=>`
+      <div class="match">
+        <span class="mtag mono">${m.t}</span>
+        <div class="vs">
+          <div class="pair" id="m${i}a" onclick="Predict.pick(${i},'a')">${m.a}</div>
+          <span class="vslab">VS</span>
+          <div class="pair" id="m${i}b" onclick="Predict.pick(${i},'b')">${m.b}</div>
+        </div>
+        <div class="mres" id="m${i}r"></div>
+      </div>`).join("");
+    go("s-predict");
+  },
+  pick(i,side){
+    if(this.done) return;
+    this.picks[i]=side;
+    $("m"+i+"a").classList.toggle("sel",side==="a");
+    $("m"+i+"b").classList.toggle("sel",side==="b");
+    $("p-go").disabled = Object.keys(this.picks).length<MATCHES.length;
+  },
+  simulate(){
+    this.done=true; this.hits=0;
+    MATCHES.forEach((m,i)=>{
+      const winner = Math.random()*100 < m.pa ? "a" : "b";
+      const hit = this.picks[i]===winner;
+      if(hit) this.hits++;
+      $("m"+i+(winner==="a"?"a":"b")).classList.add("win");
+      $("m"+i+(winner==="a"?"b":"a")).classList.add("lose");
+      const r=$("m"+i+"r");
+      r.innerHTML = hit ? `<span style="color:var(--accent)">✔ Acierto +50 XP</span>` : `<span style="color:var(--err)">✘ Fallo</span>`;
+      r.classList.add("show");
+    });
+    $("p-go").style.display="none";
+    $("p-done").style.display="block";
+  },
+  finish(){
+    const xp=this.hits*50;
+    const msg = this.hits===4 ? "¡Pleno! Ojo de analista 🔮" : this.hits>=2 ? "Buen ojo para la jornada." : "La próxima jornada será la tuya.";
+    showResult("PREDICCIÓN", xp, msg, [["ACIERTOS",this.hits+"/4"],["XP/ACIERTO","50"],["JORNADA","12"]]);
+  }
+};
+
+/* ───────────────── PARTIDO ARCADE ─────────────────
+   Pista 10×20 m vista cenital. Física con altura (z), gravedad,
+   rebote en suelo/paredes, red a 0,9 m y puntuación 15/30/40. */
+const Match = {
+  PPM:28, OX:40, OY:40, G:16,
+  shot:"plana", raf:0, bound:false, state:"idle", lock:0, drag:false,
+  start(){
+    go("s-match");
+    const cv=$("mcanvas");
+    this.cv=cv; this.ctx=cv.getContext("2d");
+    this.games=[0,0]; this.n=[0,0]; this.ptNum=0; this.lock=0;
+    this.you ={x:2.5,y:16.5,side:1,col:"#00DF82",user:true};
+    this.mate={x:7.5,y:16.5,side:1,col:"#00B86B"};
+    this.r1  ={x:2.5,y:3.5, side:0,col:"#FF6B6B"};
+    this.r2  ={x:7.5,y:3.5, side:0,col:"#FF6B6B"};
+    this.players=[this.you,this.mate,this.r1,this.r2];
+    this.you.col2="#3cf0a8"; this.mate.col2="#2fd193"; this.r1.col2="#ff9b9b"; this.r2.col2="#ff9b9b";
+    this.you.skin="#e9bd90"; this.you.hair="#3a2a1c";
+    this.mate.skin="#c98d5f"; this.mate.hair="#141414";
+    this.r1.skin="#f0cfa8"; this.r1.hair="#5b3b17";
+    this.r2.skin="#8d5a3a"; this.r2.hair="#101010";
+    this.players.forEach(p=>{p.swing=0;p.phase=0;});
+    this.trail=[]; this.parts=[]; this.flashV=0; this.spin=0;
+    this.osc=0; this.mVal=0.5; this.barOn=false; this.swingReq=null;
+    $("hitbar").classList.remove("on");
+    this.target={x:2.5,y:16.5};
+    this.bindInput();
+    this.updateHud();
+    this.newPoint();
+    this.last=performance.now();
+    cancelAnimationFrame(this.raf);
+    const loop=(t)=>{ const dt=Math.min(.032,(t-this.last)/1000); this.last=t; this.step(dt); this.raf=requestAnimationFrame(loop); };
+    this.raf=requestAnimationFrame(loop);
+  },
+  quit(){ cancelAnimationFrame(this.raf); this.state="idle"; go("s-home"); },
+  swing(s,el){
+    this.shot=s;
+    document.querySelectorAll(".shot").forEach(b=>b.classList.remove("sel"));
+    el.classList.add("sel");
+    if(this.barOn){
+      const d=Math.abs(this.mVal-0.5);
+      const q=d<=0.09?"perfect":d<=0.24?"good":"bad";
+      this.swingReq={shot:s,q,until:performance.now()+450};
+      const hb=$("hb-m");
+      hb.style.background=q==="perfect"?"#00DF82":q==="good"?"#F2C94C":"#FF6B6B";
+      clearTimeout(this.hbT); this.hbT=setTimeout(()=>hb.style.background="#fff",300);
+    }
+  },
+  bindInput(){
+    if(this.bound) return; this.bound=true;
+    const cv=this.cv;
+    const setT=(ev)=>{ const r=cv.getBoundingClientRect();
+      const px=(ev.clientX-r.left)*(360/r.width), py=(ev.clientY-r.top)*(640/r.height);
+      this.target={x:Math.min(9.6,Math.max(.4,(px-this.OX)/this.PPM)),
+                   y:Math.min(19.5,Math.max(10.5,(py-this.OY)/this.PPM))}; };
+    cv.addEventListener("pointerdown",e=>{e.preventDefault();this.drag=true;setT(e);});
+    cv.addEventListener("pointermove",e=>{if(this.drag)setT(e);});
+    window.addEventListener("pointerup",()=>this.drag=false);
+  },
+  newPoint(){
+    this.state="serve";
+    this.you.x=2.5;this.you.y=16.5; this.mate.x=7.5;this.mate.y=16.5;
+    this.r1.x=2.5;this.r1.y=3.5; this.r2.x=7.5;this.r2.y=3.5;
+    this.target={x:this.you.x,y:this.you.y};
+    const bottomServes=this.ptNum%2===0;
+    $("m-serve").textContent=bottomServes?"SACAS TÚ":"SACAN ELLOS";
+    const sx=bottomServes?7.8:2.2, sy=bottomServes?18.2:1.8;
+    this.trail=[];
+    this.ball={x:sx,y:sy,z:1,vx:0,vy:0,vz:0,lastSide:null,bounces:0};
+    setTimeout(()=>{
+      if(this.state!=="serve") return;
+      const side=bottomServes?1:0;
+      const t=side===1?{x:2+Math.random()*2.5,y:4+Math.random()*3}:{x:5.5+Math.random()*2.5,y:13+Math.random()*3};
+      const v=this.aim(sx,sy,1,t.x,t.y,7.5);
+      Object.assign(this.ball,{vx:v.vx,vy:v.vy,vz:v.vz,lastSide:side,bounces:0});
+      this.lock=0.3;
+      this.state="play";
+    },850);
+  },
+  aim(px,py,z,tx,ty,speed){
+    let t=Math.hypot(tx-px,ty-py)/speed, v;
+    for(let i=0;i<6;i++){
+      v={vx:(tx-px)/t, vy:(ty-py)/t, vz:(0-z)/t+0.5*this.G*t};
+      const tn=(10-py)/v.vy;
+      if(tn>0&&tn<t){ const zn=z+v.vz*tn-0.5*this.G*tn*tn; if(zn<1.05){ t*=1.18; continue; } }
+      break;
+    }
+    return v;
+  },
+  sideOf(y){ return y<10?0:1; },
+  puff(wx,wy,type){
+    const X=this.OX+wx*this.PPM, Y=this.OY+wy*this.PPM;
+    const n=type==="hit"?12:7;
+    for(let i=0;i<n;i++){
+      const a=Math.random()*6.283, sp=type==="hit"?50+Math.random()*90:20+Math.random()*45;
+      this.parts.push({x:X,y:Y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp*(type==="dust"?0.5:1),
+        life:0.45+Math.random()*0.3, sz:type==="hit"?2.6:2,
+        col:type==="hit"?(Math.random()<0.5?"#00DF82":"#d9ff5e"):"rgba(190,225,205,0.9)"});
+    }
+    if(this.parts.length>120) this.parts.splice(0,this.parts.length-120);
+  },
+  step(dt){
+    this.spin+=dt*8;
+    for(const p of this.parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.92; p.vy*=0.92; p.life-=dt; }
+    this.parts=this.parts.filter(p=>p.life>0);
+    this.players.forEach(p=>{ p.swing=Math.max(0,p.swing-dt); });
+    this.moveTo(this.you,this.target.x,this.target.y,6.8,dt);
+    this.aiMate(dt); this.aiRival(this.r1,0,dt); this.aiRival(this.r2,1,dt);
+    this.lock-=dt;
+    // barra de golpeo: activa cuando la bola viene hacia tu lado
+    const inbound=this.state==="play"&&this.ball&&this.ball.lastSide===0;
+    if(inbound){
+      this.osc+=dt*3.4;
+      this.mVal=(Math.sin(this.osc)+1)/2;
+      if(!this.barOn){ this.barOn=true; $("hitbar").classList.add("on"); }
+      $("hb-m").style.left="calc("+(this.mVal*100).toFixed(1)+"% - 2px)";
+    } else if(this.barOn){ this.barOn=false; $("hitbar").classList.remove("on"); }
+    if(this.state!=="play"){ this.render(); return; }
+    const b=this.ball, py=b.y;
+    // cámara lenta cuando la bola cruza hacia tu campo
+    const bdt=(inbound&&b.y>6)?dt*0.62:dt;
+    b.vz-=this.G*bdt; b.x+=b.vx*bdt; b.y+=b.vy*bdt; b.z+=b.vz*bdt;
+    this.trail.push({x:b.x,y:b.y,z:b.z});
+    if(this.trail.length>12) this.trail.shift();
+    if((py-10)*(b.y-10)<0 && b.z<0.92) return this.point(1-b.lastSide,"¡a la red!");
+    if(b.z<=0){
+      if(b.vz<-3) this.puff(b.x,b.y,"dust");
+      b.z=0; b.vz=Math.abs(b.vz)*0.72; b.vx*=0.88; b.vy*=0.88;
+      if(b.vz<1.5) b.vz=0;
+      b.bounces++;
+      if(b.bounces>=2) return this.point(1-this.sideOf(b.y),"doble bote");
+    }
+    let wall=false;
+    if(b.x<0.15){b.x=0.15;b.vx=Math.abs(b.vx)*0.8;wall=true;}
+    if(b.x>9.85){b.x=9.85;b.vx=-Math.abs(b.vx)*0.8;wall=true;}
+    if(b.y<0.15){b.y=0.15;b.vy=Math.abs(b.vy)*0.8;wall=true;}
+    if(b.y>19.85){b.y=19.85;b.vy=-Math.abs(b.vy)*0.8;wall=true;}
+    if(wall && b.bounces===0) return this.point(1-b.lastSide,"¡cristal sin botar, fuera!");
+    if(wall) this.puff(b.x,b.y,"dust");
+    if(b.z<=0.02 && Math.abs(b.vz)<0.6 && Math.hypot(b.vx,b.vy)<0.8 && b.bounces>=1)
+      return this.point(1-this.sideOf(b.y),"doble bote");
+    if(this.lock<=0){
+      for(const p of this.players){
+        if(b.lastSide===p.side) continue;
+        if(b.z>3 || Math.hypot(p.x-b.x,p.y-b.y)>1.35) continue;
+        this.hit(p); break;
+      }
+    }
+    this.render();
+  },
+  hit(p){
+    const b=this.ball, SP={globo:6.3,plana:11.5,remate:15.5};
+    let shot,speed,tx,ty;
+    if(p.user){
+      let q="block";
+      if(this.swingReq && performance.now()<this.swingReq.until){ q=this.swingReq.q; shot=this.swingReq.shot; }
+      this.swingReq=null;
+      if(q==="block"){ shot="globo"; speed=5.8; this.msg("Resto de emergencia…"); }
+      else{
+        if(shot==="remate"&&b.z<1.1) shot="plana";
+        speed=SP[shot]*(q==="perfect"?1.18:q==="bad"?0.78:1);
+        if(q==="perfect") this.msg("¡PERFECTO! ⚡");
+        if(q==="bad") this.msg("Golpe flojo…");
+      }
+      if(shot==="globo") ty=1.2+Math.random()*2;
+      else if(shot==="remate") ty=6.4+Math.random()*2.4;
+      else ty=3+Math.random()*5;
+      if(q==="perfect"){ tx=Math.random()<0.5?1:9; if(shot==="plana") ty=1.5+Math.random()*2.5; }
+      else if(q==="bad"){ tx=3+Math.random()*4; ty=Math.min(ty+2.5,8.8); }
+      else if(q==="block"){ tx=2+Math.random()*6; ty=2.5+Math.random()*3.5; }
+      else tx=0.8+Math.random()*8.4;
+    } else {
+      shot=this.aiShot();
+      if(shot==="remate"&&b.z<1.1) shot="plana";
+      speed=SP[shot];
+      if(p.side===1) ty=shot==="globo"?1.2+Math.random()*2 : shot==="remate"?6.4+Math.random()*2.4 : 3+Math.random()*5;
+      else ty=shot==="globo"?16.8+Math.random()*2 : shot==="remate"?11.2+Math.random()*2.4 : 12+Math.random()*5;
+      tx=0.8+Math.random()*8.4;
+    }
+    const v=this.aim(b.x,b.y,Math.max(b.z,0.3),tx,ty,speed);
+    b.vx=v.vx; b.vy=v.vy; b.vz=v.vz; b.lastSide=p.side; b.bounces=0;
+    p.swing=0.28;
+    this.puff(b.x,b.y,"hit");
+    this.lock=0.3;
+  },
+  aiShot(){ if(this.ball.z>2) return "remate"; return Math.random()<0.72?"plana":"globo"; },
+  moveTo(p,tx,ty,sp,dt){ const dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy); if(d<0.05)return; const s=Math.min(d,sp*dt); p.x+=dx/d*s; p.y+=dy/d*s; p.phase=(p.phase||0)+s; },
+  aiMate(dt){
+    const b=this.ball,m=this.mate;
+    const homeX=this.you.x<5?7.3:2.7;
+    if(this.state==="play"&&b&&this.sideOf(b.y)===1&&Math.abs(b.x-m.x)<Math.abs(b.x-this.you.x))
+      this.moveTo(m,b.x,Math.min(19.3,Math.max(10.7,b.y)),5.6,dt);
+    else this.moveTo(m,homeX,16,4.5,dt);
+  },
+  aiRival(p,half,dt){
+    const b=this.ball;
+    const myZone=b?(half===0?b.x<5:b.x>=5):false;
+    if(this.state==="play"&&b&&(this.sideOf(b.y)===0||b.vy<0)&&myZone)
+      this.moveTo(p,b.x,Math.min(9.3,Math.max(0.7,b.y)),5.2,dt);
+    else this.moveTo(p,half===0?2.5:7.5,3.5,4.2,dt);
+  },
+  point(winner,reason){
+    this.state="pause";
+    this.flashV=0.9;
+    this.ptNum++;
+    this.n[winner]++;
+    this.msg((winner===1?"¡Punto para ti! ":"Punto rival: ")+reason);
+    const o=1-winner;
+    if(this.n[winner]>=4 && this.n[winner]-this.n[o]>=2){
+      this.games[winner]++; this.n=[0,0];
+      this.msg(winner===1?"¡JUEGO PARA TI! 🎾":"Juego para los rivales");
+      if(this.games[winner]>=3){ this.updateHud(); return setTimeout(()=>this.end(winner),1300); }
+    }
+    this.updateHud();
+    setTimeout(()=>{ if(this.state==="pause") this.newPoint(); },1400);
+  },
+  fmt(){
+    const P=[0,15,30,40], a=this.n[1], b=this.n[0];
+    if(a>=3&&b>=3){ if(a===b) return "40 - 40"; return a>b?"AD - 40":"40 - AD"; }
+    return P[Math.min(a,3)]+" - "+P[Math.min(b,3)];
+  },
+  updateHud(){ $("m-pts").textContent="TÚ "+this.fmt()+" RIVAL"; $("m-games").textContent=this.games[1]+"-"+this.games[0]; },
+  msg(t){ const m=$("mmsg"); m.textContent=t; m.style.opacity=1; clearTimeout(this.msgT); this.msgT=setTimeout(()=>m.style.opacity=0,1100); },
+  end(winner){
+    cancelAnimationFrame(this.raf); this.state="idle";
+    const xp=this.games[1]*30+(winner===1?60:0);
+    showResult("PARTIDO ARCADE", xp,
+      winner===1?"¡Victoria! La pista es tuya 🏆":"Derrota digna. ¡Pide revancha!",
+      [["JUEGOS",this.games[1]+"-"+this.games[0]],["RESULTADO",winner===1?"WIN":"LOSS"],["XP/JUEGO","30"]]);
+  },
+  render(){
+    const c=this.ctx,P=this.PPM,X=this.OX,Y=this.OY,W=10*P,L=20*P,NY=Y+10*P;
+    // fondo con viñeta
+    const bg=c.createLinearGradient(0,0,0,640);
+    bg.addColorStop(0,"#052419"); bg.addColorStop(.5,"#02110c"); bg.addColorStop(1,"#052419");
+    c.fillStyle=bg; c.fillRect(0,0,360,640);
+    // marco de cristal exterior
+    c.fillStyle="rgba(140,210,255,0.05)"; c.fillRect(X-13,Y-13,W+26,L+26);
+    c.strokeStyle="rgba(140,210,255,0.20)"; c.lineWidth=2.5; c.strokeRect(X-13,Y-13,W+26,L+26);
+    c.strokeStyle="rgba(140,210,255,0.08)"; c.lineWidth=8; c.strokeRect(X-8,Y-8,W+16,L+16);
+    // reflejos diagonales en el cristal
+    c.save(); c.beginPath(); c.rect(X-13,Y-13,W+26,L+26); c.clip();
+    c.strokeStyle="rgba(255,255,255,0.045)"; c.lineWidth=14;
+    c.beginPath(); c.moveTo(X-40,Y+60); c.lineTo(X+90,Y-40); c.moveTo(X+W-70,Y+L+40); c.lineTo(X+W+50,Y+L-80); c.stroke();
+    c.restore();
+    // césped con degradado y bandas de siega
+    const turf=c.createLinearGradient(X,Y,X+W,Y+L);
+    turf.addColorStop(0,"#0c4d31"); turf.addColorStop(1,"#073520");
+    c.fillStyle=turf; c.fillRect(X,Y,W,L);
+    c.fillStyle="rgba(255,255,255,0.022)";
+    for(let i=0;i<10;i+=2) c.fillRect(X,Y+i*2*P,W,2*P);
+    // líneas de juego
+    c.strokeStyle="rgba(255,255,255,0.6)"; c.lineWidth=2;
+    c.beginPath();
+    c.moveTo(X,Y+3.05*P); c.lineTo(X+W,Y+3.05*P);
+    c.moveTo(X,Y+16.95*P); c.lineTo(X+W,Y+16.95*P);
+    c.moveTo(X+5*P,Y+3.05*P); c.lineTo(X+5*P,Y+16.95*P);
+    c.stroke();
+    // tornillería de esquinas
+    c.fillStyle="rgba(200,230,255,0.35)";
+    [[X-13,Y-13],[X+W+13,Y-13],[X-13,Y+L+13],[X+W+13,Y+L+13]].forEach(([qx,qy])=>{ c.beginPath(); c.arc(qx,qy,3,0,7); c.fill(); });
+    // sombra de la red sobre la pista
+    c.fillStyle="rgba(0,0,0,0.22)"; c.fillRect(X,NY+2,W,7);
+    // red con malla
+    c.fillStyle="rgba(16,34,29,0.95)"; c.fillRect(X-8,NY-3.5,W+16,7);
+    c.strokeStyle="rgba(255,255,255,0.28)"; c.lineWidth=1;
+    c.beginPath();
+    for(let x=X-8;x<=X+W+8;x+=5){ c.moveTo(x,NY-3.5); c.lineTo(x,NY+3.5); }
+    c.stroke();
+    c.fillStyle="rgba(245,252,248,0.95)"; c.fillRect(X-8,NY-5,W+16,2.4);
+    c.fillStyle="#134233"; c.fillRect(X-15,NY-9,7,18); c.fillRect(X+W+8,NY-9,7,18);
+    // objetivo del jugador
+    if(this.drag){
+      const tx=X+this.target.x*P, tzy=Y+this.target.y*P;
+      c.strokeStyle="rgba(0,223,130,.5)"; c.lineWidth=1.5;
+      c.beginPath(); c.arc(tx,tzy,9,0,7); c.moveTo(tx-13,tzy);c.lineTo(tx-4,tzy);c.moveTo(tx+4,tzy);c.lineTo(tx+13,tzy);
+      c.moveTo(tx,tzy-13);c.lineTo(tx,tzy-4);c.moveTo(tx,tzy+4);c.lineTo(tx,tzy+13); c.stroke();
+    }
+    // estela de la bola
+    for(let i=0;i<this.trail.length;i++){
+      const t=this.trail[i], a=(i+1)/this.trail.length;
+      c.fillStyle="rgba(217,255,94,"+(a*0.20).toFixed(3)+")";
+      c.beginPath(); c.arc(X+t.x*P,Y+t.y*P-t.z*9,2.5+a*2.5,0,7); c.fill();
+    }
+    // jugadores humanos (orden por profundidad)
+    const ps=[...this.players].sort((a,b)=>a.y-b.y);
+    for(const p of ps){
+      const px=X+p.x*P, pyy=Y+p.y*P;
+      let ang=p.side===1?-Math.PI/2:Math.PI/2;
+      if(this.ball) ang=Math.atan2((Y+this.ball.y*P)-pyy,(X+this.ball.x*P)-px);
+      // sombra
+      c.fillStyle="rgba(0,0,0,.38)"; c.beginPath(); c.ellipse(px,pyy+6,10,4.5,0,0,7); c.fill();
+      c.save(); c.translate(px,pyy); c.rotate(ang+Math.PI/2);
+      // pies caminando
+      const stp=Math.sin((p.phase||0)*2.2)*3;
+      c.fillStyle="#12241d";
+      c.beginPath(); c.ellipse(-4,6-stp*0.6,2.6,3.4,0,0,7); c.fill();
+      c.beginPath(); c.ellipse(4,6+stp*0.6,2.6,3.4,0,0,7); c.fill();
+      // brazo libre
+      c.strokeStyle=p.skin; c.lineWidth=3.4; c.lineCap="round";
+      c.beginPath(); c.moveTo(-7,-1); c.lineTo(-11,4); c.stroke();
+      // brazo con pala (swing al golpear)
+      const sw=p.swing>0?Math.sin((0.28-p.swing)/0.28*Math.PI)*1.5:0;
+      c.save(); c.translate(7,-1); c.rotate(-0.5+sw);
+      c.strokeStyle=p.skin; c.beginPath(); c.moveTo(0,0); c.lineTo(7,-4); c.stroke();
+      c.fillStyle="#101d18"; c.fillRect(6,-6.5,2.6,4);
+      c.fillStyle=p.user?"#00DF82":"#d8e6df";
+      c.beginPath(); c.ellipse(7.4,-11,4.2,5.4,0.25,0,7); c.fill();
+      c.strokeStyle="rgba(0,0,0,.35)"; c.lineWidth=1; c.stroke();
+      c.restore();
+      // torso (camiseta)
+      const g=c.createRadialGradient(-2,-3,1,0,0,9);
+      g.addColorStop(0,p.col2); g.addColorStop(1,p.col);
+      c.fillStyle=g; c.beginPath(); c.ellipse(0,0,8,6.2,0,0,7); c.fill();
+      c.strokeStyle="rgba(0,0,0,.4)"; c.lineWidth=1.2; c.stroke();
+      // cabeza con pelo
+      c.fillStyle=p.skin; c.beginPath(); c.arc(0,-2.5,4.4,0,7); c.fill();
+      c.fillStyle=p.hair; c.beginPath(); c.arc(0,-3.6,4.4,Math.PI,6.283); c.fill();
+      if(p.user){ c.fillStyle="#fff"; c.fillRect(-4.4,-4.2,8.8,1.7); }
+      c.restore();
+      if(p.user){
+        c.strokeStyle="rgba(255,255,255,.9)"; c.lineWidth=2;
+        c.beginPath(); c.arc(px,pyy,15.5,0,7); c.stroke();
+        c.fillStyle="#fff"; c.font="700 9px Menlo,monospace"; c.textAlign="center";
+        c.fillText("TÚ",px,pyy-21);
+      }
+    }
+    // partículas
+    for(const p of this.parts){
+      c.globalAlpha=Math.max(0,Math.min(1,p.life*2.2));
+      c.fillStyle=p.col; c.beginPath(); c.arc(p.x,p.y,p.sz,0,7); c.fill();
+    }
+    c.globalAlpha=1;
+    // bola con brillo, degradado y costura girando
+    if(this.ball){
+      const b=this.ball, bx=X+b.x*P, byF=Y+b.y*P;
+      c.fillStyle="rgba(0,0,0,.4)";
+      c.beginPath(); c.ellipse(bx,byF,Math.max(2.5,5-b.z*0.3),Math.max(1.5,2.6-b.z*0.15),0,0,7); c.fill();
+      const bz=byF-b.z*9, r=5+b.z*0.5;
+      if(this.state==="serve"){
+        const pu=10+3*Math.sin(performance.now()/130);
+        c.strokeStyle="rgba(0,223,130,.55)"; c.lineWidth=2;
+        c.beginPath(); c.arc(bx,bz,pu,0,7); c.stroke();
+      }
+      c.save(); c.shadowColor="rgba(217,255,94,.85)"; c.shadowBlur=12;
+      const bg2=c.createRadialGradient(bx-r*.4,bz-r*.4,r*.2,bx,bz,r);
+      bg2.addColorStop(0,"#f4ffb8"); bg2.addColorStop(1,"#a5d414");
+      c.fillStyle=bg2; c.beginPath(); c.arc(bx,bz,r,0,7); c.fill();
+      c.restore();
+      c.strokeStyle="rgba(255,255,255,.75)"; c.lineWidth=1;
+      c.beginPath(); c.arc(bx,bz,r*.62,this.spin,this.spin+2.1); c.stroke();
+    }
+    // flash de punto
+    if(this.flashV>0.02){
+      c.fillStyle="rgba(0,223,130,"+(this.flashV*0.15).toFixed(3)+")";
+      c.fillRect(0,0,360,640);
+      this.flashV*=0.94;
+    }
+  }
+};
+
+/* ───────────────── PADEL CRUSH (match-3) ───────────────── */
+const sleepMs=ms=>new Promise(r=>setTimeout(r,ms));
+const Crush = {
+  N:8, T:["🎾","🏓","👟","🧢","🏆"], bound:false, busy:false, sel:null,
+  start(){
+    this.level=1; this.target=1200; this.score=0; this.moves=20;
+    this.busy=true; this.sel=null;
+    go("s-crush");
+    setTimeout(()=>this.initBoard(),60);
+  },
+  quit(){ go("s-home"); },
+  initBoard(){
+    const bd=$("cboard");
+    bd.innerHTML="";
+    this.cell=bd.clientWidth/this.N;
+    bd.style.height=bd.clientWidth+"px";
+    this.g=[];
+    for(let r=0;r<this.N;r++){ this.g[r]=[];
+      for(let c=0;c<this.N;c++){
+        let t;
+        do{ t=Math.floor(Math.random()*this.T.length); }
+        while((c>=2&&this.g[r][c-1].t===t&&this.g[r][c-2].t===t)||
+              (r>=2&&this.g[r-1][c].t===t&&this.g[r-2][c].t===t));
+        this.g[r][c]={t,s:null,el:this.mkEl(t,null,r,c,false)};
+      }
+    }
+    this.updHud(); this.bindBoard(); this.busy=false;
+  },
+  mkEl(t,s,r,c,fromTop){
+    const d=document.createElement("div");
+    d.className="tile"+(s==="cross"?" cross":"")+(s==="bomb"?" bomb":"");
+    d.style.width=d.style.height=(this.cell-6)+"px";
+    d.style.fontSize=(this.cell*0.5)+"px";
+    d.style.left=(c*this.cell+3)+"px";
+    d.style.top=((fromTop?-1.3*this.cell:r*this.cell)+3)+"px";
+    d.textContent=s==="bomb"?"🌟":this.T[t];
+    $("cboard").appendChild(d);
+    if(fromTop) setTimeout(()=>{ d.style.top=(r*this.cell+3)+"px"; },25);
+    return d;
+  },
+  bindBoard(){
+    if(this.bound) return; this.bound=true;
+    const bd=$("cboard");
+    bd.addEventListener("pointerdown",e=>{
+      if(this.busy) return;
+      const rc=this.rc(e); if(!rc) return;
+      this.dRC=rc; this.dX=e.clientX; this.dY=e.clientY;
+    });
+    bd.addEventListener("pointerup",e=>{
+      if(this.busy||!this.dRC) return;
+      const dx=e.clientX-this.dX, dy=e.clientY-this.dY;
+      const [r,c]=this.dRC; this.dRC=null;
+      if(Math.hypot(dx,dy)>18){
+        const dir=Math.abs(dx)>Math.abs(dy)?[0,Math.sign(dx)]:[Math.sign(dy),0];
+        const r2=r+dir[0], c2=c+dir[1];
+        if(r2>=0&&r2<this.N&&c2>=0&&c2<this.N){ this.clearSel(); this.trySwap([r,c],[r2,c2]); }
+        return;
+      }
+      if(this.sel){
+        const [sr,sc]=this.sel;
+        if(sr===r&&sc===c) return this.clearSel();
+        if(Math.abs(sr-r)+Math.abs(sc-c)===1){ const s=this.sel; this.clearSel(); return this.trySwap(s,[r,c]); }
+      }
+      this.clearSel(); this.sel=[r,c]; this.g[r][c].el.classList.add("sel");
+    });
+  },
+  rc(e){
+    const b=$("cboard").getBoundingClientRect();
+    const c=Math.floor((e.clientX-b.left)/this.cell), r=Math.floor((e.clientY-b.top)/this.cell);
+    return (r<0||r>=this.N||c<0||c>=this.N)?null:[r,c];
+  },
+  clearSel(){ if(this.sel){ const [r,c]=this.sel; if(this.g[r][c]) this.g[r][c].el.classList.remove("sel"); this.sel=null; } },
+  place(r,c){ const t=this.g[r][c]; t.el.style.left=(c*this.cell+3)+"px"; t.el.style.top=(r*this.cell+3)+"px"; },
+  async trySwap(a,b){
+    this.busy=true;
+    const [r1,c1]=a,[r2,c2]=b;
+    const A=this.g[r1][c1], B=this.g[r2][c2];
+    this.g[r1][c1]=B; this.g[r2][c2]=A;
+    this.place(r1,c1); this.place(r2,c2);
+    await sleepMs(250);
+    if(A.s==="bomb"||B.s==="bomb"){
+      this.moves--;
+      const bomb=A.s==="bomb"?A:B, other=bomb===A?B:A;
+      const set=new Set();
+      for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++){
+        const t=this.g[r][c];
+        if(t===bomb||other.s==="bomb"||(t.t===other.t&&t.s!=="bomb")) set.add(r+","+c);
+      }
+      this.expand(set);
+      await this.clearAndFall(set,1);
+      await this.cascade(2);
+      return this.afterMove();
+    }
+    const runs=this.findRuns();
+    if(!runs.length){
+      this.g[r1][c1]=A; this.g[r2][c2]=B;
+      this.place(r1,c1); this.place(r2,c2);
+      await sleepMs(250); this.busy=false; return;
+    }
+    this.moves--;
+    await this.processRuns(runs,1,new Set([r1+","+c1,r2+","+c2]));
+    await this.cascade(2);
+    this.afterMove();
+  },
+  findRuns(){
+    const runs=[], N=this.N;
+    for(let r=0;r<N;r++){
+      let c=0;
+      while(c<N){
+        let c2=c;
+        while(c2<N && this.g[r][c].t>=0 && this.g[r][c2].t===this.g[r][c].t) c2++;
+        if(c2-c>=3) runs.push({cells:Array.from({length:c2-c},(_,i)=>[r,c+i]),len:c2-c});
+        c=Math.max(c2,c+1);
+      }
+    }
+    for(let c=0;c<N;c++){
+      let r=0;
+      while(r<N){
+        let r2=r;
+        while(r2<N && this.g[r][c].t>=0 && this.g[r2][c].t===this.g[r][c].t) r2++;
+        if(r2-r>=3) runs.push({cells:Array.from({length:r2-r},(_,i)=>[r+i,c]),len:r2-r});
+        r=Math.max(r2,r+1);
+      }
+    }
+    return runs;
+  },
+  async processRuns(runs,combo,swapKeys){
+    const specials=[], clear=new Set();
+    for(const run of runs){
+      if(run.len>=4){
+        const rc=(swapKeys&&run.cells.find(([r,c])=>swapKeys.has(r+","+c)))||run.cells[Math.floor(run.cells.length/2)];
+        specials.push({rc, type:run.len>=5?"bomb":"cross"});
+      }
+      run.cells.forEach(([r,c])=>clear.add(r+","+c));
+    }
+    specials.forEach(s=>clear.delete(s.rc[0]+","+s.rc[1]));
+    this.expand(clear);
+    for(const s of specials){
+      const [r,c]=s.rc, cell=this.g[r][c];
+      cell.s=s.type;
+      if(s.type==="bomb"){ cell.t=-1; cell.el.textContent="🌟"; cell.el.classList.add("bomb"); }
+      else cell.el.classList.add("cross");
+    }
+    await this.clearAndFall(clear,combo);
+  },
+  expand(set){
+    const q=[...set];
+    while(q.length){
+      const key=q.pop(); const [r,c]=key.split(",").map(Number);
+      const cell=this.g[r][c]; if(!cell) continue;
+      if(cell.s==="cross"&&!cell.exp){
+        cell.exp=true;
+        for(let i=0;i<this.N;i++){
+          const k1=r+","+i, k2=i+","+c;
+          if(!set.has(k1)){set.add(k1);q.push(k1);}
+          if(!set.has(k2)){set.add(k2);q.push(k2);}
+        }
+      }
+    }
+  },
+  async clearAndFall(set,combo){
+    this.score+=set.size*15*combo;
+    this.updHud();
+    if(combo>1) this.flash("¡Combo x"+combo+"!");
+    for(const key of set){ const [r,c]=key.split(",").map(Number); const t=this.g[r][c]; if(t) t.el.classList.add("dead"); }
+    await sleepMs(230);
+    for(const key of set){ const [r,c]=key.split(",").map(Number); const t=this.g[r][c]; if(t){ t.el.remove(); this.g[r][c]=null; } }
+    for(let c=0;c<this.N;c++){
+      let w=this.N-1;
+      for(let r=this.N-1;r>=0;r--){
+        if(this.g[r][c]){
+          if(w!==r){ this.g[w][c]=this.g[r][c]; this.g[r][c]=null; this.place(w,c); }
+          w--;
+        }
+      }
+      for(let r=w;r>=0;r--){
+        const t=Math.floor(Math.random()*this.T.length);
+        this.g[r][c]={t,s:null,el:this.mkEl(t,null,r,c,true)};
+      }
+    }
+    await sleepMs(320);
+  },
+  async cascade(combo){
+    let runs=this.findRuns();
+    while(runs.length){
+      await this.processRuns(runs,combo,null);
+      combo++;
+      runs=this.findRuns();
+    }
+  },
+  afterMove(){
+    this.updHud();
+    if(this.score>=this.target){
+      this.level++; this.target=Math.round(this.target*1.7); this.moves+=12;
+      this.flash("¡Objetivo superado! Nivel "+this.level+" · +12 jugadas");
+      this.updHud();
+    }
+    if(this.moves<=0) return this.end();
+    if(!this.hasMove()){ this.flash("Sin jugadas posibles… barajando"); this.shuffle(); }
+    this.busy=false;
+  },
+  hasMove(){
+    for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++){
+      if(this.g[r][c].s==="bomb") return true;
+      for(const [dr,dc] of [[0,1],[1,0]]){
+        const r2=r+dr,c2=c+dc;
+        if(r2>=this.N||c2>=this.N) continue;
+        const A=this.g[r][c], B=this.g[r2][c2];
+        this.g[r][c]=B; this.g[r2][c2]=A;
+        const ok=this.findRuns().length>0;
+        this.g[r][c]=A; this.g[r2][c2]=B;
+        if(ok) return true;
+      }
+    }
+    return false;
+  },
+  shuffle(){
+    const flat=[];
+    for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++)flat.push(this.g[r][c]);
+    let guard=0;
+    do{
+      for(let i=flat.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [flat[i],flat[j]]=[flat[j],flat[i]]; }
+      let k=0;
+      for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++){ this.g[r][c]=flat[k++]; this.place(r,c); }
+    } while((this.findRuns().length>0||!this.hasMove())&&++guard<50);
+  },
+  flash(t){ const m=$("cmsg"); m.textContent=t; m.style.opacity=1; clearTimeout(this.fT); this.fT=setTimeout(()=>m.style.opacity=0,1300); },
+  updHud(){ $("c-score").textContent=this.score; $("c-target").textContent=this.target; $("c-moves").textContent=this.moves; $("c-level").textContent=this.level; },
+  end(){
+    this.busy=true;
+    const xp=Math.round(this.score/40);
+    showResult("PADEL CRUSH", xp,
+      this.level>=3?"¡Máquina de combos! 🧩":"Buen arranque. ¡A por el nivel "+(this.level+1)+"!",
+      [["PUNTOS",this.score],["NIVEL",this.level],["OBJETIVO",this.target]]);
+  }
+};
+
+/* ───────────────── RANKING ───────────────── */
+const RANK = [
+  ["Carlos M.",1240],["Lucía F.",1105],["Dani R.",980],["Sara P.",940],
+  ["Iván T.",870],["Marta G.",760],["Álex B.",655],["Nuria S.",590],
+];
+const Rank = {
+  show(){
+    const rows=[...RANK,["Tú (Javier)",S.xp]].sort((a,b)=>b[1]-a[1]);
+    const medals=["🥇","🥈","🥉"];
+    $("rank-list").innerHTML = rows.map((r,i)=>`
+      <div class="row ${r[0].startsWith("Tú")?"me":""}">
+        <span class="pos">${medals[i]||i+1}</span>
+        <span class="nm">${r[0]}</span>
+        <span class="xp mono">${r[1]} XP</span>
+      </div>`).join("");
+    go("s-ranking");
+  }
+};
+
+refreshHub();
+</script>
+</body>
+</html>

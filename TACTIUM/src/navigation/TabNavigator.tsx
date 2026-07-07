@@ -19,9 +19,10 @@ import Animated, {
 import { Colors } from '@core/theme/colors';
 import {
   IconHome,
-  IconCalendar,
   IconTeam,
   IconUser,
+  IconCourt,
+  IconPlus,
 } from '@components/ui/Icon';
 import { HomeStack } from './HomeStack';
 import { SeasonsStack } from './SeasonsStack';
@@ -29,7 +30,12 @@ import { ClubStack } from './ClubStack';
 import { ClubTeamsStack } from './ClubTeamsStack';
 import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
+import { FeedStack } from './FeedStack';
+import { VenueStack } from './VenueStack';
+import { PublishStack } from './PublishStack';
+import { TacticsBoardScreen } from '@features/tactics/screens/TacticsBoardScreen';
 import { useTeamStore } from '@store/teamStore';
+import { useVenueStore } from '@store/venueStore';
 
 import type { TabParamList } from './types';
 
@@ -147,6 +153,8 @@ const HIDE_TAB_BAR_ON: ReadonlySet<string> = new Set([
   'Lineup',
   'Results',
   'Availability',
+  'Registrar',
+  'Compose',
   'SeasonDetail',
   'CreateTeamFromClub',
   // Vista de detalle del team desde el tab Equipos (club_admin) — oculta
@@ -189,9 +197,16 @@ const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
 
 export const TabNavigator = () => {
   const activeRole = useTeamStore((s) => s.activeRole);
+  const team = useTeamStore((s) => s.team);
+  const hasVenue = useVenueStore((s) => !!s.venue);
+  // Modo sede: posee una sede y NO está en un equipo → el tab "Equipo" se
+  // sustituye por "Mi sede". Si tiene ambos (híbrido), mantiene su equipo y
+  // llega a la sede desde la tarjeta MI SEDE del Perfil.
+  const sedeMode = hasVenue && !team;
 
   return (
     <Tab.Navigator
+      initialRouteName="Feed"
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -226,8 +241,23 @@ export const TabNavigator = () => {
         freezeOnBlur: false,
       }}
     >
+      {/* Feed = tablón social. Primer tab y pantalla de arranque para todos.
+          Envuelto en FeedStack para poder abrir la ficha pública de una sede
+          al tocar un club en el feed. */}
+      <Tab.Screen
+        name="Feed"
+        component={FeedStack}
+        options={{
+          tabBarLabel: 'Feed',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon Icon={IconHome} focused={focused} />
+          ),
+        }}
+      />
+
       {activeRole === 'club_admin' ? (
         <>
+          {/* club_admin: el "Equipo" son dos vistas — Club y Equipos. */}
           <Tab.Screen
             name="Club"
             component={ClubStack}
@@ -248,47 +278,26 @@ export const TabNavigator = () => {
               ),
             }}
           />
-          <Tab.Screen
-            name="Profile"
-            component={ProfileStack}
-            options={{
-              tabBarLabel: 'Perfil',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconUser} focused={focused} />
-              ),
-            }}
-          />
         </>
       ) : (
         <>
-          <Tab.Screen
-            name="Home"
-            component={HomeStack}
-            options={{
-              tabBarLabel: 'Inicio',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconHome} focused={focused} />
-              ),
-            }}
-          />
-
-          {activeRole !== 'player' ? (
+          {sedeMode ? (
+            /* sede: el tab "Equipo" se convierte en "Mi sede" (panel de la sede). */
             <Tab.Screen
-              name="Seasons"
-              component={SeasonsStack}
+              name="MiSede"
+              component={VenueStack}
               options={{
-                tabBarLabel: 'Temporadas',
+                tabBarLabel: 'Mi sede',
                 tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconCalendar} focused={focused} />
+                  <TabIcon Icon={IconClub} focused={focused} />
                 ),
               }}
             />
-          ) : null}
-
-          {activeRole !== 'player' ? (
+          ) : (
+            /* capitán/jugador: el hub del equipo (jornadas, alineaciones…). */
             <Tab.Screen
-              name="Team"
-              component={TeamStack}
+              name="Home"
+              component={HomeStack}
               options={{
                 tabBarLabel: 'Equipo',
                 tabBarIcon: ({ focused }) => (
@@ -296,20 +305,66 @@ export const TabNavigator = () => {
                 ),
               }}
             />
-          ) : null}
-
+          )}
+          {/* Crear: hub estilo Instagram (resultado / vídeo / foto / texto). */}
           <Tab.Screen
-            name="Profile"
-            component={ProfileStack}
+            name="Crear"
+            component={PublishStack}
             options={{
-              tabBarLabel: 'Perfil',
+              tabBarLabel: 'Crear',
               tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconUser} focused={focused} />
+                <TabIcon Icon={IconPlus} focused={focused} />
               ),
             }}
           />
         </>
       )}
+
+      {/* Pizarra = tab propio (antes anidada en HomeStack). */}
+      <Tab.Screen
+        name="Pizarra"
+        component={TacticsBoardScreen}
+        options={{
+          tabBarLabel: 'Pizarra',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon Icon={IconCourt} focused={focused} />
+          ),
+        }}
+      />
+
+      <Tab.Screen
+        name="Profile"
+        component={ProfileStack}
+        options={{
+          tabBarLabel: 'Perfil',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon Icon={IconUser} focused={focused} />
+          ),
+        }}
+      />
+
+      {/* Tabs ocultos: siguen navegables (desde los botones de la Home vía
+          getParent().navigate) pero sin botón en la barra. Solo capitán. */}
+      {activeRole !== 'club_admin' ? (
+        <>
+          <Tab.Screen
+            name="Seasons"
+            component={SeasonsStack}
+            options={{
+              tabBarItemStyle: { display: 'none' },
+              tabBarButton: () => null,
+            }}
+          />
+          <Tab.Screen
+            name="Team"
+            component={TeamStack}
+            options={{
+              tabBarItemStyle: { display: 'none' },
+              tabBarButton: () => null,
+            }}
+          />
+        </>
+      ) : null}
     </Tab.Navigator>
   );
 };

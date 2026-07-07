@@ -43,6 +43,13 @@ export type OnboardingStackParamList = {
   };
 };
 
+// ─── Feed Stack (bajo el tab Feed) ──────────────────────────────────
+export type FeedStackParamList = {
+  FeedRoot: undefined;
+  // Ficha pública de una sede (al tocar un club en el feed).
+  VenuePublic: { venueId: string };
+};
+
 // ─── Home Stack (nested under Home tab) ─────────────────────────────
 export type HomeStackParamList = {
   HomeRoot: undefined;
@@ -66,6 +73,8 @@ export type TeamStackParamList = {
 
 export type ProfileStackParamList = {
   ProfileRoot: undefined;
+  VenuePanel: undefined;
+  VenuePublic: { venueId: string };
 };
 
 export type ClubStackParamList = {
@@ -97,18 +106,38 @@ export type ClubTeamsStackParamList = {
 
 // ─── Bottom Tabs ────────────────────────────────────────────────────
 export type TabParamList = {
+  Feed: undefined;
+  Crear: undefined;
+  Pizarra: undefined;
   Club: undefined;
   ClubTeams: undefined;
   Home: undefined;
+  MiSede: undefined;
   Seasons: undefined;
   Team: undefined;
   Profile: undefined;
+};
+
+// ─── Publish/Crear Stack (bajo el tab ➕) ────────────────────────────
+export type PublishStackParamList = {
+  PublishHub: undefined;
+  Registrar: undefined;
+  // asVenueId: si viene, el post se publica a nombre de esa sede (autor=club).
+  Compose: { kind: 'video' | 'photo' | 'text'; asVenueId?: string };
+};
+
+// ─── New User Stack (alta: elegir tipo → perfil/sede) ────────────────
+export type NewUserStackParamList = {
+  AccountType: undefined;
+  ProfileSetup: undefined;
+  VenueSetup: undefined;
 };
 
 // ─── Root Stack ─────────────────────────────────────────────────────
 export type RootStackParamList = {
   AuthFlow: undefined;
   OnboardingFlow: undefined;
+  NewUserFlow: undefined;
   MainTabs: undefined;
   // Modales presentados encima de las tabs
   Paywall: { intent?: string } | undefined;
@@ -155,3 +184,12 @@ export type AuthStackScreenProps<T extends keyof AuthStackParamList> =
 export type OnboardingStackScreenProps<
   T extends keyof OnboardingStackParamList,
 > = NativeStackScreenProps<OnboardingStackParamList, T>;
+
+export type PublishStackScreenProps<T extends keyof PublishStackParamList> =
+  CompositeScreenProps<
+    NativeStackScreenProps<PublishStackParamList, T>,
+    TabScreenProps<keyof TabParamList>
+  >;
+
+export type NewUserStackScreenProps<T extends keyof NewUserStackParamList> =
+  NativeStackScreenProps<NewUserStackParamList, T>;

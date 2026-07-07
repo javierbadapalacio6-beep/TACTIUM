@@ -34,12 +34,13 @@ import * as MatchdaysApi from '@core/services/matchdays';
 import * as PlayersApi from '@core/services/players';
 import * as ProfileApi from '@core/services/profile';
 import * as AvatarApi from '@core/services/avatar';
+import { getMyVenue, type MyVenue } from '@core/services/venues';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import type { Database } from '@core/supabase/database.types';
-import type { RootStackParamList } from '@navigation/types';
+import type { RootStackParamList, ProfileStackParamList } from '@navigation/types';
 
 type TeamRole = Database['public']['Enums']['team_role'];
 
@@ -53,6 +54,9 @@ export const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // Mismo navegador (ProfileStack); tipado aparte para navegar a VenuePanel.
+  const profileNav =
+    useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const user    = useAuthStore((s) => s.user);
   const userId  = useAuthStore((s) => s.user?.id ?? null);
   const signOut = useAuthStore((s) => s.signOut);
@@ -95,6 +99,8 @@ export const ProfileScreen = () => {
   // Guard de carga del profile (avatar + flag de notificaciones). Una sola
   // hidratación por ciclo de focus; el state es la fuente de verdad.
   const [profileLoaded, setProfileLoaded] = useState(false);
+  // Sede propia (cuenta de negocio). Si existe, mostramos acceso al Panel.
+  const [myVenue, setMyVenue] = useState<MyVenue | null>(null);
 
   // Hidratamos el avatar del profile SOLO una vez por ciclo de focus. Sin
   // ref-guard: el state es la fuente de verdad. Antes había una
@@ -120,6 +126,21 @@ export const ProfileScreen = () => {
         cancelled = true;
       };
     }, [profileLoaded]),
+  );
+
+  // Sede propia (cuenta de negocio). Efecto propio, reactivo a userId, sin
+  // acoplarse al guard de profileLoaded. Usa el userId del store (sin red).
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      let cancelled = false;
+      getMyVenue(userId)
+        .then((v) => !cancelled && setMyVenue(v))
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [userId]),
   );
 
   const openExternalUrl = (url: string) => {
@@ -458,34 +479,72 @@ export const ProfileScreen = () => {
           ) : null}
         </View>
 
-        {/* Team */}
-        <Text style={styles.sectionLabel}>EQUIPO ACTUAL</Text>
-        <View style={styles.teamCard}>
-          <TactiumMark size={42} gradient />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.teamName}>{team?.name ?? '—'}</Text>
-            <Text style={styles.teamMeta} numberOfLines={1}>
-              {[teamMeta, activeSeason?.name].filter(Boolean).join(' · ') || 'Sin temporada activa'}
-            </Text>
-          </View>
-        </View>
+        {/* Mi sede (solo si el usuario posee una sede/negocio) */}
+        {myVenue ? (
+          <>
+            <Text style={styles.sectionLabel}>MI SEDE</Text>
+            <Pressable
+              onPress={() => profileNav.navigate('VenuePanel')}
+              style={({ pressed }) => [styles.teamCard, pressed && { opacity: 0.85 }]}
+            >
+              {myVenue.logo_url ? (
+                <Image source={{ uri: myVenue.logo_url }} style={styles.venueCrestImg} />
+              ) : (
+                <View style={styles.venueCrest}>
+                  <Text style={styles.venueCrestTxt}>
+                    {myVenue.name
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((w) => w[0]?.toUpperCase() ?? '')
+                      .join('')}
+                  </Text>
+                </View>
+              )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.teamName} numberOfLines={1}>{myVenue.name}</Text>
+                <Text style={styles.teamMeta} numberOfLines={1}>
+                  {[myVenue.city, myVenue.province].filter(Boolean).join(' · ') || 'Tu sede'}
+                </Text>
+              </View>
+              <IconChevron size={14} color={Colors.textFaint} />
+            </Pressable>
+          </>
+        ) : null}
 
-        {/* Stats */}
-        {loadingStats ? (
-          <View style={styles.statsLoading}>
-            <ActivityIndicator color={Colors.accent} size="small" />
-          </View>
-        ) : activeSeason ? (
-          <View style={styles.statsGrid}>
-            <ProfileStat label="Jornadas" value={`${played}/${matchdays.length}`} />
-            <ProfileStat label="Victorias" value={String(wins)} highlight />
-            <ProfileStat label="Tasa V"    value={winRate !== null ? `${winRate}%` : '—'} />
-          </View>
-        ) : (
-          <View style={styles.noSeasonBox}>
-            <Text style={styles.noSeasonText}>Sin temporada activa</Text>
-          </View>
-        )}
+        {/* Team + Stats · solo si el usuario está en un equipo. Sin equipo
+            (sede, amateur del acceso abierto) no tiene sentido enseñar
+            "EQUIPO ACTUAL: —" ni stats vacías → se ocultan. Se une desde
+            la sección Invitaciones más abajo. */}
+        {team ? (
+          <>
+            <Text style={styles.sectionLabel}>EQUIPO ACTUAL</Text>
+            <View style={styles.teamCard}>
+              <TactiumMark size={42} gradient />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.teamName}>{team.name}</Text>
+                <Text style={styles.teamMeta} numberOfLines={1}>
+                  {[teamMeta, activeSeason?.name].filter(Boolean).join(' · ') || 'Sin temporada activa'}
+                </Text>
+              </View>
+            </View>
+
+            {loadingStats ? (
+              <View style={styles.statsLoading}>
+                <ActivityIndicator color={Colors.accent} size="small" />
+              </View>
+            ) : activeSeason ? (
+              <View style={styles.statsGrid}>
+                <ProfileStat label="Jornadas" value={`${played}/${matchdays.length}`} />
+                <ProfileStat label="Victorias" value={String(wins)} highlight />
+                <ProfileStat label="Tasa V"    value={winRate !== null ? `${winRate}%` : '—'} />
+              </View>
+            ) : (
+              <View style={styles.noSeasonBox}>
+                <Text style={styles.noSeasonText}>Sin temporada activa</Text>
+              </View>
+            )}
+          </>
+        ) : null}
 
         {/* Mi jugador (solo en rol player) */}
         {isPlayer ? (
@@ -748,7 +807,9 @@ export const ProfileScreen = () => {
         </Text>
 
         <Text style={styles.signature}>
-          {'TACTIUM · ' + players.length + ' JUGADORES' + (activeSeason ? ' · ' + activeSeason.name.toUpperCase() : '')}
+          {team
+            ? 'TACTIUM · ' + players.length + ' JUGADORES' + (activeSeason ? ' · ' + activeSeason.name.toUpperCase() : '')
+            : 'TACTIUM'}
         </Text>
       </ScrollView>
 
@@ -1079,6 +1140,30 @@ const styles = StyleSheet.create({
   teamCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: Colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: Colors.hair },
   teamName:  { color: Colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
   teamMeta:  { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  venueCrest: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  venueCrestTxt: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  venueCrestImg: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+  },
 
   statsGrid:    { flexDirection: 'row', gap: 8, marginTop: 12 },
   statsLoading: { marginTop: 12, height: 70, alignItems: 'center', justifyContent: 'center' },

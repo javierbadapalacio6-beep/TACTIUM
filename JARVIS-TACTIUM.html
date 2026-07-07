@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS SYSTEM · TACTIUM</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#02090C; --panel:rgba(6,24,30,.85); --line:rgba(34,211,238,.28); --line2:rgba(34,211,238,.12);
+  --cyan:#22D3EE; --cyan2:#67E8F9; --teal:#2DD4BF; --green:#4ADE80;
+  --text:#D8FDFF; --muted:#6FA8B5; --warn:#FBBF24; --err:#F87171;
+  --glow:0 0 12px rgba(34,211,238,.45);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column;position:relative}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:
+  radial-gradient(ellipse at 50% 40%, rgba(34,211,238,.06), transparent 55%),
+  repeating-linear-gradient(0deg, transparent 0 3px, rgba(0,0,0,.12) 3px 4px)}
+body::after{content:'';position:fixed;inset:0;z-index:50;pointer-events:none;background:linear-gradient(180deg,transparent 0%,rgba(34,211,238,.025) 50%,transparent 100%);background-size:100% 8px;animation:scan 9s linear infinite}
+@keyframes scan{to{background-position:0 100vh}}
+
+/* ============ HEADER ============ */
+header{display:flex;align-items:center;padding:10px 24px;border-bottom:1px solid var(--line);position:relative;z-index:2;gap:20px}
+.brand{font-family:'Orbitron';font-size:13px;letter-spacing:3px;font-weight:700}
+.brand .on{color:var(--green);text-shadow:0 0 8px rgba(74,222,128,.6)}
+.title{font-family:'Orbitron';font-size:21px;letter-spacing:6px;font-weight:900;color:var(--cyan2);text-shadow:var(--glow);flex:1;text-align:center}
+.title small{color:var(--muted);font-size:12px;letter-spacing:2px}
+.clock{font-family:'Orbitron';font-size:13px;letter-spacing:2px;text-align:right;color:var(--text)}
+.clock .t{font-size:17px;color:var(--cyan2)}
+nav{display:flex;justify-content:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--line2);position:relative;z-index:2}
+nav .tab{font-family:'Orbitron';font-size:11px;letter-spacing:2px;color:var(--muted);padding:6px 18px;cursor:pointer;border-bottom:2px solid transparent}
+nav .tab.active{color:var(--cyan2);border-color:var(--cyan);text-shadow:var(--glow)}
+nav .tab:hover{color:var(--cyan2)}
+
+/* ============ GRID ============ */
+.grid{flex:1;display:grid;grid-template-columns:295px 1fr 315px;gap:12px;padding:12px 16px;min-height:0;position:relative;z-index:2}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0}
+.panel{background:var(--panel);border:1px solid var(--line);position:relative;padding:12px 14px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+.panel::before{content:'';position:absolute;top:0;left:0;width:38px;height:2px;background:var(--cyan);box-shadow:var(--glow)}
+.ptitle{font-family:'Orbitron';font-size:10.5px;letter-spacing:2.5px;color:var(--cyan2);margin-bottom:10px;display:flex;justify-content:space-between}
+.ptitle .aux{color:var(--muted);letter-spacing:1px}
+
+/* system status */
+.sysrow{display:flex;align-items:center;gap:16px}
+.gauge{position:relative;width:104px;height:104px;flex-shrink:0}
+.gauge canvas{position:absolute;inset:0}
+.gauge .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Orbitron'}
+.gauge .val b{font-size:21px;color:var(--cyan2);text-shadow:var(--glow)}
+.gauge .val span{font-size:8px;letter-spacing:2px;color:var(--muted)}
+.stats{flex:1;display:flex;flex-direction:column;gap:7px}
+.stat{display:flex;justify-content:space-between;font-size:13.5px;font-weight:600}
+.stat b{color:var(--cyan2);font-family:'Orbitron';font-size:12px}
+.stat span{color:var(--muted);letter-spacing:1px}
+
+/* voice */
+#wave{width:100%;height:56px;display:block}
+.vstatus{text-align:center;font-size:13px;color:var(--muted);letter-spacing:2px;margin-top:4px}
+.vstatus.live{color:var(--cyan2);text-shadow:var(--glow)}
+
+/* log */
+#syslog{flex:1;overflow-y:auto;font-size:12.5px;line-height:1.9;min-height:80px}
+#syslog div{display:flex;gap:8px;align-items:baseline}
+#syslog .ts{color:var(--muted);font-family:'Orbitron';font-size:10px;flex-shrink:0}
+#syslog .dot{color:var(--teal)}
+.panel.grow{flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* quick access */
+.qa{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.qa .q{display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 2px;border:1px solid var(--line2);cursor:pointer;transition:.15s;background:rgba(34,211,238,.03)}
+.qa .q:hover{border-color:var(--cyan);background:rgba(34,211,238,.1);box-shadow:var(--glow)}
+.qa .q .ic{font-size:17px}
+.qa .q .lb{font-size:8.5px;letter-spacing:1px;color:var(--muted);font-family:'Orbitron'}
+
+/* ============ CENTER ============ */
+.center{display:flex;flex-direction:column;min-height:0;gap:10px}
+.corewrap{display:flex;align-items:center;justify-content:center;position:relative;height:34%;min-height:170px;flex-shrink:0}
+.ring{position:absolute;border-radius:50%;border:1.5px solid rgba(34,211,238,.35)}
+.r1{width:250px;height:250px;border-style:dashed;animation:spinL 24s linear infinite}
+.r2{width:212px;height:212px;border-color:transparent;border-top-color:var(--cyan);border-right-color:var(--cyan);animation:spinR 5s linear infinite;box-shadow:0 0 18px rgba(34,211,238,.25)}
+.r3{width:180px;height:180px;border-color:rgba(45,212,191,.4);border-left-color:transparent;border-bottom-color:transparent;animation:spinL 8s linear infinite}
+.r4{width:148px;height:148px;border-style:dotted;border-color:rgba(103,232,249,.5);animation:spinR 14s linear infinite}
+@keyframes spinL{to{transform:rotate(-360deg)}}
+@keyframes spinR{to{transform:rotate(360deg)}}
+.corelbl{font-family:'Orbitron';font-size:30px;font-weight:900;letter-spacing:9px;color:#fff;text-shadow:0 0 22px var(--cyan),0 0 45px rgba(34,211,238,.5);z-index:1;animation:breathe 3s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.85}50%{opacity:1}}
+.corewrap.listening .r2{animation-duration:1.2s;border-top-color:var(--err);border-right-color:var(--err)}
+.corewrap.speaking .r2{animation-duration:2s;border-top-color:var(--teal);border-right-color:var(--teal)}
+
+#chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:11px;padding:4px 6px;min-height:0}
+#chat::-webkit-scrollbar,#syslog::-webkit-scrollbar,.fb-list::-webkit-scrollbar{width:5px}
+#chat::-webkit-scrollbar-thumb,#syslog::-webkit-scrollbar-thumb,.fb-list::-webkit-scrollbar-thumb{background:rgba(34,211,238,.3)}
+.msg{max-width:85%;padding:10px 15px;font-size:14.5px;line-height:1.55;white-space:pre-wrap;animation:fadein .25s ease;border:1px solid var(--line2)}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{align-self:flex-end;background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.35);clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%)}
+.msg.jarvis{align-self:flex-start;background:var(--panel);clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px))}
+.msg.jarvis b{color:var(--cyan2)}
+.msg.jarvis a{color:var(--cyan)}
+.msg .tag{display:block;font-family:'Orbitron';font-size:9px;letter-spacing:2.5px;color:var(--cyan);margin-bottom:6px}
+.msg img{max-width:100%;border:1px solid var(--line);margin-top:6px}
+
+.prompt{border:1px solid var(--line);background:var(--panel);padding:10px 14px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+.prompt .plbl{font-family:'Orbitron';font-size:9.5px;letter-spacing:2.5px;color:var(--cyan2);margin-bottom:6px}
+.pbar{display:flex;align-items:center;gap:10px}
+.pbar .arrow{color:var(--cyan);font-family:'Orbitron';font-size:14px}
+#txt{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:16px;font-family:'Rajdhani';font-weight:500}
+#txt::placeholder{color:var(--muted)}
+.ibtn{width:38px;height:38px;border:1px solid var(--line);background:rgba(34,211,238,.06);color:var(--cyan);font-size:16px;cursor:pointer;flex-shrink:0;transition:.15s;display:flex;align-items:center;justify-content:center}
+.ibtn:hover{background:rgba(34,211,238,.16);box-shadow:var(--glow)}
+.ibtn.rec{background:rgba(248,113,113,.2);border-color:var(--err);color:#FCA5A5;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.5}}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11px;font-family:'Orbitron';letter-spacing:1px;color:var(--muted);border:1px solid var(--line2);padding:5px 11px;cursor:pointer;transition:.15s;background:rgba(34,211,238,.03)}
+.chip:hover{color:var(--cyan2);border-color:var(--cyan)}
+
+/* ============ RIGHT ============ */
+#netmap{width:100%;height:120px;display:block}
+.netfoot{display:flex;justify-content:space-between;font-size:11px;font-family:'Orbitron';letter-spacing:1px;color:var(--muted);margin-top:6px}
+.netfoot b{color:var(--green)}
+#chart{width:100%;height:88px;display:block}
+.bars{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.bar{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.bar .lb{width:110px;color:var(--muted);letter-spacing:.5px}
+.bar .tr{flex:1;height:4px;background:rgba(34,211,238,.1)}
+.bar .fl{height:100%;background:linear-gradient(90deg,var(--teal),var(--cyan));box-shadow:0 0 6px rgba(34,211,238,.5);transition:width 1.2s ease}
+.bar .pc{width:34px;text-align:right;font-family:'Orbitron';font-size:10px;color:var(--cyan2)}
+.env{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.envitem{display:flex;align-items:center;gap:9px;font-size:12px}
+.envitem .ic{font-size:19px}
+.envitem b{font-family:'Orbitron';font-size:14px;color:var(--cyan2);display:block}
+.envitem span{color:var(--muted);font-size:10px;letter-spacing:1px}
+.envloc{grid-column:1/3;display:flex;justify-content:space-between;border-top:1px solid var(--line2);padding-top:8px;font-size:12px;color:var(--muted)}
+.envloc b{color:var(--text)}
+
+/* ============ FOOTER ============ */
+footer{display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid var(--line);padding:10px 24px;gap:10px;position:relative;z-index:2}
+.f{display:flex;align-items:center;gap:11px;border-right:1px solid var(--line2);padding-right:10px}
+.f:last-child{border-right:none}
+.f .ic{font-size:20px;color:var(--cyan)}
+.f .lb{font-size:9.5px;letter-spacing:1.5px;color:var(--muted);font-family:'Orbitron'}
+.f .vl{font-family:'Orbitron';font-size:15px;font-weight:700;color:var(--text)}
+.f .sub{font-size:10px;color:var(--muted);letter-spacing:1px}
+.f .vl.g{color:var(--green)}
+
+/* ============ FILE BROWSER MODAL ============ */
+#fbmodal{position:fixed;inset:0;background:rgba(2,9,12,.88);z-index:100;display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+#fbmodal.open{display:flex}
+.fb{width:min(880px,92vw);height:min(600px,86vh);background:#04151B;border:1px solid var(--cyan);box-shadow:0 0 40px rgba(34,211,238,.25);display:flex;flex-direction:column;clip-path:polygon(0 0,calc(100% - 22px) 0,100% 22px,100% 100%,22px 100%,0 calc(100% - 22px))}
+.fb-head{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line)}
+.fb-head .t{font-family:'Orbitron';font-size:12px;letter-spacing:2.5px;color:var(--cyan2)}
+.fb-path{flex:1;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.fb-x{cursor:pointer;color:var(--err);font-size:19px;padding:0 6px}
+.fb-body{flex:1;display:flex;min-height:0}
+.fb-list{width:46%;overflow-y:auto;border-right:1px solid var(--line2);padding:8px}
+.fb-item{display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;font-size:14px;border:1px solid transparent}
+.fb-item:hover{background:rgba(34,211,238,.08);border-color:var(--line2)}
+.fb-item .sz{margin-left:auto;font-size:11px;color:var(--muted);font-family:'Orbitron')}
+.fb-view{flex:1;overflow:auto;padding:14px;font-size:13px}
+.fb-view pre{white-space:pre-wrap;word-break:break-word;color:var(--text);font-family:Consolas,monospace;font-size:12.5px;line-height:1.5}
+.fb-view img{max-width:100%;border:1px solid var(--line)}
+.fb-hint{color:var(--muted);font-size:13px;padding:20px;text-align:center}
+.typing{color:var(--muted);font-size:13px;letter-spacing:2px;animation:blink 1s infinite}
+
+@media (max-width:1150px){.grid{grid-template-columns:250px 1fr}.col.right{display:none}footer{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">JARVIS OS &nbsp;<span class="on">● ONLINE</span></div>
+  <div class="title">J A R V I S &nbsp;S Y S T E M <small>v2.0 · TACTIUM</small></div>
+  <div class="clock"><div id="hdate">—</div><div class="t" id="htime">--:--:--</div></div>
+</header>
+<nav>
+  <div class="tab active">⊞ DASHBOARD</div><div class="tab" onclick="handle('estado del proyecto')">⚙ TACTIUM</div>
+  <div class="tab" onclick="pickFolder()">🗀 ARCHIVOS</div><div class="tab" onclick="handle('busca ')" id="tabweb">🌐 WEB</div>
+  <div class="tab" onclick="handle('ayuda')">◎ AYUDA</div>
+</nav>
+
+<div class="grid">
+  <!-- LEFT -->
+  <div class="col">
+    <div class="panel">
+      <div class="ptitle">SYSTEM STATUS <span class="aux" id="sysaux">SCAN…</span></div>
+      <div class="sysrow">
+        <div class="gauge"><canvas id="gauge" width="104" height="104"></canvas>
+          <div class="val"><b id="gval">--%</b><span>OPTIMAL</span></div></div>
+        <div class="stats">
+          <div class="stat"><span>CPU</span><b id="stCpu">--</b></div>
+          <div class="stat"><span>MEMORIA</span><b id="stMem">--</b></div>
+          <div class="stat"><span>ALMACÉN</span><b id="stSto">--</b></div>
+          <div class="stat"><span>RED</span><b id="stNet">--</b></div>
+          <div class="stat"><span>BATERÍA</span><b id="stBat">--</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ptitle">VOICE RECOGNITION</div>
+      <canvas id="wave"></canvas>
+      <div class="vstatus" id="vstatus">EN ESPERA</div>
+    </div>
+    <div class="panel grow">
+      <div class="ptitle">SYSTEM LOG</div>
+      <div id="syslog"></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle">QUICK ACCESS</div>
+      <div class="qa">
+        <div class="q" onclick="pickFolder()"><div class="ic">📁</div><div class="lb">FILES</div></div>
+        <div class="q" onclick="promptSearch()"><div class="ic">🔎</div><div class="lb">BUSCAR</div></div>
+        <div class="q" onclick="window.open('https://www.google.com')"><div class="ic">🌐</div><div class="lb">GOOGLE</div></div>
+        <div class="q" onclick="window.open('https://www.youtube.com')"><div class="ic">▶️</div><div class="lb">YOUTUBE</div></div>
+        <div class="q" onclick="window.open('https://news.google.com/?hl=es')"><div class="ic">📰</div><div class="lb">NEWS</div></div>
+        <div class="q" onclick="toggleVoice()"><div class="ic" id="voxic">🔊</div><div class="lb">VOZ</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="col center">
+    <div class="corewrap" id="corewrap">
+      <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="ring r4"></div>
+      <div class="corelbl">JARVIS</div>
+    </div>
+    <div id="chat"></div>
+    <div class="chips" id="chips"></div>
+    <div class="prompt">
+      <div class="plbl">COMMAND PROMPT</div>
+      <div class="pbar">
+        <span class="arrow">&gt;&gt;</span>
+        <input id="txt" placeholder="Hable o escriba una orden, señor…" autocomplete="off">
+        <button class="ibtn" id="mic" title="Hablar">🎙️</button>
+        <button class="ibtn" onclick="handle(document.getElementById('txt').value)" title="Enviar">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col right">
+    <div class="panel">
+      <div class="ptitle">NETWORK MAP</div>
+      <canvas id="netmap"></canvas>
+      <div class="netfoot"><span>ONLINE&nbsp;<b id="nmDev">—</b></span><span>SECURITY&nbsp;<b>SECURE</b></span></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle">DATA ANALYTICS <span class="aux" id="syncPct">—</span></div>
+      <canvas id="chart"></canvas>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle">ENVIRONMENT <span class="aux" id="wxaux">SYNC…</span></div>
+      <div class="env">
+        <div class="envitem"><div class="ic">🌡️</div><div><b id="wxT">--°C</b><span>TEMP</span></div></div>
+        <div class="envitem"><div class="ic">💧</div><div><b id="wxH">--%</b><span>HUMEDAD</span></div></div>
+        <div class="envitem"><div class="ic">⏱</div><div><b id="wxP">-- hPa</b><span>PRESIÓN</span></div></div>
+        <div class="envitem"><div class="ic">🌬</div><div><b id="wxW">-- km/h</b><span>VIENTO</span></div></div>
+        <div class="envloc"><span>LOCALIZACIÓN <b id="wxLoc">—</b></span><span id="wxDesc"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="f"><div class="ic">⚡</div><div><div class="lb">POWER STATUS</div><div class="vl" id="fBat">--%</div><div class="sub">BATERÍA</div></div></div>
+  <div class="f"><div class="ic">🛡️</div><div><div class="lb">SECURITY LEVEL</div><div class="vl g">MAXIMUM</div><div class="sub">FIREWALL ACTIVE</div></div></div>
+  <div class="f"><div class="ic">🧠</div><div><div class="lb">AI CAPABILITIES</div><div class="vl g">ONLINE</div><div class="sub">LEARNING MODE</div></div></div>
+  <div class="f"><div class="ic">🕐</div><div><div class="lb">UPTIME</div><div class="vl" id="fUp">0m 0s</div><div class="sub">SYSTEM STABLE</div></div></div>
+  <div class="f"><div class="ic">💾</div><div><div class="lb">MEMORY CORE</div><div class="vl" id="fMem">--</div><div class="sub" id="fMemSub">—</div></div></div>
+  <div class="f"><div class="ic">🔲</div><div><div class="lb">PROCESSOR</div><div class="vl" id="fCpu">--%</div><div class="sub" id="fCores">—</div></div></div>
+</footer>
+
+<!-- FILE BROWSER -->
+<div id="fbmodal">
+  <div class="fb">
+    <div class="fb-head"><span class="t">🗀 FILE EXPLORER</span><span class="fb-path" id="fbpath"></span>
+      <span class="chip" onclick="fbUp()">⬆ SUBIR</span><span class="fb-x" onclick="fbClose()">✕</span></div>
+    <div class="fb-body">
+      <div class="fb-list" id="fblist"></div>
+      <div class="fb-view" id="fbview"><div class="fb-hint">Seleccione un archivo para previsualizarlo.<br><br>Texto, código e imágenes se muestran aquí mismo.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════ BASE DE CONOCIMIENTO TACTIUM ═══════════════ */
+const KB={
+precios:`<span class="tag">SUSCRIPCIONES · APP STORE CONNECT</span><b>8 productos activos (grupo "TACTIUM Pro" · io.tactium.app):</b>
+
+• Capitán Mensual — tactium_captain_monthly — <b>4,99 €</b> (L4)
+• Capitán Anual — tactium_captain_yearly — <b>47,99 €</b> (L4)
+• Club Starter Mensual — <b>11,99 €</b> (L3) · Anual — <b>115,99 €</b> (L3)
+• Club Pro Mensual — <b>24,99 €</b> (L2) · Anual — <b>239,99 €</b> (L2)
+• Club Elite Mensual — <b>39,99 €</b> (L1) · Anual — <b>384,99 €</b> (L1)
+
+Free trial 14 días · nuevos suscriptores. Apple subió los anuales al tier válido. Level 1 = MÁS premium.`,
+apple:`<span class="tag">CHECKLIST · APPLE</span><b>App Store Connect:</b>
+
+✅ Grupo "TACTIUM Pro" + 8 IAP activos con free trial 14 días
+✅ Screenshots 6.5" / 6.9" / iPad en app-store-assets/
+
+⚠️ En los ANUALES eliminar "Mensual con compromiso 12m"
+⚠️ Subscription Level: 1 = más premium (convención inversa)
+⚠️ Family Sharing OFF · Bundle io.tactium.app · v1.0.2`,
+google:`<span class="tag">CHECKLIST · GOOGLE PLAY</span><b>Play Console:</b>
+
+⚠️ <b>Bloqueo:</b> Google exige APK/AAB subido ANTES de crear suscripciones → acoplar catálogo a la sesión de EAS Build.
+✅ Build: builds/tactium-build8-vc4.aab
+✅ Assets en app-store-assets/play/ · Scripts .cjs en TACTIUM/
+Package io.tactium.app · versionCode 1`,
+estado:`<span class="tag">ESTADO DEL PROYECTO</span><b>TACTIUM:</b>
+
+📱 Expo/RN SDK 54 + Supabase · v1.0.2
+🧩 Features: auth, club, feed, home, matches, onboarding, profile, seasons, subscription, tactics, team
+💰 Apple: 8 IAP activos · Google: pendiente de EAS Build
+🎮 ARENA: 6 minijuegos pendientes de portar a src/features/arena (favorito: Predicción)
+📣 Marketing: Meta Ads plan + prospección de clubs listos`,
+arena:`<span class="tag">TACTIUM ARENA</span>Hub de 6 minijuegos (arcade, match-3, quiz, predicción…).
+Prototipos: PADEL-CLASH y PADEL-CRUSH en la carpeta raíz. Pendiente portar a src/features/arena. Su favorito: <b>Predicción</b>.`,
+ayuda:`<span class="tag">COMANDOS</span><b>Ahora soy bastante más capaz, señor:</b>
+
+🌐 <b>"busca [lo que sea]"</b> — investigo en internet y te lo leo
+🌐 <b>"google [x]" / "youtube [x]"</b> — abro la búsqueda en pestaña
+💻 <b>"explora mi pc" / "archivos"</b> — navego por tus carpetas y leo archivos
+🌤 <b>"qué tiempo hace"</b> — clima real de tu ubicación
+📊 <b>"precios" · "checklist apple" · "checklist google" · "estado" · "arena"</b> — TACTIUM
+🕐 <b>"hora" / "fecha"</b> · <b>"abre app store / play / expo / supabase"</b>
+
+Pulse 🎙️ y hable. Con VOZ activada respondo hablando.`};
+
+const INTENTS=[
+ {k:["precio","suscripcion","iap","tarifa","cuanto cuesta","plan"],r:"precios",say:"Los ocho productos de suscripción, en pantalla."},
+ {k:["apple","app store","ios","connect"],r:"apple",say:"Checklist de Apple. Recuerde: Level uno es el más premium."},
+ {k:["google play","play console","android","aab","checklist google"],r:"google",say:"Checklist de Google Play. Recuerde el bloqueo del build."},
+ {k:["estado","proyecto","resumen","como va"],r:"estado",say:"Estado del proyecto TACTIUM en pantalla."},
+ {k:["arena","juego","crush","clash","predic"],r:"arena",say:"Datos del prototipo Arena, señor."},
+ {k:["ayuda","help","comandos","que puedes","que sabes"],r:"ayuda",say:"Mis capacidades, en pantalla."}];
+
+/* ═══════════════ UTILIDADES ═══════════════ */
+const $=id=>document.getElementById(id);
+const chat=$("chat"),txt=$("txt"),mic=$("mic"),corewrap=$("corewrap"),vstatus=$("vstatus");
+let voiceOn=true;
+function slog(t){const d=document.createElement("div");
+ d.innerHTML=`<span class="ts">${new Date().toLocaleTimeString("es-ES")}</span><span class="dot">●</span><span>${t}</span>`;
+ const l=$("syslog");l.appendChild(d);l.scrollTop=l.scrollHeight;
+ while(l.children.length>40)l.removeChild(l.firstChild);}
+function addMsg(t,who){const d=document.createElement("div");d.className="msg "+who;
+ if(who==="jarvis")d.innerHTML=t;else d.textContent=t;
+ chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
+function speak(t){if(!voiceOn||!("speechSynthesis"in window)||!t)return;
+ speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);
+ u.lang="es-ES";u.rate=1.06;u.pitch=.8;
+ const v=speechSynthesis.getVoices().filter(v=>v.lang.startsWith("es"));
+ if(v.length)u.voice=v.find(x=>/male|jorge|pablo|alvaro|enrique/i.test(x.name))||v[0];
+ u.onstart=()=>{corewrap.classList.add("speaking");vstatus.textContent="TRANSMITIENDO";vstatus.classList.add("live")};
+ u.onend=()=>{corewrap.classList.remove("speaking");vstatus.textContent="EN ESPERA";vstatus.classList.remove("live")};
+ speechSynthesis.speak(u);}
+function toggleVoice(){voiceOn=!voiceOn;$("voxic").textContent=voiceOn?"🔊":"🔇";
+ if(!voiceOn)speechSynthesis.cancel();slog("Voz "+(voiceOn?"activada":"silenciada"));}
+function promptSearch(){txt.value="busca ";txt.focus();}
+
+/* ═══════════════ BÚSQUEDA WEB (Wikipedia + DuckDuckGo) ═══════════════ */
+async function wiki(q){
+ try{
+  let r=await fetch(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`);
+  if(r.ok){const j=await r.json();if(j.extract&&j.type!=="disambiguation")return j;}
+  r=await fetch(`https://es.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=1&format=json&origin=*`);
+  const s=await r.json();
+  if(s[1]&&s[1][0]){const r2=await fetch(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(s[1][0])}`);
+   if(r2.ok){const j2=await r2.json();if(j2.extract)return j2;}}
+ }catch(e){}
+ return null;}
+async function ddg(q){
+ try{const r=await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`);
+  if(r.ok){const j=await r.json();if(j.AbstractText)return{extract:j.AbstractText,title:j.Heading,url:j.AbstractURL};}
+ }catch(e){}
+ return null;}
+async function webSearch(q){
+ slog(`Búsqueda web: "${q}"`);
+ const w=await wiki(q)||await ddg(q);
+ const gUrl=`https://www.google.com/search?q=${encodeURIComponent(q)}`;
+ if(w){
+  const url=w.content_urls?w.content_urls.desktop.page:(w.url||gUrl);
+  const img=w.thumbnail?`<img src="${w.thumbnail.source}" alt="">`:"";
+  return{html:`<span class="tag">BÚSQUEDA WEB · ${(w.title||q).toUpperCase()}</span>${w.extract}${img}
+
+🔗 <a href="${url}" target="_blank">Fuente completa</a> · <a href="${gUrl}" target="_blank">Ver en Google</a>`,
+   say:(w.extract||"").split(". ").slice(0,2).join(". ")+"."};
+ }
+ window.open(gUrl);
+ return{html:`No he encontrado un resumen directo de <b>"${q}"</b>, señor. He abierto la búsqueda en Google en una pestaña nueva: <a href="${gUrl}" target="_blank">${q}</a>`,
+  say:"No encontré un resumen directo. He abierto Google con la búsqueda, señor."};}
+
+/* ═══════════════ CLIMA REAL (Open-Meteo) ═══════════════ */
+const WMO={0:"Despejado",1:"Mayormente despejado",2:"Parcialmente nublado",3:"Nublado",45:"Niebla",48:"Niebla",51:"Llovizna",53:"Llovizna",55:"Llovizna",61:"Lluvia ligera",63:"Lluvia",65:"Lluvia fuerte",71:"Nieve",80:"Chubascos",81:"Chubascos",82:"Chubascos fuertes",95:"Tormenta",96:"Tormenta",99:"Tormenta"};
+let wx=null;
+async function loadWeather(){
+ const coords=await new Promise(res=>{
+  if(!navigator.geolocation)return res(null);
+  navigator.geolocation.getCurrentPosition(p=>res(p.coords),()=>res(null),{timeout:6000});});
+ const lat=coords?coords.latitude:41.65,lon=coords?coords.longitude:-0.88;// fallback: Zaragoza
+ try{
+  const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,weather_code&timezone=auto`);
+  const j=await r.json();const c=j.current;
+  wx={t:Math.round(c.temperature_2m),h:c.relative_humidity_2m,p:Math.round(c.surface_pressure),w:Math.round(c.wind_speed_10m),d:WMO[c.weather_code]||"—",tz:j.timezone};
+  $("wxT").textContent=wx.t+"°C";$("wxH").textContent=wx.h+"%";$("wxP").textContent=wx.p+" hPa";$("wxW").textContent=wx.w+" km/h";
+  $("wxLoc").textContent=coords?"GPS · "+wx.tz:"Zaragoza (aprox.)";$("wxDesc").textContent=wx.d;$("wxaux").textContent="LIVE";
+  slog("Clima sincronizado ("+wx.t+"°C, "+wx.d+")");
+ }catch(e){$("wxaux").textContent="OFFLINE";slog("Clima no disponible");}}
+
+/* ═══════════════ EXPLORADOR DE ARCHIVOS ═══════════════ */
+let dirStack=[];// [{handle,name}]
+const TXT_EXT=/\.(txt|md|json|js|jsx|ts|tsx|html|css|csv|log|xml|yml|yaml|cjs|mjs|ini|bat|ps1|sql|py)$/i;
+const IMG_EXT=/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i;
+function fbClose(){$("fbmodal").classList.remove("open");}
+async function pickFolder(){
+ if(!window.showDirectoryPicker){
+  addMsg("Su navegador no soporta acceso a carpetas, señor. Use Chrome o Edge actualizados.","jarvis");return;}
+ try{
+  const h=await showDirectoryPicker();
+  dirStack=[{handle:h,name:h.name}];
+  $("fbmodal").classList.add("open");
+  slog("Acceso concedido a carpeta: "+h.name);
+  speak("Acceso concedido, señor. Explorando "+h.name+".");
+  await renderDir();
+ }catch(e){/* cancelado */}}
+async function renderDir(){
+ const cur=dirStack[dirStack.length-1];
+ $("fbpath").textContent="‪"+dirStack.map(d=>d.name).join(" / ");
+ const list=$("fblist");list.innerHTML="";
+ const dirs=[],files=[];
+ for await(const[name,h]of cur.handle.entries()){(h.kind==="directory"?dirs:files).push({name,h});}
+ dirs.sort((a,b)=>a.name.localeCompare(b.name));files.sort((a,b)=>a.name.localeCompare(b.name));
+ for(const d of dirs){const el=document.createElement("div");el.className="fb-item";
+  el.innerHTML=`📁 <span>${d.name}</span>`;
+  el.onclick=async()=>{dirStack.push({handle:d.h,name:d.name});await renderDir();};list.appendChild(el);}
+ for(const f of files){const el=document.createElement("div");el.className="fb-item";
+  el.innerHTML=`📄 <span>${f.name}</span><span class="sz"></span>`;
+  el.onclick=()=>previewFile(f.h,el);list.appendChild(el);}
+ if(!dirs.length&&!files.length)list.innerHTML='<div class="fb-hint">Carpeta vacía</div>';}
+async function fbUp(){if(dirStack.length>1){dirStack.pop();await renderDir();}}
+async function previewFile(handle,el){
+ const v=$("fbview");
+ try{
+  const f=await handle.getFile();
+  const kb=(f.size/1024).toFixed(1)+" KB";
+  if(el)el.querySelector(".sz").textContent=kb;
+  const head=`<div style="margin-bottom:10px"><b style="color:var(--cyan2)">${f.name}</b> <span style="color:var(--muted)">· ${kb} · ${new Date(f.lastModified).toLocaleString("es-ES")}</span></div>`;
+  if(IMG_EXT.test(f.name)){v.innerHTML=head+`<img src="${URL.createObjectURL(f)}">`;}
+  else if(TXT_EXT.test(f.name)&&f.size<2e6){const t=await f.text();
+   v.innerHTML=head+`<pre>${t.slice(0,8000).replace(/&/g,"&amp;").replace(/</g,"&lt;")}${t.length>8000?"\n\n… (truncado)":""}</pre>`;}
+  else{v.innerHTML=head+`<div class="fb-hint">Sin vista previa para este formato.</div>`;}
+  slog("Archivo inspeccionado: "+f.name);
+ }catch(e){v.innerHTML='<div class="fb-hint">No se pudo leer el archivo.</div>';}}
+async function findFiles(q){
+ if(!dirStack.length)return null;
+ const out=[];let count=0;
+ async function walk(h,path,depth){
+  if(depth>4||out.length>=25||count>3000)return;
+  for await(const[name,child]of h.entries()){count++;
+   if(name.toLowerCase().includes(q))out.push(path+"/"+name+(child.kind==="directory"?"/":""));
+   if(child.kind==="directory"&&!/node_modules|\.git/.test(name))await walk(child,path+"/"+name,depth+1);
+   if(out.length>=25||count>3000)return;}}
+ await walk(dirStack[0].handle,dirStack[0].name,0);
+ return out;}
+
+/* ═══════════════ CEREBRO ═══════════════ */
+async function think(input){
+ const q=input.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
+ // hora / fecha
+ if(/\b(que hora|hora es|^hora$)\b/.test(q)){const t=new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"});
+  return{html:`Son las <b>${t}</b>, señor.`,say:`Son las ${t}, señor.`};}
+ if(/\b(fecha|que dia)\b/.test(q)){const d=new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  return{html:`Hoy es <b>${d}</b>.`,say:`Hoy es ${d}.`};}
+ // saludos
+ if(/\b(hola|buenos dias|buenas|hey jarvis)\b/.test(q))
+  return{html:"A su servicio, señor. Sistemas al 100%. Puedo buscar en internet, explorar su PC, darle el clima o los datos de TACTIUM.",say:"A su servicio, señor. Todos los sistemas operativos."};
+ if(/\b(gracias|perfecto|genial|bien hecho)\b/.test(q))return{html:"Para eso estoy, señor.",say:"Para eso estoy, señor."};
+ // abrir paneles
+ if(/abre.*(app ?store|apple)/.test(q)){window.open("https://appstoreconnect.apple.com");return{html:"Abriendo App Store Connect…",say:"Abriendo App Store Connect."};}
+ if(/abre.*play/.test(q)){window.open("https://play.google.com/console");return{html:"Abriendo Play Console…",say:"Abriendo Play Console."};}
+ if(/abre.*(expo|eas)/.test(q)){window.open("https://expo.dev");return{html:"Abriendo Expo…",say:"Abriendo Expo."};}
+ if(/abre.*supabase/.test(q)){window.open("https://supabase.com/dashboard");return{html:"Abriendo Supabase…",say:"Abriendo Supabase."};}
+ // google / youtube directos
+ let m=q.match(/^google\s+(.+)/);if(m){window.open(`https://www.google.com/search?q=${encodeURIComponent(m[1])}`);
+  return{html:`Buscando <b>"${m[1]}"</b> en Google, señor.`,say:"Búsqueda abierta en Google."};}
+ m=q.match(/^youtube\s+(.+)/);if(m){window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(m[1])}`);
+  return{html:`Buscando <b>"${m[1]}"</b> en YouTube.`,say:"Búsqueda abierta en YouTube."};}
+ // buscar archivo
+ m=q.match(/busca(?:r)?\s+(?:el\s+)?archivo\s+(.+)/)||q.match(/encuentra\s+(?:el\s+)?archivo\s+(.+)/);
+ if(m){if(!dirStack.length)return{html:'Primero necesito acceso, señor. Diga <b>"explora mi pc"</b> o pulse FILES y elija una carpeta.',say:"Primero concédame acceso a una carpeta, señor."};
+  const res=await findFiles(m[1].trim());
+  if(res&&res.length)return{html:`<span class="tag">ARCHIVOS ENCONTRADOS · ${res.length}</span>`+res.map(r=>"📄 "+r).join("\n"),say:`He localizado ${res.length} coincidencias, señor.`};
+  return{html:`Sin coincidencias para <b>"${m[1]}"</b> en ${dirStack[0].name}.`,say:"No he encontrado coincidencias, señor."};}
+ // explorar pc
+ if(/\b(explora|navega|archivos|mi pc|carpeta|explorador|ficheros)\b/.test(q)){pickFolder();
+  return{html:"Abriendo el explorador… Seleccione la carpeta a la que me concede acceso (puede elegir todo el Escritorio o un disco).",say:"Seleccione la carpeta, señor."};}
+ // clima
+ if(/\b(tiempo|clima|temperatura|lluvia|calor|frio)\b/.test(q)){
+  if(!wx)await loadWeather();
+  if(wx)return{html:`<span class="tag">ENVIRONMENT · LIVE</span>🌡️ <b>${wx.t}°C</b> · ${wx.d}
+💧 Humedad ${wx.h}% · 🌬 Viento ${wx.w} km/h · ⏱ ${wx.p} hPa`,
+   say:`Ahora mismo ${wx.t} grados, ${wx.d}. Humedad del ${wx.h} por ciento y viento de ${wx.w} kilómetros por hora, señor.`};
+  return{html:"No puedo acceder al servicio meteorológico ahora mismo, señor.",say:"Servicio meteorológico no disponible."};}
+ // busqueda web explicita
+ m=q.match(/^(?:busca|buscar|investiga|averigua)\s+(.+)/)||q.match(/^(?:que es|quien es|quien fue|que significa)\s+(.+)/);
+ if(m&&m[1].trim().length>1)return await webSearch(m[1].trim());
+ // TACTIUM
+ let best=null,bs=0;
+ for(const it of INTENTS){const s=it.k.filter(kw=>q.includes(kw)).length;if(s>bs){bs=s;best=it;}}
+ if(best)return{html:KB[best.r],say:best.say};
+ // fallback → intentar web
+ if(q.length>3){const r=await webSearch(input.trim());
+  return{html:`<span class="tag">NO ESTABA EN MI BASE LOCAL — HE BUSCADO EN LA RED</span>`+r.html.replace(/<span class="tag">.*?<\/span>/,""),say:r.say};}
+ return{html:'Diga <b>"ayuda"</b> para ver mis capacidades, señor.',say:"Diga ayuda para ver mis capacidades."};}
+
+async function handle(input){
+ input=(input||"").trim();if(!input)return;
+ addMsg(input,"user");txt.value="";
+ const tick=addMsg('<span class="typing">▮ PROCESANDO…</span>',"jarvis");
+ try{const r=await think(input);tick.innerHTML=r.html;speak(r.say||"");}
+ catch(e){tick.innerHTML="Ha habido una interferencia en mis circuitos, señor. Reintente.";slog("Error: "+e.message);}
+ chat.scrollTop=chat.scrollHeight;}
+txt.addEventListener("keydown",e=>{if(e.key==="Enter")handle(txt.value)});
+$("tabweb").onclick=promptSearch;
+
+/* chips */
+const CHIPS=[["🌐 BUSCAR","__search"],["💻 MI PC","explora mi pc"],["🌤 CLIMA","que tiempo hace"],["💰 PRECIOS","precios"],["🍎 APPLE","checklist apple"],["🤖 GOOGLE","checklist google"],["❓ AYUDA","ayuda"]];
+for(const[l,c]of CHIPS){const el=document.createElement("div");el.className="chip";el.textContent=l;
+ el.onclick=()=>c==="__search"?promptSearch():handle(c);$("chips").appendChild(el);}
+
+/* ═══════════════ VOZ (entrada) ═══════════════ */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,recording=false;
+if(SR){rec=new SR();rec.lang="es-ES";rec.interimResults=false;
+ rec.onresult=e=>handle(e.results[0][0].transcript);
+ rec.onend=()=>{recording=false;mic.classList.remove("rec");corewrap.classList.remove("listening");
+  vstatus.textContent="EN ESPERA";vstatus.classList.remove("live");};
+ rec.onerror=e=>{if(e.error==="not-allowed")addMsg("Necesito permiso de micrófono, señor. Actívelo en el icono 🎙️ de la barra de direcciones.","jarvis");};
+ mic.onclick=()=>{if(recording){rec.stop();return;}
+  speechSynthesis.cancel();recording=true;mic.classList.add("rec");corewrap.classList.add("listening");
+  vstatus.textContent="ESCUCHANDO…";vstatus.classList.add("live");slog("Escucha activa");rec.start();};}
+else{mic.onclick=()=>addMsg("El reconocimiento de voz requiere Chrome o Edge, señor.","jarvis");}
+
+/* ═══════════════ RELOJ + UPTIME ═══════════════ */
+const t0=Date.now();
+setInterval(()=>{const n=new Date();
+ $("htime").textContent=n.toLocaleTimeString("es-ES");
+ $("hdate").textContent=n.toLocaleDateString("es-ES",{day:"2-digit",month:"short",year:"numeric"}).toUpperCase();
+ const s=Math.floor((Date.now()-t0)/1000);
+ $("fUp").textContent=(s>=3600?Math.floor(s/3600)+"h ":"")+Math.floor(s%3600/60)+"m "+(s%60)+"s";},1000);
+
+/* ═══════════════ STATS REALES DEL SISTEMA ═══════════════ */
+let cpuSim=14;
+async function initStats(){
+ const cores=navigator.hardwareConcurrency||4;
+ $("fCores").textContent=cores+" NÚCLEOS";
+ const dm=navigator.deviceMemory;
+ $("stMem").textContent=dm?"≥"+dm+" GB":"N/D";
+ $("fMem").textContent=dm?dm+" GB":"—";$("fMemSub").textContent="RAM DETECTADA";
+ if(navigator.storage&&navigator.storage.estimate){const e=await navigator.storage.estimate();
+  if(e.quota)$("stSto").textContent=(e.quota/1e9).toFixed(0)+" GB disp.";}
+ const c=navigator.connection;
+ if(c)$("stNet").textContent=(c.downlink?c.downlink+" Mb/s":c.effectiveType||"OK");else $("stNet").textContent="ONLINE";
+ if(navigator.getBattery){const b=await navigator.getBattery();
+  const upd=()=>{const p=Math.round(b.level*100);$("stBat").textContent=p+"%"+(b.charging?" ⚡":"");$("fBat").textContent=p+"%";};
+  upd();b.onlevelchange=upd;b.onchargingchange=upd;}
+ else{$("stBat").textContent="AC";$("fBat").textContent="100%";}
+ $("stCpu").textContent=cores+" cores";
+ $("sysaux").textContent="LIVE";}
+setInterval(()=>{cpuSim=Math.max(4,Math.min(88,cpuSim+(Math.random()*10-5)));
+ $("fCpu").textContent=Math.round(cpuSim)+"%";},1500);
+
+/* gauge */
+const gctx=$("gauge").getContext("2d");let gv=0,gTarget=98;
+function drawGauge(){gctx.clearRect(0,0,104,104);
+ gctx.lineWidth=3;
+ for(let i=0;i<40;i++){const a=-Math.PI/2+i/40*Math.PI*2;
+  gctx.strokeStyle=i/40<=gv/100?"#22D3EE":"rgba(34,211,238,.15)";
+  gctx.beginPath();gctx.moveTo(52+Math.cos(a)*40,52+Math.sin(a)*40);
+  gctx.lineTo(52+Math.cos(a)*47,52+Math.sin(a)*47);gctx.stroke();}
+ if(gv<gTarget)gv=Math.min(gTarget,gv+1.4);
+ $("gval").textContent=Math.round(gv)+"%";requestAnimationFrame(drawGauge);}
+drawGauge();
+
+/* wave */
+const wc=$("wave");const wctx=wc.getContext("2d");
+function sizeWave(){wc.width=wc.clientWidth;wc.height=56;}sizeWave();addEventListener("resize",sizeWave);
+let ph=0;
+(function wave(){wctx.clearRect(0,0,wc.width,wc.height);ph+=recording?.35:.06;
+ const mid=28,n=Math.floor(wc.width/5);
+ for(let i=0;i<n;i++){
+  const amp=recording?(Math.sin(i*.7+ph*2)*8+Math.random()*14+4):(Math.sin(i*.4+ph)*3+2);
+  wctx.fillStyle=recording?"rgba(103,232,249,.9)":"rgba(34,211,238,.45)";
+  wctx.fillRect(i*5,mid-amp,2.5,amp*2);}
+ requestAnimationFrame(wave);})();
+
+/* network map */
+const nm=$("netmap");const nctx=nm.getContext("2d");
+function sizeNM(){nm.width=nm.clientWidth;nm.height=120;}sizeNM();addEventListener("resize",sizeNM);
+const blobs=[[.16,.32,.11],[.24,.55,.07],[.30,.72,.06],[.47,.28,.08],[.52,.45,.09],[.60,.62,.06],[.72,.35,.12],[.80,.55,.07],[.88,.72,.05]];
+const dots=[];for(const[bx,by,r]of blobs)for(let i=0;i<70;i++){const a=Math.random()*Math.PI*2,d=Math.sqrt(Math.random())*r;
+ dots.push([bx+Math.cos(a)*d*1.7,by+Math.sin(a)*d]);}
+const nodes=[[.2,.35],[.48,.3],[.55,.5],[.75,.4],[.85,.6],[.3,.6]];let npulse=0;
+(function drawNM(){nctx.clearRect(0,0,nm.width,nm.height);npulse+=.03;
+ nctx.fillStyle="rgba(45,212,191,.35)";
+ for(const[x,y]of dots)nctx.fillRect(x*nm.width,y*nm.height,1.6,1.6);
+ nctx.strokeStyle="rgba(34,211,238,.25)";nctx.lineWidth=1;
+ for(let i=0;i<nodes.length-1;i++){nctx.beginPath();
+  nctx.moveTo(nodes[i][0]*nm.width,nodes[i][1]*nm.height);
+  nctx.lineTo(nodes[i+1][0]*nm.width,nodes[i+1][1]*nm.height);nctx.stroke();}
+ nodes.forEach(([x,y],i)=>{const X=x*nm.width,Y=y*nm.height,p=(Math.sin(npulse*2+i)+1)/2;
+  nctx.fillStyle="#22D3EE";nctx.beginPath();nctx.arc(X,Y,2.2,0,7);nctx.fill();
+  nctx.strokeStyle=`rgba(34,211,238,${.5-p*.5})`;nctx.beginPath();nctx.arc(X,Y,3+p*7,0,7);nctx.stroke();});
+ requestAnimationFrame(drawNM);})();
+$("nmDev").textContent=Math.floor(Math.random()*8)+18;
+
+/* analytics */
+const ch=$("chart");const cctx=ch.getContext("2d");
+function sizeCH(){ch.width=ch.clientWidth;ch.height=88;}sizeCH();addEventListener("resize",sizeCH);
+const series=Array.from({length:26},()=>30+Math.random()*45);
+setInterval(()=>{series.shift();series.push(30+Math.random()*45);},1400);
+(function drawCH(){cctx.clearRect(0,0,ch.width,ch.height);
+ cctx.strokeStyle="rgba(34,211,238,.12)";cctx.lineWidth=1;
+ for(let y=12;y<88;y+=18){cctx.beginPath();cctx.moveTo(0,y);cctx.lineTo(ch.width,y);cctx.stroke();}
+ cctx.strokeStyle="#2DD4BF";cctx.lineWidth=1.6;cctx.beginPath();
+ series.forEach((v,i)=>{const x=i/(series.length-1)*ch.width,y=88-v;i?cctx.lineTo(x,y):cctx.moveTo(x,y);});
+ cctx.stroke();
+ cctx.fillStyle="#67E8F9";
+ series.forEach((v,i)=>{if(i%3===0)cctx.fillRect(i/(series.length-1)*ch.width-1.5,88-v-1.5,3,3);});
+ requestAnimationFrame(drawCH);})();
+const BARS=[["Sensor Input",87],["User Activity",62],["Network Traffic",73],["System Performance",91]];
+for(const[lb,pc]of BARS){const d=document.createElement("div");d.className="bar";
+ d.innerHTML=`<span class="lb">${lb}</span><div class="tr"><div class="fl" style="width:0%"></div></div><span class="pc">${pc}%</span>`;
+ $("bars").appendChild(d);setTimeout(()=>d.querySelector(".fl").style.width=pc+"%",400);}
+$("syncPct").textContent="SYNC 65%";
+
+/* ═══════════════ ARRANQUE ═══════════════ */
+window.addEventListener("load",()=>{
+ if("speechSynthesis"in window)speechSynthesis.getVoices();
+ slog("Sistema inicializado");slog("Todos los sistemas en línea");slog("Red segura");
+ initStats().then(()=>slog("Diagnóstico de hardware completo"));
+ loadWeather();
+ slog("Base de datos TACTIUM sincronizada");slog("Listo para recibir órdenes");
+ addMsg(`<span class="tag">SISTEMA INICIADO</span>Buenos días, señor. <b>JARVIS v2</b> operativo con capacidades ampliadas:
+
+🌐 <b>Búsqueda en internet</b> — "busca Carlos Alcaraz", "qué es la inflación"…
+💻 <b>Explorar su PC</b> — "explora mi pc" y navegue por sus carpetas y archivos
+🌤 <b>Clima real</b> — "qué tiempo hace"
+📊 <b>TACTIUM</b> — precios, checklists de Apple y Google, estado del proyecto
+
+Pulse 🎙️ y hable, o use los accesos rápidos.`,"jarvis");
+ setTimeout(()=>speak("Buenos días, señor. JARVIS versión 2 operativo. Búsqueda en internet, acceso a archivos y telemetría en tiempo real, disponibles."),700);
+});
+</script>
+</body>
+</html>

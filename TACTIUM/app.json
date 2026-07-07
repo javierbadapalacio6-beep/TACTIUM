@@ -3,7 +3,7 @@
     "name": "TACTIUM",
     "slug": "tactium",
     "version": "1.0.2",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "dark",
     "scheme": "tactium",
     "icon": "./assets/icon.png",

@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "email:preview": "tsx scripts/send-launch-blast.tsx --preview",
+    "email:dry-run": "tsx scripts/send-launch-blast.tsx --dry-run",
+    "email:launch": "tsx scripts/send-launch-blast.tsx",
+    "newsletter:preview": "tsx scripts/send-newsletter.tsx --preview",
+    "newsletter:test": "tsx scripts/send-newsletter.tsx --test",
+    "newsletter:dry-run": "tsx scripts/send-newsletter.tsx --dry-run",
+    "newsletter:send": "tsx scripts/send-newsletter.tsx"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -30,9 +37,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^16.4.5",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

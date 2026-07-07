@@ -5,10 +5,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Colors } from '@core/theme/colors';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
+import { useProfileStore } from '@store/profileStore';
 
 import { AuthStack } from './AuthStack';
 import { OnboardingStack } from './OnboardingStack';
 import { TabNavigator } from './TabNavigator';
+import { NewUserStack } from './NewUserStack';
 import { PlayerClaimGate } from '@features/onboarding/components/PlayerClaimGate';
 import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
 import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
@@ -20,16 +22,16 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const team = useTeamStore((s) => s.team);
   const isOnboarding = useTeamStore((s) => s.isOnboarding);
   const hasLoadedOnce = useTeamStore((s) => s.hasLoadedOnce);
-  const isLoading = useTeamStore((s) => s.isLoading);
+  const team = useTeamStore((s) => s.team);
+  const activeRole = useTeamStore((s) => s.activeRole);
+  const profileOnboarded = useProfileStore((s) => s.onboarded);
 
-  // Mientras esté autenticado pero el teamStore no haya terminado su primera
-  // carga, mostramos loader. Si solo comprobamos `isLoading` aquí, hay un
-  // frame inicial (justo tras el login) en el que team=null e isLoading=false
-  // todavía, y el RootNavigator pinta OnboardingFlow → flash visual.
-  if (isAuthenticated && !hasLoadedOnce) {
+  // Mientras esté autenticado pero no haya terminado la primera carga del
+  // teamStore NI se sepa si el perfil está completo (onboarded===null),
+  // mostramos loader — así evitamos flashes entre feed / alta de perfil.
+  if (isAuthenticated && (!hasLoadedOnce || profileOnboarded === null)) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator color={Colors.accent} size="large" />
@@ -37,7 +39,19 @@ export const RootNavigator = () => {
     );
   }
 
-  const showMainTabs = isAuthenticated && !!team && !isOnboarding;
+  // Alta del usuario nuevo (Fase 1d): si el perfil no está completo Y no tiene
+  // equipo ni gestiona un club → elige tipo (jugador/club/sede). Los existentes
+  // (onboarded=true backfill) o quien ya tiene equipo/club lo saltan. El flujo
+  // "crear equipo/club" tiene prioridad (isOnboarding) porque se lanza DESDE
+  // aquí (opción "gestiono un club").
+  const needsProfileSetup =
+    isAuthenticated &&
+    profileOnboarded === false &&
+    !team &&
+    activeRole !== 'club_admin';
+
+  const showMainTabs =
+    isAuthenticated && hasLoadedOnce && !needsProfileSetup && !isOnboarding;
 
   return (
     <>
@@ -50,8 +64,10 @@ export const RootNavigator = () => {
       >
         {!isAuthenticated ? (
           <Stack.Screen name="AuthFlow" component={AuthStack} />
-        ) : !team || isOnboarding ? (
+        ) : isOnboarding ? (
           <Stack.Screen name="OnboardingFlow" component={OnboardingStack} />
+        ) : needsProfileSetup ? (
+          <Stack.Screen name="NewUserFlow" component={NewUserStack} />
         ) : (
           <>
             <Stack.Screen name="MainTabs" component={TabNavigator} />

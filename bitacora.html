@@ -247,6 +247,26 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-03",
+    title: "🎬 Vídeo promo (Reel/TikTok 9:16) creado con Remotion recorriendo TODAS las funcionalidades de la app (16 capturas) + logo + voz en off sincronizada. Queda afinar sync, música y fotos. Pizarra sigue aparcada.",
+    changes: [
+      { type: "feat", text: "<strong>🎬 Reel promocional 9:16 (1080×1920) con Remotion</strong> en el subproyecto <code>tactium-remotion</code> (carpeta hermana). Composición <code>TactiumReel</code> (~47 s) que recorre <strong>todas las funcionalidades</strong>: Club (home, equipos, invitar capitán), Capitán (temporada, <strong>escáner de calendario y ranking por foto/PDF</strong>, plantilla con puntos FEP, alta/edición de jugador, invitar por código, disponibilidad, alta de jornada, <strong>alineación auto-ordenada por puntos</strong> con estrategias Pirámide/Equilibrada, confirmar, resultados). Estética de marca (verde, glow, móvil con Ken-Burns), <strong>isotipo TACTIUM</strong> vectorizado (reusado de <code>TactiumMark</code>) en intro y CTA, y <strong>voz en off del usuario</strong> integrada (<code>&lt;Audio&gt;</code>, silencio inicial recortado, escenas escaladas a 47,45 s). Skill <code>remotion-best-practices</code> instalada. Render: <code>out/tactium-reel-v3.mp4</code>." },
+
+      { type: "decision", text: "<strong>⏳ Pendientes del vídeo</strong>: (a) <strong>afinar la sincronización</strong> voz↔rótulos (el ajuste fue proporcional; falta clavar escenas concretas según feedback), (b) añadir <strong>música de fondo</strong> con ducking, (c) intercalar <strong>fotos del usuario en pista</strong>, (d) opcional versión <strong>corta de 30 s</strong> y subtítulos quemados. Guion de voz guardado en la conversación." },
+
+      { type: "decision", text: "<strong>⏸️ Pizarra táctica sigue aparcada</strong> (ver 2026-06-30): pizarra de dibujo con pista fotorrealista + fichas + lápiz/borrador. Pendiente afinar calibración/tamaño de pista, comprimir assets y limpiar imágenes de la raíz. Se retoma más adelante." },
+    ],
+  },
+  {
+    date: "2026-06-30",
+    title: "🎾 Nueva PIZARRA TÁCTICA (en desarrollo, APARCADA): pizarra de dibujo a pantalla completa con pista de pádel fotorrealista (4 colores), fichas con fotos reales de los jugadores y lápiz/borrador. Probada en dev build iOS + Expo Go. Se deja en pendiente para pasar a otra tarea.",
+    changes: [
+      { type: "feat", text: "<strong>🎾 Pizarra táctica (pantalla <code>TacticsBoardScreen</code>)</strong>: pizarra de dibujo a <strong>pantalla completa</strong> con <strong>pista de pádel fotorrealista de fondo</strong> (imagen real vertical, calibrada a píxel) seleccionable en <strong>4 colores</strong> (azul/verde/marrón/rosa, JPEG ~240 KB). <strong>Fichas movibles</strong> con las <strong>fotos reales</strong> de la pareja (avatares de <code>players</code>) y herramientas directas <strong>Mover · Lápiz · Borrador</strong> (color y grosor del lápiz, borrado por toque). Motor <code>@shopify/react-native-skia</code> 2.2.12 (requiere build nativo nuevo). Menús flotando sobre el asfalto de la imagen." },
+
+      { type: "decision", text: "<strong>⏸️ Aparcada de momento</strong>. Antes se exploró un editor de <strong>jugadas por palabras</strong> (globo al revés, chiquita al centro…) + animación + biblioteca de 36 jugadas — descartado a favor de la pizarra de dibujo simple. Los archivos del motor de jugadas (<code>actions.ts</code>, <code>plays.ts</code>, <code>tacticsStore.ts</code>) quedan sin usar por si se retoman. <strong>Pendientes</strong>: afinar tamaño/calibración de la pista, comprimir/optimizar assets, limpiar imágenes sueltas de la raíz y decidir orientación. Todo aún en <strong>dev build / Expo Go</strong>, sin tocar producción." },
+    ],
+  },
+  {
     date: "2026-06-23",
     title: "🍎 1.0.2 APROBADA y live en iOS (Android en prueba cerrada). Verificadas las notificaciones en real (jornada/alineación avisan a los jugadores). 3 OTAs a production: toggle de avisos, ocultar suscripción a jugadores y arreglo del aviso de confirmación de email.",
     changes: [

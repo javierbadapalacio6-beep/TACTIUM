@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,6 +22,9 @@ import { useClubStore } from './src/store/clubStore';
 import { useConnectionStore } from './src/store/connectionStore';
 import { useSubscriptionStore } from './src/store/subscriptionStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
+import { reconcileSubscriptionFromStore } from './src/core/services/subscriptions';
+import { useProfileStore } from './src/store/profileStore';
+import { useVenueStore } from './src/store/venueStore';
 import { maybePromptForPush } from './src/core/push';
 import { ToastHost, OfflineBanner, ResponsiveFrame } from './src/components/ui';
 import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
@@ -63,10 +67,23 @@ export default function App() {
   const refreshSubs = useSubscriptionStore((s) => s.refresh);
   const subscribeSubsRealtime = useSubscriptionStore((s) => s.subscribeRealtime);
   const resetSubs = useSubscriptionStore((s) => s.reset);
+  const loadProfile = useProfileStore((s) => s.load);
+  const resetProfile = useProfileStore((s) => s.reset);
+  const loadVenue = useVenueStore((s) => s.load);
+  const resetVenue = useVenueStore((s) => s.reset);
 
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
+
+  // La app es vertical por defecto; solo pantallas concretas (la pizarra)
+  // permiten rotar. Bloqueamos portrait al arrancar (no-op si el módulo
+  // nativo no está en este binario).
+  useEffect(() => {
+    ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.PORTRAIT_UP,
+    ).catch(() => {});
+  }, []);
 
   // Backstop: si por lo que sea el AnimatedSplash no llegara a ocultar el
   // splash nativo, lo forzamos pasados unos segundos para no dejar la app
@@ -94,9 +111,27 @@ export default function App() {
         // quedan asociadas a este user en el backend de RC. Si más
         // tarde el user cambia (re-login con otra cuenta), el helper
         // hace `Purchases.logIn` internamente.
-        configurePurchases(userId).catch((e) =>
-          console.warn('configurePurchases failed', e),
-        );
+        // Configura RC y, en cuanto está listo, RECONCILIA el estado real de
+        // la tienda con la BD (auto-cura suscripciones que el webhook no
+        // actualizó: conversión de prueba→pago, renovación...). No bloquea el
+        // arranque; al terminar refresca el store para repintar la UI.
+        configurePurchases(userId)
+          .catch((e) => console.warn('configurePurchases failed', e))
+          .then(() => reconcileSubscriptionFromStore())
+          .then((n) => {
+            if (!cancelled && n > 0) return refreshSubs(userId);
+          })
+          .catch((e) =>
+            console.warn('reconcileSubscriptionFromStore failed', e),
+          );
+
+        // Perfil: carga el flag `onboarded` para el gate de alta de perfil
+        // (Fase 1d). Fail-open dentro del store → nunca deja al usuario
+        // colgado. No bloquea el resto del arranque.
+        void loadProfile();
+        // Sede propia: para que el TabNavigator adapte las tabs (Equipo → Mi
+        // sede). No bloquea el arranque.
+        void loadVenue(userId);
 
         // Esperamos a que zustand-persist hidrate el activeTeamId desde
         // AsyncStorage; si no, loadForUser puede leer null y caer al
@@ -135,10 +170,16 @@ export default function App() {
       resetTeam();
       resetClubs();
       resetSubs();
+      resetProfile();
+      resetVenue();
     }
   }, [
     isAuthenticated,
     userId,
+    loadProfile,
+    resetProfile,
+    loadVenue,
+    resetVenue,
     loadTeam,
     resetTeam,
     loadClubs,

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TACTIUM · Prospección de clubs</title>
+<style>
+  :root{
+    --bg:#030F0F; --card:#0C2222; --raised:#0F2A28; --accent:#00DF82;
+    --accent-deep:#03624C; --text:#E8F5EF; --muted:rgba(232,245,239,.7);
+    --faint:rgba(232,245,239,.45); --hair:rgba(232,245,239,.09);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif;
+    background-image:radial-gradient(ellipse 900px 420px at 50% -120px, #03624C40 0%, var(--bg) 60%);
+    min-height:100vh;padding:32px 20px 60px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.28em;
+    text-transform:uppercase;font-size:11px;color:var(--accent);font-weight:600}
+  h1{font-size:30px;font-weight:800;letter-spacing:-1px;margin:6px 0 4px}
+  .sub{color:var(--muted);font-size:15px;margin:0 0 26px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:14px}
+  .kpi{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:14px 16px}
+  .kpi .n{font-size:26px;font-weight:800;line-height:1}
+  .kpi .l{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-top:6px}
+  .market{display:flex;gap:22px;flex-wrap:wrap;background:var(--raised);border:1px solid var(--hair);
+    border-radius:14px;padding:14px 18px;margin-bottom:22px}
+  .market div{font-size:13px;color:var(--muted)} .market b{color:var(--accent);font-size:16px}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  input[type=search]{background:var(--card);border:1px solid var(--hair);border-radius:999px;
+    color:var(--text);padding:10px 16px;font-size:14px;min-width:220px;outline:none}
+  input[type=search]:focus{border-color:var(--accent)}
+  .chip{background:var(--card);border:1px solid var(--hair);color:var(--muted);border-radius:999px;
+    padding:8px 14px;font-size:13px;cursor:pointer;user-select:none}
+  .chip.active{background:var(--accent);color:#001810;border-color:var(--accent);font-weight:700}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden;
+    border:1px solid var(--hair)}
+  th,td{text-align:left;padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--hair);vertical-align:top}
+  th{color:var(--faint);text-transform:uppercase;font-size:11px;letter-spacing:.08em;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td a{color:var(--accent);text-decoration:none} td a:hover{text-decoration:underline}
+  .club-name{font-weight:700;font-size:14px}
+  .loc{color:var(--faint);font-size:12px;margin-top:2px}
+  .noemail{color:var(--faint);font-style:italic}
+  select.st{background:var(--raised);color:var(--text);border:1px solid var(--hair);border-radius:8px;
+    padding:6px 8px;font-size:12.5px;cursor:pointer}
+  .st[data-s="Pendiente"]{color:var(--muted)}
+  .st[data-s="Contactado"]{color:#ffd166;border-color:#ffd16655}
+  .st[data-s="Respondió"]{color:#5bc0ff;border-color:#5bc0ff55}
+  .st[data-s="Cliente"]{color:var(--accent);border-color:var(--accent)}
+  .mailbtn{background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:8px;
+    padding:6px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  .mailbtn:hover{background:var(--accent);color:#001810}
+  .mailbtn:disabled{opacity:.3;cursor:not-allowed;border-color:var(--hair);color:var(--faint)}
+  .foot{color:var(--faint);font-size:12px;margin-top:18px;line-height:1.6}
+  @media(max-width:780px){.kpis{grid-template-columns:repeat(3,1fr)}th:nth-child(4),td:nth-child(4){display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mono">TACTIUM · PROSPECCIÓN B2B</div>
+  <h1>Clubs de pádel en España</h1>
+  <p class="sub">Mini-CRM para gestionar el contacto con clubs. Tu progreso se guarda en este navegador.</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="market">
+    <div><b>109.040</b><br>licencias 2024</div>
+    <div><b>+1.500</b><br>clubs federados</div>
+    <div><b>~17.000</b><br>pistas</div>
+    <div><b>1º Cataluña</b><br>2º Madrid · 3º Andalucía</div>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="q" placeholder="Buscar club o ciudad…">
+    <span id="ccaa"></span>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>Club</th><th>Email</th><th>Teléfono</th><th>Web</th><th>Estado</th><th></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <p class="foot">
+    Fuentes: FEP 2024 y federaciones autonómicas (datos públicos).
+    Verifica cada email antes de enviar y usa un subdominio aparte para no afectar la reputación de tactium.io.
+    El botón ✉ abre tu cliente de correo con el email ya redactado y el nombre del club personalizado.
+  </p>
+</div>
+
+<script>
+const APP_URL="https://apps.apple.com/es/app/tactium/id6769825905";
+const STATES=["Pendiente","Contactado","Respondió","Cliente"];
+const clubs=[
+ {ccaa:"Madrid",club:"Real Club de Campo Villa de Madrid",city:"Madrid",web:"ccvm.es",email:"deportes@ccvm.es",tel:"915 502 010"},
+ {ccaa:"Madrid",club:"Madrid Central Pádel",city:"Madrid",web:"madridcentralpadel.com",email:"recepcion@madridcentralpadel.com",tel:"608 884 708"},
+ {ccaa:"Madrid",club:"Mas Padel",city:"Las Rozas",web:"maspadel.com",email:"info@maspadel.com",tel:"916 315 894"},
+ {ccaa:"Madrid",club:"School Padel Center M30",city:"Madrid",web:"m30.lavidapadel.com",email:"m30@lavidapadel.com",tel:"664 482 647"},
+ {ccaa:"Madrid",club:"Vim Pádel",city:"Madrid",web:"vimpadel.com",email:"info@vimpadel.com",tel:"918 602 199"},
+ {ccaa:"Madrid",club:"Las Tablas Sports Club",city:"Madrid",web:"lastablassports.club",email:"somos@lastablassports.club",tel:""},
+ {ccaa:"Madrid",club:"La Vida Padel",city:"Alcobendas",web:"lavidapadel.com",email:"",tel:"919 379 955"},
+ {ccaa:"Madrid",club:"Campus 23",city:"Madrid",web:"campus23.es",email:"",tel:"655 709 048"},
+ {ccaa:"Andalucía",club:"CD Match Padel",city:"Sevilla",web:"cdmatchpadel.es",email:"info@cdmatchpadel.es",tel:""},
+ {ccaa:"Andalucía",club:"Club Santa Clara",city:"Sevilla",web:"clubsantaclara.es",email:"padelyteniscsc@gmail.com",tel:""},
+ {ccaa:"Andalucía",club:"Padel Sport Academy",city:"Málaga",web:"padelsportacademy.com",email:"info@padelsportacademy.com",tel:""},
+ {ccaa:"Cataluña",club:"Catalunya Padel Club",city:"Sta. Perpètua de Mogoda",web:"catalunyapadelclub.com",email:"info@catalunyapadelclub.com",tel:"676 864 881"},
+ {ccaa:"Cataluña",club:"Direxis Pàdel",city:"Badalona",web:"direxispadel.com",email:"",tel:"930 130 399"},
+ {ccaa:"Cataluña",club:"Oxygen Sports Club",city:"Martorelles",web:"sportscluboxygen.com",email:"info@sportscluboxygen.com",tel:"936 551 153"},
+ {ccaa:"C. Valenciana",club:"SUMA Pádel Club",city:"Alfafar",web:"sumapadelclub.com",email:"padelalfafar@sumafitnessclub.com",tel:"610 237 658"},
+ {ccaa:"C. Valenciana",club:"ONE PADEL VALENCIA",city:"Paterna",web:"onepadelvalencia.com",email:"recepciononepadel@gmail.com",tel:""},
+ {ccaa:"C. Valenciana",club:"Padel Club Valencia",city:"La Pobla de Vallbona",web:"padellands.com",email:"",tel:"962 763 403"},
+ {ccaa:"C. Valenciana",club:"Padel Club Alicante Indoor",city:"Alicante",web:"padelclubalicante.com",email:"info@padelclubalicante.com",tel:"965 287 715"},
+ {ccaa:"C. Valenciana",club:"Altea Hills Club de Padel",city:"Altea",web:"",email:"",tel:"965 747 001"},
+ {ccaa:"País Vasco",club:"Bilbao Padel Indoor",city:"Zamudio",web:"",email:"",tel:"675 208 533"},
+ {ccaa:"Galicia",club:"Arenga",city:"Vigo",web:"arenga.es",email:"info@arenga.es",tel:"610 236 900"},
+ {ccaa:"Galicia",club:"Real Club de Tenis Coruña",city:"A Coruña",web:"teniscoruna.com",email:"martin.sanchez@teniscoruna.com",tel:"630 785 932"},
+ {ccaa:"Galicia",club:"Casino Ferrolano (pádel)",city:"Ferrol",web:"",email:"info.casinoferrolano@gmail.com",tel:"981 353 092"},
+];
+
+const KEY="tactium_prospect_status";
+let status={};
+try{ status=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ status={}; }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(status)); }catch(e){} }
+
+let filterCCAA="Todas", query="";
+const ccaas=["Todas",...[...new Set(clubs.map(c=>c.ccaa))]];
+
+function emailBody(club){
+  return `Hola:\n\nSoy Javier, fundador de TACTIUM. Os escribo porque trabajáis con equipos de pádel federado y quizá os ahorre un dolor de cabeza recurrente.\n\nTACTIUM es una app para capitanes y clubs: monta la alineación de cada jornada en menos de un minuto —equilibrando parejas por puntos y respetando el orden de fuerza de la federación— y avisa a los jugadores sin perseguir a nadie por WhatsApp.\n\nPara un club con varios equipos, el admin lo ve todo desde un panel y los capitanes alinean en 90 segundos.\n\n¿Te viene bien que te enseñe en 10 minutos cómo quedaría con los equipos de ${club.club}? Si lo prefieres, te paso el enlace y lo pruebas: 14 días gratis y los jugadores nunca pagan.\n\nUn saludo,\nJavier · TACTIUM\nhttps://tactium.io · ${APP_URL}\n\nSi no es de tu interés, responde "baja" y no te volveré a escribir.`;
+}
+function mailto(club){
+  const s=encodeURIComponent(`Alineaciones del club en 1 minuto, ${club.club}`);
+  const b=encodeURIComponent(emailBody(club));
+  return `mailto:${club.email}?subject=${s}&body=${b}`;
+}
+
+function renderChips(){
+  document.getElementById("ccaa").innerHTML=ccaas.map(c=>
+    `<span class="chip ${c===filterCCAA?'active':''}" data-c="${c}">${c}</span>`).join(" ");
+  document.querySelectorAll(".chip").forEach(el=>el.onclick=()=>{filterCCAA=el.dataset.c;render();});
+}
+function renderKPIs(){
+  const counts={total:clubs.length, email:clubs.filter(c=>c.email).length};
+  STATES.forEach(s=>counts[s]=clubs.filter(c=>(status[c.club]||"Pendiente")===s).length);
+  const cards=[
+    ["total","Clubs"],["email","Con email"],["Pendiente","Por contactar"],
+    ["Contactado","Contactados"],["Respondió","Respondieron"],["Cliente","Clientes"]
+  ];
+  document.getElementById("kpis").innerHTML=cards.map(([k,l])=>
+    `<div class="kpi"><div class="n">${counts[k]}</div><div class="l">${l}</div></div>`).join("");
+}
+function render(){
+  renderChips(); renderKPIs();
+  const rows=clubs.filter(c=>{
+    const okC=filterCCAA==="Todas"||c.ccaa===filterCCAA;
+    const okQ=!query||(c.club+" "+c.city).toLowerCase().includes(query);
+    return okC&&okQ;
+  }).map((c)=>{
+    const st=status[c.club]||"Pendiente";
+    const opts=STATES.map(s=>`<option ${s===st?'selected':''}>${s}</option>`).join("");
+    const email=c.email?`<a href="mailto:${c.email}">${c.email}</a>`:`<span class="noemail">no localizado</span>`;
+    const web=c.web?`<a href="https://${c.web}" target="_blank">${c.web}</a>`:"—";
+    const mail=c.email
+      ?`<button class="mailbtn" onclick="window.location.href='${mailto(c)}'">✉ Email</button>`
+      :`<button class="mailbtn" disabled>✉ Email</button>`;
+    return `<tr>
+      <td><div class="club-name">${c.club}</div><div class="loc">${c.ccaa} · ${c.city}</div></td>
+      <td>${email}</td><td>${c.tel||"—"}</td><td>${web}</td>
+      <td><select class="st" data-s="${st}" data-club="${c.club.replace(/"/g,'&quot;')}">${opts}</select></td>
+      <td>${mail}</td></tr>`;
+  }).join("");
+  document.getElementById("rows").innerHTML=rows||`<tr><td colspan="6" style="color:var(--faint)">Sin resultados.</td></tr>`;
+  document.querySelectorAll("select.st").forEach(sel=>sel.onchange=()=>{
+    status[sel.dataset.club]=sel.value; save(); render();
+  });
+}
+document.getElementById("q").oninput=e=>{query=e.target.value.toLowerCase();render();};
+render();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { sendWelcomeWaitlist } from "@/lib/email/send";
+import { sendWelcomeAppLive } from "@/lib/email/send";
 
 // Schema server-side. NO confiar en lo que validó el cliente — un bot
 // puede saltarse zodResolver fácilmente.
@@ -82,7 +82,12 @@ export async function POST(req: NextRequest) {
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ??
     req.nextUrl.origin.replace(/\/$/, "");
-  sendWelcomeWaitlist({ to: parsed.email, siteUrl })
+  // App ya publicada: el alta dispara el email de bienvenida con el enlace
+  // de descarga (antes era el "estás en lista de espera").
+  const appStoreUrl =
+    process.env.NEXT_PUBLIC_APP_STORE_URL ??
+    "https://apps.apple.com/es/app/tactium/id6769825905";
+  sendWelcomeAppLive({ to: parsed.email, siteUrl, appStoreUrl })
     .then((res) => {
       if (!res.ok) {
         console.warn("[waitlist] welcome email no enviado", res.error);

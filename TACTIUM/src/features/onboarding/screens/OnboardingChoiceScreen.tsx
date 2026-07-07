@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Alert,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,8 +20,8 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { AmbientBackdrop, NeonDot } from '@components/ui';
-import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
+import { useTeamStore } from '@store/teamStore';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 
 // Timings de la secuencia de entrada — inspirado en stagger de anime.js
@@ -37,7 +36,7 @@ export const OnboardingChoiceScreen = ({
   navigation,
 }: OnboardingStackScreenProps<'OnboardingChoice'>) => {
   const insets = useSafeAreaInsets();
-  const signOut = useAuthStore((s) => s.signOut);
+  const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
   const clubs = useClubStore((s) => s.clubs);
   const [redeemOpen, setRedeemOpen] = useState(false);
 
@@ -68,16 +67,11 @@ export const OnboardingChoiceScreen = ({
         </Animated.View>
         <Animated.View entering={FadeIn.delay(220).duration(220)}>
           <Pressable
-            onPress={() =>
-              Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Salir', style: 'destructive', onPress: () => signOut() },
-              ])
-            }
+            onPress={finishOnboarding}
             hitSlop={10}
             style={{ paddingHorizontal: 6 }}
           >
-            <Text style={styles.exitLink}>Cerrar sesión</Text>
+            <Text style={styles.exitLink}>Volver</Text>
           </Pressable>
         </Animated.View>
       </View>

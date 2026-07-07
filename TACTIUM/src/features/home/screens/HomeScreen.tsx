@@ -373,6 +373,13 @@ export const HomeScreen = ({
                 }
                 onPress={goSeasons}
               />
+              <ActionRow
+                icon={<IconCourt size={20} color={Colors.accent} />}
+                title="Pizarra táctica"
+                value="BETA"
+                hint="Diseña y anima jugadas con fichas"
+                onPress={() => navigation.getParent()?.navigate('Pizarra')}
+              />
             </>
           ) : null}
         </View>

@@ -11,6 +11,13 @@ import * as TeamMembersApi from '@core/services/teamMembers';
 import { useAuthStore } from './authStore';
 import { useClubStore } from './clubStore';
 
+// ── DEV: forzar la experiencia "SIN EQUIPO" (acceso abierto) ─────────────
+// Con esto puesto, en desarrollo la app te trata como si no tuvieras equipo
+// en cada recarga: aterrizas en el Feed y el tab Equipo muestra el estado
+// "únete/crea" (desde ahí puedes probar el onboarding de crear equipo).
+// ⚠️ PON A `false` cuando termines de probar. Solo aplica en __DEV__.
+const DEV_FORCE_NO_TEAM = __DEV__ && false;
+
 export type Player = PlayersApi.Player;
 export type Team = TeamsApi.Team;
 export type Side = PlayersApi.PlayerPosition;
@@ -53,6 +60,10 @@ interface TeamState {
   loadForUser: () => Promise<void>;
   reset: () => void;
   finishOnboarding: () => void;
+  /** Entra explícitamente al flujo de crear equipo/club (desde el estado
+   *  "sin equipo"). Con acceso abierto, no tener equipo ya NO fuerza el
+   *  onboarding; este flag lo activa solo cuando el usuario lo pide. */
+  startOnboarding: () => void;
   setActiveTeam: (teamId: string) => Promise<void>;
   setActiveRoleOverride: (role: ActiveRole) => Promise<void>;
   refreshMyPlayer: () => Promise<void>;
@@ -264,7 +275,7 @@ export const useTeamStore = create<TeamState>()(
             TeamMembersApi.fetchMyMemberships(),
           ]);
 
-          if (teams.length === 0) {
+          if (DEV_FORCE_NO_TEAM || teams.length === 0) {
             set({
               team: null,
               players: [],
@@ -331,6 +342,8 @@ export const useTeamStore = create<TeamState>()(
       },
 
       finishOnboarding: () => set({ isOnboarding: false }),
+
+      startOnboarding: () => set({ isOnboarding: true }),
 
       setActiveTeam: async (teamId) => {
         const teams = get().teams;

@@ -6,6 +6,10 @@ import {
   type EmailSendResult,
 } from "./client";
 import { WelcomeWaitlist } from "./templates/WelcomeWaitlist";
+import { LaunchIOS } from "./templates/LaunchIOS";
+import { LaunchIOSPlain } from "./templates/LaunchIOSPlain";
+import { WelcomeAppLive } from "./templates/WelcomeAppLive";
+import { Newsletter } from "./templates/Newsletter";
 
 // Funciones de envío por template, tipadas. Cada una:
 //   1. Renderiza el JSX a HTML (+ versión texto plana para clientes que no
@@ -83,11 +87,202 @@ export async function sendWelcomeWaitlist(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// LANZAMIENTO iOS · envío masivo a la waitlist el día que la app sale en la
+// App Store. Mismo patrón que sendWelcomeWaitlist. El link de la App Store
+// se pasa por args (numeric App ID) para no hardcodearlo en la template.
+// ─────────────────────────────────────────────────────────────────────────
+
+interface LaunchArgs extends BaseArgs {
+  appStoreUrl: string;
+}
+
+export async function sendLaunchIOS(
+  args: LaunchArgs,
+): Promise<EmailSendResult> {
+  const resend = getResend();
+  if (!resend) return { ok: true, skipped: true };
+
+  const recipient = resolveRecipient(args.to);
+  const html = await render(
+    <LaunchIOS to={args.to} siteUrl={args.siteUrl} appStoreUrl={args.appStoreUrl} />,
+  );
+  const text = await render(
+    <LaunchIOS to={args.to} siteUrl={args.siteUrl} appStoreUrl={args.appStoreUrl} />,
+    { plainText: true },
+  );
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: getEmailFrom(),
+      to: recipient,
+      subject: "Ya está aquí · TACTIUM en la App Store",
+      html,
+      text,
+      headers: {
+        "X-Entity-Ref-ID": `launch-ios-${Date.now()}`,
+      },
+      tags: [
+        { name: "template", value: "launch-ios" },
+        { name: "env", value: process.env.NODE_ENV ?? "development" },
+      ],
+    });
+    if (error) {
+      console.error("[email] sendLaunchIOS failed", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true, id: data?.id };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[email] sendLaunchIOS threw", message);
+    return { ok: false, error: message };
+  }
+}
+
+export async function sendLaunchIOSPlain(
+  args: LaunchArgs,
+): Promise<EmailSendResult> {
+  const resend = getResend();
+  if (!resend) return { ok: true, skipped: true };
+
+  const recipient = resolveRecipient(args.to);
+  const html = await render(
+    <LaunchIOSPlain to={args.to} siteUrl={args.siteUrl} appStoreUrl={args.appStoreUrl} />,
+  );
+  const text = await render(
+    <LaunchIOSPlain to={args.to} siteUrl={args.siteUrl} appStoreUrl={args.appStoreUrl} />,
+    { plainText: true },
+  );
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: getEmailFrom(),
+      to: recipient,
+      subject: "TACTIUM ya está en la App Store",
+      html,
+      text,
+      headers: {
+        "X-Entity-Ref-ID": `launch-ios-plain-${Date.now()}`,
+      },
+      tags: [
+        { name: "template", value: "launch-ios-plain" },
+        { name: "env", value: process.env.NODE_ENV ?? "development" },
+      ],
+    });
+    if (error) {
+      console.error("[email] sendLaunchIOSPlain failed", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true, id: data?.id };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[email] sendLaunchIOSPlain threw", message);
+    return { ok: false, error: message };
+  }
+}
+
+export async function sendWelcomeAppLive(
+  args: LaunchArgs,
+): Promise<EmailSendResult> {
+  const resend = getResend();
+  if (!resend) return { ok: true, skipped: true };
+
+  const recipient = resolveRecipient(args.to);
+  const html = await render(
+    <WelcomeAppLive to={args.to} siteUrl={args.siteUrl} appStoreUrl={args.appStoreUrl} />,
+  );
+  const text = await render(
+    <WelcomeAppLive to={args.to} siteUrl={args.siteUrl} appStoreUrl={args.appStoreUrl} />,
+    { plainText: true },
+  );
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: getEmailFrom(),
+      to: recipient,
+      subject: "Gracias por apuntarte · ya puedes descargar TACTIUM",
+      html,
+      text,
+      headers: { "X-Entity-Ref-ID": `welcome-applive-${Date.now()}` },
+      tags: [
+        { name: "template", value: "welcome-applive" },
+        { name: "env", value: process.env.NODE_ENV ?? "development" },
+      ],
+    });
+    if (error) {
+      console.error("[email] sendWelcomeAppLive failed", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true, id: data?.id };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[email] sendWelcomeAppLive threw", message);
+    return { ok: false, error: message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// NEWSLETTER · envío recurrente genérico. El contenido (asunto, titular,
+// párrafos, CTA) se pasa por args desde un archivo editable.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface NewsletterArgs extends BaseArgs {
+  subject: string;
+  preview: string;
+  heading: string;
+  paragraphs: string[];
+  ctaLabel?: string;
+  ctaUrl?: string;
+}
+
+export async function sendNewsletter(
+  args: NewsletterArgs,
+): Promise<EmailSendResult> {
+  const resend = getResend();
+  if (!resend) return { ok: true, skipped: true };
+
+  const recipient = resolveRecipient(args.to);
+  const node = (
+    <Newsletter
+      to={args.to}
+      siteUrl={args.siteUrl}
+      preview={args.preview}
+      heading={args.heading}
+      paragraphs={args.paragraphs}
+      ctaLabel={args.ctaLabel}
+      ctaUrl={args.ctaUrl}
+    />
+  );
+  const html = await render(node);
+  const text = await render(node, { plainText: true });
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: getEmailFrom(),
+      to: recipient,
+      subject: args.subject,
+      html,
+      text,
+      headers: { "X-Entity-Ref-ID": `newsletter-${Date.now()}` },
+      tags: [
+        { name: "template", value: "newsletter" },
+        { name: "env", value: process.env.NODE_ENV ?? "development" },
+      ],
+    });
+    if (error) {
+      console.error("[email] sendNewsletter failed", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true, id: data?.id };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[email] sendNewsletter threw", message);
+    return { ok: false, error: message };
+  }
+}
+
 // Placeholders tipados para los próximos templates. Se implementan a
 // medida que se conectan flows (registro, recovery, convocatoria).
-// Dejarlos aquí declarados evita imports rotos cuando se referencien
-// desde la app.
 //
 // export async function sendWelcomeRegister(args: ...): Promise<EmailSendResult> { ... }
 // export async function sendPasswordRecovery(args: ...): Promise<EmailSendResult> { ... }
-// export async function sendMatchdayConvocation(args: ...): Promise<EmailSendResult> { ... }
