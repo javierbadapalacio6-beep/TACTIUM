@@ -1,3 +1,9 @@
+# Dependencias — se regeneran con npm install (NUNCA en repo)
+node_modules/
+
+# Export local del bundle (eas update/export)
+dist/
+
 # Expo local state (device history, dev server settings)
 .expo/
 
