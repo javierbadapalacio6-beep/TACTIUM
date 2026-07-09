@@ -1,0 +1,5 @@
+# Forzar LF en los .easignore: los finales CRLF rompen el match de los
+# patrones (p.ej. "node_modules/\r" no excluiría node_modules) y volvería
+# a hincharse el tarball de EAS.
+.easignore text eol=lf
+**/.easignore text eol=lf

@@ -5,6 +5,11 @@
 #  · archivos pesados que no aportan al bundle
 #  · secretos que no deben llegar al servidor de Expo
 
+# OJO: con .easignore presente, EAS IGNORA el .gitignore — hay que
+# excluir aquí también lo obvio (node_modules pesa >1 GB).
+node_modules/
+.git/
+
 # Tooling de desarrollo local — symlinks rompen el tarball en Windows.
 .agents/
 .claude/
@@ -27,6 +32,8 @@ __tests__/
 *.ipa
 *.apk
 *.aab
+# Export local del bundle (eas update/export) — no aporta al build remoto
+dist/
 
 # Service account key de Google Play (API) — NUNCA debe ir al build de la app.
 google-service-account.json
