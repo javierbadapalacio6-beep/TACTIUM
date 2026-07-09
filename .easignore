@@ -1,0 +1,42 @@
+# .easignore en la RAÍZ del repo git (4PADEL LAB PRUEBA).
+#
+# IMPORTANTE: el proyecto de la app (eas.json) vive en el subdirectorio
+# TACTIUM/, pero la raíz del repo git es este directorio padre. EAS archiva
+# desde la raíz del repo, así que el .easignore de TACTIUM/ NO se lee — hay
+# que excluir aquí. Sin esto, EAS metía node_modules y los otros subproyectos
+# en el tarball (subía ~1,4 GB / 683 MB en vez de ~35 MB).
+
+# node_modules en cualquier nivel — esto es lo que hinchaba el archivo.
+node_modules/
+
+# Git
+.git/
+
+# Otros subproyectos del repo: no hacen falta para el build de la app iOS.
+/tactium-landing/
+/.design-extract/
+/analisis-video/
+/SCREENS/
+/builds/
+/bitacora.html
+*.MP4
+*.docx
+
+# TACTIUM: artefactos locales y nativos regenerables (no aportan al build).
+/TACTIUM/dist/
+/TACTIUM/.expo/
+/TACTIUM/.expo-shared/
+/TACTIUM/ios/
+/TACTIUM/android/
+/TACTIUM/.agents/
+/TACTIUM/.claude/
+/TACTIUM/__tests__/
+
+# Secretos que NUNCA deben ir embebidos en el build.
+# OJO: NO excluimos google-services.json — expo-notifications lo necesita.
+*.p8
+/TACTIUM/google-service-account.json
+*firebase-adminsdk*.json
+
+# Logs
+*.log
