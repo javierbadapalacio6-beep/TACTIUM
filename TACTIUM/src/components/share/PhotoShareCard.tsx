@@ -74,16 +74,38 @@ import { TactiumMark } from '@components/brand/TactiumMark';
 
 interface Props {
   photoUri: string;
-  /** Línea grande sobre la foto (p. ej. "CD Tactium 2 – 1 Pádel Río"). */
+  /** Línea grande sobre la foto (p. ej. "CD Tactium 2 – 1 Pádel Río").
+   *  Se usa como respaldo si NO se pasa el marcador en dos líneas. */
   title: string;
   /** Línea secundaria (p. ej. "Amistoso · 7 jul 2026"). */
   subtitle?: string;
-  /** Línea de detalle (p. ej. "6-4 6-3 · P1"). */
+  /** Línea de detalle (p. ej. "VICTORIA"). */
   detail?: string;
+  /** Marcador en DOS líneas (opcional). Si se pasan homeName+awayName,
+   *  sustituyen al `title`: cada equipo en su fila con su resultado. */
+  homeName?: string;
+  homeScore?: number | string;
+  awayName?: string;
+  awayScore?: number | string;
+  /** Resalta en verde la fila de "nuestro" equipo. */
+  highlight?: 'home' | 'away';
 }
 
 export const PhotoShareCard = React.forwardRef<View, Props>(
-  ({ photoUri, title, subtitle, detail }, ref) => (
+  (
+    {
+      photoUri,
+      title,
+      subtitle,
+      detail,
+      homeName,
+      homeScore,
+      awayName,
+      awayScore,
+      highlight,
+    },
+    ref,
+  ) => (
     <View ref={ref} collapsable={false} style={styles.card}>
       <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
       {/* Velo inferior para legibilidad del resultado sobre la foto */}
@@ -96,9 +118,52 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
           <TactiumMark size={22} gradient />
           <Text style={styles.brandName}>TACTIUM</Text>
         </View>
-        <Text style={styles.title} numberOfLines={2}>
-          {title}
-        </Text>
+        {homeName != null && awayName != null ? (
+          <View style={styles.scoreboard}>
+            <View style={styles.scoreRow}>
+              <Text
+                style={[
+                  styles.scoreName,
+                  highlight === 'home' && styles.scoreNameUs,
+                ]}
+                numberOfLines={1}
+              >
+                {homeName}
+              </Text>
+              <Text
+                style={[
+                  styles.scoreValue,
+                  highlight === 'home' && styles.scoreValueUs,
+                ]}
+              >
+                {homeScore}
+              </Text>
+            </View>
+            <View style={styles.scoreRow}>
+              <Text
+                style={[
+                  styles.scoreName,
+                  highlight === 'away' && styles.scoreNameUs,
+                ]}
+                numberOfLines={1}
+              >
+                {awayName}
+              </Text>
+              <Text
+                style={[
+                  styles.scoreValue,
+                  highlight === 'away' && styles.scoreValueUs,
+                ]}
+              >
+                {awayScore}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.title} numberOfLines={2}>
+            {title}
+          </Text>
+        )}
         {subtitle ? (
           <Text style={styles.subtitle} numberOfLines={1}>
             {subtitle}
@@ -262,6 +327,30 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     lineHeight: 26,
   },
+  scoreboard: { gap: 2 },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  scoreName: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 19,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  scoreNameUs: { color: '#FFFFFF' },
+  scoreValue: {
+    fontFamily: Fonts.mono,
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 22,
+    fontWeight: '800',
+    minWidth: 26,
+    textAlign: 'right',
+  },
+  scoreValueUs: { color: Colors.accent },
   subtitle: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 13,

@@ -42,6 +42,7 @@ import * as MatchdaysApi from '@core/services/matchdays';
 import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
+import * as MatchdayPhotoApi from '@core/services/matchdayPhoto';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
 import {
   captureViewSafe,
@@ -197,6 +198,7 @@ export const JornadaScreen = ({
   // Foto del partido (estilo Strava): opcional, para compartir el resultado
   // de liga con la marca cuando el acta está cerrada. Disponible a todos.
   const [matchPhotoUri, setMatchPhotoUri] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const matchPhotoCardRef = React.useRef<View>(null);
 
   const targetMatchdayId = route.params?.matchdayId;
@@ -488,12 +490,39 @@ export const JornadaScreen = ({
       : 'EMPATE';
   const photoTitle = `${teamName} ${score.won}–${score.lost} ${matchday.opponent}`;
   const photoSubtitle = `${jornadaLabel}${season ? ` · ${season.name}` : ''} · ${longDate}`;
-  const photoDetail = `${outcomeLabel} · ${score.won}–${score.lost}`;
+  const photoDetail = outcomeLabel;
   const photoShareText = `${teamName} ${score.won}-${score.lost} ${matchday.opponent} · ${jornadaLabel}${season ? ` · ${season.name}` : ''}\nVía TACTIUM · ${DOWNLOAD_URL}`;
 
-  const pickMatchPhotoNow = async () => {
+  // Foto persistida (portada de la jornada, la ven todos) vs foto efímera
+  // local. La persistida (photo_url) manda; la efímera es un fallback local
+  // para compartir sin guardar.
+  const displayPhoto = matchday.photo_url ?? matchPhotoUri;
+
+  // Capitán: sube y persiste la portada para todo el equipo. Resto: efímera
+  // solo para compartir (no se guarda).
+  const addOrChangePhoto = async () => {
     const uri = await pickMatchPhoto();
-    if (uri) setMatchPhotoUri(uri);
+    if (!uri) return;
+    if (isCaptain && team) {
+      setPhotoUploading(true);
+      try {
+        const url = await MatchdayPhotoApi.uploadMatchPhoto(
+          team.id,
+          matchday.id,
+          uri,
+        );
+        setMatchday((prev) => (prev ? { ...prev, photo_url: url } : prev));
+      } catch (e: any) {
+        Alert.alert(
+          'No se pudo guardar la foto',
+          e?.message ?? 'Inténtalo de nuevo.',
+        );
+      } finally {
+        setPhotoUploading(false);
+      }
+    } else {
+      setMatchPhotoUri(uri);
+    }
   };
 
   return (
@@ -670,67 +699,6 @@ export const JornadaScreen = ({
           </Text>
         ) : null}
 
-        {/* === COMPARTIR FOTO DEL PARTIDO (solo acta cerrada) ===
-            Tarjeta "estilo Strava": foto + resultado + marca TACTIUM. La
-            comparte cualquiera (no solo el capitán): es acción social/viral,
-            no de autoridad. Se comparte como imagen por expo-sharing (la
-            tarjeta ya lleva tactium.io); en binarios sin expo-sharing degrada
-            a foto + texto por el share nativo, transparente para el usuario. */}
-        {closed ? (
-          <View style={{ marginTop: 16, gap: 10 }}>
-            {matchPhotoUri ? (
-              <>
-                <View style={{ alignItems: 'center' }}>
-                  <PhotoShareCard
-                    ref={matchPhotoCardRef}
-                    photoUri={matchPhotoUri}
-                    title={photoTitle}
-                    subtitle={photoSubtitle}
-                    detail={photoDetail}
-                  />
-                </View>
-                <Pressable
-                  onPress={() =>
-                    shareCardImage(
-                      matchPhotoCardRef,
-                      matchPhotoUri,
-                      photoShareText,
-                    )
-                  }
-                  style={({ pressed }) => [
-                    styles.sharePhotoCta,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <IconShare size={16} color={Colors.accent} />
-                  <Text style={styles.sharePhotoCtaLabel}>
-                    Compartir foto del partido
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={pickMatchPhotoNow}
-                  style={({ pressed }) => pressed && { opacity: 0.7 }}
-                >
-                  <Text style={styles.changePhotoLabel}>Cambiar foto</Text>
-                </Pressable>
-              </>
-            ) : (
-              <Pressable
-                onPress={pickMatchPhotoNow}
-                style={({ pressed }) => [
-                  styles.sharePhotoCta,
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <IconImage size={16} color={Colors.accent} />
-                <Text style={styles.sharePhotoCtaLabel}>
-                  Añadir foto del partido
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        ) : null}
-
         {/* === ALINEACIÓN HEADER === */}
         <View style={styles.lineupHeader}>
           <View>
@@ -857,6 +825,89 @@ export const JornadaScreen = ({
               </Text>
             ) : null}
           </>
+        ) : null}
+
+        {/* === FOTO DEL PARTIDO (portada · acta cerrada) ===
+            Persistida en Supabase Storage: el capitán la fija/cambia y la ve
+            todo el equipo; cualquiera la comparte (tarjeta estilo Strava vía
+            expo-sharing). El path {team_id}/{matchday_id}.jpg lo gobierna la
+            RLS (solo admin escribe). Sin foto, el resto no ve acción. */}
+        {closed ? (
+          <View style={styles.photoSection}>
+            <Text style={styles.sectionEyebrow}>Foto del partido</Text>
+            {displayPhoto ? (
+              <>
+                <View style={{ alignItems: 'center', marginTop: 4 }}>
+                  <PhotoShareCard
+                    ref={matchPhotoCardRef}
+                    photoUri={displayPhoto}
+                    title={photoTitle}
+                    homeName={teamName}
+                    homeScore={score.won}
+                    awayName={matchday.opponent}
+                    awayScore={score.lost}
+                    highlight="home"
+                    subtitle={photoSubtitle}
+                    detail={photoDetail}
+                  />
+                </View>
+                <Pressable
+                  onPress={() =>
+                    shareCardImage(
+                      matchPhotoCardRef,
+                      displayPhoto,
+                      photoShareText,
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.sharePhotoCta,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <IconShare size={16} color={Colors.accent} />
+                  <Text style={styles.sharePhotoCtaLabel}>
+                    Compartir foto del partido
+                  </Text>
+                </Pressable>
+                {isCaptain || !matchday.photo_url ? (
+                  <Pressable
+                    onPress={addOrChangePhoto}
+                    disabled={photoUploading}
+                    style={({ pressed }) => pressed && { opacity: 0.7 }}
+                  >
+                    <Text style={styles.changePhotoLabel}>
+                      {photoUploading ? 'Guardando…' : 'Cambiar foto'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </>
+            ) : isCaptain ? (
+              <Pressable
+                onPress={addOrChangePhoto}
+                disabled={photoUploading}
+                style={({ pressed }) => [
+                  styles.sharePhotoCta,
+                  { marginTop: 4 },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                {photoUploading ? (
+                  <ActivityIndicator color={Colors.accent} />
+                ) : (
+                  <>
+                    <IconImage size={16} color={Colors.accent} />
+                    <Text style={styles.sharePhotoCtaLabel}>
+                      Añadir foto del partido
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            ) : (
+              <Text style={styles.photoEmptyHint}>
+                Aún no hay foto de este partido.
+              </Text>
+            )}
+          </View>
         ) : null}
 
         {/* === ELIMINAR JORNADA · solo captain === */}
@@ -2101,7 +2152,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     letterSpacing: 0.5,
   },
-  // Compartir foto del partido (acta cerrada)
+  // Foto del partido (acta cerrada)
+  photoSection: { marginTop: 24, gap: 10 },
+  photoEmptyHint: {
+    color: Colors.textFaint,
+    fontSize: 13,
+    marginTop: 2,
+  },
   sharePhotoCta: {
     height: 50,
     borderRadius: Radius.md,

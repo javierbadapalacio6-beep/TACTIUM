@@ -274,6 +274,7 @@ export type Database = {
           notes: string | null
           opponent: string
           outcome: Database["public"]["Enums"]["match_outcome"] | null
+          photo_url: string | null
           score_against: number | null
           score_for: number | null
           season_id: string
@@ -292,6 +293,7 @@ export type Database = {
           notes?: string | null
           opponent: string
           outcome?: Database["public"]["Enums"]["match_outcome"] | null
+          photo_url?: string | null
           score_against?: number | null
           score_for?: number | null
           season_id: string
@@ -310,6 +312,7 @@ export type Database = {
           notes?: string | null
           opponent?: string
           outcome?: Database["public"]["Enums"]["match_outcome"] | null
+          photo_url?: string | null
           score_against?: number | null
           score_for?: number | null
           season_id?: string
@@ -830,6 +833,7 @@ export type Database = {
           notes: string | null
           opponent: string
           outcome: Database["public"]["Enums"]["match_outcome"] | null
+          photo_url: string | null
           score_against: number | null
           score_for: number | null
           season_id: string
