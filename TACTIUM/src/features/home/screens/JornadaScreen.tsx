@@ -491,7 +491,15 @@ export const JornadaScreen = ({
   const photoTitle = `${teamName} ${score.won}–${score.lost} ${matchday.opponent}`;
   const photoSubtitle = `${jornadaLabel}${season ? ` · ${season.name}` : ''} · ${longDate}`;
   const photoDetail = outcomeLabel;
-  const photoShareText = `${teamName} ${score.won}-${score.lost} ${matchday.opponent} · ${jornadaLabel}${season ? ` · ${season.name}` : ''}\nVía TACTIUM · ${DOWNLOAD_URL}`;
+  const photoShareText = [
+    `🎾 *TACTIUM · ${jornadaLabel}*`,
+    `${teamName} ${score.won} – ${score.lost} ${matchday.opponent} (${outcomeLabel})`,
+    season ? season.name : null,
+    ``,
+    `Sigue a tu equipo en TACTIUM: ${DOWNLOAD_URL}`,
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
 
   // Foto persistida (portada de la jornada, la ven todos) vs foto efímera
   // local. La persistida (photo_url) manda; la efímera es un fallback local
@@ -522,6 +530,30 @@ export const JornadaScreen = ({
       }
     } else {
       setMatchPhotoUri(uri);
+    }
+  };
+
+  // Compartir el RESULTADO como texto (sin foto), igual que el amistoso:
+  // WhatsApp directo (con fallback wa.me) y hoja nativa para otras apps.
+  const shareResultWhatsapp = async () => {
+    const url = `whatsapp://send?text=${encodeURIComponent(photoShareText)}`;
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (can) await Linking.openURL(url);
+      else
+        await Linking.openURL(
+          `https://wa.me/?text=${encodeURIComponent(photoShareText)}`,
+        );
+    } catch {
+      // no se pudo abrir WhatsApp
+    }
+  };
+
+  const shareResultNative = async () => {
+    try {
+      await Share.share({ message: photoShareText });
+    } catch {
+      // cancelado por el usuario
     }
   };
 
@@ -907,6 +939,29 @@ export const JornadaScreen = ({
                 Aún no hay foto de este partido.
               </Text>
             )}
+
+            {/* Compartir el RESULTADO solo texto (sin foto), como el amistoso */}
+            <Pressable
+              onPress={shareResultWhatsapp}
+              style={({ pressed }) => [
+                styles.sharePhotoCta,
+                { marginTop: 4 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <IconShare size={16} color={Colors.accent} />
+              <Text style={styles.sharePhotoCtaLabel}>
+                Compartir resultado por WhatsApp
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={shareResultNative}
+              style={({ pressed }) => pressed && { opacity: 0.7 }}
+            >
+              <Text style={styles.changePhotoLabel}>
+                Compartir en otras apps
+              </Text>
+            </Pressable>
           </View>
         ) : null}
 
