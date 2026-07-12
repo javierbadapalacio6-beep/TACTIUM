@@ -43,6 +43,25 @@ export async function captureViewSafe(
   }
 }
 
+// expo-sharing también se carga PEREZOSAMENTE: es un módulo nativo que no
+// existe en binarios anteriores a 1.2.0. Con require() protegido, un binario
+// viejo (p. ej. 1.1.0 que reciba este JS por OTA) no casca — cae al Share
+// nativo — y el nuevo abre la hoja de compartir imagen de verdad.
+type ShareAsyncFn = (
+  url: string,
+  options?: { mimeType?: string; dialogTitle?: string; UTI?: string },
+) => Promise<void>;
+let expoSharing: {
+  shareAsync: ShareAsyncFn;
+  isAvailableAsync: () => Promise<boolean>;
+} | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  expoSharing = require('expo-sharing');
+} catch {
+  expoSharing = null;
+}
+
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
@@ -153,6 +172,49 @@ export async function sharePhotoCard(
       Platform.OS === 'ios'
         ? ({ url: uri, message: text } as never)
         : ({ message: text, url: uri } as never),
+    );
+  } catch {
+    // cancelado por el usuario
+  }
+}
+
+/**
+ * Comparte la tarjeta compuesta como IMAGEN mediante la hoja de compartir
+ * nativa (expo-sharing). La tarjeta ya lleva resultado + marca + tactium.io,
+ * así que no necesita caption: se comparte solo la foto (que WhatsApp/IG
+ * muestran como imagen). Si el binario no trae expo-sharing (p. ej. 1.1.0),
+ * cae de forma transparente al Share nativo con foto + texto de respaldo.
+ */
+export async function shareCardImage(
+  ref: React.RefObject<View | null>,
+  photoUri: string,
+  fallbackText: string,
+): Promise<void> {
+  const captured = await captureViewSafe(ref, { format: 'jpg', quality: 0.92 });
+  const uri = captured ?? photoUri;
+  // Camino preferente: hoja nativa de compartir imagen (expo-sharing).
+  try {
+    if (expoSharing && (await expoSharing.isAvailableAsync())) {
+      const fileUri =
+        uri.startsWith('file://') || uri.startsWith('content://')
+          ? uri
+          : `file://${uri}`;
+      await expoSharing.shareAsync(fileUri, {
+        mimeType: 'image/jpeg',
+        dialogTitle: 'Compartir partido',
+        UTI: 'public.jpeg',
+      });
+      return;
+    }
+  } catch {
+    // si expo-sharing falla (cancelado/no soportado), probamos el fallback
+  }
+  // Fallback binario viejo: foto + texto por el Share de React Native.
+  try {
+    await Share.share(
+      Platform.OS === 'ios'
+        ? ({ url: uri, message: fallbackText } as never)
+        : ({ message: fallbackText, url: uri } as never),
     );
   } catch {
     // cancelado por el usuario

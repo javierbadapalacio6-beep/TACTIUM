@@ -43,7 +43,13 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
-import { captureViewSafe } from '@components/share/PhotoShareCard';
+import {
+  captureViewSafe,
+  PhotoShareCard,
+  pickMatchPhoto,
+  shareCardImage,
+} from '@components/share/PhotoShareCard';
+import { DOWNLOAD_URL } from '@core/config/referral';
 import { LineupShareCard } from '../components/LineupShareCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
@@ -188,6 +194,10 @@ export const JornadaScreen = ({
   const [manualCloseOpen, setManualCloseOpen] = useState(false);
   const [manualScoreFor, setManualScoreFor] = useState('');
   const [manualScoreAgainst, setManualScoreAgainst] = useState('');
+  // Foto del partido (estilo Strava): opcional, para compartir el resultado
+  // de liga con la marca cuando el acta está cerrada. Disponible a todos.
+  const [matchPhotoUri, setMatchPhotoUri] = useState<string | null>(null);
+  const matchPhotoCardRef = React.useRef<View>(null);
 
   const targetMatchdayId = route.params?.matchdayId;
 
@@ -465,6 +475,27 @@ export const JornadaScreen = ({
     matchday.location?.trim() ||
     (matchday.is_home ? 'Pista local · Sin especificar' : 'Pista visitante · Sin especificar');
 
+  // Textos de la tarjeta "estilo Strava" para compartir la foto del partido.
+  // Siempre desde nuestra perspectiva (nosotros primero); la tarjeta ya lleva
+  // marca + tactium.io, así que cada foto compartida difunde la app.
+  const teamName = team?.name ?? '—';
+  const jornadaLabel = `Jornada ${String(matchday.jornada_number).padStart(2, '0')}`;
+  const outcomeLabel =
+    matchday.outcome === 'win'
+      ? 'VICTORIA'
+      : matchday.outcome === 'loss'
+      ? 'DERROTA'
+      : 'EMPATE';
+  const photoTitle = `${teamName} ${score.won}–${score.lost} ${matchday.opponent}`;
+  const photoSubtitle = `${jornadaLabel}${season ? ` · ${season.name}` : ''} · ${longDate}`;
+  const photoDetail = `${outcomeLabel} · ${score.won}–${score.lost}`;
+  const photoShareText = `${teamName} ${score.won}-${score.lost} ${matchday.opponent} · ${jornadaLabel}${season ? ` · ${season.name}` : ''}\nVía TACTIUM · ${DOWNLOAD_URL}`;
+
+  const pickMatchPhotoNow = async () => {
+    const uri = await pickMatchPhoto();
+    if (uri) setMatchPhotoUri(uri);
+  };
+
   return (
     <View style={styles.root}>
       {/* === NAV === */}
@@ -637,6 +668,67 @@ export const JornadaScreen = ({
               ? '  (empate)'
               : ''}
           </Text>
+        ) : null}
+
+        {/* === COMPARTIR FOTO DEL PARTIDO (solo acta cerrada) ===
+            Tarjeta "estilo Strava": foto + resultado + marca TACTIUM. La
+            comparte cualquiera (no solo el capitán): es acción social/viral,
+            no de autoridad. Se comparte como imagen por expo-sharing (la
+            tarjeta ya lleva tactium.io); en binarios sin expo-sharing degrada
+            a foto + texto por el share nativo, transparente para el usuario. */}
+        {closed ? (
+          <View style={{ marginTop: 16, gap: 10 }}>
+            {matchPhotoUri ? (
+              <>
+                <View style={{ alignItems: 'center' }}>
+                  <PhotoShareCard
+                    ref={matchPhotoCardRef}
+                    photoUri={matchPhotoUri}
+                    title={photoTitle}
+                    subtitle={photoSubtitle}
+                    detail={photoDetail}
+                  />
+                </View>
+                <Pressable
+                  onPress={() =>
+                    shareCardImage(
+                      matchPhotoCardRef,
+                      matchPhotoUri,
+                      photoShareText,
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.sharePhotoCta,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <IconShare size={16} color={Colors.accent} />
+                  <Text style={styles.sharePhotoCtaLabel}>
+                    Compartir foto del partido
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={pickMatchPhotoNow}
+                  style={({ pressed }) => pressed && { opacity: 0.7 }}
+                >
+                  <Text style={styles.changePhotoLabel}>Cambiar foto</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable
+                onPress={pickMatchPhotoNow}
+                style={({ pressed }) => [
+                  styles.sharePhotoCta,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <IconImage size={16} color={Colors.accent} />
+                <Text style={styles.sharePhotoCtaLabel}>
+                  Añadir foto del partido
+                </Text>
+              </Pressable>
+            )}
+          </View>
         ) : null}
 
         {/* === ALINEACIÓN HEADER === */}
@@ -2008,6 +2100,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     letterSpacing: 0.5,
+  },
+  // Compartir foto del partido (acta cerrada)
+  sharePhotoCta: {
+    height: 50,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    backgroundColor: Colors.accent10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  sharePhotoCtaLabel: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+  changePhotoLabel: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingVertical: 4,
   },
   // CTA bottom
   ctaWrap: {
