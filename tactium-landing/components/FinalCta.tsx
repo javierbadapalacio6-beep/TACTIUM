@@ -1,5 +1,6 @@
 import { TactiumMark } from "./TactiumMark";
 import { AppStoreBadge } from "./AppStoreBadge";
+import { PlayStoreBadge } from "./PlayStoreBadge";
 
 // CTA final. Estrategia: el usuario que ha llegado hasta abajo está más
 // caliente — segunda oportunidad de convertir, ahora con descarga directa.
@@ -17,7 +18,10 @@ export function FinalCta() {
           Descárgala gratis y prueba 14 días con acceso completo. Sin tarjeta
           para empezar, cancela cuando quieras.
         </p>
-        <AppStoreBadge />
+        <div className="flex flex-wrap justify-center gap-3">
+          <AppStoreBadge />
+          <PlayStoreBadge />
+        </div>
       </div>
     </section>
   );
