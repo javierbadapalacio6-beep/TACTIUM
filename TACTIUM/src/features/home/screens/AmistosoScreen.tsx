@@ -351,12 +351,19 @@ export const AmistosoScreen = () => {
     try {
       let firstMatchId: string | null = null;
       for (const p of validPartidos) {
+        // El creador va SIEMPRE en side0/slot0 (hueco pre-rellenado con su
+        // nombre). En colegas/entreno lo vinculamos a su cuenta pase lo que
+        // pase con el texto: si edita su nombre por un apodo o lo acorta, el
+        // partido debe seguir contando en SUS stats (si no, se guarda pero no
+        // aparece en su historial). En equipos el capitán puede no jugar, así
+        // que ahí seguimos vinculando por nombre exacto.
+        const a1UserId = !isEquipos && userId ? userId : linkByName(p.a1);
         const participants: CasualParticipant[] = [
           {
             side: 0,
             slot: 0,
             name: p.a1.trim() || (team?.name ?? 'Nosotros'),
-            user_id: linkByName(p.a1),
+            user_id: a1UserId,
           },
           { side: 0, slot: 1, name: p.a2.trim(), user_id: linkByName(p.a2) },
           {
@@ -606,13 +613,28 @@ export const AmistosoScreen = () => {
                   : 'NUESTRA PAREJA'}
             </Text>
             <View style={styles.slotPairRow}>
-              <TextInput
-                style={[styles.input, styles.slotInput]}
-                value={p.a1}
-                onChangeText={(t) => update(i, { a1: t })}
-                placeholder="Jugador 1"
-                placeholderTextColor={Colors.textFaint}
-              />
+              {/* En colegas/entreno el primer hueco eres TÚ: se vincula a tu
+                  cuenta pase lo que pase con el texto (ver handleSave). El
+                  badge lo deja claro para que el partido cuente en tus stats. */}
+              <View style={styles.slotInput}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    !isEquipos && i === 0 ? styles.meInput : null,
+                  ]}
+                  value={p.a1}
+                  onChangeText={(t) => update(i, { a1: t })}
+                  placeholder={!isEquipos && i === 0 ? 'Tú' : 'Jugador 1'}
+                  placeholderTextColor={Colors.textFaint}
+                />
+                {!isEquipos && i === 0 ? (
+                  <View style={styles.meBadge} pointerEvents="none">
+                    <View style={styles.mePill}>
+                      <Text style={styles.meBadgeText}>TÚ</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
               <TextInput
                 style={[styles.input, styles.slotInput]}
                 value={p.a2}
@@ -643,8 +665,8 @@ export const AmistosoScreen = () => {
             ) : null}
             <Text style={styles.guestHint}>
               {isEntreno
-                ? 'Toca los chips para colocar a los cuatro: rellenan Pareja A y luego Pareja B. Los vinculados suman en sus stats.'
-                : 'Chips: tu plantilla y tus colegas habituales (el eslabón = suma en sus stats). O escribe cualquier nombre nuevo.'}
+                ? 'El primer hueco eres tú. Toca los chips para colocar a los cuatro: rellenan Pareja A y luego Pareja B. Los vinculados suman en sus stats.'
+                : 'El primer hueco eres tú (cuenta en tus stats aunque cambies el nombre por tu apodo). Los chips son tu plantilla y colegas habituales; el eslabón = suma en sus stats.'}
             </Text>
             <Text style={styles.fieldLabel}>
               {isEntreno ? 'PAREJA B' : 'PAREJA RIVAL'}
@@ -845,6 +867,28 @@ const styles = StyleSheet.create({
   },
   slotPairRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   slotInput: { flex: 1 },
+  meInput: { paddingRight: 46 },
+  meBadge: {
+    position: 'absolute',
+    right: 8,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  mePill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+  },
+  meBadgeText: {
+    fontFamily: Fonts.mono,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: Colors.accent,
+  },
   rosterRow: { gap: 6, paddingVertical: 4, paddingRight: 8 },
   rosterChip: {
     flexDirection: 'row',
