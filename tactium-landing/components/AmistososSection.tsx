@@ -7,8 +7,8 @@ import { PhoneFrame } from "./PhoneFrame";
 
 // AmistososSection: sección dedicada al lado social/casual de TACTIUM.
 // No todo es liga federada: cualquier partido entre colegas o entreno se
-// registra, se le pone foto y se comparte como tarjeta estilo Strava —
-// y cuenta en tus estadísticas. Split layout: phone (tarjeta) izq, copy dcha.
+// registra, se le pone foto y se comparte con su resultado — y cuenta en
+// tus estadísticas. Split layout: 2 phones izq, copy dcha.
 
 const bullets = [
   {
@@ -17,7 +17,7 @@ const bullets = [
   },
   {
     icon: Share2,
-    text: "Tarjeta estilo Strava lista para compartir por WhatsApp",
+    text: "Tarjeta con foto y resultado, lista para compartir por WhatsApp",
   },
   {
     icon: BarChart3,
@@ -70,21 +70,31 @@ export function AmistososSection() {
       className="relative py-16 sm:py-24 border-t border-[var(--color-hair)] overflow-hidden"
     >
       <div className="relative max-w-6xl mx-auto px-6 grid lg:grid-cols-[1.1fr_1fr] gap-12 lg:gap-16 items-center">
-        {/* Izq: phone con la tarjeta del amistoso */}
+        {/* Izq: 2 phones — registrar el amistoso + tarjeta compartible */}
         <div
           data-reveal
           style={{ opacity: 0 }}
           className="relative flex justify-center items-center min-h-[520px] order-last lg:order-first"
         >
           <div
-            className="absolute w-[75%] h-[80%] bg-[var(--color-accent)] opacity-[0.12] blur-3xl rounded-full"
+            className="absolute w-[80%] h-[80%] bg-[var(--color-accent)] opacity-[0.12] blur-3xl rounded-full"
             aria-hidden="true"
           />
-          <div className="relative -rotate-[3deg]">
+          {/* Phone 1 — tarjeta con foto y resultado, delante */}
+          <div className="relative z-[2] -translate-x-6 -rotate-[5deg]">
             <PhoneFrame
               src="/screens/amistoso-card.jpg"
-              alt="Tarjeta de amistoso con foto del partido, resultado y sets estilo Strava"
-              size="hero"
+              alt="Tarjeta de amistoso con foto del partido, resultado y sets"
+              size="card"
+              glow="subtle"
+            />
+          </div>
+          {/* Phone 2 — pantalla de registro del amistoso, detrás */}
+          <div className="relative z-[1] translate-x-6 translate-y-12 rotate-[5deg]">
+            <PhoneFrame
+              src="/screens/amistoso-registro.jpg"
+              alt="Pantalla de registro de amistoso con parejas y marcador por sets"
+              size="card"
               glow="subtle"
             />
           </div>
