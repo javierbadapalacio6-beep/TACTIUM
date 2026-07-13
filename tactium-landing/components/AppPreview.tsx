@@ -36,7 +36,7 @@ const steps = [
       src: "/screens/alineacion.jpg",
       alt: "Pantalla de Alineación con auto-orden y barras de puntos",
     },
-    rotate: "lg:-rotate-[2deg]",
+    rotate: "lg:rotate-0",
     offset: "lg:-translate-y-10",
   },
   {
@@ -48,19 +48,6 @@ const steps = [
     mockup: {
       src: "/screens/jornada-resultados.png",
       alt: "Pantalla de Jornada cerrada con resultado de victoria por pareja",
-    },
-    rotate: "lg:rotate-[2deg]",
-    offset: "lg:-translate-y-10",
-  },
-  {
-    n: "04",
-    label: "AMISTOSOS",
-    title: "Comparte el partido",
-    description:
-      "Registra amistosos y entrenos, guarda la foto y comparte el resultado con tarjeta estilo Strava.",
-    mockup: {
-      src: "/screens/amistoso-card.jpg",
-      alt: "Tarjeta de amistoso con foto del partido, resultado y sets estilo Strava",
     },
     rotate: "lg:rotate-[6deg]",
     offset: "lg:translate-y-0",
@@ -129,7 +116,7 @@ export function AppPreview() {
 
         {/* Grid de 3 phones + textos. Desktop: 3 columnas con stagger Y y
             rotate alterno (perspective natural). Mobile: stack vertical. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 lg:gap-8 items-start">
           {steps.map((step) => (
             <div
               key={step.n}

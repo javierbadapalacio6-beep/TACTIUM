@@ -5,6 +5,7 @@ import { FederationsMarquee } from "@/components/FederationsMarquee";
 import { ForWho } from "@/components/ForWho";
 import { ForClubs } from "@/components/ForClubs";
 import { Features } from "@/components/Features";
+import { AmistososSection } from "@/components/AmistososSection";
 import { Pricing } from "@/components/Pricing";
 import { Faq } from "@/components/Faq";
 import { FinalCta } from "@/components/FinalCta";
@@ -34,6 +35,7 @@ export default function Home() {
         <ForWho />
         <ForClubs />
         <Features />
+        <AmistososSection />
         <Pricing />
         <Faq />
         <FinalCta />
