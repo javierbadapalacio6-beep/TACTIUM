@@ -38,6 +38,18 @@ next-env.d.ts
 
 # Tooling temp
 **/.claude/scheduled_tasks.lock
+
+# Build artifacts & large binaries (NUNCA al repo — engordan clones/push/EAS)
+builds/
+analisis-video/
+*.aab
+*.ipa
+
+# Media suelta dejada en la raíz (capturas/vídeos de referencia, WhatsApp, etc.)
+/image*.png
+/WhatsApp*
+/*.MP4
+/*.mp4
 **/.claude/settings.local.json
 
 # Native build artifacts (regenerados por expo prebuild)
