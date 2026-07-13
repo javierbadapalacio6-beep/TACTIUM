@@ -17,7 +17,7 @@ const bullets = [
   },
   {
     icon: Share2,
-    text: "Tarjeta con foto y resultado, lista para compartir por WhatsApp",
+    text: "Tarjeta con foto y resultado, lista para compartir en redes",
   },
   {
     icon: BarChart3,
