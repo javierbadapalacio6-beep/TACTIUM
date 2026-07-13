@@ -259,6 +259,8 @@ export interface CasualMatchSummary {
   partner: string | null;
   /** Pareja rival, p. ej. "Ruiz / Sanz". */
   rivals: string;
+  /** Foto portada del partido (si la hay). */
+  photoUrl: string | null;
 }
 
 /** Mis amistosos con resultado, del más reciente al más antiguo. */
@@ -278,7 +280,7 @@ export async function fetchMyCasualMatches(
 
   const [mRes, pRes] = await Promise.all([
     from('casual_matches')
-      .select('id, played_on, type, sets, winner_side')
+      .select('id, played_on, type, sets, winner_side, photo_url')
       .in('id', ids),
     from('casual_match_participants')
       .select('match_id, side, name, user_id')
@@ -307,6 +309,7 @@ export async function fetchMyCasualMatches(
     type: string | null;
     sets: [number, number][] | null;
     winner_side: number | null;
+    photo_url: string | null;
   }[]) {
     if (m.winner_side == null) continue;
     const side = sideByMatch.get(m.id) ?? 0;
@@ -331,6 +334,7 @@ export async function fetchMyCasualMatches(
       sets,
       partner,
       rivals,
+      photoUrl: m.photo_url,
     });
   }
   return out
@@ -361,4 +365,279 @@ export async function createCasualMatch(
   );
   if (error) throw new Error(error.message);
   return data as string;
+}
+
+// ── Foto del amistoso ──────────────────────────────────────────────
+// Reutiliza el bucket público match-photos. Path 'casual/{uid}/{id}.jpg'
+// (RLS: escribe solo el creador → foldername[2] = auth.uid()).
+const CASUAL_PHOTO_BUCKET = 'match-photos';
+
+type AnyUpdate = (table: string) => {
+  update: (values: Record<string, unknown>) => {
+    eq: (
+      col: string,
+      val: string,
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+/** Sube (o reemplaza) la foto del amistoso y guarda casual_matches.photo_url. */
+export async function uploadCasualPhoto(
+  userId: string,
+  matchId: string,
+  uri: string,
+): Promise<string> {
+  const path = `casual/${userId}/${matchId}.jpg`;
+  const response = await fetch(uri);
+  const arrayBuffer = await response.arrayBuffer();
+  const { error: upErr } = await supabase.storage
+    .from(CASUAL_PHOTO_BUCKET)
+    .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+  if (upErr) throw upErr;
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(CASUAL_PHOTO_BUCKET).getPublicUrl(path);
+  const url = `${publicUrl}?v=${Date.now()}`;
+  const fromUpd = supabase.from.bind(supabase) as unknown as AnyUpdate;
+  const { error: updErr } = await fromUpd('casual_matches')
+    .update({ photo_url: url })
+    .eq('id', matchId);
+  if (updErr) throw new Error(updErr.message);
+  return url;
+}
+
+/** Quita la foto del amistoso (borra el objeto y limpia photo_url). */
+export async function removeCasualPhoto(
+  userId: string,
+  matchId: string,
+): Promise<void> {
+  try {
+    await supabase.storage
+      .from(CASUAL_PHOTO_BUCKET)
+      .remove([`casual/${userId}/${matchId}.jpg`]);
+  } catch (e) {
+    console.warn('casual photo remove failed', e);
+  }
+  const fromUpd = supabase.from.bind(supabase) as unknown as AnyUpdate;
+  const { error } = await fromUpd('casual_matches')
+    .update({ photo_url: null })
+    .eq('id', matchId);
+  if (error) throw new Error(error.message);
+}
+
+// ── Detalle de un amistoso ─────────────────────────────────────────
+
+export interface CasualParticipantRow {
+  side: number;
+  slot: number;
+  name: string;
+  user_id: string | null;
+}
+
+export interface CasualMatchDetail {
+  id: string;
+  type: string;
+  playedOn: string | null;
+  photoUrl: string | null;
+  createdBy: string;
+  winnerSide: number | null;
+  /** Sets en perspectiva del lado 0, tal cual se guardan. */
+  sets: [number, number][];
+  /** Lado del usuario que consulta (donde participa); 0 por defecto. */
+  mySide: 0 | 1;
+  participants: CasualParticipantRow[];
+}
+
+/** Detalle completo de un amistoso: participantes por lado, sets y foto. */
+export async function fetchCasualMatchDetail(
+  matchId: string,
+  userId: string,
+): Promise<CasualMatchDetail | null> {
+  const from = supabase.from.bind(supabase) as unknown as AnyFrom;
+  const { data: mRaw, error: e1 } = await from('casual_matches')
+    .select('id, type, played_on, photo_url, created_by, winner_side, sets')
+    .eq('id', matchId);
+  if (e1) throw new Error(e1.message);
+  const m = (
+    (mRaw ?? []) as {
+      id: string;
+      type: string | null;
+      played_on: string | null;
+      photo_url: string | null;
+      created_by: string;
+      winner_side: number | null;
+      sets: [number, number][] | null;
+    }[]
+  )[0];
+  if (!m) return null;
+
+  const { data: pRaw, error: e2 } = await from('casual_match_participants')
+    .select('side, slot, name, user_id')
+    .eq('match_id', matchId);
+  if (e2) throw new Error(e2.message);
+  const participants = ((pRaw ?? []) as CasualParticipantRow[])
+    .slice()
+    .sort((a, b) => a.side - b.side || a.slot - b.slot);
+  const mine = participants.find((p) => p.user_id === userId);
+  const mySide = ((mine?.side ?? 0) === 1 ? 1 : 0) as 0 | 1;
+
+  return {
+    id: m.id,
+    type: m.type ?? 'amistoso',
+    playedOn: m.played_on,
+    photoUrl: m.photo_url,
+    createdBy: m.created_by,
+    winnerSide: m.winner_side,
+    sets: m.sets ?? [],
+    mySide,
+    participants,
+  };
+}
+
+// ── Head-to-head ───────────────────────────────────────────────────
+// Historial ENTRE encuentros anteriores a este partido. La identidad de un
+// jugador es su user_id si está vinculado, o su nombre normalizado si es
+// texto libre; una pareja = el conjunto (sin orden) de sus dos miembros.
+
+export interface H2HPairResult {
+  usNames: string[];
+  themNames: string[];
+  wins: number;
+  losses: number;
+  total: number;
+}
+export interface H2HIndividual {
+  name: string;
+  user_id: string | null;
+  wins: number;
+  losses: number;
+  total: number;
+}
+export interface CasualH2H {
+  /** Duelo de TU pareja vs esa pareja rival (encuentros previos). */
+  pair: H2HPairResult | null;
+  /** Tu H2H contra cada rival por separado (encuentros previos). */
+  individuals: H2HIndividual[];
+}
+
+/**
+ * H2H del usuario para un partido concreto: cuenta SOLO encuentros previos
+ * (excluye el propio partido) entre las mismas parejas y contra cada rival.
+ */
+export async function fetchCasualH2H(
+  userId: string,
+  matchId: string,
+): Promise<CasualH2H> {
+  const from = supabase.from.bind(supabase) as unknown as AnyFrom;
+
+  const { data: mineRaw, error: e1 } = await from('casual_match_participants')
+    .select('match_id')
+    .eq('user_id', userId);
+  if (e1) throw new Error(e1.message);
+  const ids = [
+    ...new Set(
+      ((mineRaw ?? []) as { match_id: string }[]).map((r) => r.match_id),
+    ),
+  ];
+  if (ids.length === 0) return { pair: null, individuals: [] };
+
+  const [pRes, mRes] = await Promise.all([
+    from('casual_match_participants')
+      .select('match_id, side, slot, name, user_id')
+      .in('match_id', ids),
+    from('casual_matches').select('id, winner_side').in('id', ids),
+  ]);
+  if (pRes.error) throw new Error(pRes.error.message);
+  if (mRes.error) throw new Error(mRes.error.message);
+
+  const winnerById = new Map(
+    ((mRes.data ?? []) as { id: string; winner_side: number | null }[]).map(
+      (m) => [m.id, m.winner_side],
+    ),
+  );
+  type P = {
+    match_id: string;
+    side: number;
+    slot: number;
+    name: string | null;
+    user_id: string | null;
+  };
+  const byMatch = new Map<string, P[]>();
+  for (const r of (pRes.data ?? []) as P[]) {
+    const l = byMatch.get(r.match_id) ?? [];
+    l.push(r);
+    byMatch.set(r.match_id, l);
+  }
+
+  const norm = (s: string | null) => (s ?? '').trim().toLowerCase();
+  const keyOf = (p: P) => p.user_id ?? `n:${norm(p.name)}`;
+  const pairKeyOf = (arr: P[]) => arr.map(keyOf).sort().join('|');
+
+  const target = byMatch.get(matchId);
+  if (!target) return { pair: null, individuals: [] };
+  const myTarget = target.find((p) => p.user_id === userId);
+  const mySide = myTarget?.side ?? 0;
+  const otherSide = mySide === 0 ? 1 : 0;
+  const ourMembers = target.filter((p) => p.side === mySide);
+  const rivalMembers = target.filter((p) => p.side === otherSide);
+  const ourPairKey = pairKeyOf(ourMembers);
+  const rivalPairKey = pairKeyOf(rivalMembers);
+
+  let pWins = 0;
+  let pLoss = 0;
+  let pTotal = 0;
+  const indiv = new Map<string, H2HIndividual>();
+  for (const rm of rivalMembers) {
+    if (!norm(rm.name) && !rm.user_id) continue;
+    indiv.set(keyOf(rm), {
+      name: rm.name ?? '',
+      user_id: rm.user_id,
+      wins: 0,
+      losses: 0,
+      total: 0,
+    });
+  }
+
+  for (const mid of ids) {
+    if (mid === matchId) continue; // solo encuentros ANTERIORES a este
+    const parts = byMatch.get(mid);
+    if (!parts) continue;
+    const w = winnerById.get(mid);
+    if (w == null) continue;
+    const meHere = parts.find((p) => p.user_id === userId);
+    const side = meHere?.side ?? 0;
+    const opp = side === 0 ? 1 : 0;
+    const ourArr = parts.filter((p) => p.side === side);
+    const oppArr = parts.filter((p) => p.side === opp);
+    const iWon = w === side;
+
+    if (pairKeyOf(ourArr) === ourPairKey && pairKeyOf(oppArr) === rivalPairKey) {
+      pTotal++;
+      if (iWon) pWins++;
+      else pLoss++;
+    }
+    const oppKeys = new Set(oppArr.map(keyOf));
+    for (const [k, v] of indiv) {
+      if (oppKeys.has(k)) {
+        v.total++;
+        if (iWon) v.wins++;
+        else v.losses++;
+      }
+    }
+  }
+
+  const pair: H2HPairResult | null =
+    pTotal > 0
+      ? {
+          usNames: ourMembers.map((p) => p.name ?? '').filter(Boolean),
+          themNames: rivalMembers.map((p) => p.name ?? '').filter(Boolean),
+          wins: pWins,
+          losses: pLoss,
+          total: pTotal,
+        }
+      : null;
+  const individuals = [...indiv.values()]
+    .filter((v) => v.total > 0)
+    .sort((a, b) => b.total - a.total);
+  return { pair, individuals };
 }

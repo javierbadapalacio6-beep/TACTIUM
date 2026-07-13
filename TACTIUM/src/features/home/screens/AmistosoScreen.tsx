@@ -24,6 +24,7 @@ import {
   createCasualMatch,
   fetchClaimCode,
   fetchMyFrequentPartners,
+  uploadCasualPhoto,
   type CasualParticipant,
   type FrequentPartner,
 } from '@core/services/casualMatches';
@@ -180,6 +181,9 @@ export const AmistosoScreen = () => {
   const [partidos, setPartidos] = useState<PartidoInput[]>([emptyPartido()]);
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  // Id del partido guardado (el primero, si son varios): la foto elegida en
+  // el paso de compartir se persiste en ESE amistoso (portada estilo liga).
+  const [savedMatchId, setSavedMatchId] = useState<string | null>(null);
   // Foto del partido (estilo Strava): se comparte compuesta con el
   // resultado y la marca. Opcional, se elige tras guardar.
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -389,6 +393,7 @@ export const AmistosoScreen = () => {
         ok++;
       }
       setSavedCount(ok);
+      setSavedMatchId(firstMatchId);
       // Código de reclamo (si la migración está aplicada) para 1 partido.
       if (firstMatchId && ok === 1) {
         fetchClaimCode(firstMatchId).then(setClaimCode);
@@ -465,7 +470,15 @@ export const AmistosoScreen = () => {
 
   const pickPhoto = async () => {
     const uri = await pickMatchPhoto();
-    if (uri) setPhotoUri(uri);
+    if (!uri) return;
+    setPhotoUri(uri);
+    // Persistimos la foto como portada del amistoso guardado (estilo liga),
+    // para que quede permanente y se vea en el detalle del partido.
+    if (savedMatchId && userId) {
+      uploadCasualPhoto(userId, savedMatchId, uri).catch((e) =>
+        console.warn('casual photo upload', e),
+      );
+    }
   };
 
   const photoTitle = isSingle

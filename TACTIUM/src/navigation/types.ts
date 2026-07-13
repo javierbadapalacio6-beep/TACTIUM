@@ -118,6 +118,7 @@ export type RootStackParamList = {
   ClubBilling: undefined;
   MyData: undefined;
   MyStats: undefined;
+  CasualMatchDetail: { matchId: string };
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

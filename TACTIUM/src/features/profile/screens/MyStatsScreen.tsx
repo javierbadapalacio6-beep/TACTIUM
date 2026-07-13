@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '@navigation/types';
 
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
@@ -58,7 +60,8 @@ type Scope = 'activa' | 'todas' | 'amistosos';
 
 export const MyStatsScreen = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
   const userId = useAuthStore((s) => s.user?.id ?? null);
@@ -447,7 +450,18 @@ export const MyStatsScreen = () => {
                       <Text style={styles.sectionLabel}>RESULTADOS</Text>
                       <View style={styles.card}>
                         {casualMatches.map((cm) => (
-                          <View key={cm.id} style={styles.resultRow}>
+                          <Pressable
+                            key={cm.id}
+                            onPress={() =>
+                              navigation.navigate('CasualMatchDetail', {
+                                matchId: cm.id,
+                              })
+                            }
+                            style={({ pressed }) => [
+                              styles.resultRow,
+                              pressed && { opacity: 0.6 },
+                            ]}
+                          >
                             <View
                               style={[
                                 styles.resultBadge,
@@ -474,6 +488,7 @@ export const MyStatsScreen = () => {
                             <View style={{ flex: 1, minWidth: 0 }}>
                               <Text style={styles.rankName} numberOfLines={1}>
                                 vs {cm.rivals || 'rival'}
+                                {cm.photoUrl ? '  📷' : ''}
                               </Text>
                               <Text style={styles.rankMeta} numberOfLines={1}>
                                 {cm.partner ? `con ${cm.partner} · ` : ''}
@@ -482,7 +497,7 @@ export const MyStatsScreen = () => {
                               </Text>
                             </View>
                             <Text style={styles.resultSets}>{cm.sets}</Text>
-                          </View>
+                          </Pressable>
                         ))}
                       </View>
                     </>

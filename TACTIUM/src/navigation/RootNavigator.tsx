@@ -15,6 +15,7 @@ import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionS
 import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
 import { MyDataScreen } from '@features/profile/screens/MyDataScreen';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
+import { CasualMatchDetailScreen } from '@features/profile/screens/CasualMatchDetailScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -100,6 +101,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="MyStats"
               component={MyStatsScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="CasualMatchDetail"
+              component={CasualMatchDetailScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',
