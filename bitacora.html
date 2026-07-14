@@ -248,8 +248,14 @@
 const LOG = [
   {
     date: "2026-07-14",
-    title: "🎥 Sacar el proyecto a la calle: mensajes de presentación (comunidad + academia de IA) abriendo colaboración, guion y storyboard interactivo del vídeo explicativo, y nuevo subagente guionista de redes. Sorteo de capitanes en ejecución.",
+    title: "🎥 Sacar el proyecto a la calle: mensajes de presentación (comunidad + academia de IA), guion y storyboard del vídeo, subagente guionista de redes y guiones de reels. + Fix del acta (el verde marcaba mal el ganador del set) publicado por OTA.",
     changes: [
+      { type: "fix", text: "<strong>🐛 Fix del acta de la jornada: el verde marcaba mal al ganador del set</strong>. Cada celda de marcador pintaba en verde el número de NUESTRO equipo en cuanto tenía valor → en un set <strong>6-7</strong> (que gana el 7) el 6 propio quedaba verde y parecía ganador. El cálculo (<code>matchOutcome</code>, marcador agregado y <code>close_matchday</code>) ya era CORRECTO — solo engañaba el color. Ahora el verde resalta el <strong>ganador del set</strong> (número más alto, con ambos valores puestos); a nuestro equipo lo identifica la cabecera Local/Visitante. Sin cambios de cálculo ni de BD. Commit <code>131afdc8</code>." },
+
+      { type: "chore", text: "<strong>📡 OTA a production (runtime 1.2.0)</strong>. <code>eas update --branch production</code> (update group <code>fe9d3ba3</code>) con el fix del acta + la feature de amistosos. Va al tren <strong>1.2.0</strong>: los usuarios de 1.1.0 NO lo reciben; les llegará a los de 1.2.0 cuando las stores aprueben el build 18." },
+
+      { type: "docs", text: "<strong>🎬 Guiones de reels + guía de rodaje</strong> (marco del subagente guionista, marca TACTIUM cargada): reel showcase de producto y reel del ángulo \"gratis para el jugador\" (formato talking-head, solo a cámara). Guía de grabación: tomas del iPad filmadas con el móvil (antiparpadeo con obturador 1/60, anti-reflejo, bloqueo AE/AF), y tarjeta-guion de una hoja. Copy del cierre afinado: jugadores GRATIS · capitán 14 días de prueba." },
+
       { type: "docs", text: "<strong>📣 Mensajes de presentación del proyecto</strong>. Preparados para <strong>la comunidad del curso de IA</strong> y para <strong>la propia academia de IA</strong> (ángulo: producto real <em>en producción</em> construido con desarrollo agéntico → ofrecerlo como caso práctico y abrir puerta a colaborar), y para una <strong>academia de pádel de Cantabria</strong> (colaboración local + info del intensivo). Con enlaces a landing, App Store y Google Play." },
 
       { type: "docs", text: "<strong>🎬 Vídeo explicativo del proyecto (versión técnica)</strong>. Guion completo con arco <em>gancho → qué resuelve → demo → stack → workflow agéntico (MCP: migraciones, SQL, builds, marketing) → aprendizaje → cierre</em>. Y <strong>storyboard interactivo montado con Claude Design</strong> (Artifact): diapositivas navegables en la identidad de TACTIUM, timecodes tipo broadcast (REC), <strong>notas de presentador</strong> (narración + qué mostrar) y <strong>modo grabación</strong> que oculta la interfaz para screen-record limpio." },
