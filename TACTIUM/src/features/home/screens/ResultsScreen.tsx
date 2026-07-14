@@ -853,6 +853,15 @@ const SetLine: React.FC<{
   const leftValue = cell[leftSide];
   const rightValue = cell[rightSide];
 
+  // Ganador del set = el número MÁS ALTO, y solo cuando AMBOS están puestos
+  // (un 6-7 lo gana el 7; con un único valor todavía no hay ganador). El
+  // verde debe marcar al ganador del set, no "nuestro" lado.
+  const lNum = leftValue === '' ? null : Number(leftValue);
+  const rNum = rightValue === '' ? null : Number(rightValue);
+  const bothFilled = lNum !== null && rNum !== null;
+  const leftWins = bothFilled && (lNum as number) > (rNum as number);
+  const rightWins = bothFilled && (rNum as number) > (lNum as number);
+
   // Validación de marcador padel:
   //   - Sets 1 y 2: 0..7 (7 sólo con tiebreak desde 6-6).
   //   - Set 3 ("OPC."): super-tiebreak, hasta 15 (cubre 10-X con diferencia
@@ -875,7 +884,8 @@ const SetLine: React.FC<{
       <View style={styles.setLineInputs}>
         <ScoreCell
           value={leftValue}
-          accent={leftSide === 'us'}
+          win={leftWins}
+          mine={leftSide === 'us'}
           disabled={disabled}
           saving={saving}
           saved={saved}
@@ -885,7 +895,8 @@ const SetLine: React.FC<{
         <Text style={styles.setLineSep}>·</Text>
         <ScoreCell
           value={rightValue}
-          accent={rightSide === 'us'}
+          win={rightWins}
+          mine={rightSide === 'us'}
           disabled={disabled}
           saving={saving}
           saved={saved}
@@ -900,13 +911,16 @@ const SetLine: React.FC<{
 // ─── ScoreCell ──────────────────────────────────────────────────────────────
 const ScoreCell: React.FC<{
   value: string;
-  accent: boolean;
+  /** true = este lado GANÓ el set (número más alto, ambos puestos). */
+  win: boolean;
+  /** true = es el marcador de nuestro equipo (solo para accesibilidad). */
+  mine: boolean;
   disabled: boolean;
   saving: boolean;
   saved: boolean;
   onChange: (value: string) => void;
   onBlurCell: () => void;
-}> = ({ value, accent, disabled, saving, saved, onChange, onBlurCell }) => (
+}> = ({ value, win, mine, disabled, saving, saved, onChange, onBlurCell }) => (
   <View style={styles.scoreCellWrap}>
     <TextInput
       value={value}
@@ -917,10 +931,14 @@ const ScoreCell: React.FC<{
       editable={!disabled}
       placeholder="·"
       placeholderTextColor={Colors.textFaint}
-      accessibilityLabel={accent ? 'Juegos a favor' : 'Juegos del rival'}
+      accessibilityLabel={mine ? 'Juegos a favor' : 'Juegos del rival'}
       style={[
         styles.scoreCell,
-        { color: accent && value ? Colors.accent : Colors.text },
+        // Verde = GANADOR del set (el número más alto), no nuestro lado. A
+        // nuestro equipo lo identifica la cabecera Local/Visitante.
+        win
+          ? { color: Colors.accent, fontWeight: '800' }
+          : { color: Colors.text },
         disabled && { opacity: 0.5 },
       ]}
     />
