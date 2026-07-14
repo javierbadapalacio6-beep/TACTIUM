@@ -247,6 +247,19 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-14",
+    title: "🎥 Sacar el proyecto a la calle: mensajes de presentación (comunidad + academia de IA) abriendo colaboración, guion y storyboard interactivo del vídeo explicativo, y nuevo subagente guionista de redes. Sorteo de capitanes en ejecución.",
+    changes: [
+      { type: "docs", text: "<strong>📣 Mensajes de presentación del proyecto</strong>. Preparados para <strong>la comunidad del curso de IA</strong> y para <strong>la propia academia de IA</strong> (ángulo: producto real <em>en producción</em> construido con desarrollo agéntico → ofrecerlo como caso práctico y abrir puerta a colaborar), y para una <strong>academia de pádel de Cantabria</strong> (colaboración local + info del intensivo). Con enlaces a landing, App Store y Google Play." },
+
+      { type: "docs", text: "<strong>🎬 Vídeo explicativo del proyecto (versión técnica)</strong>. Guion completo con arco <em>gancho → qué resuelve → demo → stack → workflow agéntico (MCP: migraciones, SQL, builds, marketing) → aprendizaje → cierre</em>. Y <strong>storyboard interactivo montado con Claude Design</strong> (Artifact): diapositivas navegables en la identidad de TACTIUM, timecodes tipo broadcast (REC), <strong>notas de presentador</strong> (narración + qué mostrar) y <strong>modo grabación</strong> que oculta la interfaz para screen-record limpio." },
+
+      { type: "feat", text: "<strong>🤖 Nuevo subagente global <code>guionista-redes</code></strong> (<code>~/.claude/agents/</code>): guionista de contenido para redes (Reels / TikTok / Shorts / carruseles) con estructura fija <strong>Gancho → Enseñanza → Cierre</strong>, tono humano (nada de copy corporativo) y formato de salida cerrado (guion + copy del post + hashtags + sonido + nota de edición). Solo lectura (<code>Read/Grep/Glob</code>), <code>model: sonnet</code>, <code>memory: user</code>. Para producir contenido de marca de forma recurrente." },
+
+      { type: "chore", text: "<strong>🎟️ Sorteo de capitanes (1 año gratis) en ejecución — 9 ganadores mezcla iOS/Android</strong>. <strong>iOS</strong>: generado el lote de Offer Codes de Apple (Apple obliga a un <strong>mínimo de 500</strong>, incluso en código personalizado → se generan 500 de un solo uso y se reparten solo los necesarios); ya canjeados 6, con mensaje que exige <strong>empezar como capitán independiente</strong> y aclara que la <strong>cuenta de Apple del iPhone es distinta de la sesión de TACTIUM</strong> (el año se asigna a la cuenta con la que se canjea). <strong>Android</strong>: grant directo en <code>subscriptions</code> (hecho <code>lfbprime</code> #1 + <code>javierbp6</code> test) — verificado que un grant promocional de RevenueCat NO valdría porque el gate lee la tabla, no el entitlement." },
+    ],
+  },
+  {
     date: "2026-07-13",
     title: "🚀 1.2.0 a REVISIÓN en iOS + Android (build 18): feature social de amistosos completa (detalle clicable + cara a cara + foto permanente), fix del vínculo del creador y del SDK de RevenueCat. Landing en producción con sección propia de amistosos. Sorteo de capitanes: Offer Codes (iOS) + grants en BD (Android). Histórico de git purgado (video.MP4 de 569 MB).",
     changes: [
