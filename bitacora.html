@@ -247,6 +247,17 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-16",
+    title: "🐛 Fix de la tarjeta compartible del amistoso (la foto salía sin el marcador la primera vez) + botón de WhatsApp fuera. Publicado por OTA a production (runtime 1.2.0).",
+    changes: [
+      { type: "fix", text: "<strong>La foto del amistoso salía distinta la primera vez que se compartía</strong>. En <code>AmistosoScreen</code> la tarjeta (<code>PhotoShareCard</code>) se renderizaba SIN los props de marcador a dos líneas → salía solo el título de una línea. La versión guardada (<code>CasualMatchDetailScreen</code>) sí los pasaba, de ahí la diferencia. Ahora la <strong>primera imagen es idéntica a la guardada</strong>: pareja + resultado sobre pareja + resultado, sets debajo y el <strong>ganador resaltado en verde</strong> (props <code>homeName/homeScore/awayName/awayScore/highlight</code>, subtítulo Entreno/Amistoso y detalle VICTORIA/DERROTA · sets alineados con el detalle)." },
+
+      { type: "fix", text: "<strong>Botón \"Compartir por WhatsApp\" eliminado</strong> (no hacía nada: <code>Linking.openURL('whatsapp://…')</code> fallaba en silencio). Quitados el botón, la función <code>shareWhatsapp</code> y el import <code>Linking</code>. Ahora tras guardar: con foto → botón principal <strong>\"Compartir foto + resultado\"</strong>; sin foto → <strong>\"Añadir foto del partido\"</strong> pasa a ser el botón principal; y un secundario discreto <strong>\"Compartir sólo el texto\"</strong> como respaldo. Se mantiene el botón de invitar a jugadores sin TACTIUM." },
+
+      { type: "chore", text: "<strong>📡 OTA a production (runtime 1.2.0)</strong>. <code>eas update --branch production</code> (update group <code>c064e307</code>) con los dos fixes (solo JS/UI). Va al tren <strong>1.2.0</strong>: view-shot + expo-sharing solo existen en el build 18, así que la tarjeta compuesta se verá de verdad cuando las stores aprueben ese build; en binarios anteriores degrada a foto + texto sin romper." },
+    ],
+  },
+  {
     date: "2026-07-14",
     title: "🎥 Sacar el proyecto a la calle: mensajes de presentación (comunidad + academia de IA), guion y storyboard del vídeo, subagente guionista de redes y guiones de reels. + Fix del acta (el verde marcaba mal el ganador del set) publicado por OTA.",
     changes: [

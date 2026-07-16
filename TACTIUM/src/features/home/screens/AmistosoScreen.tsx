@@ -9,7 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   Share,
-  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -414,13 +413,6 @@ export const AmistosoScreen = () => {
     }
   };
 
-  const shareWhatsapp = async () => {
-    const url = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
-    const can = await Linking.canOpenURL(url);
-    if (can) await Linking.openURL(url);
-    else await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(shareText)}`);
-  };
-
   const shareNative = async () => {
     try {
       await Share.share({ message: shareText });
@@ -481,18 +473,26 @@ export const AmistosoScreen = () => {
     }
   };
 
-  const photoTitle = isSingle
-    ? `${ourStr(partidos[0]) || 'Nosotros'} ${marcador.us}–${marcador.them} ${
-        rivalStr(partidos[0]) || 'Rival'
-      }`
-    : `${team?.name ?? 'Nosotros'} ${marcador.us}–${marcador.them} ${
-        rivalTeam || 'Rival'
-      }`;
-  const photoDetail = isSingle
+  // Marcador de la tarjeta (idéntico al del detalle del partido): pareja +
+  // resultado sobre pareja + resultado, resaltando al ganador en verde.
+  const photoHome = isSingle
+    ? ourStr(partidos[0]) || 'Nosotros'
+    : team?.name ?? 'Nosotros';
+  const photoAway = isSingle
+    ? rivalStr(partidos[0]) || 'Rival'
+    : rivalTeam || 'Rival';
+  const photoDecided = marcador.us !== marcador.them;
+  const photoWon = marcador.us > marcador.them;
+  const photoTitle = `${photoHome} ${marcador.us}–${marcador.them} ${photoAway}`;
+  const photoSets = isSingle
     ? setsToString(partidos[0]?.sets ?? [])
     : `${validPartidos.length} ${
         validPartidos.length === 1 ? 'partido' : 'partidos'
       }`;
+  const photoDetail =
+    isSingle && photoDecided
+      ? `${photoWon ? 'VICTORIA' : 'DERROTA'}${photoSets ? ` · ${photoSets}` : ''}`
+      : photoSets;
 
   return (
     <View style={styles.root}>
@@ -744,11 +744,18 @@ export const AmistosoScreen = () => {
                   ref={photoCardRef}
                   photoUri={photoUri}
                   title={photoTitle}
-                  subtitle={`Amistoso · ${new Date().toLocaleDateString(
+                  subtitle={`${isEntreno ? 'Entreno' : 'Amistoso'} · ${new Date().toLocaleDateString(
                     'es-ES',
                     { day: 'numeric', month: 'short' },
                   )}`}
                   detail={photoDetail}
+                  homeName={photoHome}
+                  homeScore={marcador.us}
+                  awayName={photoAway}
+                  awayScore={marcador.them}
+                  highlight={
+                    photoDecided ? (photoWon ? 'home' : 'away') : 'home'
+                  }
                 />
               </View>
             ) : null}
@@ -766,31 +773,16 @@ export const AmistosoScreen = () => {
               <Pressable
                 onPress={pickPhoto}
                 style={({ pressed }) => [
-                  styles.ctaGhost,
-                  pressed && { opacity: 0.7 },
+                  styles.cta,
+                  pressed && { opacity: 0.85 },
                 ]}
               >
                 <View style={styles.ctaGhostRow}>
-                  <IconCamera size={15} color={Colors.text} />
-                  <Text style={styles.ctaGhostLabel}>
-                    Añadir foto del partido
-                  </Text>
+                  <IconCamera size={15} color="#001810" />
+                  <Text style={styles.ctaLabel}>Añadir foto del partido</Text>
                 </View>
               </Pressable>
             )}
-            <Pressable
-              onPress={shareWhatsapp}
-              style={({ pressed }) => [
-                photoUri ? styles.ctaGhost : styles.cta,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <Text
-                style={photoUri ? styles.ctaGhostLabel : styles.ctaLabel}
-              >
-                Compartir por WhatsApp
-              </Text>
-            </Pressable>
             <Pressable
               onPress={shareNative}
               style={({ pressed }) => [
@@ -798,7 +790,9 @@ export const AmistosoScreen = () => {
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={styles.ctaGhostLabel}>Otras apps</Text>
+              <Text style={styles.ctaGhostLabel}>
+                Compartir sólo el texto
+              </Text>
             </Pressable>
             {unlinkedNames.length > 0 ? (
               <Pressable
