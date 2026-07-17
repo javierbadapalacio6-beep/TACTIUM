@@ -122,6 +122,21 @@ export async function fetchMyPlayer(
 }
 
 /**
+ * Equipos donde el usuario tiene una ficha de jugador vinculada (claim).
+ * Permite ofrecer el modo "Jugador" a un capitán que ADEMÁS juega en su
+ * propio equipo (misma persona), aunque su rol de membresía sea captain.
+ */
+export async function fetchMyPlayerTeamIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('players')
+    .select('team_id')
+    .eq('user_id', userId)
+    .eq('active', true);
+  if (error) throw error;
+  return Array.from(new Set((data ?? []).map((r) => r.team_id)));
+}
+
+/**
  * Lista los jugadores de la plantilla aún sin usuario asociado. Pensado para
  * la pantalla "¿Cuál eres tú?" del onboarding del player.
  */

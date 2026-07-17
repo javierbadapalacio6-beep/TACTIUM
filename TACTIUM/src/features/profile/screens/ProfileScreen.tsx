@@ -66,12 +66,18 @@ export const ProfileScreen = () => {
   const memberships             = useTeamStore((s) => s.memberships);
   const setActiveRoleOverride   = useTeamStore((s) => s.setActiveRoleOverride);
   const myPlayerId              = useTeamStore((s) => s.myPlayerId);
+  const myPlayerTeamIds         = useTeamStore((s) => s.myPlayerTeamIds);
   const refreshMyPlayer         = useTeamStore((s) => s.refreshMyPlayer);
   const clubs                   = useClubStore((s) => s.clubs);
 
   const availableRoles = useMemo(
-    () => computeAvailableRoles(memberships, clubs.map((c) => c.id)),
-    [memberships, clubs],
+    () =>
+      computeAvailableRoles(
+        memberships,
+        clubs.map((c) => c.id),
+        myPlayerTeamIds,
+      ),
+    [memberships, clubs, myPlayerTeamIds],
   );
 
   const [role, setRole]                 = useState<TeamRole | null>(null);
