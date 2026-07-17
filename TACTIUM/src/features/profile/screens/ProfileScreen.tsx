@@ -121,6 +121,17 @@ export const ProfileScreen = () => {
           {displayName}
         </Text>
         <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => navigation.navigate('SearchCommunity')}
+            accessibilityRole="button"
+            accessibilityLabel="Buscar en la comunidad"
+            style={({ pressed }) => [
+              styles.menuBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <IconSearch size={22} color={Colors.text} />
+          </Pressable>
           <NotificationBell />
           <Pressable
             onPress={() => navigation.navigate('Settings')}
@@ -213,34 +224,6 @@ export const ProfileScreen = () => {
             ]}
           >
             <Text style={styles.pillBtnLabel}>Compartir</Text>
-          </Pressable>
-        </View>
-
-        {/* Comunidad: buscar + novedades */}
-        <View style={styles.communityRow}>
-          <Pressable
-            onPress={() => navigation.navigate('SearchCommunity')}
-            accessibilityRole="button"
-            accessibilityLabel="Buscar en la comunidad"
-            style={({ pressed }) => [
-              styles.chip,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <IconSearch size={15} color={Colors.textMuted} />
-            <Text style={styles.chipLabel}>Buscar</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate('Feed')}
-            accessibilityRole="button"
-            accessibilityLabel="Ver novedades"
-            style={({ pressed }) => [
-              styles.chip,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={styles.chipEmoji}>📰</Text>
-            <Text style={styles.chipLabel}>Novedades</Text>
           </Pressable>
         </View>
 
