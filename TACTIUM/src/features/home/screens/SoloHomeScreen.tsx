@@ -57,7 +57,13 @@ export const SoloHomeScreen = () => {
   );
 
   const firstName = (() => {
-    const meta = (user?.user_metadata ?? {}) as { full_name?: string };
+    const meta = (user?.user_metadata ?? {}) as {
+      full_name?: string;
+      username?: string;
+    };
+    // El nombre de usuario (nombre corto) manda sobre el completo.
+    const uname = (meta.username ?? '').trim();
+    if (uname) return uname;
     const n = (meta.full_name ?? '').trim();
     return n ? n.split(' ')[0] : null;
   })();

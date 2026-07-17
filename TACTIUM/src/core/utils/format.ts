@@ -45,6 +45,31 @@ export const formatShortDay = (date: Date): string => {
 };
 
 /**
+ * Nombre a mostrar del usuario logueado, en orden de preferencia:
+ *   username (nombre corto que elige en Perfil) → full_name → parte local
+ *   del email → 'Jugador'.
+ * El username y full_name viven en `user_metadata` de la sesión, así que
+ * esto es síncrono (no requiere consultar `profiles`).
+ */
+export const displayNameOf = (
+  user:
+    | { user_metadata?: Record<string, unknown> | null; email?: string | null }
+    | null
+    | undefined,
+): string => {
+  const meta = (user?.user_metadata ?? {}) as {
+    username?: string | null;
+    full_name?: string | null;
+  };
+  const username = (meta.username ?? '').trim();
+  if (username) return username;
+  const fullName = (meta.full_name ?? '').trim();
+  if (fullName) return fullName;
+  const email = user?.email ?? '';
+  return email.split('@')[0] || 'Jugador';
+};
+
+/**
  * Iniciales de un nombre: "Club Visitante" → "CV"
  */
 export const initialsOf = (name: string): string => {

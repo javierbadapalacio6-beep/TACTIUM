@@ -1,7 +1,35 @@
 import { supabase } from '@core/supabase/client';
+import type { User } from '@supabase/supabase-js';
 import type { Database } from '@core/supabase/database.types';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+
+/**
+ * Fija el "nombre de usuario" (nombre corto) del user logueado. Persiste en
+ * `profiles.username` (fuente de verdad, futura búsqueda social) y lo espeja
+ * en `user_metadata.username` para que toda la app lo lea de forma síncrona
+ * desde la sesión (igual que `full_name`). Pasar cadena vacía lo borra
+ * (vuelve a mostrarse el nombre completo). Devuelve el user actualizado.
+ */
+export async function setMyUsername(username: string): Promise<User | null> {
+  const value = username.trim() || null;
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error('Sin sesión activa');
+
+  const { error: pErr } = await supabase
+    .from('profiles')
+    .update({ username: value } as never)
+    .eq('id', userId);
+  if (pErr) throw pErr;
+
+  // El updateUser dispara USER_UPDATED → el authStore refresca `user` solo.
+  const { data, error: uErr } = await supabase.auth.updateUser({
+    data: { username: value },
+  });
+  if (uErr) throw uErr;
+  return data.user ?? null;
+}
 
 export async function fetchMyProfile(): Promise<Profile | null> {
   const { data: auth } = await supabase.auth.getUser();

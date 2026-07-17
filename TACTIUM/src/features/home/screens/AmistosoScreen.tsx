@@ -216,8 +216,13 @@ export const AmistosoScreen = () => {
   // En colegas/entreno, tu propio nombre va pre-rellenado en el primer
   // hueco (eres quien registra el partido → tu vínculo está garantizado).
   const authName = useAuthStore((s) => {
-    const meta = (s.user?.user_metadata ?? {}) as { full_name?: string };
-    return (meta.full_name ?? '').trim() || null;
+    const meta = (s.user?.user_metadata ?? {}) as {
+      full_name?: string;
+      username?: string;
+    };
+    // Preferimos el nombre de usuario (nombre corto) sobre el completo: es
+    // más limpio en el partido y en la foto compartida.
+    return (meta.username ?? meta.full_name ?? '').trim() || null;
   });
   const myName = useMemo(
     () =>

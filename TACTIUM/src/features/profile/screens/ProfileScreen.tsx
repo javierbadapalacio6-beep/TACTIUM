@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useNavigation, useScrollToTop } from '@react-navigation/native';
@@ -27,7 +28,7 @@ import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
-import { initialsOf } from '@core/utils/format';
+import { initialsOf, displayNameOf } from '@core/utils/format';
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
@@ -239,12 +240,39 @@ export const ProfileScreen = () => {
   const wins    = matchdays.filter((m) => m.outcome === 'win').length;
   const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
 
-  const displayName =
-    (user?.user_metadata?.full_name as string | undefined) ??
-    user?.email?.split('@')[0] ??
-    'Capitán';
+  const displayName = displayNameOf(user);
 
   const initials = initialsOf(displayName);
+
+  // ─── Nombre de usuario (nombre corto para amistosos / foto) ──────────────
+  const currentUsername = (
+    (user?.user_metadata?.username as string | undefined) ?? ''
+  ).trim();
+  const [usernameInput, setUsernameInput] = useState(currentUsername);
+  const [savingUsername, setSavingUsername] = useState(false);
+  // Re-sincroniza el input cuando cambia el valor guardado (p. ej. tras
+  // guardar, o al hidratar la sesión). No pisa lo que el usuario teclea
+  // porque `currentUsername` solo cambia al persistir.
+  useEffect(() => {
+    setUsernameInput(currentUsername);
+  }, [currentUsername]);
+  const usernameDirty = usernameInput.trim() !== currentUsername;
+
+  const handleSaveUsername = async () => {
+    const val = usernameInput.trim();
+    if (savingUsername || val === currentUsername) return;
+    setSavingUsername(true);
+    try {
+      await ProfileApi.setMyUsername(val);
+      toast.success(
+        val ? 'Nombre de usuario guardado' : 'Nombre de usuario borrado',
+      );
+    } catch (e: any) {
+      toast.error('No se pudo guardar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setSavingUsername(false);
+    }
+  };
 
   const confirmLogout = () => {
     Alert.alert('Cerrar sesión', '¿Estás seguro?', [
@@ -459,6 +487,45 @@ export const ProfileScreen = () => {
             </View>
           ) : null}
         </View>
+
+        {/* Nombre de usuario (nombre corto para amistosos y foto del partido) */}
+        <Text style={styles.sectionLabel}>NOMBRE DE USUARIO</Text>
+        <View style={styles.usernameCard}>
+          <TextInput
+            style={styles.usernameInput}
+            value={usernameInput}
+            onChangeText={setUsernameInput}
+            placeholder="Cómo apareces (ej. Javi)"
+            placeholderTextColor={Colors.textFaint}
+            maxLength={20}
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleSaveUsername}
+            accessibilityLabel="Nombre de usuario"
+          />
+          <Pressable
+            onPress={handleSaveUsername}
+            disabled={!usernameDirty || savingUsername}
+            accessibilityRole="button"
+            accessibilityLabel="Guardar nombre de usuario"
+            style={({ pressed }) => [
+              styles.usernameSave,
+              (!usernameDirty || savingUsername) && { opacity: 0.4 },
+              pressed && usernameDirty && !savingUsername && { opacity: 0.85 },
+            ]}
+          >
+            {savingUsername ? (
+              <ActivityIndicator size="small" color={Colors.accent} />
+            ) : (
+              <Text style={styles.usernameSaveLabel}>Guardar</Text>
+            )}
+          </Pressable>
+        </View>
+        <Text style={styles.usernameHint}>
+          Tu nombre corto para amistosos y la foto del partido. Si lo dejas
+          vacío, usamos tu nombre completo.
+        </Text>
 
         {/* Team (oculto en modo jugador suelto) */}
         {team ? (
@@ -1107,6 +1174,52 @@ const styles = StyleSheet.create({
   rolePillText: { fontFamily: Fonts.mono, color: Colors.accent, fontSize: 11, letterSpacing: 1, fontWeight: '600' },
 
   sectionLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: Colors.textFaint, fontWeight: '500', marginTop: 18, marginBottom: 10 },
+
+  usernameCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 6,
+  },
+  usernameInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    paddingVertical: 8,
+  },
+  usernameSave: {
+    minWidth: 78,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  usernameSaveLabel: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  usernameHint: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    lineHeight: 14,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
 
   teamCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: Colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: Colors.hair },
   teamName:  { color: Colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
