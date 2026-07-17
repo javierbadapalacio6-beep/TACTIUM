@@ -46,6 +46,9 @@ interface TeamState {
   // myPlayerLoaded = false significa "todavía no se ha resuelto" (loading).
   myPlayerId: string | null;
   myPlayerLoaded: boolean;
+  // Equipos donde el usuario tiene una ficha de jugador vinculada. Permite
+  // ofrecer modo Jugador a un capitán que también juega en su equipo.
+  myPlayerTeamIds: string[];
 
   isLoading: boolean;
   hasLoadedOnce: boolean;
@@ -147,13 +150,16 @@ function deriveRawRole(
 function deriveAvailableRoles(
   memberships: TeamMember[],
   clubIds: string[],
+  playerTeamIds: string[] = [],
 ): ActiveRole[] {
   const set = new Set<ActiveRole>();
   if (clubIds.length > 0) set.add('club_admin');
   if (memberships.some((m) => m.role === 'captain' || m.role === 'admin')) {
     set.add('captain');
   }
-  if (memberships.some((m) => m.role === 'player')) {
+  // 'player' si tiene una membresía player O una ficha de jugador vinculada
+  // (caso capitán-que-juega en su propio equipo).
+  if (memberships.some((m) => m.role === 'player') || playerTeamIds.length > 0) {
     set.add('player');
   }
   return Array.from(set);
@@ -167,6 +173,7 @@ function roleAppliesToTeam(
   team: Team | null,
   memberships: TeamMember[],
   clubIds: string[],
+  playerTeamIds: string[] = [],
 ): boolean {
   if (!team) return role === 'club_admin' && clubIds.length > 0;
   if (role === 'club_admin') {
@@ -175,7 +182,11 @@ function roleAppliesToTeam(
   const m = memberships.find((x) => x.team_id === team.id);
   if (!m) return false;
   if (role === 'captain') return m.role === 'captain' || m.role === 'admin';
-  if (role === 'player') return m.role === 'player';
+  // Un capitán con ficha de jugador vinculada en este equipo puede pasar a
+  // modo Jugador aunque su membresía sea captain.
+  if (role === 'player') {
+    return m.role === 'player' || playerTeamIds.includes(team.id);
+  }
   return false;
 }
 
@@ -188,9 +199,13 @@ function deriveActiveRole(
   memberships: TeamMember[],
   clubIds: string[],
   override: ActiveRole,
+  playerTeamIds: string[] = [],
 ): ActiveRole {
   const raw = deriveRawRole(team, memberships, clubIds);
-  if (override && roleAppliesToTeam(override, team, memberships, clubIds)) {
+  if (
+    override &&
+    roleAppliesToTeam(override, team, memberships, clubIds, playerTeamIds)
+  ) {
     return override;
   }
   return raw;
@@ -229,6 +244,7 @@ function findFirstTeamForRole(
   teams: Team[],
   memberships: TeamMember[],
   clubIds: string[],
+  playerTeamIds: string[] = [],
 ): Team | null {
   if (role === 'club_admin') {
     return teams.find((t) => t.club_id && clubIds.includes(t.club_id)) ?? null;
@@ -237,7 +253,11 @@ function findFirstTeamForRole(
     const m = memberships.find((x) => x.team_id === t.id);
     if (!m) continue;
     if (role === 'captain' && (m.role === 'captain' || m.role === 'admin')) return t;
-    if (role === 'player' && m.role === 'player') return t;
+    if (
+      role === 'player' &&
+      (m.role === 'player' || playerTeamIds.includes(t.id))
+    )
+      return t;
   }
   return null;
 }
@@ -261,6 +281,7 @@ export const useTeamStore = create<TeamState>()(
       activeTeamId: null,
       myPlayerId: null,
       myPlayerLoaded: false,
+      myPlayerTeamIds: [],
       isLoading: false,
       hasLoadedOnce: false,
       isOnboarding: false,
@@ -278,9 +299,13 @@ export const useTeamStore = create<TeamState>()(
       loadForUser: async () => {
         set({ isLoading: true, error: null });
         try {
-          const [teams, memberships] = await Promise.all([
+          const uid = useAuthStore.getState().user?.id ?? null;
+          const [teams, memberships, myPlayerTeamIds] = await Promise.all([
             TeamsApi.fetchMyTeams(),
             TeamMembersApi.fetchMyMemberships(),
+            uid
+              ? PlayersApi.fetchMyPlayerTeamIds(uid)
+              : Promise.resolve<string[]>([]),
           ]);
 
           if (teams.length === 0) {
@@ -302,6 +327,7 @@ export const useTeamStore = create<TeamState>()(
               activeTeamId: null,
               myPlayerId: null,
               myPlayerLoaded: true,
+              myPlayerTeamIds: [],
               isLoading: false,
               hasLoadedOnce: true,
               isOnboarding: false,
@@ -320,7 +346,13 @@ export const useTeamStore = create<TeamState>()(
 
           const clubIds = useClubStore.getState().clubs.map((c) => c.id);
           const override = get().activeRoleOverride;
-          const activeRole = deriveActiveRole(team, memberships, clubIds, override);
+          const activeRole = deriveActiveRole(
+            team,
+            memberships,
+            clubIds,
+            override,
+            myPlayerTeamIds,
+          );
 
           const myPlayer = await resolveMyPlayerId(team, activeRole);
 
@@ -330,6 +362,7 @@ export const useTeamStore = create<TeamState>()(
             players,
             teams,
             memberships,
+            myPlayerTeamIds,
             activeRole,
             myPlayerId: myPlayer.id,
             myPlayerLoaded: myPlayer.loaded,
@@ -354,6 +387,7 @@ export const useTeamStore = create<TeamState>()(
           activeTeamId: null,
           myPlayerId: null,
           myPlayerLoaded: false,
+          myPlayerTeamIds: [],
           isLoading: false,
           hasLoadedOnce: false,
           isOnboarding: false,
@@ -397,11 +431,21 @@ export const useTeamStore = create<TeamState>()(
 
         const clubIds = useClubStore.getState().clubs.map((c) => c.id);
         const memberships = get().memberships;
+        const playerTeamIds = get().myPlayerTeamIds;
         let override = get().activeRoleOverride;
-        if (override && !roleAppliesToTeam(override, team, memberships, clubIds)) {
+        if (
+          override &&
+          !roleAppliesToTeam(override, team, memberships, clubIds, playerTeamIds)
+        ) {
           override = null;
         }
-        const activeRole = deriveActiveRole(team, memberships, clubIds, override);
+        const activeRole = deriveActiveRole(
+          team,
+          memberships,
+          clubIds,
+          override,
+          playerTeamIds,
+        );
 
         if (lastSetActiveTeamRequest !== teamId) return;
         set({ players, activeRole, activeRoleOverride: override });
@@ -412,12 +456,18 @@ export const useTeamStore = create<TeamState>()(
       },
 
       setActiveRoleOverride: async (role) => {
-        const { teams, memberships, team } = get();
+        const { teams, memberships, team, myPlayerTeamIds } = get();
         const clubIds = useClubStore.getState().clubs.map((c) => c.id);
 
         // Override = null → vuelve al cálculo automático
         if (role === null) {
-          const activeRole = deriveActiveRole(team, memberships, clubIds, null);
+          const activeRole = deriveActiveRole(
+            team,
+            memberships,
+            clubIds,
+            null,
+            myPlayerTeamIds,
+          );
           set({ activeRoleOverride: null, activeRole, myPlayerLoaded: false });
           const myPlayer = await resolveMyPlayerId(team, activeRole);
           set({ myPlayerId: myPlayer.id, myPlayerLoaded: myPlayer.loaded });
@@ -425,7 +475,10 @@ export const useTeamStore = create<TeamState>()(
         }
 
         // Si el equipo activo ya cumple el rol pedido, basta con marcar override
-        if (team && roleAppliesToTeam(role, team, memberships, clubIds)) {
+        if (
+          team &&
+          roleAppliesToTeam(role, team, memberships, clubIds, myPlayerTeamIds)
+        ) {
           set({
             activeRoleOverride: role,
             activeRole: role,
@@ -437,7 +490,13 @@ export const useTeamStore = create<TeamState>()(
         }
 
         // Si no, buscar un equipo válido para ese rol y cambiar
-        const target = findFirstTeamForRole(role, teams, memberships, clubIds);
+        const target = findFirstTeamForRole(
+          role,
+          teams,
+          memberships,
+          clubIds,
+          myPlayerTeamIds,
+        );
         if (!target) {
           // No hay teams compatibles → silently se mantiene el estado actual
           return;
@@ -467,7 +526,13 @@ export const useTeamStore = create<TeamState>()(
         const memberships = await TeamMembersApi.fetchMyMemberships();
         const clubIds = useClubStore.getState().clubs.map((c) => c.id);
         const override = get().activeRoleOverride;
-        const activeRole = deriveActiveRole(team, memberships, clubIds, override);
+        const activeRole = deriveActiveRole(
+          team,
+          memberships,
+          clubIds,
+          override,
+          get().myPlayerTeamIds,
+        );
         set((s) => ({
           team,
           activeTeamId: team.id,
@@ -651,4 +716,5 @@ export const selectIsPlayer = (s: TeamState): boolean =>
 export const computeAvailableRoles = (
   memberships: TeamMember[],
   clubIds: string[],
-): ActiveRole[] => deriveAvailableRoles(memberships, clubIds);
+  playerTeamIds: string[] = [],
+): ActiveRole[] => deriveAvailableRoles(memberships, clubIds, playerTeamIds);

@@ -39,6 +39,7 @@ import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInv
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import type { Database } from '@core/supabase/database.types';
 import type { RootStackParamList } from '@navigation/types';
 
@@ -65,12 +66,18 @@ export const ProfileScreen = () => {
   const memberships             = useTeamStore((s) => s.memberships);
   const setActiveRoleOverride   = useTeamStore((s) => s.setActiveRoleOverride);
   const myPlayerId              = useTeamStore((s) => s.myPlayerId);
+  const myPlayerTeamIds         = useTeamStore((s) => s.myPlayerTeamIds);
   const refreshMyPlayer         = useTeamStore((s) => s.refreshMyPlayer);
   const clubs                   = useClubStore((s) => s.clubs);
 
   const availableRoles = useMemo(
-    () => computeAvailableRoles(memberships, clubs.map((c) => c.id)),
-    [memberships, clubs],
+    () =>
+      computeAvailableRoles(
+        memberships,
+        clubs.map((c) => c.id),
+        myPlayerTeamIds,
+      ),
+    [memberships, clubs, myPlayerTeamIds],
   );
 
   const [role, setRole]                 = useState<TeamRole | null>(null);
@@ -430,6 +437,7 @@ export const ProfileScreen = () => {
           o moverlo al nivel del NavigationContainer. */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.eyebrow}>PERFIL</Text>
+        <NotificationBell />
       </View>
 
       <ScrollView

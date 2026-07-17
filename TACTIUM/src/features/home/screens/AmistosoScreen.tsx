@@ -284,10 +284,13 @@ export const AmistosoScreen = () => {
         })
         .filter(Boolean),
       ``,
-      `Organiza tus amistosos con TACTIUM: ${DOWNLOAD_URL}`,
+      claimCode
+        ? `Este partido ya vive en TACTIUM. Con el código ${claimCode} lo sumas a tus stats: victorias, rachas y cara a cara. 🏆`
+        : 'Organiza tus amistosos con TACTIUM: victorias, rachas y cara a cara. 🏆',
+      DOWNLOAD_URL,
     ];
     return lines.join('\n');
-  }, [team, rivalTeam, partidos, marcador, isSingle, isEntreno]);
+  }, [team, rivalTeam, partidos, marcador, isSingle, isEntreno, claimCode]);
 
   const validPartidos = partidos.filter(
     (p) => setsToNumeric(p.sets).length > 0,

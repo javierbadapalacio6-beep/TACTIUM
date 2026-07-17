@@ -247,6 +247,27 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-17",
+    title: "🚀 1.2.0 APROBADA en las stores + jornada intensa: nombre de usuario, código del partido, campanita de notificaciones in-app, fix de roles al canjear código, cuentas demo + presentación para Smash Pádel Club, y arranque de la capa social (en rama). Casi todo publicado por OTA a production (runtime 1.2.0).",
+    changes: [
+      { type: "decision", text: "<strong>✅ 1.2.0 (build 18) APROBADA en App Store y Google Play</strong>. A partir de ahora el <strong>runtime OTA de production es 1.2.0</strong>: los <code>eas update --branch production</code> llegan a usuarios reales sin esperar a ninguna store. Toda la tanda de hoy va por OTA salvo lo indicado." },
+
+      { type: "feat", text: "<strong>🔔 Campanita de notificaciones IN-APP (v1)</strong>. Centro de notificaciones dentro de la app (campana + badge de no leídos) en las cabeceras de <strong>Home, Club y Perfil</strong>, distinto de las push. Backend aditivo: tabla <code>notifications</code> con RLS (cada uno ve/marca las suyas), triggers que avisan a capitán/club cuando <strong>alguien se une por código</strong> (<code>member_joined</code>) y cuando <strong>se vincula a una ficha</strong> (<code>player_claimed</code> «X se ha vinculado a la ficha de Y»), y <strong>espejo de las push</strong> (nueva jornada / alineación / recordatorios quedan también in-app, sin romper el push). Realtime para que el badge suba en vivo. OTA <code>093f295b</code>." },
+
+      { type: "fix", text: "<strong>🐛 Roles: canjear un código degradaba al capitán</strong>. <code>redeem_team_invitation</code> hacía <code>ON CONFLICT DO UPDATE SET role=excluded.role</code> → si el DUEÑO canjeaba un código de JUGADOR de su propio equipo se auto-degradaba a <code>player</code> y perdía la gestión. Arreglado (conserva el rol superior; restaurados los dueños degradados). Además: un <strong>capitán que además juega</strong> (con ficha vinculada) ya puede <strong>alternar Capitán/Jugador</strong> en Perfil → Modo (el teamStore rastrea <code>myPlayerTeamIds</code>). Migración <code>20260717_redeem_no_downgrade</code> + OTA <code>bd13ad5c</code>." },
+
+      { type: "feat", text: "<strong>🎟️ Código del partido en el detalle y al compartir</strong>. Para que quien jugó y no está en la app se lleve sus stats: el detalle del amistoso muestra una tarjeta <strong>«CÓDIGO DEL PARTIDO»</strong> (solo el creador, si hay algún participante sin cuenta) y el mensaje al compartir foto+resultado ahora <strong>incluye el código</strong> con copy nuevo («Este partido ya vive en TACTIUM. Con el código X lo sumas a tus stats: victorias, rachas y cara a cara»). OTA <code>8dd181d5</code>." },
+
+      { type: "feat", text: "<strong>👤 Nombre de usuario (nombre corto) en Perfil</strong>. El nombre + apellidos salía demasiado largo en amistosos y en la foto. Nuevo campo <code>profiles.username</code> (+ espejo en <code>user_metadata</code>, helper <code>displayNameOf</code>) editable en Perfil y usado en el pre-relleno de amistosos y el saludo del jugador suelto. Si se deja vacío, cae al nombre completo. OTA <code>6b0b046d</code>." },
+
+      { type: "fix", text: "<strong>🐛 Jornada pasada sin acta aparecía como «PRÓXIMA»</strong>. Cuando no hay jornadas futuras sin cerrar, la Home cae (a propósito) a la pasada más reciente; pero la etiquetaba como «PRÓXIMA» con el <code>status</code> crudo. Ahora usa <code>matchdayState()</code>: una jornada jugada sin registrar sale como <strong>«PENDIENTE»</strong> (empuja a meter el resultado), en Home y en el preview de club. OTA <code>20d953a0</code>." },
+
+      { type: "decision", text: "<strong>🤝 Capa social v1 «seguir» — construida en RAMA aparte (no en producción)</strong>. Rama <code>feature/perfiles-sociales</code>: buscar jugadores y clubes, <strong>perfil público</strong> (con snapshot de amistosos / datos del club) y <strong>seguir/dejar de seguir</strong> (una dirección, estilo Strava). Backend aditivo y dormido en prod (tabla <code>follows</code> polimórfica + RPCs <code>SECURITY DEFINER</code> que exponen solo campos seguros, nunca el email). Entrada «Comunidad» en Perfil. Sin merge ni OTA hasta validarlo; el <em>handle</em> único de username se deja para el lanzamiento." },
+
+      { type: "docs", text: "<strong>🎾 Preparación de la demo para Smash Pádel Club (Cantabria)</strong>. 5 cuentas demo (club / capitán independiente / jugador con equipo / jugador suelto / capitán-por-código <code>SMASH25</code>) con datos ricos e interconectados y premium activo, creadas por SQL. Guía HTML imprimible con las credenciales + guion, y una <strong>presentación explicativa</strong> (Claude Design / Artifact) con capturas reales de la app, precios de los planes y el logo de TACTIUM." },
+    ],
+  },
+  {
     date: "2026-07-16",
     title: "🐛 Fix de la tarjeta compartible del amistoso (la foto salía sin el marcador la primera vez) + botón de WhatsApp fuera. Publicado por OTA a production (runtime 1.2.0).",
     changes: [

@@ -41,6 +41,7 @@ export {
   IconTicket,
   IconGift,
   IconLink,
+  IconBell,
 } from './Icon';
 export { DateField, TimeField, dateToIsoDate, dateToIsoTime, isoDateToDate, isoTimeToDate } from './DateTimeField';
 export { TeamSwitcher } from './TeamSwitcher';
