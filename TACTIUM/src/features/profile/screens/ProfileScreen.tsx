@@ -39,6 +39,7 @@ import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInv
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import type { Database } from '@core/supabase/database.types';
 import type { RootStackParamList } from '@navigation/types';
 
@@ -430,6 +431,7 @@ export const ProfileScreen = () => {
           o moverlo al nivel del NavigationContainer. */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.eyebrow}>PERFIL</Text>
+        <NotificationBell />
       </View>
 
       <ScrollView

@@ -41,6 +41,7 @@ import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { buildCaptainInviteMessage } from '@core/config/referral';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { matchdayState } from '@core/utils/matchday';
 
 import type { HomeStackScreenProps } from '@navigation/types';
@@ -221,7 +222,7 @@ export const HomeScreen = ({
         <View style={styles.topbarCenter}>
           <TeamSwitcher />
         </View>
-        <View style={[styles.topbarSide, styles.topbarSideRight]}>
+        <View style={styles.topbarRight}>
           {canEdit ? (
             <Pressable
               onPress={goSeasons}
@@ -233,6 +234,7 @@ export const HomeScreen = ({
               <IconCalendar size={18} color={Colors.text} />
             </Pressable>
           ) : null}
+          <NotificationBell />
         </View>
       </View>
 
@@ -604,6 +606,12 @@ const styles = StyleSheet.create({
   },
   topbarSideRight: {
     justifyContent: 'flex-end',
+  },
+  topbarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   topbarCenter: {
     flex: 1,

@@ -14,7 +14,8 @@ import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconPlus, IconPencil, NeonDot } from '@components/ui';
+import { IconPlus, IconPencil } from '@components/ui';
+import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
@@ -172,7 +173,7 @@ export const ClubDashboardScreen = ({
             </Text>
           </View>
         </View>
-        <NeonDot size={7} />
+        <NotificationBell />
       </View>
 
       <ScrollView

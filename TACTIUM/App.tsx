@@ -20,6 +20,7 @@ import { useTeamStore } from './src/store/teamStore';
 import { useClubStore } from './src/store/clubStore';
 import { useConnectionStore } from './src/store/connectionStore';
 import { useSubscriptionStore } from './src/store/subscriptionStore';
+import { useNotificationStore } from './src/store/notificationStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
 import { maybePromptForPush } from './src/core/push';
 import { ToastHost, OfflineBanner, ResponsiveFrame } from './src/components/ui';
@@ -63,6 +64,10 @@ export default function App() {
   const refreshSubs = useSubscriptionStore((s) => s.refresh);
   const subscribeSubsRealtime = useSubscriptionStore((s) => s.subscribeRealtime);
   const resetSubs = useSubscriptionStore((s) => s.reset);
+
+  const loadNotifications = useNotificationStore((s) => s.load);
+  const subscribeNotifications = useNotificationStore((s) => s.subscribe);
+  const resetNotifications = useNotificationStore((s) => s.reset);
 
   useEffect(() => {
     hydrateAuth();
@@ -122,6 +127,11 @@ export default function App() {
         if (cancelled) return;
         subscribeSubsRealtime(userId);
         if (cancelled) return;
+        // Notificaciones in-app (campanita): carga inicial + realtime para
+        // que el badge de no leídos suba en vivo.
+        void loadNotifications();
+        subscribeNotifications(userId);
+        if (cancelled) return;
         // Avisos push: priming + registro del token (no bloquea el arranque).
         void maybePromptForPush(userId);
       })();
@@ -135,6 +145,7 @@ export default function App() {
       resetTeam();
       resetClubs();
       resetSubs();
+      resetNotifications();
     }
   }, [
     isAuthenticated,
@@ -146,6 +157,9 @@ export default function App() {
     refreshSubs,
     subscribeSubsRealtime,
     resetSubs,
+    loadNotifications,
+    subscribeNotifications,
+    resetNotifications,
   ]);
 
   // Realtime de players: cuando el team activo cambia (login, switch de
