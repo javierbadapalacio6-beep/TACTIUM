@@ -531,14 +531,18 @@ export const ProfileScreen = () => {
           </Pressable>
         </View>
         <Text style={styles.usernameHint}>
-          Tu nombre corto para amistosos y la foto del partido. Si lo dejas
-          vacío, usamos tu nombre completo.
+          Tu nombre corto para amistosos, la foto del partido y la comunidad.
+          Es único. Si lo dejas vacío, usamos tu nombre completo.
         </Text>
 
         {/* Comunidad · buscar y seguir a otros jugadores y clubes */}
         <Text style={styles.sectionLabel}>COMUNIDAD</Text>
         <SettingsList
           items={[
+            {
+              label: 'Novedades',
+              onPress: () => navigation.navigate('Feed'),
+            },
             {
               label: 'Buscar jugadores y clubes',
               onPress: () => navigation.navigate('SearchCommunity'),

@@ -18,6 +18,7 @@ import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
 import { CasualMatchDetailScreen } from '@features/profile/screens/CasualMatchDetailScreen';
 import { SearchCommunityScreen } from '@features/social/screens/SearchCommunityScreen';
 import { PublicProfileScreen } from '@features/social/screens/PublicProfileScreen';
+import { FeedScreen } from '@features/social/screens/FeedScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -127,6 +128,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="PublicProfile"
               component={PublicProfileScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="Feed"
+              component={FeedScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

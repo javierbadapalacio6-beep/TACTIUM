@@ -21,7 +21,13 @@ export async function setMyUsername(username: string): Promise<User | null> {
     .from('profiles')
     .update({ username: value } as never)
     .eq('id', userId);
-  if (pErr) throw pErr;
+  if (pErr) {
+    // 23505 = unique_violation → el nombre ya lo usa otra persona.
+    if ((pErr as { code?: string }).code === '23505') {
+      throw new Error('Ese nombre de usuario ya está en uso. Prueba otro.');
+    }
+    throw pErr;
+  }
 
   // El updateUser dispara USER_UPDATED → el authStore refresca `user` solo.
   const { data, error: uErr } = await supabase.auth.updateUser({

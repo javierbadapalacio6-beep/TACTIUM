@@ -17,6 +17,11 @@ export interface CommunityResult {
   is_following: boolean;
 }
 
+export interface PublicProfileTeam {
+  name: string;
+  role: 'captain' | 'admin' | 'player' | string;
+}
+
 export interface PublicUserProfile {
   id: string;
   username: string | null;
@@ -30,6 +35,7 @@ export interface PublicUserProfile {
   casual_played: number;
   casual_won: number;
   casual_win_rate: number | null;
+  teams: PublicProfileTeam[];
 }
 
 export interface PublicClubProfile {
@@ -51,6 +57,18 @@ export interface FollowerRow {
 export interface FollowingRow extends FollowerRow {
   type: FollowTargetType;
   subtitle: string | null;
+}
+
+export interface FeedItem {
+  kind: 'casual' | 'league';
+  ref_id: string;
+  occurred_on: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  avatar_url: string | null;
+  title: string;
+  subtitle: string | null;
+  positive: boolean | null;
 }
 
 // ── Casts puntuales (tabla/RPCs fuera de los tipos generados) ──────────────
@@ -110,6 +128,10 @@ export async function listFollowers(
 
 export async function listFollowing(userId: string): Promise<FollowingRow[]> {
   return (await callRpc<FollowingRow[]>('list_following', { p_user: userId })) ?? [];
+}
+
+export async function fetchFeed(limit = 30): Promise<FeedItem[]> {
+  return (await callRpc<FeedItem[]>('social_feed', { p_limit: limit })) ?? [];
 }
 
 export async function followTarget(type: FollowTargetType, id: string): Promise<void> {

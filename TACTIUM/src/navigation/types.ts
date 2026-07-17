@@ -122,6 +122,7 @@ export type RootStackParamList = {
   // Capa social v1 (feature/perfiles-sociales)
   SearchCommunity: undefined;
   PublicProfile: { type: 'user' | 'club'; id: string };
+  Feed: undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

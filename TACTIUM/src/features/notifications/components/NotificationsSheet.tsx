@@ -10,6 +10,7 @@ import {
   IconCalendar,
   IconClock,
   IconBell,
+  IconUser,
 } from '@components/ui';
 import { useNotificationStore } from '@store/notificationStore';
 import type { AppNotification } from '@core/services/notifications';
@@ -34,6 +35,8 @@ const iconFor = (type: string, color: string) => {
   switch (type) {
     case 'player_claimed':
       return <IconLink size={16} color={color} />;
+    case 'new_follower':
+      return <IconUser size={16} color={color} />;
     case 'member_joined':
     case 'joined_team':
       return <IconTeam size={16} color={color} />;

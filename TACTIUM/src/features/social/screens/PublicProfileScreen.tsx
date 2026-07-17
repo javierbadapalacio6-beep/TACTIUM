@@ -209,6 +209,32 @@ export const PublicProfileScreen = () => {
                   }
                 />
               </View>
+
+              {user?.teams && user.teams.length > 0 ? (
+                <>
+                  <Text style={styles.sectionLabel}>EQUIPOS</Text>
+                  <View style={styles.teamsCard}>
+                    {user.teams.map((tm, i) => (
+                      <View
+                        key={`${tm.name}-${i}`}
+                        style={[
+                          styles.teamRow,
+                          i < user.teams.length - 1 && styles.teamRowDivider,
+                        ]}
+                      >
+                        <Text style={styles.teamNameTxt} numberOfLines={1}>
+                          {tm.name}
+                        </Text>
+                        <Text style={styles.teamRoleTxt}>
+                          {tm.role === 'captain' || tm.role === 'admin'
+                            ? 'Capitán'
+                            : 'Jugador'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
             </>
           ) : (
             <>
@@ -406,4 +432,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clubMeta: { color: Colors.textMuted, fontSize: 14, flex: 1 },
+
+  teamsCard: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    overflow: 'hidden',
+  },
+  teamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  teamRowDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
+  teamNameTxt: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  teamRoleTxt: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
 });
