@@ -22,11 +22,19 @@ export interface PublicProfileTeam {
   role: 'captain' | 'admin' | 'player' | string;
 }
 
+export interface PublicProfilePhoto {
+  match_id: string;
+  photo_url: string;
+  played_on: string | null;
+  positive: boolean | null;
+}
+
 export interface PublicUserProfile {
   id: string;
   username: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  bio: string | null;
   level_display: number | null;
   is_me: boolean;
   followers_count: number;
@@ -36,6 +44,7 @@ export interface PublicUserProfile {
   casual_won: number;
   casual_win_rate: number | null;
   teams: PublicProfileTeam[];
+  photos: PublicProfilePhoto[];
 }
 
 export interface PublicClubProfile {

@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Pressable,
   ScrollView,
@@ -149,6 +150,10 @@ export const PublicProfileScreen = () => {
                 : secondary}
             </Text>
 
+            {type === 'user' && user?.bio ? (
+              <Text style={styles.bio}>{user.bio}</Text>
+            ) : null}
+
             {!isMe ? (
               <View style={{ marginTop: 16 }}>
                 <FollowButton
@@ -190,6 +195,32 @@ export const PublicProfileScreen = () => {
           {/* Stats de amistosos (solo jugadores) */}
           {type === 'user' ? (
             <>
+              {user?.photos && user.photos.length > 0 ? (
+                <>
+                  <Text style={styles.sectionLabel}>FOTOS DE PARTIDOS</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.photoRow}
+                  >
+                    {user.photos.map((ph) => (
+                      <View key={ph.match_id} style={styles.photoItem}>
+                        <Image
+                          source={{ uri: ph.photo_url }}
+                          style={styles.photoImg}
+                          resizeMode="cover"
+                        />
+                        {ph.positive === true ? (
+                          <View style={styles.photoBadge}>
+                            <Text style={styles.photoBadgeTxt}>W</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              ) : null}
+
               <Text style={styles.sectionLabel}>AMISTOSOS</Text>
               <View style={styles.statsCard}>
                 <StatCell label="Jugados" value={String(user?.casual_played ?? 0)} />
@@ -336,6 +367,42 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   secondary: { color: Colors.textMuted, fontSize: 13, marginTop: 4 },
+  bio: {
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 12,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  photoRow: { gap: 10, paddingVertical: 2, paddingRight: 8 },
+  photoItem: {
+    width: 116,
+    height: 150,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+  },
+  photoImg: { width: '100%', height: '100%' },
+  photoBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoBadgeTxt: {
+    fontFamily: Fonts.mono,
+    color: Colors.textInverse,
+    fontSize: 11,
+    fontWeight: '800',
+  },
   mePill: {
     marginTop: 16,
     paddingHorizontal: 12,

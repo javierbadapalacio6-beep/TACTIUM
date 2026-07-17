@@ -102,6 +102,10 @@ export const ProfileScreen = () => {
   // YA lo respeta: send-push y el cron diario de recordatorios filtran por él.
   // Default true; se hidrata del profile en el focus effect de abajo.
   const [notifEnabled, setNotifEnabled] = useState(true);
+  // Bio/descripción del perfil (profiles.bio). Se hidrata del profile abajo.
+  const [bioInput, setBioInput] = useState('');
+  const [bioSaved, setBioSaved] = useState('');
+  const [savingBio, setSavingBio] = useState(false);
   // Guard de carga del profile (avatar + flag de notificaciones). Una sola
   // hidratación por ciclo de focus; el state es la fuente de verdad.
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -120,6 +124,11 @@ export const ProfileScreen = () => {
           if (!cancelled) {
             setAvatarUrl(p?.avatar_url ?? null);
             setNotifEnabled(p?.notifications_enabled ?? true);
+            const bio = (
+              (p as { bio?: string | null } | null)?.bio ?? ''
+            ).toString();
+            setBioSaved(bio);
+            setBioInput(bio);
             setProfileLoaded(true);
           }
         } catch {
@@ -278,6 +287,22 @@ export const ProfileScreen = () => {
       toast.error('No se pudo guardar', e?.message ?? 'Inténtalo de nuevo.');
     } finally {
       setSavingUsername(false);
+    }
+  };
+
+  const bioDirty = bioInput.trim() !== bioSaved;
+  const handleSaveBio = async () => {
+    const val = bioInput.trim();
+    if (savingBio || val === bioSaved) return;
+    setSavingBio(true);
+    try {
+      await ProfileApi.setMyBio(val);
+      setBioSaved(val);
+      toast.success('Descripción guardada');
+    } catch (e: any) {
+      toast.error('No se pudo guardar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setSavingBio(false);
     }
   };
 
@@ -533,6 +558,44 @@ export const ProfileScreen = () => {
         <Text style={styles.usernameHint}>
           Tu nombre corto para amistosos, la foto del partido y la comunidad.
           Es único. Si lo dejas vacío, usamos tu nombre completo.
+        </Text>
+
+        {/* Descripción / bio del perfil público */}
+        <Text style={styles.sectionLabel}>DESCRIPCIÓN</Text>
+        <View style={styles.bioCard}>
+          <TextInput
+            style={styles.bioInput}
+            value={bioInput}
+            onChangeText={setBioInput}
+            placeholder="Cuéntate en una línea (nivel, club, mano dominante…)"
+            placeholderTextColor={Colors.textFaint}
+            maxLength={160}
+            multiline
+            accessibilityLabel="Descripción del perfil"
+          />
+          <View style={styles.bioFooter}>
+            <Text style={styles.bioCount}>{bioInput.length}/160</Text>
+            <Pressable
+              onPress={handleSaveBio}
+              disabled={!bioDirty || savingBio}
+              accessibilityRole="button"
+              accessibilityLabel="Guardar descripción"
+              style={({ pressed }) => [
+                styles.usernameSave,
+                (!bioDirty || savingBio) && { opacity: 0.4 },
+                pressed && bioDirty && !savingBio && { opacity: 0.85 },
+              ]}
+            >
+              {savingBio ? (
+                <ActivityIndicator size="small" color={Colors.accent} />
+              ) : (
+                <Text style={styles.usernameSaveLabel}>Guardar</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+        <Text style={styles.usernameHint}>
+          Aparece en tu perfil público de la comunidad.
         </Text>
 
         {/* Comunidad · buscar y seguir a otros jugadores y clubes */}
@@ -1251,6 +1314,35 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     marginTop: 8,
     paddingHorizontal: 4,
+  },
+  bioCard: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.hair,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
+  bioInput: {
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    minHeight: 48,
+    maxHeight: 120,
+    textAlignVertical: 'top',
+    paddingVertical: 2,
+  },
+  bioFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  bioCount: {
+    fontFamily: Fonts.mono,
+    color: Colors.textFaint,
+    fontSize: 11,
   },
 
   teamCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: Colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: Colors.hair },

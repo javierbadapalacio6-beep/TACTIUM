@@ -51,6 +51,22 @@ export async function fetchMyProfile(): Promise<Profile | null> {
 }
 
 /**
+ * Fija la bio/descripción del perfil (≤160). Vacío = la borra. Solo vive en
+ * `profiles.bio` (se muestra en el perfil público vía RPC).
+ */
+export async function setMyBio(bio: string): Promise<void> {
+  const value = bio.trim() || null;
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error('Sin sesión activa');
+  const { error } = await supabase
+    .from('profiles')
+    .update({ bio: value } as never)
+    .eq('id', userId);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Actualiza el flag `notifications_enabled` del profile del user logueado.
  * RLS permite que el propio user modifique su perfil.
  */
