@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -129,16 +130,24 @@ export const CasualMatchDetailScreen = () => {
   const isMine = !!detail && !!userId && detail.createdBy === userId;
   const typeLabel = detail?.type === 'entreno' ? 'Entreno' : 'Amistoso';
 
+  // ¿Hay alguien que jugó y NO está en la app? Ese es a quien le sirve el
+  // código para reclamar sus stats.
+  const canClaim = useMemo(
+    () => !!detail?.participants.some((p) => !p.user_id && p.name.trim()),
+    [detail],
+  );
+
   const shareText = useMemo(() => {
     if (!detail || !view) return '';
-    return [
-      `🎾 *TACTIUM · ${typeLabel}*`,
-      `${view.ourPair} ${view.ourScore} – ${view.rivalScore} ${view.rivalPair}`,
-      view.setsStr,
-      ``,
-      `Organiza tus amistosos con TACTIUM: ${DOWNLOAD_URL}`,
-    ].join('\n');
-  }, [detail, view, typeLabel]);
+    const header =
+      `🎾 ${view.ourPair} ${view.ourScore}–${view.rivalScore} ${view.rivalPair}` +
+      (view.setsStr ? ` (${view.setsStr})` : '');
+    const hook =
+      canClaim && detail.claimCode
+        ? `Este partido ya vive en TACTIUM. Con el código ${detail.claimCode} lo sumas a tus stats: victorias, rachas y cara a cara. 🏆`
+        : 'Organiza tus amistosos con TACTIUM: victorias, rachas y cara a cara. 🏆';
+    return [header, '', hook, DOWNLOAD_URL].join('\n');
+  }, [detail, view, canClaim]);
 
   const onAddPhoto = async () => {
     if (!userId) return;
@@ -180,6 +189,16 @@ export const CasualMatchDetailScreen = () => {
   const onShare = () => {
     if (!detail?.photoUrl) return;
     shareCardImage(cardRef, detail.photoUrl, shareText);
+  };
+
+  // Compartir SOLO el texto (con el código) — para cuando no hay foto o se
+  // quiere mandar el código suelto a quien jugó y no tiene la app.
+  const shareCode = async () => {
+    try {
+      await Share.share({ message: shareText });
+    } catch {
+      // cancelado por el usuario
+    }
   };
 
   return (
@@ -340,6 +359,36 @@ export const CasualMatchDetailScreen = () => {
                       </Text>
                     </View>
                   ))}
+                </View>
+              </>
+            ) : null}
+
+            {/* Código del partido: para que quien jugó y no está en la app
+                reclame sus stats. Solo lo ve el creador y solo si hay algún
+                participante sin cuenta. */}
+            {isMine && canClaim && detail.claimCode ? (
+              <>
+                <Text style={styles.sectionLabel}>CÓDIGO DEL PARTIDO</Text>
+                <View style={styles.codeCard}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.codeValue} selectable>
+                      {detail.claimCode}
+                    </Text>
+                    <Text style={styles.codeHint}>
+                      Compártelo con quien jugó y no tiene TACTIUM: al
+                      registrarse, mete el código en Stats y este partido cuenta
+                      en sus estadísticas.
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={shareCode}
+                    style={({ pressed }) => [
+                      styles.codeShareBtn,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={styles.codeShareLabel}>Compartir</Text>
+                  </Pressable>
                 </View>
               </>
             ) : null}
@@ -522,6 +571,45 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 22,
     marginBottom: 8,
+  },
+  codeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  codeValue: {
+    fontFamily: Fonts.mono,
+    color: Colors.accent,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: 4,
+  },
+  codeHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+  },
+  codeShareBtn: {
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: Colors.accent10,
+    borderWidth: 1,
+    borderColor: Colors.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  codeShareLabel: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
   },
   setsCard: {
     backgroundColor: Colors.bgCard,

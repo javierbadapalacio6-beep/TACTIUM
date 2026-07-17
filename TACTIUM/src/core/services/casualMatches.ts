@@ -446,6 +446,8 @@ export interface CasualMatchDetail {
   /** Lado del usuario que consulta (donde participa); 0 por defecto. */
   mySide: 0 | 1;
   participants: CasualParticipantRow[];
+  /** Código para que quien jugó y no tiene la app reclame sus stats. */
+  claimCode: string | null;
 }
 
 /** Detalle completo de un amistoso: participantes por lado, sets y foto. */
@@ -455,7 +457,9 @@ export async function fetchCasualMatchDetail(
 ): Promise<CasualMatchDetail | null> {
   const from = supabase.from.bind(supabase) as unknown as AnyFrom;
   const { data: mRaw, error: e1 } = await from('casual_matches')
-    .select('id, type, played_on, photo_url, created_by, winner_side, sets')
+    .select(
+      'id, type, played_on, photo_url, created_by, winner_side, sets, claim_code',
+    )
     .eq('id', matchId);
   if (e1) throw new Error(e1.message);
   const m = (
@@ -467,6 +471,7 @@ export async function fetchCasualMatchDetail(
       created_by: string;
       winner_side: number | null;
       sets: [number, number][] | null;
+      claim_code: string | null;
     }[]
   )[0];
   if (!m) return null;
@@ -491,6 +496,7 @@ export async function fetchCasualMatchDetail(
     sets: m.sets ?? [],
     mySide,
     participants,
+    claimCode: m.claim_code,
   };
 }
 
