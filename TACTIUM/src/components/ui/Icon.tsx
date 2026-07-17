@@ -199,6 +199,16 @@ export const IconSearch = make(16, ({ color, strokeWidth }) => (
   </>
 ));
 
+/** Menú de tres líneas (hamburguesa) — abre Ajustes desde el perfil. */
+export const IconMenu = make(22, ({ color, strokeWidth }) => (
+  <Path
+    d="M4 7h16M4 12h16M4 17h16"
+    stroke={color}
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+  />
+));
+
 // ── Iconos F8 (jugador/amistosos) — mismo lenguaje de trazo ─────────
 
 /** Pala de pádel con bola: el icono del amistoso. */

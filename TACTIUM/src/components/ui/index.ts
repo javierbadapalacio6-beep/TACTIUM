@@ -24,6 +24,7 @@ export {
   IconEye,
   IconEyeOff,
   IconSearch,
+  IconMenu,
   IconApple,
   IconGoogle,
   IconMail,

@@ -15,6 +15,7 @@ import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionS
 import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
 import { MyDataScreen } from '@features/profile/screens/MyDataScreen';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
+import { SettingsScreen } from '@features/settings/screens/SettingsScreen';
 import { CasualMatchDetailScreen } from '@features/profile/screens/CasualMatchDetailScreen';
 import { SearchCommunityScreen } from '@features/social/screens/SearchCommunityScreen';
 import { PublicProfileScreen } from '@features/social/screens/PublicProfileScreen';
@@ -104,6 +105,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="MyStats"
               component={MyStatsScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

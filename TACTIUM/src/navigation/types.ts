@@ -118,6 +118,7 @@ export type RootStackParamList = {
   ClubBilling: undefined;
   MyData: undefined;
   MyStats: undefined;
+  Settings: undefined;
   CasualMatchDetail: { matchId: string };
   // Capa social v1 (feature/perfiles-sociales)
   SearchCommunity: undefined;
