@@ -16,6 +16,8 @@ import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScr
 import { MyDataScreen } from '@features/profile/screens/MyDataScreen';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
 import { CasualMatchDetailScreen } from '@features/profile/screens/CasualMatchDetailScreen';
+import { SearchCommunityScreen } from '@features/social/screens/SearchCommunityScreen';
+import { PublicProfileScreen } from '@features/social/screens/PublicProfileScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -109,6 +111,22 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="CasualMatchDetail"
               component={CasualMatchDetailScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="SearchCommunity"
+              component={SearchCommunityScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="PublicProfile"
+              component={PublicProfileScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

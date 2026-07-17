@@ -119,6 +119,9 @@ export type RootStackParamList = {
   MyData: undefined;
   MyStats: undefined;
   CasualMatchDetail: { matchId: string };
+  // Capa social v1 (feature/perfiles-sociales)
+  SearchCommunity: undefined;
+  PublicProfile: { type: 'user' | 'club'; id: string };
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

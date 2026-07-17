@@ -527,6 +527,26 @@ export const ProfileScreen = () => {
           vacío, usamos tu nombre completo.
         </Text>
 
+        {/* Comunidad · buscar y seguir a otros jugadores y clubes */}
+        <Text style={styles.sectionLabel}>COMUNIDAD</Text>
+        <SettingsList
+          items={[
+            {
+              label: 'Buscar jugadores y clubes',
+              onPress: () => navigation.navigate('SearchCommunity'),
+            },
+            {
+              label: 'Mi perfil público',
+              onPress: () =>
+                userId &&
+                navigation.navigate('PublicProfile', {
+                  type: 'user',
+                  id: userId,
+                }),
+            },
+          ]}
+        />
+
         {/* Team (oculto en modo jugador suelto) */}
         {team ? (
           <>
