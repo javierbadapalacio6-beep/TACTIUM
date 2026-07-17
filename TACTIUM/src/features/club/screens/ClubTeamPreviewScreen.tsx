@@ -17,6 +17,7 @@ import { IconBack, IconChevron } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
+import { matchdayState } from '@core/utils/matchday';
 
 import type { ClubTeamsStackScreenProps } from '@navigation/types';
 
@@ -159,7 +160,11 @@ export const ClubTeamPreviewScreen = ({
             {/* Próxima jornada */}
             {nextMatchday ? (
               <>
-                <Text style={styles.sectionLabel}>PRÓXIMA JORNADA</Text>
+                <Text style={styles.sectionLabel}>
+                  {matchdayState(nextMatchday) === 'pending-acta'
+                    ? 'JORNADA PENDIENTE'
+                    : 'PRÓXIMA JORNADA'}
+                </Text>
                 <Pressable
                   onPress={() =>
                     navigation.navigate('Jornada', {

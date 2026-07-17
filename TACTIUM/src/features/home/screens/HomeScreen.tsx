@@ -41,6 +41,7 @@ import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { buildCaptainInviteMessage } from '@core/config/referral';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { matchdayState } from '@core/utils/matchday';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -245,7 +246,11 @@ export const HomeScreen = ({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>PRÓXIMA JORNADA</Text>
+        <Text style={styles.eyebrow}>
+          {nextMatchday && matchdayState(nextMatchday) === 'pending-acta'
+            ? 'JORNADA PENDIENTE'
+            : 'PRÓXIMA JORNADA'}
+        </Text>
 
         {nextMatchday ? (
           <Pressable
@@ -309,7 +314,16 @@ export const HomeScreen = ({
                 }
                 highlight={lineupFilled >= matchesPerRound}
               />
-              <StatChip label="ESTADO" value={nextMatchday.status === 'in_progress' ? 'EN JUEGO' : 'PRÓXIMA'} />
+              <StatChip
+                label="ESTADO"
+                value={
+                  nextMatchday.status === 'in_progress'
+                    ? 'EN JUEGO'
+                    : matchdayState(nextMatchday) === 'pending-acta'
+                      ? 'PENDIENTE'
+                      : 'PRÓXIMA'
+                }
+              />
             </View>
 
             <View style={styles.heroFooter}>
