@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -36,6 +36,8 @@ import type { OnboardingStackScreenProps } from '@navigation/types';
 export const CreateClubScreen = ({
   navigation,
 }: OnboardingStackScreenProps<'CreateClub'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const createClub = useClubStore((s) => s.createClub);
 
@@ -81,7 +83,7 @@ export const CreateClubScreen = ({
           hitSlop={10}
           style={styles.headerBtn}
         >
-          <IconBack size={18} color={Colors.text} />
+          <IconBack size={18} color={c.text} />
         </Pressable>
         <View style={styles.progress}>
           <View style={[styles.bar, styles.barActive]} />
@@ -108,7 +110,7 @@ export const CreateClubScreen = ({
               value={name}
               onChangeText={setName}
               placeholder="Padel Club"
-              placeholderTextColor={Colors.textFaint}
+              placeholderTextColor={c.textFaint}
               maxLength={60}
               autoCapitalize="words"
               style={styles.nameInputField}
@@ -141,7 +143,7 @@ export const CreateClubScreen = ({
                 </Text>
               )}
             </View>
-            <IconChevron size={14} color={Colors.textFaint} />
+            <IconChevron size={14} color={c.textFaint} />
           </Pressable>
         </Section>
 
@@ -205,6 +207,8 @@ const FederationPickerSheet: React.FC<{
   onClose: () => void;
   onPick: (f: Federation | null) => void;
 }> = ({ open, selected, onClose, onPick }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <BottomSheet open={open} onClose={onClose}>
       <Text style={styles.sheetEyebrow}>FEDERACIÓN</Text>
@@ -215,8 +219,8 @@ const FederationPickerSheet: React.FC<{
           style={[
             styles.fedRow,
             !selected && {
-              backgroundColor: Colors.accent10,
-              borderColor: Colors.accent50,
+              backgroundColor: c.accent10,
+              borderColor: c.accent50,
             },
           ]}
         >
@@ -231,7 +235,7 @@ const FederationPickerSheet: React.FC<{
               SNP, LAPI, interempresas, ligas de club…
             </Text>
           </View>
-          {!selected ? <IconCheck size={16} color={Colors.accent} /> : null}
+          {!selected ? <IconCheck size={16} color={c.accent} /> : null}
         </Pressable>
         {FEDERATIONS.map((f) => {
           const sel = selected?.code === f.code;
@@ -242,8 +246,8 @@ const FederationPickerSheet: React.FC<{
               style={[
                 styles.fedRow,
                 sel && {
-                  backgroundColor: Colors.accent10,
-                  borderColor: Colors.accent50,
+                  backgroundColor: c.accent10,
+                  borderColor: c.accent50,
                 },
               ]}
             >
@@ -256,7 +260,7 @@ const FederationPickerSheet: React.FC<{
                 </Text>
                 <Text style={styles.fedRegion}>{f.region}</Text>
               </View>
-              {sel ? <IconCheck size={16} color={Colors.accent} /> : null}
+              {sel ? <IconCheck size={16} color={c.accent} /> : null}
             </Pressable>
           );
         })}
@@ -268,16 +272,20 @@ const FederationPickerSheet: React.FC<{
 const Section: React.FC<{
   label: string;
   children: React.ReactNode;
-}> = ({ label, children }) => (
+}> = ({ label, children }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={{ marginTop: 18 }}>
     <Text style={styles.sectionLabel}>{label}</Text>
     <View style={{ height: 8 }} />
     {children}
   </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     paddingHorizontal: 20,
     flexDirection: 'row',
@@ -295,12 +303,12 @@ const styles = StyleSheet.create({
     width: 18,
     height: 3,
     borderRadius: 2,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
   },
   barActive: {
     width: 28,
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.7,
     shadowRadius: 6,
   },
@@ -309,27 +317,27 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 10,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 28,
     fontWeight: '600',
     letterSpacing: -0.7,
     lineHeight: 30,
     marginBottom: 6,
   },
-  lede: { color: Colors.textMuted, fontSize: 14, lineHeight: 20 },
+  lede: { color: c.textMuted, fontSize: 14, lineHeight: 20 },
   nameInput: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -337,11 +345,11 @@ const styles = StyleSheet.create({
     width: 5,
     height: 22,
     borderRadius: 3,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   nameInputField: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '600',
     paddingVertical: 0,
@@ -350,54 +358,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 14,
     minHeight: 54,
   },
   selectorValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   selectorMeta: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontFamily: Fonts.mono,
     fontSize: 11,
     marginTop: 2,
     letterSpacing: 0.5,
   },
-  selectorPlaceholder: { color: Colors.textFaint, fontSize: 14 },
+  selectorPlaceholder: { color: c.textFaint, fontSize: 14 },
   sectionLabel: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2,
-    color: Colors.textFaint,
+    color: c.textFaint,
     textTransform: 'uppercase',
     fontWeight: '500',
   },
   preview: {
     marginTop: 22,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 14,
   },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   previewName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   previewMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
@@ -405,22 +413,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   previewFooterText: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 0.5,
   },
   cta: { paddingHorizontal: 20, paddingTop: 8 },
   ctaBtn: {
     height: 54,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -433,13 +441,13 @@ const styles = StyleSheet.create({
   },
   sheetEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sheetTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -453,33 +461,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   fedBadge: {
     minWidth: 56,
     paddingHorizontal: 8,
     height: 32,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fedBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   fedName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
-  fedRegion: { color: Colors.textFaint, fontSize: 11, marginTop: 2 },
+  fedRegion: { color: c.textFaint, fontSize: 11, marginTop: 2 },
 });

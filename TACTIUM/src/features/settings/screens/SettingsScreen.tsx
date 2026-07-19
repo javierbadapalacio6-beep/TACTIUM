@@ -9,11 +9,13 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme/useColors';
+import type { Palette } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -23,6 +25,7 @@ import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/tea
 import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
+import { useThemeStore } from '@store/themeStore';
 import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from '@core/services/seasons';
@@ -39,6 +42,10 @@ import type { RootStackParamList } from '@navigation/types';
 type TeamRole = Database['public']['Enums']['team_role'];
 
 export const SettingsScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -266,7 +273,7 @@ export const SettingsScreen = () => {
           accessibilityRole="button"
           accessibilityLabel="Volver"
         >
-          <IconBack size={20} color={Colors.text} />
+          <IconBack size={20} color={c.text} />
         </Pressable>
         <Text style={styles.eyebrow}>AJUSTES</Text>
         <View style={{ width: 38 }} />
@@ -296,7 +303,7 @@ export const SettingsScreen = () => {
             {/* Stats */}
             {loadingStats ? (
               <View style={styles.statsLoading}>
-                <ActivityIndicator color={Colors.accent} size="small" />
+                <ActivityIndicator color={c.accent} size="small" />
               </View>
             ) : activeSeason ? (
               <View style={styles.statsGrid}>
@@ -341,7 +348,7 @@ export const SettingsScreen = () => {
                   ]}
                 >
                   {unlinking ? (
-                    <ActivityIndicator size="small" color={Colors.accent} />
+                    <ActivityIndicator size="small" color={c.accent} />
                   ) : (
                     <Text style={styles.myPlayerBtnLabel}>Cambiar</Text>
                   )}
@@ -364,7 +371,7 @@ export const SettingsScreen = () => {
                     Elige tu nombre en la plantilla
                   </Text>
                 </View>
-                <IconChevron size={14} color={Colors.textFaint} />
+                <IconChevron size={14} color={c.textFaint} />
               </Pressable>
             )}
           </>
@@ -389,15 +396,15 @@ export const SettingsScreen = () => {
                     style={[
                       styles.modePill,
                       sel && {
-                        backgroundColor: Colors.accent10,
-                        borderColor: Colors.accent50,
+                        backgroundColor: c.accent10,
+                        borderColor: c.accent50,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.modePillText,
-                        { color: sel ? Colors.accent : Colors.textMuted },
+                        { color: sel ? c.accent : c.textMuted },
                       ]}
                     >
                       {label}
@@ -454,7 +461,7 @@ export const SettingsScreen = () => {
                   Pasa a gestionar: plantilla, alineaciones y liga
                 </Text>
               </View>
-              <IconChevron size={14} color={Colors.textFaint} />
+              <IconChevron size={14} color={c.textFaint} />
             </Pressable>
           ) : null}
           {activeRole === 'captain' && team ? (
@@ -474,7 +481,7 @@ export const SettingsScreen = () => {
                   Genera códigos para que se unan a tu equipo
                 </Text>
               </View>
-              <IconChevron size={14} color={Colors.textFaint} />
+              <IconChevron size={14} color={c.textFaint} />
             </Pressable>
           ) : null}
           <Pressable
@@ -493,9 +500,52 @@ export const SettingsScreen = () => {
                 Si te han invitado a otro equipo
               </Text>
             </View>
-            <IconChevron size={14} color={Colors.textFaint} />
+            <IconChevron size={14} color={c.textFaint} />
           </Pressable>
         </View>
+
+        {/* Apariencia (tema claro/oscuro/automático) */}
+        <Text style={styles.sectionLabel}>APARIENCIA</Text>
+        <View style={styles.modeRow}>
+          {(
+            [
+              { key: 'light', label: 'Claro' },
+              { key: 'dark', label: 'Oscuro' },
+              { key: 'system', label: 'Automático' },
+            ] as const
+          ).map((opt) => {
+            const sel = themeMode === opt.key;
+            return (
+              <Pressable
+                key={opt.key}
+                onPress={() => setThemeMode(opt.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: sel }}
+                accessibilityLabel={`Tema ${opt.label}`}
+                style={[
+                  styles.modePill,
+                  sel && {
+                    backgroundColor: c.accent10,
+                    borderColor: c.accent50,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modePillText,
+                    { color: sel ? c.accent : c.textMuted },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.modeHint}>
+          Elige el aspecto de la app. «Automático» sigue el modo claro u oscuro
+          de tu iPhone.
+        </Text>
 
         {/* Notificaciones */}
         <Text style={styles.sectionLabel}>NOTIFICACIONES</Text>
@@ -552,7 +602,11 @@ export const SettingsScreen = () => {
               onPress: () =>
                 openExternalUrl('https://tactium.io/legal/privacidad'),
             },
-            { label: 'Versión', detail: '1.0.2', trailing: 'static' },
+            {
+              label: 'Versión',
+              detail: Constants.expoConfig?.version ?? '1.2.0',
+              trailing: 'static',
+            },
           ]}
         />
 
@@ -580,7 +634,7 @@ export const SettingsScreen = () => {
           ]}
         >
           {deleting ? (
-            <ActivityIndicator size="small" color={Colors.error} />
+            <ActivityIndicator size="small" color={c.error} />
           ) : (
             <Text style={styles.deleteAccountLabel}>Eliminar cuenta</Text>
           )}
@@ -620,12 +674,16 @@ export const SettingsScreen = () => {
 
 const ProfileStat: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
   label, value, highlight,
-}) => (
-  <View style={styles.statBox}>
-    <Text style={[styles.statValue, highlight && { color: Colors.accent }]}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.statBox}>
+      <Text style={[styles.statValue, highlight && { color: c.accent }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+};
 
 // ─── SubscriptionCard ──────────────────────────────────────────────────────
 // Resume el estado de la suscripción del user + entry-point a la pantalla
@@ -646,6 +704,8 @@ const SubscriptionCard: React.FC<{
   onPressUser,
   onPressClub,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
   // Sub activa propia o del club: mostramos lo más relevante.
@@ -712,16 +772,16 @@ const SubscriptionCard: React.FC<{
   // resto → accent verde.
   const trialTint =
     trialDaysLeft != null && trialDaysLeft <= 3
-      ? Colors.warning
-      : Colors.accent;
+      ? c.warning
+      : c.accent;
   const trialBgTint =
     trialDaysLeft != null && trialDaysLeft <= 3
       ? 'rgba(242,201,76,0.12)'
-      : Colors.accent10;
+      : c.accent10;
   const trialBorderTint =
     trialDaysLeft != null && trialDaysLeft <= 3
       ? 'rgba(242,201,76,0.45)'
-      : Colors.accent40;
+      : c.accent40;
 
   return (
     <>
@@ -743,15 +803,15 @@ const SubscriptionCard: React.FC<{
           style={[
             styles.subBadge,
             activeSub && {
-              backgroundColor: Colors.accent10,
-              borderColor: Colors.accent40,
+              backgroundColor: c.accent10,
+              borderColor: c.accent40,
             },
           ]}
         >
           <Text
             style={[
               styles.subBadgeText,
-              activeSub && { color: Colors.accent },
+              activeSub && { color: c.accent },
             ]}
           >
             {activeSub ? 'PRO' : 'FREE'}
@@ -799,7 +859,7 @@ const SubscriptionCard: React.FC<{
             </Text>
           </View>
         ) : null}
-        <IconChevron size={14} color={Colors.textFaint} />
+        <IconChevron size={14} color={c.textFaint} />
       </Pressable>
     </>
   );
@@ -815,7 +875,10 @@ interface SettingItem {
   accessibilityLabel?: string;
 }
 
-const SettingsList: React.FC<{ items: SettingItem[] }> = ({ items }) => (
+const SettingsList: React.FC<{ items: SettingItem[] }> = ({ items }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={styles.settingsList}>
     {items.map((it, i) => {
       const trailing = it.trailing ?? 'chevron';
@@ -836,14 +899,14 @@ const SettingsList: React.FC<{ items: SettingItem[] }> = ({ items }) => (
           <Text
             style={[
               styles.settingLabel,
-              trailing === 'soon' && { color: Colors.textMuted },
+              trailing === 'soon' && { color: c.textMuted },
             ]}
           >
             {it.label}
           </Text>
           {it.detail ? <Text style={styles.settingDetail}>{it.detail}</Text> : null}
           {trailing === 'chevron' ? (
-            <IconChevron size={14} color={Colors.textFaint} />
+            <IconChevron size={14} color={c.textFaint} />
           ) : trailing === 'toggle' ? (
             <Toggle
               size="sm"
@@ -860,10 +923,11 @@ const SettingsList: React.FC<{ items: SettingItem[] }> = ({ items }) => (
       );
     })}
   </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root:   { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -875,28 +939,28 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: Colors.accent, fontWeight: '500' },
+  eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
   scroll:  { paddingHorizontal: 22, paddingTop: 8 },
 
-  sectionLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: Colors.textFaint, fontWeight: '500', marginTop: 18, marginBottom: 10 },
+  sectionLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.textFaint, fontWeight: '500', marginTop: 18, marginBottom: 10 },
 
-  teamCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: Colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: Colors.hair },
-  teamName:  { color: Colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
-  teamMeta:  { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  teamCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.bgCard, borderRadius: 16, borderWidth: 1, borderColor: c.hair },
+  teamName:  { color: c.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
+  teamMeta:  { color: c.textMuted, fontSize: 12, marginTop: 2 },
 
   statsGrid:    { flexDirection: 'row', gap: 8, marginTop: 12 },
   statsLoading: { marginTop: 12, height: 70, alignItems: 'center', justifyContent: 'center' },
-  noSeasonBox:  { marginTop: 12, height: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bgCard, borderRadius: 12, borderWidth: 1, borderColor: Colors.hair },
-  noSeasonText: { color: Colors.textMuted, fontSize: 13 },
-  statBox:      { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.hair, alignItems: 'center' },
-  statValue:    { fontFamily: Fonts.mono, fontSize: 18, fontWeight: '700', color: Colors.text },
-  statLabel:    { fontFamily: Fonts.mono, fontSize: 10, color: Colors.textFaint, letterSpacing: 1.5, marginTop: 6, textTransform: 'uppercase' },
+  noSeasonBox:  { marginTop: 12, height: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bgCard, borderRadius: 12, borderWidth: 1, borderColor: c.hair },
+  noSeasonText: { color: c.textMuted, fontSize: 13 },
+  statBox:      { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: c.bgCard, borderWidth: 1, borderColor: c.hair, alignItems: 'center' },
+  statValue:    { fontFamily: Fonts.mono, fontSize: 18, fontWeight: '700', color: c.text },
+  statLabel:    { fontFamily: Fonts.mono, fontSize: 10, color: c.textFaint, letterSpacing: 1.5, marginTop: 6, textTransform: 'uppercase' },
 
   modeRow: {
     flexDirection: 'row',
@@ -906,9 +970,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -919,7 +983,7 @@ const styles = StyleSheet.create({
   },
   modeHint: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 0.4,
     marginTop: 8,
@@ -934,10 +998,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
   },
   subCard: {
     flexDirection: 'row',
@@ -945,34 +1009,34 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   subBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   subBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
   },
   subTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   subHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -1006,10 +1070,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
   },
   myPlayerCard: {
     flexDirection: 'row',
@@ -1017,37 +1081,37 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   myPlayerAvatar: {
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   myPlayerAvatarText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   myPlayerName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   myPlayerMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     letterSpacing: 0.4,
     marginTop: 3,
@@ -1056,14 +1120,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 32,
     borderRadius: 9,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   myPlayerBtnLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: -0.1,
@@ -1072,52 +1136,52 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   redeemBadgeText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 22,
     fontWeight: '600',
     lineHeight: 24,
   },
   redeemTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   redeemHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
-  settingsList:   { backgroundColor: Colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: Colors.hair, overflow: 'hidden' },
+  settingsList:   { backgroundColor: c.bgCard, borderRadius: 16, borderWidth: 1, borderColor: c.hair, overflow: 'hidden' },
   settingRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  settingDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
-  settingLabel:   { flex: 1, color: Colors.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
-  settingDetail:  { color: Colors.textMuted, fontSize: 13, marginRight: 8 },
+  settingDivider: { borderBottomWidth: 1, borderColor: c.hair },
+  settingLabel:   { flex: 1, color: c.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
+  settingDetail:  { color: c.textMuted, fontSize: 13, marginRight: 8 },
   soonBadge: {
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 5,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   soonBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1,
   },
   notifHint: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
     lineHeight: 14,
@@ -1126,13 +1190,13 @@ const styles = StyleSheet.create({
   },
 
   logout:      { marginTop: 24, height: 52, borderRadius: Radius.lg, borderWidth: 1, borderColor: 'rgba(255,107,107,0.4)', alignItems: 'center', justifyContent: 'center' },
-  logoutLabel: { color: Colors.error, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
+  logoutLabel: { color: c.error, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
 
   dangerLabel: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.error,
+    color: c.error,
     fontWeight: '500',
     marginTop: 36,
     marginBottom: 10,
@@ -1148,14 +1212,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   deleteAccountLabel: {
-    color: Colors.error,
+    color: c.error,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   deleteAccountHint: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
     lineHeight: 14,
@@ -1164,5 +1228,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  signature:   { fontFamily: Fonts.mono, color: Colors.textFaint, fontSize: 10, letterSpacing: 1.5, textAlign: 'center', marginTop: 20 },
+  signature:   { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10, letterSpacing: 1.5, textAlign: 'center', marginTop: 20 },
 });

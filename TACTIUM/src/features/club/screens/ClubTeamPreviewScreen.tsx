@@ -10,7 +10,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconChevron } from '@components/ui';
@@ -35,6 +35,8 @@ import type { ClubTeamsStackScreenProps } from '@navigation/types';
 export const ClubTeamPreviewScreen = ({
   navigation,
 }: ClubTeamsStackScreenProps<'ClubTeamPreview'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
 
@@ -110,7 +112,7 @@ export const ClubTeamPreviewScreen = ({
             pressed && { opacity: 0.7 },
           ]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Equipos</Text>
         </Pressable>
       </View>
@@ -134,7 +136,7 @@ export const ClubTeamPreviewScreen = ({
 
         {loading ? (
           <View style={styles.loaderBox}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : (
           <>
@@ -145,13 +147,13 @@ export const ClubTeamPreviewScreen = ({
               <Stat
                 label="Victorias"
                 value={String(stats.wins)}
-                color={Colors.accent}
+                color={c.accent}
               />
               <View style={styles.statsDivider} />
               <Stat
                 label="Derrotas"
                 value={String(stats.losses)}
-                color={Colors.error}
+                color={c.error}
               />
               <View style={styles.statsDivider} />
               <Stat label="Empates" value={String(stats.draws)} />
@@ -244,7 +246,7 @@ export const ClubTeamPreviewScreen = ({
                     {md.outcome ? (
                       <OutcomePill outcome={md.outcome} />
                     ) : null}
-                    <IconChevron size={14} color={Colors.textFaint} />
+                    <IconChevron size={14} color={c.textFaint} />
                   </Pressable>
                 ))}
               </View>
@@ -261,26 +263,32 @@ interface StatProps {
   value: string;
   color?: string;
 }
-const Stat: React.FC<StatProps> = ({ label, value, color }) => (
+const Stat: React.FC<StatProps> = ({ label, value, color }) => {
+  const c = useColors();
+  const statStyles = useMemo(() => makeStatStyles(c), [c]);
+  return (
   <View style={statStyles.box}>
     <Text style={[statStyles.value, color ? { color } : null]}>{value}</Text>
     <Text style={statStyles.label}>{label}</Text>
   </View>
-);
+  );
+};
 
 const OutcomePill: React.FC<{ outcome: 'win' | 'loss' | 'draw' }> = ({
   outcome,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const label = outcome === 'win' ? 'V' : outcome === 'loss' ? 'D' : 'E';
   const color =
     outcome === 'win'
-      ? Colors.accent
+      ? c.accent
       : outcome === 'loss'
-        ? Colors.error
-        : Colors.warning;
+        ? c.error
+        : c.warning;
   const bg =
     outcome === 'win'
-      ? Colors.accent15
+      ? c.accent15
       : outcome === 'loss'
         ? 'rgba(255,107,107,0.14)'
         : 'rgba(242,201,76,0.14)';
@@ -291,18 +299,18 @@ const OutcomePill: React.FC<{ outcome: 'win' | 'loss' | 'draw' }> = ({
   );
 };
 
-const statStyles = StyleSheet.create({
+const makeStatStyles = (c: Palette) => StyleSheet.create({
   box: { flex: 1, alignItems: 'center', paddingVertical: 14 },
   value: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
   label: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1.4,
     marginTop: 6,
@@ -310,8 +318,8 @@ const statStyles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     paddingHorizontal: 20,
     flexDirection: 'row',
@@ -321,79 +329,79 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
   scroll: { paddingHorizontal: 22, paddingTop: 14 },
   eyebrow: {
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2.5,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 4,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: -0.6,
   },
-  subtitle: { color: Colors.textMuted, fontSize: 13, marginTop: 6 },
+  subtitle: { color: c.textMuted, fontSize: 13, marginTop: 6 },
   loaderBox: { paddingVertical: 32, alignItems: 'center' },
   statsCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     marginTop: 18,
   },
   statsDivider: {
     width: 1,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
     marginVertical: 10,
   },
   sectionLabel: {
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2.4,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '500',
     marginTop: 22,
     marginBottom: 10,
   },
   nextCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     padding: 14,
   },
   nextJornadaNum: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 1.2,
   },
   nextRival: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
     marginTop: 10,
   },
-  nextMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 4 },
+  nextMeta: { color: c.textMuted, fontSize: 12, marginTop: 4 },
   nextHint: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 10,
     letterSpacing: 1.2,
     marginTop: 12,
@@ -404,18 +412,18 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   matchdayNumBox: {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -423,18 +431,18 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: 0.5,
   },
   matchdayRival: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   matchdayMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
     marginTop: 3,
@@ -455,17 +463,17 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     paddingHorizontal: 18,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
     gap: 6,
   },
-  emptyTitle: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  emptyTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
   },
-  empty: { color: Colors.textFaint, textAlign: 'center', fontSize: 14 },
+  empty: { color: c.textFaint, textAlign: 'center', fontSize: 14 },
 });

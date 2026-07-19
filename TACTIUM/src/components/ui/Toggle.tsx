@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 
 interface Props {
   value: boolean;
@@ -18,6 +18,8 @@ export const Toggle: React.FC<Props> = ({
   disabled = false,
   accessibilityLabel,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const w = size === 'sm' ? 36 : 50;
   const h = size === 'sm' ? 22 : 30;
   const knob = h - 6;
@@ -38,8 +40,8 @@ export const Toggle: React.FC<Props> = ({
           width: w,
           height: h,
           borderRadius: h / 2,
-          backgroundColor: value ? Colors.accent : Colors.bgRaised,
-          borderColor: value ? Colors.accent : Colors.hairStrong,
+          backgroundColor: value ? c.accent : c.bgRaised,
+          borderColor: value ? c.accent : c.hairStrong,
           alignItems: value ? 'flex-end' : 'flex-start',
           shadowOpacity: value ? 0.45 : 0,
           opacity: disabled ? 0.4 : 1,
@@ -51,20 +53,21 @@ export const Toggle: React.FC<Props> = ({
           width: knob,
           height: knob,
           borderRadius: knob / 2,
-          backgroundColor: value ? Colors.textInverse : Colors.text,
+          backgroundColor: value ? c.textInverse : c.text,
         }}
       />
     </Pressable>
   );
 };
 
-const styles = StyleSheet.create({
-  track: {
-    padding: 3,
-    borderWidth: 1,
-    justifyContent: 'center',
-    shadowColor: Colors.accent,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    track: {
+      padding: 3,
+      borderWidth: 1,
+      justifyContent: 'center',
+      shadowColor: c.accent,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 0 },
+    },
+  });

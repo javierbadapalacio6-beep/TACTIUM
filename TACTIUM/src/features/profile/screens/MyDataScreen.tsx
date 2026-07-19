@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconChevron, IconX } from '@components/ui';
@@ -42,6 +42,8 @@ export const MyDataScreen = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useAuthStore((s) => s.user);
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
 
   const [summary, setSummary] = useState<MyDataSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,7 @@ export const MyDataScreen = () => {
             pressed && { opacity: 0.7 },
           ]}
         >
-          <IconX size={14} color={Colors.text} />
+          <IconX size={14} color={c.text} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.eyebrow}>MIS DATOS</Text>
@@ -170,7 +172,7 @@ export const MyDataScreen = () => {
 
         {loading ? (
           <View style={styles.loader}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : summary ? (
           <>
@@ -229,7 +231,7 @@ export const MyDataScreen = () => {
               ]}
             >
               {exporting ? (
-                <ActivityIndicator size="small" color={Colors.accent} />
+                <ActivityIndicator size="small" color={c.accent} />
               ) : (
                 <Text style={styles.exportBtnLabel}>
                   Compartir mis datos (JSON)
@@ -265,56 +267,68 @@ const Row: React.FC<{
   value: string;
   mono?: boolean;
   isLast?: boolean;
-}> = ({ label, value, mono, isLast }) => (
-  <View style={[styles.row, !isLast && styles.rowDivider]}>
-    <Text style={styles.rowLabel}>{label}</Text>
-    <Text
-      style={[
-        styles.rowValue,
-        mono && { fontFamily: Fonts.mono, fontSize: 12 },
-      ]}
-      numberOfLines={1}
-    >
-      {value}
-    </Text>
-  </View>
-);
+}> = ({ label, value, mono, isLast }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={[styles.row, !isLast && styles.rowDivider]}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.rowValue,
+          mono && { fontFamily: Fonts.mono, fontSize: 12 },
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+};
 
 const CountRow: React.FC<{
   label: string;
   value: number;
   isLast?: boolean;
-}> = ({ label, value, isLast }) => (
-  <View style={[styles.row, !isLast && styles.rowDivider]}>
-    <Text style={styles.rowLabel}>{label}</Text>
-    <View style={styles.countPill}>
-      <Text style={styles.countPillText}>{value}</Text>
+}> = ({ label, value, isLast }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={[styles.row, !isLast && styles.rowDivider]}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.countPill}>
+        <Text style={styles.countPillText}>{value}</Text>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const LinkRow: React.FC<{
   label: string;
   onPress: () => void;
   isLast?: boolean;
-}> = ({ label, onPress, isLast }) => (
-  <Pressable
-    onPress={onPress}
-    accessibilityRole="link"
-    accessibilityLabel={label}
-    style={({ pressed }) => [
-      styles.row,
-      !isLast && styles.rowDivider,
-      pressed && { opacity: 0.85 },
-    ]}
-  >
-    <Text style={[styles.rowLabel, { color: Colors.text }]}>{label}</Text>
-    <IconChevron size={14} color={Colors.textFaint} />
-  </Pressable>
-);
+}> = ({ label, onPress, isLast }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.row,
+        !isLast && styles.rowDivider,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <Text style={[styles.rowLabel, { color: c.text }]}>{label}</Text>
+      <IconChevron size={14} color={c.textFaint} />
+    </Pressable>
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -325,16 +339,16 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCenter: { flex: 1, alignItems: 'center' },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
@@ -342,7 +356,7 @@ const styles = StyleSheet.create({
 
   scroll: { paddingHorizontal: 22, paddingTop: 14 },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 8,
@@ -353,17 +367,17 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '500',
     marginTop: 22,
     marginBottom: 10,
   },
 
   card: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -376,15 +390,15 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   rowLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     flex: 1,
   },
   rowValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     maxWidth: '60%',
@@ -394,15 +408,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   countPillText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -410,21 +424,21 @@ const styles = StyleSheet.create({
   exportBtn: {
     height: 52,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
     alignItems: 'center',
     justifyContent: 'center',
   },
   exportBtnLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
   exportHint: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
     lineHeight: 14,

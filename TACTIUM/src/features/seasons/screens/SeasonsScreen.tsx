@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -33,6 +33,8 @@ import type { SeasonsStackScreenProps } from '@navigation/types';
 export const SeasonsScreen = ({
   navigation,
 }: SeasonsStackScreenProps<'SeasonsRoot'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   const gate = usePremiumGate();
@@ -108,7 +110,7 @@ export const SeasonsScreen = ({
           accessibilityLabel="Crear temporada"
           style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconPlus size={16} color={Colors.accent} />
+          <IconPlus size={16} color={c.accent} />
         </Pressable>
       </View>
 
@@ -131,7 +133,7 @@ export const SeasonsScreen = ({
       >
         {loading ? (
           <View style={{ paddingVertical: 60, alignItems: 'center' }}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : loadError && seasons.length === 0 ? (
           // Fallo en la primera carga (sin caché previa) — distinguimos del
@@ -180,7 +182,7 @@ export const SeasonsScreen = ({
                   accessibilityRole="button"
                   accessibilityLabel="Crear primera temporada"
                 >
-                  <IconPlus size={14} color={Colors.textInverse} />
+                  <IconPlus size={14} color={c.textInverse} />
                   <Text style={styles.emptyCtaLabel}>Crear temporada</Text>
                 </Pressable>
               </View>
@@ -216,7 +218,7 @@ export const SeasonsScreen = ({
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <IconPlus size={14} color={Colors.accent} />
+                <IconPlus size={14} color={c.accent} />
                 <Text style={styles.dashedText}>Crear nueva temporada</Text>
               </Pressable>
             ) : null}
@@ -257,6 +259,11 @@ const ActiveSeasonCard: React.FC<{
   team: TeamsApi.Team | null;
   onPress: () => void;
 }> = ({ season, team, onPress }) => {
+  // Tarjeta destacada de degradado verde: se mantiene SIEMPRE oscura (con
+  // texto claro) también en modo claro, para no perder el look y que el
+  // texto se lea sobre el verde. Paleta oscura fija en todo su subárbol.
+  const c = darkColors;
+  const styles = useMemo(() => makeStyles(c), [c]);
   const pct = season.total_matchdays
     ? Math.round((1 / season.total_matchdays) * 100)
     : 0;
@@ -266,7 +273,7 @@ const ActiveSeasonCard: React.FC<{
       style={({ pressed }) => [styles.activeCard, pressed && { opacity: 0.95 }]}
     >
       <LinearGradient
-        colors={[Colors.primary, Colors.bgCard2]}
+        colors={[c.primary, c.bgCard2]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -292,6 +299,8 @@ const PastSeasonCard: React.FC<{
   team: TeamsApi.Team | null;
   onPress: () => void;
 }> = ({ season, team, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
@@ -306,7 +315,7 @@ const PastSeasonCard: React.FC<{
           {buildSeasonMeta(team)}
         </Text>
       </View>
-      <IconChevron size={14} color={Colors.textFaint} />
+      <IconChevron size={14} color={c.textFaint} />
     </Pressable>
   );
 };
@@ -322,6 +331,8 @@ const CreateSeasonSheet: React.FC<{
   onClose: () => void;
   onCreated: () => void;
 }> = ({ open, onClose, onCreated }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const team = useTeamStore((s) => s.team);
   const [name, setName] = useState('');
   const [phase, setPhase] = useState<SeasonsApi.SeasonPhase>('liga');
@@ -453,7 +464,7 @@ const CreateSeasonSheet: React.FC<{
           maxLength={60}
           autoCapitalize="words"
           style={styles.sheetInput}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
         />
       </View>
 
@@ -468,8 +479,8 @@ const CreateSeasonSheet: React.FC<{
               style={[
                 styles.phaseOption,
                 sel && {
-                  backgroundColor: Colors.accent10,
-                  borderColor: Colors.accent50,
+                  backgroundColor: c.accent10,
+                  borderColor: c.accent50,
                 },
               ]}
             >
@@ -477,8 +488,8 @@ const CreateSeasonSheet: React.FC<{
                 style={[
                   styles.radioOuter,
                   sel && {
-                    backgroundColor: Colors.accent,
-                    borderColor: Colors.accent,
+                    backgroundColor: c.accent,
+                    borderColor: c.accent,
                   },
                 ]}
               >
@@ -507,7 +518,7 @@ const CreateSeasonSheet: React.FC<{
           }
           keyboardType="number-pad"
           placeholder={phase === 'playoff' ? 'ej. 4' : 'ej. 18'}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
           maxLength={2}
         />
@@ -532,10 +543,10 @@ const CreateSeasonSheet: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',
@@ -547,16 +558,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
   },
   addBtn: {
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -565,14 +576,14 @@ const styles = StyleSheet.create({
     paddingTop: 18,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.8,
     lineHeight: 34,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     marginTop: 8,
   },
@@ -583,7 +594,7 @@ const styles = StyleSheet.create({
   activeCard: {
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     paddingHorizontal: 22,
     paddingVertical: 18,
     overflow: 'hidden',
@@ -597,34 +608,34 @@ const styles = StyleSheet.create({
   },
   activeBadge: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 1.5,
     fontWeight: '600',
   },
   activeName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: -0.7,
     lineHeight: 28,
   },
   activeMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     marginTop: 4,
   },
   progressTrack: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.black35,
+    backgroundColor: c.black35,
     marginTop: 18,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.7,
     shadowRadius: 6,
   },
@@ -638,13 +649,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '500',
   },
   histCount: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   pastCard: {
     flexDirection: 'row',
@@ -652,16 +663,16 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   pastBadge: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -670,16 +681,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
-    color: Colors.text,
+    color: c.text,
   },
   pastName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   pastMeta: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     marginTop: 2,
   },
@@ -689,35 +700,35 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderStyle: 'dashed',
     borderWidth: 1.5,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   dashedText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 14,
     fontWeight: '600',
   },
   empty: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
@@ -730,23 +741,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 42,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   emptyCtaLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
   sheetEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sheetTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -755,7 +766,7 @@ const styles = StyleSheet.create({
   },
   sheetLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     marginTop: 8,
@@ -763,10 +774,10 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   sheetInputWrap: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 14,
     flexDirection: 'row',
@@ -777,11 +788,11 @@ const styles = StyleSheet.create({
     width: 5,
     height: 18,
     borderRadius: 3,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   sheetInput: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '600',
     paddingVertical: 0,
@@ -793,16 +804,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   radioOuter: {
     width: 18,
     height: 18,
     borderRadius: 9,
     borderWidth: 1.5,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -813,12 +824,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   phaseLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   phaseSub: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
   },
@@ -826,10 +837,10 @@ const styles = StyleSheet.create({
     height: 52,
     marginTop: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   Text,
@@ -10,7 +10,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, useResolvedScheme, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet } from './BottomSheet';
@@ -61,6 +61,9 @@ const DateTimeField: React.FC<InternalProps> = ({
   icon,
   format,
 }) => {
+  const c = useColors();
+  const scheme = useResolvedScheme();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Date>(value ?? new Date());
 
@@ -140,9 +143,9 @@ const DateTimeField: React.FC<InternalProps> = ({
               onChange={onIosChange}
               minimumDate={minimumDate}
               maximumDate={maximumDate}
-              themeVariant="dark"
-              accentColor={Colors.accent}
-              textColor={Colors.text}
+              themeVariant={scheme}
+              accentColor={c.accent}
+              textColor={c.text}
               locale="es-ES"
               is24Hour
               style={styles.picker}
@@ -167,7 +170,7 @@ const DateTimeField: React.FC<InternalProps> = ({
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <IconCheck size={16} color="#001810" />
+              <IconCheck size={16} color={c.textInverse} />
               <Text style={styles.primaryLabel}>Confirmar</Text>
             </Pressable>
           </View>
@@ -177,23 +180,29 @@ const DateTimeField: React.FC<InternalProps> = ({
   );
 };
 
-export const DateField: React.FC<FieldProps> = (props) => (
-  <DateTimeField
-    {...props}
-    mode="date"
-    icon={<IconCalendar size={16} color={Colors.accent} />}
-    format={formatDate}
-  />
-);
+export const DateField: React.FC<FieldProps> = (props) => {
+  const c = useColors();
+  return (
+    <DateTimeField
+      {...props}
+      mode="date"
+      icon={<IconCalendar size={16} color={c.accent} />}
+      format={formatDate}
+    />
+  );
+};
 
-export const TimeField: React.FC<FieldProps> = (props) => (
-  <DateTimeField
-    {...props}
-    mode="time"
-    icon={<IconClock size={16} color={Colors.accent} />}
-    format={formatTime}
-  />
-);
+export const TimeField: React.FC<FieldProps> = (props) => {
+  const c = useColors();
+  return (
+    <DateTimeField
+      {...props}
+      mode="time"
+      icon={<IconClock size={16} color={c.accent} />}
+      format={formatTime}
+    />
+  );
+};
 
 // ───── Helpers para serializar a string formato Postgres ──────────────
 
@@ -230,83 +239,84 @@ export const isoTimeToDate = (
   return d;
 };
 
-const styles = StyleSheet.create({
-  field: {
-    backgroundColor: Colors.bgCard,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  fieldIcon: {
-    width: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fieldValue: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  fieldPlaceholder: {
-    color: Colors.textFaint,
-    fontWeight: '400',
-  },
-  sheetEyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: Colors.accent,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  pickerWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  picker: {
-    alignSelf: 'center',
-    width: '100%',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  primaryBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  primaryLabel: {
-    color: '#001810',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  secondaryBtn: {
-    height: 50,
-    paddingHorizontal: 18,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.bgCard,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryLabel: {
-    color: Colors.textMuted,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    field: {
+      backgroundColor: c.bgCard,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    fieldIcon: {
+      width: 22,
+      height: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    fieldValue: {
+      flex: 1,
+      color: c.text,
+      fontSize: 15,
+      fontWeight: '500',
+    },
+    fieldPlaceholder: {
+      color: c.textFaint,
+      fontWeight: '400',
+    },
+    sheetEyebrow: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 2,
+      color: c.accent,
+      fontWeight: '500',
+      textAlign: 'center',
+    },
+    pickerWrap: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    picker: {
+      alignSelf: 'center',
+      width: '100%',
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 4,
+    },
+    primaryBtn: {
+      flex: 1,
+      height: 50,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    primaryLabel: {
+      color: c.textInverse,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    secondaryBtn: {
+      height: 50,
+      paddingHorizontal: 18,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    secondaryLabel: {
+      color: c.textMuted,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+  });

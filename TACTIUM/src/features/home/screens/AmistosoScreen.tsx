@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconLink, IconGift, IconCamera } from '@components/ui';
@@ -98,6 +98,8 @@ const ScoreSlots: React.FC<{
   sets: SetPair[];
   onChange: (sets: SetPair[]) => void;
 }> = ({ sets, onChange }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const setCell = (si: number, side: 0 | 1, v: string) => {
     const next = sets.map((s) => [...s] as SetPair);
     next[si][side] = clean(v);
@@ -116,7 +118,7 @@ const ScoreSlots: React.FC<{
               keyboardType="number-pad"
               maxLength={1}
               placeholder="–"
-              placeholderTextColor={Colors.textFaint}
+              placeholderTextColor={c.textFaint}
             />
             <TextInput
               style={styles.box}
@@ -125,7 +127,7 @@ const ScoreSlots: React.FC<{
               keyboardType="number-pad"
               maxLength={1}
               placeholder="–"
-              placeholderTextColor={Colors.textFaint}
+              placeholderTextColor={c.textFaint}
             />
           </View>
         </View>
@@ -139,20 +141,26 @@ const Field: React.FC<{
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
-}> = ({ label, value, onChangeText, placeholder }) => (
-  <View style={{ marginBottom: 10 }}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <TextInput
-      style={styles.input}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor={Colors.textFaint}
-    />
-  </View>
-);
+}> = ({ label, value, onChangeText, placeholder }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={c.textFaint}
+      />
+    </View>
+  );
+};
 
 export const AmistosoScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const team = useTeamStore((s) => s.team);
@@ -224,9 +232,20 @@ export const AmistosoScreen = () => {
     // más limpio en el partido y en la foto compartida.
     return (meta.username ?? meta.full_name ?? '').trim() || null;
   });
+  // Nombre a mostrar de un jugador de plantilla: preferimos el `username`
+  // (nombre corto que el jugador eligió en su cuenta) sobre el nombre largo
+  // del roster. Así un compañero que reclamó su ficha sale con su apodo.
+  const rosterName = (pl: (typeof players)[number]) =>
+    pl.profile_username?.trim() || pl.name;
+  // Mi nombre: SIEMPRE mi nombre de usuario primero (authName ya prefiere el
+  // username sobre el nombre completo). Antes ganaba el nombre del roster, que
+  // es el largo → al cambiar el username seguía saliendo el nombre completo.
   const myName = useMemo(
     () =>
-      players.find((pl) => pl.user_id === userId)?.name ?? authName ?? null,
+      authName ??
+      (players.find((pl) => pl.user_id === userId)
+        ? rosterName(players.find((pl) => pl.user_id === userId)!)
+        : null),
     [players, userId, authName],
   );
   useEffect(() => {
@@ -306,30 +325,39 @@ export const AmistosoScreen = () => {
       if (fp.user_id) m.set(fp.name.trim().toLowerCase(), fp.user_id);
     }
     for (const pl of players) {
-      if (pl.user_id) m.set(pl.name.trim().toLowerCase(), pl.user_id);
+      if (!pl.user_id) continue;
+      // Vinculamos por AMBOS nombres (largo del roster y corto/username), así
+      // el partido cuenta en sus stats se rellene con el que se rellene.
+      m.set(pl.name.trim().toLowerCase(), pl.user_id);
+      m.set(rosterName(pl).trim().toLowerCase(), pl.user_id);
     }
     return m;
   }, [players, recent]);
 
-  // Chips: plantilla + colegas recientes (sin duplicar nombres ni a mí).
+  // Chips: en ENTRENO solo la plantilla (partido interno del equipo); en
+  // COLEGAS, plantilla + colegas recientes (puede jugar cualquiera). Se muestra
+  // el nombre corto (username) del jugador vinculado y se evita duplicar/a mí.
   const chipPeople = useMemo(() => {
     const seen = new Set<string>();
     const out: { key: string; name: string; linked: boolean }[] = [];
     for (const pl of players) {
-      const k = pl.name.trim().toLowerCase();
+      const display = rosterName(pl);
+      const k = display.trim().toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push({ key: `pl-${pl.id}`, name: pl.name, linked: !!pl.user_id });
+      out.push({ key: `pl-${pl.id}`, name: display, linked: !!pl.user_id });
     }
-    for (const fp of recent) {
-      const k = fp.name.trim().toLowerCase();
-      if (seen.has(k)) continue;
-      if (myName && k === myName.trim().toLowerCase()) continue;
-      seen.add(k);
-      out.push({ key: `fp-${k}`, name: fp.name, linked: !!fp.user_id });
+    if (!isEntreno) {
+      for (const fp of recent) {
+        const k = fp.name.trim().toLowerCase();
+        if (seen.has(k)) continue;
+        if (myName && k === myName.trim().toLowerCase()) continue;
+        seen.add(k);
+        out.push({ key: `fp-${k}`, name: fp.name, linked: !!fp.user_id });
+      }
     }
     return out;
-  }, [players, recent, myName]);
+  }, [players, recent, myName, isEntreno]);
   const linkByName = (name: string): string | null => {
     const k = name.trim().toLowerCase();
     // Mi propio hueco SIEMPRE vinculado a mi cuenta: en una cuenta nueva
@@ -481,24 +509,34 @@ export const AmistosoScreen = () => {
     }
   };
 
-  // Marcador de la tarjeta (idéntico al del detalle del partido): pareja +
+  // Tarjeta de la foto (IDÉNTICA al detalle del partido en Stats): pareja +
   // resultado sobre pareja + resultado, resaltando al ganador en verde.
-  const photoHome = isSingle
-    ? ourStr(partidos[0]) || 'Nosotros'
+  //
+  // Si hay UN SOLO partido válido —da igual el modo, incluido 'equipos' con
+  // una única pista— pintamos ESE partido: parejas de jugadores + marcador
+  // por SETS + "VICTORIA/DERROTA · 6-3 6-4", tal cual lo muestra el detalle.
+  // Solo cuando hay 2+ partidos (enfrentamiento de club multipista) agregamos
+  // a nivel de equipo (nombres de equipo + marcador por partidos).
+  const soloPartido = validPartidos.length === 1 ? validPartidos[0] : null;
+  const soloRes = soloPartido ? setsResult(soloPartido.sets) : null;
+  const photoHome = soloPartido
+    ? ourStr(soloPartido) || 'Nosotros'
     : team?.name ?? 'Nosotros';
-  const photoAway = isSingle
-    ? rivalStr(partidos[0]) || 'Rival'
+  const photoAway = soloPartido
+    ? rivalStr(soloPartido) || 'Rival'
     : rivalTeam || 'Rival';
-  const photoDecided = marcador.us !== marcador.them;
-  const photoWon = marcador.us > marcador.them;
-  const photoTitle = `${photoHome} ${marcador.us}–${marcador.them} ${photoAway}`;
-  const photoSets = isSingle
-    ? setsToString(partidos[0]?.sets ?? [])
+  const photoUsScore = soloRes ? soloRes.us : marcador.us;
+  const photoThemScore = soloRes ? soloRes.them : marcador.them;
+  const photoDecided = soloRes ? soloRes.decided : marcador.us !== marcador.them;
+  const photoWon = soloRes ? soloRes.won : marcador.us > marcador.them;
+  const photoTitle = `${photoHome} ${photoUsScore}–${photoThemScore} ${photoAway}`;
+  const photoSets = soloPartido
+    ? setsToString(soloPartido.sets)
     : `${validPartidos.length} ${
         validPartidos.length === 1 ? 'partido' : 'partidos'
       }`;
   const photoDetail =
-    isSingle && photoDecided
+    soloPartido && photoDecided
       ? `${photoWon ? 'VICTORIA' : 'DERROTA'}${photoSets ? ` · ${photoSets}` : ''}`
       : photoSets;
 
@@ -521,7 +559,7 @@ export const AmistosoScreen = () => {
           hitSlop={10}
           style={styles.backBtn}
         >
-          <IconBack size={20} color={Colors.text} />
+          <IconBack size={20} color={c.text} />
         </Pressable>
 
         <Text style={styles.eyebrow}>
@@ -562,8 +600,8 @@ export const AmistosoScreen = () => {
                   styles.countChip,
                   { marginTop: 16 },
                   sel && {
-                    backgroundColor: Colors.accent,
-                    borderColor: Colors.accent,
+                    backgroundColor: c.accent,
+                    borderColor: c.accent,
                   },
                 ]}
               >
@@ -571,7 +609,7 @@ export const AmistosoScreen = () => {
                   style={[
                     styles.countChipText,
                     { fontSize: 13 },
-                    { color: sel ? '#000' : Colors.text },
+                    { color: sel ? '#000' : c.text },
                   ]}
                 >
                   {m.label}
@@ -601,15 +639,15 @@ export const AmistosoScreen = () => {
                     style={[
                       styles.countChip,
                       sel && {
-                        backgroundColor: Colors.accent,
-                        borderColor: Colors.accent,
+                        backgroundColor: c.accent,
+                        borderColor: c.accent,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.countChipText,
-                        { color: sel ? '#000' : Colors.text },
+                        { color: sel ? '#000' : c.text },
                       ]}
                     >
                       {n}
@@ -646,7 +684,7 @@ export const AmistosoScreen = () => {
                   value={p.a1}
                   onChangeText={(t) => update(i, { a1: t })}
                   placeholder={!isEquipos && i === 0 ? 'Tú' : 'Jugador 1'}
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                 />
                 {!isEquipos && i === 0 ? (
                   <View style={styles.meBadge} pointerEvents="none">
@@ -661,7 +699,7 @@ export const AmistosoScreen = () => {
                 value={p.a2}
                 onChangeText={(t) => update(i, { a2: t })}
                 placeholder="Jugador 2"
-                placeholderTextColor={Colors.textFaint}
+                placeholderTextColor={c.textFaint}
               />
             </View>
             {chipPeople.length > 0 ? (
@@ -677,7 +715,7 @@ export const AmistosoScreen = () => {
                     style={styles.rosterChip}
                   >
                     {cp.linked ? (
-                      <IconLink size={11} color={Colors.accent} />
+                      <IconLink size={11} color={c.accent} />
                     ) : null}
                     <Text style={styles.rosterChipText}>{cp.name}</Text>
                   </Pressable>
@@ -698,14 +736,14 @@ export const AmistosoScreen = () => {
                 value={p.b1}
                 onChangeText={(t) => update(i, { b1: t })}
                 placeholder="Rival 1"
-                placeholderTextColor={Colors.textFaint}
+                placeholderTextColor={c.textFaint}
               />
               <TextInput
                 style={[styles.input, styles.slotInput]}
                 value={p.b2}
                 onChangeText={(t) => update(i, { b2: t })}
                 placeholder="Rival 2"
-                placeholderTextColor={Colors.textFaint}
+                placeholderTextColor={c.textFaint}
               />
             </View>
             <Text style={styles.fieldLabel}>RESULTADO</Text>
@@ -758,9 +796,9 @@ export const AmistosoScreen = () => {
                   )}`}
                   detail={photoDetail}
                   homeName={photoHome}
-                  homeScore={marcador.us}
+                  homeScore={photoUsScore}
                   awayName={photoAway}
-                  awayScore={marcador.them}
+                  awayScore={photoThemScore}
                   highlight={
                     photoDecided ? (photoWon ? 'home' : 'away') : 'home'
                   }
@@ -811,7 +849,7 @@ export const AmistosoScreen = () => {
                 ]}
               >
                 <View style={styles.inviteBtnRow}>
-                  <IconGift size={16} color={Colors.accent} />
+                  <IconGift size={16} color={c.accent} />
                   <Text style={styles.inviteBtnLabel}>
                     Invita a {unlinkedNames.length}{' '}
                     {unlinkedNames.length === 1 ? 'jugador' : 'jugadores'} sin
@@ -830,16 +868,16 @@ export const AmistosoScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   content: { paddingHorizontal: 20 },
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
@@ -848,33 +886,33 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 8,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: -0.6,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
   },
   section: {
     marginTop: 18,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 14,
   },
   partidoLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '600',
@@ -895,14 +933,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: Colors.accent,
+    borderColor: c.accent,
   },
   meBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1,
-    color: Colors.accent,
+    color: c.accent,
   },
   rosterRow: { gap: 6, paddingVertical: 4, paddingRight: 8 },
   rosterChip: {
@@ -913,14 +951,14 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     justifyContent: 'center',
   },
-  rosterChipText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
+  rosterChipText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
   guestHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     lineHeight: 16,
     marginTop: 2,
@@ -928,20 +966,20 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1.4,
     fontWeight: '500',
     marginBottom: 6,
   },
   input: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
   },
   countRow: { flexDirection: 'row', gap: 6 },
@@ -949,9 +987,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 42,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -960,7 +998,7 @@ const styles = StyleSheet.create({
   setGroup: { flex: 1 },
   setLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 9,
     letterSpacing: 1.2,
     marginBottom: 4,
@@ -971,40 +1009,40 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    color: Colors.text,
+    borderColor: c.hairStrong,
+    color: c.text,
     fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
   },
   scoreCard: {
     marginTop: 18,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     padding: 16,
     alignItems: 'center',
   },
   scoreTeams: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     letterSpacing: 0.6,
   },
   scoreBig: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: 1,
     marginTop: 4,
   },
-  scoreSep: { color: Colors.textFaint },
+  scoreSep: { color: c.textFaint },
   scoreUnit: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 2,
     marginTop: 2,
@@ -1013,7 +1051,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     height: 52,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1022,7 +1060,7 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1032,13 +1070,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
-  ctaGhostLabel: { color: Colors.textMuted, fontSize: 14, fontWeight: '600' },
+  ctaGhostLabel: { color: c.textMuted, fontSize: 14, fontWeight: '600' },
   inviteBtn: {
     marginTop: 4,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
-    backgroundColor: Colors.accent15,
+    borderColor: c.accent40,
+    backgroundColor: c.accent15,
     paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
@@ -1049,9 +1087,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
-  inviteBtnLabel: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
+  inviteBtnLabel: { color: c.accent, fontSize: 14, fontWeight: '700' },
   inviteBtnHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     marginTop: 3,
     textAlign: 'center',

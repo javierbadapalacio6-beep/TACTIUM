@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Share,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet, IconTrash, IconPlus, IconShare } from '@components/ui';
@@ -25,6 +25,8 @@ export const InvitePlayersSheet: React.FC<{
   teamName: string | null;
   onClose: () => void;
 }> = ({ open, teamId, teamName, onClose }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [invitations, setInvitations] = useState<
     InvitationsApi.TeamInvitationWithRedeemer[]
   >([]);
@@ -135,10 +137,10 @@ export const InvitePlayersSheet: React.FC<{
         accessibilityLabel="Generar nuevo código de invitación"
       >
         {generating ? (
-          <ActivityIndicator color={Colors.textInverse} />
+          <ActivityIndicator color={c.textInverse} />
         ) : (
           <>
-            <IconPlus size={14} color={Colors.textInverse} />
+            <IconPlus size={14} color={c.textInverse} />
             <Text style={styles.generateBtnLabel}>
               Generar código nuevo
             </Text>
@@ -148,7 +150,7 @@ export const InvitePlayersSheet: React.FC<{
 
       {loading ? (
         <View style={styles.loaderRow}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       ) : (
         <>
@@ -179,7 +181,7 @@ export const InvitePlayersSheet: React.FC<{
                     accessibilityRole="button"
                     accessibilityLabel="Compartir código"
                   >
-                    <IconShare size={14} color={Colors.accent} />
+                    <IconShare size={14} color={c.accent} />
                   </Pressable>
                   <Pressable
                     onPress={() => handleRevoke(inv)}
@@ -191,7 +193,7 @@ export const InvitePlayersSheet: React.FC<{
                     accessibilityRole="button"
                     accessibilityLabel="Revocar código"
                   >
-                    <IconTrash size={14} color={Colors.error} />
+                    <IconTrash size={14} color={c.error} />
                   </Pressable>
                 </View>
               ))
@@ -253,16 +255,16 @@ function formatRedeemedAt(iso: string): string {
   return `unido el ${date.getDate()}/${date.getMonth() + 1}`;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 16,
@@ -280,13 +282,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     paddingVertical: 14,
     borderRadius: Radius.md,
     marginBottom: 16,
   },
   generateBtnLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
@@ -294,7 +296,7 @@ const styles = StyleSheet.create({
   list: { gap: 8 },
   groupLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1.5,
     fontWeight: '600',
@@ -302,11 +304,11 @@ const styles = StyleSheet.create({
   },
   rowMuted: {
     opacity: 0.7,
-    backgroundColor: Colors.bgRaised,
-    borderColor: Colors.hair,
+    backgroundColor: c.bgRaised,
+    borderColor: c.hair,
   },
   codeTextMuted: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     textDecorationLine: 'line-through',
   },
   loaderRow: { paddingVertical: 24, alignItems: 'center' },
@@ -314,12 +316,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     borderRadius: Radius.md,
     borderStyle: 'dashed',
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
   },
@@ -330,22 +332,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   codeBlock: { flex: 1, minWidth: 0 },
   codeText: {
     fontFamily: Fonts.mono,
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: 1,
   },
   codeMeta: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     marginTop: 2,
     letterSpacing: 0.5,
   },

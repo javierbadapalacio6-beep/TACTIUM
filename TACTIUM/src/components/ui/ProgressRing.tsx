@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
 }
 
 export const ProgressRing: React.FC<Props> = ({ pct, size = 44, stroke = 4 }) => {
+  const colors = useColors();
   const r = (size - stroke) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -38,15 +39,15 @@ export const ProgressRing: React.FC<Props> = ({ pct, size = 44, stroke = 4 }) =>
           cx={cx}
           cy={cy}
           r={r}
-          stroke={Colors.bgRaised}
+          stroke={colors.bgRaised}
           strokeWidth={stroke}
-          fill={Colors.bgCard}
+          fill={colors.bgCard}
         />
         <Circle
           cx={cx}
           cy={cy}
           r={r}
-          stroke={Colors.accent}
+          stroke={colors.accent}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={`${dash} ${c}`}
@@ -57,7 +58,7 @@ export const ProgressRing: React.FC<Props> = ({ pct, size = 44, stroke = 4 }) =>
         style={{
           fontFamily: Fonts.mono,
           fontSize: 11,
-          color: Colors.accent,
+          color: colors.accent,
           fontWeight: '600',
         }}
       >

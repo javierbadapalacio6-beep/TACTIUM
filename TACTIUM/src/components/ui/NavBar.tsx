@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
-import { Typography } from '@core/theme/typography';
+import { useColors, useTypography, type Palette } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
 
 import { IconBack } from './Icon';
@@ -22,6 +21,9 @@ export const NavBar: React.FC<Props> = ({
   backLabel = 'Atrás',
   rightSlot,
 }) => {
+  const c = useColors();
+  const t = useTypography();
+  const styles = useMemo(() => makeStyles(c, t), [c, t]);
   return (
     <View style={styles.row}>
       {onBack ? (
@@ -29,7 +31,7 @@ export const NavBar: React.FC<Props> = ({
           onPress={onBack}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>{backLabel}</Text>
         </Pressable>
       ) : (
@@ -44,45 +46,46 @@ export const NavBar: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 8,
-  },
-  backBtn: {
-    height: 36,
-    paddingHorizontal: 10,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.bgCard,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  backLabel: {
-    ...Typography.body,
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text,
-  },
-  center: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  subtitle: {
-    ...Typography.eyebrowFaint,
-    marginBottom: 2,
-  },
-  title: {
-    ...Typography.title,
-    color: Colors.text,
-  },
-  right: {
-    minWidth: 36,
-    alignItems: 'flex-end',
-  },
-});
+const makeStyles = (c: Palette, t: ReturnType<typeof useTypography>) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 18,
+      paddingTop: 8,
+    },
+    backBtn: {
+      height: 36,
+      paddingHorizontal: 10,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    backLabel: {
+      ...t.body,
+      fontSize: 14,
+      fontWeight: '500',
+      color: c.text,
+    },
+    center: {
+      alignItems: 'center',
+      flex: 1,
+    },
+    subtitle: {
+      ...t.eyebrowFaint,
+      marginBottom: 2,
+    },
+    title: {
+      ...t.title,
+      color: c.text,
+    },
+    right: {
+      minWidth: 36,
+      alignItems: 'flex-end',
+    },
+  });

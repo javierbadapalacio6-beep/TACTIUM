@@ -14,7 +14,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@navigation/types';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconLink, IconTicket } from '@components/ui';
@@ -65,6 +65,8 @@ export const MyStatsScreen = () => {
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
   const userId = useAuthStore((s) => s.user?.id ?? null);
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
 
   // Sin equipo (jugador suelto) el único ámbito con datos es amistosos.
   const [scope, setScope] = useState<Scope>(team ? 'activa' : 'amistosos');
@@ -257,7 +259,7 @@ export const MyStatsScreen = () => {
             hitSlop={10}
             style={styles.backBtn}
           >
-            <IconBack size={20} color={Colors.text} />
+            <IconBack size={20} color={c.text} />
           </Pressable>
         ) : null}
 
@@ -290,8 +292,8 @@ export const MyStatsScreen = () => {
                 style={[
                   styles.scopeChip,
                   sel && {
-                    backgroundColor: Colors.accent,
-                    borderColor: Colors.accent,
+                    backgroundColor: c.accent,
+                    borderColor: c.accent,
                   },
                 ]}
               >
@@ -301,7 +303,7 @@ export const MyStatsScreen = () => {
                   minimumFontScale={0.75}
                   style={[
                     styles.scopeChipText,
-                    { color: sel ? '#000' : Colors.text },
+                    { color: sel ? '#000' : c.text },
                   ]}
                 >
                   {s.label}
@@ -328,8 +330,8 @@ export const MyStatsScreen = () => {
                 style={[
                   styles.scopeChip,
                   sel && {
-                    backgroundColor: Colors.accent,
-                    borderColor: Colors.accent,
+                    backgroundColor: c.accent,
+                    borderColor: c.accent,
                   },
                 ]}
               >
@@ -339,7 +341,7 @@ export const MyStatsScreen = () => {
                   minimumFontScale={0.75}
                   style={[
                     styles.scopeChipText,
-                    { color: sel ? '#000' : Colors.text },
+                    { color: sel ? '#000' : c.text },
                   ]}
                 >
                   {v.label}
@@ -353,7 +355,7 @@ export const MyStatsScreen = () => {
 
         {loading ? (
           <View style={styles.loader}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : view === 'plantilla' ? (
           ranking.length === 0 ? (
@@ -373,7 +375,7 @@ export const MyStatsScreen = () => {
                     <Text
                       style={[
                         styles.rankPos,
-                        i === 0 && { color: Colors.accent },
+                        i === 0 && { color: c.accent },
                       ]}
                     >
                       {i + 1}
@@ -382,7 +384,7 @@ export const MyStatsScreen = () => {
                       <Text
                         style={[
                           styles.rankName,
-                          isMe && { color: Colors.accent },
+                          isMe && { color: c.accent },
                         ]}
                         numberOfLines={1}
                       >
@@ -423,9 +425,9 @@ export const MyStatsScreen = () => {
                     <View style={styles.heroRight}>
                       <Text style={styles.heroRecord}>
                         {casual.won}
-                        <Text style={{ color: Colors.textFaint }}> V · </Text>
+                        <Text style={{ color: c.textFaint }}> V · </Text>
                         {casual.lost}
-                        <Text style={{ color: Colors.textFaint }}> D</Text>
+                        <Text style={{ color: c.textFaint }}> D</Text>
                       </Text>
                     </View>
                   </View>
@@ -467,7 +469,7 @@ export const MyStatsScreen = () => {
                                 styles.resultBadge,
                                 {
                                   backgroundColor: cm.won
-                                    ? Colors.accent15
+                                    ? c.accent15
                                     : 'rgba(255,107,107,0.12)',
                                 },
                               ]}
@@ -477,8 +479,8 @@ export const MyStatsScreen = () => {
                                   styles.resultBadgeTxt,
                                   {
                                     color: cm.won
-                                      ? Colors.accent
-                                      : Colors.error,
+                                      ? c.accent
+                                      : c.error,
                                   },
                                 ]}
                               >
@@ -533,9 +535,9 @@ export const MyStatsScreen = () => {
               <View style={styles.heroRight}>
                 <Text style={styles.heroRecord}>
                   {stats.won}
-                  <Text style={{ color: Colors.textFaint }}> V · </Text>
+                  <Text style={{ color: c.textFaint }}> V · </Text>
                   {stats.lost}
-                  <Text style={{ color: Colors.textFaint }}> D</Text>
+                  <Text style={{ color: c.textFaint }}> D</Text>
                 </Text>
                 <View style={styles.lastFiveRow}>
                   {stats.lastFive.map((r, i) => (
@@ -545,7 +547,7 @@ export const MyStatsScreen = () => {
                         styles.dot,
                         {
                           backgroundColor:
-                            r === 'W' ? Colors.accent : Colors.error,
+                            r === 'W' ? c.accent : c.error,
                         },
                       ]}
                     />
@@ -677,12 +679,12 @@ export const MyStatsScreen = () => {
                         ]}
                       >
                         {fp.user_id ? (
-                          <IconLink size={10} color={Colors.accent} />
+                          <IconLink size={10} color={c.accent} />
                         ) : null}
                         <Text
                           style={[
                             styles.colegaBadgeTxt,
-                            { color: fp.user_id ? Colors.accent : Colors.textFaint },
+                            { color: fp.user_id ? c.accent : c.textFaint },
                           ]}
                         >
                           {fp.user_id ? 'vinculado' : 'sin app'}
@@ -763,7 +765,7 @@ export const MyStatsScreen = () => {
             </Text>
 
             <Pressable onPress={redeemCode} hitSlop={8} style={styles.claimRow}>
-              <IconTicket size={16} color={Colors.accent} />
+              <IconTicket size={16} color={c.accent} />
               <Text style={styles.claimLink}>
                 ¿Tienes un código de partido? Canjéalo aquí
               </Text>
@@ -779,28 +781,32 @@ const StatCell: React.FC<{
   label: string;
   value: string;
   highlight?: boolean;
-}> = ({ label, value, highlight }) => (
-  <View style={styles.statCell}>
-    <Text
-      style={[styles.statValue, highlight && { color: Colors.accent }]}
-      numberOfLines={1}
-    >
-      {value}
-    </Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+}> = ({ label, value, highlight }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.statCell}>
+      <Text
+        style={[styles.statValue, highlight && { color: c.accent }]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   content: { paddingHorizontal: 20 },
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
@@ -809,12 +815,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 8,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: -0.6,
@@ -828,7 +834,7 @@ const styles = StyleSheet.create({
   filterDivider: {
     width: 1,
     height: 22,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
     marginHorizontal: 2,
   },
   scopeChip: {
@@ -836,9 +842,9 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 6,
     borderRadius: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -846,67 +852,67 @@ const styles = StyleSheet.create({
   loader: { paddingTop: 60, alignItems: 'center' },
   emptyBox: {
     marginTop: 24,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 20,
   },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
   },
   hero: {
     marginTop: 18,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
   heroPct: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 44,
     fontWeight: '800',
     letterSpacing: -1,
   },
   heroLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 2,
   },
   heroRight: { alignItems: 'flex-end', gap: 8 },
-  heroRecord: { color: Colors.text, fontSize: 22, fontWeight: '700' },
+  heroRecord: { color: c.text, fontSize: 22, fontWeight: '700' },
   lastFiveRow: { flexDirection: 'row', gap: 5 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   grid: { flexDirection: 'row', gap: 8, marginTop: 10 },
   statCell: {
     flex: 1,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  statValue: { color: Colors.text, fontSize: 17, fontWeight: '800' },
+  statValue: { color: c.text, fontSize: 17, fontWeight: '800' },
   statLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 8.5,
     letterSpacing: 1,
     marginTop: 4,
   },
   sectionLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
@@ -914,34 +920,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   card: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 14,
     gap: 10,
   },
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rankPos: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 13,
     fontWeight: '700',
     width: 22,
     textAlign: 'center',
   },
-  rankName: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  rankName: { color: c.text, fontSize: 14, fontWeight: '600' },
   rankMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
   },
-  rankPct: { color: Colors.text, fontSize: 16, fontWeight: '800' },
+  rankPct: { color: c.text, fontSize: 16, fontWeight: '800' },
   courtRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   courtLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     width: 28,
@@ -950,30 +956,30 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     overflow: 'hidden',
   },
   barFill: {
     height: '100%',
     borderRadius: 4,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   courtValue: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     width: 44,
     textAlign: 'right',
   },
   partnerCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  partnerName: { color: Colors.text, fontSize: 16, fontWeight: '700' },
-  partnerMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 3 },
-  partnerPct: { color: Colors.accent, fontSize: 24, fontWeight: '800' },
+  partnerName: { color: c.text, fontSize: 16, fontWeight: '700' },
+  partnerMeta: { color: c.textMuted, fontSize: 12, marginTop: 3 },
+  partnerPct: { color: c.accent, fontSize: 24, fontWeight: '800' },
   shareBtn: {
     marginTop: 24,
     height: 50,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -983,11 +989,11 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoBtnLabel: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
+  photoBtnLabel: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
   colegaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   colegaBadge: {
     flexDirection: 'row',
@@ -999,16 +1005,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   colegaBadgeOn: {
-    backgroundColor: Colors.accent15,
-    borderColor: Colors.accent40,
+    backgroundColor: c.accent15,
+    borderColor: c.accent40,
   },
   colegaBadgeOff: {
-    backgroundColor: Colors.bgRaised,
-    borderColor: Colors.hairStrong,
+    backgroundColor: c.bgRaised,
+    borderColor: c.hairStrong,
   },
   colegaBadgeTxt: { fontSize: 11, fontWeight: '700' },
   colegaHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 8,
@@ -1019,7 +1025,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   resultBadge: {
     width: 26,
@@ -1031,7 +1037,7 @@ const styles = StyleSheet.create({
   resultBadgeTxt: { fontSize: 12, fontWeight: '800' },
   resultSets: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -1043,13 +1049,13 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   claimLink: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 16,
   },
   footNote: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     textAlign: 'center',
     marginTop: 12,

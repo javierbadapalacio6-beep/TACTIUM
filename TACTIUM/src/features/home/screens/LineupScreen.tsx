@@ -21,7 +21,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -169,6 +169,8 @@ export const LineupScreen = ({
   navigation,
   route,
 }: HomeStackScreenProps<'Lineup'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
@@ -858,7 +860,7 @@ export const LineupScreen = ({
   if (loading) {
     return (
       <View style={[styles.root, styles.center]}>
-        <ActivityIndicator color={Colors.accent} />
+        <ActivityIndicator color={c.accent} />
       </View>
     );
   }
@@ -877,7 +879,7 @@ export const LineupScreen = ({
               pressed && { opacity: 0.7 },
             ]}
           >
-            <IconBack size={16} color={Colors.text} />
+            <IconBack size={16} color={c.text} />
             <Text style={styles.backLabel}>Atrás</Text>
           </Pressable>
         </View>
@@ -920,7 +922,7 @@ export const LineupScreen = ({
           }}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Jornada</Text>
         </Pressable>
 
@@ -940,7 +942,7 @@ export const LineupScreen = ({
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <IconTrash size={14} color={Colors.textMuted} />
+                <IconTrash size={14} color={c.textMuted} />
               </Pressable>
 
               <Pressable
@@ -969,12 +971,12 @@ export const LineupScreen = ({
               >
             <IconBolt
               size={12}
-              color={autoSort ? Colors.accent : Colors.textMuted}
+              color={autoSort ? c.accent : c.textMuted}
             />
             <Text
               style={[
                 styles.autoSortLabel,
-                { color: autoSort ? Colors.accent : Colors.textMuted },
+                { color: autoSort ? c.accent : c.textMuted },
               ]}
             >
               Auto-orden {autoSort ? '· ON' : '· OFF'}
@@ -1000,12 +1002,12 @@ export const LineupScreen = ({
             {validation.map((v, i) => {
               const color =
                 v.state === 'ok'
-                  ? Colors.accent
+                  ? c.accent
                   : v.state === 'warn'
-                  ? Colors.warning
+                  ? c.warning
                   : v.state === 'err'
-                  ? Colors.error
-                  : Colors.hairStrong;
+                  ? c.error
+                  : c.hairStrong;
               return (
                 <View key={i} style={[styles.dot, { backgroundColor: color }]} />
               );
@@ -1020,10 +1022,10 @@ export const LineupScreen = ({
                 value={balance}
                 color={
                   balance >= 80
-                    ? Colors.accent
+                    ? c.accent
                     : balance >= 50
-                    ? Colors.warning
-                    : Colors.error
+                    ? c.warning
+                    : c.error
                 }
               />
             </View>
@@ -1031,7 +1033,7 @@ export const LineupScreen = ({
               style={[
                 styles.balanceLabel,
                 {
-                  color: balance >= 80 ? Colors.accent : Colors.textMuted,
+                  color: balance >= 80 ? c.accent : c.textMuted,
                 },
               ]}
             >
@@ -1045,7 +1047,7 @@ export const LineupScreen = ({
           entering={FadeInUp.duration(200)}
           style={[
             styles.hintText,
-            autoDelta != null && { color: Colors.accent, fontWeight: '600' },
+            autoDelta != null && { color: c.accent, fontWeight: '600' },
           ]}
         >
           {hint}
@@ -1080,7 +1082,7 @@ export const LineupScreen = ({
               <Text
                 style={[
                   styles.variantChipLabel,
-                  isCurrent && { color: Colors.accent },
+                  isCurrent && { color: c.accent },
                 ]}
                 numberOfLines={1}
               >
@@ -1121,7 +1123,7 @@ export const LineupScreen = ({
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <IconBolt size={14} color={Colors.accent} />
+              <IconBolt size={14} color={c.accent} />
               <Text style={styles.generateLabel}>
                 Generar alineación
               </Text>
@@ -1168,7 +1170,7 @@ export const LineupScreen = ({
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <IconBolt size={12} color={Colors.accent} />
+              <IconBolt size={12} color={c.accent} />
               <Text style={styles.fillEmptyLabel}>
                 Completar con mejores del banquillo
               </Text>
@@ -1193,7 +1195,7 @@ export const LineupScreen = ({
             ]}
           >
             <View style={styles.suggestionIcon}>
-              <IconBolt size={14} color={Colors.accent} />
+              <IconBolt size={14} color={c.accent} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.suggestionEyebrow}>
@@ -1315,7 +1317,7 @@ export const LineupScreen = ({
               onPress={() => applyOption(opt)}
               style={({ pressed }) => [
                 styles.optionCard,
-                pressed && { opacity: 0.85, borderColor: Colors.accent50 },
+                pressed && { opacity: 0.85, borderColor: c.accent50 },
               ]}
             >
               <View style={styles.optionHead}>
@@ -1324,7 +1326,7 @@ export const LineupScreen = ({
                   <Text style={styles.optionHint}>{opt.hint}</Text>
                 </View>
                 <View style={styles.optionUse}>
-                  <IconBolt size={12} color={Colors.accent} />
+                  <IconBolt size={12} color={c.accent} />
                   <Text style={styles.optionUseText}>Usar</Text>
                 </View>
               </View>
@@ -1370,15 +1372,19 @@ const FilterRow: React.FC<{
   hint: string;
   value: boolean;
   onChange: (v: boolean) => void;
-}> = ({ label, hint, value, onChange }) => (
-  <View style={styles.filterRow}>
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <Text style={styles.filterLabel}>{label}</Text>
-      <Text style={styles.filterHint}>{hint}</Text>
+}> = ({ label, hint, value, onChange }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.filterRow}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.filterLabel}>{label}</Text>
+        <Text style={styles.filterHint}>{hint}</Text>
+      </View>
+      <Toggle value={value} onChange={onChange} />
     </View>
-    <Toggle value={value} onChange={onChange} />
-  </View>
-);
+  );
+};
 
 // ============= BALANCE FILL =============
 
@@ -1386,6 +1392,8 @@ const BalanceFill: React.FC<{ value: number; color: string }> = ({
   value,
   color,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const w = useSharedValue(0);
   useEffect(() => {
     w.value = withTiming(value, {
@@ -1409,6 +1417,8 @@ const CourtBarFill: React.FC<{ pct: number; color: string }> = ({
   pct,
   color,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const w = useSharedValue(0);
   useEffect(() => {
     w.value = withTiming(pct, {
@@ -1441,6 +1451,7 @@ const Avatar: React.FC<{
   fontSize = 10,
   photoUrl,
 }) => {
+  const c = useColors();
   const scale = useSharedValue(1);
   const rotate = useSharedValue(0);
 
@@ -1461,8 +1472,8 @@ const Avatar: React.FC<{
     transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
   }));
 
-  const bg = selected || animating ? Colors.accent : Colors.accent15;
-  const fg = selected || animating ? '#000' : Colors.accent;
+  const bg = selected || animating ? c.accent : c.accent15;
+  const fg = selected || animating ? '#000' : c.accent;
 
   return (
     <Animated.View
@@ -1538,15 +1549,17 @@ const CourtRow: React.FC<CourtRowProps> = ({
   onRemove,
   isAnimating,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const pctOfMax = maxPts ? Math.min(100, (total / maxPts) * 100) : 0;
   const tint =
     validation.state === 'err'
-      ? Colors.error
+      ? c.error
       : validation.state === 'warn'
-      ? Colors.warning
+      ? c.warning
       : top
-      ? Colors.accent
-      : Colors.text;
+      ? c.accent
+      : c.text;
 
   const errorMsg = validation.state === 'err' ? validation.msg : null;
   const ghostHint = sel != null;
@@ -1555,10 +1568,10 @@ const CourtRow: React.FC<CourtRowProps> = ({
     validation.state === 'err'
       ? 'rgba(255,107,107,0.6)'
       : pulsing
-      ? Colors.accent
+      ? c.accent
       : top
-      ? Colors.accent40
-      : Colors.hair;
+      ? c.accent40
+      : c.hair;
 
   return (
     <View style={[styles.courtRow, { borderColor }]}>
@@ -1569,7 +1582,7 @@ const CourtRow: React.FC<CourtRowProps> = ({
             validation.state === 'err'
               ? { backgroundColor: 'rgba(255,107,107,0.15)' }
               : top
-              ? { backgroundColor: Colors.accent15 }
+              ? { backgroundColor: c.accent15 }
               : null,
           ]}
         >
@@ -1577,9 +1590,9 @@ const CourtRow: React.FC<CourtRowProps> = ({
             style={[
               styles.courtBadgeText,
               validation.state === 'err'
-                ? { color: Colors.error }
+                ? { color: c.error }
                 : top
-                ? { color: Colors.accent }
+                ? { color: c.accent }
                 : null,
             ]}
           >
@@ -1591,8 +1604,13 @@ const CourtRow: React.FC<CourtRowProps> = ({
           <View style={styles.courtBar}>
             <CourtBarFill pct={pctOfMax} color={tint} />
           </View>
-          {top && validation.state !== 'err' ? (
-            <Text style={styles.titularLabel}>PAREJA Nº1</Text>
+          {validation.state !== 'err' ? (
+            <Text
+              style={[styles.titularLabel, !top && styles.titularLabelMuted]}
+            >
+              PAREJA Nº{court}
+              {top ? ' · TITULAR' : ''}
+            </Text>
           ) : null}
           {errorMsg ? (
             <Animated.Text
@@ -1669,6 +1687,8 @@ const SlotTile: React.FC<SlotTileProps> = ({
   onTap,
   onLongPress,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   if (!player) {
     return (
       <Pressable
@@ -1689,7 +1709,7 @@ const SlotTile: React.FC<SlotTileProps> = ({
           <Text style={styles.slotEmptyGhostText}>↓ Colocar aquí</Text>
         ) : (
           <>
-            <IconPlus size={12} color={Colors.textFaint} />
+            <IconPlus size={12} color={c.textFaint} />
             <Text style={styles.slotEmptyText}>Vacío</Text>
           </>
         )}
@@ -1742,7 +1762,7 @@ const SlotTile: React.FC<SlotTileProps> = ({
           hitSlop={8}
           style={styles.removeChip}
         >
-          <IconTrash size={12} color={Colors.error} />
+          <IconTrash size={12} color={c.error} />
         </Pressable>
       ) : null}
     </Pressable>
@@ -1768,6 +1788,8 @@ const BenchBar: React.FC<BenchBarProps> = ({
   isAnimating,
   disabled,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const slotSelected = sel?.kind === 'slot';
   return (
     <Pressable
@@ -1776,7 +1798,7 @@ const BenchBar: React.FC<BenchBarProps> = ({
         styles.benchBar,
         slotSelected && {
           borderTopColor: 'rgba(0,223,130,0.4)',
-          backgroundColor: Colors.accent10,
+          backgroundColor: c.accent10,
         },
       ]}
     >
@@ -1785,7 +1807,7 @@ const BenchBar: React.FC<BenchBarProps> = ({
           <Text
             style={[
               styles.benchEyebrow,
-              slotSelected && { color: Colors.accent },
+              slotSelected && { color: c.accent },
             ]}
           >
             BANQUILLO · {players.length}
@@ -1800,7 +1822,7 @@ const BenchBar: React.FC<BenchBarProps> = ({
           ) : null}
         </View>
         <Text style={styles.benchTeamPts}>
-          Σ EQUIPO <Text style={{ color: Colors.text }}>{teamPts}</Text>
+          Σ EQUIPO <Text style={{ color: c.text }}>{teamPts}</Text>
         </Text>
       </View>
 
@@ -1850,6 +1872,8 @@ const BenchChip: React.FC<BenchChipProps> = ({
   disabled,
   onTap,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const initials = initialsOf(player);
   return (
     <Pressable
@@ -1889,8 +1913,8 @@ const BenchChip: React.FC<BenchChipProps> = ({
 
 // ============= STYLES =============
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   center: { alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
@@ -1902,14 +1926,14 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1920,8 +1944,8 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1930,15 +1954,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   autoSortBtnOn: {
-    borderColor: Colors.accent50,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent50,
+    backgroundColor: c.accent10,
   },
   autoSortLabel: {
     fontFamily: Fonts.mono,
@@ -1954,7 +1978,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2.5,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 4,
   },
@@ -1964,7 +1988,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '600',
     letterSpacing: -0.5,
@@ -1982,7 +2006,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 3,
     borderRadius: 2,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
     overflow: 'hidden',
   },
   balanceFill: { height: '100%' },
@@ -1998,7 +2022,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     minHeight: 16,
     fontSize: 11,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   variantStripContainer: {
     height: 52,
@@ -2017,19 +2041,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   variantChipCurrent: {
-    borderColor: Colors.accent50,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent50,
+    backgroundColor: c.accent10,
   },
   variantChipActive: {
-    borderColor: Colors.accent,
+    borderColor: c.accent,
   },
   variantChipStar: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     lineHeight: 14,
   },
@@ -2039,7 +2063,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '600',
     letterSpacing: 0.4,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   variantChipAdd: {
     paddingHorizontal: 14,
@@ -2047,7 +2071,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2057,7 +2081,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   ruleBanner: {
     marginHorizontal: 20,
@@ -2068,12 +2092,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   ruleBannerStrict: {
-    backgroundColor: Colors.accent10,
-    borderColor: Colors.accent40,
+    backgroundColor: c.accent10,
+    borderColor: c.accent40,
   },
   ruleBannerLoose: {
-    backgroundColor: Colors.bgCard,
-    borderColor: Colors.hair,
+    backgroundColor: c.bgCard,
+    borderColor: c.hair,
   },
   ruleBannerText: {
     fontFamily: Fonts.mono,
@@ -2087,7 +2111,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   courtRow: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
@@ -2104,7 +2128,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 9,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2112,26 +2136,29 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
   },
   courtBar: {
     height: 3,
     borderRadius: 2,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
     overflow: 'hidden',
   },
   courtBarFill: { height: '100%' },
   titularLabel: {
     fontSize: 9,
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontWeight: '600',
     letterSpacing: 1.2,
     marginTop: 4,
   },
+  titularLabelMuted: {
+    color: c.textFaint,
+  },
   errorMsg: {
     fontSize: 10,
-    color: Colors.error,
+    color: c.error,
     fontFamily: Fonts.mono,
     fontWeight: '500',
     letterSpacing: 0.4,
@@ -2148,7 +2175,7 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.2,
     marginTop: 3,
   },
@@ -2164,7 +2191,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2172,25 +2199,25 @@ const styles = StyleSheet.create({
   },
   slotEmptyGhost: {
     borderColor: 'rgba(0,223,130,0.6)',
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
   },
-  slotEmptyText: { color: Colors.textFaint, fontSize: 12, fontWeight: '500' },
-  slotEmptyGhostText: { color: Colors.accent, fontSize: 12, fontWeight: '500' },
+  slotEmptyText: { color: c.textFaint, fontSize: 12, fontWeight: '500' },
+  slotEmptyGhostText: { color: c.accent, fontSize: 12, fontWeight: '500' },
   slotTile: {
     flex: 1,
     height: 52,
     borderRadius: 11,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 9,
   },
   slotTileSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent,
+    backgroundColor: c.accent10,
   },
   slotTileError: {
     borderColor: 'rgba(255,107,107,0.4)',
@@ -2200,17 +2227,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: -0.1,
-    color: Colors.text,
+    color: c.text,
     lineHeight: 15,
   },
   slotMeta: {
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 0.5,
     marginTop: 2,
     fontFamily: Fonts.mono,
   },
-  slotPts: { color: Colors.textMuted },
+  slotPts: { color: c.textMuted },
   removeChip: {
     width: 22,
     height: 22,
@@ -2225,15 +2252,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.accent50,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent50,
+    backgroundColor: c.accent10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   fillEmptyLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -2241,42 +2268,42 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.accent50,
-    backgroundColor: Colors.accent15,
+    borderColor: c.accent50,
+    backgroundColor: c.accent15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   generateLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   generateHint: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     opacity: 0.7,
     fontSize: 10,
     letterSpacing: 0.3,
   },
   filterEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   filterTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
     marginTop: 4,
   },
   filterLede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 4,
@@ -2288,16 +2315,16 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   filterLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   filterHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 16,
     marginTop: 2,
@@ -2305,7 +2332,7 @@ const styles = StyleSheet.create({
   filterCta: {
     height: 52,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2326,8 +2353,8 @@ const styles = StyleSheet.create({
   optionCard: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.background,
+    borderColor: c.hairStrong,
+    backgroundColor: c.background,
     padding: 14,
     gap: 10,
   },
@@ -2337,13 +2364,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   optionLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   optionHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 16,
     marginTop: 2,
@@ -2355,12 +2382,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   optionUseText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: -0.1,
@@ -2368,7 +2395,7 @@ const styles = StyleSheet.create({
   optionPreview: {
     gap: 4,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingTop: 10,
   },
   optionRow: {
@@ -2378,7 +2405,7 @@ const styles = StyleSheet.create({
   },
   optionCourt: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     fontWeight: '700',
     width: 16,
@@ -2386,17 +2413,17 @@ const styles = StyleSheet.create({
   },
   optionPair: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     letterSpacing: -0.1,
   },
   optionPts: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
   },
   optionWarn: {
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 11,
     lineHeight: 15,
   },
@@ -2406,9 +2433,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 14,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -2417,13 +2444,13 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 9,
-    backgroundColor: Colors.accent25,
+    backgroundColor: c.accent25,
     alignItems: 'center',
     justifyContent: 'center',
   },
   suggestionEyebrow: {
     fontSize: 11,
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontWeight: '600',
     letterSpacing: 1.2,
@@ -2433,25 +2460,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: -0.1,
-    color: Colors.text,
+    color: c.text,
   },
   suggestionApply: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderRadius: 6,
   },
   suggestionApplyText: {
     fontSize: 11,
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontWeight: '600',
     letterSpacing: 1,
   },
   benchBar: {
     borderTopWidth: 1,
-    borderTopColor: Colors.hair,
-    backgroundColor: Colors.bgCard,
+    borderTopColor: c.hair,
+    backgroundColor: c.bgCard,
     paddingTop: 6,
     paddingBottom: 4,
   },
@@ -2464,7 +2491,7 @@ const styles = StyleSheet.create({
   },
   benchEyebrow: {
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.6,
     fontFamily: Fonts.mono,
     fontWeight: '500',
@@ -2477,14 +2504,14 @@ const styles = StyleSheet.create({
   },
   benchHintText: {
     fontSize: 10,
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontWeight: '600',
     letterSpacing: 1,
   },
   benchTeamPts: {
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.2,
     fontFamily: Fonts.mono,
     fontWeight: '500',
@@ -2493,7 +2520,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 4,
     fontSize: 12,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   benchScroll: {
     paddingHorizontal: 16,
@@ -2504,27 +2531,27 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 10,
     borderRadius: 12,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   benchChipSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent,
+    backgroundColor: c.accent10,
   },
   benchChipName: {
     fontSize: 12,
     fontWeight: '500',
     letterSpacing: -0.1,
-    color: Colors.text,
+    color: c.text,
     lineHeight: 14,
   },
   benchChipMeta: {
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontFamily: Fonts.mono,
     letterSpacing: 0.5,
     marginTop: 2,
@@ -2532,29 +2559,29 @@ const styles = StyleSheet.create({
   ctaWrap: {
     paddingHorizontal: 20,
     paddingTop: 8,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   cta: {
     width: '100%',
     height: 54,
     borderRadius: 16,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
   ctaDisabled: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     shadowOpacity: 0,
   },
   ctaWarn: {
-    backgroundColor: Colors.warning,
-    shadowColor: Colors.warning,
+    backgroundColor: c.warning,
+    shadowColor: c.warning,
   },
   ctaLabel: {
     color: '#000',
@@ -2569,7 +2596,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   ctaLabelDisabled: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 16,
     fontWeight: '500',
     letterSpacing: -0.2,

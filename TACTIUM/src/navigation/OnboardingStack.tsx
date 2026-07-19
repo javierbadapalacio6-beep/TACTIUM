@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { OnboardingChoiceScreen } from '@features/onboarding/screens/OnboardingChoiceScreen';
 import { CreateClubScreen } from '@features/onboarding/screens/CreateClubScreen';
 import { CreateTeamsForClubScreen } from '@features/onboarding/screens/CreateTeamsForClubScreen';
@@ -14,14 +14,17 @@ import type { OnboardingStackParamList } from './types';
 const Stack = createNativeStackNavigator<OnboardingStackParamList>();
 
 export const OnboardingStack = () => {
+  const c = useColors();
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: c.background },
+      animation: 'slide_from_right' as const,
+    }),
+    [c],
+  );
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.background },
-        animation: 'slide_from_right',
-      }}
-    >
+    <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="OnboardingChoice" component={OnboardingChoiceScreen} />
       <Stack.Screen name="CreateClub" component={CreateClubScreen} />
       <Stack.Screen name="CreateTeamsForClub" component={CreateTeamsForClubScreen} />

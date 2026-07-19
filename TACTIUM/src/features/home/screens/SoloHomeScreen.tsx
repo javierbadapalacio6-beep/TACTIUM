@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconRacket, IconTicket, IconGift } from '@components/ui';
+import { IconBall, IconTicket, IconGift } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
 import { DOWNLOAD_URL } from '@core/config/referral';
@@ -39,6 +39,11 @@ const formatShortDate = (iso: string | null): string => {
 };
 
 export const SoloHomeScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  // La tarjeta "registrar amistoso" es una pieza destacada de degradado
+  // verde con texto claro: se mantiene SIEMPRE oscura (también en claro).
+  const heroStyles = useMemo(() => makeStyles(darkColors), []);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
@@ -103,24 +108,24 @@ export const SoloHomeScreen = () => {
         {/* Hero: registrar amistoso */}
         <Pressable
           onPress={() => navigation.navigate('Amistoso')}
-          style={({ pressed }) => [styles.hero, pressed && { opacity: 0.95 }]}
+          style={({ pressed }) => [heroStyles.hero, pressed && { opacity: 0.95 }]}
         >
           <LinearGradient
-            colors={[Colors.primary, '#062520', Colors.background]}
+            colors={[darkColors.primary, '#062520', darkColors.background]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <View style={styles.heroIcon}>
-            <IconRacket size={26} color={Colors.accent} />
+          <View style={heroStyles.heroIcon}>
+            <IconBall size={26} color={darkColors.accent} />
           </View>
-          <Text style={styles.heroTitle}>Registrar un amistoso</Text>
-          <Text style={styles.heroText}>
+          <Text style={heroStyles.heroTitle}>Registrar un amistoso</Text>
+          <Text style={heroStyles.heroText}>
             Apunta el partido con tus colegas: marcador en sets, foto y
             resumen para el grupo de WhatsApp.
           </Text>
-          <View style={styles.heroCta}>
-            <Text style={styles.heroCtaText}>EMPEZAR</Text>
+          <View style={heroStyles.heroCta}>
+            <Text style={heroStyles.heroCtaText}>EMPEZAR</Text>
           </View>
         </Pressable>
 
@@ -150,7 +155,7 @@ export const SoloHomeScreen = () => {
                     <Text
                       style={[
                         styles.resultBadgeTxt,
-                        { color: cm.won ? Colors.accent : Colors.error },
+                        { color: cm.won ? c.accent : c.error },
                       ]}
                     >
                       {cm.won ? 'V' : 'D'}
@@ -179,7 +184,7 @@ export const SoloHomeScreen = () => {
           style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
         >
           <View style={styles.cardIcon}>
-            <IconTicket size={20} color={Colors.accent} />
+            <IconTicket size={20} color={c.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.cardTitle}>¿Tienes un código de partido?</Text>
@@ -195,7 +200,7 @@ export const SoloHomeScreen = () => {
           style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
         >
           <View style={styles.cardIcon}>
-            <IconGift size={20} color={Colors.accent} />
+            <IconGift size={20} color={c.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.cardTitle}>Invita a tus colegas</Text>
@@ -233,8 +238,8 @@ export const SoloHomeScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   topbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -243,7 +248,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   brand: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 2,
@@ -251,13 +256,13 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20, paddingTop: 10 },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     marginBottom: 6,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.6,
@@ -267,7 +272,7 @@ const styles = StyleSheet.create({
   hero: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 20,
     overflow: 'hidden',
     marginBottom: 12,
@@ -284,13 +289,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   heroTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 19,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   heroText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
@@ -301,7 +306,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   heroCtaText: {
     color: '#000',
@@ -311,17 +316,17 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10.5,
     letterSpacing: 2,
     marginTop: 6,
     marginBottom: 8,
   },
   resultsCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 14,
     paddingVertical: 6,
     marginBottom: 12,
@@ -332,7 +337,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   resultBadge: {
     width: 26,
@@ -342,16 +347,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resultBadgeTxt: { fontSize: 12, fontWeight: '800' },
-  resultName: { color: Colors.text, fontSize: 13.5, fontWeight: '700' },
-  resultMeta: { color: Colors.textFaint, fontSize: 11.5, marginTop: 1 },
+  resultName: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+  resultMeta: { color: c.textFaint, fontSize: 11.5, marginTop: 1 },
   resultSets: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     fontWeight: '600',
   },
   resultsAll: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12.5,
     fontWeight: '700',
     textAlign: 'center',
@@ -361,10 +366,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 16,
     marginBottom: 12,
   },
@@ -377,12 +382,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14.5,
     fontWeight: '700',
   },
   cardText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12.5,
     lineHeight: 18,
     marginTop: 2,
@@ -390,24 +395,24 @@ const styles = StyleSheet.create({
   teamBox: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     borderStyle: 'dashed',
     padding: 16,
     marginTop: 6,
   },
   teamBoxTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13.5,
     fontWeight: '700',
     marginBottom: 4,
   },
   teamBoxText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12.5,
     lineHeight: 18,
   },
   teamBoxLink: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12.5,
     fontWeight: '700',
     marginTop: 10,

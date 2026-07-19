@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -7,7 +7,7 @@ import Animated, {
   FadeOutUp,
 } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { useToastStore, type ToastKind } from '@store/toastStore';
 import { useConnectionStore } from '@store/connectionStore';
 import { IconCheck, IconAlert, IconX } from './Icon';
@@ -16,35 +16,37 @@ import { IconCheck, IconAlert, IconX } from './Icon';
 // El `tint` es un overlay translúcido que se pinta SOBRE el bgRaised
 // sólido para dar color al toast sin sacrificar opacidad. El antiguo
 // `bg` translúcido dejaba pasar el negro del status bar / dynamic island.
-const KIND_STYLE: Record<
+const makeKindStyle = (
+  c: Palette,
+): Record<
   ToastKind,
   { tint: string; border: string; iconColor: string; Icon: React.FC<{ size?: number; color?: string }> }
-> = {
+> => ({
   success: {
     tint: 'rgba(0,223,130,0.14)',
     border: 'rgba(0,223,130,0.55)',
-    iconColor: Colors.accent,
+    iconColor: c.accent,
     Icon: IconCheck,
   },
   error: {
     tint: 'rgba(255,107,107,0.14)',
     border: 'rgba(255,107,107,0.55)',
-    iconColor: Colors.error,
+    iconColor: c.error,
     Icon: IconAlert,
   },
   warn: {
     tint: 'rgba(242,201,76,0.14)',
     border: 'rgba(242,201,76,0.55)',
-    iconColor: Colors.warning,
+    iconColor: c.warning,
     Icon: IconAlert,
   },
   info: {
     tint: 'rgba(232,245,239,0.06)',
     border: 'rgba(232,245,239,0.20)',
-    iconColor: Colors.text,
+    iconColor: c.text,
     Icon: IconAlert,
   },
-};
+});
 
 // Host del sistema de toasts. Se monta UNA vez en App.tsx, fuera del
 // NavigationContainer pero dentro de SafeAreaProvider, para flotar
@@ -56,6 +58,9 @@ const KIND_STYLE: Record<
 //   - Auto-dismiss según `durationMs` del toast actual.
 //   - Tap → dismiss inmediato (anula el timer).
 export const ToastHost: React.FC = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const KIND_STYLE = useMemo(() => makeKindStyle(c), [c]);
   const insets = useSafeAreaInsets();
   const current = useToastStore((s) => s.current);
   const dismiss = useToastStore((s) => s.dismiss);
@@ -134,7 +139,7 @@ export const ToastHost: React.FC = () => {
               accessibilityLabel="Cerrar aviso"
               style={styles.closeBtn}
             >
-              <IconX size={14} color={Colors.textMuted} />
+              <IconX size={14} color={c.textMuted} />
             </Pressable>
           </Pressable>
         </Animated.View>
@@ -143,61 +148,62 @@ export const ToastHost: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  host: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    zIndex: 1000,
-    elevation: 1000,
-  },
-  toastWrap: {
-    width: '100%',
-  },
-  toast: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    // Fondo SÓLIDO (bgRaised). El tint del kind va como overlay encima
-    // — así el toast nunca es translúcido frente al status bar.
-    backgroundColor: Colors.bgRaised,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 14,
-  },
-  iconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  title: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  description: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    host: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      paddingHorizontal: 16,
+      zIndex: 1000,
+      elevation: 1000,
+    },
+    toastWrap: {
+      width: '100%',
+    },
+    toast: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      // Fondo SÓLIDO (bgRaised). El tint del kind va como overlay encima
+      // — así el toast nunca es translúcido frente al status bar.
+      backgroundColor: c.bgRaised,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOpacity: 0.45,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 14,
+    },
+    iconWrap: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 1,
+    },
+    title: {
+      color: c.text,
+      fontSize: 14,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+    },
+    description: {
+      color: c.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 2,
+    },
+    closeBtn: {
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });

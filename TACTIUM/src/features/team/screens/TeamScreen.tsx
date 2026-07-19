@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, useIsDark, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -47,6 +47,9 @@ import { displayName, initialsOf, photoOf } from '@core/utils/playerName';
 const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 
 export const TeamScreen = () => {
+  const c = useColors();
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const players = useTeamStore((s) => s.players);
   const addPlayer = useTeamStore((s) => s.addPlayer);
@@ -136,7 +139,7 @@ export const TeamScreen = () => {
             accessibilityLabel="Invitar jugadores con código"
             style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
           >
-            <IconShare size={14} color={Colors.accent} />
+            <IconShare size={14} color={c.accent} />
           </Pressable>
           {FCP_ENABLED && (
             <Pressable
@@ -153,7 +156,7 @@ export const TeamScreen = () => {
             onPress={() => setScanning(true)}
             style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
           >
-            <IconCamera size={16} color={Colors.accent} />
+            <IconCamera size={16} color={c.accent} />
           </Pressable>
           <Pressable
             onPress={() => setAdding(true)}
@@ -162,7 +165,7 @@ export const TeamScreen = () => {
             accessibilityLabel="Añadir jugador"
             style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
           >
-            <IconPlus size={16} color={Colors.accent} />
+            <IconPlus size={16} color={c.accent} />
           </Pressable>
         </View>
       </View>
@@ -180,17 +183,17 @@ export const TeamScreen = () => {
 
       <View style={styles.searchWrap}>
         <View style={styles.search}>
-          <IconSearch size={14} color={Colors.textFaint} />
+          <IconSearch size={14} color={c.textFaint} />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Buscar jugador"
-            placeholderTextColor={Colors.textFaint}
+            placeholderTextColor={c.textFaint}
             style={styles.searchInput}
           />
           {search ? (
             <Pressable onPress={() => setSearch('')} hitSlop={6}>
-              <IconX size={12} color={Colors.textFaint} />
+              <IconX size={12} color={c.textFaint} />
             </Pressable>
           ) : null}
         </View>
@@ -227,7 +230,7 @@ export const TeamScreen = () => {
                     accessibilityRole="button"
                     accessibilityLabel="Añadir jugador"
                   >
-                    <IconPlus size={14} color={Colors.textInverse} />
+                    <IconPlus size={14} color={c.textInverse} />
                     <Text style={styles.emptyCtaPrimaryLabel}>
                       Añadir jugador
                     </Text>
@@ -303,7 +306,7 @@ export const TeamScreen = () => {
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <View style={styles.rank}>
+                <View style={[styles.rank, isDark && styles.rankBoxDark]}>
                   <Text style={styles.rankText}>
                     #{String(i + 1).padStart(2, '0')}
                   </Text>
@@ -334,7 +337,7 @@ export const TeamScreen = () => {
                     <Text style={styles.bajaBadgeText}>BAJA</Text>
                   </View>
                 ) : null}
-                <IconChevron size={14} color={Colors.textFaint} />
+                <IconChevron size={14} color={c.textFaint} />
               </Pressable>
             ))
           )}
@@ -433,19 +436,23 @@ const Kpi: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
   label,
   value,
   highlight,
-}) => (
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View>
     <Text
       style={[
         styles.kpiValue,
-        { color: highlight ? Colors.accent : Colors.text },
+        { color: highlight ? c.accent : c.text },
       ]}
     >
       {value}
     </Text>
     <Text style={styles.kpiLabel}>{label}</Text>
   </View>
-);
+  );
+};
 
 interface EditProps {
   player: Player | null;
@@ -465,6 +472,8 @@ const EditPlayerSheet: React.FC<EditProps> = ({
   onRemove,
   onPhotoChange,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
   const [alias, setAlias] = useState('');
   const [pts, setPts] = useState('');
@@ -607,7 +616,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
       >
         <View style={styles.photoCircle}>
           {photoBusy ? (
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           ) : player?.profile_avatar_url ?? photo ? (
             <Image
               source={{ uri: (player?.profile_avatar_url ?? photo) as string }}
@@ -632,7 +641,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
           maxLength={NAME_MAX_LENGTH}
           autoCapitalize="words"
           style={styles.sheetInput}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
         />
       </FormRow>
       <FormRow label="ALIAS (OPCIONAL)">
@@ -643,7 +652,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
           autoCapitalize="words"
           placeholder="Cómo le llaman en el equipo"
           style={styles.sheetInput}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
         />
       </FormRow>
       <FormRow label="PUNTOS FEP">
@@ -653,7 +662,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
           keyboardType="number-pad"
           maxLength={5}
           style={[styles.sheetInput, { fontFamily: Fonts.mono }]}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
         />
       </FormRow>
       <FormRow label="POSICIÓN">
@@ -666,13 +675,13 @@ const EditPlayerSheet: React.FC<EditProps> = ({
                 onPress={() => setPos(p)}
                 style={[
                   styles.posBtn,
-                  sel && { backgroundColor: Colors.accent, borderColor: Colors.accent },
+                  sel && { backgroundColor: c.accent, borderColor: c.accent },
                 ]}
               >
                 <Text
                   style={[
                     styles.posBtnText,
-                    { color: sel ? '#000' : Colors.text },
+                    { color: sel ? '#000' : c.text },
                   ]}
                 >
                   {p}
@@ -687,7 +696,7 @@ const EditPlayerSheet: React.FC<EditProps> = ({
           <Text
             style={[
               styles.availLabel,
-              { color: avail ? Colors.text : Colors.textMuted },
+              { color: avail ? c.text : c.textMuted },
             ]}
           >
             {avail ? 'Disponible' : 'No disponible'}
@@ -710,6 +719,8 @@ interface AddProps {
   }) => void;
 }
 const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
   const [alias, setAlias] = useState('');
   const [pts, setPts] = useState('300');
@@ -761,7 +772,7 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
           autoCapitalize="words"
           placeholder="Player 13"
           style={styles.sheetInput}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
         />
       </FormRow>
       <FormRow label="ALIAS (OPCIONAL)">
@@ -772,7 +783,7 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
           autoCapitalize="words"
           placeholder="Cómo le llaman en el equipo"
           style={styles.sheetInput}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
         />
       </FormRow>
       <FormRow label="PUNTOS FEP">
@@ -794,13 +805,13 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
                 onPress={() => setPos(p)}
                 style={[
                   styles.posBtn,
-                  sel && { backgroundColor: Colors.accent, borderColor: Colors.accent },
+                  sel && { backgroundColor: c.accent, borderColor: c.accent },
                 ]}
               >
                 <Text
                   style={[
                     styles.posBtnText,
-                    { color: sel ? '#000' : Colors.text },
+                    { color: sel ? '#000' : c.text },
                   ]}
                 >
                   {p}
@@ -817,15 +828,19 @@ const AddPlayerSheet: React.FC<AddProps> = ({ open, onClose, onAdd }) => {
 const FormRow: React.FC<{ label: string; children: React.ReactNode }> = ({
   label,
   children,
-}) => (
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={{ marginBottom: 14 }}>
     <Text style={styles.formLabel}>{label}</Text>
     {children}
   </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -836,16 +851,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
   },
   addBtn: {
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -853,9 +868,9 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -864,15 +879,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   scanBtnIcon: { fontSize: 14 },
   scanBtnLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -881,7 +896,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.8,
@@ -893,11 +908,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   kpiSep: {
     width: 1,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
   },
   kpiValue: {
     fontFamily: Fonts.mono,
@@ -909,7 +924,7 @@ const styles = StyleSheet.create({
   kpiLabel: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.5,
     marginTop: 6,
     textTransform: 'uppercase',
@@ -923,16 +938,16 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 11,
     paddingHorizontal: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     paddingVertical: 0,
   },
@@ -941,10 +956,10 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   list: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -956,18 +971,22 @@ const styles = StyleSheet.create({
   },
   rowDividerInline: {
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   rank: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Colors.primaryDim,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // El recuadro verde oscuro se mantiene SOLO en modo oscuro; en claro el
+  // número va sin encuadrar (solo el verde del texto) para no cargar tanto.
+  rankBoxDark: {
+    backgroundColor: c.primaryDim,
+  },
   rankText: {
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 11,
     fontWeight: '600',
@@ -976,7 +995,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -989,7 +1008,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.accent,
+    color: c.accent,
   },
   rowNameRow: {
     flexDirection: 'row',
@@ -997,7 +1016,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rowName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
@@ -1011,11 +1030,11 @@ const styles = StyleSheet.create({
   bajaBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.warning,
+    color: c.warning,
     letterSpacing: 0.5,
   },
   rowMeta: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
   },
@@ -1023,9 +1042,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   ptsPillText: {
     fontFamily: Fonts.mono,
@@ -1034,7 +1053,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     paddingVertical: 30,
-    color: Colors.textFaint,
+    color: c.textFaint,
     textAlign: 'center',
     fontSize: 13,
   },
@@ -1045,13 +1064,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   emptySubtitle: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
@@ -1071,10 +1090,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 42,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   emptyCtaPrimaryLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.1,
@@ -1083,27 +1102,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 42,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyCtaSecondaryLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   sheetEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sheetTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -1119,9 +1138,9 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1134,16 +1153,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 26,
     fontWeight: '700',
-    color: Colors.accent,
+    color: c.accent,
   },
   photoPickLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '600',
   },
   formLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     paddingLeft: 4,
@@ -1154,10 +1173,10 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 11,
     paddingHorizontal: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    color: Colors.text,
+    borderColor: c.hairStrong,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -1169,9 +1188,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 11,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1185,10 +1204,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   availLabel: {
     fontSize: 14,
@@ -1208,7 +1227,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   removeBtnText: {
-    color: Colors.error,
+    color: c.error,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1216,10 +1235,10 @@ const styles = StyleSheet.create({
     flex: 2,
     height: 50,
     borderRadius: 13,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
@@ -1228,10 +1247,10 @@ const styles = StyleSheet.create({
     height: 52,
     marginTop: 8,
     borderRadius: 13,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },

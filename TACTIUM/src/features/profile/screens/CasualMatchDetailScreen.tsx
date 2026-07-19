@@ -18,7 +18,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack } from '@components/ui';
@@ -68,6 +68,8 @@ export const CasualMatchDetailScreen = () => {
     useRoute<RouteProp<RootStackParamList, 'CasualMatchDetail'>>();
   const { matchId } = route.params;
   const userId = useAuthStore((s) => s.user?.id ?? null);
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
 
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<CasualMatchDetail | null>(null);
@@ -218,12 +220,12 @@ export const CasualMatchDetailScreen = () => {
           hitSlop={10}
           style={styles.backBtn}
         >
-          <IconBack size={20} color={Colors.text} />
+          <IconBack size={20} color={c.text} />
         </Pressable>
 
         {loading ? (
           <View style={styles.loader}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : !detail || !view ? (
           <View style={styles.emptyBox}>
@@ -316,11 +318,11 @@ export const CasualMatchDetailScreen = () => {
                 <View style={styles.h2hCard}>
                   <View style={styles.h2hHeadline}>
                     <Text style={styles.h2hBig}>
-                      <Text style={{ color: Colors.accent }}>
+                      <Text style={{ color: c.accent }}>
                         {h2h.pair.wins}
                       </Text>
                       <Text style={styles.h2hSep}> – </Text>
-                      <Text style={{ color: Colors.error }}>
+                      <Text style={{ color: c.error }}>
                         {h2h.pair.losses}
                       </Text>
                     </Text>
@@ -353,9 +355,9 @@ export const CasualMatchDetailScreen = () => {
                         {iv.name}
                       </Text>
                       <Text style={styles.indivRecord}>
-                        <Text style={{ color: Colors.accent }}>{iv.wins}</Text>
+                        <Text style={{ color: c.accent }}>{iv.wins}</Text>
                         <Text style={styles.h2hSep}>–</Text>
-                        <Text style={{ color: Colors.error }}>{iv.losses}</Text>
+                        <Text style={{ color: c.error }}>{iv.losses}</Text>
                       </Text>
                     </View>
                   ))}
@@ -432,7 +434,7 @@ export const CasualMatchDetailScreen = () => {
                         <Text
                           style={[
                             styles.secondaryBtnLabel,
-                            { color: Colors.error },
+                            { color: c.error },
                           ]}
                         >
                           Quitar foto
@@ -456,7 +458,7 @@ export const CasualMatchDetailScreen = () => {
                 )}
                 {busy ? (
                   <ActivityIndicator
-                    color={Colors.accent}
+                    color={c.accent}
                     style={{ marginTop: 10 }}
                   />
                 ) : null}
@@ -481,30 +483,34 @@ const ScoreRow: React.FC<{ name: string; score: number; win: boolean }> = ({
   name,
   score,
   win,
-}) => (
-  <View style={styles.scoreRow}>
-    <Text
-      style={[styles.scoreName, win && { color: Colors.text }]}
-      numberOfLines={1}
-    >
-      {name}
-    </Text>
-    <Text style={[styles.scoreValue, win && { color: Colors.accent }]}>
-      {score}
-    </Text>
-  </View>
-);
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.scoreRow}>
+      <Text
+        style={[styles.scoreName, win && { color: c.text }]}
+        numberOfLines={1}
+      >
+        {name}
+      </Text>
+      <Text style={[styles.scoreValue, win && { color: c.accent }]}>
+        {score}
+      </Text>
+    </View>
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   content: { paddingHorizontal: 20 },
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
@@ -512,28 +518,28 @@ const styles = StyleSheet.create({
   loader: { paddingTop: 60, alignItems: 'center' },
   emptyBox: {
     marginTop: 24,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 20,
   },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
-  emptyText: { color: Colors.textMuted, fontSize: 13 },
+  emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
+  emptyText: { color: c.textMuted, fontSize: 13 },
   eyebrow: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 12,
   },
   cardWrap: { alignItems: 'center', marginBottom: 4 },
   scoreCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     padding: 18,
     gap: 4,
   },
@@ -545,14 +551,14 @@ const styles = StyleSheet.create({
   },
   scoreName: {
     flex: 1,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 19,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   scoreValue: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 26,
     fontWeight: '800',
     minWidth: 30,
@@ -560,12 +566,12 @@ const styles = StyleSheet.create({
   },
   scoreDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
     marginVertical: 6,
   },
   sectionLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
@@ -576,22 +582,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   codeValue: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: 4,
   },
   codeHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 6,
@@ -599,23 +605,23 @@ const styles = StyleSheet.create({
   codeShareBtn: {
     height: 40,
     borderRadius: 11,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
   codeShareLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '700',
   },
   setsCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
@@ -625,23 +631,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   setLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 1.5,
   },
   setScore: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '700' },
-  setWin: { color: Colors.accent },
-  setLose: { color: Colors.textMuted },
-  setSep: { color: Colors.textFaint },
+  setWin: { color: c.accent },
+  setLose: { color: c.textMuted },
+  setSep: { color: c.textFaint },
   h2hCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 16,
     gap: 8,
   },
@@ -651,14 +657,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   h2hBig: { fontFamily: Fonts.mono, fontSize: 30, fontWeight: '800' },
-  h2hSep: { color: Colors.textFaint },
-  h2hMeta: { color: Colors.textFaint, fontSize: 12, fontFamily: Fonts.mono },
-  h2hPairs: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
+  h2hSep: { color: c.textFaint },
+  h2hMeta: { color: c.textFaint, fontSize: 12, fontFamily: Fonts.mono },
+  h2hPairs: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
   card: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 16,
   },
   indivRow: {
@@ -667,16 +673,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
-  indivName: { flex: 1, color: Colors.text, fontSize: 15, fontWeight: '600' },
+  indivName: { flex: 1, color: c.text, fontSize: 15, fontWeight: '600' },
   indivRecord: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '800' },
   actions: { marginTop: 24 },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
   primaryBtn: {
     height: 50,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -686,12 +692,12 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryBtnLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -699,6 +705,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 220,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
   },
 });

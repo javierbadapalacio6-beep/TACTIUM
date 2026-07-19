@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Image,
   Text,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { initialsOf } from '@core/utils/format';
 
@@ -19,6 +19,7 @@ export const CommunityAvatar: React.FC<{
   avatarUrl?: string | null;
   size?: number;
 }> = ({ name, avatarUrl, size = 44 }) => {
+  const c = useColors();
   const radius = Math.round(size * 0.28);
   if (avatarUrl) {
     return (
@@ -29,14 +30,17 @@ export const CommunityAvatar: React.FC<{
           height: size,
           borderRadius: radius,
           borderWidth: 1,
-          borderColor: Colors.accent40,
+          borderColor: c.accent40,
         }}
       />
     );
   }
+  // Avatar sin foto: chip de degradado verde con iniciales. Paleta oscura
+  // fija para que las iniciales (verde neón) se lean sobre el verde también
+  // en modo claro (con la paleta clara quedaban verde sobre verde).
   return (
     <LinearGradient
-      colors={[Colors.primary, Colors.bgCard2]}
+      colors={[darkColors.primary, darkColors.bgCard2]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={{
@@ -46,12 +50,12 @@ export const CommunityAvatar: React.FC<{
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
-        borderColor: Colors.accent40,
+        borderColor: darkColors.accent40,
       }}
     >
       <Text
         style={{
-          color: Colors.accent,
+          color: darkColors.accent,
           fontWeight: '700',
           fontSize: Math.round(size * 0.36),
           fontFamily: Fonts.mono,
@@ -69,40 +73,44 @@ export const FollowButton: React.FC<{
   busy?: boolean;
   onPress: () => void;
   size?: 'sm' | 'md';
-}> = ({ following, busy, onPress, size = 'md' }) => (
-  <Pressable
-    onPress={onPress}
-    disabled={busy}
-    accessibilityRole="button"
-    accessibilityLabel={following ? 'Dejar de seguir' : 'Seguir'}
-    style={({ pressed }) => [
-      styles.btn,
-      size === 'sm' && styles.btnSm,
-      following ? styles.btnFollowing : styles.btnFollow,
-      pressed && { opacity: 0.85 },
-      busy && { opacity: 0.6 },
-    ]}
-  >
-    {busy ? (
-      <ActivityIndicator
-        size="small"
-        color={following ? Colors.textMuted : Colors.textInverse}
-      />
-    ) : (
-      <Text
-        style={[
-          styles.label,
-          size === 'sm' && styles.labelSm,
-          following ? styles.labelFollowing : styles.labelFollow,
-        ]}
-      >
-        {following ? 'Siguiendo' : 'Seguir'}
-      </Text>
-    )}
-  </Pressable>
-);
+}> = ({ following, busy, onPress, size = 'md' }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={following ? 'Dejar de seguir' : 'Seguir'}
+      style={({ pressed }) => [
+        styles.btn,
+        size === 'sm' && styles.btnSm,
+        following ? styles.btnFollowing : styles.btnFollow,
+        pressed && { opacity: 0.85 },
+        busy && { opacity: 0.6 },
+      ]}
+    >
+      {busy ? (
+        <ActivityIndicator
+          size="small"
+          color={following ? c.textMuted : c.textInverse}
+        />
+      ) : (
+        <Text
+          style={[
+            styles.label,
+            size === 'sm' && styles.labelSm,
+            following ? styles.labelFollowing : styles.labelFollow,
+          ]}
+        >
+          {following ? 'Siguiendo' : 'Seguir'}
+        </Text>
+      )}
+    </Pressable>
+  );
+};
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   btn: {
     minWidth: 104,
     height: 40,
@@ -113,15 +121,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   btnSm: { minWidth: 92, height: 34, borderRadius: 10, paddingHorizontal: 12 },
-  btnFollow: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  btnFollow: { backgroundColor: c.accent, borderColor: c.accent },
   btnFollowing: {
     backgroundColor: 'transparent',
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   label: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
   labelSm: { fontSize: 13 },
-  labelFollow: { color: Colors.textInverse },
-  labelFollowing: { color: Colors.textMuted },
+  labelFollow: { color: c.textInverse },
+  labelFollowing: { color: c.textMuted },
 });
 
 /** Ver el módulo como componente vacío evita el warning de fast-refresh. */

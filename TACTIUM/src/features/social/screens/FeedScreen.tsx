@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { IconBack, IconChevron } from '@components/ui';
 import { fetchFeed, type FeedItem } from '@core/services/social';
@@ -32,6 +32,8 @@ const fmtDate = (iso: string | null): string => {
 };
 
 export const FeedScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -77,7 +79,7 @@ export const FeedScreen = () => {
           accessibilityRole="button"
           accessibilityLabel="Volver"
         >
-          <IconBack size={20} color={Colors.text} />
+          <IconBack size={20} color={c.text} />
         </Pressable>
         <Text style={styles.eyebrow}>NOVEDADES</Text>
         <View style={{ width: 38 }} />
@@ -85,7 +87,7 @@ export const FeedScreen = () => {
 
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       ) : (
         <ScrollView
@@ -98,7 +100,7 @@ export const FeedScreen = () => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => load(true)}
-              tintColor={Colors.accent}
+              tintColor={c.accent}
             />
           }
         >
@@ -129,7 +131,7 @@ export const FeedScreen = () => {
                   <Text
                     style={[
                       styles.title,
-                      it.positive === true && { color: Colors.accent },
+                      it.positive === true && { color: c.accent },
                     ]}
                     numberOfLines={2}
                   >
@@ -147,7 +149,7 @@ export const FeedScreen = () => {
                     <Text style={styles.date}>{fmtDate(it.occurred_on)}</Text>
                   </View>
                 </View>
-                <IconChevron size={14} color={Colors.textFaint} />
+                <IconChevron size={14} color={c.textFaint} />
               </Pressable>
             ))
           )}
@@ -157,8 +159,8 @@ export const FeedScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -170,15 +172,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
@@ -186,9 +188,9 @@ const styles = StyleSheet.create({
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8 },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
   emptyHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
@@ -200,19 +202,19 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14.5,
-    fontWeight: '650',
+    fontWeight: '600',
     letterSpacing: -0.1,
   },
   subtitle: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 4,
     lineHeight: 17,
@@ -220,14 +222,14 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   kindTag: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 9,
     letterSpacing: 1.2,
     fontWeight: '700',
   },
   date: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
   },

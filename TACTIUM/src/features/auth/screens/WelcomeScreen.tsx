@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
-import { Typography } from '@core/theme/typography';
+import { useColors, useTypography, type Palette } from '@core/theme';
 import { Spacing, Radius } from '@core/theme/spacing';
 import { Fonts } from '@core/theme/fonts';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -79,6 +78,9 @@ const slides: Slide[] = [
 export const WelcomeScreen = ({
   navigation,
 }: AuthStackScreenProps<'Welcome'>) => {
+  const c = useColors();
+  const t = useTypography();
+  const styles = useMemo(() => makeStyles(c, t), [c, t]);
   const [step, setStep] = useState(0);
   // Dirección del último cambio: 1 = avanzando, -1 = retrocediendo, 0 = mount.
   // Permite que la animación de entrada del visual + texto sea direccional,
@@ -230,7 +232,7 @@ export const WelcomeScreen = ({
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <IconBack size={18} color={Colors.text} />
+                <IconBack size={18} color={c.text} />
               </Pressable>
             </Animated.View>
           )}
@@ -242,7 +244,7 @@ export const WelcomeScreen = ({
             ]}
           >
             <LinearGradient
-              colors={[Colors.accent, '#27e898']}
+              colors={[c.accent, '#27e898']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -275,10 +277,10 @@ export const WelcomeScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette, t: ReturnType<typeof useTypography>) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   topbar: {
     flexDirection: 'row',
@@ -293,14 +295,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   wordmark: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 4,
     fontFamily: Fonts.sans,
   },
   skip: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -317,7 +319,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   tag: {
-    ...Typography.eyebrow,
+    ...t.eyebrow,
     fontSize: 11,
     letterSpacing: 3,
     marginBottom: 14,
@@ -326,21 +328,21 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
-    ...Typography.h1,
+    ...t.h1,
     fontSize: 32,
     lineHeight: 34,
     fontWeight: '600',
     letterSpacing: -0.8,
-    color: Colors.text,
+    color: c.text,
   },
   titleAccent: {
-    color: Colors.accent,
+    color: c.accent,
   },
   bodyText: {
-    ...Typography.body,
+    ...t.body,
     fontSize: 15,
     lineHeight: 22,
-    color: Colors.textMuted,
+    color: c.textMuted,
     maxWidth: 320,
   },
   footer: {
@@ -359,8 +361,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(232,245,239,0.18)',
   },
   dotActive: {
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.7,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 0 },
@@ -374,9 +376,9 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -389,7 +391,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -402,7 +404,7 @@ const styles = StyleSheet.create({
   },
   trialNote: {
     textAlign: 'center',
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 0.6,
@@ -416,7 +418,7 @@ const styles = StyleSheet.create({
   },
   signatureText: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 2,
   },

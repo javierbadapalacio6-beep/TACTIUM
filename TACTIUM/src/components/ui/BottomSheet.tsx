@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Modal,
   View,
@@ -9,7 +9,8 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme/useColors';
+import type { Palette } from '@core/theme/colors';
 import { Spacing } from '@core/theme/spacing';
 interface Props {
   open: boolean;
@@ -37,6 +38,8 @@ export const BottomSheet: React.FC<Props> = ({
   scrollable = true,
   footer,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   // ✅ REDUCIDO: De safeBottom + 48 a solo safeBottom + 16
   // El sheet termina pegado al borde inferior de la pantalla, así que el
@@ -105,14 +108,14 @@ export const BottomSheet: React.FC<Props> = ({
     </Modal>
   );
 };
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
     flexDirection: 'column',
   },
   scrim: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: c.overlay,
   },
   sheetWrap: {
     width: '100%',
@@ -121,14 +124,14 @@ const styles = StyleSheet.create({
     // centro vertical con una franja grande vacía encima. Dejándolo sin
     // flex, el sheetWrap se dimensiona a su contenido (el sheet) y se
     // ancla naturalmente al fondo gracias a la flex column del root.
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
   },
   sheet: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingTop: 10,
     maxHeight: '90%',
     // Sin minHeight: que el sheet abrace el contenido. Si el contenido
@@ -149,7 +152,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 5,
     borderRadius: 3,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
     marginBottom: 10,
   },
   content: {
@@ -161,6 +164,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md + 4,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.hair,
+    borderTopColor: c.hair,
   },
 });

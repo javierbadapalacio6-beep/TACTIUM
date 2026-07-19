@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
   View,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 
@@ -37,6 +37,8 @@ export const DeleteClubSheet = ({
   onConfirm,
   onCancel,
 }: DeleteClubSheetProps) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
 
@@ -83,7 +85,7 @@ export const DeleteClubSheet = ({
               onChangeText={setText}
               editable={!loading}
               placeholder={clubName}
-              placeholderTextColor={Colors.textFaint}
+              placeholderTextColor={c.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               style={styles.input}
@@ -99,7 +101,7 @@ export const DeleteClubSheet = ({
               ]}
             >
               {loading ? (
-                <ActivityIndicator color={Colors.text} />
+                <ActivityIndicator color={c.text} />
               ) : (
                 <Text style={styles.deleteBtnLabel}>Borrar club para siempre</Text>
               )}
@@ -117,19 +119,19 @@ export const DeleteClubSheet = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   fill: { flex: 1 },
   scrim: {
     flex: 1,
-    backgroundColor: Colors.overlay,
+    backgroundColor: c.overlay,
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
     borderTopWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 22,
     paddingTop: 10,
   },
@@ -138,35 +140,35 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
     marginBottom: 18,
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.error,
+    color: c.error,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
     marginTop: 6,
   },
   body: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 10,
   },
   bodyStrong: {
-    color: Colors.text,
+    color: c.text,
     fontWeight: '700',
   },
   inputLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     marginTop: 20,
     marginBottom: 8,
@@ -175,27 +177,27 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
     paddingHorizontal: 14,
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
   },
   deleteBtn: {
     height: 54,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.error,
+    backgroundColor: c.error,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 18,
   },
   deleteBtnLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '700',
   },
   cancelLink: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',

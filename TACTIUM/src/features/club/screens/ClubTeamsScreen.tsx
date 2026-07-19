@@ -10,7 +10,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -32,6 +32,8 @@ import type { ClubTeamsStackScreenProps } from '@navigation/types';
 export const ClubTeamsScreen = ({
   navigation,
 }: ClubTeamsStackScreenProps<'ClubTeamsRoot'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
@@ -116,7 +118,7 @@ export const ClubTeamsScreen = ({
 
         {loading ? (
           <View style={styles.loaderBox}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : clubTeams.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -173,7 +175,7 @@ export const ClubTeamsScreen = ({
                       </Text>
                     </View>
                   </View>
-                  <IconChevron size={16} color={Colors.textFaint} />
+                  <IconChevron size={16} color={c.textFaint} />
                 </Pressable>
               );
             })}
@@ -184,8 +186,8 @@ export const ClubTeamsScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   topbar: {
     paddingHorizontal: 22,
     flexDirection: 'row',
@@ -203,19 +205,19 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2.5,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 2,
   },
   brandName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   scroll: { paddingHorizontal: 22, paddingTop: 6 },
   intro: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 18,
@@ -225,33 +227,33 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 18,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
     gap: 6,
   },
   emptyTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
   },
-  empty: { color: Colors.textFaint, textAlign: 'center', fontSize: 14 },
+  empty: { color: c.textFaint, textAlign: 'center', fontSize: 14 },
   teamCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   teamCardLeft: {
     flex: 1,
@@ -264,33 +266,33 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   teamAvatarText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   teamName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   teamMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
   teamStats: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 0.4,
     marginTop: 4,

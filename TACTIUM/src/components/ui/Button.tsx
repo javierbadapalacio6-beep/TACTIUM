@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Pressable,
   Text,
@@ -9,8 +9,7 @@ import {
   type TextStyle,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
-import { Typography } from '@core/theme/typography';
+import { useColors, useTypography, type Palette } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
 
 type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'ghost' | 'subtle';
@@ -36,17 +35,21 @@ export const Button: React.FC<ButtonProps> = ({
   iconRight,
   style,
 }) => {
+  const c = useColors();
+  const t = useTypography();
+  const styles = useMemo(() => makeStyles(c, t), [c, t]);
+
   const isDisabled = disabled || isLoading;
   const labelColor =
     variant === 'primary'
-      ? Colors.textInverse
+      ? c.textInverse
       : variant === 'destructive'
-      ? Colors.error
+      ? c.error
       : variant === 'secondary'
-      ? Colors.accent
+      ? c.accent
       : variant === 'subtle'
-      ? Colors.text
-      : Colors.text;
+      ? c.text
+      : c.text;
 
   return (
     <Pressable
@@ -75,54 +78,55 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  base: {
-    height: 54,
-    borderRadius: Radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  primary: {
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  secondary: {
-    backgroundColor: Colors.accent10,
-    borderWidth: 1,
-    borderColor: Colors.accent40,
-  },
-  destructive: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,107,0.4)',
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-  },
-  subtle: {
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-  label: {
-    ...Typography.headline,
-    fontSize: 16,
-    letterSpacing: -0.2,
-  },
-});
+const makeStyles = (c: Palette, t: ReturnType<typeof useTypography>) =>
+  StyleSheet.create({
+    base: {
+      height: 54,
+      borderRadius: Radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 18,
+    },
+    content: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    primary: {
+      backgroundColor: c.accent,
+      shadowColor: c.accent,
+      shadowOpacity: 0.4,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 8,
+    },
+    secondary: {
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    destructive: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: 'rgba(255,107,107,0.4)',
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    subtle: {
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    disabled: {
+      opacity: 0.4,
+    },
+    label: {
+      ...t.headline,
+      fontSize: 16,
+      letterSpacing: -0.2,
+    },
+  });

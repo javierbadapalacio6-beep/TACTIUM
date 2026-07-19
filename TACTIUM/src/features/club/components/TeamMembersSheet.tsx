@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Share,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -39,6 +39,8 @@ export const TeamMembersSheet: React.FC<{
   teamName: string | null;
   onClose: () => void;
 }> = ({ open, teamId, teamName, onClose }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [members, setMembers] = useState<TeamMembersApi.TeamMemberWithProfile[]>(
     [],
   );
@@ -261,7 +263,7 @@ export const TeamMembersSheet: React.FC<{
 
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       ) : members.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -307,7 +309,7 @@ export const TeamMembersSheet: React.FC<{
                     hitSlop={8}
                     style={styles.removeBtn}
                   >
-                    <IconTrash size={16} color={Colors.err} />
+                    <IconTrash size={16} color={c.err} />
                   </Pressable>
                 </View>
 
@@ -322,18 +324,18 @@ export const TeamMembersSheet: React.FC<{
                         style={[
                           styles.rolePill,
                           sel && {
-                            backgroundColor: Colors.accent10,
-                            borderColor: Colors.accent50,
+                            backgroundColor: c.accent10,
+                            borderColor: c.accent50,
                           },
                         ]}
                       >
                         {sel ? (
-                          <IconCheck size={11} color={Colors.accent} />
+                          <IconCheck size={11} color={c.accent} />
                         ) : null}
                         <Text
                           style={[
                             styles.rolePillText,
-                            { color: sel ? Colors.accent : Colors.textMuted },
+                            { color: sel ? c.accent : c.textMuted },
                           ]}
                         >
                           {ROLE_LABEL[r]}
@@ -388,7 +390,7 @@ export const TeamMembersSheet: React.FC<{
       <View style={styles.invitesSection}>
         <View style={styles.invitesHeader}>
           <Text style={styles.invitesEyebrow}>INVITACIONES</Text>
-          {generating ? <ActivityIndicator size="small" color={Colors.accent} /> : null}
+          {generating ? <ActivityIndicator size="small" color={c.accent} /> : null}
         </View>
 
         <View style={styles.inviteCtas}>
@@ -402,8 +404,8 @@ export const TeamMembersSheet: React.FC<{
               pressed && { opacity: 0.85 },
             ]}
           >
-            <IconPlus size={14} color={Colors.accent} />
-            <Text style={[styles.inviteBtnText, { color: Colors.accent }]}>
+            <IconPlus size={14} color={c.accent} />
+            <Text style={[styles.inviteBtnText, { color: c.accent }]}>
               Invitar capitán
             </Text>
           </Pressable>
@@ -416,7 +418,7 @@ export const TeamMembersSheet: React.FC<{
               pressed && { opacity: 0.85 },
             ]}
           >
-            <IconPlus size={14} color={Colors.textMuted} />
+            <IconPlus size={14} color={c.textMuted} />
             <Text style={styles.inviteBtnText}>Invitar jugador</Text>
           </Pressable>
         </View>
@@ -437,7 +439,7 @@ export const TeamMembersSheet: React.FC<{
                     <Text
                       style={[
                         styles.inviteCode,
-                        !active && { color: Colors.textFaint },
+                        !active && { color: c.textFaint },
                       ]}
                     >
                       {inv.code}
@@ -452,7 +454,7 @@ export const TeamMembersSheet: React.FC<{
                       hitSlop={6}
                       style={styles.inviteActionBtn}
                     >
-                      <IconShare size={14} color={Colors.accent} />
+                      <IconShare size={14} color={c.accent} />
                     </Pressable>
                   ) : null}
                   <Pressable
@@ -460,7 +462,7 @@ export const TeamMembersSheet: React.FC<{
                     hitSlop={6}
                     style={styles.inviteActionBtn}
                   >
-                    <IconTrash size={14} color={Colors.err} />
+                    <IconTrash size={14} color={c.err} />
                   </Pressable>
                 </View>
               );
@@ -487,16 +489,16 @@ export const TeamMembersSheet: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -504,7 +506,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 17,
     marginBottom: 14,
@@ -518,30 +520,30 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.error + '55',
-    backgroundColor: Colors.error + '12',
+    borderColor: c.error + '55',
+    backgroundColor: c.error + '12',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteTeamLabel: {
-    color: Colors.error,
+    color: c.error,
     fontSize: 14,
     fontWeight: '700',
   },
   emptyCard: {
     paddingVertical: 24,
     alignItems: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
-  emptyText: { color: Colors.textMuted, fontSize: 13 },
+  emptyText: { color: c.textMuted, fontSize: 13 },
   memberCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -554,27 +556,27 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   memberName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   memberEmail: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
   },
@@ -595,8 +597,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.hair,
-    backgroundColor: Colors.background,
+    borderColor: c.hair,
+    backgroundColor: c.background,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -609,7 +611,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.4,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   slotRow: {
     flexDirection: 'row',
@@ -626,31 +628,31 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.accent40,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
   },
   slotBadgeLabel: {
     fontFamily: Fonts.mono,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.4,
-    color: Colors.accent,
+    color: c.accent,
   },
   slotBadgeName: {
     flex: 1,
     minWidth: 0,
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   slotBadgeEmpty: {
-    borderColor: Colors.hair,
-    backgroundColor: Colors.background,
+    borderColor: c.hair,
+    backgroundColor: c.background,
     justifyContent: 'center',
   },
   slotBadgeEmptyText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     fontStyle: 'italic',
   },
@@ -659,21 +661,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.hair,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.hair,
+    backgroundColor: c.bgCard,
   },
   slotReleaseText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.4,
-    color: Colors.err,
+    color: c.err,
   },
   invitesSection: {
     marginTop: 18,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   invitesHeader: {
     flexDirection: 'row',
@@ -683,7 +685,7 @@ const styles = StyleSheet.create({
   },
   invitesEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 1.8,
     fontWeight: '500',
@@ -696,22 +698,22 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 42,
     borderRadius: Radius.sm,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   inviteBtnPrimary: {
-    backgroundColor: Colors.accent10,
-    borderColor: Colors.accent50,
+    backgroundColor: c.accent10,
+    borderColor: c.accent50,
   },
   inviteBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textMuted,
+    color: c.textMuted,
     letterSpacing: -0.1,
   },
   inviteRow: {
@@ -721,19 +723,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: Radius.sm,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   inviteCode: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 2,
   },
   inviteMeta: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
   },

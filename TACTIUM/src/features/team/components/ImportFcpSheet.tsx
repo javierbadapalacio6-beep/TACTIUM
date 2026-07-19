@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { BottomSheet } from '@components/ui';
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -30,6 +30,8 @@ interface Props {
 }
 
 export const ImportFcpSheet: React.FC<Props> = ({ open, onClose, onImport }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [gender, setGender] = useState<FcpGender>('M');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FcpTeam[]>([]);
@@ -167,7 +169,7 @@ export const ImportFcpSheet: React.FC<Props> = ({ open, onClose, onImport }) => 
                   <Text
                     style={[
                       styles.genderText,
-                      { color: sel ? '#000' : Colors.textMuted },
+                      { color: sel ? '#000' : c.textMuted },
                     ]}
                   >
                     {label}
@@ -186,11 +188,11 @@ export const ImportFcpSheet: React.FC<Props> = ({ open, onClose, onImport }) => 
             autoFocus
             autoCapitalize="characters"
             placeholder="Nombre del equipo (p.ej. MEDIO CUDEYO A)"
-            placeholderTextColor={Colors.textFaint}
+            placeholderTextColor={c.textFaint}
             style={styles.input}
           />
           {searching ? (
-            <ActivityIndicator color={Colors.accent} style={{ marginTop: 16 }} />
+            <ActivityIndicator color={c.accent} style={{ marginTop: 16 }} />
           ) : null}
           <ScrollView
             style={{ maxHeight: 300, marginTop: 8 }}
@@ -234,7 +236,7 @@ export const ImportFcpSheet: React.FC<Props> = ({ open, onClose, onImport }) => 
           </Pressable>
 
           {loadingRoster ? (
-            <ActivityIndicator color={Colors.accent} style={{ marginTop: 16 }} />
+            <ActivityIndicator color={c.accent} style={{ marginTop: 16 }} />
           ) : roster && roster.length ? (
             <>
               <Text style={styles.help}>
@@ -263,37 +265,37 @@ export const ImportFcpSheet: React.FC<Props> = ({ open, onClose, onImport }) => 
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2,
-    color: Colors.accent,
+    color: c.accent,
     marginBottom: 4,
   },
   title: {
     fontFamily: Fonts.sans,
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.text,
+    color: c.text,
   },
   subtitle: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textMuted,
+    color: c.textMuted,
     marginTop: 4,
     marginBottom: 4,
   },
   help: {
     fontSize: 13,
-    color: Colors.textMuted,
+    color: c.textMuted,
     lineHeight: 18,
     marginBottom: 4,
     marginTop: 8,
   },
   error: {
     fontSize: 13,
-    color: Colors.error,
+    color: c.error,
     marginTop: 8,
   },
   genderRow: {
@@ -301,9 +303,9 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 3,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     marginTop: 12,
   },
   genderBtn: {
@@ -313,17 +315,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  genderBtnActive: { backgroundColor: Colors.accent },
+  genderBtnActive: { backgroundColor: c.accent },
   genderText: { fontSize: 14, fontWeight: '700' },
   input: {
     marginTop: 10,
     height: 48,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
   },
   row: {
@@ -333,31 +335,31 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     marginBottom: 8,
   },
-  rowName: { color: Colors.text, fontSize: 15, fontWeight: '600' },
+  rowName: { color: c.text, fontSize: 15, fontWeight: '600' },
   rowSub: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontFamily: Fonts.mono,
     fontSize: 11,
     marginTop: 2,
   },
-  rowArrow: { color: Colors.accent, fontSize: 16, marginLeft: 8 },
-  back: { color: Colors.textMuted, fontFamily: Fonts.mono, fontSize: 12 },
+  rowArrow: { color: c.accent, fontSize: 16, marginLeft: 8 },
+  back: { color: c.textMuted, fontFamily: Fonts.mono, fontSize: 12 },
   prow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 9,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.hair,
+    borderBottomColor: c.hair,
   },
-  pname: { flex: 1, color: Colors.text, fontSize: 14 },
+  pname: { flex: 1, color: c.text, fontSize: 14 },
   ppts: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontFamily: Fonts.mono,
     fontSize: 12,
     marginLeft: 8,
@@ -365,9 +367,9 @@ const styles = StyleSheet.create({
   cta: {
     height: 50,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaText: { color: Colors.textInverse, fontSize: 15, fontWeight: '700' },
+  ctaText: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
 });

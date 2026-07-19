@@ -10,7 +10,7 @@ import {
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -42,6 +42,8 @@ function formatShortDate(iso: string | null): string {
 export const ClubDashboardScreen = ({
   navigation,
 }: ClubStackScreenProps<'ClubRoot'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
@@ -201,7 +203,7 @@ export const ClubDashboardScreen = ({
 
         {loading ? (
           <View style={styles.loaderBox}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : (
           <>
@@ -343,7 +345,10 @@ const SectionHeader: React.FC<{
   padded?: boolean;
   onAdd?: () => void;
   addLabel?: string;
-}> = ({ label, count, padded, onAdd, addLabel }) => (
+}> = ({ label, count, padded, onAdd, addLabel }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View
     style={[
       styles.sectionHeader,
@@ -364,18 +369,21 @@ const SectionHeader: React.FC<{
             pressed && { opacity: 0.75 },
           ]}
         >
-          <IconPlus size={14} color={Colors.accent} />
+          <IconPlus size={14} color={c.accent} />
         </Pressable>
       ) : null}
     </View>
   </View>
-);
+  );
+};
 
 // ─── NextMatchdayCard ───────────────────────────────────────────────────────
 const NextMatchdayCard: React.FC<{
   overview: ClubTeamOverview;
   onPress: () => void;
 }> = ({ overview, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const md = overview.nextMatchday!;
   const dateLabel = formatShortDate(md.match_date);
   const timeLabel = md.match_time ? md.match_time.slice(0, 5) : null;
@@ -397,7 +405,7 @@ const NextMatchdayCard: React.FC<{
         <View
           style={[
             styles.venueDot,
-            { backgroundColor: md.is_home ? Colors.accent : Colors.textFaint },
+            { backgroundColor: md.is_home ? c.accent : c.textFaint },
           ]}
         />
       </View>
@@ -421,13 +429,15 @@ const LastResultCard: React.FC<{
   overview: ClubTeamOverview;
   onPress: () => void;
 }> = ({ overview, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const md = overview.lastResult!;
   const tint =
     md.outcome === 'win'
-      ? Colors.accent
+      ? c.accent
       : md.outcome === 'loss'
-        ? Colors.error
-        : Colors.warning;
+        ? c.error
+        : c.warning;
   const label =
     md.outcome === 'win' ? 'V' : md.outcome === 'loss' ? 'D' : 'E';
   const hasScore = md.score_for != null && md.score_against != null;
@@ -464,7 +474,7 @@ const LastResultCard: React.FC<{
           <Text
             style={[
               styles.resultScoreNum,
-              { color: isHome ? tint : Colors.text },
+              { color: isHome ? tint : c.text },
             ]}
           >
             {leftScore}
@@ -473,7 +483,7 @@ const LastResultCard: React.FC<{
           <Text
             style={[
               styles.resultScoreNum,
-              { color: isHome ? Colors.text : tint },
+              { color: isHome ? c.text : tint },
             ]}
           >
             {rightScore}
@@ -502,6 +512,8 @@ const TeamRow: React.FC<{
   uncovered?: boolean;
   onManage: () => void;
 }> = ({ overview, last, uncovered, onManage }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { team, playersCount } = overview;
   const meta =
     [team.category, team.gender, team.group_name && `Grupo ${team.group_name}`]
@@ -541,7 +553,7 @@ const TeamRow: React.FC<{
         ) : null}
       </View>
       <View style={styles.manageBtn}>
-        <IconPencil size={14} color={uncovered ? Colors.warning : Colors.accent} />
+        <IconPencil size={14} color={uncovered ? c.warning : c.accent} />
       </View>
     </Pressable>
   );
@@ -552,7 +564,10 @@ const Stat: React.FC<{ label: string; value: string; small?: boolean }> = ({
   label,
   value,
   small,
-}) => (
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={{ flex: 1 }}>
     <Text style={styles.statLabel}>{label}</Text>
     <Text
@@ -562,11 +577,12 @@ const Stat: React.FC<{ label: string; value: string; small?: boolean }> = ({
       {value}
     </Text>
   </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
-  empty: { color: Colors.textFaint, textAlign: 'center', fontSize: 14 },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
+  empty: { color: c.textFaint, textAlign: 'center', fontSize: 14 },
 
   topbar: {
     paddingHorizontal: 22,
@@ -584,13 +600,13 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 1.6,
     fontWeight: '500',
   },
   brandName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -606,18 +622,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
-  statsDivider: { width: 1, backgroundColor: Colors.hair },
+  statsDivider: { width: 1, backgroundColor: c.hair },
   statLabel: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.5,
     fontWeight: '500',
   },
   statValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -625,7 +641,7 @@ const styles = StyleSheet.create({
   },
 
   intro: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     paddingHorizontal: 22,
@@ -643,14 +659,14 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.text,
+    color: c.text,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sectionCount: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1,
   },
   sectionRight: {
@@ -662,9 +678,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 9,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -680,9 +696,9 @@ const styles = StyleSheet.create({
     width: 160,
     minHeight: 168,
     borderRadius: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 14,
     justifyContent: 'space-between',
   },
@@ -690,7 +706,7 @@ const styles = StyleSheet.create({
     width: 160,
     minHeight: 168,
     borderRadius: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
     padding: 14,
     justifyContent: 'space-between',
@@ -702,14 +718,14 @@ const styles = StyleSheet.create({
   },
   cardJornada: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   cardJornadaSmall: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -721,7 +737,7 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
@@ -729,13 +745,13 @@ const styles = StyleSheet.create({
   },
   cardTime: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     letterSpacing: 0.4,
     marginTop: 2,
   },
   cardOpponent: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
@@ -745,11 +761,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   cardTeamName: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1,
@@ -781,10 +797,10 @@ const styles = StyleSheet.create({
   resultScoreSep: {
     fontFamily: Fonts.mono,
     fontSize: 18,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   resultScoreEmpty: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontFamily: Fonts.mono,
     fontSize: 18,
     marginTop: 8,
@@ -797,24 +813,24 @@ const styles = StyleSheet.create({
 
   emptyCard: {
     marginHorizontal: 22,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingVertical: 24,
     paddingHorizontal: 18,
     alignItems: 'center',
     gap: 6,
   },
-  emptyTitle: { color: Colors.text, fontSize: 15, fontWeight: '600' },
-  emptyText: { color: Colors.textMuted, fontSize: 12, textAlign: 'center' },
+  emptyTitle: { color: c.text, fontSize: 15, fontWeight: '600' },
+  emptyText: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
 
   teamList: {
     marginHorizontal: 22,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   dangerZone: {
@@ -824,7 +840,7 @@ const styles = StyleSheet.create({
   },
   dangerEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.error,
+    color: c.error,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
@@ -835,25 +851,25 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.error + '66',
-    backgroundColor: Colors.error + '14',
+    borderColor: c.error + '66',
+    backgroundColor: c.error + '14',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteClubLabel: {
-    color: Colors.error,
+    color: c.error,
     fontSize: 15,
     fontWeight: '700',
   },
   dangerHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 8,
   },
   coverageLine: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     letterSpacing: 0.3,
     marginHorizontal: 22,
@@ -862,7 +878,7 @@ const styles = StyleSheet.create({
   },
   uncoveredBadge: {
     fontFamily: Fonts.mono,
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 10,
     letterSpacing: 0.5,
     fontWeight: '700',
@@ -877,27 +893,27 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   teamBadge: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   teamBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   teamName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
@@ -905,14 +921,14 @@ const styles = StyleSheet.create({
   teamMeta: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textMuted,
+    color: c.textMuted,
     marginTop: 3,
     letterSpacing: 0.4,
   },
   teamKpi: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     marginTop: 3,
     letterSpacing: 0.4,
   },
@@ -920,9 +936,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -932,14 +948,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 22,
     height: 52,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  ctaLabel: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+  ctaLabel: { color: c.accent, fontSize: 14, fontWeight: '600' },
 });

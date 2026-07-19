@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   TextInput,
   View,
@@ -8,8 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
-import { Typography } from '@core/theme/typography';
+import { useColors, useTypography, type Palette } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
 
 interface Props extends Omit<TextInputProps, 'style'> {
@@ -28,6 +27,9 @@ export const Input: React.FC<Props> = ({
   containerStyle,
   ...inputProps
 }) => {
+  const c = useColors();
+  const t = useTypography();
+  const styles = useMemo(() => makeStyles(c, t), [c, t]);
   const [focused, setFocused] = useState(false);
   return (
     <View style={[{ marginBottom: 14 }, containerStyle]}>
@@ -41,8 +43,8 @@ export const Input: React.FC<Props> = ({
         style={[
           styles.input,
           focused && {
-            borderColor: Colors.accent40,
-            backgroundColor: Colors.bgCard2,
+            borderColor: c.accent40,
+            backgroundColor: c.bgCard2,
           },
         ]}
       >
@@ -57,7 +59,7 @@ export const Input: React.FC<Props> = ({
             setFocused(false);
             inputProps.onBlur?.(e);
           }}
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.field}
         />
         {rightSlot}
@@ -66,43 +68,44 @@ export const Input: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-    paddingHorizontal: 4,
-  },
-  label: {
-    ...Typography.meta,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  input: {
-    minHeight: 50,
-    paddingHorizontal: 14,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  accentBar: {
-    width: 5,
-    height: 20,
-    borderRadius: 3,
-    backgroundColor: Colors.accent,
-  },
-  field: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '500',
-    fontFamily: Typography.body.fontFamily,
-    paddingVertical: 0,
-  },
-});
+const makeStyles = (c: Palette, t: ReturnType<typeof useTypography>) =>
+  StyleSheet.create({
+    labelRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+      paddingHorizontal: 4,
+    },
+    label: {
+      ...t.meta,
+      fontSize: 11,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    input: {
+      minHeight: 50,
+      paddingHorizontal: 14,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    accentBar: {
+      width: 5,
+      height: 20,
+      borderRadius: 3,
+      backgroundColor: c.accent,
+    },
+    field: {
+      flex: 1,
+      color: c.text,
+      fontSize: 15,
+      fontWeight: '500',
+      fontFamily: t.body.fontFamily,
+      paddingVertical: 0,
+    },
+  });

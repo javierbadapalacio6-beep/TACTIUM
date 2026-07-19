@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -47,6 +47,8 @@ const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 export const AddPlayersScreen = ({
   navigation,
 }: OnboardingStackScreenProps<'AddPlayers'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const players = useTeamStore((s) => s.players);
   const addPlayer = useTeamStore((s) => s.addPlayer);
@@ -143,10 +145,10 @@ export const AddPlayersScreen = ({
           hitSlop={10}
           style={styles.headerBtn}
         >
-          <IconBack size={20} color={Colors.textMuted} />
+          <IconBack size={20} color={c.textMuted} />
         </Pressable>
         <View style={styles.progress}>
-          <View style={[styles.bar, { backgroundColor: Colors.primary }]} />
+          <View style={[styles.bar, { backgroundColor: c.primary }]} />
           <View style={[styles.bar, styles.barActive]} />
         </View>
         <View style={{ width: 36 }} />
@@ -171,7 +173,7 @@ export const AddPlayersScreen = ({
           ]}
         >
           <View style={styles.scanShortcutIcon}>
-            <IconCamera size={14} color={Colors.accent} />
+            <IconCamera size={14} color={c.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.scanShortcutTitle}>Escanear plantilla</Text>
@@ -179,7 +181,7 @@ export const AddPlayersScreen = ({
               Importa varios jugadores de una captura del ranking
             </Text>
           </View>
-          <IconArrowRight size={14} color={Colors.accent} />
+          <IconArrowRight size={14} color={c.accent} />
         </Pressable>
 
         {/* Atajo: volcar la plantilla oficial desde la Federación Cántabra. */}
@@ -203,7 +205,7 @@ export const AddPlayersScreen = ({
                 Vuelca tu plantilla cántabra con los puntos oficiales
               </Text>
             </View>
-            <IconArrowRight size={14} color={Colors.accent} />
+            <IconArrowRight size={14} color={c.accent} />
           </Pressable>
         )}
       </View>
@@ -254,7 +256,7 @@ export const AddPlayersScreen = ({
                 hitSlop={6}
                 style={styles.rowBtn}
               >
-                <IconX size={14} color={Colors.textFaint} />
+                <IconX size={14} color={c.textFaint} />
               </Pressable>
             </View>
           ))}
@@ -266,7 +268,7 @@ export const AddPlayersScreen = ({
                   value={newName}
                   onChangeText={setNewName}
                   placeholder="Nombre"
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                   autoFocus
                   maxLength={NAME_MAX_LENGTH}
                   autoCapitalize="words"
@@ -276,7 +278,7 @@ export const AddPlayersScreen = ({
                   value={newPts}
                   onChangeText={(v) => setNewPts(sanitizePtsInput(v))}
                   placeholder="Pts"
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                   keyboardType="number-pad"
                   maxLength={5}
                   style={[
@@ -305,13 +307,13 @@ export const AddPlayersScreen = ({
                       onPress={() => setNewSide(s)}
                       style={[
                         styles.sideTab,
-                        sel && { backgroundColor: Colors.accent },
+                        sel && { backgroundColor: c.accent },
                       ]}
                     >
                       <Text
                         style={[
                           styles.sideTabText,
-                          { color: sel ? '#000' : Colors.textMuted },
+                          { color: sel ? '#000' : c.textMuted },
                         ]}
                       >
                         {s}
@@ -324,7 +326,7 @@ export const AddPlayersScreen = ({
           ) : (
             <Pressable onPress={() => setAdding(true)} style={styles.addRowBtn}>
               <View style={styles.idChip}>
-                <IconPlus size={14} color={Colors.accent} />
+                <IconPlus size={14} color={c.accent} />
               </View>
               <Text style={styles.addRowText}>Añadir jugador</Text>
             </Pressable>
@@ -359,10 +361,10 @@ export const AddPlayersScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -386,8 +388,8 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   barActive: {
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.7,
     shadowRadius: 6,
   },
@@ -399,12 +401,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 12,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 32,
     fontWeight: '600',
     letterSpacing: -0.8,
@@ -412,7 +414,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 15,
     lineHeight: 21,
   },
@@ -423,29 +425,29 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   scanShortcutIcon: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.accent50,
+    borderColor: c.accent50,
     alignItems: 'center',
     justifyContent: 'center',
   },
   scanShortcutTitle: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
   scanShortcutHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -460,13 +462,13 @@ const styles = StyleSheet.create({
   counterText: {
     fontFamily: Fonts.mono,
     fontSize: 13,
-    color: Colors.textMuted,
+    color: c.textMuted,
     letterSpacing: 1,
   },
   counterSum: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1,
   },
   scroll: {
@@ -474,10 +476,10 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   list: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -489,24 +491,24 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   idChip: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Colors.primaryDim,
+    backgroundColor: c.primaryDim,
     alignItems: 'center',
     justifyContent: 'center',
   },
   idChipText: {
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 12,
     fontWeight: '500',
   },
   rowName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '500',
     letterSpacing: -0.2,
@@ -518,10 +520,10 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   posBtnText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 1,
@@ -530,12 +532,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
   },
   ptsPillText: {
     fontFamily: Fonts.mono,
     fontSize: 13,
-    color: Colors.text,
+    color: c.text,
     letterSpacing: 0.4,
   },
   rowBtn: {
@@ -547,7 +549,7 @@ const styles = StyleSheet.create({
   },
   addInline: {
     padding: 14,
-    backgroundColor: Colors.bgCard2,
+    backgroundColor: c.bgCard2,
     gap: 8,
   },
   addRow: {
@@ -556,20 +558,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addField: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
   },
   confirm: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -578,9 +580,9 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 3,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   sideTab: {
     flex: 1,
@@ -602,7 +604,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   addRowText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -613,12 +615,12 @@ const styles = StyleSheet.create({
   ctaBtn: {
     height: 56,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -35,6 +35,8 @@ type Mode = 'choice' | 'email';
 type Tab = 'signin' | 'signup';
 
 export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [mode, setMode] = useState<Mode>('choice');
   const [tab, setTab] = useState<Tab>('signin');
   const [email, setEmail] = useState('');
@@ -245,6 +247,8 @@ const ChoiceView: React.FC<ChoiceProps> = ({
   busy,
   showApple,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={[styles.container, { paddingTop: insetTop }]}>
       <View style={styles.hero}>
@@ -292,11 +296,11 @@ const ChoiceView: React.FC<ChoiceProps> = ({
           ]}
         >
           {busy === 'google' ? (
-            <ActivityIndicator size="small" color={Colors.text} />
+            <ActivityIndicator size="small" color={c.text} />
           ) : (
             <>
               <IconGoogle size={18} />
-              <Text style={[styles.providerLabel, { color: Colors.text }]}>
+              <Text style={[styles.providerLabel, { color: c.text }]}>
                 Continuar con Google
               </Text>
             </>
@@ -317,8 +321,8 @@ const ChoiceView: React.FC<ChoiceProps> = ({
             pressed && { opacity: 0.85 },
           ]}
         >
-          <IconMail size={18} color={Colors.accent} />
-          <Text style={[styles.providerLabel, { color: Colors.accent }]}>
+          <IconMail size={18} color={c.accent} />
+          <Text style={[styles.providerLabel, { color: c.accent }]}>
             Continuar con email
           </Text>
         </Pressable>
@@ -373,6 +377,8 @@ const EmailView: React.FC<EmailProps> = ({
   onSubmit,
   onForgotPassword,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const isSignup = tab === 'signup';
   const disabled = !valid || submitting;
   return (
@@ -385,7 +391,7 @@ const EmailView: React.FC<EmailProps> = ({
             pressed && { opacity: 0.7 },
           ]}
         >
-          <IconBack size={14} color={Colors.text} />
+          <IconBack size={14} color={c.text} />
           <Text style={styles.backChipText}>Atrás</Text>
         </Pressable>
         <TactiumMark size={32} gradient />
@@ -402,7 +408,7 @@ const EmailView: React.FC<EmailProps> = ({
         <Text style={styles.emailTitle}>
           {isSignup ? (
             <>
-              Únete a <Text style={{ color: Colors.accent }}>TACTIUM</Text>
+              Únete a <Text style={{ color: c.accent }}>TACTIUM</Text>
             </>
           ) : (
             <>Bienvenido{'\n'}de vuelta</>
@@ -422,14 +428,14 @@ const EmailView: React.FC<EmailProps> = ({
               style={[
                 styles.tab,
                 tab === k && {
-                  backgroundColor: Colors.bgRaised,
+                  backgroundColor: c.bgRaised,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: tab === k ? Colors.text : Colors.textMuted },
+                  { color: tab === k ? c.text : c.textMuted },
                 ]}
               >
                 {k === 'signin' ? 'Iniciar sesión' : 'Crear cuenta'}
@@ -468,9 +474,9 @@ const EmailView: React.FC<EmailProps> = ({
           rightSlot={
             <Pressable onPress={() => setShowPass(!showPass)} hitSlop={8}>
               {showPass ? (
-                <IconEyeOff size={18} color={Colors.textMuted} />
+                <IconEyeOff size={18} color={c.textMuted} />
               ) : (
-                <IconEye size={18} color={Colors.textMuted} />
+                <IconEye size={18} color={c.textMuted} />
               )}
             </Pressable>
           }
@@ -514,7 +520,7 @@ const EmailView: React.FC<EmailProps> = ({
         >
           <Text style={styles.swap}>
             {isSignup ? '¿Ya tienes cuenta? ' : '¿Nuevo aquí? '}
-            <Text style={{ color: Colors.accent, fontWeight: '600' }}>
+            <Text style={{ color: c.accent, fontWeight: '600' }}>
               {isSignup ? 'Inicia sesión' : 'Crea una cuenta'}
             </Text>
           </Text>
@@ -524,10 +530,10 @@ const EmailView: React.FC<EmailProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   container: {
     flex: 1,
@@ -540,7 +546,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   wordmark: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 44,
     letterSpacing: 8,
     paddingLeft: 8,
@@ -548,14 +554,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tag: {
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 5,
     fontWeight: '500',
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
@@ -577,12 +583,12 @@ const styles = StyleSheet.create({
   providerGhost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   providerEmail: {
     backgroundColor: 'rgba(0,223,130,0.08)',
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   providerLabel: {
     fontSize: 16,
@@ -598,17 +604,17 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
   },
   dividerText: {
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   trialNote: {
     textAlign: 'center',
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 0.6,
@@ -617,7 +623,7 @@ const styles = StyleSheet.create({
   },
   legal: {
     textAlign: 'center',
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 6,
@@ -636,12 +642,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   backChipText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -652,21 +658,21 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
     marginBottom: 10,
   },
   emailTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '600',
     letterSpacing: -0.6,
     lineHeight: 32,
   },
   emailLede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 21,
     marginTop: 10,
@@ -676,10 +682,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
     padding: 4,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     marginBottom: 18,
   },
   tab: {
@@ -694,7 +700,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   hint: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'none',
@@ -708,10 +714,10 @@ const styles = StyleSheet.create({
   cta: {
     height: 54,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -722,7 +728,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   swap: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
   },
 });

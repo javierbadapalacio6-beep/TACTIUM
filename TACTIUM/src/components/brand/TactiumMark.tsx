@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import Svg, { G, Path, Rect } from 'react-native-svg';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 
 // Isotipo TACTIUM. Vectorización fiel al PNG oficial — 7 paths que
 // componen el T monogram con velocity cuts (top bar + 2 wings principales
@@ -24,6 +24,7 @@ interface Props {
 }
 
 export const TactiumMark: React.FC<Props> = ({ size = 28, gradient }) => {
+  const c = useColors();
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 1254 1254" fill="none">
@@ -35,12 +36,12 @@ export const TactiumMark: React.FC<Props> = ({ size = 28, gradient }) => {
             height={1214}
             rx={240}
             ry={240}
-            fill={Colors.bgCard}
-            stroke={Colors.accent + '60'}
+            fill={c.bgCard}
+            stroke={c.accent + '60'}
             strokeWidth={6}
           />
         )}
-        <G fill={Colors.accent}>
+        <G fill={c.accent}>
           <Path d="M565.03 889.19 c-8.82 -5.14 -17.39 -10.29 -19.23 -11.51 l-3.31 -2.08 0 -207.69 c0 -231.08 0.73 -212.22 -8.45 -214.80 -2.82 -0.73 -44.09 -1.22 -114.87 -1.22 l-110.46 0 -9.92 -18 c-5.39 -9.92 -9.67 -18.61 -9.31 -19.47 0.98 -2.45 40.41 -3.18 151.36 -2.69 l103.48 0.37 8.94 4.16 c10.53 5.02 20.21 14.57 25.59 25.47 l3.43 7.10 0.37 225.08 c0.12 123.69 -0.12 224.96 -0.61 224.84 -0.61 -0.12 -8.20 -4.29 -17.02 -9.55z" />
           <Path d="M672.31 680.64 c0 -126.50 0.49 -221.65 1.22 -226.19 2.20 -15.80 13.59 -31.11 27.80 -37.84 l7.10 -3.31 129.56 -0.37 129.56 -0.24 -2.69 5.14 c-1.47 2.94 -6.25 11.76 -10.78 19.72 l-8.08 14.33 -110.58 0 c-92.70 0 -111.19 0.24 -114.75 1.71 -8.57 3.67 -7.96 -13.35 -7.96 216.02 l0 206.71 -19.59 11.27 c-10.78 6.25 -19.84 11.27 -20.21 11.27 -0.37 0 -0.61 -98.21 -0.61 -218.23z" />
           <Path d="M444.17 714.93 c-0.98 -1.59 -4.16 -7.23 -7.23 -12.61 -3.06 -5.39 -6.98 -12.37 -8.69 -15.43 -2.45 -4.29 -2.82 -6 -1.84 -6.98 1.10 -1.10 10.29 -1.47 30.62 -1.47 l29.27 0 -0.37 19.35 -0.37 19.23 -19.84 0.37 c-19.47 0.24 -19.84 0.24 -21.55 -2.45z" />

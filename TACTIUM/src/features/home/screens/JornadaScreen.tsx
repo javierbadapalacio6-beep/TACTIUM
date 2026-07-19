@@ -15,7 +15,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -27,6 +27,8 @@ import {
   IconAlert,
   IconShare,
   IconPin,
+  IconHome,
+  IconPlane,
   IconPencil,
   BottomSheet,
   DateField,
@@ -75,57 +77,59 @@ type Status =
   | 'closed-loss'
   | 'closed-draw';
 
-const STATUS_CONFIG: Record<
+const makeStatusConfig = (
+  c: Palette,
+): Record<
   Status,
   { label: string; sub: (n: number, courts: number) => string; tint: string; dim?: boolean }
-> = {
+> => ({
   pending: {
     label: 'Sin alineación',
     sub: () => 'Crea la alineación primero',
-    tint: Colors.textFaint,
+    tint: c.textFaint,
     dim: true,
   },
   scheduled: {
     label: 'Pendiente',
     sub: () => 'Aún sin resultados',
-    tint: Colors.textMuted,
+    tint: c.textMuted,
   },
   'in-progress': {
     label: 'En curso',
     sub: (n, courts) => `${n}/${courts} partidos resueltos`,
-    tint: Colors.warning,
+    tint: c.warning,
   },
   won: {
     label: 'Victoria',
     sub: () => 'Jornada ganada',
-    tint: Colors.accent,
+    tint: c.accent,
   },
   lost: {
     label: 'Derrota',
     sub: () => 'Jornada perdida',
-    tint: Colors.error,
+    tint: c.error,
   },
   tied: {
     label: 'Empate',
     sub: () => 'Resultado igualado',
-    tint: Colors.warning,
+    tint: c.warning,
   },
   'closed-win': {
     label: 'Victoria',
     sub: () => 'Acta cerrada · ganada',
-    tint: Colors.accent,
+    tint: c.accent,
   },
   'closed-loss': {
     label: 'Derrota',
     sub: () => 'Acta cerrada · perdida',
-    tint: Colors.error,
+    tint: c.error,
   },
   'closed-draw': {
     label: 'Empate',
     sub: () => 'Acta cerrada · empate',
-    tint: Colors.warning,
+    tint: c.warning,
   },
-};
+});
 
 const setWinner = (us: number | null, them: number | null) => {
   if (us == null || them == null) return null;
@@ -177,6 +181,8 @@ export const JornadaScreen = ({
   navigation,
   route,
 }: HomeStackScreenProps<'Jornada'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   // Solo captain/club_admin pueden editar/cerrar/eliminar la jornada.
@@ -431,7 +437,7 @@ export const JornadaScreen = ({
   if (loading) {
     return (
       <View style={[styles.root, styles.center]}>
-        <ActivityIndicator color={Colors.accent} />
+        <ActivityIndicator color={c.accent} />
       </View>
     );
   }
@@ -447,7 +453,7 @@ export const JornadaScreen = ({
             }}
             style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
           >
-            <IconBack size={16} color={Colors.text} />
+            <IconBack size={16} color={c.text} />
             <Text style={styles.backLabel}>Inicio</Text>
           </Pressable>
         </View>
@@ -568,7 +574,7 @@ export const JornadaScreen = ({
           }}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Inicio</Text>
         </Pressable>
         <View style={styles.navRight}>
@@ -581,7 +587,7 @@ export const JornadaScreen = ({
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <IconPencil size={14} color={Colors.text} />
+              <IconPencil size={14} color={c.text} />
             </Pressable>
           ) : null}
           {isCaptain && lineupReady ? (
@@ -597,7 +603,7 @@ export const JornadaScreen = ({
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <IconShare size={14} color={Colors.accent} />
+              <IconShare size={14} color={c.accent} />
             </Pressable>
           ) : null}
         </View>
@@ -636,29 +642,37 @@ export const JornadaScreen = ({
             <View
               style={[
                 styles.venuePill,
-                matchday.is_home
-                  ? styles.venuePillHome
-                  : styles.venuePillAway,
+                {
+                  backgroundColor: withAlpha(
+                    matchday.is_home ? c.accent : c.text,
+                    matchday.is_home ? 0.15 : 0.08,
+                  ),
+                  borderColor: withAlpha(
+                    matchday.is_home ? c.accent : c.text,
+                    matchday.is_home ? 0.4 : 0.2,
+                  ),
+                },
               ]}
             >
+              {matchday.is_home ? (
+                <IconHome size={12} color={c.accent} />
+              ) : (
+                <IconPlane size={13} color={c.text} />
+              )}
               <Text
                 style={[
                   styles.venuePillText,
-                  {
-                    color: matchday.is_home
-                      ? Colors.accent
-                      : Colors.textMuted,
-                  },
+                  { color: matchday.is_home ? c.accent : c.text },
                 ]}
               >
-                {matchday.is_home ? '● LOCAL' : '○ VISITANTE'}
+                {matchday.is_home ? 'LOCAL' : 'VISITANTE'}
               </Text>
             </View>
           </View>
 
           <View style={styles.metaGrid}>
             <View style={styles.metaIcon}>
-              <IconCalendar size={14} color={Colors.textMuted} />
+              <IconCalendar size={14} color={c.textMuted} />
             </View>
             <View style={styles.metaContent}>
               <Text style={styles.metaPrimary}>{longDate}</Text>
@@ -666,7 +680,7 @@ export const JornadaScreen = ({
             </View>
 
             <View style={styles.metaIcon}>
-              <IconPin size={14} color={Colors.textMuted} />
+              <IconPin size={14} color={c.textMuted} />
             </View>
             <View style={styles.metaContent}>
               <Text style={styles.metaMuted}>{venueLabel}</Text>
@@ -679,7 +693,7 @@ export const JornadaScreen = ({
             {matchday.tandas ? (
               <>
                 <View style={styles.metaIcon}>
-                  <IconCourt size={14} color={Colors.textMuted} />
+                  <IconCourt size={14} color={c.textMuted} />
                 </View>
                 <View style={styles.metaContent}>
                   <Text style={styles.metaPrimary}>
@@ -742,10 +756,10 @@ export const JornadaScreen = ({
               styles.statusPill,
               {
                 backgroundColor: lineupReady
-                  ? Colors.accent15
+                  ? c.accent15
                   : 'rgba(242,201,76,0.15)',
                 borderColor: lineupReady
-                  ? Colors.accent40
+                  ? c.accent40
                   : 'rgba(242,201,76,0.40)',
               },
             ]}
@@ -754,14 +768,14 @@ export const JornadaScreen = ({
               style={[
                 styles.statusPillDot,
                 {
-                  backgroundColor: lineupReady ? Colors.accent : Colors.warning,
+                  backgroundColor: lineupReady ? c.accent : c.warning,
                 },
               ]}
             />
             <Text
               style={[
                 styles.statusPillText,
-                { color: lineupReady ? Colors.accent : Colors.warning },
+                { color: lineupReady ? c.accent : c.warning },
               ]}
             >
               {lineupReady ? 'VALIDADA' : 'PENDIENTE'}
@@ -802,12 +816,12 @@ export const JornadaScreen = ({
         {/* Court order rule */}
         {lineupReady ? (
           <View style={styles.ruleBox}>
-            <IconAlert size={14} color={Colors.textFaint} />
+            <IconAlert size={14} color={c.textFaint} />
             <Text style={styles.ruleText}>
               {pointsScheme ? (
                 <>
                   Orden automático por{' '}
-                  <Text style={{ color: Colors.text, fontWeight: '500' }}>
+                  <Text style={{ color: c.text, fontWeight: '500' }}>
                     suma de puntos
                   </Text>
                   . P1 y P2 valen 3 puntos; el resto, 2.
@@ -815,7 +829,7 @@ export const JornadaScreen = ({
               ) : (
                 <>
                   Pareja con{' '}
-                  <Text style={{ color: Colors.text, fontWeight: '500' }}>
+                  <Text style={{ color: c.text, fontWeight: '500' }}>
                     más puntos
                   </Text>{' '}
                   en P1. Orden descendente.
@@ -838,10 +852,10 @@ export const JornadaScreen = ({
               ]}
             >
               {closing ? (
-                <ActivityIndicator color={Colors.error} />
+                <ActivityIndicator color={c.error} />
               ) : (
                 <>
-                  <IconCheck size={16} color={Colors.error} />
+                  <IconCheck size={16} color={c.error} />
                   <Text style={styles.closeCtaLabel}>Cerrar acta</Text>
                 </>
               )}
@@ -896,7 +910,7 @@ export const JornadaScreen = ({
                     pressed && { opacity: 0.85 },
                   ]}
                 >
-                  <IconShare size={16} color={Colors.accent} />
+                  <IconShare size={16} color={c.accent} />
                   <Text style={styles.sharePhotoCtaLabel}>
                     Compartir foto del partido
                   </Text>
@@ -924,10 +938,10 @@ export const JornadaScreen = ({
                 ]}
               >
                 {photoUploading ? (
-                  <ActivityIndicator color={Colors.accent} />
+                  <ActivityIndicator color={c.accent} />
                 ) : (
                   <>
-                    <IconImage size={16} color={Colors.accent} />
+                    <IconImage size={16} color={c.accent} />
                     <Text style={styles.sharePhotoCtaLabel}>
                       Añadir foto del partido
                     </Text>
@@ -949,7 +963,7 @@ export const JornadaScreen = ({
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <IconShare size={16} color={Colors.accent} />
+              <IconShare size={16} color={c.accent} />
               <Text style={styles.sharePhotoCtaLabel}>
                 Compartir resultado por WhatsApp
               </Text>
@@ -1096,8 +1110,8 @@ export const JornadaScreen = ({
                 onChangeText={(v) => setManualScoreFor(clampScore(v))}
                 keyboardType="number-pad"
                 placeholder="—"
-                placeholderTextColor={Colors.textFaint}
-                style={[styles.manualScoreInput, { color: Colors.accent }]}
+                placeholderTextColor={c.textFaint}
+                style={[styles.manualScoreInput, { color: c.accent }]}
                 editable={!closing}
               />
             </View>
@@ -1109,7 +1123,7 @@ export const JornadaScreen = ({
                 onChangeText={(v) => setManualScoreAgainst(clampScore(v))}
                 keyboardType="number-pad"
                 placeholder="—"
-                placeholderTextColor={Colors.textFaint}
+                placeholderTextColor={c.textFaint}
                 style={styles.manualScoreInput}
                 editable={!closing}
               />
@@ -1120,9 +1134,9 @@ export const JornadaScreen = ({
         <View style={styles.manualCloseRow}>
           {(
             [
-              { label: 'Victoria', short: 'V', outcome: 'win', tint: Colors.accent },
-              { label: 'Empate',   short: 'E', outcome: 'draw', tint: Colors.warning },
-              { label: 'Derrota',  short: 'D', outcome: 'loss', tint: Colors.error },
+              { label: 'Victoria', short: 'V', outcome: 'win', tint: c.accent },
+              { label: 'Empate',   short: 'E', outcome: 'draw', tint: c.warning },
+              { label: 'Derrota',  short: 'D', outcome: 'loss', tint: c.error },
             ] as const
           ).map((opt) => {
             const disabled = closing || !manualScoreReady;
@@ -1189,6 +1203,9 @@ const ResultCard: React.FC<{
   isHome: boolean;
   onPress: () => void;
 }> = ({ status, us, them, played, courts, isHome, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const STATUS_CONFIG = makeStatusConfig(c);
   const cfg = STATUS_CONFIG[status];
   const showScore =
     status !== 'pending' && status !== 'scheduled';
@@ -1207,7 +1224,7 @@ const ResultCard: React.FC<{
       disabled={!interactive}
       style={({ pressed }) => [
         styles.resultCard,
-        showScore && { borderColor: cfg.tint + '66' },
+        showScore && { borderColor: withAlpha(cfg.tint, 0.4) },
         cfg.dim && { opacity: 0.55 },
         pressed && interactive && { opacity: 0.9 },
       ]}
@@ -1222,7 +1239,7 @@ const ResultCard: React.FC<{
         <View
           style={[
             styles.resultBadge,
-            { backgroundColor: cfg.tint + '26' },
+            { backgroundColor: withAlpha(cfg.tint, 0.15) },
           ]}
         >
           <View
@@ -1241,10 +1258,10 @@ const ResultCard: React.FC<{
             styles.resultScoreNum,
             {
               color: !showScore
-                ? Colors.textFaint
+                ? c.textFaint
                 : leftIsUs
                   ? cfg.tint
-                  : Colors.text,
+                  : c.text,
             },
           ]}
         >
@@ -1256,9 +1273,9 @@ const ResultCard: React.FC<{
             styles.resultScoreNum,
             {
               color: !showScore
-                ? Colors.textFaint
+                ? c.textFaint
                 : leftIsUs
-                  ? Colors.text
+                  ? c.text
                   : cfg.tint,
             },
           ]}
@@ -1293,29 +1310,31 @@ const PairResultRow: React.FC<{
   disabled,
   onPress,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const tint =
     outcome.state === 'won'
-      ? Colors.accent
+      ? c.accent
       : outcome.state === 'lost'
-      ? Colors.error
+      ? c.error
       : outcome.state === 'partial'
-      ? Colors.warning
+      ? c.warning
       : null;
 
   const badge =
     outcome.state === 'won'
-      ? { label: 'V', tint: Colors.accent, a11y: 'Victoria' }
+      ? { label: 'V', tint: c.accent, a11y: 'Victoria' }
       : outcome.state === 'lost'
-      ? { label: 'D', tint: Colors.error, a11y: 'Derrota' }
+      ? { label: 'D', tint: c.error, a11y: 'Derrota' }
       : outcome.state === 'partial'
-      ? { label: '·', tint: Colors.warning, a11y: 'En juego' }
+      ? { label: '·', tint: c.warning, a11y: 'En juego' }
       : null;
 
   const borderColor = tint
     ? tint + '4D'
     : isTop && ready
-    ? Colors.accent25
-    : Colors.hair;
+    ? c.accent25
+    : c.hair;
 
   const label = ready
     ? playerA && playerB
@@ -1338,8 +1357,8 @@ const PairResultRow: React.FC<{
           style={[
             styles.pairBadge,
             isTop && ready && {
-              backgroundColor: Colors.accent15,
-              borderColor: Colors.accent40,
+              backgroundColor: c.accent15,
+              borderColor: c.accent40,
             },
           ]}
         >
@@ -1347,7 +1366,7 @@ const PairResultRow: React.FC<{
           <Text
             style={[
               styles.pairBadgeNum,
-              isTop && ready && { color: Colors.accent },
+              isTop && ready && { color: c.accent },
             ]}
           >
             {court}
@@ -1358,7 +1377,7 @@ const PairResultRow: React.FC<{
           <Text
             style={[
               styles.pairLabel,
-              !ready && { color: Colors.textMuted },
+              !ready && { color: c.textMuted },
             ]}
             numberOfLines={1}
           >
@@ -1409,7 +1428,7 @@ const PairResultRow: React.FC<{
           <Text
             style={[
               styles.setsValue,
-              { color: tint ?? Colors.text },
+              { color: tint ?? c.text },
             ]}
           >
             {outcome.summary}
@@ -1428,6 +1447,8 @@ const EditMatchdaySheet: React.FC<{
   matchday: MatchdaysApi.Matchday;
   onSaved: (m: MatchdaysApi.Matchday) => void;
 }> = ({ open, onClose, matchday, onSaved }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [opponent, setOpponent] = useState(matchday.opponent);
   const [matchDate, setMatchDate] = useState<Date | null>(
     isoDateToDate(matchday.match_date),
@@ -1501,7 +1522,7 @@ const EditMatchdaySheet: React.FC<{
           value={opponent}
           onChangeText={setOpponent}
           placeholder="Club Visitante"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
         />
       </View>
@@ -1515,7 +1536,7 @@ const EditMatchdaySheet: React.FC<{
           <Text
             style={[
               styles.venueCellLabel,
-              { color: isHome ? '#001810' : Colors.text },
+              { color: isHome ? '#001810' : c.text },
             ]}
           >
             Local
@@ -1523,7 +1544,7 @@ const EditMatchdaySheet: React.FC<{
           <Text
             style={[
               styles.venueCellSub,
-              { color: isHome ? 'rgba(0,24,16,0.6)' : Colors.textFaint },
+              { color: isHome ? 'rgba(0,24,16,0.6)' : c.textFaint },
             ]}
           >
             En nuestras pistas
@@ -1536,7 +1557,7 @@ const EditMatchdaySheet: React.FC<{
           <Text
             style={[
               styles.venueCellLabel,
-              { color: !isHome ? '#001810' : Colors.text },
+              { color: !isHome ? '#001810' : c.text },
             ]}
           >
             Visitante
@@ -1544,7 +1565,7 @@ const EditMatchdaySheet: React.FC<{
           <Text
             style={[
               styles.venueCellSub,
-              { color: !isHome ? 'rgba(0,24,16,0.6)' : Colors.textFaint },
+              { color: !isHome ? 'rgba(0,24,16,0.6)' : c.textFaint },
             ]}
           >
             Fuera de casa
@@ -1576,7 +1597,7 @@ const EditMatchdaySheet: React.FC<{
           value={location}
           onChangeText={setLocation}
           placeholder="Pádel Club Norte"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
         />
       </View>
@@ -1594,6 +1615,8 @@ const ShareLineupSheet: React.FC<{
   pairs: LineupsApi.LineupPair[];
   teamName: string;
 }> = ({ open, onClose, matchday, season, pairs, teamName }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const dateObj = isoDateToDate(matchday.match_date);
   const shortDate = dateObj ? formatShortDay(dateObj) : 'Fecha pendiente';
   const time = matchday.match_time?.slice(0, 5) ?? '';
@@ -1693,11 +1716,11 @@ const ShareLineupSheet: React.FC<{
           ]}
         >
           <View
-            style={[styles.shareCellIcon, { backgroundColor: Colors.accent15 }]}
+            style={[styles.shareCellIcon, { backgroundColor: c.accent15 }]}
           >
-            <IconImage size={20} color={Colors.accent} />
+            <IconImage size={20} color={c.accent} />
           </View>
-          <Text style={[styles.shareCellLabel, { color: Colors.accent }]}>
+          <Text style={[styles.shareCellLabel, { color: c.accent }]}>
             Imagen
           </Text>
         </Pressable>
@@ -1727,12 +1750,12 @@ const ShareLineupSheet: React.FC<{
           <View
             style={[
               styles.shareCellIcon,
-              { backgroundColor: Colors.accent15 },
+              { backgroundColor: c.accent15 },
             ]}
           >
-            <IconShare size={20} color={Colors.accent} />
+            <IconShare size={20} color={c.accent} />
           </View>
-          <Text style={[styles.shareCellLabel, { color: Colors.accent }]}>
+          <Text style={[styles.shareCellLabel, { color: c.accent }]}>
             Compartir
           </Text>
         </Pressable>
@@ -1753,16 +1776,16 @@ const ShareLineupSheet: React.FC<{
 
 // ============= STYLES =============
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   center: { alignItems: 'center', justifyContent: 'center' },
   emptyTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
   },
-  emptyText: { color: Colors.textMuted, fontSize: 13, textAlign: 'center' },
+  emptyText: { color: c.textMuted, fontSize: 13, textAlign: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1773,14 +1796,14 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
   navRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1790,9 +1813,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1801,12 +1824,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 6,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '600',
     letterSpacing: -0.9,
@@ -1816,10 +1839,10 @@ const styles = StyleSheet.create({
   infoCard: {
     marginTop: 18,
     padding: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     position: 'relative',
   },
   infoHeader: {
@@ -1829,7 +1852,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.hair,
+    borderBottomColor: c.hair,
   },
   infoHeaderLeft: {
     flexDirection: 'row',
@@ -1842,14 +1865,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 9,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
     borderColor: 'rgba(0,223,130,0.30)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   rivalAvatarText: {
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 11,
     fontWeight: '600',
@@ -1857,32 +1880,27 @@ const styles = StyleSheet.create({
   },
   infoEyebrow: {
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.5,
     fontFamily: Fonts.mono,
     fontWeight: '500',
     marginBottom: 1,
   },
   rivalName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
     maxWidth: 180,
   },
   venuePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 9999,
     borderWidth: 1,
-  },
-  venuePillHome: {
-    backgroundColor: Colors.accent15,
-    borderColor: 'rgba(0,223,130,0.35)',
-  },
-  venuePillAway: {
-    backgroundColor: 'transparent',
-    borderColor: Colors.hairStrong,
   },
   venuePillText: {
     fontFamily: Fonts.mono,
@@ -1901,9 +1919,9 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1915,19 +1933,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   metaPrimary: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '500',
     letterSpacing: -0.1,
   },
   metaSecondary: {
-    color: Colors.textFaint,
+    color: c.text,
     fontFamily: Fonts.mono,
     fontSize: 12,
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   metaMuted: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     letterSpacing: -0.1,
   },
@@ -1936,10 +1955,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 18,
     paddingVertical: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1976,7 +1995,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   resultSub: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
   },
   resultScore: {
@@ -1994,7 +2013,7 @@ const styles = StyleSheet.create({
   resultScoreSep: {
     width: 1,
     height: 24,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
   },
   // Lineup header
   lineupHeader: {
@@ -2007,13 +2026,13 @@ const styles = StyleSheet.create({
   sectionEyebrow: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 2.4,
     fontWeight: '500',
     marginBottom: 2,
   },
   sectionTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '500',
     letterSpacing: -0.3,
@@ -2036,7 +2055,7 @@ const styles = StyleSheet.create({
   },
   // Pair rows
   pairRow: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 14,
@@ -2051,16 +2070,16 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pairBadgeP: {
     fontFamily: Fonts.mono,
     fontSize: 8,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 0.6,
     fontWeight: '500',
     lineHeight: 9,
@@ -2069,11 +2088,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.4,
-    color: Colors.text,
+    color: c.text,
     lineHeight: 18,
   },
   pairLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '500',
     letterSpacing: -0.15,
@@ -2088,24 +2107,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
   },
   topTagText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.accent,
+    color: c.accent,
     letterSpacing: 0.6,
     fontWeight: '600',
   },
   pairPts: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textMuted,
+    color: c.textMuted,
     letterSpacing: 0.2,
   },
   pairMetaFaint: {
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   outcomeBadge: {
     width: 28,
@@ -2126,12 +2145,12 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   addResultChipText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '600',
     letterSpacing: 1,
   },
@@ -2140,7 +2159,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
     borderStyle: 'dashed',
-    borderTopColor: Colors.hair,
+    borderTopColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -2148,7 +2167,7 @@ const styles = StyleSheet.create({
   setsLabel: {
     fontSize: 9,
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.4,
     fontWeight: '500',
   },
@@ -2163,7 +2182,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontFamily: Fonts.mono,
     fontSize: 12,
-    color: Colors.textMuted,
+    color: c.textMuted,
     textAlign: 'center',
     letterSpacing: 0.4,
   },
@@ -2171,17 +2190,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   ruleText: {
     fontSize: 12,
-    color: Colors.textMuted,
+    color: c.textMuted,
     lineHeight: 17,
     flex: 1,
   },
@@ -2198,9 +2217,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  closeCtaLabel: { color: Colors.error, fontSize: 14, fontWeight: '600' },
+  closeCtaLabel: { color: c.error, fontSize: 14, fontWeight: '600' },
   closeHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     fontFamily: Fonts.mono,
     textAlign: 'center',
@@ -2210,7 +2229,7 @@ const styles = StyleSheet.create({
   // Foto del partido (acta cerrada)
   photoSection: { marginTop: 24, gap: 10 },
   photoEmptyHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 13,
     marginTop: 2,
   },
@@ -2218,16 +2237,16 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.accent40,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  sharePhotoCtaLabel: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+  sharePhotoCtaLabel: { color: c.accent, fontSize: 14, fontWeight: '600' },
   changePhotoLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',
@@ -2237,18 +2256,18 @@ const styles = StyleSheet.create({
   ctaWrap: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   cta: {
     width: '100%',
     height: 56,
     borderRadius: 16,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -2262,13 +2281,13 @@ const styles = StyleSheet.create({
   // Sheet shared
   sheetEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sheetTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -2277,7 +2296,7 @@ const styles = StyleSheet.create({
   },
   sheetLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     marginTop: 8,
@@ -2285,15 +2304,15 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   sheetInputWrap: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   sheetInput: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     paddingVertical: 0,
   },
@@ -2301,10 +2320,10 @@ const styles = StyleSheet.create({
     height: 52,
     marginTop: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -2323,14 +2342,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'flex-start',
   },
   venueCellActive: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   venueCellLabel: {
     fontSize: 15,
@@ -2351,16 +2370,16 @@ const styles = StyleSheet.create({
   sharePreview: {
     marginTop: 12,
     padding: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     maxHeight: 220,
   },
   sharePreviewText: {
     fontFamily: Fonts.mono,
     fontSize: 12,
-    color: Colors.textMuted,
+    color: c.textMuted,
     lineHeight: 18,
   },
   shareGrid: {
@@ -2372,10 +2391,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
     gap: 8,
   },
@@ -2395,12 +2414,12 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shareCloseLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -2409,29 +2428,29 @@ const styles = StyleSheet.create({
   // (BottomSheet ya aplica gap:14 entre hijos directos — sin marginBottom aquí)
   manualCloseEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   manualCloseTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.3,
     lineHeight: 24,
   },
   manualCloseLede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
   manualScoreBlock: {
     alignSelf: 'stretch',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginTop: 4,
@@ -2439,7 +2458,7 @@ const styles = StyleSheet.create({
   manualScoreLabel: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.6,
     fontWeight: '500',
     marginBottom: 10,
@@ -2458,7 +2477,7 @@ const styles = StyleSheet.create({
   manualScoreSlotLabel: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.4,
     fontWeight: '500',
     marginBottom: 4,
@@ -2467,10 +2486,10 @@ const styles = StyleSheet.create({
     width: 64,
     height: 52,
     borderRadius: 12,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
-    color: Colors.text,
+    borderColor: c.hair,
+    color: c.text,
     fontFamily: Fonts.mono,
     fontSize: 24,
     fontWeight: '700',
@@ -2480,7 +2499,7 @@ const styles = StyleSheet.create({
   manualScoreSep: {
     fontFamily: Fonts.mono,
     fontSize: 22,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '600',
   },
   manualCloseRow: {
@@ -2515,7 +2534,7 @@ const styles = StyleSheet.create({
   },
   manualCloseHint: {
     fontFamily: Fonts.mono,
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 11,
     letterSpacing: 0.5,
     textAlign: 'center',
@@ -2528,7 +2547,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   deleteJornadaLabel: {
-    color: Colors.error,
+    color: c.error,
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: 0.2,
@@ -2538,13 +2557,13 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
   },
   manualCloseCancelLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     fontWeight: '500',
   },

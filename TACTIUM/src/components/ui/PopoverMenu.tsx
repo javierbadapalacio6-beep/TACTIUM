@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Modal,
   Pressable,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconChevron } from './Icon';
@@ -51,6 +51,8 @@ export const PopoverMenu: React.FC<Props> = ({
   right = 20,
   minWidth = 240,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const effectiveTop = top ?? insets.top + 64;
 
@@ -85,7 +87,7 @@ export const PopoverMenu: React.FC<Props> = ({
                   onPress={opt.onPress}
                   style={({ pressed }) => [
                     styles.row,
-                    pressed && { backgroundColor: Colors.accent10 },
+                    pressed && { backgroundColor: c.accent10 },
                   ]}
                 >
                   <View style={styles.rowLeading}>
@@ -94,7 +96,7 @@ export const PopoverMenu: React.FC<Props> = ({
                     ) : null}
                     <Text style={styles.label}>{opt.label}</Text>
                   </View>
-                  <IconChevron size={14} color={Colors.textFaint} />
+                  <IconChevron size={14} color={c.textFaint} />
                 </Pressable>
               </React.Fragment>
             ))}
@@ -105,55 +107,56 @@ export const PopoverMenu: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  popover: {
-    position: 'absolute',
-    backgroundColor: Colors.bgRaised,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    overflow: 'hidden',
-    // Sombra fuerte para que parezca "flotando" sobre la pantalla.
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
-    ...(Platform.OS === 'android' ? { elevation: 16 } : null),
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 56,
-  },
-  rowLeading: {
-    flex: 1,
-    minWidth: 0,
-  },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    color: Colors.textFaint,
-    letterSpacing: 1.5,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  label: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.hair,
-    marginLeft: 16,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    popover: {
+      position: 'absolute',
+      backgroundColor: c.bgRaised,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      overflow: 'hidden',
+      // Sombra fuerte para que parezca "flotando" sobre la pantalla.
+      shadowColor: '#000',
+      shadowOpacity: 0.5,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 16,
+      ...(Platform.OS === 'android' ? { elevation: 16 } : null),
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      minHeight: 56,
+    },
+    rowLeading: {
+      flex: 1,
+      minWidth: 0,
+    },
+    eyebrow: {
+      fontFamily: Fonts.mono,
+      fontSize: 10,
+      color: c.textFaint,
+      letterSpacing: 1.5,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    label: {
+      color: c.text,
+      fontSize: 15,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: c.hair,
+      marginLeft: 16,
+    },
+  });

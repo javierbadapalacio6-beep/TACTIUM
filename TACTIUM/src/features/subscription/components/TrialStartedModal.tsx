@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -38,6 +38,8 @@ function formatDate(iso: string): string {
  * — que genera nueva fila optimistic con id distinto — no relance el modal.
  */
 export const TrialStartedModal: React.FC = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
@@ -183,7 +185,7 @@ export const TrialStartedModal: React.FC = () => {
           <Text style={styles.eyebrow}>PRUEBA ACTIVADA</Text>
           <Text style={styles.title}>
             14 días de TACTIUM Pro{'\n'}
-            <Text style={{ color: Colors.accent }}>gratis</Text>
+            <Text style={{ color: c.accent }}>gratis</Text>
           </Text>
           <Text style={styles.lede}>
             Acceso completo a todas las funciones. Sin compromiso. Cancela
@@ -208,7 +210,7 @@ export const TrialStartedModal: React.FC = () => {
             {valueProps.map((label) => (
               <View key={label} style={styles.valueRow}>
                 <View style={styles.checkDot}>
-                  <IconCheck size={11} color={Colors.accent} />
+                  <IconCheck size={11} color={c.accent} />
                 </View>
                 <Text style={styles.valueText}>{label}</Text>
               </View>
@@ -238,10 +240,10 @@ export const TrialStartedModal: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   card: {
     flex: 1,
@@ -254,14 +256,14 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2.4,
     fontWeight: '500',
     marginBottom: 10,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '800',
     letterSpacing: -0.8,
@@ -269,7 +271,7 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -284,21 +286,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 18,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   summaryItem: { alignItems: 'center', minWidth: 110 },
-  summaryDivider: { width: 1, height: 28, backgroundColor: Colors.hair },
+  summaryDivider: { width: 1, height: 28, backgroundColor: c.hair },
   summaryLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1.4,
     fontWeight: '500',
   },
   summaryValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
@@ -318,19 +320,19 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 7,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   valueText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     flex: 1,
   },
   disclaimer: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     lineHeight: 16,
     textAlign: 'center',
@@ -341,18 +343,18 @@ const styles = StyleSheet.create({
     height: 54,
     alignSelf: 'stretch',
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 22,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
   ctaLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.1,

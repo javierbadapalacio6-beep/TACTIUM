@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconArrowRight, IconCheck } from '@components/ui';
@@ -38,13 +38,13 @@ const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   expired: 'Expirada',
 };
 
-const STATUS_TINT: Record<SubscriptionStatus, string> = {
-  trialing: Colors.accent,
-  active: Colors.accent,
-  grace_period: Colors.warning,
-  canceled: Colors.textMuted,
-  expired: Colors.error,
-};
+const makeStatusTint = (c: Palette): Record<SubscriptionStatus, string> => ({
+  trialing: c.accent,
+  active: c.accent,
+  grace_period: c.warning,
+  canceled: c.textMuted,
+  expired: c.error,
+});
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -59,6 +59,9 @@ function formatDate(iso: string | null): string {
 export const SubscriptionScreen = ({
   navigation,
 }: RootStackScreenProps<'Subscription'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const STATUS_TINT = useMemo(() => makeStatusTint(c), [c]);
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const activeRole = useTeamStore((s) => s.activeRole);
@@ -156,7 +159,7 @@ export const SubscriptionScreen = ({
           accessibilityLabel="Volver"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Volver</Text>
         </Pressable>
         <View style={{ flex: 1 }} />
@@ -231,7 +234,7 @@ export const SubscriptionScreen = ({
               {clubCovering ? (
                 <View style={styles.coverNotice}>
                   <View style={styles.coverDot}>
-                    <IconCheck size={12} color={Colors.accent} />
+                    <IconCheck size={12} color={c.accent} />
                   </View>
                   <Text style={styles.coverText}>
                     Tu club ya cubre tu plan. Puedes cancelar la suscripción
@@ -250,7 +253,7 @@ export const SubscriptionScreen = ({
               {clubCovering ? (
                 <View style={[styles.coverNotice, { marginTop: 14 }]}>
                   <View style={styles.coverDot}>
-                    <IconCheck size={12} color={Colors.accent} />
+                    <IconCheck size={12} color={c.accent} />
                   </View>
                   <Text style={styles.coverText}>
                     Tu club te cubre. Tienes acceso premium sin pagar nada.
@@ -304,7 +307,7 @@ export const SubscriptionScreen = ({
                 ? 'Suscribir el club'
                 : 'Hazte Pro · Prueba 14 días'}
             </Text>
-            <IconArrowRight size={16} color={Colors.textInverse} />
+            <IconArrowRight size={16} color={c.textInverse} />
           </Pressable>
         ) : (
           <Pressable
@@ -367,36 +370,40 @@ const ActionRow: React.FC<{
   sub: string;
   destructive?: boolean;
   onPress: () => void;
-}> = ({ label, sub, destructive, onPress }) => (
-  <Pressable
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityLabel={`${label}. ${sub}`}
-    style={({ pressed }) => [
-      styles.actionRow,
-      pressed && { opacity: 0.85 },
-    ]}
-  >
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <Text
-        style={[
-          styles.actionLabel,
-          destructive && { color: Colors.error },
-        ]}
-      >
-        {label}
-      </Text>
-      <Text style={styles.actionSub}>{sub}</Text>
-    </View>
-    <IconArrowRight
-      size={14}
-      color={destructive ? Colors.error : Colors.textFaint}
-    />
-  </Pressable>
-);
+}> = ({ label, sub, destructive, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${sub}`}
+      style={({ pressed }) => [
+        styles.actionRow,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          style={[
+            styles.actionLabel,
+            destructive && { color: c.error },
+          ]}
+        >
+          {label}
+        </Text>
+        <Text style={styles.actionSub}>{sub}</Text>
+      </View>
+      <IconArrowRight
+        size={14}
+        color={destructive ? c.error : c.textFaint}
+      />
+    </Pressable>
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
 
   header: {
     flexDirection: 'row',
@@ -410,30 +417,30 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
 
   scroll: { paddingHorizontal: 22, paddingTop: 14 },
 
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.6,
     marginTop: 6,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
@@ -442,10 +449,10 @@ const styles = StyleSheet.create({
 
   // Status card
   statusCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 16,
     marginBottom: 14,
   },
@@ -455,13 +462,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   planName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   planMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -479,7 +486,7 @@ const styles = StyleSheet.create({
   },
   statusDivider: {
     height: 1,
-    backgroundColor: Colors.hair,
+    backgroundColor: c.hair,
     marginVertical: 14,
   },
   statusRow: {
@@ -488,12 +495,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusRowLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
   },
   statusRowValue: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -504,21 +511,21 @@ const styles = StyleSheet.create({
     marginTop: 14,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   coverDot: {
     width: 20,
     height: 20,
     borderRadius: 6,
-    backgroundColor: Colors.accent + '22',
+    backgroundColor: c.accent + '22',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
   coverText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     lineHeight: 17,
     flex: 1,
@@ -527,12 +534,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 10,
     borderRadius: 10,
-    backgroundColor: Colors.warning + '14',
+    backgroundColor: c.warning + '14',
     borderWidth: 1,
-    borderColor: Colors.warning + '40',
+    borderColor: c.warning + '40',
   },
   scheduledText: {
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '600',
@@ -540,21 +547,21 @@ const styles = StyleSheet.create({
 
   // Recuperación de pago (grace period)
   billingIssueCard: {
-    backgroundColor: Colors.warning + '14',
+    backgroundColor: c.warning + '14',
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.warning + '55',
+    borderColor: c.warning + '55',
     padding: 16,
     marginBottom: 14,
   },
   billingIssueTitle: {
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   billingIssueText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
@@ -562,13 +569,13 @@ const styles = StyleSheet.create({
   billingIssueBtn: {
     height: 44,
     borderRadius: Radius.md,
-    backgroundColor: Colors.warning,
+    backgroundColor: c.warning,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 14,
   },
   billingIssueBtnLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -581,41 +588,41 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 52,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     marginBottom: 14,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.3,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
   ctaPrimaryLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 15,
     fontWeight: '700',
   },
   ctaSecondary: {
     height: 48,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
   },
   ctaSecondaryLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
 
   // Actions block
   actionsBlock: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     overflow: 'hidden',
   },
   actionRow: {
@@ -625,15 +632,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.hair,
+    borderBottomColor: c.hair,
   },
   actionLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   actionSub: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -643,7 +650,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   legalText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     textAlign: 'center',
   },

@@ -18,7 +18,7 @@ import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as LineupsApi from '@core/services/lineups';
 import { getCourtsForCompetition } from '@core/data/federations';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, useIsDark, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -33,7 +33,7 @@ import {
   NeonDot,
   TeamSwitcher,
   IconGift,
-  IconRacket,
+  IconBall,
 } from '@components/ui';
 import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -49,6 +49,14 @@ import type { HomeStackScreenProps } from '@navigation/types';
 export const HomeScreen = ({
   navigation,
 }: HomeStackScreenProps<'HomeRoot'>) => {
+  const c = useColors();
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  // La tarjeta de "próxima jornada" es una pieza destacada de degradado
+  // verde con texto claro: se mantiene SIEMPRE oscura (también en modo
+  // claro) para no perder el look y que el texto se lea. Usa la paleta
+  // oscura fija en todo su subárbol.
+  const heroStyles = useMemo(() => makeStyles(darkColors), []);
   const insets = useSafeAreaInsets();
   const players = useTeamStore((s) => s.players);
   const team = useTeamStore((s) => s.team);
@@ -231,7 +239,7 @@ export const HomeScreen = ({
               accessibilityRole="button"
               accessibilityLabel="Abrir temporadas"
             >
-              <IconCalendar size={18} color={Colors.text} />
+              <IconCalendar size={18} color={c.text} />
             </Pressable>
           ) : null}
           <NotificationBell />
@@ -257,46 +265,46 @@ export const HomeScreen = ({
         {nextMatchday ? (
           <Pressable
             onPress={() => navigation.navigate('Jornada', { matchdayId: nextMatchday.id })}
-            style={({ pressed }) => [styles.hero, pressed && { opacity: 0.95 }]}
+            style={({ pressed }) => [heroStyles.hero, pressed && { opacity: 0.95 }]}
           >
             <LinearGradient
-              colors={[Colors.primary, '#062520', Colors.background]}
+              colors={[darkColors.primary, '#062520', darkColors.background]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
-            <View style={styles.heroWatermark} pointerEvents="none">
+            <View style={heroStyles.heroWatermark} pointerEvents="none">
               <Svg width={240} height={160} viewBox="0 0 240 160">
                 <Rect x="2" y="2" width="236" height="156" rx="3"
-                  stroke={Colors.accent} strokeWidth="1.2" fill="none" opacity={0.4} />
-                <Line x1="120" y1="2" x2="120" y2="158" stroke={Colors.accent} strokeWidth="1" opacity={0.4} />
-                <Line x1="2" y1="80" x2="238" y2="80" stroke={Colors.accent} strokeWidth="1" opacity={0.4} />
-                <Line x1="70" y1="2" x2="70" y2="158" stroke={Colors.accent} strokeWidth="1" opacity={0.3} />
-                <Line x1="170" y1="2" x2="170" y2="158" stroke={Colors.accent} strokeWidth="1" opacity={0.3} />
+                  stroke={darkColors.accent} strokeWidth="1.2" fill="none" opacity={0.4} />
+                <Line x1="120" y1="2" x2="120" y2="158" stroke={darkColors.accent} strokeWidth="1" opacity={0.4} />
+                <Line x1="2" y1="80" x2="238" y2="80" stroke={darkColors.accent} strokeWidth="1" opacity={0.4} />
+                <Line x1="70" y1="2" x2="70" y2="158" stroke={darkColors.accent} strokeWidth="1" opacity={0.3} />
+                <Line x1="170" y1="2" x2="170" y2="158" stroke={darkColors.accent} strokeWidth="1" opacity={0.3} />
               </Svg>
             </View>
 
-            <View style={styles.heroLive}>
+            <View style={heroStyles.heroLive}>
               <NeonDot size={6} />
-              <Text style={styles.heroLiveText}>
+              <Text style={heroStyles.heroLiveText}>
                 J·{String(nextMatchday.jornada_number).padStart(2, '0')}
                 {nextMatchday.match_date ? ` · ${nextMatchday.match_date}` : ''}
                 {nextMatchday.match_time ? ` · ${nextMatchday.match_time.slice(0, 5)}` : ''}
               </Text>
             </View>
 
-            <Text style={styles.heroLabel}>vs.</Text>
-            <Text style={styles.heroTitle}>{nextMatchday.opponent}</Text>
+            <Text style={heroStyles.heroLabel}>vs.</Text>
+            <Text style={heroStyles.heroTitle}>{nextMatchday.opponent}</Text>
             {nextMatchday.location?.trim() ? (
-              <View style={styles.heroLocationRow}>
-                <IconPin size={12} color={Colors.textMuted} />
-                <Text style={styles.heroLocation} numberOfLines={1}>
+              <View style={heroStyles.heroLocationRow}>
+                <IconPin size={12} color={darkColors.textMuted} />
+                <Text style={heroStyles.heroLocation} numberOfLines={1}>
                   {nextMatchday.location.trim()}
                 </Text>
               </View>
             ) : null}
 
-            <View style={styles.statRow}>
+            <View style={heroStyles.statRow}>
               <StatChip label="DISPONIBLES" value={`${avail}`} suffix={`/ ${total}`} highlight />
               <StatChip
                 label="ALINEACIÓN"
@@ -328,10 +336,10 @@ export const HomeScreen = ({
               />
             </View>
 
-            <View style={styles.heroFooter}>
-              <Text style={styles.heroFooterText}>Abrir jornada</Text>
-              <View style={styles.heroFooterArrow}>
-                <IconArrowRight size={14} color="#001810" />
+            <View style={heroStyles.heroFooter}>
+              <Text style={heroStyles.heroFooterText}>Abrir jornada</Text>
+              <View style={heroStyles.heroFooterArrow}>
+                <IconArrowRight size={14} color={darkColors.textInverse} />
               </View>
             </View>
           </Pressable>
@@ -350,13 +358,22 @@ export const HomeScreen = ({
                 onPress={activeSeason ? goScanCalendar : goSeasons}
                 style={({ pressed }) => [
                   styles.heroEmptyCta,
+                  isDark ? styles.heroEmptyCtaSolid : styles.heroEmptyCtaSoft,
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={styles.heroEmptyCtaLabel}>
+                <Text
+                  style={[
+                    styles.heroEmptyCtaLabel,
+                    { color: isDark ? c.textInverse : c.accent },
+                  ]}
+                >
                   {activeSeason ? 'Escanear calendario' : 'Crear temporada'}
                 </Text>
-                <IconArrowRight size={14} color="#001810" />
+                <IconArrowRight
+                  size={14}
+                  color={isDark ? c.textInverse : c.accent}
+                />
               </Pressable>
             ) : null}
             {canEdit && activeSeason ? (
@@ -403,7 +420,7 @@ export const HomeScreen = ({
                 {nextMatchday.is_home ? 'Local' : 'Visitante'}
               </Text>
             </View>
-            <IconChevron size={14} color={Colors.textFaint} />
+            <IconChevron size={14} color={c.textFaint} />
           </Pressable>
         ) : isPlayer &&
           nextMatchday &&
@@ -435,7 +452,7 @@ export const HomeScreen = ({
 
         <View style={{ gap: 8 }}>
           <ActionRow
-            icon={<IconTeam size={20} color={Colors.accent} />}
+            icon={<IconTeam size={20} color={c.accent} />}
             title={isPlayer ? 'Mi disponibilidad' : 'Disponibilidad'}
             value={`${avail}/${total}`}
             hint={
@@ -452,14 +469,14 @@ export const HomeScreen = ({
           {canEdit ? (
             <>
               <ActionRow
-                icon={<IconAnalytics size={20} color={Colors.accent} />}
+                icon={<IconAnalytics size={20} color={c.accent} />}
                 title="Plantilla"
                 value={String(players.length)}
                 hint="Estadísticas y puntos FEP"
                 onPress={goTeam}
               />
               <ActionRow
-                icon={<IconCalendar size={20} color={Colors.accent} />}
+                icon={<IconCalendar size={20} color={c.accent} />}
                 title="Temporadas"
                 value={activeSeason ? activeSeason.name.replace('Temporada ', '') : '—'}
                 hint={
@@ -477,14 +494,14 @@ export const HomeScreen = ({
           ) : null}
           {canEdit ? (
             <ActionRow
-              icon={<IconGift size={20} color={Colors.accent} />}
+              icon={<IconGift size={20} color={c.accent} />}
               title="Invita a un capitán"
               hint="¿Conoces a otro capitán? Regálale dejar el Excel"
               onPress={inviteCaptain}
             />
           ) : null}
           <ActionRow
-            icon={<IconRacket size={20} color={Colors.accent} />}
+            icon={<IconBall size={20} color={c.accent} />}
             title="Amistoso"
             hint={
               canEdit
@@ -528,33 +545,40 @@ const StatChip: React.FC<{
   suffix?: string;
   sub?: string;
   highlight?: boolean;
-}> = ({ label, value, suffix, sub, highlight }) => (
-  <View
-    style={[
-      styles.statChip,
-      highlight && { borderColor: Colors.accent40 },
-    ]}
-  >
-    <Text style={styles.statChipLabel} numberOfLines={1}>
-      {label}
-    </Text>
-    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 4 }}>
-      <Text
-        style={[
-          styles.statChipValue,
-          highlight && { color: Colors.accent },
-        ]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.55}
-      >
-        {value}
+}> = ({ label, value, suffix, sub, highlight }) => {
+  // StatChip vive solo dentro de la tarjeta de jornada (siempre oscura),
+  // así que usa la paleta oscura fija para que su texto se lea sobre el
+  // degradado verde también en modo claro.
+  const c = darkColors;
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View
+      style={[
+        styles.statChip,
+        highlight && { borderColor: c.accent40 },
+      ]}
+    >
+      <Text style={styles.statChipLabel} numberOfLines={1}>
+        {label}
       </Text>
-      {suffix ? <Text style={styles.statChipSuffix}>{suffix}</Text> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 4 }}>
+        <Text
+          style={[
+            styles.statChipValue,
+            highlight && { color: c.accent },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.55}
+        >
+          {value}
+        </Text>
+        {suffix ? <Text style={styles.statChipSuffix}>{suffix}</Text> : null}
+      </View>
+      {sub ? <Text style={styles.statChipSub}>{sub}</Text> : null}
     </View>
-    {sub ? <Text style={styles.statChipSub}>{sub}</Text> : null}
-  </View>
-);
+  );
+};
 
 const ActionRow: React.FC<{
   icon: React.ReactNode;
@@ -563,34 +587,38 @@ const ActionRow: React.FC<{
   value?: string;
   hint: string;
   onPress: () => void;
-}> = ({ icon, title, value, hint, onPress }) => (
-  <Pressable
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityLabel={`${title}. ${value ?? ''}. ${hint}`}
-    style={({ pressed }) => [
-      styles.actionRow,
-      pressed && { opacity: 0.85 },
-    ]}
-  >
-    <View style={styles.actionIcon}>{icon}</View>
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <Text style={styles.actionTitle}>{title}</Text>
-      <Text style={styles.actionHint}>{hint}</Text>
-    </View>
-    {value ? (
-      <View style={styles.actionPill}>
-        <Text style={styles.actionPillText}>{value}</Text>
+}> = ({ icon, title, value, hint, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${value ?? ''}. ${hint}`}
+      style={({ pressed }) => [
+        styles.actionRow,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View style={styles.actionIcon}>{icon}</View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionHint}>{hint}</Text>
       </View>
-    ) : null}
-    <IconChevron size={14} color={Colors.textFaint} />
-  </Pressable>
-);
+      {value ? (
+        <View style={styles.actionPill}>
+          <Text style={styles.actionPillText}>{value}</Text>
+        </View>
+      ) : null}
+      <IconChevron size={14} color={c.textFaint} />
+    </Pressable>
+  );
+};
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   topbar: {
     flexDirection: 'row',
@@ -624,9 +652,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -638,7 +666,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2.4,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 14,
   },
@@ -647,10 +675,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
@@ -658,34 +686,34 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   myMatchCourtTxt: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 14,
     fontWeight: '700',
   },
-  myMatchTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
-  myMatchMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  myMatchTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+  myMatchMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
   myMatchOut: {
     marginTop: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 14,
   },
-  myMatchOutTxt: { color: Colors.textMuted, fontSize: 13, lineHeight: 18 },
+  myMatchOutTxt: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
   eyebrowFaint: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2.4,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '500',
     marginBottom: 14,
   },
@@ -695,7 +723,7 @@ const styles = StyleSheet.create({
     paddingTop: 22,
     paddingBottom: 22,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.5,
@@ -718,17 +746,17 @@ const styles = StyleSheet.create({
   heroLiveText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.accent,
+    color: c.accent,
     letterSpacing: 1.6,
   },
   heroLabel: {
     fontSize: 12,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontWeight: '500',
     marginBottom: 4,
   },
   heroTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '700',
     letterSpacing: -0.8,
@@ -742,7 +770,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   heroLocation: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     flexShrink: 1,
   },
@@ -753,32 +781,32 @@ const styles = StyleSheet.create({
   },
   statChip: {
     flex: 1,
-    backgroundColor: Colors.black35,
+    backgroundColor: c.black35,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   statChipLabel: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.4,
     fontWeight: '500',
   },
   statChipValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: -0.4,
   },
   statChipSuffix: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
   },
   statChipSub: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 10,
     marginTop: 2,
   },
@@ -786,13 +814,13 @@ const styles = StyleSheet.create({
     marginTop: 22,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   heroFooterText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -800,30 +828,30 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.5,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
   },
   heroEmpty: {
-    backgroundColor: Colors.bgCard,
-    borderColor: Colors.hairStrong,
+    backgroundColor: c.bgCard,
+    borderColor: c.hairStrong,
     paddingVertical: 28,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
   },
   heroEmptyTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: -0.3,
   },
   heroEmptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
@@ -834,14 +862,22 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 18,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
+  // Oscuro: relleno verde sólido (look de producción). Claro: verde suave
+  // (tinte + borde) para que el CTA no resalte tanto sobre el fondo blanco.
+  heroEmptyCtaSolid: {
+    backgroundColor: c.accent,
+  },
+  heroEmptyCtaSoft: {
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+  },
   heroEmptyCtaLabel: {
-    color: '#001810',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -852,20 +888,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroEmptySecondaryLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
   primaryCta: {
     height: 56,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
     marginTop: 22,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -882,29 +918,29 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   actionIcon: {
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderWidth: 1,
-    borderColor: Colors.accent25,
+    borderColor: c.accent25,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   actionHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -912,12 +948,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
   },
   actionPillText: {
     fontFamily: Fonts.mono,
     fontSize: 13,
-    color: Colors.text,
+    color: c.text,
     fontWeight: '600',
   },
   statusFooter: {
@@ -928,22 +964,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 16,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   statusTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
   },
   statusMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
   statusAction: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '600',
   },

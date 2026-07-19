@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconCheck, IconChevron } from '@components/ui';
@@ -69,6 +69,8 @@ export const ResultsScreen = ({
   navigation,
   route,
 }: HomeStackScreenProps<'Results'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   // Solo captain/club_admin pueden cargar resultados. Players ven la pantalla
@@ -383,7 +385,7 @@ export const ResultsScreen = ({
   if (loading) {
     return (
       <View style={[styles.root, styles.center]}>
-        <ActivityIndicator color={Colors.accent} />
+        <ActivityIndicator color={c.accent} />
       </View>
     );
   }
@@ -406,7 +408,7 @@ export const ResultsScreen = ({
           }}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Jornada</Text>
         </Pressable>
         <Text style={styles.headerCount}>{playedLabel}</Text>
@@ -453,7 +455,7 @@ export const ResultsScreen = ({
         {/* === SCORE AGREGADO === */}
         <View style={styles.aggregateCard}>
           <LinearGradient
-            colors={[Colors.bgCard, Colors.bgCard2]}
+            colors={[c.bgCard, c.bgCard2]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -470,7 +472,7 @@ export const ResultsScreen = ({
             <Text
               style={[
                 styles.aggregateScore,
-                { color: anyFilled ? Colors.accent : Colors.textFaint },
+                { color: anyFilled ? c.accent : c.textFaint },
               ]}
             >
               {anyFilled ? teamScore.us : '—'}
@@ -479,7 +481,7 @@ export const ResultsScreen = ({
             <Text
               style={[
                 styles.aggregateScore,
-                { color: anyFilled ? Colors.text : Colors.textFaint },
+                { color: anyFilled ? c.text : c.textFaint },
               ]}
             >
               {anyFilled ? teamScore.them : '—'}
@@ -542,7 +544,7 @@ export const ResultsScreen = ({
           }}
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
         >
-          <IconCheck size={18} color={Colors.textInverse} />
+          <IconCheck size={18} color={c.textInverse} />
           <Text style={styles.ctaLabel}>{canEdit ? 'Listo' : 'Volver'}</Text>
         </Pressable>
       </ScrollView>
@@ -591,12 +593,14 @@ const ResultRow: React.FC<{
   onToggleForfeit,
   onSetForfeitDirection,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const tint =
     outcome === 'won'
-      ? Colors.accent
+      ? c.accent
       : outcome === 'lost'
-        ? Colors.error
-        : Colors.textFaint;
+        ? c.error
+        : c.textFaint;
 
   // Marcador resumen: orden Local-Visitante, no Nos.-Riv.
   const setSummary = match.sets
@@ -620,7 +624,7 @@ const ResultRow: React.FC<{
     <View
       style={[
         styles.row,
-        { borderColor: expanded ? Colors.hairStrong : Colors.hair },
+        { borderColor: expanded ? c.hairStrong : c.hair },
       ]}
     >
       <Pressable
@@ -635,14 +639,14 @@ const ResultRow: React.FC<{
           style={[
             styles.courtBadge,
             court === 0 && {
-              backgroundColor: Colors.accent10,
+              backgroundColor: c.accent10,
             },
           ]}
         >
           <Text
             style={[
               styles.courtBadgeText,
-              { color: court === 0 ? Colors.accent : Colors.text },
+              { color: court === 0 ? c.accent : c.text },
             ]}
           >
             P{court + 1}
@@ -687,7 +691,7 @@ const ResultRow: React.FC<{
             expanded && { transform: [{ rotate: '90deg' }] },
           ]}
         >
-          <IconChevron size={14} color={Colors.textFaint} />
+          <IconChevron size={14} color={c.textFaint} />
         </View>
       </Pressable>
 
@@ -707,7 +711,7 @@ const ResultRow: React.FC<{
                 styles.forfeitTrack,
                 {
                   backgroundColor: match.forfeit
-                    ? Colors.accent
+                    ? c.accent
                     : 'rgba(232,245,239,0.12)',
                 },
               ]}
@@ -723,14 +727,14 @@ const ResultRow: React.FC<{
               style={[
                 styles.forfeitLabel,
                 {
-                  color: match.forfeit ? Colors.accent : Colors.textMuted,
+                  color: match.forfeit ? c.accent : c.textMuted,
                 },
               ]}
             >
               W.O. (no presentado)
             </Text>
             {savingForfeit ? (
-              <ActivityIndicator size="small" color={Colors.accent} />
+              <ActivityIndicator size="small" color={c.accent} />
             ) : null}
           </Pressable>
 
@@ -751,7 +755,7 @@ const ResultRow: React.FC<{
                 <Text
                   style={[
                     styles.foDirText,
-                    !match.forfeitUs && { color: Colors.accent },
+                    !match.forfeitUs && { color: c.accent },
                   ]}
                 >
                   Ganado · no vino el rival
@@ -771,7 +775,7 @@ const ResultRow: React.FC<{
                 <Text
                   style={[
                     styles.foDirText,
-                    match.forfeitUs && { color: Colors.error },
+                    match.forfeitUs && { color: c.error },
                   ]}
                 >
                   Perdido · no vinimos
@@ -789,7 +793,7 @@ const ResultRow: React.FC<{
                   <Text
                     style={[
                       styles.teamsHeaderName,
-                      isHome && { color: Colors.accent },
+                      isHome && { color: c.accent },
                     ]}
                     numberOfLines={1}
                   >
@@ -801,7 +805,7 @@ const ResultRow: React.FC<{
                   <Text
                     style={[
                       styles.teamsHeaderName,
-                      !isHome && { color: Colors.accent },
+                      !isHome && { color: c.accent },
                     ]}
                     numberOfLines={1}
                   >
@@ -848,6 +852,8 @@ const SetLine: React.FC<{
   onChange: (side: 'us' | 'them', value: string) => void;
   onBlurCell: () => void;
 }> = ({ setIdx, cell, isHome, disabled, saving, saved, onChange, onBlurCell }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const leftSide: 'us' | 'them' = isHome ? 'us' : 'them';
   const rightSide: 'us' | 'them' = isHome ? 'them' : 'us';
   const leftValue = cell[leftSide];
@@ -920,45 +926,49 @@ const ScoreCell: React.FC<{
   saved: boolean;
   onChange: (value: string) => void;
   onBlurCell: () => void;
-}> = ({ value, win, mine, disabled, saving, saved, onChange, onBlurCell }) => (
-  <View style={styles.scoreCellWrap}>
-    <TextInput
-      value={value}
-      onChangeText={onChange}
-      onBlur={onBlurCell}
-      keyboardType="number-pad"
-      maxLength={2}
-      editable={!disabled}
-      placeholder="·"
-      placeholderTextColor={Colors.textFaint}
-      accessibilityLabel={mine ? 'Juegos a favor' : 'Juegos del rival'}
-      style={[
-        styles.scoreCell,
-        // Verde = GANADOR del set (el número más alto), no nuestro lado. A
-        // nuestro equipo lo identifica la cabecera Local/Visitante.
-        win
-          ? { color: Colors.accent, fontWeight: '800' }
-          : { color: Colors.text },
-        disabled && { opacity: 0.5 },
-      ]}
-    />
-    {saving ? (
-      <View style={styles.scoreCellSaving}>
-        <ActivityIndicator size="small" color={Colors.accent} />
-      </View>
-    ) : saved ? (
-      // Check verde efímero (~1.2s) tras guardado exitoso — feedback
-      // positivo cuando la red fue lenta y el spinner duró un rato.
-      <View style={styles.scoreCellSaving}>
-        <IconCheck size={12} color={Colors.accent} />
-      </View>
-    ) : null}
-  </View>
-);
+}> = ({ value, win, mine, disabled, saving, saved, onChange, onBlurCell }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.scoreCellWrap}>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        onBlur={onBlurCell}
+        keyboardType="number-pad"
+        maxLength={2}
+        editable={!disabled}
+        placeholder="·"
+        placeholderTextColor={c.textFaint}
+        accessibilityLabel={mine ? 'Juegos a favor' : 'Juegos del rival'}
+        style={[
+          styles.scoreCell,
+          // Verde = GANADOR del set (el número más alto), no nuestro lado. A
+          // nuestro equipo lo identifica la cabecera Local/Visitante.
+          win
+            ? { color: c.accent, fontWeight: '800' }
+            : { color: c.text },
+          disabled && { opacity: 0.5 },
+        ]}
+      />
+      {saving ? (
+        <View style={styles.scoreCellSaving}>
+          <ActivityIndicator size="small" color={c.accent} />
+        </View>
+      ) : saved ? (
+        // Check verde efímero (~1.2s) tras guardado exitoso — feedback
+        // positivo cuando la red fue lenta y el spinner duró un rato.
+        <View style={styles.scoreCellSaving}>
+          <IconCheck size={12} color={c.accent} />
+        </View>
+      ) : null}
+    </View>
+  );
+};
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   center: { alignItems: 'center', justifyContent: 'center' },
 
   // Nav
@@ -972,17 +982,17 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
   headerCount: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 1.5,
   },
@@ -995,19 +1005,19 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 6,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: -0.7,
     lineHeight: 30,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
@@ -1020,7 +1030,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1029,14 +1039,14 @@ const styles = StyleSheet.create({
   aggregateSide: { flex: 1, minWidth: 0 },
   aggregateSideLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1.6,
     textTransform: 'uppercase',
     fontWeight: '500',
   },
   aggregateSideSub: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
@@ -1055,12 +1065,12 @@ const styles = StyleSheet.create({
   aggregateDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
   },
 
   // Row card
   row: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
@@ -1076,7 +1086,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1087,7 +1097,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   rowLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
@@ -1095,7 +1105,7 @@ const styles = StyleSheet.create({
   rowSummary: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     marginTop: 3,
     letterSpacing: 0.5,
   },
@@ -1104,7 +1114,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     minWidth: 32,
     alignItems: 'center',
   },
@@ -1117,7 +1127,7 @@ const styles = StyleSheet.create({
   outcomePillTextMuted: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 0.5,
   },
   chevWrap: { width: 14, alignItems: 'center' },
@@ -1125,7 +1135,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 14,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
 
   // Forfeit
@@ -1164,22 +1174,22 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    backgroundColor: Colors.bgCard,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
   foDirBtnWon: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent,
+    backgroundColor: c.accent10,
   },
   foDirBtnLost: {
-    borderColor: Colors.error,
-    backgroundColor: Colors.error + '14',
+    borderColor: c.error,
+    backgroundColor: c.error + '14',
   },
   foDirText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
@@ -1199,12 +1209,12 @@ const styles = StyleSheet.create({
   teamsHeaderTag: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.6,
     fontWeight: '500',
   },
   teamsHeaderName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
@@ -1224,7 +1234,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1,
     fontWeight: '500',
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   setLineInputs: {
     flex: 1,
@@ -1235,7 +1245,7 @@ const styles = StyleSheet.create({
   setLineSep: {
     fontFamily: Fonts.mono,
     fontSize: 18,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   scoreCellWrap: {
     flex: 1,
@@ -1244,9 +1254,9 @@ const styles = StyleSheet.create({
   scoreCell: {
     height: 44,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     fontFamily: Fonts.mono,
     fontSize: 17,
     fontWeight: '600',
@@ -1264,18 +1274,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
     height: 54,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
   ctaLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.1,

@@ -247,6 +247,23 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-19",
+    title: "🎨 Perfil rediseñado estilo Instagram (escaparate + Ajustes detrás de menú) con feed de novedades, perfil público ampliado y bio/galería — y arranque del MODO CLARO: sistema de tema dinámico en toda la app. Todo en la rama feature/perfiles-sociales (aún NO en producción, sin OTA).",
+    changes: [
+      { type: "feat", text: "<strong>📸 Perfil rediseñado estilo Instagram</strong>. El Perfil pasa a ser un <strong>escaparate</strong> (foto, nombre de usuario, bio, seguidores/siguiendo, equipos y galería de fotos de amistosos) y los <strong>Ajustes</strong> se esconden detrás del menú (⋯) para no ensuciar la vista pública. En la cabecera, la <strong>lupa (buscar comunidad)</strong> va junto a la campana; retirado el chip «Novedades»." },
+
+      { type: "feat", text: "<strong>🗞️ Feed de novedades + perfil público con equipos</strong>. Nuevo feed de actividad de la gente/clubes que sigues, <strong>perfil público</strong> que muestra los equipos del jugador, <strong>notificación de nuevo seguidor</strong> y <strong>username único</strong> como identidad social. Backend social aditivo (sigue dormido en prod hasta el lanzamiento)." },
+
+      { type: "feat", text: "<strong>✍️ Descripción/bio del perfil + galería de amistosos</strong>. El perfil admite una <strong>bio</strong> editable y una <strong>galería de fotos</strong> de los amistosos en el perfil público, reforzando el ángulo social «escaparate del jugador»." },
+
+      { type: "feat", text: "<strong>🌗 MODO CLARO — sistema de tema dinámico en toda la app</strong>. Arquitectura nueva en <code>src/core/theme/</code>: <code>colors.ts</code> exporta <code>darkColors</code> + <code>lightColors</code> (mismas claves) y el tipo <code>Palette</code>; hooks <code>useColors()</code> / <code>useIsDark()</code> / <code>useTypography()</code>; store <code>themeStore.ts</code> con el modo persistido (Claro / Oscuro / Automático). Patrón <code>const c = useColors(); const styles = useMemo(() => makeStyles(c), [c])</code> aplicado a <strong>~77 ficheros</strong> (toda <code>src/</code> + <code>App.tsx</code> con navTheme y StatusBar reactivos). Acento en claro <code>#00995E</code> (el neón <code>#00DF82</code> no contrasta sobre blanco). Selector en <strong>Ajustes → APARIENCIA</strong>. Default sigue OSCURO. <code>tsc --noEmit</code> limpio." },
+
+      { type: "decision", text: "<strong>Qué queda OSCURO a propósito</strong>: el splash de marca (<code>AnimatedSplash</code>) y las tarjetas que se exportan al compartir (<code>PhotoShareCard</code>, <code>LineupShareCard</code>) — son imágenes de marca, no interfaz. Pendientes de decisión fina: la píldora flotante de la tab bar y el picker nativo de fecha/hora." },
+
+      { type: "chore", text: "<strong>Sin merge ni OTA todavía</strong>. Todo (rediseño social + modo claro) vive en <code>feature/perfiles-sociales</code>; se validará en build dev/preview antes de mergear a <code>main</code> y publicar." },
+    ],
+  },
+  {
     date: "2026-07-17",
     title: "🚀 1.2.0 APROBADA en las stores + jornada intensa: nombre de usuario, código del partido, campanita de notificaciones in-app, fix de roles al canjear código, cuentas demo + presentación para Smash Pádel Club, y arranque de la capa social (en rama). Casi todo publicado por OTA a production (runtime 1.2.0).",
     changes: [

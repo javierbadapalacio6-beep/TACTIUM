@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { BottomSheet, IconCamera } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
@@ -34,6 +34,8 @@ interface Props {
  *  · Nombre de usuario + descripción se guardan juntos con "Guardar".
  */
 export const EditProfileSheet: React.FC<Props> = ({ open, onClose, onSaved }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const user = useAuthStore((s) => s.user);
   const displayName = displayNameOf(user);
   const initials = initialsOf(displayName);
@@ -211,7 +213,7 @@ export const EditProfileSheet: React.FC<Props> = ({ open, onClose, onSaved }) =>
           ]}
         >
           {saving ? (
-            <ActivityIndicator size="small" color={Colors.textInverse} />
+            <ActivityIndicator size="small" color={c.textInverse} />
           ) : (
             <Text style={styles.saveBtnLabel}>Guardar</Text>
           )}
@@ -236,19 +238,21 @@ export const EditProfileSheet: React.FC<Props> = ({ open, onClose, onSaved }) =>
             <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
           ) : (
             <LinearGradient
-              colors={[Colors.primary, Colors.bgCard2]}
+              colors={[darkColors.primary, darkColors.bgCard2]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.avatar}
             >
-              <Text style={styles.avatarText}>{initials}</Text>
+              <Text style={[styles.avatarText, { color: darkColors.accent }]}>
+                {initials}
+              </Text>
             </LinearGradient>
           )}
           <View style={styles.avatarEditBadge}>
             {avatarBusy ? (
-              <ActivityIndicator size="small" color={Colors.accent} />
+              <ActivityIndicator size="small" color={c.accent} />
             ) : (
-              <IconCamera size={13} color={Colors.text} />
+              <IconCamera size={13} color={c.text} />
             )}
           </View>
         </Pressable>
@@ -264,7 +268,7 @@ export const EditProfileSheet: React.FC<Props> = ({ open, onClose, onSaved }) =>
             value={username}
             onChangeText={setUsername}
             placeholder="Cómo apareces (ej. Javi)"
-            placeholderTextColor={Colors.textFaint}
+            placeholderTextColor={c.textFaint}
             maxLength={20}
             autoCapitalize="words"
             autoCorrect={false}
@@ -287,7 +291,7 @@ export const EditProfileSheet: React.FC<Props> = ({ open, onClose, onSaved }) =>
             value={bio}
             onChangeText={setBio}
             placeholder="Cuéntate en una línea (nivel, club, mano dominante…)"
-            placeholderTextColor={Colors.textFaint}
+            placeholderTextColor={c.textFaint}
             maxLength={160}
             multiline
             accessibilityLabel="Descripción del perfil"
@@ -302,10 +306,10 @@ export const EditProfileSheet: React.FC<Props> = ({ open, onClose, onSaved }) =>
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
@@ -319,14 +323,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   avatarImage: {
     width: 96,
     height: 96,
     borderRadius: 48,
     borderWidth: 2,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   avatarEditBadge: {
     position: 'absolute',
@@ -335,21 +339,21 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 2,
-    borderColor: Colors.bgRaised,
+    borderColor: c.bgRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.5,
   },
   avatarHint: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
   },
@@ -357,26 +361,26 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '500',
     marginBottom: 8,
   },
   inputCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 14,
   },
   textInput: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
     paddingVertical: 14,
   },
   fieldHint: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
     lineHeight: 14,
@@ -384,16 +388,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   bioCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 8,
   },
   bioInput: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     lineHeight: 20,
     minHeight: 48,
@@ -403,7 +407,7 @@ const styles = StyleSheet.create({
   },
   bioCount: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     alignSelf: 'flex-end',
     marginTop: 6,
@@ -411,12 +415,12 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 52,
     borderRadius: 14,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   saveBtnLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.1,

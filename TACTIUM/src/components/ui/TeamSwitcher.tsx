@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { useTeamStore } from '@store/teamStore';
@@ -19,6 +19,8 @@ import { IconChevron, IconCheck } from './Icon';
 export const TeamSwitcher: React.FC<{
   compact?: boolean;
 }> = ({ compact }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const team = useTeamStore((s) => s.team);
   const teams = useTeamStore((s) => s.teams);
   const activeRole = useTeamStore((s) => s.activeRole);
@@ -67,7 +69,7 @@ export const TeamSwitcher: React.FC<{
             {team.name}
           </Text>
         </View>
-        <IconChevron size={14} color={Colors.textFaint} />
+        <IconChevron size={14} color={c.textFaint} />
       </Pressable>
 
       <BottomSheet open={open} onClose={() => setOpen(false)}>
@@ -106,8 +108,8 @@ export const TeamSwitcher: React.FC<{
                 style={[
                   styles.teamRow,
                   sel && {
-                    backgroundColor: Colors.accent10,
-                    borderColor: Colors.accent50,
+                    backgroundColor: c.accent10,
+                    borderColor: c.accent50,
                   },
                 ]}
               >
@@ -126,7 +128,7 @@ export const TeamSwitcher: React.FC<{
                       .join(' · ') || 'Sin configurar'}
                   </Text>
                 </View>
-                {sel ? <IconCheck size={16} color={Colors.accent} /> : null}
+                {sel ? <IconCheck size={16} color={c.accent} /> : null}
               </Pressable>
             );
           })}
@@ -136,95 +138,96 @@ export const TeamSwitcher: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
-  staticBlock: {
-    minWidth: 0,
-    flexShrink: 1,
-  },
-  label: {
-    fontFamily: Fonts.mono,
-    color: Colors.textFaint,
-    fontSize: 11,
-    letterSpacing: 1.6,
-    fontWeight: '500',
-  },
-  teamName: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.sm,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  buttonCompact: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  sheetEyebrow: {
-    fontFamily: Fonts.mono,
-    color: Colors.accent,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '500',
-  },
-  sheetTitle: {
-    color: Colors.text,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  teamRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-  },
-  teamBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  teamBadgeText: {
-    fontFamily: Fonts.mono,
-    color: Colors.accent,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  teamRowName: {
-    color: Colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  teamRowMeta: {
-    fontFamily: Fonts.mono,
-    color: Colors.textFaint,
-    fontSize: 11,
-    marginTop: 2,
-    letterSpacing: 0.4,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    staticBlock: {
+      minWidth: 0,
+      flexShrink: 1,
+    },
+    label: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 11,
+      letterSpacing: 1.6,
+      fontWeight: '500',
+    },
+    teamName: {
+      color: c.text,
+      fontSize: 14,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    button: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: Radius.sm,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    buttonCompact: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    sheetEyebrow: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 11,
+      letterSpacing: 2,
+      fontWeight: '500',
+    },
+    sheetTitle: {
+      color: c.text,
+      fontSize: 22,
+      fontWeight: '700',
+      letterSpacing: -0.4,
+      marginTop: 4,
+      marginBottom: 12,
+    },
+    teamRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hair,
+    },
+    teamBadge: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    teamBadgeText: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    teamRowName: {
+      color: c.text,
+      fontSize: 13,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+    },
+    teamRowMeta: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 11,
+      marginTop: 2,
+      letterSpacing: 0.4,
+    },
+  });

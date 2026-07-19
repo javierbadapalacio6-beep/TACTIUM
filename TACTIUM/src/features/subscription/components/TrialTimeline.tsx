@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Modal,
   View,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 
@@ -47,6 +47,8 @@ export const TrialTimeline = ({
   onConfirm,
   onCancel,
 }: TrialTimelineProps) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
 
   const steps = [
@@ -138,7 +140,7 @@ export const TrialTimeline = ({
             ]}
           >
             {loading ? (
-              <ActivityIndicator color={Colors.textInverse} />
+              <ActivityIndicator color={c.textInverse} />
             ) : (
               <Text style={styles.ctaLabel}>Iniciar prueba gratuita</Text>
             )}
@@ -163,18 +165,18 @@ export const TrialTimeline = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   scrim: {
     flex: 1,
-    backgroundColor: Colors.overlay,
+    backgroundColor: c.overlay,
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
     borderTopWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 22,
     paddingTop: 10,
   },
@@ -183,25 +185,25 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
     marginBottom: 18,
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
     marginTop: 6,
   },
   subtitle: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     marginTop: 4,
   },
@@ -224,8 +226,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dotActive: {
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.6,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
@@ -234,12 +236,12 @@ const styles = StyleSheet.create({
   dotCharge: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: Colors.textMuted,
+    borderColor: c.textMuted,
   },
   rail: {
     width: 2,
     flex: 1,
-    backgroundColor: Colors.accentDim,
+    backgroundColor: c.accentDim,
     marginVertical: 4,
     opacity: 0.55,
   },
@@ -249,16 +251,16 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
   },
   stepWhen: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   stepWhenCharge: {
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   stepDesc: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 3,
@@ -266,32 +268,32 @@ const styles = StyleSheet.create({
   cta: {
     height: 56,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 6,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
   ctaLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
   microcopy: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 0.4,
     textAlign: 'center',
     marginTop: 12,
   },
   cancelLink: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',

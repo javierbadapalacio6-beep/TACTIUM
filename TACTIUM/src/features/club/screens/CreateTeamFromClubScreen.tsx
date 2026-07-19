@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -46,6 +46,8 @@ const GENDERS: { id: TeamGender; label: string }[] = [
 export const CreateTeamFromClubScreen = ({
   navigation,
 }: ClubStackScreenProps<'CreateTeamFromClub'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
   const createTeam = useTeamStore((s) => s.createTeam);
@@ -67,7 +69,7 @@ export const CreateTeamFromClubScreen = ({
   // La elección del club manda (igual que en el onboarding del club).
   useEffect(() => {
     if (club?.federation) setComp('federada');
-    else setComp((c) => (c === 'federada' ? 'snp' : c));
+    else setComp((prev) => (prev === 'federada' ? 'snp' : prev));
   }, [club?.federation]);
   const [customCourts, setCustomCourts] = useState(3);
   const [customOrder, setCustomOrder] = useState(false);
@@ -163,7 +165,7 @@ export const CreateTeamFromClubScreen = ({
           hitSlop={10}
           style={styles.headerBtn}
         >
-          <IconBack size={18} color={Colors.text} />
+          <IconBack size={18} color={c.text} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
           Nuevo equipo
@@ -189,7 +191,7 @@ export const CreateTeamFromClubScreen = ({
               value={name}
               onChangeText={setName}
               placeholder="Equipo A"
-              placeholderTextColor={Colors.textFaint}
+              placeholderTextColor={c.textFaint}
               style={styles.nameInputField}
               autoFocus
             />
@@ -223,15 +225,15 @@ export const CreateTeamFromClubScreen = ({
                   style={[
                     styles.compCell,
                     sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
+                      backgroundColor: c.accent,
+                      borderColor: c.accent,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.compCellText,
-                      { color: sel ? '#000' : Colors.text },
+                      { color: sel ? '#000' : c.text },
                     ]}
                   >
                     {p.label}
@@ -278,7 +280,7 @@ export const CreateTeamFromClubScreen = ({
                   value={league}
                   onChangeText={setLeague}
                   placeholder="Liga por equipos absoluta"
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                   style={styles.plainInputField}
                 />
               </View>
@@ -294,7 +296,7 @@ export const CreateTeamFromClubScreen = ({
                   value={league}
                   onChangeText={setLeague}
                   placeholder="Liga interempresas, liga del club…"
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                   style={styles.plainInputField}
                 />
               </View>
@@ -312,15 +314,15 @@ export const CreateTeamFromClubScreen = ({
                         styles.compCell,
                         { flex: 1, paddingHorizontal: 0 },
                         sel && {
-                          backgroundColor: Colors.accent,
-                          borderColor: Colors.accent,
+                          backgroundColor: c.accent,
+                          borderColor: c.accent,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.compCellText,
-                          { color: sel ? '#000' : Colors.text },
+                          { color: sel ? '#000' : c.text },
                         ]}
                       >
                         {n}
@@ -364,27 +366,27 @@ export const CreateTeamFromClubScreen = ({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.catRowScroll}
           >
-            {CATS.map((c) => {
-              const sel = cat === c;
+            {CATS.map((catOption) => {
+              const sel = cat === catOption;
               return (
                 <Pressable
-                  key={c}
-                  onPress={() => setCat(c)}
+                  key={catOption}
+                  onPress={() => setCat(catOption)}
                   style={[
                     styles.catCellFixed,
                     sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
+                      backgroundColor: c.accent,
+                      borderColor: c.accent,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.catCellText,
-                      { color: sel ? '#000' : Colors.text },
+                      { color: sel ? '#000' : c.text },
                     ]}
                   >
-                    {c}
+                    {catOption}
                   </Text>
                 </Pressable>
               );
@@ -403,15 +405,15 @@ export const CreateTeamFromClubScreen = ({
                   style={[
                     styles.catCell,
                     sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
+                      backgroundColor: c.accent,
+                      borderColor: c.accent,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.catCellText,
-                      { fontSize: 14, color: sel ? '#000' : Colors.text },
+                      { fontSize: 14, color: sel ? '#000' : c.text },
                     ]}
                   >
                     {g.label}
@@ -444,15 +446,15 @@ export const CreateTeamFromClubScreen = ({
                     style={[
                       styles.catCell,
                       sel && {
-                        backgroundColor: Colors.accent,
-                        borderColor: Colors.accent,
+                        backgroundColor: c.accent,
+                        borderColor: c.accent,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.catCellText,
-                        { color: sel ? '#000' : Colors.text },
+                        { color: sel ? '#000' : c.text },
                       ]}
                     >
                       {g}
@@ -491,7 +493,10 @@ const Section: React.FC<{
   label: string;
   right?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ label, right, children }) => (
+}> = ({ label, right, children }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={{ marginTop: 18 }}>
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionLabel}>{label}</Text>
@@ -499,10 +504,11 @@ const Section: React.FC<{
     </View>
     {children}
   </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     paddingHorizontal: 20,
     flexDirection: 'row',
@@ -516,7 +522,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
@@ -526,27 +532,27 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2.5,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 8,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '600',
     letterSpacing: -0.6,
     lineHeight: 30,
     marginBottom: 6,
   },
-  lede: { color: Colors.textMuted, fontSize: 13, lineHeight: 19 },
+  lede: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
   nameInput: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -554,26 +560,26 @@ const styles = StyleSheet.create({
     width: 5,
     height: 22,
     borderRadius: 3,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   nameInputField: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '600',
     paddingVertical: 0,
   },
   plainInput: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     minHeight: 48,
     justifyContent: 'center',
   },
   plainInputField: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '500',
     paddingVertical: 0,
@@ -583,9 +589,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 52,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -596,9 +602,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 52,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -611,9 +617,9 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 16,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -623,7 +629,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   compBlurb: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     marginTop: 8,
     lineHeight: 16,
@@ -632,10 +638,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 14,
     paddingVertical: 14,
     minHeight: 54,
@@ -645,23 +651,23 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 9,
     letterSpacing: 1.4,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '600',
   },
   selectorValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   selectorMeta: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontFamily: Fonts.mono,
     fontSize: 11,
     marginTop: 2,
     letterSpacing: 0.5,
   },
-  selectorPlaceholder: { color: Colors.textFaint, fontSize: 14 },
+  selectorPlaceholder: { color: c.textFaint, fontSize: 14 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -672,20 +678,20 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2,
-    color: Colors.textFaint,
+    color: c.textFaint,
     textTransform: 'uppercase',
     fontWeight: '500',
   },
   groupToggle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  groupToggleText: { color: Colors.textMuted, fontSize: 12 },
+  groupToggleText: { color: c.textMuted, fontSize: 12 },
   cta: { paddingHorizontal: 20, paddingTop: 8 },
   ctaBtn: {
     height: 54,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -696,5 +702,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.2,
   },
-  empty: { color: Colors.textFaint, textAlign: 'center', fontSize: 14 },
+  empty: { color: c.textFaint, textAlign: 'center', fontSize: 14 },
 });

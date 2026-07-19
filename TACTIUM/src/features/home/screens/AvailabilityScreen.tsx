@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, Toggle } from '@components/ui';
@@ -22,6 +22,8 @@ type Filter = 'all' | 'avail' | 'out';
 export const AvailabilityScreen = ({
   navigation,
 }: HomeStackScreenProps<'Availability'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const players = useTeamStore((s) => s.players);
   const setPlayerAvail = useTeamStore((s) => s.setPlayerAvail);
@@ -65,7 +67,7 @@ export const AvailabilityScreen = ({
           }}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Inicio</Text>
         </Pressable>
         {isPlayer ? (
@@ -108,8 +110,8 @@ export const AvailabilityScreen = ({
           <ProgressRing pct={pct} size={64} stroke={6} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.summaryValue}>
-              <Text style={{ color: Colors.accent }}>{counts.avail}</Text>
-              <Text style={{ color: Colors.textFaint }}> / {counts.total}</Text>
+              <Text style={{ color: c.accent }}>{counts.avail}</Text>
+              <Text style={{ color: c.textFaint }}> / {counts.total}</Text>
             </Text>
             <Text style={styles.summaryLabel}>jugadores disponibles</Text>
           </View>
@@ -128,7 +130,7 @@ export const AvailabilityScreen = ({
                 <Text
                   style={[
                     styles.filterTabText,
-                    { color: isActive ? Colors.text : Colors.textMuted },
+                    { color: isActive ? c.text : c.textMuted },
                   ]}
                 >
                   {label}
@@ -179,8 +181,8 @@ export const AvailabilityScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -191,26 +193,26 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
   resetBtn: {
     height: 36,
     paddingHorizontal: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   resetLabel: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -218,37 +220,37 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   roleBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1.6,
   },
   notLinkedBanner: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingVertical: 14,
     paddingHorizontal: 16,
     marginBottom: 18,
     gap: 4,
   },
   notLinkedTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   notLinkedText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -257,12 +259,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 8,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: -0.7,
@@ -273,10 +275,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 16,
   },
   summaryValue: {
@@ -286,7 +288,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   summaryLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     marginTop: 4,
   },
@@ -295,10 +297,10 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 4,
     marginTop: 18,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   filterTab: {
     flex: 1,
@@ -308,7 +310,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterTabActive: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
   },
   filterTabText: {
     fontSize: 13,
@@ -316,10 +318,10 @@ const styles = StyleSheet.create({
   },
   list: {
     marginTop: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -331,42 +333,42 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   rowMine: {
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
   },
   idChip: {
     width: 34,
     height: 34,
     borderRadius: 11,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   idChipMine: {
-    backgroundColor: Colors.accent15,
-    borderColor: Colors.accent50,
+    backgroundColor: c.accent15,
+    borderColor: c.accent50,
   },
   idChipText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   idChipTextMine: {
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   rowName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   rowMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },

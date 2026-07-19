@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { ClubDashboardScreen } from '@features/club/screens/ClubDashboardScreen';
 import { CreateTeamFromClubScreen } from '@features/club/screens/CreateTeamFromClubScreen';
 import { JornadaScreen } from '@features/home/screens/JornadaScreen';
@@ -13,14 +13,17 @@ import type { ClubStackParamList } from './types';
 const Stack = createNativeStackNavigator<ClubStackParamList>();
 
 export const ClubStack = () => {
+  const c = useColors();
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: c.background },
+      animation: 'slide_from_right' as const,
+    }),
+    [c],
+  );
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.background },
-        animation: 'slide_from_right',
-      }}
-    >
+    <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="ClubRoot" component={ClubDashboardScreen} />
       <Stack.Screen
         name="CreateTeamFromClub"

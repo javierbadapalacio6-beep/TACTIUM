@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -51,6 +51,8 @@ const GENDERS: { id: TeamGender; label: string }[] = [
 export const CreateTeamsForClubScreen = ({
   navigation,
 }: OnboardingStackScreenProps<'CreateTeamsForClub'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
@@ -189,7 +191,7 @@ export const CreateTeamsForClubScreen = ({
           hitSlop={10}
           style={styles.headerBtn}
         >
-          <IconBack size={20} color={Colors.textMuted} />
+          <IconBack size={20} color={c.textMuted} />
         </Pressable>
         <View style={styles.progress}>
           <View style={[styles.bar, styles.barDone]} />
@@ -252,7 +254,7 @@ export const CreateTeamsForClubScreen = ({
                 </Text>
               </View>
               <View style={styles.tickPill}>
-                <IconCheck size={12} color={Colors.accent} />
+                <IconCheck size={12} color={c.accent} />
               </View>
             </View>
           ))}
@@ -264,7 +266,7 @@ export const CreateTeamsForClubScreen = ({
                   value={newName}
                   onChangeText={setNewName}
                   placeholder="Nombre del equipo"
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                   autoFocus
                   style={[styles.addField, { flex: 1 }]}
                 />
@@ -310,15 +312,15 @@ export const CreateTeamsForClubScreen = ({
                       style={[
                         styles.chipFixed,
                         sel && {
-                          backgroundColor: Colors.accent,
-                          borderColor: Colors.accent,
+                          backgroundColor: c.accent,
+                          borderColor: c.accent,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.chipText,
-                          { color: sel ? '#000' : Colors.text },
+                          { color: sel ? '#000' : c.text },
                         ]}
                       >
                         {p.label}
@@ -335,7 +337,7 @@ export const CreateTeamsForClubScreen = ({
                   value={newLeague}
                   onChangeText={setNewLeague}
                   placeholder="Liga (ej. Liga Andaluza por equipos absoluta)"
-                  placeholderTextColor={Colors.textFaint}
+                  placeholderTextColor={c.textFaint}
                   style={styles.addField}
                 />
               ) : null}
@@ -346,7 +348,7 @@ export const CreateTeamsForClubScreen = ({
                     value={newLeague}
                     onChangeText={setNewLeague}
                     placeholder="Nombre de la liga (opcional)"
-                    placeholderTextColor={Colors.textFaint}
+                    placeholderTextColor={c.textFaint}
                     style={styles.addField}
                   />
                   <Text style={styles.miniLabel}>PARTIDOS POR JORNADA</Text>
@@ -360,15 +362,15 @@ export const CreateTeamsForClubScreen = ({
                           style={[
                             styles.chip,
                             sel && {
-                              backgroundColor: Colors.accent,
-                              borderColor: Colors.accent,
+                              backgroundColor: c.accent,
+                              borderColor: c.accent,
                             },
                           ]}
                         >
                           <Text
                             style={[
                               styles.chipText,
-                              { color: sel ? '#000' : Colors.text },
+                              { color: sel ? '#000' : c.text },
                             ]}
                           >
                             {n}
@@ -404,15 +406,15 @@ export const CreateTeamsForClubScreen = ({
                       style={[
                         styles.chip,
                         sel && {
-                          backgroundColor: Colors.accent,
-                          borderColor: Colors.accent,
+                          backgroundColor: c.accent,
+                          borderColor: c.accent,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.chipText,
-                          { color: sel ? '#000' : Colors.text },
+                          { color: sel ? '#000' : c.text },
                         ]}
                       >
                         {g.label}
@@ -428,27 +430,27 @@ export const CreateTeamsForClubScreen = ({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipScrollContent}
               >
-                {CATS.map((c) => {
-                  const sel = newCat === c;
+                {CATS.map((catValue) => {
+                  const sel = newCat === catValue;
                   return (
                     <Pressable
-                      key={c}
-                      onPress={() => setNewCat(c)}
+                      key={catValue}
+                      onPress={() => setNewCat(catValue)}
                       style={[
                         styles.chipFixed,
                         sel && {
-                          backgroundColor: Colors.accent,
-                          borderColor: Colors.accent,
+                          backgroundColor: c.accent,
+                          borderColor: c.accent,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.chipText,
-                          { color: sel ? '#000' : Colors.text },
+                          { color: sel ? '#000' : c.text },
                         ]}
                       >
-                        {c}
+                        {catValue}
                       </Text>
                     </Pressable>
                   );
@@ -479,15 +481,15 @@ export const CreateTeamsForClubScreen = ({
                         style={[
                           styles.chip,
                           sel && {
-                            backgroundColor: Colors.accent,
-                            borderColor: Colors.accent,
+                            backgroundColor: c.accent,
+                            borderColor: c.accent,
                           },
                         ]}
                       >
                         <Text
                           style={[
                             styles.chipText,
-                            { color: sel ? '#000' : Colors.text },
+                            { color: sel ? '#000' : c.text },
                           ]}
                         >
                           {g}
@@ -504,7 +506,7 @@ export const CreateTeamsForClubScreen = ({
                   hitSlop={6}
                   style={styles.cancelInline}
                 >
-                  <IconX size={12} color={Colors.textFaint} />
+                  <IconX size={12} color={c.textFaint} />
                   <Text style={styles.cancelInlineText}>Cancelar</Text>
                 </Pressable>
               ) : null}
@@ -524,7 +526,7 @@ export const CreateTeamsForClubScreen = ({
           ) : (
             <Pressable onPress={() => setAdding(true)} style={styles.addRowBtn}>
               <View style={styles.idChip}>
-                <IconPlus size={14} color={Colors.accent} />
+                <IconPlus size={14} color={c.accent} />
               </View>
               <Text style={styles.addRowText}>Añadir equipo</Text>
             </Pressable>
@@ -550,10 +552,10 @@ export const CreateTeamsForClubScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   center: { alignItems: 'center', justifyContent: 'center' },
-  empty: { color: Colors.textFaint, fontSize: 14 },
+  empty: { color: c.textFaint, fontSize: 14 },
 
   header: {
     paddingHorizontal: 20,
@@ -569,10 +571,10 @@ const styles = StyleSheet.create({
   },
   progress: { flexDirection: 'row', gap: 6 },
   bar: { width: 22, height: 3, borderRadius: 2 },
-  barDone: { backgroundColor: Colors.accent50 },
+  barDone: { backgroundColor: c.accent50 },
   barActive: {
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.7,
     shadowRadius: 6,
   },
@@ -582,19 +584,19 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 10,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '600',
     letterSpacing: -0.7,
     lineHeight: 32,
     marginBottom: 6,
   },
-  lede: { color: Colors.textMuted, fontSize: 14, lineHeight: 20 },
+  lede: { color: c.textMuted, fontSize: 14, lineHeight: 20 },
 
   counter: {
     paddingHorizontal: 24,
@@ -607,22 +609,22 @@ const styles = StyleSheet.create({
   counterText: {
     fontFamily: Fonts.mono,
     fontSize: 12,
-    color: Colors.textMuted,
+    color: c.textMuted,
     letterSpacing: 1,
   },
   counterSum: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1,
   },
 
   scroll: { paddingHorizontal: 20, paddingBottom: 20 },
   list: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -632,30 +634,30 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
-  rowDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
+  rowDivider: { borderBottomWidth: 1, borderColor: c.hair },
   idChip: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Colors.primaryDim,
+    backgroundColor: c.primaryDim,
     alignItems: 'center',
     justifyContent: 'center',
   },
   idChipText: {
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 12,
     fontWeight: '500',
   },
   rowName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '500',
     letterSpacing: -0.2,
   },
   rowMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 3,
     letterSpacing: 0.4,
@@ -664,16 +666,16 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   addInline: {
     padding: 14,
-    backgroundColor: Colors.bgCard2,
+    backgroundColor: c.bgCard2,
     gap: 10,
   },
   addRow: {
@@ -682,26 +684,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addField: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
   },
   confirm: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   miniLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1.4,
     fontWeight: '500',
@@ -710,27 +712,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   inheritedCompText: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
   },
   inheritedCompHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 9,
     letterSpacing: 1,
     fontWeight: '700',
   },
   formatHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     lineHeight: 15,
     marginTop: -2,
@@ -746,7 +748,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   groupToggleText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
   },
   chipRow: {
@@ -757,9 +759,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 38,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -772,9 +774,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 38,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -793,7 +795,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   cancelInlineText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -806,7 +808,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   addRowText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -814,19 +816,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     borderRadius: Radius.md,
     borderStyle: 'dashed',
     gap: 4,
   },
   quotaLockedText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   quotaLockedHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     lineHeight: 15,
   },
@@ -835,12 +837,12 @@ const styles = StyleSheet.create({
   ctaBtn: {
     height: 56,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },

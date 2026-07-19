@@ -7,6 +7,10 @@ import type { Database } from '@core/supabase/database.types';
 // el equipo sin que el capitán tenga que subirla.
 export type Player = Database['public']['Tables']['players']['Row'] & {
   profile_avatar_url?: string | null;
+  // `username` (nombre corto) del perfil del usuario vinculado, si lo hay.
+  // Se mezcla igual que el avatar para poder mostrar el nombre corto que el
+  // jugador eligió en su cuenta en vez del nombre largo del roster.
+  profile_username?: string | null;
 };
 export type PlayerInsert = Database['public']['Tables']['players']['Insert'];
 export type PlayerUpdate = Database['public']['Tables']['players']['Update'];
@@ -34,16 +38,26 @@ export async function fetchPlayers(teamId: string): Promise<Player[]> {
   );
   if (userIds.length === 0) return players;
 
-  const { data: profiles } = await supabase
+  // `username` existe en prod pero aún no en los tipos generados → cast
+  // puntual (mismo patrón que social.ts / casualMatches.ts).
+  type ProfileRow = {
+    id: string;
+    avatar_url: string | null;
+    username: string | null;
+  };
+  const { data: profiles } = (await supabase
     .from('profiles')
-    .select('id, avatar_url')
-    .in('id', userIds);
-  const avatarById = new Map(
-    (profiles ?? []).map((pr) => [pr.id, pr.avatar_url] as const),
+    .select('id, avatar_url, username')
+    .in('id', userIds)) as unknown as { data: ProfileRow[] | null };
+  const byId = new Map(
+    (profiles ?? []).map(
+      (pr) => [pr.id, { avatar: pr.avatar_url, username: pr.username }] as const,
+    ),
   );
   return players.map((p) => ({
     ...p,
-    profile_avatar_url: p.user_id ? avatarById.get(p.user_id) ?? null : null,
+    profile_avatar_url: p.user_id ? byId.get(p.user_id)?.avatar ?? null : null,
+    profile_username: p.user_id ? byId.get(p.user_id)?.username ?? null : null,
   }));
 }
 

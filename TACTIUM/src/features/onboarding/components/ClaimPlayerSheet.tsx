@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet, IconChevron } from '@components/ui';
@@ -35,6 +35,8 @@ export const ClaimPlayerSheet: React.FC<{
   onClose: () => void;
   onClaimed?: () => void;
 }> = ({ open, teamId, teamName, onClose, onClaimed }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const refreshMyPlayer = useTeamStore((s) => s.refreshMyPlayer);
 
   const [loading, setLoading] = useState(false);
@@ -130,7 +132,7 @@ export const ClaimPlayerSheet: React.FC<{
 
       {loading ? (
         <View style={styles.loaderBox}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       ) : list.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -172,9 +174,9 @@ export const ClaimPlayerSheet: React.FC<{
                   </Text>
                 </View>
                 {submitting ? (
-                  <ActivityIndicator color={Colors.accent} size="small" />
+                  <ActivityIndicator color={c.accent} size="small" />
                 ) : (
-                  <IconChevron size={14} color={Colors.textFaint} />
+                  <IconChevron size={14} color={c.textFaint} />
                 )}
               </Pressable>
             );
@@ -197,16 +199,16 @@ export const ClaimPlayerSheet: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -214,7 +216,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 6,
@@ -224,32 +226,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingVertical: 22,
     paddingHorizontal: 18,
     alignItems: 'center',
     gap: 6,
   },
   emptyTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
   },
   list: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -261,34 +263,34 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   rowName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   rowMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     letterSpacing: 0.4,
     marginTop: 3,
@@ -297,13 +299,13 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 6,
   },
   secondaryLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,

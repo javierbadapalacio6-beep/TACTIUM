@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   TextInput,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -60,6 +60,8 @@ type Props = RankingProps | CalendarProps;
 const uid = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const ScanSheet: React.FC<Props> = (props) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { open, onClose, mode, teamName } = props;
   const [step, setStep] = useState<Step>('idle');
   const [items, setItems] = useState<Item[]>([]);
@@ -244,10 +246,10 @@ export const ScanSheet: React.FC<Props> = (props) => {
             ]}
           >
             {step === 'saving' ? (
-              <ActivityIndicator color={Colors.textInverse} />
+              <ActivityIndicator color={c.textInverse} />
             ) : (
               <>
-                <IconCheck size={16} color={Colors.textInverse} />
+                <IconCheck size={16} color={c.textInverse} />
                 <Text style={styles.confirmBtnLabel}>
                   {mode === 'ranking'
                     ? `Crear ${items.length} jugadores`
@@ -264,7 +266,7 @@ export const ScanSheet: React.FC<Props> = (props) => {
           botón X) para que el título quede ópticamente centrado. */}
       <View style={styles.idleHeader}>
         <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
-          <IconX size={14} color={Colors.text} />
+          <IconX size={14} color={c.text} />
         </Pressable>
         <Text style={styles.idleTitle} numberOfLines={1}>
           {title}
@@ -280,10 +282,10 @@ export const ScanSheet: React.FC<Props> = (props) => {
             accessibilityLabel="Hacer foto con la cámara"
             style={({ pressed }) => [
               styles.sourceCard,
-              pressed && { backgroundColor: Colors.accent10 },
+              pressed && { backgroundColor: c.accent10 },
             ]}
           >
-            <IconCamera size={20} color={Colors.accent} />
+            <IconCamera size={20} color={c.accent} />
             <Text style={styles.sourceCardLabel}>Cámara</Text>
           </Pressable>
           <Pressable
@@ -292,10 +294,10 @@ export const ScanSheet: React.FC<Props> = (props) => {
             accessibilityLabel="Elegir de la galería"
             style={({ pressed }) => [
               styles.sourceCard,
-              pressed && { backgroundColor: Colors.accent10 },
+              pressed && { backgroundColor: c.accent10 },
             ]}
           >
-            <IconImage size={20} color={Colors.accent} />
+            <IconImage size={20} color={c.accent} />
             <Text style={styles.sourceCardLabel}>Galería</Text>
           </Pressable>
           <Pressable
@@ -304,10 +306,10 @@ export const ScanSheet: React.FC<Props> = (props) => {
             accessibilityLabel="Elegir archivo PDF o imagen"
             style={({ pressed }) => [
               styles.sourceCard,
-              pressed && { backgroundColor: Colors.accent10 },
+              pressed && { backgroundColor: c.accent10 },
             ]}
           >
-            <IconFile size={20} color={Colors.accent} />
+            <IconFile size={20} color={c.accent} />
             <Text style={styles.sourceCardLabel}>Archivo</Text>
             <Text style={styles.sourceCardHint}>PDF</Text>
           </Pressable>
@@ -316,7 +318,7 @@ export const ScanSheet: React.FC<Props> = (props) => {
 
       {step === 'loading' ? (
         <View style={styles.loaderBox}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
           <Text style={styles.loaderText}>Procesando…</Text>
           <Text style={styles.loaderHint}>Suele tardar 2–5 segundos.</Text>
         </View>
@@ -354,7 +356,7 @@ export const ScanSheet: React.FC<Props> = (props) => {
               pressed && { opacity: 0.85 },
             ]}
           >
-            <IconPlus size={14} color={Colors.textMuted} />
+            <IconPlus size={14} color={c.textMuted} />
             <Text style={styles.addRowLabel}>Añadir fila</Text>
           </Pressable>
         </>
@@ -371,6 +373,8 @@ const PlayerRow: React.FC<{
   onChange: (patch: Partial<ScannedPlayer>) => void;
   onRemove: () => void;
 }> = ({ item, onChange, onRemove }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.row}>
       <View style={styles.rowMain}>
@@ -378,7 +382,7 @@ const PlayerRow: React.FC<{
           value={item.name}
           onChangeText={(v) => onChange({ name: v })}
           placeholder="Nombre"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={[styles.input, styles.inputName]}
         />
         <TextInput
@@ -388,7 +392,7 @@ const PlayerRow: React.FC<{
             onChange({ pts: sanitized === '' ? 0 : Number(sanitized) });
           }}
           placeholder="pts"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           keyboardType="number-pad"
           style={[styles.input, styles.inputPts]}
         />
@@ -403,15 +407,15 @@ const PlayerRow: React.FC<{
               style={[
                 styles.posPill,
                 sel && {
-                  backgroundColor: Colors.accent10,
-                  borderColor: Colors.accent50,
+                  backgroundColor: c.accent10,
+                  borderColor: c.accent50,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.posPillText,
-                  { color: sel ? Colors.accent : Colors.textMuted },
+                  { color: sel ? c.accent : c.textMuted },
                 ]}
               >
                 {p}
@@ -420,7 +424,7 @@ const PlayerRow: React.FC<{
           );
         })}
         <Pressable onPress={onRemove} hitSlop={6} style={styles.rowDelete}>
-          <IconTrash size={14} color={Colors.error} />
+          <IconTrash size={14} color={c.error} />
         </Pressable>
       </View>
     </View>
@@ -433,6 +437,8 @@ const MatchdayRow: React.FC<{
   onChange: (patch: Partial<ScannedMatchday>) => void;
   onRemove: () => void;
 }> = ({ item, onChange, onRemove }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.row}>
       <View style={styles.rowMain}>
@@ -440,7 +446,7 @@ const MatchdayRow: React.FC<{
           value={item.opponent}
           onChangeText={(v) => onChange({ opponent: v })}
           placeholder="Rival"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={[styles.input, styles.inputName]}
         />
       </View>
@@ -449,14 +455,14 @@ const MatchdayRow: React.FC<{
           value={item.match_date ?? ''}
           onChangeText={(v) => onChange({ match_date: v || undefined })}
           placeholder="YYYY-MM-DD"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={[styles.input, styles.inputDate]}
         />
         <TextInput
           value={item.match_time ?? ''}
           onChangeText={(v) => onChange({ match_time: v || undefined })}
           placeholder="HH:MM"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={[styles.input, styles.inputTime]}
         />
         <Pressable
@@ -464,242 +470,243 @@ const MatchdayRow: React.FC<{
           style={[
             styles.venuePill,
             item.is_home && {
-              backgroundColor: Colors.accent10,
-              borderColor: Colors.accent50,
+              backgroundColor: c.accent10,
+              borderColor: c.accent50,
             },
           ]}
         >
           <Text
             style={[
               styles.venuePillText,
-              { color: item.is_home ? Colors.accent : Colors.textMuted },
+              { color: item.is_home ? c.accent : c.textMuted },
             ]}
           >
             {item.is_home ? 'CASA' : 'FUERA'}
           </Text>
         </Pressable>
         <Pressable onPress={onRemove} hitSlop={6} style={styles.rowDelete}>
-          <IconTrash size={14} color={Colors.error} />
+          <IconTrash size={14} color={c.error} />
         </Pressable>
       </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    color: Colors.accent,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '500',
-  },
-  title: {
-    color: Colors.text,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  lede: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-  },
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    eyebrow: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 11,
+      letterSpacing: 2,
+      fontWeight: '500',
+    },
+    title: {
+      color: c.text,
+      fontSize: 22,
+      fontWeight: '700',
+      letterSpacing: -0.4,
+    },
+    lede: {
+      color: c.textMuted,
+      fontSize: 13,
+      lineHeight: 19,
+    },
 
-  // Header del sheet estilo Claude mobile: X cerrar (izq) + título centrado.
-  idleHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: -4,
-    marginBottom: 4,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.bgRaised,
-    borderWidth: 1,
-    borderColor: Colors.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Spacer transparente del mismo ancho que el botón X para que el title
-  // quede centrado pero sin el redondel visible.
-  headerSpacer: {
-    width: 32,
-    height: 32,
-  },
-  idleTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
+    // Header del sheet estilo Claude mobile: X cerrar (izq) + título centrado.
+    idleHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: -4,
+      marginBottom: 4,
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Spacer transparente del mismo ancho que el botón X para que el title
+    // quede centrado pero sin el redondel visible.
+    headerSpacer: {
+      width: 32,
+      height: 32,
+    },
+    idleTitle: {
+      flex: 1,
+      textAlign: 'center',
+      color: c.text,
+      fontSize: 16,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
 
-  // Grid de 2 cards horizontales con icono grande arriba + label debajo.
-  sourceRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  sourceCard: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 6,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  sourceCardLabel: {
-    color: Colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  sourceCardHint: {
-    fontFamily: Fonts.mono,
-    color: Colors.textFaint,
-    fontSize: 9,
-    letterSpacing: 0.4,
-  },
+    // Grid de 2 cards horizontales con icono grande arriba + label debajo.
+    sourceRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 4,
+    },
+    sourceCard: {
+      flex: 1,
+      paddingVertical: 16,
+      paddingHorizontal: 6,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hair,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    sourceCardLabel: {
+      color: c.text,
+      fontSize: 13,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+    },
+    sourceCardHint: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 9,
+      letterSpacing: 0.4,
+    },
 
-  loaderBox: {
-    paddingVertical: 28,
-    alignItems: 'center',
-    gap: 10,
-  },
-  loaderText: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  loaderHint: {
-    fontFamily: Fonts.mono,
-    color: Colors.textFaint,
-    fontSize: 11,
-    letterSpacing: 0.5,
-  },
+    loaderBox: {
+      paddingVertical: 28,
+      alignItems: 'center',
+      gap: 10,
+    },
+    loaderText: {
+      color: c.text,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    loaderHint: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 11,
+      letterSpacing: 0.5,
+    },
 
-  previewHint: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  previewList: {
-    gap: 8,
-  },
+    previewHint: {
+      color: c.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    previewList: {
+      gap: 8,
+    },
 
-  row: {
-    backgroundColor: Colors.bgCard,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-    padding: 10,
-    gap: 8,
-  },
-  rowMain: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  input: {
-    backgroundColor: Colors.bgRaised,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  inputName: { flex: 2, minWidth: 0 },
-  inputPts: { width: 72, fontFamily: Fonts.mono, textAlign: 'center' },
-  inputDate: { flex: 1.6, fontFamily: Fonts.mono },
-  inputTime: { width: 70, fontFamily: Fonts.mono, textAlign: 'center' },
+    row: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hair,
+      padding: 10,
+      gap: 8,
+    },
+    rowMain: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    input: {
+      backgroundColor: c.bgRaised,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.hair,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: c.text,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    inputName: { flex: 2, minWidth: 0 },
+    inputPts: { width: 72, fontFamily: Fonts.mono, textAlign: 'center' },
+    inputDate: { flex: 1.6, fontFamily: Fonts.mono },
+    inputTime: { width: 70, fontFamily: Fonts.mono, textAlign: 'center' },
 
-  posRow: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-  },
-  posPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-    backgroundColor: Colors.bgRaised,
-  },
-  posPillText: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.4,
-  },
-  venuePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.hair,
-    backgroundColor: Colors.bgRaised,
-  },
-  venuePillText: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  rowDelete: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 'auto',
-  },
+    posRow: {
+      flexDirection: 'row',
+      gap: 6,
+      alignItems: 'center',
+    },
+    posPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.bgRaised,
+    },
+    posPillText: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      fontWeight: '600',
+      letterSpacing: 0.4,
+    },
+    venuePill: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.bgRaised,
+    },
+    venuePillText: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    rowDelete: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 'auto',
+    },
 
-  addRowBtn: {
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: Colors.hairStrong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  addRowLabel: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    fontWeight: '500',
-  },
+    addRowBtn: {
+      paddingVertical: 12,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.hairStrong,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    addRowLabel: {
+      color: c.textMuted,
+      fontSize: 13,
+      fontWeight: '500',
+    },
 
-  confirmBtn: {
-    height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: Colors.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  confirmBtnLabel: {
-    color: Colors.textInverse,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-});
+    confirmBtn: {
+      height: 52,
+      borderRadius: Radius.lg,
+      backgroundColor: c.accent,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      shadowColor: c.accent,
+      shadowOpacity: 0.4,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
+    },
+    confirmBtnLabel: {
+      color: c.textInverse,
+      fontSize: 15,
+      fontWeight: '700',
+      letterSpacing: -0.1,
+    },
+  });

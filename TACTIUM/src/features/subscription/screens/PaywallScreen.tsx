@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius, Spacing } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -69,6 +69,8 @@ export const PaywallScreen = ({
   navigation,
   route,
 }: RootStackScreenProps<'Paywall'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const signOut = useAuthStore((s) => s.signOut);
@@ -712,7 +714,7 @@ export const PaywallScreen = ({
               pressed && { opacity: 0.7 },
             ]}
           >
-            <IconX size={14} color={Colors.text} />
+            <IconX size={14} color={c.text} />
           </Pressable>
         )}
         <View style={styles.headerCenter}>
@@ -765,7 +767,7 @@ export const PaywallScreen = ({
           {VALUE_PROPS.map((label) => (
             <View key={label} style={styles.valueRow}>
               <View style={styles.checkDot}>
-                <IconCheck size={12} color={Colors.accent} />
+                <IconCheck size={12} color={c.accent} />
               </View>
               <Text style={styles.valueText}>{label}</Text>
             </View>
@@ -959,7 +961,7 @@ export const PaywallScreen = ({
           ]}
         >
           {purchasing ? (
-            <ActivityIndicator color={Colors.textInverse} />
+            <ActivityIndicator color={c.textInverse} />
           ) : (
             <Text style={styles.ctaLabel}>
               {existingSubForSubject
@@ -1055,8 +1057,8 @@ export const PaywallScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
 
   header: {
     flexDirection: 'row',
@@ -1068,16 +1070,16 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCenter: { flex: 1, alignItems: 'center' },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
@@ -1095,7 +1097,7 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   heroTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.6,
@@ -1103,7 +1105,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   heroLede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -1114,13 +1116,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   trialPillText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1,
@@ -1142,7 +1144,7 @@ const styles = StyleSheet.create({
   },
   socialProofText: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
@@ -1152,15 +1154,15 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 7,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
   valueText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     lineHeight: 19,
     flex: 1,
@@ -1171,10 +1173,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     padding: 4,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     marginBottom: 14,
   },
   billingChip: {
@@ -1187,25 +1189,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   billingChipActive: {
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
   },
   billingChipText: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  billingChipTextActive: { color: Colors.text },
+  billingChipTextActive: { color: c.text },
   discountBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   discountBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -1217,20 +1219,20 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   planCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 16,
     gap: 4,
   },
   planCardSelected: {
     // Fondo sólido (bgRaised, ligeramente más claro que bgCard) + borde
     // accent doble grosor + sombra accent para destacar sin transparencia.
-    backgroundColor: Colors.bgRaised,
-    borderColor: Colors.accent,
+    backgroundColor: c.bgRaised,
+    borderColor: c.accent,
     borderWidth: 2,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.25,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -1242,13 +1244,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   planTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   planQuota: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -1256,11 +1258,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   recommendedBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.8,
@@ -1274,24 +1276,24 @@ const styles = StyleSheet.create({
   },
   planPrice: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   planPriceSuffix: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
   planAnnualHint: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     fontFamily: Fonts.mono,
     marginTop: 4,
   },
   planSavings: {
-    color: Colors.accent,
+    color: c.accent,
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 0.3,
@@ -1310,7 +1312,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   disclaimerText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     lineHeight: 16,
     textAlign: 'center',
@@ -1323,7 +1325,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   legalLink: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '500',
     textDecorationLine: 'underline',
@@ -1334,31 +1336,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.hair,
-    backgroundColor: Colors.background,
+    borderTopColor: c.hair,
+    backgroundColor: c.background,
     gap: 12,
   },
   cta: {
     height: 56,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
   ctaLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
   trustLine: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 0.5,
     textAlign: 'center',
@@ -1371,11 +1373,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   footerLink: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
   footerLinkSep: {
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
 });

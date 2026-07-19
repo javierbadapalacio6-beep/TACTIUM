@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
@@ -18,7 +18,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { NeonDot, Toggle } from '@components/ui';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -73,6 +73,7 @@ const PlayerDot: React.FC<PlayerDotProps> = ({
   duration,
   delay,
 }) => {
+  const c = useColors();
   const px = useSharedValue(cx);
   const py = useSharedValue(cy);
 
@@ -111,13 +112,13 @@ const PlayerDot: React.FC<PlayerDotProps> = ({
       <AnimatedCircle
         animatedProps={animatedProps}
         r={14}
-        fill={Colors.accent}
+        fill={c.accent}
         opacity={0.15}
       />
       <AnimatedCircle
         animatedProps={animatedProps}
         r={5}
-        fill={Colors.accent}
+        fill={c.accent}
       />
     </>
   );
@@ -130,15 +131,18 @@ const PLAYER_DOTS: PlayerDotProps[] = [
   { cx: 225, cy: 50, dx: -16, dy: 12, duration: 2600, delay: 900 },
 ];
 
-export const HeroVisual = () => (
+export const HeroVisual = () => {
+  const c = useColors();
+  const visualStyles = useMemo(() => makeVisualStyles(c), [c]);
+  return (
   // Visual del slide 1. Pista de pádel con los 4 jugadores en movimiento
   // y el logo TACTIUM en el centro (donde antes ponía PLAN · ADAPT · WIN).
   <View style={{ width: 340, height: 268, alignItems: 'center', justifyContent: 'center' }}>
     <Svg width={340} height={268} viewBox="0 0 280 220">
       <Defs>
         <LinearGradient id="court" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor={Colors.primary} stopOpacity="0.55" />
-          <Stop offset="100%" stopColor={Colors.background} stopOpacity="0.3" />
+          <Stop offset="0%" stopColor={c.primary} stopOpacity="0.55" />
+          <Stop offset="100%" stopColor={c.background} stopOpacity="0.3" />
         </LinearGradient>
       </Defs>
       <Rect
@@ -148,15 +152,15 @@ export const HeroVisual = () => (
         height="180"
         rx="6"
         fill="url(#court)"
-        stroke={Colors.accent}
+        stroke={c.accent}
         strokeOpacity={0.55}
         strokeWidth="1.2"
       />
-      <Line x1="20" y1="104" x2="260" y2="104" stroke={Colors.accent} strokeOpacity={0.7} strokeWidth="1.2" strokeDasharray="4 4" />
-      <Line x1="140" y1="60" x2="140" y2="104" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-      <Line x1="140" y1="104" x2="140" y2="148" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-      <Line x1="20" y1="60" x2="260" y2="60" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
-      <Line x1="20" y1="148" x2="260" y2="148" stroke={Colors.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="20" y1="104" x2="260" y2="104" stroke={c.accent} strokeOpacity={0.7} strokeWidth="1.2" strokeDasharray="4 4" />
+      <Line x1="140" y1="60" x2="140" y2="104" stroke={c.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="140" y1="104" x2="140" y2="148" stroke={c.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="20" y1="60" x2="260" y2="60" stroke={c.accent} strokeOpacity={0.25} strokeWidth="1" />
+      <Line x1="20" y1="148" x2="260" y2="148" stroke={c.accent} strokeOpacity={0.25} strokeWidth="1" />
       {PLAYER_DOTS.map((dot, i) => (
         <PlayerDot key={i} {...dot} />
       ))}
@@ -166,9 +170,12 @@ export const HeroVisual = () => (
       <TactiumMark size={56} gradient />
     </View>
   </View>
-);
+  );
+};
 
 export const AvailVisual = () => {
+  const c = useColors();
+  const visualStyles = useMemo(() => makeVisualStyles(c), [c]);
   // Estado final: 3/4 disponibles. Los toggles parten todos en false y
   // van encendiéndose secuencialmente para simular que el capitán los
   // está pulsando uno a uno. El que termina en false (jugador 03) NO se
@@ -218,7 +225,7 @@ export const AvailVisual = () => {
             visualStyles.row,
             i < rows.length - 1 && {
               borderBottomWidth: 1,
-              borderColor: Colors.hair,
+              borderColor: c.hair,
             },
           ]}
         >
@@ -241,6 +248,8 @@ export const AvailVisual = () => {
 };
 
 export const LineupVisual = () => {
+  const c = useColors();
+  const visualStyles = useMemo(() => makeVisualStyles(c), [c]);
   const pairs = [
     { a: '01', b: '02', sum: 12.0 },
     { a: '03', b: '04', sum: 10.5 },
@@ -325,15 +334,17 @@ export const LineupVisual = () => {
 };
 
 export const SeasonVisual = () => {
+  const c = useColors();
+  const visualStyles = useMemo(() => makeVisualStyles(c), [c]);
   const journeys = [
-    { v: 'V', c: Colors.accent },
-    { v: 'V', c: Colors.accent },
+    { v: 'V', c: c.accent },
+    { v: 'V', c: c.accent },
     { v: 'D', c: '#FF5C5C' },
-    { v: 'V', c: Colors.accent },
+    { v: 'V', c: c.accent },
     { v: 'E', c: '#FFB547' },
-    { v: 'V', c: Colors.accent },
-    { v: '·', c: Colors.textFaint },
-    { v: '·', c: Colors.textFaint },
+    { v: 'V', c: c.accent },
+    { v: '·', c: c.textFaint },
+    { v: '·', c: c.textFaint },
   ];
 
   // Cuenta cuántas jornadas se "han revelado" hasta el momento. Los stats
@@ -401,7 +412,7 @@ export const SeasonVisual = () => {
                 visualStyles.journeyCell,
                 {
                   backgroundColor: j.v === '·' ? 'transparent' : j.c + '22',
-                  borderColor: j.v === '·' ? Colors.hair : j.c + '70',
+                  borderColor: j.v === '·' ? c.hair : j.c + '70',
                 },
               ]}
             >
@@ -446,6 +457,8 @@ export const SeasonVisual = () => {
 // % de victorias animado y un resultado de amistoso debajo. Mismo
 // lenguaje visual que MyStats — lo que verá de verdad dentro de la app.
 export const CasualVisual = () => {
+  const c = useColors();
+  const visualStyles = useMemo(() => makeVisualStyles(c), [c]);
   const pct = useAnimatedCounter(71, 1000, 400);
   const dots: boolean[] = [true, true, false, true, true];
   return (
@@ -461,7 +474,7 @@ export const CasualVisual = () => {
               key={i}
               style={[
                 visualStyles.casualDot,
-                { backgroundColor: w ? Colors.accent : '#ff6b6b' },
+                { backgroundColor: w ? c.accent : '#ff6b6b' },
               ]}
             />
           ))}
@@ -484,7 +497,7 @@ export const CasualVisual = () => {
   );
 };
 
-const visualStyles = StyleSheet.create({
+const makeVisualStyles = (c: Palette) => StyleSheet.create({
   casualWrap: {
     width: 300,
     alignSelf: 'center',
@@ -492,20 +505,20 @@ const visualStyles = StyleSheet.create({
   casualHero: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 18,
   },
   casualPct: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 40,
     fontWeight: '800',
     letterSpacing: -1,
   },
   casualLabel: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 2,
     marginTop: 2,
@@ -516,10 +529,10 @@ const visualStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 12,
     marginTop: 10,
   },
@@ -531,10 +544,10 @@ const visualStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  casualBadgeTxt: { color: Colors.accent, fontSize: 12, fontWeight: '800' },
-  casualName: { color: Colors.text, fontSize: 13.5, fontWeight: '700' },
-  casualMeta: { color: Colors.textFaint, fontSize: 11.5, marginTop: 1 },
-  casualSets: { color: Colors.text, fontSize: 12.5, fontWeight: '700' },
+  casualBadgeTxt: { color: c.accent, fontSize: 12, fontWeight: '800' },
+  casualName: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+  casualMeta: { color: c.textFaint, fontSize: 11.5, marginTop: 1 },
+  casualSets: { color: c.text, fontSize: 12.5, fontWeight: '700' },
   casualPill: {
     alignSelf: 'center',
     marginTop: 12,
@@ -542,11 +555,11 @@ const visualStyles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Colors.accent40,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
   },
   casualPillTxt: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.5,
@@ -568,9 +581,9 @@ const visualStyles = StyleSheet.create({
     width: 290,
     padding: 16,
     borderRadius: 18,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     shadowColor: '#000',
     shadowOpacity: 0.5,
     shadowRadius: 30,
@@ -587,13 +600,13 @@ const visualStyles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 2,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   eyebrowAccent: {
     fontFamily: Fonts.mono,
     fontSize: 10,
     letterSpacing: 1,
-    color: Colors.accent,
+    color: c.accent,
   },
   row: {
     flexDirection: 'row',
@@ -605,26 +618,26 @@ const visualStyles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   numText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '500',
   },
   meta: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
   validBadge: {
     flexDirection: 'row',
@@ -633,15 +646,15 @@ const visualStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   validBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
     letterSpacing: 1,
-    color: Colors.accent,
+    color: c.accent,
   },
   pairRow: {
     flexDirection: 'row',
@@ -651,15 +664,15 @@ const visualStyles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 6,
     borderRadius: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   pairIdx: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -679,29 +692,29 @@ const visualStyles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   pairChipText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.text,
+    color: c.text,
   },
   pairSum: {
     fontFamily: Fonts.mono,
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.accent,
+    color: c.accent,
   },
   bigTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '600',
     marginTop: 4,
   },
   winRate: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 24,
     fontWeight: '700',
     fontFamily: Fonts.mono,
@@ -710,7 +723,7 @@ const visualStyles = StyleSheet.create({
   winRateLabel: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1,
   },
   journeyGrid: {
@@ -741,18 +754,18 @@ const visualStyles = StyleSheet.create({
     gap: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   statValue: {
     fontFamily: Fonts.mono,
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
   },
   statLabel: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1,
     marginTop: 2,
   },

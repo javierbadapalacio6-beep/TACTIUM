@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconArrowRight, IconAlert } from '@components/ui';
@@ -37,13 +37,13 @@ const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   canceled: 'Cancelada',
   expired: 'Expirada',
 };
-const STATUS_TINT: Record<SubscriptionStatus, string> = {
-  trialing: Colors.accent,
-  active: Colors.accent,
-  grace_period: Colors.warning,
-  canceled: Colors.textMuted,
-  expired: Colors.error,
-};
+const makeStatusTint = (c: Palette): Record<SubscriptionStatus, string> => ({
+  trialing: c.accent,
+  active: c.accent,
+  grace_period: c.warning,
+  canceled: c.textMuted,
+  expired: c.error,
+});
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -55,6 +55,9 @@ function formatDate(iso: string | null): string {
 export const ClubBillingScreen = ({
   navigation,
 }: RootStackScreenProps<'ClubBilling'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const STATUS_TINT = useMemo(() => makeStatusTint(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
@@ -110,7 +113,7 @@ export const ClubBillingScreen = ({
           accessibilityLabel="Volver"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Volver</Text>
         </Pressable>
       </View>
@@ -209,7 +212,7 @@ export const ClubBillingScreen = ({
 
           {overQuota && recommended && currentPlan ? (
             <View style={styles.warningCard}>
-              <IconAlert size={14} color={Colors.warning} />
+              <IconAlert size={14} color={c.warning} />
               <Text style={styles.warningText}>
                 Tienes {teamCount} equipos pero tu plan {currentPlan.shortLabel}{' '}
                 solo cubre {teamsCovered}. Sube a{' '}
@@ -264,7 +267,7 @@ export const ClubBillingScreen = ({
                           style={[
                             styles.teamBadgeText,
                             {
-                              color: covered ? Colors.accent : Colors.warning,
+                              color: covered ? c.accent : c.warning,
                             },
                           ]}
                         >
@@ -290,7 +293,7 @@ export const ClubBillingScreen = ({
             <Text style={styles.ctaPrimaryLabel}>
               Suscribir club · Prueba 14 días
             </Text>
-            <IconArrowRight size={16} color={Colors.textInverse} />
+            <IconArrowRight size={16} color={c.textInverse} />
           </Pressable>
         ) : overQuota ? (
           <Pressable
@@ -303,7 +306,7 @@ export const ClubBillingScreen = ({
             ]}
           >
             <Text style={styles.ctaPrimaryLabel}>Mejorar plan</Text>
-            <IconArrowRight size={16} color={Colors.textInverse} />
+            <IconArrowRight size={16} color={c.textInverse} />
           </Pressable>
         ) : (
           <Pressable
@@ -366,7 +369,7 @@ export const ClubBillingScreen = ({
                 {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}
               </Text>
             </View>
-            <IconArrowRight size={14} color={Colors.textFaint} />
+            <IconArrowRight size={14} color={c.textFaint} />
           </Pressable>
         </View>
       </ScrollView>
@@ -374,8 +377,8 @@ export const ClubBillingScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
 
   header: {
     flexDirection: 'row',
@@ -389,30 +392,30 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
-  backLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
 
   scroll: { paddingHorizontal: 22, paddingTop: 14 },
 
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.6,
     marginTop: 6,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
@@ -421,10 +424,10 @@ const styles = StyleSheet.create({
 
   // Status card
   statusCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 16,
     marginBottom: 14,
   },
@@ -434,13 +437,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   planName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   planMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
     lineHeight: 17,
@@ -457,16 +460,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
-  statusDivider: { height: 1, backgroundColor: Colors.hair, marginVertical: 14 },
+  statusDivider: { height: 1, backgroundColor: c.hair, marginVertical: 14 },
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  statusRowLabel: { color: Colors.textMuted, fontSize: 13 },
+  statusRowLabel: { color: c.textMuted, fontSize: 13 },
   statusRowValue: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -474,12 +477,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 10,
     borderRadius: 10,
-    backgroundColor: Colors.warning + '14',
+    backgroundColor: c.warning + '14',
     borderWidth: 1,
-    borderColor: Colors.warning + '40',
+    borderColor: c.warning + '40',
   },
   scheduledText: {
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '600',
@@ -496,14 +499,14 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.text,
+    color: c.text,
     letterSpacing: 2,
     fontWeight: '500',
   },
   usageCount: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1,
   },
   warningCard: {
@@ -518,23 +521,23 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   warningText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     lineHeight: 17,
     flex: 1,
   },
   emptyTeams: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: 22,
   },
 
   teamList: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     overflow: 'hidden',
   },
   teamRow: {
@@ -546,15 +549,15 @@ const styles = StyleSheet.create({
   },
   teamRowDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.hair,
+    borderBottomColor: c.hair,
   },
   teamName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   teamMeta: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
@@ -565,8 +568,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   teamBadgeOk: {
-    backgroundColor: Colors.accent10,
-    borderColor: Colors.accent40,
+    backgroundColor: c.accent10,
+    borderColor: c.accent40,
   },
   teamBadgeOff: {
     backgroundColor: 'rgba(242,201,76,0.10)',
@@ -587,31 +590,31 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 52,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     marginVertical: 14,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.3,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
   ctaPrimaryLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 15,
     fontWeight: '700',
   },
   ctaSecondary: {
     height: 48,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 14,
   },
   ctaSecondaryLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -628,42 +631,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   compareRowCurrent: {
-    backgroundColor: Colors.accent10,
-    borderColor: Colors.accent40,
+    backgroundColor: c.accent10,
+    borderColor: c.accent40,
   },
   compareName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   compareQuota: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
   comparePrice: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '700',
   },
   comparePriceSuffix: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '500',
   },
 
   // Actions
   actionsBlock: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     overflow: 'hidden',
   },
   actionRow: {
@@ -673,12 +676,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   actionLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   actionSub: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
   },

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { ClubTeamsScreen } from '@features/club/screens/ClubTeamsScreen';
 import { ClubTeamPreviewScreen } from '@features/club/screens/ClubTeamPreviewScreen';
 import { JornadaScreen } from '@features/home/screens/JornadaScreen';
@@ -27,14 +27,17 @@ const Stack = createNativeStackNavigator<ClubTeamsStackParamList>();
  * editar cambia a Modo Capitán desde Profile.
  */
 export const ClubTeamsStack = () => {
+  const c = useColors();
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: c.background },
+      animation: 'slide_from_right' as const,
+    }),
+    [c],
+  );
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.background },
-        animation: 'slide_from_right',
-      }}
-    >
+    <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="ClubTeamsRoot" component={ClubTeamsScreen} />
       <Stack.Screen name="ClubTeamPreview" component={ClubTeamPreviewScreen} />
       <Stack.Screen name="Jornada" component={JornadaScreen} />

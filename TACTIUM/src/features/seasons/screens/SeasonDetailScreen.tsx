@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -50,6 +50,8 @@ export const SeasonDetailScreen = ({
   navigation,
   route,
 }: SeasonsStackScreenProps<'SeasonDetail'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const seasonId = route.params.id;
 
@@ -264,7 +266,7 @@ export const SeasonDetailScreen = ({
           }}
           style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={Colors.text} />
+          <IconBack size={16} color={c.text} />
           <Text style={styles.navBtnLabel}>Temporadas</Text>
         </Pressable>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -277,7 +279,7 @@ export const SeasonDetailScreen = ({
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <IconCamera size={16} color={Colors.accent} />
+                <IconCamera size={16} color={c.accent} />
               </Pressable>
               <Pressable
                 onPress={openAddMatchday}
@@ -289,7 +291,7 @@ export const SeasonDetailScreen = ({
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <IconPlus size={16} color={Colors.accent} />
+                <IconPlus size={16} color={c.accent} />
               </Pressable>
             </>
           ) : null}
@@ -344,7 +346,7 @@ export const SeasonDetailScreen = ({
               <Text style={[styles.filterTabLabel, filter === key && styles.filterTabLabelActive]}>
                 {label}
               </Text>
-              <Text style={[styles.filterTabCount, filter === key && { color: Colors.accent }]}>
+              <Text style={[styles.filterTabCount, filter === key && { color: c.accent }]}>
                 {count}
               </Text>
             </Pressable>
@@ -353,7 +355,7 @@ export const SeasonDetailScreen = ({
 
         {/* ── List ── */}
         {loading ? (
-          <ActivityIndicator color={Colors.accent} style={{ marginVertical: 32 }} />
+          <ActivityIndicator color={c.accent} style={{ marginVertical: 32 }} />
         ) : filtered.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
@@ -395,7 +397,7 @@ export const SeasonDetailScreen = ({
             onPress={openAddMatchday}
             style={({ pressed }) => [styles.dashedAdd, pressed && { opacity: 0.7 }]}
           >
-            <IconPlus size={14} color={Colors.accent} />
+            <IconPlus size={14} color={c.accent} />
             <Text style={styles.dashedAddText}>Crear nueva jornada</Text>
           </Pressable>
         ) : null}
@@ -414,7 +416,7 @@ export const SeasonDetailScreen = ({
             ]}
           >
             {closingSeason ? (
-              <ActivityIndicator color={Colors.error} size="small" />
+              <ActivityIndicator color={c.error} size="small" />
             ) : (
               <Text style={styles.closeSeasonLabel}>
                 {allDisputed
@@ -471,12 +473,16 @@ export const SeasonDetailScreen = ({
 // ─── StatCell ────────────────────────────────────────────────────────
 const StatCell: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
   label, value, highlight,
-}) => (
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={styles.statCell}>
-    <Text style={[styles.statValue, highlight && { color: Colors.accent }]}>{value}</Text>
+    <Text style={[styles.statValue, highlight && { color: c.accent }]}>{value}</Text>
     <Text style={styles.statLabel}>{label}</Text>
   </View>
-);
+  );
+};
 
 // ─── MatchdayRow ─────────────────────────────────────────────────────
 const MatchdayRow: React.FC<{
@@ -488,11 +494,13 @@ const MatchdayRow: React.FC<{
   // onEdit es opcional: temporadas archivadas no muestran el botón pencil.
   onEdit?: () => void;
 }> = ({ matchday: m, state, isNext, isLast, onOpen, onEdit }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const outcomeMeta = m.outcome
     ? {
-        win:  { color: Colors.accent,  bg: Colors.accent15,              border: Colors.accent40, label: 'V' },
-        draw: { color: Colors.warning, bg: 'rgba(242,201,76,0.15)',       border: 'rgba(242,201,76,0.40)', label: 'E' },
-        loss: { color: Colors.error,   bg: 'rgba(255,107,107,0.15)',      border: 'rgba(255,107,107,0.40)', label: 'D' },
+        win:  { color: c.accent,  bg: c.accent15,              border: c.accent40, label: 'V' },
+        draw: { color: c.warning, bg: 'rgba(242,201,76,0.15)',       border: 'rgba(242,201,76,0.40)', label: 'E' },
+        loss: { color: c.error,   bg: 'rgba(255,107,107,0.15)',      border: 'rgba(255,107,107,0.40)', label: 'D' },
       }[m.outcome]
     : null;
 
@@ -505,7 +513,7 @@ const MatchdayRow: React.FC<{
       >
         {/* Badge J## */}
         <View style={[styles.jornadaBadge, isNext && styles.jornadaBadgeNext]}>
-          <Text style={[styles.jornadaBadgeText, isNext && { color: Colors.accent }]}>
+          <Text style={[styles.jornadaBadgeText, isNext && { color: c.accent }]}>
             J{String(m.jornada_number).padStart(2, '0')}
           </Text>
           {isNext && (
@@ -557,7 +565,7 @@ const MatchdayRow: React.FC<{
           hitSlop={8}
           style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.5 }]}
         >
-          <IconPencil size={14} color={Colors.textFaint} />
+          <IconPencil size={14} color={c.textFaint} />
         </Pressable>
       ) : null}
     </View>
@@ -572,6 +580,8 @@ const AddMatchdaySheet: React.FC<{
   nextJornadaNumber: number;
   onCreated: () => void;
 }> = ({ open, onClose, seasonId, nextJornadaNumber, onCreated }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const team = useTeamStore((s) => s.team);
   const courts = React.useMemo(
     () => getCourtsForCompetition(team?.federation, team?.league, team?.gender),
@@ -647,7 +657,7 @@ const AddMatchdaySheet: React.FC<{
           ]}
         >
           {submitting
-            ? <ActivityIndicator color={Colors.textInverse} />
+            ? <ActivityIndicator color={c.textInverse} />
             : <Text style={styles.sheetCtaLabel}>Crear jornada</Text>}
         </Pressable>
       }
@@ -663,7 +673,7 @@ const AddMatchdaySheet: React.FC<{
           value={opponent}
           onChangeText={setOpponent}
           placeholder="Club Visitante"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
           autoFocus
         />
@@ -675,10 +685,10 @@ const AddMatchdaySheet: React.FC<{
           onPress={() => setIsHome(true)}
           style={[styles.venueCell, isHome && styles.venueCellActive]}
         >
-          <Text style={[styles.venueLabel, { color: isHome ? Colors.textInverse : Colors.text }]}>
+          <Text style={[styles.venueLabel, { color: isHome ? c.textInverse : c.text }]}>
             Local
           </Text>
-          <Text style={[styles.venueSub, { color: isHome ? 'rgba(0,24,16,0.6)' : Colors.textFaint }]}>
+          <Text style={[styles.venueSub, { color: isHome ? 'rgba(0,24,16,0.6)' : c.textFaint }]}>
             En nuestras pistas
           </Text>
         </Pressable>
@@ -686,10 +696,10 @@ const AddMatchdaySheet: React.FC<{
           onPress={() => setIsHome(false)}
           style={[styles.venueCell, !isHome && styles.venueCellActive]}
         >
-          <Text style={[styles.venueLabel, { color: !isHome ? Colors.textInverse : Colors.text }]}>
+          <Text style={[styles.venueLabel, { color: !isHome ? c.textInverse : c.text }]}>
             Visitante
           </Text>
-          <Text style={[styles.venueSub, { color: !isHome ? 'rgba(0,24,16,0.6)' : Colors.textFaint }]}>
+          <Text style={[styles.venueSub, { color: !isHome ? 'rgba(0,24,16,0.6)' : c.textFaint }]}>
             Fuera de casa
           </Text>
         </Pressable>
@@ -701,7 +711,7 @@ const AddMatchdaySheet: React.FC<{
           value={location}
           onChangeText={setLocation}
           placeholder="Ej. Club Pádel Indoor, Pista 3"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
         />
       </View>
@@ -744,6 +754,8 @@ const EditMatchdaySheet: React.FC<{
   onSaved: () => void;
   onDeleted: () => void;
 }> = ({ matchday: m, onClose, onSaved, onDeleted }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const team = useTeamStore((s) => s.team);
   const courts = React.useMemo(
     () => getCourtsForCompetition(team?.federation, team?.league, team?.gender),
@@ -843,7 +855,7 @@ const EditMatchdaySheet: React.FC<{
             ]}
           >
             {deleting ? (
-              <ActivityIndicator color={Colors.error} size="small" />
+              <ActivityIndicator color={c.error} size="small" />
             ) : (
               <Text style={styles.deleteBtnLabel}>Eliminar</Text>
             )}
@@ -859,7 +871,7 @@ const EditMatchdaySheet: React.FC<{
             ]}
           >
             {submitting ? (
-              <ActivityIndicator color={Colors.textInverse} />
+              <ActivityIndicator color={c.textInverse} />
             ) : (
               <Text style={styles.sheetCtaLabel}>Guardar</Text>
             )}
@@ -878,7 +890,7 @@ const EditMatchdaySheet: React.FC<{
           value={opponent}
           onChangeText={setOpponent}
           placeholder="Club Visitante"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
         />
       </View>
@@ -889,15 +901,15 @@ const EditMatchdaySheet: React.FC<{
           onPress={() => setIsHome(true)}
           style={[styles.venueCell, isHome && styles.venueCellActive]}
         >
-          <Text style={[styles.venueLabel, { color: isHome ? Colors.textInverse : Colors.text }]}>Local</Text>
-          <Text style={[styles.venueSub, { color: isHome ? 'rgba(0,24,16,0.6)' : Colors.textFaint }]}>En nuestras pistas</Text>
+          <Text style={[styles.venueLabel, { color: isHome ? c.textInverse : c.text }]}>Local</Text>
+          <Text style={[styles.venueSub, { color: isHome ? 'rgba(0,24,16,0.6)' : c.textFaint }]}>En nuestras pistas</Text>
         </Pressable>
         <Pressable
           onPress={() => setIsHome(false)}
           style={[styles.venueCell, !isHome && styles.venueCellActive]}
         >
-          <Text style={[styles.venueLabel, { color: !isHome ? Colors.textInverse : Colors.text }]}>Visitante</Text>
-          <Text style={[styles.venueSub, { color: !isHome ? 'rgba(0,24,16,0.6)' : Colors.textFaint }]}>Fuera de casa</Text>
+          <Text style={[styles.venueLabel, { color: !isHome ? c.textInverse : c.text }]}>Visitante</Text>
+          <Text style={[styles.venueSub, { color: !isHome ? 'rgba(0,24,16,0.6)' : c.textFaint }]}>Fuera de casa</Text>
         </Pressable>
       </View>
 
@@ -907,7 +919,7 @@ const EditMatchdaySheet: React.FC<{
           value={location}
           onChangeText={setLocation}
           placeholder="Ej. Club Pádel Indoor, Pista 3"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           style={styles.sheetInput}
         />
       </View>
@@ -951,6 +963,8 @@ const TandasPicker: React.FC<{
   options: string[];
   onChange: (v: string | null) => void;
 }> = ({ value, options, onChange }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <ScrollView
       horizontal
@@ -1002,8 +1016,8 @@ const TandasPicker: React.FC<{
 };
 
 // ─── Styles ──────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
 
   // Nav
   nav: {
@@ -1016,21 +1030,21 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 14,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  navBtnLabel: { color: Colors.text, fontSize: 14, fontWeight: '500' },
+  navBtnLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
   addBtn: {
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1038,9 +1052,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1061,11 +1075,11 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.8,
@@ -1080,26 +1094,26 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.hair,
+    borderTopColor: c.hair,
   },
   statCell: { alignItems: 'flex-start' },
   statValue: {
     fontFamily: Fonts.mono,
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: -0.3,
     lineHeight: 20,
   },
   statLabel: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: 4,
   },
-  statDivider: { width: 1, height: 28, backgroundColor: Colors.hair },
+  statDivider: { width: 1, height: 28, backgroundColor: c.hair },
 
   // Filter
   filterWrap: {
@@ -1108,10 +1122,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 20,
     marginBottom: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     padding: 4,
   },
   filterTab: {
@@ -1124,26 +1138,26 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: 'transparent',
   },
-  filterTabActive: { backgroundColor: Colors.bgRaised },
+  filterTabActive: { backgroundColor: c.bgRaised },
   filterTabLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
-  filterTabLabelActive: { color: Colors.text },
+  filterTabLabelActive: { color: c.text },
   filterTabCount: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.textFaint,
+    color: c.textFaint,
   },
 
   // List
   list: {
     marginHorizontal: 20,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -1153,7 +1167,7 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.hair,
+    borderBottomColor: c.hair,
   },
   rowMain: {
     flex: 1,
@@ -1169,18 +1183,18 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 11,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   jornadaBadgeNext: {
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
   },
   jornadaBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.text,
+    color: c.text,
     letterSpacing: 0.4,
     fontWeight: '600',
   },
@@ -1192,14 +1206,14 @@ const styles = StyleSheet.create({
 
   // Row info
   rowRival: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   rowMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
     letterSpacing: 0.4,
@@ -1230,13 +1244,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: Colors.accent40,
-    backgroundColor: Colors.accent10,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
   },
   upcomingText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.accent,
+    color: c.accent,
     letterSpacing: 1,
     fontWeight: '600',
   },
@@ -1253,7 +1267,7 @@ const styles = StyleSheet.create({
   actaBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 9,
-    color: Colors.warning,
+    color: c.warning,
     letterSpacing: 1.2,
     fontWeight: '600',
   },
@@ -1272,14 +1286,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     paddingVertical: 28,
     paddingHorizontal: 16,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
   },
@@ -1292,13 +1306,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderStyle: 'dashed',
     borderWidth: 1.5,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  dashedAddText: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+  dashedAddText: { color: c.accent, fontSize: 14, fontWeight: '600' },
 
   // Cerrar temporada — discreto al final, color error suave para
   // marcar que es una acción no reversible. Aparece sólo cuando la
@@ -1309,13 +1323,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: `${Colors.error}40`,
-    backgroundColor: `${Colors.error}0D`,
+    borderColor: `${c.error}40`,
+    backgroundColor: `${c.error}0D`,
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeSeasonLabel: {
-    color: Colors.error,
+    color: c.error,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
@@ -1330,18 +1344,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   archivedNoteTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   archivedNoteText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     marginTop: 4,
     lineHeight: 18,
@@ -1350,13 +1364,13 @@ const styles = StyleSheet.create({
   // Sheet shared
   sheetEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sheetTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -1365,7 +1379,7 @@ const styles = StyleSheet.create({
   },
   sheetLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     marginTop: 10,
@@ -1373,15 +1387,15 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   sheetInputWrap: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   sheetInput: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     paddingVertical: 0,
   },
@@ -1393,13 +1407,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
   },
   venueCellActive: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   venueLabel: { fontSize: 15, fontWeight: '600', letterSpacing: -0.2 },
   venueSub: {
@@ -1421,24 +1435,24 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: `${Colors.error}40`,
+    borderColor: `${c.error}40`,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteBtnLabel: { color: Colors.error, fontSize: 14, fontWeight: '600' },
+  deleteBtnLabel: { color: c.error, fontSize: 14, fontWeight: '600' },
   sheetCta: {
     height: 52,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
   sheetCtaLabel: {
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -1448,25 +1462,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 40,
     borderRadius: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   tandaChipActive: {
-    backgroundColor: Colors.accent10,
-    borderColor: Colors.accent,
+    backgroundColor: c.accent10,
+    borderColor: c.accent,
   },
   tandaChipLabel: {
     fontFamily: Fonts.mono,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.4,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   tandaChipLabelActive: {
-    color: Colors.accent,
+    color: c.accent,
   },
 });

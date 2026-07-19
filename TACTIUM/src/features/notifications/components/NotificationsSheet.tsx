@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import {
   BottomSheet,
@@ -57,6 +57,8 @@ interface Props {
 }
 
 export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const items = useNotificationStore((s) => s.items);
   const markAllRead = useNotificationStore((s) => s.markAllRead);
 
@@ -77,7 +79,7 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
 
       {items.length === 0 ? (
         <View style={styles.empty}>
-          <IconBell size={26} color={Colors.textFaint} />
+          <IconBell size={26} color={c.textFaint} />
           <Text style={styles.emptyText}>
             Aquí verás cuando alguien se una a tu equipo, tus jornadas y
             recordatorios.
@@ -87,7 +89,7 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
         <View style={styles.list}>
           {items.map((n: AppNotification) => {
             const unread = !n.read_at;
-            const tint = unread ? Colors.accent : Colors.textMuted;
+            const tint = unread ? c.accent : c.textMuted;
             return (
               <View
                 key={n.id}
@@ -97,8 +99,8 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
                   style={[
                     styles.iconBox,
                     unread && {
-                      backgroundColor: Colors.accent10,
-                      borderColor: Colors.accent40,
+                      backgroundColor: c.accent10,
+                      borderColor: c.accent40,
                     },
                   ]}
                 >
@@ -125,16 +127,16 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
   },
   empty: { alignItems: 'center', gap: 12, paddingVertical: 28 },
   emptyText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
@@ -155,37 +157,37 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderRadius: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
-  rowUnread: { borderColor: Colors.accent40, backgroundColor: Colors.bgCard2 },
+  rowUnread: { borderColor: c.accent40, backgroundColor: c.bgCard2 },
   iconBox: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
   rowTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
-    fontWeight: '650',
+    fontWeight: '600',
     letterSpacing: -0.1,
   },
   rowBody: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
   },
   rowTime: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 0.4,
     marginTop: 6,
@@ -194,7 +196,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     marginTop: 4,
   },
 });

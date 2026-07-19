@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -54,6 +54,8 @@ export const CreateTeamScreen = ({
   navigation,
   route,
 }: OnboardingStackScreenProps<'CreateTeam'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const createTeam = useTeamStore((s) => s.createTeam);
   const signOut = useAuthStore((s) => s.signOut);
@@ -206,7 +208,7 @@ export const CreateTeamScreen = ({
               value={name}
               onChangeText={setName}
               placeholder="Padel Club"
-              placeholderTextColor={Colors.textFaint}
+              placeholderTextColor={c.textFaint}
               maxLength={50}
               autoCapitalize="words"
               style={styles.nameInputField}
@@ -229,15 +231,15 @@ export const CreateTeamScreen = ({
                   style={[
                     styles.compCell,
                     sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
+                      backgroundColor: c.accent,
+                      borderColor: c.accent,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.compCellText,
-                      { color: sel ? '#000' : Colors.text },
+                      { color: sel ? '#000' : c.text },
                     ]}
                   >
                     {p.label}
@@ -273,7 +275,7 @@ export const CreateTeamScreen = ({
                     <Text style={styles.selectorPlaceholder}>Selecciona federación</Text>
                   )}
                 </View>
-                <IconChevron size={14} color={Colors.textFaint} />
+                <IconChevron size={14} color={c.textFaint} />
               </Pressable>
             </Section>
 
@@ -308,15 +310,15 @@ export const CreateTeamScreen = ({
                       style={[
                         styles.catCell,
                         sel && {
-                          backgroundColor: Colors.accent,
-                          borderColor: Colors.accent,
+                          backgroundColor: c.accent,
+                          borderColor: c.accent,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.catCellText,
-                          { color: sel ? '#000' : Colors.text },
+                          { color: sel ? '#000' : c.text },
                         ]}
                       >
                         {n}
@@ -353,28 +355,28 @@ export const CreateTeamScreen = ({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.catScrollContent}
           >
-            {CATS.map((c) => {
-              const sel = cat === c;
+            {CATS.map((catValue) => {
+              const sel = cat === catValue;
               return (
                 <Pressable
-                  key={c}
-                  onPress={() => setCat(c)}
+                  key={catValue}
+                  onPress={() => setCat(catValue)}
                   style={[
                     styles.catCell,
                     styles.catScrollCell,
                     sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
+                      backgroundColor: c.accent,
+                      borderColor: c.accent,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.catCellText,
-                      { color: sel ? '#000' : Colors.text },
+                      { color: sel ? '#000' : c.text },
                     ]}
                   >
-                    {c}
+                    {catValue}
                   </Text>
                 </Pressable>
               );
@@ -393,8 +395,8 @@ export const CreateTeamScreen = ({
                   style={[
                     styles.catCell,
                     sel && {
-                      backgroundColor: Colors.accent,
-                      borderColor: Colors.accent,
+                      backgroundColor: c.accent,
+                      borderColor: c.accent,
                     },
                   ]}
                 >
@@ -402,7 +404,7 @@ export const CreateTeamScreen = ({
                     style={[
                       styles.catCellText,
                       { fontSize: 14 },
-                      { color: sel ? '#000' : Colors.text },
+                      { color: sel ? '#000' : c.text },
                     ]}
                   >
                     {g.label}
@@ -435,15 +437,15 @@ export const CreateTeamScreen = ({
                     style={[
                       styles.catCell,
                       sel && {
-                        backgroundColor: Colors.accent,
-                        borderColor: Colors.accent,
+                        backgroundColor: c.accent,
+                        borderColor: c.accent,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.catCellText,
-                        { color: sel ? '#000' : Colors.text },
+                        { color: sel ? '#000' : c.text },
                       ]}
                     >
                       {g}
@@ -519,6 +521,8 @@ const FederationPickerSheet: React.FC<{
   onClose: () => void;
   onPick: (f: Federation) => void;
 }> = ({ open, selected, onClose, onPick }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <BottomSheet open={open} onClose={onClose}>
       <Text style={styles.sheetEyebrow}>FEDERACIÓN</Text>
@@ -534,8 +538,8 @@ const FederationPickerSheet: React.FC<{
               style={[
                 styles.fedRow,
                 sel && {
-                  backgroundColor: Colors.accent10,
-                  borderColor: Colors.accent50,
+                  backgroundColor: c.accent10,
+                  borderColor: c.accent50,
                 },
               ]}
             >
@@ -548,7 +552,7 @@ const FederationPickerSheet: React.FC<{
                 </Text>
                 <Text style={styles.fedRegion}>{f.region}</Text>
               </View>
-              {sel ? <IconCheck size={16} color={Colors.accent} /> : null}
+              {sel ? <IconCheck size={16} color={c.accent} /> : null}
             </Pressable>
           );
         })}
@@ -561,23 +565,30 @@ const PlainInput: React.FC<{
   value: string;
   onChangeText: (s: string) => void;
   placeholder?: string;
-}> = ({ value, onChangeText, placeholder }) => (
+}> = ({ value, onChangeText, placeholder }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={styles.plainInput}>
     <TextInput
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder}
-      placeholderTextColor={Colors.textFaint}
+      placeholderTextColor={c.textFaint}
       style={styles.plainInputField}
     />
   </View>
-);
+  );
+};
 
 const Section: React.FC<{
   label: string;
   right?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ label, right, children }) => (
+}> = ({ label, right, children }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <View style={{ marginTop: 18 }}>
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionLabel}>{label}</Text>
@@ -585,12 +596,13 @@ const Section: React.FC<{
     </View>
     {children}
   </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -612,17 +624,17 @@ const styles = StyleSheet.create({
     width: 18,
     height: 3,
     borderRadius: 2,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
   },
   barActive: {
     width: 28,
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.7,
     shadowRadius: 6,
   },
   barDone: {
-    backgroundColor: Colors.accent50,
+    backgroundColor: c.accent50,
   },
   scroll: {
     paddingHorizontal: 24,
@@ -633,12 +645,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 10,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 28,
     fontWeight: '600',
     letterSpacing: -0.7,
@@ -646,7 +658,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -654,10 +666,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -665,26 +677,26 @@ const styles = StyleSheet.create({
     width: 5,
     height: 22,
     borderRadius: 3,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   nameInputField: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '600',
     paddingVertical: 0,
   },
   plainInput: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     minHeight: 48,
     justifyContent: 'center',
   },
   plainInputField: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '500',
     paddingVertical: 0,
@@ -706,9 +718,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 52,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -721,9 +733,9 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 16,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -733,13 +745,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   compBlurb: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     marginTop: 8,
     lineHeight: 16,
   },
   compHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -753,7 +765,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 2,
-    color: Colors.textFaint,
+    color: c.textFaint,
     textTransform: 'uppercase',
     fontWeight: '500',
   },
@@ -763,15 +775,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   groupToggleText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
   },
   preview: {
     marginTop: 22,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 14,
   },
   previewRow: {
@@ -780,14 +792,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   previewName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   previewMeta: {
     fontFamily: Fonts.mono,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
@@ -795,12 +807,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   previewFooterText: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textFaint,
+    color: c.textFaint,
     letterSpacing: 0.5,
   },
   cta: {
@@ -810,10 +822,10 @@ const styles = StyleSheet.create({
   ctaBtn: {
     height: 54,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -825,7 +837,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   exitLink: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -833,40 +845,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 14,
     minHeight: 54,
   },
   selectorValue: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   selectorMeta: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontFamily: Fonts.mono,
     fontSize: 11,
     marginTop: 2,
     letterSpacing: 0.5,
   },
   selectorPlaceholder: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 14,
   },
   sheetEyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   sheetTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -880,36 +892,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   fedBadge: {
     minWidth: 56,
     paddingHorizontal: 8,
     height: 32,
     borderRadius: 8,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fedBadgeText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   fedName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   fedRegion: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     marginTop: 2,
   },

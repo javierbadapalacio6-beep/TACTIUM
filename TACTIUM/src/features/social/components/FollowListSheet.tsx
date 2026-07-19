@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { BottomSheet } from '@components/ui';
 import {
@@ -48,6 +48,8 @@ export const FollowListSheet: React.FC<Props> = ({
   targetType,
   onOpenProfile,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [rows, setRows] = useState<DisplayRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export const FollowListSheet: React.FC<Props> = ({
       <Text style={styles.title}>{title}</Text>
       {loading ? (
         <View style={styles.state}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       ) : rows.length === 0 ? (
         <Text style={styles.empty}>
@@ -166,16 +168,16 @@ export const FollowListSheet: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -183,16 +185,16 @@ const styles = StyleSheet.create({
   },
   state: { paddingVertical: 30, alignItems: 'center' },
   empty: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     paddingVertical: 20,
     textAlign: 'center',
   },
   card: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -209,7 +211,7 @@ const styles = StyleSheet.create({
     gap: 12,
     minWidth: 0,
   },
-  rowDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
-  name: { color: Colors.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
-  meta: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  rowDivider: { borderBottomWidth: 1, borderColor: c.hair },
+  name: { color: c.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
+  meta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
 });

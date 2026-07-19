@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { IconAlert, IconArrowRight } from './Icon';
 import { useSubscriptionStore } from '@store/subscriptionStore';
@@ -29,6 +29,8 @@ interface Props {
 export const TrialExpiringBanner: React.FC<Props> = ({
   thresholdDays = 3,
 }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const days = useSubscriptionStore((s) => s.trialDaysLeft());
@@ -59,7 +61,7 @@ export const TrialExpiringBanner: React.FC<Props> = ({
         ]}
       >
         <View style={styles.iconWrap}>
-          <IconAlert size={12} color={Colors.warning} />
+          <IconAlert size={12} color={c.warning} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.label} numberOfLines={1}>
@@ -69,48 +71,49 @@ export const TrialExpiringBanner: React.FC<Props> = ({
             Mantén el acceso premium · Pulsa para actualizar
           </Text>
         </View>
-        <IconArrowRight size={12} color={Colors.warning} />
+        <IconArrowRight size={12} color={c.warning} />
       </Pressable>
     </Animated.View>
   );
 };
 
-const styles = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 22,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(242,201,76,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(242,201,76,0.40)',
-  },
-  iconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    backgroundColor: 'rgba(242,201,76,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: {
-    color: Colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  sub: {
-    fontFamily: Fonts.mono,
-    color: Colors.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-    letterSpacing: 0.2,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    wrap: {
+      paddingHorizontal: 22,
+      paddingTop: 6,
+      paddingBottom: 4,
+    },
+    banner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: 'rgba(242,201,76,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(242,201,76,0.40)',
+    },
+    iconWrap: {
+      width: 22,
+      height: 22,
+      borderRadius: 7,
+      backgroundColor: 'rgba(242,201,76,0.18)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    label: {
+      color: c.text,
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: -0.1,
+    },
+    sub: {
+      fontFamily: Fonts.mono,
+      color: c.textMuted,
+      fontSize: 11,
+      marginTop: 2,
+      letterSpacing: 0.2,
+    },
+  });

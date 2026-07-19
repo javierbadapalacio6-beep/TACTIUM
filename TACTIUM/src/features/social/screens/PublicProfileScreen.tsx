@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { IconBack, IconTeam } from '@components/ui';
 import {
@@ -37,6 +37,8 @@ import {
 import type { RootStackParamList } from '@navigation/types';
 
 export const PublicProfileScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -121,7 +123,7 @@ export const PublicProfileScreen = () => {
           accessibilityRole="button"
           accessibilityLabel="Volver"
         >
-          <IconBack size={20} color={Colors.text} />
+          <IconBack size={20} color={c.text} />
         </Pressable>
         <Text style={styles.eyebrow}>PERFIL</Text>
         <View style={{ width: 38 }} />
@@ -129,7 +131,7 @@ export const PublicProfileScreen = () => {
 
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator color={Colors.accent} />
+          <ActivityIndicator color={c.accent} />
         </View>
       ) : (
         <ScrollView
@@ -272,7 +274,7 @@ export const PublicProfileScreen = () => {
               <Text style={styles.sectionLabel}>EL CLUB</Text>
               <View style={styles.clubCard}>
                 <View style={styles.clubIcon}>
-                  <IconTeam size={20} color={Colors.accent} />
+                  <IconTeam size={20} color={c.accent} />
                 </View>
                 <Text style={styles.clubMeta}>
                   {club?.teams_count ?? 0}{' '}
@@ -302,35 +304,43 @@ const CountBox: React.FC<{
   label: string;
   value: number;
   onPress?: () => void;
-}> = ({ label, value, onPress }) => (
-  <Pressable
-    onPress={onPress}
-    disabled={!onPress}
-    style={({ pressed }) => [
-      styles.countBox,
-      pressed && onPress && { opacity: 0.7 },
-    ]}
-  >
-    <Text style={styles.countValue}>{value}</Text>
-    <Text style={styles.countLabel}>{label}</Text>
-  </Pressable>
-);
+}> = ({ label, value, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.countBox,
+        pressed && onPress && { opacity: 0.7 },
+      ]}
+    >
+      <Text style={styles.countValue}>{value}</Text>
+      <Text style={styles.countLabel}>{label}</Text>
+    </Pressable>
+  );
+};
 
 const StatCell: React.FC<{
   label: string;
   value: string;
   highlight?: boolean;
-}> = ({ label, value, highlight }) => (
-  <View style={styles.statCell}>
-    <Text style={[styles.statValue, highlight && { color: Colors.accent }]}>
-      {value}
-    </Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+}> = ({ label, value, highlight }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.statCell}>
+      <Text style={[styles.statValue, highlight && { color: c.accent }]}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -342,15 +352,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
@@ -360,15 +370,15 @@ const styles = StyleSheet.create({
 
   hero: { alignItems: 'center', marginBottom: 22 },
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
     marginTop: 14,
   },
-  secondary: { color: Colors.textMuted, fontSize: 13, marginTop: 4 },
+  secondary: { color: c.textMuted, fontSize: 13, marginTop: 4 },
   bio: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 12,
@@ -381,9 +391,9 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
   },
   photoImg: { width: '100%', height: '100%' },
   photoBadge: {
@@ -393,13 +403,13 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   photoBadgeTxt: {
     fontFamily: Fonts.mono,
-    color: Colors.textInverse,
+    color: c.textInverse,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -408,11 +418,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 9999,
-    backgroundColor: Colors.accent15,
+    backgroundColor: c.accent15,
   },
   mePillText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 10,
     letterSpacing: 1.5,
     fontWeight: '700',
@@ -423,20 +433,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
   },
   countValue: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
   },
   countLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1,
     marginTop: 5,
@@ -447,44 +457,44 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontWeight: '500',
     marginTop: 22,
     marginBottom: 10,
   },
   statsCard: {
     flexDirection: 'row',
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingVertical: 16,
   },
   statCell: { flex: 1, alignItems: 'center' },
   statValue: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
   },
   statLabel: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     letterSpacing: 1,
     marginTop: 6,
     textTransform: 'uppercase',
   },
-  statDivider: { width: 1, backgroundColor: Colors.hair, marginVertical: 4 },
+  statDivider: { width: 1, backgroundColor: c.hair, marginVertical: 4 },
 
   clubCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -492,19 +502,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clubMeta: { color: Colors.textMuted, fontSize: 14, flex: 1 },
+  clubMeta: { color: c.textMuted, fontSize: 14, flex: 1 },
 
   teamsCard: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   teamRow: {
@@ -515,17 +525,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  teamRowDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
+  teamRowDivider: { borderBottomWidth: 1, borderColor: c.hair },
   teamNameTxt: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   teamRoleTxt: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 0.5,
     textTransform: 'uppercase',

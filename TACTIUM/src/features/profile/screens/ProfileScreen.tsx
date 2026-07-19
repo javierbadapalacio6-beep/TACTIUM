@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useFocusEffect, useNavigation, useScrollToTop } from '@react-navigation
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { IconMenu, IconSearch } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
@@ -48,6 +48,8 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export const ProfileScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -130,7 +132,7 @@ export const ProfileScreen = () => {
               pressed && { opacity: 0.7 },
             ]}
           >
-            <IconSearch size={22} color={Colors.text} />
+            <IconSearch size={22} color={c.text} />
           </Pressable>
           <NotificationBell />
           <Pressable
@@ -142,7 +144,7 @@ export const ProfileScreen = () => {
               pressed && { opacity: 0.7 },
             ]}
           >
-            <IconMenu size={22} color={Colors.text} />
+            <IconMenu size={22} color={c.text} />
           </Pressable>
         </View>
       </View>
@@ -231,12 +233,37 @@ export const ProfileScreen = () => {
         {photos.length > 0 ? (
           <View style={styles.grid}>
             {photos.map((ph) => (
-              <Image
+              <Pressable
                 key={ph.match_id}
-                source={{ uri: ph.photo_url }}
-                style={styles.gridItem}
-                resizeMode="cover"
-              />
+                onPress={() =>
+                  navigation.navigate('CasualMatchDetail', {
+                    matchId: ph.match_id,
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.gridItem,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Image
+                  source={{ uri: ph.photo_url }}
+                  style={styles.gridImg}
+                  resizeMode="cover"
+                />
+                {ph.positive !== null ? (
+                  <View style={styles.gridResult}>
+                    <View
+                      style={[
+                        styles.gridResultDot,
+                        { backgroundColor: ph.positive ? c.accent : c.error },
+                      ]}
+                    />
+                    <Text style={styles.gridResultText}>
+                      {ph.positive ? 'GANADO' : 'PERDIDO'}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
             ))}
           </View>
         ) : (
@@ -270,24 +297,28 @@ const StatColumn: React.FC<{
   value: number;
   label: string;
   onPress?: () => void;
-}> = ({ value, label, onPress }) => (
-  <Pressable
-    onPress={onPress}
-    disabled={!onPress}
-    accessibilityRole={onPress ? 'button' : undefined}
-    accessibilityLabel={`${value} ${label}`}
-    style={({ pressed }) => [
-      styles.statColumn,
-      pressed && onPress && { opacity: 0.7 },
-    ]}
-  >
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </Pressable>
-);
+}> = ({ value, label, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={`${value} ${label}`}
+      style={({ pressed }) => [
+        styles.statColumn,
+        pressed && onPress && { opacity: 0.7 },
+      ]}
+    >
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </Pressable>
+  );
+};
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     paddingHorizontal: H_PADDING,
     flexDirection: 'row',
@@ -297,7 +328,7 @@ const styles = StyleSheet.create({
   },
   headerName: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.4,
@@ -307,9 +338,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -329,27 +360,27 @@ const styles = StyleSheet.create({
   statColumn: { alignItems: 'center', flex: 1 },
   statValue: {
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
   statLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
 
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
     marginTop: 16,
   },
-  role: { color: Colors.textMuted, fontSize: 13, marginTop: 3 },
+  role: { color: c.textMuted, fontSize: 13, marginTop: 3 },
   bio: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
@@ -364,14 +395,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pillBtnLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.1,
@@ -386,16 +417,16 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   chipLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.1,
@@ -412,7 +443,36 @@ const styles = StyleSheet.create({
     width: GRID_ITEM,
     height: GRID_ITEM,
     borderRadius: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
+    overflow: 'hidden',
+  },
+  gridImg: {
+    width: '100%',
+    height: '100%',
+  },
+  gridResult: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  gridResultDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  gridResultText: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.mono,
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
   emptyGrid: {
     marginTop: 28,
@@ -421,7 +481,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyGridText: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 13,
     textAlign: 'center',
     paddingHorizontal: 24,

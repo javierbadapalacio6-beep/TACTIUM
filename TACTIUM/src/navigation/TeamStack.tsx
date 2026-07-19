@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { TeamScreen } from '@features/team/screens/TeamScreen';
 
 // Stack wrapper de un solo screen para Team. La razón NO es que necesitemos
@@ -17,18 +17,23 @@ import { TeamScreen } from '@features/team/screens/TeamScreen';
 
 const Stack = createNativeStackNavigator();
 
-export const TeamStack = () => (
-  <Stack.Navigator
-    screenOptions={{
+export const TeamStack = () => {
+  const c = useColors();
+  const screenOptions = useMemo(
+    () => ({
       headerShown: false,
-      contentStyle: { backgroundColor: Colors.background },
+      contentStyle: { backgroundColor: c.background },
       // `animation: 'none'`: el TabNavigator ya hace fade entre tabs, no
       // duplicamos aquí (dos fades superpuestos en nav rápida dejan un
       // frame opacity 0). El wrapper Stack sigue cumpliendo su función
       // (absorber el mount cycle) sin animación propia.
-      animation: 'none',
-    }}
-  >
-    <Stack.Screen name="TeamRoot" component={TeamScreen} />
-  </Stack.Navigator>
-);
+      animation: 'none' as const,
+    }),
+    [c],
+  );
+  return (
+    <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen name="TeamRoot" component={TeamScreen} />
+    </Stack.Navigator>
+  );
+};

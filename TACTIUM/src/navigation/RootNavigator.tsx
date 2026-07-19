@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
 
@@ -25,6 +25,7 @@ import type { RootStackParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
+  const c = useColors();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const team = useTeamStore((s) => s.team);
   const isOnboarding = useTeamStore((s) => s.isOnboarding);
@@ -32,14 +33,23 @@ export const RootNavigator = () => {
   const hasLoadedOnce = useTeamStore((s) => s.hasLoadedOnce);
   const isLoading = useTeamStore((s) => s.isLoading);
 
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: c.background },
+      animation: 'fade' as const,
+    }),
+    [c],
+  );
+
   // Mientras esté autenticado pero el teamStore no haya terminado su primera
   // carga, mostramos loader. Si solo comprobamos `isLoading` aquí, hay un
   // frame inicial (justo tras el login) en el que team=null e isLoading=false
   // todavía, y el RootNavigator pinta OnboardingFlow → flash visual.
   if (isAuthenticated && !hasLoadedOnce) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator color={Colors.accent} size="large" />
+      <View style={[styles.loader, { backgroundColor: c.background }]}>
+        <ActivityIndicator color={c.accent} size="large" />
       </View>
     );
   }
@@ -49,13 +59,7 @@ export const RootNavigator = () => {
 
   return (
     <>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: Colors.background },
-          animation: 'fade',
-        }}
-      >
+      <Stack.Navigator screenOptions={screenOptions}>
         {!isAuthenticated ? (
           <Stack.Screen name="AuthFlow" component={AuthStack} />
         ) : !showMainTabs ? (
@@ -163,6 +167,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.background,
   },
 });

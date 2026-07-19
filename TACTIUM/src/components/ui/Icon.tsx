@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { Path, Circle, Line, Rect } from 'react-native-svg';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 
 interface IconProps {
   size?: number;
@@ -10,12 +10,19 @@ interface IconProps {
 }
 
 const make =
-  (defaultSize: number, paths: (p: Required<IconProps>) => React.ReactNode) =>
-  ({ size = defaultSize, color = Colors.text, strokeWidth = 1.6 }: IconProps) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {paths({ size, color, strokeWidth })}
-    </Svg>
-  );
+  (
+    defaultSize: number,
+    paths: (p: Required<IconProps>, c: Palette) => React.ReactNode,
+  ) =>
+  ({ size = defaultSize, color, strokeWidth = 1.6 }: IconProps) => {
+    const c = useColors();
+    const resolvedColor = color ?? c.text;
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        {paths({ size, color: resolvedColor, strokeWidth }, c)}
+      </Svg>
+    );
+  };
 
 export const IconBack = make(20, ({ color, strokeWidth }) => (
   <Path
@@ -152,6 +159,16 @@ export const IconHome = make(22, ({ color, strokeWidth }) => (
   </>
 ));
 
+export const IconPlane = make(20, ({ color, strokeWidth }) => (
+  <Path
+    d="M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8 4.8 6.2a.5.5 0 0 0-.5.8L8 11l-2 2-2.5-.5a.5.5 0 0 0-.5.8L5 15l1.7 1.7 1.7 1.7 1.7-1.5a.5.5 0 0 0 .8-.5L11 16l2-2 3.2 3.7a.5.5 0 0 0 .8-.5z"
+    stroke={color}
+    strokeWidth={strokeWidth}
+    strokeLinejoin="round"
+    strokeLinecap="round"
+  />
+));
+
 export const IconUser = make(22, ({ color, strokeWidth }) => (
   <>
     <Circle cx="12" cy="9" r="3.6" stroke={color} strokeWidth={strokeWidth} />
@@ -175,7 +192,7 @@ export const IconEye = make(18, ({ color, strokeWidth }) => (
   </>
 ));
 
-export const IconEyeOff = make(18, ({ color, strokeWidth }) => (
+export const IconEyeOff = make(18, ({ color, strokeWidth }, c) => (
   <>
     <Path
       d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"
@@ -183,7 +200,7 @@ export const IconEyeOff = make(18, ({ color, strokeWidth }) => (
       strokeWidth={strokeWidth}
     />
     <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={strokeWidth} />
-    <Line x1="3" y1="3" x2="21" y2="21" stroke={Colors.accent} strokeWidth={strokeWidth + 0.2} />
+    <Line x1="3" y1="3" x2="21" y2="21" stroke={c.accent} strokeWidth={strokeWidth + 0.2} />
   </>
 ));
 
@@ -231,6 +248,27 @@ export const IconRacket = make(20, ({ color, strokeWidth }) => (
     <Circle cx="12" cy="7" r="0.9" fill={color} />
     <Circle cx="10" cy="10" r="0.9" fill={color} />
     <Circle cx="19" cy="6" r="2.4" stroke={color} strokeWidth={strokeWidth} />
+  </>
+));
+
+/** Pelota de tenis/pádel: icono del amistoso (partido entre amigos). */
+export const IconBall = make(20, ({ color, strokeWidth }) => (
+  <>
+    <Circle cx="12" cy="12" r="8.5" stroke={color} strokeWidth={strokeWidth} />
+    <Path
+      d="M5.3 5.3C8.6 8 8.6 16 5.3 18.7"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      fill="none"
+    />
+    <Path
+      d="M18.7 5.3C15.4 8 15.4 16 18.7 18.7"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      fill="none"
+    />
   </>
 ));
 

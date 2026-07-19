@@ -16,7 +16,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, useIsDark } from '@core/theme';
 import {
   IconHome,
   IconAnalytics,
@@ -43,11 +43,12 @@ const TabIcon: React.FC<{
   Icon: React.ComponentType<{ size?: number; color?: string }>;
   focused: boolean;
 }> = ({ Icon, focused }) => {
+  const c = useColors();
   return (
     <View style={styles.icon}>
       <Icon
         size={22}
-        color={focused ? Colors.tabBarActive : Colors.tabBarInactive}
+        color={focused ? c.tabBarActive : c.tabBarInactive}
       />
     </View>
   );
@@ -66,6 +67,7 @@ const AnimatedTabButton: React.FC<BottomTabBarButtonProps> = ({
   accessibilityState,
   testID,
 }) => {
+  const c = useColors();
   const focused = accessibilityState?.selected ?? false;
   const scale = useSharedValue(1);
   const haloOpacity = useSharedValue(focused ? 1 : 0);
@@ -118,7 +120,17 @@ const AnimatedTabButton: React.FC<BottomTabBarButtonProps> = ({
       android_ripple={null}
       style={styles.tabButton}
     >
-      <Animated.View style={[styles.halo, haloStyle]} pointerEvents="none" />
+      <Animated.View
+        style={[
+          styles.halo,
+          {
+            backgroundColor: c.accent + '22', // ~13% alpha
+            borderColor: c.accent + '55',
+          },
+          haloStyle,
+        ]}
+        pointerEvents="none"
+      />
       <Animated.View style={[styles.tabButtonInner, animStyle]}>
         {children as React.ReactNode}
       </Animated.View>
@@ -158,6 +170,7 @@ const HIDE_TAB_BAR_ON: ReadonlySet<string> = new Set([
 
 const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
   const insets = useSafeAreaInsets();
+  const isDark = useIsDark();
 
   const focusedTab = props.state.routes[props.state.index];
   const focusedRouteName = getFocusedRouteNameFromRoute(focusedTab);
@@ -177,11 +190,30 @@ const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
     >
       {/* Pill con clipping para que el blur respete las esquinas
           redondeadas. Sombra externa va aparte (debajo). */}
-      <View style={styles.shadowWrap}>
+      <View
+        style={[
+          styles.shadowWrap,
+          !isDark && { shadowOpacity: 0.14, shadowRadius: 20 },
+        ]}
+      >
         <View style={styles.glassPill}>
-          <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, styles.glassTint]} />
-          <View style={[StyleSheet.absoluteFill, styles.glassBorder]} />
+          <BlurView
+            intensity={70}
+            tint={isDark ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              isDark ? styles.glassTint : styles.glassTintLight,
+            ]}
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              isDark ? styles.glassBorder : styles.glassBorderLight,
+            ]}
+          />
           <BottomTabBar {...props} />
         </View>
       </View>
@@ -190,6 +222,7 @@ const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
 };
 
 export const TabNavigator = () => {
+  const c = useColors();
   const activeRole = useTeamStore((s) => s.activeRole);
   const hasTeam = useTeamStore((s) => !!s.team);
 
@@ -198,8 +231,8 @@ export const TabNavigator = () => {
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.tabBarActive,
-        tabBarInactiveTintColor: Colors.tabBarInactive,
+        tabBarActiveTintColor: c.tabBarActive,
+        tabBarInactiveTintColor: c.tabBarInactive,
         // El BottomTabBar interno se renderiza encima del pill cristal.
         // Lo dejamos transparente para que se vea el blur a través.
         tabBarStyle: styles.innerTabBar,
@@ -370,10 +403,18 @@ const styles = StyleSheet.create({
   glassTint: {
     backgroundColor: 'rgba(7,18,15,0.42)',
   },
+  glassTintLight: {
+    backgroundColor: 'rgba(255,255,255,0.62)',
+  },
   glassBorder: {
     borderRadius: 32,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
+  },
+  glassBorderLight: {
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(14,26,20,0.10)',
   },
   item: {
     paddingTop: 0,
@@ -403,9 +444,7 @@ const styles = StyleSheet.create({
     left: 8,
     right: 8,
     borderRadius: 18,
-    backgroundColor: Colors.accent + '22', // ~13% alpha
     borderWidth: 1,
-    borderColor: Colors.accent + '55',
   },
   label: {
     fontSize: 10,

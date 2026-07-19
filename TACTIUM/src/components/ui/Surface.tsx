@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, type ViewProps, type ViewStyle } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
 
 interface Props extends ViewProps {
@@ -15,11 +15,12 @@ export const Surface: React.FC<Props> = ({
   children,
   ...rest
 }) => {
+  const c = useColors();
   const base: ViewStyle = {
-    backgroundColor: variant === 'flat' ? 'transparent' : Colors.bgCard,
+    backgroundColor: variant === 'flat' ? 'transparent' : c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: variant === 'raised' ? Colors.hairStrong : Colors.hair,
+    borderColor: variant === 'raised' ? c.hairStrong : c.hair,
   };
   return (
     <View style={[base, style as ViewStyle]} {...rest}>

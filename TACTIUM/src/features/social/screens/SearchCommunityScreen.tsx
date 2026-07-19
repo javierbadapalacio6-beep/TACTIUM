@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Input, IconBack, IconSearch, IconChevron } from '@components/ui';
 import {
@@ -22,6 +22,8 @@ import { CommunityAvatar } from '@features/social/components/social-ui';
 import type { RootStackParamList } from '@navigation/types';
 
 export const SearchCommunityScreen = () => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -74,7 +76,7 @@ export const SearchCommunityScreen = () => {
           accessibilityRole="button"
           accessibilityLabel="Volver"
         >
-          <IconBack size={20} color={Colors.text} />
+          <IconBack size={20} color={c.text} />
         </Pressable>
         <Text style={styles.eyebrow}>COMUNIDAD</Text>
         <View style={{ width: 38 }} />
@@ -90,7 +92,7 @@ export const SearchCommunityScreen = () => {
           autoCorrect={false}
           returnKeyType="search"
           containerStyle={{ marginBottom: 0 }}
-          rightSlot={<IconSearch size={16} color={Colors.textMuted} />}
+          rightSlot={<IconSearch size={16} color={c.textMuted} />}
         />
       </View>
 
@@ -104,7 +106,7 @@ export const SearchCommunityScreen = () => {
       >
         {loading ? (
           <View style={styles.state}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={c.accent} />
           </View>
         ) : results.length > 0 ? (
           <View style={styles.card}>
@@ -139,7 +141,7 @@ export const SearchCommunityScreen = () => {
                     <Text style={styles.followingPillText}>SIGUIENDO</Text>
                   </View>
                 ) : null}
-                <IconChevron size={14} color={Colors.textFaint} />
+                <IconChevron size={14} color={c.textFaint} />
               </Pressable>
             ))}
           </View>
@@ -162,8 +164,8 @@ export const SearchCommunityScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -175,15 +177,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 3,
     fontWeight: '500',
@@ -191,19 +193,19 @@ const styles = StyleSheet.create({
   searchWrap: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 },
   list: { paddingHorizontal: 20, paddingTop: 8 },
   state: { paddingTop: 48, alignItems: 'center', gap: 6 },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
   emptyHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
     paddingHorizontal: 24,
     lineHeight: 19,
   },
   card: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     overflow: 'hidden',
   },
   row: {
@@ -213,20 +215,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  rowDivider: { borderBottomWidth: 1, borderColor: Colors.hair },
-  name: { color: Colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
-  meta: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+  rowDivider: { borderBottomWidth: 1, borderColor: c.hair },
+  name: { color: c.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
+  meta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
   followingPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
   },
   followingPillText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1,

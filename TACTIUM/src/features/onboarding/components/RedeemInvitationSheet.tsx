@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet } from '@components/ui';
@@ -23,6 +23,8 @@ export const RedeemInvitationSheet: React.FC<{
   onClose: () => void;
   onRedeemed?: () => void;
 }> = ({ open, onClose, onRedeemed }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const loadTeam = useTeamStore((s) => s.loadForUser);
@@ -84,7 +86,7 @@ export const RedeemInvitationSheet: React.FC<{
             setCode(t.replace(/[^A-Za-z0-9]/g, '').slice(0, 8))
           }
           placeholder="XK8R9P3M"
-          placeholderTextColor={Colors.textFaint}
+          placeholderTextColor={c.textFaint}
           autoCapitalize="characters"
           autoCorrect={false}
           autoFocus
@@ -113,16 +115,16 @@ export const RedeemInvitationSheet: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   eyebrow: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
@@ -130,7 +132,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 16,
@@ -139,17 +141,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     paddingHorizontal: 14,
     paddingVertical: 16,
   },
   inputField: {
     flex: 1,
     fontFamily: Fonts.mono,
-    color: Colors.text,
+    color: c.text,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: 4,
@@ -158,18 +160,18 @@ const styles = StyleSheet.create({
   },
   inputCounter: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 1,
   },
   cta: {
     height: 54,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 14,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },

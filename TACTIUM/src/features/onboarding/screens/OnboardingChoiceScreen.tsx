@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 
-import { Colors } from '@core/theme/colors';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
@@ -37,6 +37,8 @@ import type { OnboardingStackScreenProps } from '@navigation/types';
 export const OnboardingChoiceScreen = ({
   navigation,
 }: OnboardingStackScreenProps<'OnboardingChoice'>) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const signOut = useAuthStore((s) => s.signOut);
   const clubs = useClubStore((s) => s.clubs);
@@ -272,7 +274,10 @@ const ChoiceCard: React.FC<{
   // de un precio "desde X" en el subtítulo que no aplica a todos los modos.
   priceLabel?: string;
   onPress: () => void;
-}> = ({ title, description, badge, badgeAccent, priceLabel, onPress }) => (
+}> = ({ title, description, badge, badgeAccent, priceLabel, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
@@ -282,15 +287,15 @@ const ChoiceCard: React.FC<{
         style={[
           styles.cardBadge,
           badgeAccent && {
-            backgroundColor: Colors.accent10,
-            borderColor: Colors.accent50,
+            backgroundColor: c.accent10,
+            borderColor: c.accent50,
           },
         ]}
       >
         <Text
           style={[
             styles.cardBadgeText,
-            { color: badgeAccent ? Colors.accent : Colors.textMuted },
+            { color: badgeAccent ? c.accent : c.textMuted },
           ]}
         >
           {badge}
@@ -308,12 +313,13 @@ const ChoiceCard: React.FC<{
       <Text style={styles.cardCtaArrow}>→</Text>
     </View>
   </Pressable>
-);
+  );
+};
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -322,7 +328,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   brand: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 2,
@@ -341,12 +347,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
-    color: Colors.accent,
+    color: c.accent,
     fontWeight: '500',
     marginBottom: 10,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '600',
     letterSpacing: -0.7,
@@ -354,7 +360,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   lede: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 14,
@@ -367,24 +373,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     marginBottom: 24,
   },
   trialPillDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Colors.accent,
-    shadowColor: Colors.accent,
+    backgroundColor: c.accent,
+    shadowColor: c.accent,
     shadowOpacity: 0.8,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
   trialPillText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.4,
@@ -401,11 +407,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.hairStrong,
+    backgroundColor: c.hairStrong,
   },
   dividerText: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     letterSpacing: 2,
     fontWeight: '500',
@@ -414,16 +420,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     borderStyle: 'dashed',
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   freeBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: Colors.accent10,
+    backgroundColor: c.accent10,
     borderWidth: 1,
-    borderColor: Colors.accent40,
+    borderColor: c.accent40,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 5,
@@ -431,19 +437,19 @@ const styles = StyleSheet.create({
   },
   freeBadgeText: {
     fontFamily: Fonts.mono,
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1,
   },
   redeemTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   redeemHint: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 3,
@@ -453,10 +459,10 @@ const styles = StyleSheet.create({
   // pantallas pequeñas no solapen con el bloque "código de invitación"
   // ni el footnote inferior.
   card: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.hairStrong,
+    borderColor: c.hairStrong,
     padding: 14,
   },
   cardHeader: {
@@ -469,9 +475,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     height: 20,
     borderRadius: 5,
-    backgroundColor: Colors.bgRaised,
+    backgroundColor: c.bgRaised,
     borderWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -482,20 +488,20 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   cardTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.3,
     marginBottom: 4,
   },
   cardDesc: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     lineHeight: 17,
   },
   cardPrice: {
     fontFamily: Fonts.mono,
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.4,
@@ -505,19 +511,19 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderColor: Colors.hair,
+    borderColor: c.hair,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   cardCtaText: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: -0.1,
   },
   cardCtaArrow: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -527,12 +533,12 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   footnote: {
-    color: Colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     textAlign: 'center',
   },
   exitLink: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },

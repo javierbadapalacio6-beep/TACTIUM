@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
@@ -14,7 +14,8 @@ import { AnimatedSplash } from './src/components/brand/AnimatedSplash';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 import { RootNavigator } from './src/navigation';
-import { Colors } from './src/core/theme/colors';
+import { Colors, type Palette } from './src/core/theme/colors';
+import { useColors, useResolvedScheme } from './src/core/theme/useColors';
 import { useAuthStore } from './src/store/authStore';
 import { useTeamStore } from './src/store/teamStore';
 import { useClubStore } from './src/store/clubStore';
@@ -26,19 +27,21 @@ import { maybePromptForPush } from './src/core/push';
 import { ToastHost, OfflineBanner, ResponsiveFrame } from './src/components/ui';
 import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
 
-const navTheme = {
-  ...DefaultTheme,
-  dark: true,
-  colors: {
-    ...DefaultTheme.colors,
-    background: Colors.background,
-    card: Colors.bgRaised,
-    text: Colors.text,
-    border: Colors.hair,
-    primary: Colors.accent,
-    notification: Colors.accent,
-  },
-};
+function makeNavTheme(c: Palette, isDark: boolean) {
+  return {
+    ...DefaultTheme,
+    dark: isDark,
+    colors: {
+      ...DefaultTheme.colors,
+      background: c.background,
+      card: c.bgRaised,
+      text: c.text,
+      border: c.hair,
+      primary: c.accent,
+      notification: c.accent,
+    },
+  };
+}
 
 export default function App() {
   // Overlay del splash animado: visible hasta que su animación de salida
@@ -68,6 +71,15 @@ export default function App() {
   const loadNotifications = useNotificationStore((s) => s.load);
   const subscribeNotifications = useNotificationStore((s) => s.subscribe);
   const resetNotifications = useNotificationStore((s) => s.reset);
+
+  // Tema (claro/oscuro/sistema). navTheme y StatusBar reaccionan al modo
+  // elegido en Ajustes. Las pantallas migradas usan useColors() directamente.
+  const c = useColors();
+  const scheme = useResolvedScheme();
+  const navTheme = useMemo(
+    () => makeNavTheme(c, scheme === 'dark'),
+    [c, scheme],
+  );
 
   useEffect(() => {
     hydrateAuth();
@@ -179,17 +191,17 @@ export default function App() {
   }, [activeTeamId, subscribePlayersRealtime, unsubscribePlayersRealtime]);
 
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <GestureHandlerRootView style={[styles.root, { backgroundColor: c.background }]}>
       <SafeAreaProvider>
         <NavigationContainer theme={navTheme}>
-          <StatusBar style="light" />
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
           {/* ResponsiveFrame: en teléfono es transparente; en tablet/iPad
               centra toda la app en una columna de ancho máximo sobre el
               fondo de marca para que los layouts no se estiren. */}
           <ResponsiveFrame>
             {isHydrating ? (
-              <View style={styles.loader}>
-                <ActivityIndicator color={Colors.accent} size="large" />
+              <View style={[styles.loader, { backgroundColor: c.background }]}>
+                <ActivityIndicator color={c.accent} size="large" />
               </View>
             ) : (
               <RootNavigator />
