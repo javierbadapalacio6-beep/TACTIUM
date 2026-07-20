@@ -93,6 +93,17 @@ interface TeamState {
   /** Borra un equipo (cascada) y recarga teams. */
   deleteTeam: (teamId: string) => Promise<void>;
 
+  /**
+   * Actualiza ajustes del equipo activo (categoría, grupo, nombre) y refresca
+   * `team` + `teams` en memoria sin recargar todo. Útil para corregir datos
+   * que se pusieron mal al crear o completar el grupo cuando ya se sorteó.
+   */
+  updateTeamSettings: (patch: {
+    name?: string;
+    category?: string | null;
+    group_name?: string | null;
+  }) => Promise<void>;
+
   addPlayer: (data: {
     name: string;
     pts: number;
@@ -549,6 +560,16 @@ export const useTeamStore = create<TeamState>()(
         await TeamsApi.coverTeam(teamId);
         // Recargamos para traer el flag `covered` actualizado a todos los teams.
         await get().loadForUser();
+      },
+
+      updateTeamSettings: async (patch) => {
+        const team = get().team;
+        if (!team) return;
+        const updated = await TeamsApi.updateTeam(team.id, patch);
+        set((s) => ({
+          team: s.team?.id === updated.id ? updated : s.team,
+          teams: s.teams.map((t) => (t.id === updated.id ? updated : t)),
+        }));
       },
 
       deleteTeam: async (teamId) => {

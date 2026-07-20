@@ -25,8 +25,9 @@ import {
   IconShare,
   BottomSheet,
   ScanSheet,
-  Toggle, IconCamera } from '@components/ui';
+  Toggle, IconCamera, IconPencil } from '@components/ui';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
+import { EditTeamSheet } from '@features/team/components/EditTeamSheet';
 import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
 import { FCP_ENABLED } from '@core/config/featureFlags';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
@@ -63,6 +64,7 @@ export const TeamScreen = () => {
   const [scanning, setScanning] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [importingFcp, setImportingFcp] = useState(false);
+  const [editingTeam, setEditingTeam] = useState(false);
   // Reverse trial: invitar jugadores con código es premium → gate al paywall.
   const gate = usePremiumGate();
   const openInvite = gate(() => setInviting(true), 'invite_create');
@@ -127,10 +129,28 @@ export const TeamScreen = () => {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.eyebrow} numberOfLines={1}>
-          {[team?.name, team?.category].filter(Boolean).join(' · ').toUpperCase() ||
-            'EQUIPO'}
-        </Text>
+        <Pressable
+          onPress={() => setEditingTeam(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Editar categoría y grupo del equipo"
+          style={({ pressed }) => [
+            styles.eyebrowBtn,
+            pressed && { opacity: 0.6 },
+          ]}
+        >
+          <Text style={styles.eyebrow} numberOfLines={1}>
+            {[
+              team?.name,
+              team?.category,
+              team?.group_name ? `Grupo ${team.group_name}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+              .toUpperCase() || 'EQUIPO'}
+          </Text>
+          <IconPencil size={12} color={c.textFaint} />
+        </Pressable>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
             onPress={openInvite}
@@ -427,6 +447,11 @@ export const TeamScreen = () => {
         teamId={team?.id ?? null}
         teamName={team?.name ?? null}
         onClose={() => setInviting(false)}
+      />
+
+      <EditTeamSheet
+        open={editingTeam}
+        onClose={() => setEditingTeam(false)}
       />
     </View>
   );
@@ -847,7 +872,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 22,
   },
+  eyebrowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+    marginRight: 8,
+  },
   eyebrow: {
+    flexShrink: 1,
     fontFamily: Fonts.mono,
     fontSize: 11,
     letterSpacing: 3,
