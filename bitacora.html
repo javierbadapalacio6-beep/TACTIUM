@@ -248,7 +248,7 @@
 const LOG = [
   {
     date: "2026-07-19",
-    title: "🎨 Perfil rediseñado estilo Instagram (escaparate + Ajustes detrás de menú) con feed de novedades, perfil público ampliado y bio/galería — y arranque del MODO CLARO: sistema de tema dinámico en toda la app. Todo en la rama feature/perfiles-sociales (aún NO en producción, sin OTA).",
+    title: "🎨 Perfil rediseñado estilo Instagram (escaparate + Ajustes detrás de menú) con feed de novedades, perfil público ampliado y bio/galería — y MODO CLARO: sistema de tema dinámico en toda la app. Publicado por OTA a production (runtime 1.2.0) el 2026-07-20 y mergeado a main.",
     changes: [
       { type: "feat", text: "<strong>📸 Perfil rediseñado estilo Instagram</strong>. El Perfil pasa a ser un <strong>escaparate</strong> (foto, nombre de usuario, bio, seguidores/siguiendo, equipos y galería de fotos de amistosos) y los <strong>Ajustes</strong> se esconden detrás del menú (⋯) para no ensuciar la vista pública. En la cabecera, la <strong>lupa (buscar comunidad)</strong> va junto a la campana; retirado el chip «Novedades»." },
 
@@ -260,7 +260,9 @@ const LOG = [
 
       { type: "decision", text: "<strong>Qué queda OSCURO a propósito</strong>: el splash de marca (<code>AnimatedSplash</code>) y las tarjetas que se exportan al compartir (<code>PhotoShareCard</code>, <code>LineupShareCard</code>) — son imágenes de marca, no interfaz. Pendientes de decisión fina: la píldora flotante de la tab bar y el picker nativo de fecha/hora." },
 
-      { type: "chore", text: "<strong>Sin merge ni OTA todavía</strong>. Todo (rediseño social + modo claro) vive en <code>feature/perfiles-sociales</code>; se validará en build dev/preview antes de mergear a <code>main</code> y publicar." },
+      { type: "fix", text: "<strong>🐛 Pulidos de modo claro + bugs de nombre corto (misma tanda, previo al OTA)</strong>. Helper <code>withAlpha()</code> (hex y rgba) → el chip «Pendiente» de la jornada salía oscuro en claro porque <code>textMuted/textFaint</code> son <code>rgba()</code> y el sufijo alfa hex los rompía. Jornada: hora resaltada, píldora <strong>LOCAL/VISITANTE con icono</strong> (casita/avión <code>IconPlane</code>) y tratamiento de estado. Alineación: cada pareja muestra su número (<strong>Pareja Nº2, Nº3…</strong>), la 1 marca «· TITULAR». Perfil: galería <strong>clicable → detalle del partido</strong> con badge GANADO/PERDIDO. Ajustes: versión leída de <code>expoConfig</code> (1.2.0). Amistoso/entreno: usa el <strong>username (nombre corto)</strong> propio y del compañero vinculado (<code>fetchPlayers</code> trae <code>profile_username</code>); <strong>entreno solo plantilla</strong>, colegas cualquiera." },
+
+      { type: "chore", text: "<strong>📡 OTA a production (runtime 1.2.0) + merge a main — 2026-07-20</strong>. <code>eas update --branch production</code> (update group <code>3eb9570e</code>, iOS+Android) con TODA la rama: modo claro + rediseño social + estos fixes. Sin dependencias nativas nuevas (JS puro sobre <code>react-native-svg</code>/<code>expo-constants</code>/<code>expo-blur</code> ya presentes en el build 1.2.0). <code>feature/perfiles-sociales</code> mergeada a <code>main</code> (fast-forward) para que el histórico refleje producción." },
     ],
   },
   {
