@@ -247,6 +247,15 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-21",
+    title: "✏️ Editar categoría y grupo del equipo desde la app (por si te confundiste al crear o aún no está sorteada la liga) — publicado por OTA. + Refuerzo de la demo de Smash Pádel Club para la reunión (equipos con banquillo para el 5-parejas).",
+    changes: [
+      { type: "feat", text: "<strong>✏️ Editar categoría y grupo del equipo</strong>. En la pestaña <strong>Equipo</strong>, la cabecera (<code>nombre · categoría · Grupo X</code>) es ahora tocable (con lápiz) y abre una hoja <code>EditTeamSheet</code>: selector de <strong>categoría</strong> (1ª–10ª) y <strong>grupo</strong> (toggle «Sin grupos / Sí» + A/B/C/D). Resuelve dos casos: <strong>corregir</strong> datos mal puestos al crear el equipo y <strong>completar el grupo</strong> cuando se sortee la liga (muchos equipos se descargan la app antes del sorteo). Nueva acción de store <code>updateTeamSettings</code> → <code>updateTeam</code> (la RLS <code>teams_admin_update</code> ya deja al capitán/owner); refresca <code>team</code>+<code>teams</code> sin recargar. La cabecera muestra ahora también el grupo. Publicado por <strong>OTA a production</strong> (runtime 1.2.0, update group <code>ae892277</code>) y en <code>main</code>." },
+
+      { type: "chore", text: "<strong>🎾 Refuerzo de la demo para Smash Pádel Club (reunión Cantabria)</strong>. La liga del club es de <strong>5 parejas por partido</strong> → la alineación son 10 titulares. Subidos los roster para que haya banquillo real y el generador de alineación luzca: <strong>Smash Masculino A 10 → 14</strong> jugadores y <strong>Smash Masculino B 6 → 12</strong> (todos disponibles). Nombres españoles, puntos en escalera y mezcla Drive/Revés/Ambos, coherentes con los existentes." },
+    ],
+  },
+  {
     date: "2026-07-19",
     title: "🎨 Perfil rediseñado estilo Instagram (escaparate + Ajustes detrás de menú) con feed de novedades, perfil público ampliado y bio/galería — y MODO CLARO: sistema de tema dinámico en toda la app. Publicado por OTA a production (runtime 1.2.0) el 2026-07-20 y mergeado a main.",
     changes: [
