@@ -23,7 +23,7 @@ import * as LineupVariantsApi from '@core/services/lineupVariants';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
-import { useTeamStore, selectIsCaptain } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain, selectIsPlayer } from '@store/teamStore';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -73,9 +73,12 @@ export const ResultsScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
-  // Solo captain/club_admin pueden cargar resultados. Players ven la pantalla
-  // pero todo en read-only (defense in depth — RLS de Supabase ya rechazaría).
+  // Capitán Y jugadores del equipo pueden cargar el resultado (feedback Smash
+  // 2026-07-21: quitar trabajo al capitán). CERRAR el acta sigue siendo del
+  // capitán (botón en JornadaScreen + el RPC close_matchday exige team_admin).
+  // La RLS `match_results_member_*` permite escribir a cualquier team_member.
   const isCaptain = useTeamStore(selectIsCaptain);
+  const isPlayer = useTeamStore(selectIsPlayer);
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const matchdayId = route.params.matchdayId;
   const focus = route.params.focus ?? 0;
@@ -166,7 +169,7 @@ export const ResultsScreen = ({
 
   const closed = matchday?.status === 'finished';
   const started = matchday ? isMatchStarted(matchday) : false;
-  const canEdit = started && !closed && isCaptain;
+  const canEdit = started && !closed && (isCaptain || isPlayer);
 
   // ── Score agregado ──
   const teamScore = useMemo(() => {
