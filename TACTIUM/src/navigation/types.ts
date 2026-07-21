@@ -72,6 +72,8 @@ export type ProfileStackParamList = {
 export type ClubStackParamList = {
   ClubRoot: undefined;
   CreateTeamFromClub: undefined;
+  // Horarios de local del club (asignar hora a los partidos de local).
+  ClubSchedule: undefined;
   // Reusadas del HomeStack para que el ClubDashboard pueda navegar
   // directo a una jornada (ej. tap en card de últimos resultados) sin
   // cambiar de tab. Quedan read-only automáticamente para club_admin

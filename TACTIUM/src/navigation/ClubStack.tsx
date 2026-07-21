@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useColors } from '@core/theme';
 import { ClubDashboardScreen } from '@features/club/screens/ClubDashboardScreen';
 import { CreateTeamFromClubScreen } from '@features/club/screens/CreateTeamFromClubScreen';
+import { ClubScheduleScreen } from '@features/club/screens/ClubScheduleScreen';
 import { JornadaScreen } from '@features/home/screens/JornadaScreen';
 import { LineupScreen } from '@features/home/screens/LineupScreen';
 import { ResultsScreen } from '@features/home/screens/ResultsScreen';
@@ -29,6 +30,7 @@ export const ClubStack = () => {
         name="CreateTeamFromClub"
         component={CreateTeamFromClubScreen}
       />
+      <Stack.Screen name="ClubSchedule" component={ClubScheduleScreen} />
       {/* Jornada/Lineup/Results reusadas para navegar desde ClubDashboard
           a un partido concreto. Read-only para club_admin. */}
       <Stack.Screen name="Jornada" component={JornadaScreen} />

@@ -14,7 +14,7 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconPlus, IconPencil } from '@components/ui';
+import { IconPlus, IconPencil, IconChevron } from '@components/ui';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
@@ -26,6 +26,7 @@ import { clubCoverage } from '@core/entitlements/coverage';
 import { useTeamGate } from '@core/hooks/usePremiumGate';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
+import { getClubHomeSchedule } from '@core/services/clubSchedule';
 
 import type { ClubStackScreenProps } from '@navigation/types';
 
@@ -53,6 +54,7 @@ export const ClubDashboardScreen = ({
     teamName: string;
   } | null>(null);
   const [overviews, setOverviews] = useState<ClubTeamOverview[]>([]);
+  const [homeCount, setHomeCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -108,6 +110,15 @@ export const ClubDashboardScreen = ({
           if (!cancelled) console.warn('club overview', e);
         } finally {
           if (!cancelled) setLoading(false);
+        }
+        // Conteo de partidos de local pendientes de horario (best-effort).
+        if (club) {
+          try {
+            const sched = await getClubHomeSchedule(club.id);
+            if (!cancelled) setHomeCount(sched.length);
+          } catch (e) {
+            if (!cancelled) console.warn('club home schedule count', e);
+          }
         }
       })();
       return () => {
@@ -200,6 +211,30 @@ export const ClubDashboardScreen = ({
           Vista global del club. Las jornadas y los resultados los gestiona el
           capitán de cada equipo — desde aquí solo administras la estructura.
         </Text>
+
+        {/* Horarios de local: acceso destacado a la asignación de horas. */}
+        <Pressable
+          onPress={() => navigation.navigate('ClubSchedule')}
+          style={({ pressed }) => [
+            styles.scheduleCard,
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <View style={styles.scheduleIcon}>
+            <Text style={styles.scheduleEmoji}>🕒</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.scheduleTitle}>Horarios de local</Text>
+            <Text style={styles.scheduleSub} numberOfLines={1}>
+              {homeCount == null
+                ? 'Pon la hora de los partidos en casa'
+                : homeCount === 0
+                ? 'Sin partidos de local por jugar'
+                : `${homeCount} partido${homeCount === 1 ? '' : 's'} en casa por poner`}
+            </Text>
+          </View>
+          <IconChevron size={16} color={c.textFaint} />
+        </Pressable>
 
         {loading ? (
           <View style={styles.loaderBox}>
@@ -647,6 +682,29 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingHorizontal: 22,
     marginTop: 14,
   },
+  scheduleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 22,
+    marginTop: 16,
+    padding: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.accent25,
+  },
+  scheduleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.accent15,
+  },
+  scheduleEmoji: { fontSize: 20 },
+  scheduleTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+  scheduleSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
 
   sectionHeader: {
     flexDirection: 'row',

@@ -98,7 +98,7 @@ export async function registerForPushNotifications(
  * capitán y resuelve los destinatarios. No bloquea la acción del usuario.
  */
 export async function notifyPush(
-  type: 'matchday_created' | 'lineup_published',
+  type: 'matchday_created' | 'lineup_published' | 'schedule_set',
   matchdayId: string,
 ): Promise<void> {
   try {
