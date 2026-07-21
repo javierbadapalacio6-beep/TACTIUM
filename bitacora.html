@@ -248,6 +248,15 @@
 const LOG = [
   {
     date: "2026-07-21",
+    title: "🏸 Feedback de la reunión con Smash Pádel Club (Cantabria): 3 peticiones del gestor. Implementada y publicada por OTA la primera — los jugadores del equipo ya pueden meter el resultado (cerrar acta sigue siendo del capitán).",
+    changes: [
+      { type: "feat", text: "<strong>📝 Los jugadores del equipo pueden meter el resultado</strong> (no solo el capitán) — feedback del gestor de Smash para <strong>quitar trabajo al capitán</strong>. Decisiones: puede meterlo <strong>cualquier jugador vinculado</strong> del equipo; <strong>CERRAR el acta sigue siendo del capitán</strong> (el botón en la jornada está gateado y el RPC <code>close_matchday</code> ya exige team admin en servidor); siempre activo, sin interruptor. Servidor: migración que cambia las políticas de escritura de <code>match_results</code> de <code>is_team_admin</code> → <code>is_team_member</code> (aplicada en prod; solo afloja permisos → sin ventana de rotura porque el cliente seguía bloqueando hasta el OTA). Cliente: <code>ResultsScreen</code> <code>canEdit</code> pasa a <code>(isCaptain || isPlayer)</code>; el gate premium deja pasar al jugador (regla <em>player_free</em>). <strong>OTA a production</strong> (runtime 1.2.0, update group <code>d08361c9</code>)." },
+
+      { type: "docs", text: "<strong>🗒️ Recogido el resto del feedback de la reunión</strong> (pendiente de implementar): (2) que el <strong>club gestione los horarios de local</strong> — ver qué equipos juegan en casa por jornada y asignar la hora sincronizando club → capitán → jugador; (3) <strong>torneos</strong> creados y gestionados desde la app (grupos + eliminatorias, KO directo) con <strong>inscripción de la gente desde la app</strong>. Ninguno requiere build nativo (todo OTA + servidor). Guardado en memoria para roadmap." },
+    ],
+  },
+  {
+    date: "2026-07-21",
     title: "✏️ Editar categoría y grupo del equipo desde la app (por si te confundiste al crear o aún no está sorteada la liga) — publicado por OTA. + Refuerzo de la demo de Smash Pádel Club para la reunión (equipos con banquillo para el 5-parejas).",
     changes: [
       { type: "feat", text: "<strong>✏️ Editar categoría y grupo del equipo</strong>. En la pestaña <strong>Equipo</strong>, la cabecera (<code>nombre · categoría · Grupo X</code>) es ahora tocable (con lápiz) y abre una hoja <code>EditTeamSheet</code>: selector de <strong>categoría</strong> (1ª–10ª) y <strong>grupo</strong> (toggle «Sin grupos / Sí» + A/B/C/D). Resuelve dos casos: <strong>corregir</strong> datos mal puestos al crear el equipo y <strong>completar el grupo</strong> cuando se sortee la liga (muchos equipos se descargan la app antes del sorteo). Nueva acción de store <code>updateTeamSettings</code> → <code>updateTeam</code> (la RLS <code>teams_admin_update</code> ya deja al capitán/owner); refresca <code>team</code>+<code>teams</code> sin recargar. La cabecera muestra ahora también el grupo. Publicado por <strong>OTA a production</strong> (runtime 1.2.0, update group <code>ae892277</code>) y en <code>main</code>." },
