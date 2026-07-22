@@ -23,11 +23,14 @@ import {
   IconCalendar,
   IconTeam,
   IconUser,
+  IconTrophy,
 } from '@components/ui/Icon';
+import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { HomeStack } from './HomeStack';
 import { SeasonsStack } from './SeasonsStack';
 import { ClubStack } from './ClubStack';
 import { ClubTeamsStack } from './ClubTeamsStack';
+import { TournamentsStack } from './TournamentsStack';
 import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
@@ -284,6 +287,18 @@ export const TabNavigator = () => {
               ),
             }}
           />
+          {TOURNAMENTS_ENABLED ? (
+            <Tab.Screen
+              name="Tournaments"
+              component={TournamentsStack}
+              options={{
+                tabBarLabel: 'Torneos',
+                tabBarIcon: ({ focused }) => (
+                  <TabIcon Icon={IconTrophy} focused={focused} />
+                ),
+              }}
+            />
+          ) : null}
           <Tab.Screen
             name="Profile"
             component={ProfileStack}

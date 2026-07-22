@@ -320,6 +320,17 @@ export const IconGift = make(18, ({ color, strokeWidth }) => (
   </>
 ));
 
+/** Trofeo (torneos). */
+export const IconTrophy = make(20, ({ color, strokeWidth }) => (
+  <Path
+    d="M7 4h10v4a5 5 0 0 1-10 0V4zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v3M9 20h6M10 20v-1.5a2 2 0 0 1 4 0V20"
+    stroke={color}
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  />
+));
+
 /** Eslabón: jugador vinculado a su cuenta. */
 export const IconLink = make(14, ({ color, strokeWidth }) => (
   <>

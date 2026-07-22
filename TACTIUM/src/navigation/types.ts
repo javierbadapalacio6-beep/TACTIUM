@@ -102,11 +102,18 @@ export type ClubTeamsStackParamList = {
 export type TabParamList = {
   Club: undefined;
   ClubTeams: undefined;
+  Tournaments: undefined;
   Home: undefined;
   Seasons: undefined;
   Team: undefined;
   Stats: undefined;
   Profile: undefined;
+};
+
+// Stack de la pestaña Torneos (club_admin).
+export type TournamentsStackParamList = {
+  TournamentsRoot: undefined;
+  TournamentDetail: { tournamentId: string };
 };
 
 // ─── Root Stack ─────────────────────────────────────────────────────
@@ -157,6 +164,13 @@ export type ClubTeamsStackScreenProps<
   T extends keyof ClubTeamsStackParamList,
 > = CompositeScreenProps<
   NativeStackScreenProps<ClubTeamsStackParamList, T>,
+  TabScreenProps<keyof TabParamList>
+>;
+
+export type TournamentsStackScreenProps<
+  T extends keyof TournamentsStackParamList,
+> = CompositeScreenProps<
+  NativeStackScreenProps<TournamentsStackParamList, T>,
   TabScreenProps<keyof TabParamList>
 >;
 

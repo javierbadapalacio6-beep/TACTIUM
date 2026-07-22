@@ -43,6 +43,7 @@ export {
   IconBall,
   IconTicket,
   IconGift,
+  IconTrophy,
   IconLink,
   IconBell,
 } from './Icon';

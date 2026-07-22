@@ -11,3 +11,10 @@
  *   hasta que el flujo esté bien estructurado y probado para producción.
  */
 export const FCP_ENABLED = false;
+
+/**
+ * TOURNAMENTS_ENABLED: módulo de torneos del club (pestaña "Torneos" en la
+ * barra del club_admin). Apagado mientras se construye la Fase 1 (KO) para no
+ * exponer media feature; se enciende por OTA cuando esté usable.
+ */
+export const TOURNAMENTS_ENABLED = false;
