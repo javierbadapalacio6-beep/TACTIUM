@@ -247,6 +247,19 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-07-22",
+    title: "🕒 Punto 2 del feedback de Smash: HORARIOS DE LOCAL desde el club — asignar día+hora (+pista) a los partidos en casa, franjas favoritas por equipo (editables por capitán y club) y aviso a la plantilla. Todo por OTA (runtime 1.2.0).",
+    changes: [
+      { type: "feat", text: "<strong>🕒 Horarios de local (gestión desde el club)</strong>. Nueva pantalla accesible desde un <strong>icono de reloj junto a la campana</strong> en el dashboard del club. Muestra por defecto solo <strong>la jornada en juego</strong> (ventana de ~1 semana desde el partido de local más próximo, con interruptor «Jornada actual / Todas» para no listar toda la temporada con muchos equipos). Al tocar un partido, se elige una <strong>franja (día + hora)</strong> y opcionalmente la <strong>pista/lugar</strong>: se escribe en la jornada (<code>match_time</code> + <code>location</code>, y la fecha se ajusta al día elegido de esa semana) y se <strong>avisa al capitán y a los jugadores</strong> (push + campana). El club_admin ya podía editar la jornada (RLS <code>is_team_admin</code>) → sin cambios de permisos." },
+
+      { type: "feat", text: "<strong>⭐ Franjas favoritas por equipo (día + hora, ej. «Sáb 10:00»)</strong>. Se fijan una vez y aparecen al asignar cualquier partido de ese equipo, para ponerlo de un toque. Editor compartido (<code>PreferredSlotsEditor</code>) en <strong>dos sitios</strong>: el <strong>capitán</strong> desde <em>pestaña Equipo → lápiz</em> (junto a categoría/grupo) y el <strong>gestor del club</strong> desde la pantalla de Horarios (sección «Franjas favoritas por equipo»). Ambos escriben <code>teams.preferred_home_slots</code> (la RLS de <code>teams</code> deja a capitán y admin de club)." },
+
+      { type: "chore", text: "<strong>Backend aditivo (desplegado en prod)</strong>: columna <code>teams.preferred_home_slots</code> (<code>text[]</code>, franjas «D|HH:MM»); RPC <code>get_club_home_schedule</code> (partidos de local no cerrados del club, solo para su admin); edge <code>send-push</code> v6 con tipo <code>schedule_set</code> (autoriza también al admin de club y notifica push + in-app a capitán+jugadores). Sin dependencias nativas nuevas → todo OTA. De paso, limpieza de datos demo: borradas 2 temporadas «Temporada 26/27» duplicadas de Masculino A (salían horarios repetidos)." },
+
+      { type: "fix", text: "<strong>🐛 Aviso sobre builds antiguos y OTA</strong>. Un momento de susto: en el móvil del usuario «desaparecieron» el modo claro y el perfil nuevo. NO era un bundle roto (en el iPad se veía bien) — el móvil tenía un <strong>build viejo con runtime distinto</strong> que no recibe los OTA de 1.2.0 y caía al bundle de fábrica. Lección: los OTA solo llegan a apps en <strong>runtime 1.2.0</strong>; para probar hay que estar en el build 1.2.0 (App Store), no en uno anterior ni en Expo Go (RevenueCat/notifs nativas no van ahí)." },
+    ],
+  },
+  {
     date: "2026-07-21",
     title: "🏸 Feedback de la reunión con Smash Pádel Club (Cantabria): 3 peticiones del gestor. Implementada y publicada por OTA la primera — los jugadores del equipo ya pueden meter el resultado (cerrar acta sigue siendo del capitán).",
     changes: [
