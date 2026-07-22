@@ -11,62 +11,36 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useColors, withAlpha, type Palette } from '@core/theme';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconChevron, IconCheck, IconX, BottomSheet } from '@components/ui';
+import { IconBack, IconChevron, IconCheck, IconPencil, BottomSheet } from '@components/ui';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
+import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
   getClubHomeSchedule,
   currentRoundMatches,
-  setTeamPreferredSlots,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
 import { notifyPush } from '@core/push';
+import {
+  PreferredSlotsEditor,
+  parseSlot,
+  fmtSlot,
+  DOW_NAME,
+} from '@features/team/components/PreferredSlotsEditor';
 
 import type { ClubStackScreenProps } from '@navigation/types';
 
-// Días de la semana ISO (1=Lunes … 7=Domingo).
-const DOW_SHORT = ['', 'L', 'M', 'X', 'J', 'V', 'S', 'D'];
-const DOW_NAME = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-
-// Rejilla de horas para AÑADIR favoritos (08:00–23:00 cada 30 min). Evita un
-// picker nativo anidado dentro del bottom sheet.
-const TIME_OPTIONS: string[] = (() => {
-  const out: string[] = [];
-  for (let h = 8; h <= 22; h++) {
-    const hh = String(h).padStart(2, '0');
-    out.push(`${hh}:00`, `${hh}:30`);
-  }
-  out.push('23:00');
-  return out;
-})();
-
 const hhmm = (t: string | null): string => (t ? t.slice(0, 5) : '');
 
-// Franja favorita: "D|HH:MM" (D = día ISO 1..7) o legacy "HH:MM" (sin día).
-const parseSlot = (s: string): { dow: number | null; time: string } => {
-  if (s.includes('|')) {
-    const [d, t] = s.split('|');
-    const n = parseInt(d, 10);
-    return { dow: n >= 1 && n <= 7 ? n : null, time: t };
-  }
-  return { dow: null, time: s };
-};
-const fmtSlot = (s: string): string => {
-  const { dow, time } = parseSlot(s);
-  return dow ? `${DOW_NAME[dow]} ${time}` : time;
-};
-
-// Día ISO (1=Lun..7=Dom) de una fecha 'YYYY-MM-DD'.
 const isoDow = (iso: string): number => {
   const [y, m, d] = iso.split('-').map(Number);
-  const js = new Date(y, m - 1, d).getDay(); // 0=Dom..6=Sáb
+  const js = new Date(y, m - 1, d).getDay();
   return js === 0 ? 7 : js;
 };
-// Mueve una fecha al día `targetDow` DENTRO de su misma semana.
 const snapToDow = (iso: string, targetDow: number): string => {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
@@ -84,6 +58,10 @@ const dateLabel = (iso: string | null): string => {
   return d && m ? `${DOW_NAME[isoDow(iso)]} ${d}/${m}/${y?.slice(2) ?? ''}` : iso;
 };
 
+// Franjas favoritas de un equipo del store (el campo aún no está en los tipos).
+const teamSlotsOf = (t: unknown): string[] =>
+  (t as { preferred_home_slots?: string[] })?.preferred_home_slots ?? [];
+
 export const ClubScheduleScreen = ({
   navigation,
 }: ClubStackScreenProps<'ClubSchedule'>) => {
@@ -91,16 +69,36 @@ export const ClubScheduleScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
+  const teams = useTeamStore((s) => s.teams);
+  const clubTeams = useMemo(
+    () => (club ? teams.filter((t) => t.club_id === club.id) : []),
+    [teams, club],
+  );
 
   const [matches, setMatches] = useState<ClubHomeMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ClubHomeMatch | null>(null);
+  const [editTeam, setEditTeam] = useState<{ id: string; name: string } | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Franjas favoritas por equipo (override local sobre lo del store).
+  const [slotsByTeam, setSlotsByTeam] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    const init: Record<string, string[]> = {};
+    for (const t of clubTeams) init[t.id] = teamSlotsOf(t);
+    setSlotsByTeam(init);
+  }, [clubTeams]);
 
   const load = useCallback(async () => {
     if (!club) return;
     try {
-      setMatches(await getClubHomeSchedule(club.id));
+      const data = await getClubHomeSchedule(club.id);
+      setMatches(data);
+      setSlotsByTeam((prev) => {
+        const next = { ...prev };
+        for (const m of data) next[m.team_id] = m.preferred_home_slots ?? [];
+        return next;
+      });
     } catch (e: any) {
       toast.error('No se pudieron cargar', e?.message ?? 'Inténtalo de nuevo.');
     } finally {
@@ -129,6 +127,11 @@ export const ClubScheduleScreen = ({
     return Array.from(map.entries());
   }, [visible]);
 
+  const onSlotsSaved = (teamId: string, slots: string[]) => {
+    setSlotsByTeam((prev) => ({ ...prev, [teamId]: slots }));
+    load();
+  };
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -147,44 +150,9 @@ export const ClubScheduleScreen = ({
         </View>
       </View>
 
-      {hasMore ? (
-        <View style={styles.segment}>
-          {[
-            { id: false, label: 'Jornada actual' },
-            { id: true, label: 'Todas' },
-          ].map((opt) => {
-            const sel = showAll === opt.id;
-            return (
-              <Pressable
-                key={String(opt.id)}
-                onPress={() => setShowAll(opt.id)}
-                style={[styles.segmentBtn, sel && styles.segmentBtnActive]}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    { color: sel ? c.textInverse : c.textMuted },
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={c.accent} />
-        </View>
-      ) : matches.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Sin partidos de local</Text>
-          <Text style={styles.emptyText}>
-            Cuando tus equipos tengan jornadas en casa por jugar, aparecerán aquí
-            para ponerles día y hora.
-          </Text>
         </View>
       ) : (
         <ScrollView
@@ -194,110 +162,208 @@ export const ClubScheduleScreen = ({
           }}
           showsVerticalScrollIndicator={false}
         >
-          {groups.map(([date, items]) => (
-            <View key={date} style={{ marginTop: 18 }}>
-              <Text style={styles.groupDate}>
-                {dateLabel(date === '—' ? null : date)}
-              </Text>
-              <View style={{ gap: 8 }}>
-                {items.map((m) => (
-                  <Pressable
-                    key={m.matchday_id}
-                    onPress={() => setEditing(m)}
-                    style={({ pressed }) => [
-                      styles.row,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.rowTeam} numberOfLines={1}>
-                        {m.team_name}
-                      </Text>
-                      <Text style={styles.rowSub} numberOfLines={1}>
-                        {m.jornada_number ? `J${m.jornada_number}` : 'Jornada'}
-                        {m.opponent ? ` · vs ${m.opponent}` : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.rowTimeWrap}>
-                      {m.match_time ? (
-                        <Text style={styles.rowTime}>{hhmm(m.match_time)}</Text>
-                      ) : (
-                        <Text style={styles.rowTimeEmpty}>Sin hora</Text>
-                      )}
-                      {m.location ? (
-                        <Text style={styles.rowCourt} numberOfLines={1}>
-                          {m.location}
+          {/* Franjas favoritas por equipo */}
+          {clubTeams.length > 0 ? (
+            <View style={{ marginTop: 14 }}>
+              <Text style={styles.sectionLabel}>FRANJAS FAVORITAS POR EQUIPO</Text>
+              <View style={{ gap: 8, marginTop: 8 }}>
+                {clubTeams.map((t) => {
+                  const slots = slotsByTeam[t.id] ?? teamSlotsOf(t);
+                  return (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => setEditTeam({ id: t.id, name: t.name })}
+                      style={({ pressed }) => [
+                        styles.favTeamRow,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.favTeamName} numberOfLines={1}>
+                          {t.name}
                         </Text>
-                      ) : null}
-                    </View>
-                    <IconChevron size={14} color={c.textFaint} />
-                  </Pressable>
-                ))}
+                        {slots.length > 0 ? (
+                          <Text style={styles.favTeamSlots} numberOfLines={1}>
+                            {slots.map(fmtSlot).join(' · ')}
+                          </Text>
+                        ) : (
+                          <Text style={styles.favTeamEmpty}>Sin franjas favoritas</Text>
+                        )}
+                      </View>
+                      <IconPencil size={14} color={c.textFaint} />
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
-          ))}
+          ) : null}
+
+          {/* Partidos de local */}
+          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
+            PARTIDOS DE LOCAL
+          </Text>
+          {hasMore ? (
+            <View style={styles.segment}>
+              {[
+                { id: false, label: 'Jornada actual' },
+                { id: true, label: 'Todas' },
+              ].map((opt) => {
+                const sel = showAll === opt.id;
+                return (
+                  <Pressable
+                    key={String(opt.id)}
+                    onPress={() => setShowAll(opt.id)}
+                    style={[styles.segmentBtn, sel && styles.segmentBtnActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        { color: sel ? c.textInverse : c.textMuted },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {matches.length === 0 ? (
+            <Text style={styles.emptyText}>
+              Cuando tus equipos tengan jornadas en casa por jugar, aparecerán
+              aquí para ponerles día y hora.
+            </Text>
+          ) : (
+            groups.map(([date, items]) => (
+              <View key={date} style={{ marginTop: 16 }}>
+                <Text style={styles.groupDate}>
+                  {dateLabel(date === '—' ? null : date)}
+                </Text>
+                <View style={{ gap: 8 }}>
+                  {items.map((m) => (
+                    <Pressable
+                      key={m.matchday_id}
+                      onPress={() => setEditing(m)}
+                      style={({ pressed }) => [
+                        styles.row,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.rowTeam} numberOfLines={1}>
+                          {m.team_name}
+                        </Text>
+                        <Text style={styles.rowSub} numberOfLines={1}>
+                          {m.jornada_number ? `J${m.jornada_number}` : 'Jornada'}
+                          {m.opponent ? ` · vs ${m.opponent}` : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.rowTimeWrap}>
+                        {m.match_time ? (
+                          <Text style={styles.rowTime}>{hhmm(m.match_time)}</Text>
+                        ) : (
+                          <Text style={styles.rowTimeEmpty}>Sin hora</Text>
+                        )}
+                        {m.location ? (
+                          <Text style={styles.rowCourt} numberOfLines={1}>
+                            {m.location}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <IconChevron size={14} color={c.textFaint} />
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))
+          )}
         </ScrollView>
       )}
 
       <EditScheduleSheet
         match={editing}
+        slots={editing ? slotsByTeam[editing.team_id] ?? editing.preferred_home_slots : []}
         onClose={() => setEditing(null)}
         onSaved={load}
       />
+
+      <TeamSlotsSheet
+        team={editTeam}
+        slots={editTeam ? slotsByTeam[editTeam.id] ?? [] : []}
+        onClose={() => setEditTeam(null)}
+        onSaved={onSlotsSaved}
+      />
     </View>
+  );
+};
+
+// Hoja de franjas favoritas de un equipo (desde la sección de arriba).
+const TeamSlotsSheet: React.FC<{
+  team: { id: string; name: string } | null;
+  slots: string[];
+  onClose: () => void;
+  onSaved: (teamId: string, slots: string[]) => void;
+}> = ({ team, slots, onClose, onSaved }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <BottomSheet
+      open={!!team}
+      onClose={onClose}
+      footer={
+        <Pressable
+          onPress={onClose}
+          style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.saveLabel}>Listo</Text>
+        </Pressable>
+      }
+    >
+      <Text style={styles.sheetEyebrow}>FRANJAS FAVORITAS</Text>
+      <Text style={styles.sheetTitle} numberOfLines={1}>
+        {team?.name ?? ''}
+      </Text>
+      <Text style={styles.sheetSub}>
+        Se usan al poner la hora de los partidos de local de este equipo.
+      </Text>
+      <View style={{ marginTop: 16 }}>
+        {team ? (
+          <PreferredSlotsEditor
+            teamId={team.id}
+            initialSlots={slots}
+            onChanged={(s) => onSaved(team.id, s)}
+          />
+        ) : null}
+      </View>
+    </BottomSheet>
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────
 const EditScheduleSheet: React.FC<{
   match: ClubHomeMatch | null;
+  slots: string[];
   onClose: () => void;
   onSaved: () => void;
-}> = ({ match, onClose, onSaved }) => {
+}> = ({ match, slots, onClose, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
 
-  const [slots, setSlots] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null); // "D|HH:MM"
   const [court, setCourt] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [addDow, setAddDow] = useState<number>(6); // sábado por defecto
-  const [managing, setManaging] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!match) return;
-    setSlots([...(match.preferred_home_slots ?? [])]);
-    // Estado inicial: si el partido ya tiene hora, lo reflejamos como slot
-    // con el día actual de la jornada.
     if (match.match_time) {
       const dow = match.match_date ? isoDow(match.match_date) : null;
       setSelected(dow ? `${dow}|${hhmm(match.match_time)}` : hhmm(match.match_time));
     } else {
       setSelected(null);
     }
-    setAddDow(match.match_date ? isoDow(match.match_date) : 6);
-    setAdding(false);
-    setManaging(false);
+    setCourt(match.location ?? '');
   }, [match]);
-
-  const persistSlots = async (next: string[]) => {
-    if (!match) return;
-    const uniq = Array.from(new Set(next)).sort();
-    setSlots(uniq);
-    try {
-      await setTeamPreferredSlots(match.team_id, uniq);
-    } catch (e: any) {
-      toast.error('No se pudo guardar la franja', e?.message ?? '');
-    }
-  };
-
-  const addFavorite = (time: string) => {
-    const slot = `${addDow}|${time}`;
-    setSelected(slot);
-    setAdding(false);
-    if (!slots.includes(slot)) persistSlots([...slots, slot]);
-  };
 
   const save = async () => {
     if (!match || !selected) {
@@ -311,12 +377,7 @@ const EditScheduleSheet: React.FC<{
         match_time: string;
         location: string | null;
         match_date?: string | null;
-      } = {
-        match_time: `${time}:00`,
-        location: court.trim() || null,
-      };
-      // Si la franja lleva día y la jornada tiene fecha, ajustamos la fecha a
-      // ese día dentro de su semana.
+      } = { match_time: `${time}:00`, location: court.trim() || null };
       if (dow && match.match_date) patch.match_date = snapToDow(match.match_date, dow);
       await updateMatchday(match.matchday_id, patch);
       notifyPush('schedule_set', match.matchday_id);
@@ -362,20 +423,13 @@ const EditScheduleSheet: React.FC<{
         {dateLabel(match?.match_date ?? null)}
       </Text>
 
-      {/* Franjas favoritas (día + hora) */}
-      <View style={styles.favHeader}>
-        <Text style={styles.sectionLabel}>FRANJAS FAVORITAS</Text>
-        {slots.length > 0 ? (
-          <Pressable onPress={() => setManaging((v) => !v)} hitSlop={8}>
-            <Text style={styles.manageLink}>{managing ? 'Listo' : 'Editar'}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {slots.length === 0 && !adding ? (
+      <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 8 }]}>
+        ELIGE UNA FRANJA
+      </Text>
+      {slots.length === 0 ? (
         <Text style={styles.hint}>
-          Añade las franjas habituales de este equipo (p. ej. Sáb 10:00, Sáb
-          17:00) para asignarlas de un toque.
+          Este equipo aún no tiene franjas favoritas. Añádelas en la sección de
+          arriba (Franjas favoritas por equipo) o desde el equipo.
         </Text>
       ) : (
         <View style={styles.chipsWrap}>
@@ -384,88 +438,30 @@ const EditScheduleSheet: React.FC<{
             return (
               <Pressable
                 key={s}
-                onPress={() =>
-                  managing ? persistSlots(slots.filter((x) => x !== s)) : setSelected(s)
-                }
+                onPress={() => setSelected(s)}
                 style={[
                   styles.chip,
-                  sel && !managing && { backgroundColor: c.accent, borderColor: c.accent },
-                  managing && { borderColor: withAlpha(c.error, 0.5) },
+                  sel && { backgroundColor: c.accent, borderColor: c.accent },
                 ]}
               >
                 <Text
-                  style={[
-                    styles.chipText,
-                    { color: sel && !managing ? c.textInverse : c.text },
-                  ]}
+                  style={[styles.chipText, { color: sel ? c.textInverse : c.text }]}
                 >
                   {fmtSlot(s)}
                 </Text>
-                {managing ? <IconX size={12} color={c.error} /> : null}
               </Pressable>
             );
           })}
         </View>
       )}
 
-      {/* Añadir franja: día + hora */}
-      {adding ? (
-        <View style={styles.addBox}>
-          <Text style={styles.sectionLabel}>DÍA</Text>
-          <View style={styles.dowRow}>
-            {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-              const sel = addDow === d;
-              return (
-                <Pressable
-                  key={d}
-                  onPress={() => setAddDow(d)}
-                  style={[
-                    styles.dowCell,
-                    sel && { backgroundColor: c.accent, borderColor: c.accent },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dowText,
-                      { color: sel ? c.textInverse : c.text },
-                    ]}
-                  >
-                    {DOW_SHORT[d]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={[styles.sectionLabel, { marginTop: 12 }]}>HORA</Text>
-          <View style={styles.chipsWrap}>
-            {TIME_OPTIONS.map((t) => (
-              <Pressable key={t} onPress={() => addFavorite(t)} style={styles.timeCell}>
-                <Text style={styles.timeCellText}>{t}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable onPress={() => setAdding(false)} hitSlop={8}>
-            <Text style={[styles.manageLink, { marginTop: 6 }]}>Cancelar</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable
-          onPress={() => setAdding(true)}
-          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.addBtnText}>+ Añadir franja favorita</Text>
-        </Pressable>
-      )}
-
-      {/* Franja elegida */}
       <View style={styles.selectedRow}>
-        <Text style={styles.sectionLabel}>DÍA Y HORA ELEGIDOS</Text>
+        <Text style={styles.sectionLabel}>DÍA Y HORA</Text>
         <Text style={[styles.selectedTime, !selected && { color: c.textFaint }]}>
           {selected ? fmtSlot(selected) : '—'}
         </Text>
       </View>
 
-      {/* Pista (opcional) */}
       <Text style={styles.sectionLabel}>PISTA / LUGAR · OPCIONAL</Text>
       <View style={styles.courtInput}>
         <TextInput
@@ -516,11 +512,39 @@ const makeStyles = (c: Palette) =>
       letterSpacing: -0.4,
       marginTop: 2,
     },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+    emptyText: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 12 },
+    sectionLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 2,
+      color: c.textFaint,
+      textTransform: 'uppercase',
+      fontWeight: '500',
+    },
+    favTeamRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    favTeamName: { color: c.text, fontSize: 15, fontWeight: '600' },
+    favTeamSlots: {
+      color: c.accent,
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    favTeamEmpty: { color: c.textFaint, fontSize: 12, marginTop: 2 },
     segment: {
       flexDirection: 'row',
       gap: 6,
-      marginHorizontal: 22,
-      marginBottom: 4,
+      marginTop: 8,
       padding: 4,
       borderRadius: Radius.md,
       backgroundColor: c.bgCard,
@@ -529,27 +553,13 @@ const makeStyles = (c: Palette) =>
     },
     segmentBtn: {
       flex: 1,
-      height: 36,
+      height: 34,
       borderRadius: Radius.sm,
       alignItems: 'center',
       justifyContent: 'center',
     },
     segmentBtnActive: { backgroundColor: c.accent },
     segmentText: { fontSize: 13, fontWeight: '600' },
-    center: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 40,
-      gap: 8,
-    },
-    emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
-    emptyText: {
-      color: c.textMuted,
-      fontSize: 13,
-      textAlign: 'center',
-      lineHeight: 19,
-    },
     groupDate: {
       fontFamily: Fonts.mono,
       fontSize: 11,
@@ -580,7 +590,6 @@ const makeStyles = (c: Palette) =>
     },
     rowTimeEmpty: { color: c.textFaint, fontFamily: Fonts.mono, fontSize: 12 },
     rowCourt: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-    // Sheet
     sheetEyebrow: {
       fontFamily: Fonts.mono,
       color: c.accent,
@@ -596,22 +605,6 @@ const makeStyles = (c: Palette) =>
       marginTop: 4,
     },
     sheetSub: { color: c.textMuted, fontSize: 13, marginTop: 2 },
-    favHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 20,
-      marginBottom: 8,
-    },
-    sectionLabel: {
-      fontFamily: Fonts.mono,
-      fontSize: 11,
-      letterSpacing: 2,
-      color: c.textFaint,
-      textTransform: 'uppercase',
-      fontWeight: '500',
-    },
-    manageLink: { color: c.accent, fontSize: 13, fontWeight: '600' },
     hint: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
     chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: {
@@ -626,45 +619,6 @@ const makeStyles = (c: Palette) =>
       borderColor: c.hairStrong,
     },
     chipText: { fontFamily: Fonts.mono, fontSize: 15, fontWeight: '600' },
-    addBtn: { marginTop: 10 },
-    addBtnText: { color: c.accent, fontSize: 14, fontWeight: '600' },
-    addBox: {
-      marginTop: 12,
-      padding: 12,
-      borderRadius: Radius.md,
-      backgroundColor: c.bgCard2,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-      gap: 8,
-    },
-    dowRow: { flexDirection: 'row', gap: 6 },
-    dowCell: {
-      flex: 1,
-      height: 40,
-      borderRadius: Radius.sm,
-      backgroundColor: c.bgRaised,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    dowText: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700' },
-    timeCell: {
-      paddingHorizontal: 12,
-      height: 38,
-      borderRadius: Radius.sm,
-      backgroundColor: c.bgRaised,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    timeCellText: {
-      fontFamily: Fonts.mono,
-      fontSize: 14,
-      color: c.text,
-      fontWeight: '600',
-    },
     selectedRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',

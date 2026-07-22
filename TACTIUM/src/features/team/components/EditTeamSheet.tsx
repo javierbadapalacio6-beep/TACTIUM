@@ -14,11 +14,16 @@ import { Radius } from '@core/theme/spacing';
 import { BottomSheet, Toggle } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
+import { PreferredSlotsEditor } from '@features/team/components/PreferredSlotsEditor';
 
 // Mismas opciones que el formulario de creación (CreateTeamScreen) para que la
 // edición sea coherente con el alta.
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª', '9ª', '10ª'];
 const GROUPS = ['A', 'B', 'C', 'D'];
+
+// Franjas favoritas del equipo (el campo aún no está en los tipos generados).
+const teamSlotsOf = (t: unknown): string[] =>
+  (t as { preferred_home_slots?: string[] })?.preferred_home_slots ?? [];
 
 export const EditTeamSheet: React.FC<{
   open: boolean;
@@ -156,6 +161,16 @@ export const EditTeamSheet: React.FC<{
           momento.
         </Text>
       )}
+
+      {/* Franjas favoritas de local (las usa el club para poner los horarios). */}
+      {team ? (
+        <View style={styles.slotsBlock}>
+          <PreferredSlotsEditor
+            teamId={team.id}
+            initialSlots={teamSlotsOf(team)}
+          />
+        </View>
+      ) : null}
     </BottomSheet>
   );
 };
@@ -240,6 +255,12 @@ const makeStyles = (c: Palette) =>
       color: c.textMuted,
       fontSize: 12,
       lineHeight: 17,
+    },
+    slotsBlock: {
+      marginTop: 22,
+      paddingTop: 18,
+      borderTopWidth: 1,
+      borderColor: c.hair,
     },
     saveBtn: {
       height: 52,
