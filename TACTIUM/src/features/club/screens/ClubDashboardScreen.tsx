@@ -14,7 +14,7 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconPlus, IconPencil, IconChevron } from '@components/ui';
+import { IconPlus, IconPencil, IconChevron, IconClock } from '@components/ui';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
@@ -26,7 +26,7 @@ import { clubCoverage } from '@core/entitlements/coverage';
 import { useTeamGate } from '@core/hooks/usePremiumGate';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
-import { getClubHomeSchedule } from '@core/services/clubSchedule';
+import { getClubHomeSchedule, currentRoundMatches } from '@core/services/clubSchedule';
 
 import type { ClubStackScreenProps } from '@navigation/types';
 
@@ -115,7 +115,7 @@ export const ClubDashboardScreen = ({
         if (club) {
           try {
             const sched = await getClubHomeSchedule(club.id);
-            if (!cancelled) setHomeCount(sched.length);
+            if (!cancelled) setHomeCount(currentRoundMatches(sched).length);
           } catch (e) {
             if (!cancelled) console.warn('club home schedule count', e);
           }
@@ -186,7 +186,18 @@ export const ClubDashboardScreen = ({
             </Text>
           </View>
         </View>
-        <NotificationBell />
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => navigation.navigate('ClubSchedule')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Horarios de local"
+            style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.6 }]}
+          >
+            <IconClock size={20} color={c.text} />
+          </Pressable>
+          <NotificationBell />
+        </View>
       </View>
 
       <ScrollView
@@ -229,8 +240,8 @@ export const ClubDashboardScreen = ({
               {homeCount == null
                 ? 'Pon la hora de los partidos en casa'
                 : homeCount === 0
-                ? 'Sin partidos de local por jugar'
-                : `${homeCount} partido${homeCount === 1 ? '' : 's'} en casa por poner`}
+                ? 'Sin partidos de local esta jornada'
+                : `${homeCount} en casa esta jornada`}
             </Text>
           </View>
           <IconChevron size={16} color={c.textFaint} />
@@ -625,6 +636,21 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: 4,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
   },
   brandRow: {
     flexDirection: 'row',

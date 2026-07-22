@@ -19,6 +19,7 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { toast } from '@store/toastStore';
 import {
   getClubHomeSchedule,
+  currentRoundMatches,
   setTeamPreferredSlots,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
@@ -94,6 +95,7 @@ export const ClubScheduleScreen = ({
   const [matches, setMatches] = useState<ClubHomeMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ClubHomeMatch | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     if (!club) return;
@@ -112,16 +114,20 @@ export const ClubScheduleScreen = ({
     }, [load]),
   );
 
+  const roundMatches = useMemo(() => currentRoundMatches(matches), [matches]);
+  const hasMore = matches.length > roundMatches.length;
+  const visible = showAll ? matches : roundMatches;
+
   const groups = useMemo(() => {
     const map = new Map<string, ClubHomeMatch[]>();
-    for (const m of matches) {
+    for (const m of visible) {
       const k = m.match_date ?? '—';
       const arr = map.get(k) ?? [];
       arr.push(m);
       map.set(k, arr);
     }
     return Array.from(map.entries());
-  }, [matches]);
+  }, [visible]);
 
   return (
     <View style={styles.root}>
@@ -136,10 +142,37 @@ export const ClubScheduleScreen = ({
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.eyebrow}>HORARIOS DE LOCAL</Text>
           <Text style={styles.title} numberOfLines={1}>
-            {matches.length} partido{matches.length === 1 ? '' : 's'} en casa
+            {visible.length} partido{visible.length === 1 ? '' : 's'} en casa
           </Text>
         </View>
       </View>
+
+      {hasMore ? (
+        <View style={styles.segment}>
+          {[
+            { id: false, label: 'Jornada actual' },
+            { id: true, label: 'Todas' },
+          ].map((opt) => {
+            const sel = showAll === opt.id;
+            return (
+              <Pressable
+                key={String(opt.id)}
+                onPress={() => setShowAll(opt.id)}
+                style={[styles.segmentBtn, sel && styles.segmentBtnActive]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: sel ? c.textInverse : c.textMuted },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.center}>
@@ -483,6 +516,26 @@ const makeStyles = (c: Palette) =>
       letterSpacing: -0.4,
       marginTop: 2,
     },
+    segment: {
+      flexDirection: 'row',
+      gap: 6,
+      marginHorizontal: 22,
+      marginBottom: 4,
+      padding: 4,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    segmentBtn: {
+      flex: 1,
+      height: 36,
+      borderRadius: Radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    segmentBtnActive: { backgroundColor: c.accent },
+    segmentText: { fontSize: 13, fontWeight: '600' },
     center: {
       flex: 1,
       alignItems: 'center',

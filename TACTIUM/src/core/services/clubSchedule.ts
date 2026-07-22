@@ -37,6 +37,35 @@ export async function getClubHomeSchedule(
   }));
 }
 
+// Suma `n` días a una fecha 'YYYY-MM-DD'.
+function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
+    dt.getDate(),
+  ).padStart(2, '0')}`;
+}
+
+/**
+ * Partidos de la "jornada en juego": la ventana de ~1 semana desde el partido
+ * de local más próximo. Evita mostrar todas las jornadas de la temporada
+ * cuando el club tiene muchos equipos — solo el turno actual. Los partidos sin
+ * fecha se incluyen siempre (aún por calendarizar). Comparación lexicográfica
+ * de fechas ISO (válida para 'YYYY-MM-DD').
+ */
+export function currentRoundMatches(matches: ClubHomeMatch[]): ClubHomeMatch[] {
+  const dated = matches
+    .filter((m) => m.match_date)
+    .sort((a, b) => (a.match_date! < b.match_date! ? -1 : 1));
+  if (dated.length === 0) return matches;
+  const d0 = dated[0].match_date!;
+  const end = addDays(d0, 6);
+  return matches.filter(
+    (m) => !m.match_date || (m.match_date >= d0 && m.match_date <= end),
+  );
+}
+
 /** Guarda las franjas favoritas de local de un equipo (array de 'HH:MM'). */
 export async function setTeamPreferredSlots(
   teamId: string,

@@ -129,28 +129,9 @@ export const TeamScreen = () => {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable
-          onPress={() => setEditingTeam(true)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Editar categoría y grupo del equipo"
-          style={({ pressed }) => [
-            styles.eyebrowBtn,
-            pressed && { opacity: 0.6 },
-          ]}
-        >
-          <Text style={styles.eyebrow} numberOfLines={1}>
-            {[
-              team?.name,
-              team?.category,
-              team?.group_name ? `Grupo ${team.group_name}` : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')
-              .toUpperCase() || 'EQUIPO'}
-          </Text>
-          <IconPencil size={12} color={c.textFaint} />
-        </Pressable>
+        <Text style={styles.eyebrow} numberOfLines={1}>
+          EQUIPO
+        </Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
             onPress={openInvite}
@@ -191,7 +172,27 @@ export const TeamScreen = () => {
       </View>
 
       <View style={styles.intro}>
-        <Text style={styles.title}>Plantilla</Text>
+        <Pressable
+          onPress={() => setEditingTeam(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Editar equipo"
+          style={({ pressed }) => [styles.titleRow, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.title} numberOfLines={1}>
+            {team?.name ?? 'Equipo'}
+          </Text>
+          <IconPencil size={15} color={c.textFaint} />
+        </Pressable>
+        <Text style={styles.teamMeta} numberOfLines={1}>
+          {[
+            'Plantilla',
+            team?.category,
+            team?.group_name ? `Grupo ${team.group_name}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </Text>
         <View style={styles.kpis}>
           <Kpi label="Jugadores" value={String(players.length)} />
           <View style={styles.kpiSep} />
@@ -872,12 +873,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 22,
   },
-  eyebrowBtn: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    flexShrink: 1,
-    marginRight: 8,
+    gap: 8,
   },
   eyebrow: {
     flexShrink: 1,
@@ -929,11 +928,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingTop: 18,
   },
   title: {
+    flexShrink: 1,
     color: c.text,
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.8,
     lineHeight: 34,
+  },
+  teamMeta: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    letterSpacing: 0.5,
+    color: c.textMuted,
+    marginTop: 4,
   },
   kpis: {
     flexDirection: 'row',
