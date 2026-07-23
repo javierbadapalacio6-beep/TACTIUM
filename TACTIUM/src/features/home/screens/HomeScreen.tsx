@@ -8,7 +8,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Line, Rect } from 'react-native-svg';
 
@@ -34,7 +35,9 @@ import {
   TeamSwitcher,
   IconGift,
   IconBall,
+  IconTrophy,
 } from '@components/ui';
+import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore } from '@store/teamStore';
@@ -44,11 +47,13 @@ import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { matchdayState } from '@core/utils/matchday';
 
-import type { HomeStackScreenProps } from '@navigation/types';
+import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
 export const HomeScreen = ({
   navigation,
 }: HomeStackScreenProps<'HomeRoot'>) => {
+  const rootNav =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const c = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -510,6 +515,14 @@ export const HomeScreen = ({
             }
             onPress={() => navigation.navigate('Amistoso')}
           />
+          {TOURNAMENTS_ENABLED ? (
+            <ActionRow
+              icon={<IconTrophy size={20} color={c.accent} />}
+              title="Apuntarme a un torneo"
+              hint="¿Tienes un código? Inscríbete con tu pareja"
+              onPress={() => rootNav.navigate('TournamentSignup')}
+            />
+          ) : null}
         </View>
 
         {canEdit ? (

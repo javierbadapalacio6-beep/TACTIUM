@@ -9,13 +9,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useColors, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconBall, IconTicket, IconGift } from '@components/ui';
+import { IconBall, IconTicket, IconGift, IconTrophy } from '@components/ui';
+import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
 import { DOWNLOAD_URL } from '@core/config/referral';
@@ -23,7 +25,7 @@ import {
   fetchMyCasualMatches,
   type CasualMatchSummary,
 } from '@core/services/casualMatches';
-import type { HomeStackScreenProps } from '@navigation/types';
+import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
 // Home del JUGADOR SUELTO (F8): usuario sin equipo. Tres acciones:
 // registrar un amistoso, canjear un código de partido (en Stats) e
@@ -46,6 +48,8 @@ export const SoloHomeScreen = () => {
   const heroStyles = useMemo(() => makeStyles(darkColors), []);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
+  const rootNav =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useAuthStore((s) => s.user);
   const setSoloMode = useTeamStore((s) => s.setSoloMode);
   const setSoloUpgrade = useTeamStore((s) => s.setSoloUpgrade);
@@ -128,6 +132,47 @@ export const SoloHomeScreen = () => {
             <Text style={heroStyles.heroCtaText}>EMPEZAR</Text>
           </View>
         </Pressable>
+
+        {TOURNAMENTS_ENABLED ? (
+          <Pressable
+            onPress={() => rootNav.navigate('TournamentSignup')}
+            style={({ pressed }) => [
+              {
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                backgroundColor: c.bgCard,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: c.hairStrong,
+                padding: 14,
+                marginTop: 12,
+              },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: c.accent15,
+              }}
+            >
+              <IconTrophy size={18} color={c.accent} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ color: c.text, fontSize: 15, fontWeight: '700' }}>
+                Apuntarme a un torneo
+              </Text>
+              <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 2 }}>
+                ¿Tienes un código? Inscríbete con tu pareja
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
 
         {/* Últimos partidos (si ya tiene alguno) */}
         {matches.length > 0 ? (

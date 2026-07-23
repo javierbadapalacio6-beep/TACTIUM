@@ -23,13 +23,20 @@ import { signupByCode } from '@core/services/tournaments';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
-const AVAILABILITY = [
-  'Sáb mañana',
-  'Sáb tarde',
-  'Dom mañana',
-  'Dom tarde',
-  'Entre semana',
+// Disponibilidad: rejilla día × franja horaria. El jugador marca todas las
+// casillas (día + hora) en las que puede jugar, para que el club vea cuándo
+// encajar sus partidos. Se guarda como texto legible: "Sáb 18:00–21:00".
+const DOW = [1, 2, 3, 4, 5, 6, 7];
+const DOW_SHORT = ['', 'L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const DOW_FULL = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const FRANJAS = [
+  '9:00–12:00',
+  '12:00–15:00',
+  '15:00–18:00',
+  '18:00–21:00',
+  '21:00–00:00',
 ];
+const slotStr = (dow: number, franja: string) => `${DOW_FULL[dow]} ${franja}`;
 
 export const TournamentSignupScreen = ({
   navigation,
@@ -50,8 +57,19 @@ export const TournamentSignupScreen = ({
   const [avail, setAvail] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const toggleAvail = (a: string) =>
-    setAvail((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
+  const toggleSlot = (dow: number, franja: string) => {
+    const s = slotStr(dow, franja);
+    setAvail((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  };
+  const toggleFranjaWeek = (franja: string) => {
+    const all = DOW.map((d) => slotStr(d, franja));
+    const allSel = all.every((s) => avail.includes(s));
+    setAvail((prev) =>
+      allSel
+        ? prev.filter((s) => !all.includes(s))
+        : Array.from(new Set([...prev, ...all])),
+    );
+  };
 
   const valid = code.trim().length >= 4 && p1.trim() && p2.trim();
 
@@ -142,25 +160,48 @@ export const TournamentSignupScreen = ({
         </View>
 
         <Text style={styles.label}>DISPONIBILIDAD</Text>
-        <View style={styles.chips}>
-          {AVAILABILITY.map((a) => {
-            const sel = avail.includes(a);
-            return (
-              <Pressable
-                key={a}
-                onPress={() => toggleAvail(a)}
-                style={[
-                  styles.chip,
-                  sel && { backgroundColor: c.accent, borderColor: c.accent },
-                ]}
-              >
-                <Text style={[styles.chipText, { color: sel ? c.textInverse : c.text }]}>
-                  {a}
+        <Text style={styles.availHint}>
+          Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.
+        </Text>
+        {FRANJAS.map((franja) => {
+          const all = DOW.map((d) => slotStr(d, franja));
+          const allSel = all.every((s) => avail.includes(s));
+          return (
+            <View key={franja} style={styles.franjaBlock}>
+              <Pressable onPress={() => toggleFranjaWeek(franja)} hitSlop={6}>
+                <Text
+                  style={[styles.franjaLabel, allSel && { color: c.accent }]}
+                >
+                  {franja}
                 </Text>
               </Pressable>
-            );
-          })}
-        </View>
+              <View style={styles.dayRow}>
+                {DOW.map((d) => {
+                  const sel = avail.includes(slotStr(d, franja));
+                  return (
+                    <Pressable
+                      key={d}
+                      onPress={() => toggleSlot(d, franja)}
+                      style={[
+                        styles.dayCell,
+                        sel && { backgroundColor: c.accent, borderColor: c.accent },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayCellText,
+                          { color: sel ? c.textInverse : c.text },
+                        ]}
+                      >
+                        {DOW_SHORT[d]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
@@ -227,18 +268,27 @@ const makeStyles = (c: Palette) =>
     },
     inputField: { color: c.text, fontSize: 15, fontWeight: '500', paddingVertical: 0 },
     two: { flexDirection: 'row', gap: 12 },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: {
-      paddingHorizontal: 14,
-      height: 42,
-      borderRadius: Radius.md,
+    availHint: { color: c.textMuted, fontSize: 12, marginTop: -2, marginBottom: 10, lineHeight: 17 },
+    franjaBlock: { marginBottom: 12 },
+    franjaLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.text,
+      marginBottom: 6,
+    },
+    dayRow: { flexDirection: 'row', gap: 6 },
+    dayCell: {
+      flex: 1,
+      height: 40,
+      borderRadius: Radius.sm,
       backgroundColor: c.bgCard,
       borderWidth: 1,
       borderColor: c.hairStrong,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    chipText: { fontSize: 13, fontWeight: '600' },
+    dayCellText: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700' },
     footer: {
       paddingHorizontal: 22,
       paddingTop: 10,
