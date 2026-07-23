@@ -133,6 +133,8 @@ export type RootStackParamList = {
   SearchCommunity: undefined;
   PublicProfile: { type: 'user' | 'club'; id: string };
   Feed: undefined;
+  // Inscripción pública a un torneo por código.
+  TournamentSignup: { code?: string } | undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

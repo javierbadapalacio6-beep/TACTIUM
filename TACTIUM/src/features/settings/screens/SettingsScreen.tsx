@@ -27,6 +27,7 @@ import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { useThemeStore } from '@store/themeStore';
 import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
+import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
@@ -579,6 +580,20 @@ export const SettingsScreen = () => {
             },
           ]}
         />
+
+        {TOURNAMENTS_ENABLED ? (
+          <>
+            <Text style={styles.sectionLabel}>TORNEOS</Text>
+            <SettingsList
+              items={[
+                {
+                  label: 'Apuntarme a un torneo',
+                  onPress: () => navigation.navigate('TournamentSignup'),
+                },
+              ]}
+            />
+          </>
+        ) : null}
 
         <Text style={styles.sectionLabel}>SOPORTE</Text>
         <SettingsList

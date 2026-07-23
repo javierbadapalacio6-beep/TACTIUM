@@ -17,4 +17,4 @@ export const FCP_ENABLED = false;
  * barra del club_admin). Apagado mientras se construye la Fase 1 (KO) para no
  * exponer media feature; se enciende por OTA cuando esté usable.
  */
-export const TOURNAMENTS_ENABLED = false;
+export const TOURNAMENTS_ENABLED = true;
