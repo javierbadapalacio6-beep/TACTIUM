@@ -512,6 +512,7 @@ const InfoView: React.FC<{
     },
     { label: 'Estado', value: STATUS_LABEL[t.status] ?? t.status },
     { label: 'Fecha', value: formatStartsOn(t.starts_on) ?? '—' },
+    ...(t.location ? [{ label: 'Lugar', value: t.location }] : []),
   ];
   return (
     <View style={{ paddingHorizontal: 22 }}>

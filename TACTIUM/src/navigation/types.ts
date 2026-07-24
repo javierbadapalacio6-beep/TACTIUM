@@ -135,6 +135,8 @@ export type RootStackParamList = {
   Feed: undefined;
   // Inscripción pública a un torneo por código.
   TournamentSignup: { code?: string } | undefined;
+  // Explorar torneos abiertos (jugador).
+  ExploreTournaments: undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

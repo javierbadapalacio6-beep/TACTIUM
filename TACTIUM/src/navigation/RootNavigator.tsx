@@ -21,6 +21,7 @@ import { SearchCommunityScreen } from '@features/social/screens/SearchCommunityS
 import { PublicProfileScreen } from '@features/social/screens/PublicProfileScreen';
 import { FeedScreen } from '@features/social/screens/FeedScreen';
 import { TournamentSignupScreen } from '@features/tournaments/screens/TournamentSignupScreen';
+import { ExploreTournamentsScreen } from '@features/tournaments/screens/ExploreTournamentsScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -158,6 +159,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="TournamentSignup"
               component={TournamentSignupScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="ExploreTournaments"
+              component={ExploreTournamentsScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

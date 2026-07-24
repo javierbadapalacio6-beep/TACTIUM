@@ -518,9 +518,9 @@ export const HomeScreen = ({
           {TOURNAMENTS_ENABLED ? (
             <ActionRow
               icon={<IconTrophy size={20} color={c.accent} />}
-              title="Apuntarme a un torneo"
-              hint="¿Tienes un código? Inscríbete con tu pareja"
-              onPress={() => rootNav.navigate('TournamentSignup')}
+              title="Explorar torneos"
+              hint="Busca por zona, club o fecha · o entra con tu código"
+              onPress={() => rootNav.navigate('ExploreTournaments')}
             />
           ) : null}
         </View>

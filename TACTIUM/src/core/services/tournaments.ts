@@ -45,6 +45,7 @@ export interface Tournament {
   format: TournamentFormat;
   status: TournamentStatus;
   starts_on: string | null;
+  location: string | null;
   prizes: string | null;
   extra_info: string | null;
   cover_url: string | null;
@@ -119,6 +120,7 @@ export async function createTournament(input: {
   categories?: string[];
   startsOn?: string | null;
   maxPairs?: number | null;
+  location?: string | null;
   prizes?: string | null;
   extraInfo?: string | null;
   coverUrl?: string | null;
@@ -132,6 +134,7 @@ export async function createTournament(input: {
     categories: input.categories ?? [],
     starts_on: input.startsOn ?? null,
     max_pairs: input.maxPairs ?? null,
+    location: input.location?.trim() || null,
     prizes: input.prizes?.trim() || null,
     extra_info: input.extraInfo?.trim() || null,
     cover_url: input.coverUrl ?? null,
@@ -919,6 +922,41 @@ export interface TournamentLookup {
   genders: string[];
   categories: string[];
   pair_based: boolean;
+}
+
+// Fila pública para explorar torneos (cualquier jugador, sin ser del club).
+export interface ExploreTournament {
+  id: string;
+  name: string;
+  club_name: string;
+  cover_url: string | null;
+  location: string | null;
+  starts_on: string | null;
+  status: string;
+  format: string;
+  genders: string[];
+  categories: string[];
+  signup_code: string | null;
+  pair_based: boolean;
+  players: number;
+}
+
+/** Explora torneos abiertos de cualquier club (búsqueda por nombre/club/lugar). */
+export async function exploreTournaments(
+  search?: string,
+): Promise<ExploreTournament[]> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { data, error } = await rpc('explore_tournaments', {
+    p_search: search?.trim() || null,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ExploreTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+  }));
 }
 
 /** Busca un torneo por código (para mostrar nombre + categorías al apuntarse). */

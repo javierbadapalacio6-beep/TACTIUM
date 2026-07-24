@@ -135,7 +135,7 @@ export const SoloHomeScreen = () => {
 
         {TOURNAMENTS_ENABLED ? (
           <Pressable
-            onPress={() => rootNav.navigate('TournamentSignup')}
+            onPress={() => rootNav.navigate('ExploreTournaments')}
             style={({ pressed }) => [
               {
                 flexDirection: 'row',
@@ -165,10 +165,10 @@ export const SoloHomeScreen = () => {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={{ color: c.text, fontSize: 15, fontWeight: '700' }}>
-                Apuntarme a un torneo
+                Explorar torneos
               </Text>
               <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 2 }}>
-                ¿Tienes un código? Inscríbete con tu pareja
+                Busca por zona, club o fecha · o entra con tu código
               </Text>
             </View>
           </Pressable>

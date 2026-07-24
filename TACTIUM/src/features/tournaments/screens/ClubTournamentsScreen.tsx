@@ -38,6 +38,14 @@ import type { TournamentsStackScreenProps } from '@navigation/types';
 
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª'];
 
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const formatStartsOn = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getDate()} ${MESES[d.getMonth()]}`;
+};
+
 const GENDERS: { id: TournamentGender; label: string }[] = [
   { id: 'masculino', label: 'Masculino' },
   { id: 'femenino', label: 'Femenino' },
@@ -159,26 +167,35 @@ export const ClubTournamentsScreen = ({
                   }
                   style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
                 >
-                  <View style={styles.cardIcon}>
-                    <IconTrophy size={18} color={c.accent} />
+                  {t.cover_url ? (
+                    <Image source={{ uri: t.cover_url }} style={styles.cardCover} />
+                  ) : null}
+                  <View style={styles.cardRow}>
+                    {t.cover_url ? null : (
+                      <View style={styles.cardIcon}>
+                        <IconTrophy size={18} color={c.accent} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.cardName} numberOfLines={1}>
+                        {t.name}
+                      </Text>
+                      <Text style={styles.cardMeta} numberOfLines={1}>
+                        {[
+                          formatStartsOn(t.starts_on),
+                          t.location,
+                          t.genders?.length
+                            ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
+                            : null,
+                          t.categories?.length ? t.categories.join(' / ') : null,
+                          STATUS_LABEL[t.status] ?? t.status,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    </View>
+                    <IconChevron size={16} color={c.textFaint} />
                   </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.cardName} numberOfLines={1}>
-                      {t.name}
-                    </Text>
-                    <Text style={styles.cardMeta} numberOfLines={1}>
-                      {[
-                        t.genders?.length
-                          ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
-                          : null,
-                        t.categories?.length ? t.categories.join(' / ') : null,
-                        STATUS_LABEL[t.status] ?? t.status,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Text>
-                  </View>
-                  <IconChevron size={16} color={c.textFaint} />
                 </Pressable>
               ))}
             </View>
@@ -211,6 +228,7 @@ const CreateTournamentSheet: React.FC<{
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
+  const [location, setLocation] = useState('');
   const [prizes, setPrizes] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -224,6 +242,7 @@ const CreateTournamentSheet: React.FC<{
     setMaxPairs('');
     setMatchFormat('bo3_stb');
     setStartsOn(null);
+    setLocation('');
     setPrizes('');
     setExtraInfo('');
     setCoverUri(null);
@@ -273,6 +292,7 @@ const CreateTournamentSheet: React.FC<{
         categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
+        location,
         prizes,
         extraInfo,
         coverUrl,
@@ -359,6 +379,19 @@ const CreateTournamentSheet: React.FC<{
         allowClear
         label="FECHA DEL TORNEO"
       />
+
+      <Text style={styles.label}>LUGAR · OPCIONAL</Text>
+      <View style={styles.input}>
+        <TextInput
+          value={location}
+          onChangeText={setLocation}
+          placeholder="Club Smash · Santander"
+          placeholderTextColor={c.textFaint}
+          style={styles.inputField}
+          maxLength={80}
+          autoCapitalize="sentences"
+        />
+      </View>
 
       <Text style={styles.label}>TIPO DE TORNEO</Text>
       <View style={{ gap: 8 }}>
@@ -562,13 +595,17 @@ const makeStyles = (c: Palette) =>
       lineHeight: 19,
     },
     card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
       backgroundColor: c.bgCard,
       borderRadius: Radius.lg,
       borderWidth: 1,
       borderColor: c.hairStrong,
+      overflow: 'hidden',
+    },
+    cardCover: { width: '100%', height: 120 },
+    cardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
       paddingHorizontal: 14,
       paddingVertical: 14,
     },

@@ -587,8 +587,8 @@ export const SettingsScreen = () => {
             <SettingsList
               items={[
                 {
-                  label: 'Apuntarme a un torneo',
-                  onPress: () => navigation.navigate('TournamentSignup'),
+                  label: 'Explorar torneos',
+                  onPress: () => navigation.navigate('ExploreTournaments'),
                 },
               ]}
             />
