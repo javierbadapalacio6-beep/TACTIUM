@@ -44,6 +44,7 @@ export interface Tournament {
   pair_based: boolean;
   match_format: string;
   gender: string | null;
+  genders: string[];
   category: string | null;
   categories: string[];
   created_at: string;
@@ -54,6 +55,7 @@ export type TournamentGender = 'masculino' | 'femenino' | 'mixto';
 export interface TournamentRegistration {
   id: string;
   tournament_id: string;
+  gender: string | null;
   category: string | null;
   pair_label: string | null;
   p1_name: string;
@@ -100,7 +102,7 @@ export async function createTournament(input: {
   name: string;
   format: TournamentFormat;
   matchFormat?: MatchFormat;
-  gender?: TournamentGender | null;
+  genders?: TournamentGender[];
   categories?: string[];
   startsOn?: string | null;
   maxPairs?: number | null;
@@ -110,7 +112,7 @@ export async function createTournament(input: {
     name: input.name,
     format: input.format,
     match_format: input.matchFormat ?? 'bo3_stb',
-    gender: input.gender ?? null,
+    genders: input.genders ?? [],
     categories: input.categories ?? [],
     starts_on: input.startsOn ?? null,
     max_pairs: input.maxPairs ?? null,
@@ -150,6 +152,7 @@ export async function listRegistrations(
 export interface TournamentMatch {
   id: string;
   tournament_id: string;
+  gender: string | null;
   category: string | null;
   bracket: string;
   round: number;
@@ -169,6 +172,7 @@ export interface TournamentMatch {
 /** Alta manual de una pareja (por el club). Puntos opcionales para la siembra. */
 export async function addRegistration(input: {
   tournamentId: string;
+  gender?: string | null;
   category?: string | null;
   p1Name: string;
   p2Name?: string;
@@ -179,6 +183,7 @@ export async function addRegistration(input: {
 }): Promise<void> {
   const { error } = await from()('tournament_registrations').insert({
     tournament_id: input.tournamentId,
+    gender: input.gender ?? null,
     category: input.category ?? null,
     p1_name: input.p1Name.trim(),
     p2_name: input.p2Name?.trim() || null,
@@ -237,6 +242,7 @@ const seedPositions = (size: number): number[] => {
 export async function generateKoBracket(
   tournament: Tournament,
   regs: TournamentRegistration[],
+  gender: string | null = null,
   category: string | null = null,
 ): Promise<void> {
   const seeded = [...regs]
@@ -306,6 +312,7 @@ export async function generateKoBracket(
 
   const rows = byRound.flat().map((m) => ({
     tournament_id: tournament.id,
+    gender,
     category,
     bracket: 'main',
     round: m.round,
@@ -367,6 +374,7 @@ export async function setMatchResult(
     .eq('round', match.round + 1)
     .eq('slot', Math.floor(match.slot / 2));
   q = match.category == null ? q.is('category', null) : q.eq('category', match.category);
+  q = match.gender == null ? q.is('gender', null) : q.eq('gender', match.gender);
   const { data: next } = await q.maybeSingle();
 
   if (next?.id) {
@@ -384,7 +392,7 @@ export async function setMatchResult(
 export interface TournamentLookup {
   id: string;
   name: string;
-  gender: string | null;
+  genders: string[];
   categories: string[];
 }
 
@@ -407,6 +415,7 @@ export async function lookupTournament(
 /** Inscripción pública por código (el que llama es el jugador 1). */
 export async function signupByCode(input: {
   code: string;
+  gender?: string | null;
   category?: string | null;
   p1Name: string;
   p1Email?: string;
@@ -430,6 +439,7 @@ export async function signupByCode(input: {
     p2_phone: input.p2Phone ?? null,
     p_availability: input.availability ?? [],
     p_category: input.category ?? null,
+    p_gender: input.gender ?? null,
   });
   if (error) throw new Error(error.message);
   return data as string;

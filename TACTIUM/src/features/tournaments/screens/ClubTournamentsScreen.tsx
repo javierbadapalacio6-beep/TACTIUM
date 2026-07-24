@@ -148,7 +148,9 @@ export const ClubTournamentsScreen = ({
                     </Text>
                     <Text style={styles.cardMeta} numberOfLines={1}>
                       {[
-                        t.gender ? GENDER_LABEL[t.gender] : null,
+                        t.genders?.length
+                          ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
+                          : null,
                         t.categories?.length ? t.categories.join(' / ') : null,
                         STATUS_LABEL[t.status] ?? t.status,
                       ]
@@ -184,7 +186,7 @@ const CreateTournamentSheet: React.FC<{
   const styles = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
   const [cats, setCats] = useState<string[]>([]);
-  const [gender, setGender] = useState<TournamentGender>('masculino');
+  const [genders, setGenders] = useState<TournamentGender[]>(['masculino']);
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [saving, setSaving] = useState(false);
@@ -192,12 +194,14 @@ const CreateTournamentSheet: React.FC<{
   const reset = () => {
     setName('');
     setCats([]);
-    setGender('masculino');
+    setGenders(['masculino']);
     setMaxPairs('');
     setMatchFormat('bo3_stb');
   };
   const toggleCat = (v: string) =>
     setCats((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
+  const toggleGender = (g: TournamentGender) =>
+    setGenders((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
 
   const save = async () => {
     if (!clubId || !name.trim()) {
@@ -211,7 +215,7 @@ const CreateTournamentSheet: React.FC<{
         name: name.trim(),
         format: 'ko',
         matchFormat,
-        gender,
+        genders,
         categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
       });
@@ -268,14 +272,14 @@ const CreateTournamentSheet: React.FC<{
         />
       </View>
 
-      <Text style={styles.label}>GÉNERO</Text>
+      <Text style={styles.label}>GÉNERO · ELIGE UNO O VARIOS</Text>
       <View style={{ flexDirection: 'row', gap: 6 }}>
         {GENDERS.map((g) => {
-          const sel = gender === g.id;
+          const sel = genders.includes(g.id);
           return (
             <Pressable
               key={g.id}
-              onPress={() => setGender(g.id)}
+              onPress={() => toggleGender(g.id)}
               style={[
                 styles.genderCell,
                 sel && { backgroundColor: c.accent, borderColor: c.accent },

@@ -42,6 +42,12 @@ const FRANJAS = [
 ];
 const slotStr = (dow: number, franja: string) => `${DOW_FULL[dow]} ${franja}`;
 
+const GENDER_LABEL: Record<string, string> = {
+  masculino: 'Masculino',
+  femenino: 'Femenino',
+  mixto: 'Mixto',
+};
+
 export const TournamentSignupScreen = ({
   navigation,
   route,
@@ -54,6 +60,7 @@ export const TournamentSignupScreen = ({
   const [code, setCode] = useState(route.params?.code ?? '');
   const [found, setFound] = useState<TournamentLookup | null>(null);
   const [looking, setLooking] = useState(false);
+  const [gender, setGender] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [p1, setP1] = useState(user ? displayNameOf(user) : '');
   const [p1Email, setP1Email] = useState(
@@ -92,6 +99,7 @@ export const TournamentSignupScreen = ({
         return;
       }
       setFound(t);
+      setGender(t.genders.length === 1 ? t.genders[0] : null);
       setCategory(t.categories.length === 1 ? t.categories[0] : null);
     } catch (e: any) {
       toast.error('Error al buscar', e?.message ?? '');
@@ -100,9 +108,14 @@ export const TournamentSignupScreen = ({
     }
   };
 
+  const needsGender = (found?.genders.length ?? 0) > 0;
   const needsCategory = (found?.categories.length ?? 0) > 0;
   const valid =
-    !!found && !!p1.trim() && !!p2.trim() && (!needsCategory || !!category);
+    !!found &&
+    !!p1.trim() &&
+    !!p2.trim() &&
+    (!needsGender || !!gender) &&
+    (!needsCategory || !!category);
 
   const save = async () => {
     if (!valid) {
@@ -113,6 +126,7 @@ export const TournamentSignupScreen = ({
     try {
       await signupByCode({
         code,
+        gender,
         category,
         p1Name: p1,
         p1Email: p1Email || undefined,
@@ -186,12 +200,43 @@ export const TournamentSignupScreen = ({
           <View style={styles.foundCard}>
             <Text style={styles.foundName} numberOfLines={1}>{found.name}</Text>
             <Text style={styles.foundMeta}>
-              {[found.gender, found.categories.length
-                ? `${found.categories.length} categoría${found.categories.length === 1 ? '' : 's'}`
-                : null]
+              {[
+                found.genders.length
+                  ? found.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
+                  : null,
+                found.categories.length
+                  ? `${found.categories.length} cat.`
+                  : null,
+              ]
                 .filter(Boolean)
                 .join(' · ') || 'Inscripción abierta'}
             </Text>
+
+            {found.genders.length > 0 ? (
+              <>
+                <Text style={styles.foundLabel}>ELIGE TU GÉNERO</Text>
+                <View style={styles.catChips}>
+                  {found.genders.map((g) => {
+                    const sel = gender === g;
+                    return (
+                      <Pressable
+                        key={g}
+                        onPress={() => setGender(g)}
+                        style={[
+                          styles.catChip,
+                          sel && { backgroundColor: c.accent, borderColor: c.accent },
+                        ]}
+                      >
+                        <Text style={[styles.catChipText, { color: sel ? c.textInverse : c.text }]}>
+                          {GENDER_LABEL[g] ?? g}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+
             {found.categories.length > 0 ? (
               <>
                 <Text style={styles.foundLabel}>ELIGE TU CATEGORÍA</Text>
