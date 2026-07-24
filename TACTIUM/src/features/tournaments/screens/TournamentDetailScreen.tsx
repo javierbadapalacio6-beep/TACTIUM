@@ -25,6 +25,7 @@ import {
   dateToIsoTime,
 } from '@components/ui/DateTimeField';
 import { toast } from '@store/toastStore';
+import { notifyTournamentPush } from '@core/push';
 import {
   getTournament,
   listRegistrations,
@@ -1024,6 +1025,13 @@ export const TournamentDetailScreen = ({
     }
   };
 
+  // Genera y, si va bien, avisa a los inscritos (in-app + push).
+  const runGenerateBracket = (fn: () => Promise<void>) =>
+    runGenerate(async () => {
+      await fn();
+      if (t) notifyTournamentPush('tournament_bracket', t.id);
+    });
+
   const onGenerate = () => {
     if (!t) return;
     if (isSocial) {
@@ -1037,7 +1045,7 @@ export const TournamentDetailScreen = ({
           {
             text: 'Generar',
             onPress: () =>
-              runGenerate(() =>
+              runGenerateBracket(() =>
                 isMexicano
                   ? generateMexicanoRound(t, regsCat, matchesCat, dg, dc)
                   : generateAmericano(t, regsCat, dg, dc),
@@ -1053,8 +1061,8 @@ export const TournamentDetailScreen = ({
         `¿De cuántas parejas por grupo? Se repartirán las ${regsCat.length} parejas por siembra.`,
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Grupos de 3', onPress: () => runGenerate(() => generateGroups(t, regsCat, dg, dc, 3)) },
-          { text: 'Grupos de 4', onPress: () => runGenerate(() => generateGroups(t, regsCat, dg, dc, 4)) },
+          { text: 'Grupos de 3', onPress: () => runGenerateBracket(() => generateGroups(t, regsCat, dg, dc, 3)) },
+          { text: 'Grupos de 4', onPress: () => runGenerateBracket(() => generateGroups(t, regsCat, dg, dc, 4)) },
         ],
       );
       return;
@@ -1067,7 +1075,7 @@ export const TournamentDetailScreen = ({
         {
           text: 'Generar',
           onPress: () =>
-            runGenerate(() =>
+            runGenerateBracket(() =>
               isRR
                 ? generateRoundRobin(t, regsCat, dg, dc)
                 : generateKoBracket(t, regsCat, dg, dc),
@@ -1110,6 +1118,7 @@ export const TournamentDetailScreen = ({
           ? `${res.scheduled} partidos · ${res.conflicts} con conflicto de horario`
           : `${res.scheduled} partidos colocados por pista y hora`,
       );
+      if (res.scheduled > 0) notifyTournamentPush('tournament_schedule', t.id);
     });
   };
 

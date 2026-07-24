@@ -11,6 +11,7 @@ import {
   IconClock,
   IconBell,
   IconUser,
+  IconTrophy,
 } from '@components/ui';
 import { useNotificationStore } from '@store/notificationStore';
 import type { AppNotification } from '@core/services/notifications';
@@ -43,6 +44,9 @@ const iconFor = (type: string, color: string) => {
     case 'matchday_created':
     case 'lineup_published':
       return <IconCalendar size={16} color={color} />;
+    case 'tournament_bracket':
+    case 'tournament_schedule':
+      return <IconTrophy size={16} color={color} />;
     case 'availability_reminder':
     case 'lineup_reminder':
       return <IconClock size={16} color={color} />;

@@ -110,6 +110,24 @@ export async function notifyPush(
   }
 }
 
+/**
+ * Avisa a los inscritos de un torneo (in-app + push) cuando el club publica el
+ * cuadro o el horario. La edge function valida que el llamante es admin del
+ * club y resuelve destinatarios. Best-effort, no bloquea.
+ */
+export async function notifyTournamentPush(
+  type: 'tournament_bracket' | 'tournament_schedule',
+  tournamentId: string,
+): Promise<void> {
+  try {
+    await supabase.functions.invoke('send-push', {
+      body: { type, tournamentId },
+    });
+  } catch (e) {
+    console.warn('notifyTournamentPush failed', type, e);
+  }
+}
+
 // Evita repetir el priming varias veces en la misma sesión de app.
 let primedThisSession = false;
 
