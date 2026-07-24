@@ -114,6 +114,7 @@ export const TournamentDetailScreen = ({
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [editMatch, setEditMatch] = useState<TournamentMatch | null>(null);
+  const [activeCat, setActiveCat] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -157,20 +158,40 @@ export const TournamentDetailScreen = ({
     [regs],
   );
 
-  const totalRounds = matches.reduce((m, x) => Math.max(m, x.round), 0);
-  const hasBracket = matches.length > 0;
+  const cats = t?.categories ?? [];
+
+  // Categoría activa por defecto (primera) cuando el torneo tiene categorías.
+  useEffect(() => {
+    if (cats.length > 0 && (activeCat === null || !cats.includes(activeCat))) {
+      setActiveCat(cats[0]);
+    }
+  }, [t]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Todo lo del cuadro/inscritos es POR CATEGORÍA (cada una su cuadro).
+  const regsCat = useMemo(
+    () => regs.filter((r) => r.category === activeCat),
+    [regs, activeCat],
+  );
+  const matchesCat = useMemo(
+    () => matches.filter((m) => m.category === activeCat),
+    [matches, activeCat],
+  );
+
+  const totalRounds = matchesCat.reduce((m, x) => Math.max(m, x.round), 0);
+  const hasBracket = matchesCat.length > 0;
 
   const champion = useMemo(() => {
-    if (t?.status !== 'finished') return null;
-    const final = matches.find((m) => m.round === totalRounds && m.slot === 0);
+    const final = matchesCat.find(
+      (m) => m.round === totalRounds && m.slot === 0 && m.status === 'finished',
+    );
     return final?.winner_reg ?? null;
-  }, [t, matches, totalRounds]);
+  }, [matchesCat, totalRounds]);
 
   const onGenerate = () => {
     if (!t) return;
     Alert.alert(
       'Generar el cuadro',
-      `Se cerrará la inscripción y se creará el cuadro con ${regs.length} parejas (siembra por puntos). No podrás añadir más parejas.`,
+      `Se creará el cuadro${activeCat ? ` de ${activeCat}` : ''} con ${regsCat.length} parejas (siembra por puntos). No podrás añadir más parejas a esta categoría.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -178,7 +199,7 @@ export const TournamentDetailScreen = ({
           onPress: async () => {
             setGenerating(true);
             try {
-              await generateKoBracket(t, regs);
+              await generateKoBracket(t, regsCat, activeCat);
               await load();
             } catch (e: any) {
               toast.error('No se pudo generar', e?.message ?? '');
@@ -262,6 +283,30 @@ export const TournamentDetailScreen = ({
             </View>
           ) : null}
 
+          {/* Pestañas por categoría (cada una su cuadro) */}
+          {cats.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.catTabs}
+            >
+              {cats.map((cat) => {
+                const sel = activeCat === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => setActiveCat(cat)}
+                    style={[styles.catTab, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+                  >
+                    <Text style={[styles.catTabText, { color: sel ? c.textInverse : c.textMuted }]}>
+                      {cat}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+
           {/* Fase de inscripción */}
           {!hasBracket ? (
             <View style={{ paddingHorizontal: 22 }}>
@@ -286,7 +331,7 @@ export const TournamentDetailScreen = ({
 
               <View style={styles.regHeader}>
                 <Text style={styles.sectionLabel}>
-                  INSCRITOS · {regs.length}
+                  INSCRITOS{activeCat ? ` · ${activeCat}` : ''} · {regsCat.length}
                   {t?.max_pairs ? `/${t.max_pairs}` : ''}
                 </Text>
                 <Pressable onPress={() => setAdding(true)} hitSlop={8}>
@@ -294,13 +339,14 @@ export const TournamentDetailScreen = ({
                 </Pressable>
               </View>
 
-              {regs.length === 0 ? (
+              {regsCat.length === 0 ? (
                 <Text style={styles.emptyText}>
-                  Aún no hay parejas. Añádelas a mano o comparte el código.
+                  Aún no hay parejas{activeCat ? ` en ${activeCat}` : ''}. Añádelas a
+                  mano o comparte el código.
                 </Text>
               ) : (
                 <View style={{ gap: 8 }}>
-                  {regs.map((r, i) => (
+                  {regsCat.map((r, i) => (
                     <View key={r.id} style={styles.regRow}>
                       <Text style={styles.regIdx}>{i + 1}</Text>
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -327,10 +373,10 @@ export const TournamentDetailScreen = ({
 
               <Pressable
                 onPress={onGenerate}
-                disabled={regs.length < 2 || generating}
+                disabled={regsCat.length < 2 || generating}
                 style={({ pressed }) => [
                   styles.generateBtn,
-                  (regs.length < 2 || generating) && { opacity: 0.4 },
+                  (regsCat.length < 2 || generating) && { opacity: 0.4 },
                   pressed && { opacity: 0.9 },
                 ]}
               >
@@ -338,12 +384,14 @@ export const TournamentDetailScreen = ({
                   <ActivityIndicator size="small" color={c.textInverse} />
                 ) : (
                   <Text style={styles.generateLabel}>
-                    Cerrar inscripción y generar cuadro
+                    Generar cuadro{activeCat ? ` · ${activeCat}` : ''}
                   </Text>
                 )}
               </Pressable>
-              {regs.length < 2 ? (
-                <Text style={styles.genHint}>Hacen falta al menos 2 parejas.</Text>
+              {regsCat.length < 2 ? (
+                <Text style={styles.genHint}>
+                  Hacen falta al menos 2 parejas{activeCat ? ` en ${activeCat}` : ''}.
+                </Text>
               ) : null}
             </View>
           ) : (
@@ -355,13 +403,13 @@ export const TournamentDetailScreen = ({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={{ flexDirection: 'row', paddingHorizontal: 22, paddingTop: 12 }}>
                   {(() => {
-                    const r1count = matches.filter(
+                    const r1count = matchesCat.filter(
                       (m) => m.round === 1 && m.bracket === 'main',
                     ).length;
                     const totalH = r1count * PITCH1;
                     return Array.from({ length: totalRounds }, (_, r) => r + 1).map(
                       (round) => {
-                        const col = matches
+                        const col = matchesCat
                           .filter((m) => m.round === round && m.bracket === 'main')
                           .sort((a, b) => a.slot - b.slot);
                         const isCol = collapsed.has(round);
@@ -459,6 +507,7 @@ export const TournamentDetailScreen = ({
       <AddPairSheet
         open={adding}
         tournamentId={tournamentId}
+        category={activeCat}
         onClose={() => setAdding(false)}
         onAdded={load}
       />
@@ -497,9 +546,10 @@ const MatchSide: React.FC<{
 const AddPairSheet: React.FC<{
   open: boolean;
   tournamentId: string;
+  category: string | null;
   onClose: () => void;
   onAdded: () => void;
-}> = ({ open, tournamentId, onClose, onAdded }) => {
+}> = ({ open, tournamentId, category, onClose, onAdded }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [p1, setP1] = useState('');
@@ -524,6 +574,7 @@ const AddPairSheet: React.FC<{
     try {
       await addRegistration({
         tournamentId,
+        category,
         p1Name: p1,
         p2Name: p2,
         seedPoints: pts ? parseInt(pts, 10) : null,
@@ -754,6 +805,18 @@ const makeStyles = (c: Palette) =>
     },
     championLabel: { fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2, color: c.accentDim, fontWeight: '600' },
     championName: { color: c.text, fontSize: 17, fontWeight: '800', marginTop: 2 },
+    catTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 12 },
+    catTab: {
+      paddingHorizontal: 16,
+      height: 38,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    catTabText: { fontSize: 14, fontWeight: '700' },
     codeCard: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -149,7 +149,7 @@ export const ClubTournamentsScreen = ({
                     <Text style={styles.cardMeta} numberOfLines={1}>
                       {[
                         t.gender ? GENDER_LABEL[t.gender] : null,
-                        t.category,
+                        t.categories?.length ? t.categories.join(' / ') : null,
                         STATUS_LABEL[t.status] ?? t.status,
                       ]
                         .filter(Boolean)
@@ -183,7 +183,7 @@ const CreateTournamentSheet: React.FC<{
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
-  const [cat, setCat] = useState<string | null>(null);
+  const [cats, setCats] = useState<string[]>([]);
   const [gender, setGender] = useState<TournamentGender>('masculino');
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
@@ -191,11 +191,13 @@ const CreateTournamentSheet: React.FC<{
 
   const reset = () => {
     setName('');
-    setCat(null);
+    setCats([]);
     setGender('masculino');
     setMaxPairs('');
     setMatchFormat('bo3_stb');
   };
+  const toggleCat = (v: string) =>
+    setCats((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
 
   const save = async () => {
     if (!clubId || !name.trim()) {
@@ -210,7 +212,7 @@ const CreateTournamentSheet: React.FC<{
         format: 'ko',
         matchFormat,
         gender,
-        category: cat,
+        categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
       });
       toast.success('Torneo creado', 'Comparte el código para las inscripciones.');
@@ -287,18 +289,18 @@ const CreateTournamentSheet: React.FC<{
         })}
       </View>
 
-      <Text style={styles.label}>CATEGORÍA · OPCIONAL</Text>
+      <Text style={styles.label}>CATEGORÍAS · ELIGE UNA O VARIAS</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 6, paddingRight: 4 }}
       >
         {CATS.map((v) => {
-          const sel = cat === v;
+          const sel = cats.includes(v);
           return (
             <Pressable
               key={v}
-              onPress={() => setCat(sel ? null : v)}
+              onPress={() => toggleCat(v)}
               style={[
                 styles.catCell,
                 sel && { backgroundColor: c.accent, borderColor: c.accent },
@@ -311,6 +313,11 @@ const CreateTournamentSheet: React.FC<{
           );
         })}
       </ScrollView>
+      <Text style={styles.catHint}>
+        {cats.length > 1
+          ? 'Cada categoría tendrá su propio cuadro.'
+          : 'Puedes marcar varias; cada una jugará su cuadro.'}
+      </Text>
 
       <Text style={styles.label}>FORMATO DE PARTIDO</Text>
       <View style={{ gap: 8 }}>
@@ -476,6 +483,7 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     catText: { fontSize: 16, fontWeight: '600' },
+    catHint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 17 },
     genderCell: {
       flex: 1,
       height: 46,

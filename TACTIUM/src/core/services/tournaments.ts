@@ -37,7 +37,6 @@ export interface Tournament {
   club_id: string;
   name: string;
   format: TournamentFormat;
-  category: string | null;
   status: TournamentStatus;
   starts_on: string | null;
   signup_code: string | null;
@@ -45,6 +44,8 @@ export interface Tournament {
   pair_based: boolean;
   match_format: string;
   gender: string | null;
+  category: string | null;
+  categories: string[];
   created_at: string;
 }
 
@@ -53,6 +54,7 @@ export type TournamentGender = 'masculino' | 'femenino' | 'mixto';
 export interface TournamentRegistration {
   id: string;
   tournament_id: string;
+  category: string | null;
   pair_label: string | null;
   p1_name: string;
   p1_email: string | null;
@@ -99,7 +101,7 @@ export async function createTournament(input: {
   format: TournamentFormat;
   matchFormat?: MatchFormat;
   gender?: TournamentGender | null;
-  category?: string | null;
+  categories?: string[];
   startsOn?: string | null;
   maxPairs?: number | null;
 }): Promise<Tournament> {
@@ -109,7 +111,7 @@ export async function createTournament(input: {
     format: input.format,
     match_format: input.matchFormat ?? 'bo3_stb',
     gender: input.gender ?? null,
-    category: input.category ?? null,
+    categories: input.categories ?? [],
     starts_on: input.startsOn ?? null,
     max_pairs: input.maxPairs ?? null,
     // La inscripción queda abierta al crear el torneo (código compartible).
@@ -148,6 +150,7 @@ export async function listRegistrations(
 export interface TournamentMatch {
   id: string;
   tournament_id: string;
+  category: string | null;
   bracket: string;
   round: number;
   slot: number;
@@ -166,6 +169,7 @@ export interface TournamentMatch {
 /** Alta manual de una pareja (por el club). Puntos opcionales para la siembra. */
 export async function addRegistration(input: {
   tournamentId: string;
+  category?: string | null;
   p1Name: string;
   p2Name?: string;
   p1Email?: string;
@@ -175,6 +179,7 @@ export async function addRegistration(input: {
 }): Promise<void> {
   const { error } = await from()('tournament_registrations').insert({
     tournament_id: input.tournamentId,
+    category: input.category ?? null,
     p1_name: input.p1Name.trim(),
     p2_name: input.p2Name?.trim() || null,
     p1_email: input.p1Email?.trim() || null,
@@ -232,6 +237,7 @@ const seedPositions = (size: number): number[] => {
 export async function generateKoBracket(
   tournament: Tournament,
   regs: TournamentRegistration[],
+  category: string | null = null,
 ): Promise<void> {
   const seeded = [...regs]
     .filter((r) => r.status !== 'withdrawn')
@@ -300,6 +306,7 @@ export async function generateKoBracket(
 
   const rows = byRound.flat().map((m) => ({
     tournament_id: tournament.id,
+    category,
     bracket: 'main',
     round: m.round,
     slot: m.slot,
@@ -353,13 +360,14 @@ export async function setMatchResult(
     .eq('id', match.id);
   if (upd.error) throw new Error(upd.error.message);
 
-  const { data: next } = await from()('tournament_matches')
+  let q = from()('tournament_matches')
     .select('id')
     .eq('tournament_id', match.tournament_id)
     .eq('bracket', match.bracket)
     .eq('round', match.round + 1)
-    .eq('slot', Math.floor(match.slot / 2))
-    .maybeSingle();
+    .eq('slot', Math.floor(match.slot / 2));
+  q = match.category == null ? q.is('category', null) : q.eq('category', match.category);
+  const { data: next } = await q.maybeSingle();
 
   if (next?.id) {
     await from()('tournament_matches')
@@ -373,9 +381,33 @@ export async function setMatchResult(
   }
 }
 
+export interface TournamentLookup {
+  id: string;
+  name: string;
+  gender: string | null;
+  categories: string[];
+}
+
+/** Busca un torneo por código (para mostrar nombre + categorías al apuntarse). */
+export async function lookupTournament(
+  code: string,
+): Promise<TournamentLookup | null> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { data, error } = await rpc('tournament_lookup', {
+    p_code: code.trim().toUpperCase(),
+  });
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as TournamentLookup[];
+  return rows[0] ?? null;
+}
+
 /** Inscripción pública por código (el que llama es el jugador 1). */
 export async function signupByCode(input: {
   code: string;
+  category?: string | null;
   p1Name: string;
   p1Email?: string;
   p1Phone?: string;
@@ -397,6 +429,7 @@ export async function signupByCode(input: {
     p2_email: input.p2Email ?? null,
     p2_phone: input.p2Phone ?? null,
     p_availability: input.availability ?? [],
+    p_category: input.category ?? null,
   });
   if (error) throw new Error(error.message);
   return data as string;

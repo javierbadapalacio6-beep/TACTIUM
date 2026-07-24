@@ -19,7 +19,11 @@ import { IconBack } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { displayNameOf } from '@core/utils/format';
 import { toast } from '@store/toastStore';
-import { signupByCode } from '@core/services/tournaments';
+import {
+  signupByCode,
+  lookupTournament,
+  type TournamentLookup,
+} from '@core/services/tournaments';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
@@ -48,6 +52,9 @@ export const TournamentSignupScreen = ({
   const user = useAuthStore((s) => s.user);
 
   const [code, setCode] = useState(route.params?.code ?? '');
+  const [found, setFound] = useState<TournamentLookup | null>(null);
+  const [looking, setLooking] = useState(false);
+  const [category, setCategory] = useState<string | null>(null);
   const [p1, setP1] = useState(user ? displayNameOf(user) : '');
   const [p1Email, setP1Email] = useState(
     (user?.email as string | undefined) ?? '',
@@ -71,17 +78,42 @@ export const TournamentSignupScreen = ({
     );
   };
 
-  const valid = code.trim().length >= 4 && p1.trim() && p2.trim();
+  const doLookup = async () => {
+    if (code.trim().length < 4) {
+      toast.error('Escribe el código del torneo');
+      return;
+    }
+    setLooking(true);
+    try {
+      const t = await lookupTournament(code);
+      if (!t) {
+        setFound(null);
+        toast.error('No encontrado', 'Revisa el código o la inscripción está cerrada.');
+        return;
+      }
+      setFound(t);
+      setCategory(t.categories.length === 1 ? t.categories[0] : null);
+    } catch (e: any) {
+      toast.error('Error al buscar', e?.message ?? '');
+    } finally {
+      setLooking(false);
+    }
+  };
+
+  const needsCategory = (found?.categories.length ?? 0) > 0;
+  const valid =
+    !!found && !!p1.trim() && !!p2.trim() && (!needsCategory || !!category);
 
   const save = async () => {
     if (!valid) {
-      toast.error('Rellena código, tu nombre y el de tu compañero');
+      toast.error('Busca el torneo, elige categoría y rellena los nombres');
       return;
     }
     setSaving(true);
     try {
       await signupByCode({
         code,
+        category,
         p1Name: p1,
         p1Email: p1Email || undefined,
         p1Phone: p1Phone || undefined,
@@ -122,17 +154,70 @@ export const TournamentSignupScreen = ({
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.label}>CÓDIGO DEL TORNEO</Text>
-        <View style={styles.input}>
-          <TextInput
-            value={code}
-            onChangeText={(v) => setCode(v.toUpperCase().replace(/\s/g, ''))}
-            placeholder="ABC123"
-            placeholderTextColor={c.textFaint}
-            style={[styles.inputField, { fontFamily: Fonts.mono, letterSpacing: 3 }]}
-            autoCapitalize="characters"
-            maxLength={8}
-          />
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={[styles.input, { flex: 1 }]}>
+            <TextInput
+              value={code}
+              onChangeText={(v) => {
+                setCode(v.toUpperCase().replace(/\s/g, ''));
+                setFound(null);
+              }}
+              placeholder="ABC123"
+              placeholderTextColor={c.textFaint}
+              style={[styles.inputField, { fontFamily: Fonts.mono, letterSpacing: 3 }]}
+              autoCapitalize="characters"
+              maxLength={8}
+            />
+          </View>
+          <Pressable
+            onPress={doLookup}
+            disabled={looking}
+            style={({ pressed }) => [styles.lookupBtn, pressed && { opacity: 0.85 }]}
+          >
+            {looking ? (
+              <ActivityIndicator size="small" color={c.accent} />
+            ) : (
+              <Text style={styles.lookupText}>Buscar</Text>
+            )}
+          </Pressable>
         </View>
+
+        {found ? (
+          <View style={styles.foundCard}>
+            <Text style={styles.foundName} numberOfLines={1}>{found.name}</Text>
+            <Text style={styles.foundMeta}>
+              {[found.gender, found.categories.length
+                ? `${found.categories.length} categoría${found.categories.length === 1 ? '' : 's'}`
+                : null]
+                .filter(Boolean)
+                .join(' · ') || 'Inscripción abierta'}
+            </Text>
+            {found.categories.length > 0 ? (
+              <>
+                <Text style={styles.foundLabel}>ELIGE TU CATEGORÍA</Text>
+                <View style={styles.catChips}>
+                  {found.categories.map((cat) => {
+                    const sel = category === cat;
+                    return (
+                      <Pressable
+                        key={cat}
+                        onPress={() => setCategory(cat)}
+                        style={[
+                          styles.catChip,
+                          sel && { backgroundColor: c.accent, borderColor: c.accent },
+                        ]}
+                      >
+                        <Text style={[styles.catChipText, { color: sel ? c.textInverse : c.text }]}>
+                          {cat}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text style={styles.label}>TU NOMBRE</Text>
         <View style={styles.input}>
@@ -268,6 +353,49 @@ const makeStyles = (c: Palette) =>
     },
     inputField: { color: c.text, fontSize: 15, fontWeight: '500', paddingVertical: 0 },
     two: { flexDirection: 'row', gap: 12 },
+    lookupBtn: {
+      paddingHorizontal: 18,
+      minHeight: 50,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    lookupText: { color: c.accent, fontSize: 14, fontWeight: '700' },
+    foundCard: {
+      marginTop: 12,
+      padding: 14,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.accent25,
+    },
+    foundName: { color: c.text, fontSize: 16, fontWeight: '700' },
+    foundMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    foundLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 2,
+      color: c.textFaint,
+      textTransform: 'uppercase',
+      fontWeight: '500',
+      marginTop: 14,
+      marginBottom: 8,
+    },
+    catChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    catChip: {
+      paddingHorizontal: 16,
+      height: 42,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    catChipText: { fontSize: 15, fontWeight: '700' },
     availHint: { color: c.textMuted, fontSize: 12, marginTop: -2, marginBottom: 10, lineHeight: 17 },
     franjaBlock: { marginBottom: 12 },
     franjaLabel: {
