@@ -78,6 +78,9 @@ export interface TournamentRegistration {
   seed_points: number | null;
   status: string;
   created_at: string;
+  // Enriquecidos en listRegistrations desde profiles (foto del jugador si la puso).
+  p1_avatar?: string | null;
+  p2_avatar?: string | null;
 }
 
 type AnyFrom = (table: string) => any;
@@ -153,7 +156,31 @@ export async function listRegistrations(
     .eq('tournament_id', tournamentId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as TournamentRegistration[];
+  const regs = (data ?? []) as TournamentRegistration[];
+  // Enriquecer con la foto de perfil de los jugadores vinculados (si la tienen).
+  const ids = Array.from(
+    new Set(
+      regs
+        .flatMap((r) => [r.p1_user_id, r.p2_user_id])
+        .filter((x): x is string => !!x),
+    ),
+  );
+  if (ids.length) {
+    const { data: profs } = await from()('profiles')
+      .select('id, avatar_url')
+      .in('id', ids);
+    const byId = new Map<string, string | null>(
+      ((profs ?? []) as { id: string; avatar_url: string | null }[]).map((p) => [
+        p.id,
+        p.avatar_url,
+      ]),
+    );
+    for (const r of regs) {
+      r.p1_avatar = r.p1_user_id ? byId.get(r.p1_user_id) ?? null : null;
+      r.p2_avatar = r.p2_user_id ? byId.get(r.p2_user_id) ?? null : null;
+    }
+  }
+  return regs;
 }
 
 export interface TournamentMatch {
