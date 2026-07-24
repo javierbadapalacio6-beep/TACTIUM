@@ -4,6 +4,27 @@ import { supabase } from '@core/supabase/client';
 // generados → casts puntuales (mismo patrón que social.ts / clubSchedule.ts).
 
 export type TournamentFormat = 'ko' | 'groups_ko' | 'round_robin' | 'americano';
+// Formato del PARTIDO (sets). Ver formatConfig.
+export type MatchFormat = 'bo3_stb' | 'bo3_full' | 'bo1';
+
+export const formatConfig = (
+  f: string,
+): { maxSets: number; setsToWin: number; thirdSuperTb: boolean; label: string } => {
+  switch (f) {
+    case 'bo3_full':
+      return { maxSets: 3, setsToWin: 2, thirdSuperTb: false, label: 'Mejor de 3 sets' };
+    case 'bo1':
+      return { maxSets: 1, setsToWin: 1, thirdSuperTb: false, label: '1 set' };
+    case 'bo3_stb':
+    default:
+      return {
+        maxSets: 3,
+        setsToWin: 2,
+        thirdSuperTb: true,
+        label: 'Mejor de 3 · super tie-break',
+      };
+  }
+};
 export type TournamentStatus =
   | 'draft'
   | 'open'
@@ -22,6 +43,7 @@ export interface Tournament {
   signup_code: string | null;
   max_pairs: number | null;
   pair_based: boolean;
+  match_format: string;
   created_at: string;
 }
 
@@ -72,6 +94,7 @@ export async function createTournament(input: {
   clubId: string;
   name: string;
   format: TournamentFormat;
+  matchFormat?: MatchFormat;
   category?: string | null;
   startsOn?: string | null;
   maxPairs?: number | null;
@@ -80,6 +103,7 @@ export async function createTournament(input: {
     club_id: input.clubId,
     name: input.name,
     format: input.format,
+    match_format: input.matchFormat ?? 'bo3_stb',
     category: input.category ?? null,
     starts_on: input.startsOn ?? null,
     max_pairs: input.maxPairs ?? null,
@@ -131,6 +155,7 @@ export interface TournamentMatch {
   status: string;
   scheduled_at: string | null;
   court: string | null;
+  sets: number[][];
 }
 
 /** Alta manual de una pareja (por el club). Puntos opcionales para la siembra. */
@@ -284,21 +309,39 @@ export async function generateKoBracket(
   await from()('tournaments').update({ status: 'in_progress' }).eq('id', tournament.id);
 }
 
-/** Mete el resultado de un partido y hace avanzar al ganador en el cuadro. */
+/**
+ * Mete el resultado por SETS y hace avanzar al ganador. `sets` = array de
+ * [gamesHome, gamesAway] por set jugado. La app cuenta sets ganados y decide el
+ * ganador (primero en llegar a `setsToWin`). Guarda el detalle en `sets` y los
+ * sets ganados en home_score/away_score.
+ */
 export async function setMatchResult(
   match: TournamentMatch,
-  homeScore: number,
-  awayScore: number,
+  sets: number[][],
+  setsToWin: number,
 ): Promise<void> {
-  if (homeScore === awayScore) throw new Error('No puede haber empate.');
   if (!match.home_reg || !match.away_reg) {
     throw new Error('Faltan las dos parejas en este partido.');
   }
-  const winner = homeScore > awayScore ? match.home_reg : match.away_reg;
+  const clean = sets.filter(
+    (s) => s.length === 2 && (s[0] !== 0 || s[1] !== 0),
+  );
+  let wonHome = 0;
+  let wonAway = 0;
+  for (const [h, a] of clean) {
+    if (h === a) throw new Error('Un set no puede quedar empatado.');
+    if (h > a) wonHome++;
+    else wonAway++;
+  }
+  if (wonHome < setsToWin && wonAway < setsToWin) {
+    throw new Error('Marcador incompleto: nadie ha ganado los sets necesarios.');
+  }
+  const winner = wonHome > wonAway ? match.home_reg : match.away_reg;
   const upd = await from()('tournament_matches')
     .update({
-      home_score: homeScore,
-      away_score: awayScore,
+      sets: clean,
+      home_score: wonHome,
+      away_score: wonAway,
       winner_reg: winner,
       status: 'finished',
     })

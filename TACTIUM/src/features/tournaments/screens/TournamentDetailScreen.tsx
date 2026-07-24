@@ -26,6 +26,7 @@ import {
   deleteRegistration,
   generateKoBracket,
   setMatchResult,
+  formatConfig,
   type Tournament,
   type TournamentRegistration,
   type TournamentMatch,
@@ -355,6 +356,7 @@ export const TournamentDetailScreen = ({
 
       <ResultSheet
         match={editMatch}
+        matchFormat={t?.match_format ?? 'bo3_stb'}
         homeName={regName(editMatch?.home_reg ?? null)}
         awayName={regName(editMatch?.away_reg ?? null)}
         onClose={() => setEditMatch(null)}
@@ -477,39 +479,56 @@ const AddPairSheet: React.FC<{
 
 const ResultSheet: React.FC<{
   match: TournamentMatch | null;
+  matchFormat: string;
   homeName: string;
   awayName: string;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ match, homeName, awayName, onClose, onSaved }) => {
+}> = ({ match, matchFormat, homeName, awayName, onClose, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const [home, setHome] = useState('');
-  const [away, setAway] = useState('');
+  const cfg = useMemo(() => formatConfig(matchFormat), [matchFormat]);
+  const [rows, setRows] = useState<{ h: string; a: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (match) {
-      setHome(match.home_score != null ? String(match.home_score) : '');
-      setAway(match.away_score != null ? String(match.away_score) : '');
+    if (!match) return;
+    setRows(
+      Array.from({ length: cfg.maxSets }, (_, i) => {
+        const s = match.sets?.[i];
+        return { h: s ? String(s[0]) : '', a: s ? String(s[1]) : '' };
+      }),
+    );
+  }, [match, cfg.maxSets]);
+
+  const setCell = (i: number, side: 'h' | 'a', v: string) =>
+    setRows((prev) =>
+      prev.map((r, idx) => (idx === i ? { ...r, [side]: v.replace(/[^0-9]/g, '') } : r)),
+    );
+
+  const { wonHome, wonAway } = useMemo(() => {
+    let wh = 0;
+    let wa = 0;
+    for (const r of rows) {
+      const h = parseInt(r.h, 10);
+      const a = parseInt(r.a, 10);
+      if (Number.isNaN(h) || Number.isNaN(a) || h === a) continue;
+      if (h > a) wh++;
+      else wa++;
     }
-  }, [match]);
+    return { wonHome: wh, wonAway: wa };
+  }, [rows]);
+
+  const decided = wonHome >= cfg.setsToWin || wonAway >= cfg.setsToWin;
 
   const save = async () => {
     if (!match) return;
-    const h = parseInt(home, 10);
-    const a = parseInt(away, 10);
-    if (Number.isNaN(h) || Number.isNaN(a)) {
-      toast.error('Pon el marcador de los dos');
-      return;
-    }
-    if (h === a) {
-      toast.error('No puede haber empate');
-      return;
-    }
+    const sets = rows
+      .map((r) => [parseInt(r.h, 10), parseInt(r.a, 10)])
+      .filter(([h, a]) => !Number.isNaN(h) && !Number.isNaN(a) && (h !== 0 || a !== 0));
     setSaving(true);
     try {
-      await setMatchResult(match, h, a);
+      await setMatchResult(match, sets, cfg.setsToWin);
       toast.success('Resultado guardado');
       onSaved();
       onClose();
@@ -520,6 +539,11 @@ const ResultSheet: React.FC<{
     }
   };
 
+  const setLabel = (i: number) =>
+    cfg.thirdSuperTb && cfg.maxSets === 3 && i === 2
+      ? 'SUPER TIE-BREAK (a 11)'
+      : `SET ${i + 1}`;
+
   return (
     <BottomSheet
       open={!!match}
@@ -527,8 +551,12 @@ const ResultSheet: React.FC<{
       footer={
         <Pressable
           onPress={save}
-          disabled={saving}
-          style={({ pressed }) => [styles.saveBtn, saving && { opacity: 0.5 }, pressed && { opacity: 0.85 }]}
+          disabled={saving || !decided}
+          style={({ pressed }) => [
+            styles.saveBtn,
+            (saving || !decided) && { opacity: 0.5 },
+            pressed && { opacity: 0.85 },
+          ]}
         >
           {saving ? (
             <ActivityIndicator size="small" color={c.textInverse} />
@@ -538,23 +566,43 @@ const ResultSheet: React.FC<{
         </Pressable>
       }
     >
-      <Text style={styles.sheetEyebrow}>RESULTADO</Text>
-      <Text style={styles.sheetTitle}>Partido</Text>
+      <Text style={styles.sheetEyebrow}>RESULTADO · {cfg.label.toUpperCase()}</Text>
+      <Text style={styles.setTeam} numberOfLines={1}>{homeName}</Text>
+      <Text style={styles.setVs}>vs</Text>
+      <Text style={styles.setTeam} numberOfLines={1}>{awayName}</Text>
 
-      <View style={styles.scoreRow}>
-        <Text style={styles.scoreName} numberOfLines={1}>{homeName}</Text>
-        <View style={styles.scoreInput}>
-          <TextInput value={home} onChangeText={(v) => setHome(v.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={c.textFaint} style={styles.scoreInputField} keyboardType="number-pad" maxLength={2} />
+      {rows.map((r, i) => (
+        <View key={i} style={styles.setRow}>
+          <Text style={styles.setRowLabel}>{setLabel(i)}</Text>
+          <View style={styles.setInputs}>
+            <TextInput
+              value={r.h}
+              onChangeText={(v) => setCell(i, 'h', v)}
+              placeholder="0"
+              placeholderTextColor={c.textFaint}
+              style={styles.setInput}
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+            <Text style={styles.setSep}>–</Text>
+            <TextInput
+              value={r.a}
+              onChangeText={(v) => setCell(i, 'a', v)}
+              placeholder="0"
+              placeholderTextColor={c.textFaint}
+              style={styles.setInput}
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+          </View>
         </View>
-      </View>
-      <View style={styles.scoreRow}>
-        <Text style={styles.scoreName} numberOfLines={1}>{awayName}</Text>
-        <View style={styles.scoreInput}>
-          <TextInput value={away} onChangeText={(v) => setAway(v.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={c.textFaint} style={styles.scoreInputField} keyboardType="number-pad" maxLength={2} />
-        </View>
-      </View>
-      <Text style={styles.scoreHint}>
-        El ganador (marcador más alto) avanza a la siguiente ronda.
+      ))}
+
+      <Text style={[styles.liveResult, decided && { color: c.accent }]}>
+        {wonHome}–{wonAway} en sets
+        {decided
+          ? ` · gana ${wonHome > wonAway ? homeName : awayName}`
+          : ' · marcador incompleto'}
       </Text>
     </BottomSheet>
   );
@@ -731,6 +779,31 @@ const makeStyles = (c: Palette) =>
       width: '100%',
     },
     scoreHint: { color: c.textMuted, fontSize: 12, marginTop: 16, lineHeight: 18 },
+    setTeam: { color: c.text, fontSize: 16, fontWeight: '700', marginTop: 4 },
+    setVs: { color: c.textFaint, fontSize: 12, fontFamily: Fonts.mono, marginVertical: 2 },
+    setRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 14,
+    },
+    setRowLabel: { fontFamily: Fonts.mono, fontSize: 12, letterSpacing: 1, color: c.textMuted, fontWeight: '600' },
+    setInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    setInput: {
+      width: 52,
+      height: 50,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      color: c.text,
+      fontSize: 20,
+      fontWeight: '800',
+      fontFamily: Fonts.mono,
+      textAlign: 'center',
+    },
+    setSep: { color: c.textFaint, fontSize: 18, fontWeight: '700' },
+    liveResult: { color: c.textMuted, fontSize: 13, fontWeight: '600', marginTop: 18 },
     saveBtn: { height: 52, borderRadius: Radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
     saveLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   });

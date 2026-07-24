@@ -23,11 +23,18 @@ import {
   listTournaments,
   createTournament,
   type Tournament,
+  type MatchFormat,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
 
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª'];
+
+const MATCH_FORMATS: { id: MatchFormat; label: string; sub: string }[] = [
+  { id: 'bo3_stb', label: 'Mejor de 3 · super tie-break', sub: '2 sets; si 1-1, super TB a 11 (dif. 2)' },
+  { id: 'bo3_full', label: 'Mejor de 3 sets', sub: '2 sets; 3º set completo si 1-1' },
+  { id: 'bo1', label: '1 set', sub: 'Un solo set decide' },
+];
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Borrador',
@@ -166,12 +173,14 @@ const CreateTournamentSheet: React.FC<{
   const [name, setName] = useState('');
   const [cat, setCat] = useState<string | null>(null);
   const [maxPairs, setMaxPairs] = useState('');
+  const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
     setName('');
     setCat(null);
     setMaxPairs('');
+    setMatchFormat('bo3_stb');
   };
 
   const save = async () => {
@@ -185,6 +194,7 @@ const CreateTournamentSheet: React.FC<{
         clubId,
         name: name.trim(),
         format: 'ko',
+        matchFormat,
         category: cat,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
       });
@@ -265,6 +275,31 @@ const CreateTournamentSheet: React.FC<{
           );
         })}
       </ScrollView>
+
+      <Text style={styles.label}>FORMATO DE PARTIDO</Text>
+      <View style={{ gap: 8 }}>
+        {MATCH_FORMATS.map((f) => {
+          const sel = matchFormat === f.id;
+          return (
+            <Pressable
+              key={f.id}
+              onPress={() => setMatchFormat(f.id)}
+              style={[
+                styles.fmtRow,
+                sel && { borderColor: c.accent, backgroundColor: c.accent10 },
+              ]}
+            >
+              <View style={[styles.radio, sel && { borderColor: c.accent }]}>
+                {sel ? <View style={styles.radioDot} /> : null}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.fmtLabel}>{f.label}</Text>
+                <Text style={styles.fmtSub}>{f.sub}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <Text style={styles.label}>PLAZAS (PAREJAS) · OPCIONAL</Text>
       <View style={styles.input}>
@@ -405,6 +440,28 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     catText: { fontSize: 16, fontWeight: '600' },
+    fmtRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    radio: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.accent },
+    fmtLabel: { color: c.text, fontSize: 14, fontWeight: '600' },
+    fmtSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
     saveBtn: {
       height: 52,
       borderRadius: Radius.lg,
