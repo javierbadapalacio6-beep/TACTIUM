@@ -49,6 +49,9 @@ export interface Tournament {
   prizes: string | null;
   extra_info: string | null;
   cover_url: string | null;
+  courts: number;
+  start_time: string;
+  slot_minutes: number;
   signup_code: string | null;
   max_pairs: number | null;
   pair_based: boolean;
@@ -914,6 +917,223 @@ export async function setMatchResult(
       .update({ status: 'finished' })
       .eq('id', match.tournament_id);
   }
+}
+
+// ─── MOTOR DE HORARIOS ────────────────────────────────────────────────
+// Asigna hora + pista a cada partido con jugadores conocidos, respetando la
+// disponibilidad marcada por los jugadores y sin solapar parejas ni pistas.
+
+/** Guarda la configuración de horario del torneo (pistas, inicio, duración). */
+export async function updateTournamentSchedule(
+  tournamentId: string,
+  cfg: { courts: number; startTime: string; slotMinutes: number },
+): Promise<void> {
+  const { error } = await from()('tournaments')
+    .update({
+      courts: Math.max(1, cfg.courts),
+      start_time: cfg.startTime,
+      slot_minutes: Math.max(15, cfg.slotMinutes),
+    })
+    .eq('id', tournamentId);
+  if (error) throw new Error(error.message);
+}
+
+const DOW_TOKENS: Record<string, number> = {
+  lun: 1, mar: 2, mié: 3, mie: 3, jue: 4, vie: 5, sáb: 6, sab: 6, dom: 0,
+};
+
+// Extrae de una cadena de disponibilidad los rangos [minInicio, minFin) y un
+// día opcional. Tolerante a los formatos mezclados ("Sáb 18:00–21:00",
+// "9:00–12:00", "mañana", "tarde", "noche"). Devuelve [] si no entiende nada.
+function parseAvailabilityEntry(
+  raw: string,
+): { dow: number | null; from: number; to: number }[] {
+  const s = raw.trim().toLowerCase();
+  let dow: number | null = null;
+  const firstWord = s.split(/\s+/)[0];
+  if (firstWord in DOW_TOKENS) dow = DOW_TOKENS[firstWord];
+  const out: { dow: number | null; from: number; to: number }[] = [];
+  const re = /(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const from = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    let to = parseInt(m[3], 10) * 60 + parseInt(m[4], 10);
+    if (to <= from) to = 24 * 60; // "21:00–00:00"
+    out.push({ dow, from, to });
+  }
+  if (out.length === 0) {
+    if (s.includes('mañana')) out.push({ dow, from: 9 * 60, to: 14 * 60 });
+    else if (s.includes('tarde')) out.push({ dow, from: 16 * 60, to: 21 * 60 });
+    else if (s.includes('noche')) out.push({ dow, from: 21 * 60, to: 24 * 60 });
+  }
+  return out;
+}
+
+// ¿Está esta inscripción disponible a `minute` del día `weekday`?
+// Regla tolerante: si no tiene ninguna franja aplicable, se considera
+// disponible siempre (no penalizamos datos incompletos).
+function regAvailableAt(
+  reg: TournamentRegistration,
+  weekday: number,
+  minute: number,
+): boolean {
+  const ranges = (reg.availability ?? []).flatMap(parseAvailabilityEntry);
+  const applicable = ranges.filter((r) => r.dow == null || r.dow === weekday);
+  if (applicable.length === 0) return true;
+  return applicable.some((r) => minute >= r.from && minute < r.to);
+}
+
+/** Inscripciones que participan en un partido (2 parejas, o 4 en social). */
+function matchRegIds(m: TournamentMatch): string[] {
+  return [m.home_reg, m.home_reg2, m.away_reg, m.away_reg2].filter(
+    (x): x is string => !!x,
+  );
+}
+
+export interface ScheduleResult {
+  scheduled: number;
+  conflicts: number;
+}
+
+/**
+ * Genera el horario del torneo: reparte los partidos con jugadores conocidos
+ * (grupos, liga, americano/mexicano y rondas de KO ya definidas) en huecos
+ * fecha × hora × pista. Los partidos ya jugados conservan su hueco. Devuelve
+ * cuántos se colocaron y cuántos quedaron en conflicto (sin hueco disponible
+ * para todos). Requiere que el torneo tenga fecha (`starts_on`).
+ */
+export async function autoScheduleTournament(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  matches: TournamentMatch[],
+): Promise<ScheduleResult> {
+  if (!tournament.starts_on)
+    throw new Error('Pon una fecha al torneo antes de generar el horario.');
+
+  const [y, mo, d] = tournament.starts_on.split('-').map(Number);
+  const weekday = new Date(y, mo - 1, d).getDay();
+  const [sh, sm] = tournament.start_time.split(':').map(Number);
+  const startMin = (sh || 9) * 60 + (sm || 0);
+  const step = Math.max(15, tournament.slot_minutes);
+  const courts = Math.max(1, tournament.courts);
+  const regById = new Map(regs.map((r) => [r.id, r]));
+
+  // Partidos con jugadores conocidos y sin byes.
+  const known = matches.filter(
+    (m) => m.status !== 'bye' && !!m.home_reg && !!m.away_reg,
+  );
+  const pending = known.filter((m) => m.status !== 'finished');
+  const done = known.filter((m) => m.status === 'finished' && m.scheduled_at);
+
+  // Cuántas franjas horarias hacen falta (una pareja no puede jugar dos a la
+  // vez → al menos tantas franjas como el máximo de partidos por inscripción).
+  const perReg = new Map<string, number>();
+  for (const m of known)
+    for (const id of matchRegIds(m)) perReg.set(id, (perReg.get(id) ?? 0) + 1);
+  const maxPerReg = Math.max(1, ...perReg.values());
+  const neededByCourts = Math.ceil(known.length / courts);
+  const slotCount = Math.min(24, Math.max(maxPerReg, neededByCourts) + 2);
+
+  const times = Array.from({ length: slotCount }, (_, i) => startMin + i * step);
+  const timeToDate = (min: number): Date => {
+    const dt = new Date(y, mo - 1, d);
+    dt.setHours(Math.floor(min / 60), min % 60, 0, 0);
+    return dt;
+  };
+
+  // Ocupación previa por los partidos ya jugados (conservan hueco).
+  const courtBusy = new Set<string>(); // `${timeIdx}:${court}`
+  const regBusy = new Map<string, Set<number>>(); // regId → timeIdx
+  const bookReg = (id: string, ti: number) => {
+    if (!regBusy.has(id)) regBusy.set(id, new Set());
+    regBusy.get(id)!.add(ti);
+  };
+  for (const m of done) {
+    const dt = new Date(m.scheduled_at as string);
+    const min = dt.getHours() * 60 + dt.getMinutes();
+    const ti = times.findIndex((t) => t === min);
+    const court = parseInt((m.court ?? '').replace(/\D/g, ''), 10) || 1;
+    if (ti >= 0) {
+      courtBusy.add(`${ti}:${court}`);
+      for (const id of matchRegIds(m)) bookReg(id, ti);
+    }
+  }
+
+  const allAvailable = (m: TournamentMatch, ti: number): boolean =>
+    matchRegIds(m).every((id) => {
+      const r = regById.get(id);
+      return r ? regAvailableAt(r, weekday, times[ti]) : true;
+    });
+
+  // Ordena por restricción: los que tienen menos huecos disponibles, primero.
+  const availCount = (m: TournamentMatch): number =>
+    times.reduce((n, _t, ti) => (allAvailable(m, ti) ? n + 1 : n), 0);
+  const order = [...pending].sort((a, b) => availCount(a) - availCount(b));
+
+  const updates: { id: string; scheduled_at: string; court: string }[] = [];
+  let conflicts = 0;
+
+  const tryPlace = (m: TournamentMatch, requireAvail: boolean): boolean => {
+    const ids = matchRegIds(m);
+    for (let ti = 0; ti < times.length; ti++) {
+      if (ids.some((id) => regBusy.get(id)?.has(ti))) continue;
+      if (requireAvail && !allAvailable(m, ti)) continue;
+      for (let court = 1; court <= courts; court++) {
+        if (courtBusy.has(`${ti}:${court}`)) continue;
+        courtBusy.add(`${ti}:${court}`);
+        ids.forEach((id) => bookReg(id, ti));
+        updates.push({
+          id: m.id,
+          scheduled_at: timeToDate(times[ti]).toISOString(),
+          court: `Pista ${court}`,
+        });
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (const m of order) {
+    if (!tryPlace(m, true)) {
+      if (tryPlace(m, false)) conflicts++;
+    }
+  }
+
+  await Promise.all(
+    updates.map((u) =>
+      from()('tournament_matches')
+        .update({ scheduled_at: u.scheduled_at, court: u.court })
+        .eq('id', u.id),
+    ),
+  );
+
+  return { scheduled: updates.length, conflicts };
+}
+
+/** ¿El partido cae en una hora en la que NO todos están disponibles? (para avisar) */
+export function matchScheduleConflict(
+  match: TournamentMatch,
+  regs: TournamentRegistration[],
+  tournament: Tournament,
+): boolean {
+  if (!match.scheduled_at || !tournament.starts_on) return false;
+  const [y, mo, d] = tournament.starts_on.split('-').map(Number);
+  const weekday = new Date(y, mo - 1, d).getDay();
+  const dt = new Date(match.scheduled_at);
+  const minute = dt.getHours() * 60 + dt.getMinutes();
+  const byId = new Map(regs.map((r) => [r.id, r]));
+  return matchRegIds(match).some((id) => {
+    const r = byId.get(id);
+    return r ? !regAvailableAt(r, weekday, minute) : false;
+  });
+}
+
+/** Borra el horario asignado (todas las horas y pistas) de un torneo. */
+export async function clearSchedule(tournamentId: string): Promise<void> {
+  const { error } = await from()('tournament_matches')
+    .update({ scheduled_at: null, court: null })
+    .eq('tournament_id', tournamentId);
+  if (error) throw new Error(error.message);
 }
 
 export interface TournamentLookup {

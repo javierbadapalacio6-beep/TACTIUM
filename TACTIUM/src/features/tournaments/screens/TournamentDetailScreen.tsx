@@ -15,10 +15,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useColors, type Palette } from '@core/theme';
+import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconShare, IconTrophy, IconTrash, BottomSheet } from '@components/ui';
+import {
+  TimeField,
+  isoTimeToDate,
+  dateToIsoTime,
+} from '@components/ui/DateTimeField';
 import { toast } from '@store/toastStore';
 import {
   getTournament,
@@ -35,6 +40,10 @@ import {
   computeStandings,
   computeIndividualStandings,
   setSocialResult,
+  autoScheduleTournament,
+  updateTournamentSchedule,
+  clearSchedule,
+  matchScheduleConflict,
   isSocialFormat,
   posBracket,
   BRACKET_LABEL,
@@ -155,7 +164,15 @@ const formatStartsOn = (iso: string | null): string | null => {
   return `${d.getDate()} ${MESES[d.getMonth()]}`;
 };
 
-type TabKey = 'main' | 'players' | 'info';
+type TabKey = 'main' | 'schedule' | 'players' | 'info';
+
+// Hora "HH:MM" a partir de un scheduled_at ISO (hora local del dispositivo).
+const fmtTime = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 
 // Datos de una inscripción para pintar la tarjeta de partido pro.
 type RegInfo = {
@@ -284,6 +301,12 @@ const MatchCard: React.FC<{
       style={({ pressed }) => [styles.matchRowCard, pressed && { opacity: 0.85 }]}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
+        {m.scheduled_at ? (
+          <Text style={styles.matchWhen}>
+            🕐 {fmtTime(m.scheduled_at)}
+            {m.court ? ` · ${m.court}` : ''}
+          </Text>
+        ) : null}
         <MatchTeam info={homeInfo} win={homeWin} bye={homeBye} styles={styles} c={c} />
         <MatchTeam info={awayInfo} win={awayWin} bye={awayBye} styles={styles} c={c} />
       </View>
@@ -365,11 +388,13 @@ const ContentTabs: React.FC<{
   tab: TabKey;
   setTab: (t: TabKey) => void;
   mainLabel: string;
+  showSchedule: boolean;
   styles: Styles;
   c: Palette;
-}> = ({ tab, setTab, mainLabel, styles, c }) => {
+}> = ({ tab, setTab, mainLabel, showSchedule, styles, c }) => {
   const items: { key: TabKey; label: string }[] = [
     { key: 'main', label: mainLabel },
+    ...(showSchedule ? [{ key: 'schedule' as TabKey, label: 'Horario' }] : []),
     { key: 'players', label: 'Jugadores' },
     { key: 'info', label: 'Info' },
   ];
@@ -572,6 +597,262 @@ const InfoView: React.FC<{
   );
 };
 
+// Pestaña HORARIO: partidos agrupados por hora, con pista y avisos de conflicto.
+const ScheduleView: React.FC<{
+  tournament: Tournament;
+  matches: TournamentMatch[];
+  regs: TournamentRegistration[];
+  info: (id: string | null) => RegInfo;
+  onEdit: (m: TournamentMatch) => void;
+  onConfigure: () => void;
+  onGenerate: () => void;
+  onClear: () => void;
+  generating: boolean;
+  styles: Styles;
+  c: Palette;
+}> = ({
+  tournament,
+  matches,
+  regs,
+  info,
+  onEdit,
+  onConfigure,
+  onGenerate,
+  onClear,
+  generating,
+  styles,
+  c,
+}) => {
+  const scheduled = useMemo(
+    () =>
+      matches
+        .filter((m) => m.scheduled_at && m.status !== 'bye')
+        .sort((a, b) =>
+          (a.scheduled_at as string) < (b.scheduled_at as string)
+            ? -1
+            : (a.scheduled_at as string) > (b.scheduled_at as string)
+              ? 1
+              : (a.court ?? '').localeCompare(b.court ?? ''),
+        ),
+    [matches],
+  );
+  // Agrupa por hora.
+  const groups: { time: string; items: TournamentMatch[] }[] = [];
+  for (const m of scheduled) {
+    const time = fmtTime(m.scheduled_at) ?? '—';
+    const g = groups.find((x) => x.time === time);
+    if (g) g.items.push(m);
+    else groups.push({ time, items: [m] });
+  }
+  const conflicts = scheduled.filter((m) =>
+    matchScheduleConflict(m, regs, tournament),
+  ).length;
+
+  return (
+    <View style={{ paddingHorizontal: 22 }}>
+      <View style={styles.schedConfigCard}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.schedConfigLabel}>CONFIGURACIÓN</Text>
+          <Text style={styles.schedConfigValue}>
+            {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} · desde{' '}
+            {tournament.start_time} · {tournament.slot_minutes} min
+            {!tournament.starts_on ? ' · sin fecha' : ''}
+          </Text>
+        </View>
+        <Pressable onPress={onConfigure} hitSlop={8}>
+          <Text style={styles.addLink}>Configurar</Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        onPress={onGenerate}
+        disabled={generating}
+        style={({ pressed }) => [
+          styles.generateBtn,
+          { marginTop: 14 },
+          generating && { opacity: 0.5 },
+          pressed && { opacity: 0.9 },
+        ]}
+      >
+        {generating ? (
+          <ActivityIndicator size="small" color={c.textInverse} />
+        ) : (
+          <Text style={styles.generateLabel}>
+            {scheduled.length ? 'Regenerar horario' : 'Generar horario'}
+          </Text>
+        )}
+      </Pressable>
+
+      {!tournament.starts_on ? (
+        <Text style={styles.genHint}>
+          Pon una fecha al torneo (pestaña Info · el club la edita al crear) para
+          poder generar el horario.
+        </Text>
+      ) : null}
+
+      {conflicts > 0 ? (
+        <View style={styles.conflictBanner}>
+          <Text style={styles.conflictBannerText}>
+            ⚠️ {conflicts} {conflicts === 1 ? 'partido' : 'partidos'} en una hora que
+            no le va a alguna pareja. Ajusta pistas/horas o revísalo con ellos.
+          </Text>
+        </View>
+      ) : null}
+
+      {scheduled.length === 0 ? (
+        <Text style={[styles.emptyText, { marginTop: 14 }]}>
+          Aún no hay horario. Genera el cuadro/los grupos y pulsa “Generar
+          horario”: repartiremos los partidos por pista y hora respetando la
+          disponibilidad de cada jugador.
+        </Text>
+      ) : (
+        <View style={{ marginTop: 8 }}>
+          {groups.map((g) => (
+            <View key={g.time} style={{ marginTop: 16 }}>
+              <Text style={styles.schedTime}>{g.time}</Text>
+              <View style={{ gap: 8 }}>
+                {g.items.map((m) => {
+                  const conf = matchScheduleConflict(m, regs, tournament);
+                  return (
+                    <View key={m.id}>
+                      {conf ? (
+                        <Text style={styles.conflictTag}>⚠️ Conflicto de horario</Text>
+                      ) : null}
+                      <MatchCard
+                        m={m}
+                        info={info}
+                        onEdit={onEdit}
+                        social={isSocialFormat(tournament.format)}
+                        styles={styles}
+                        c={c}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+
+          <Pressable onPress={onClear} hitSlop={8} style={{ marginTop: 22 }}>
+            <Text style={[styles.addLink, { color: c.error, textAlign: 'center' }]}>
+              Borrar horario
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// Sheet de configuración del horario: pistas, hora de inicio y duración.
+const ScheduleConfigSheet: React.FC<{
+  open: boolean;
+  tournament: Tournament | null;
+  onClose: () => void;
+  onSaved: (generate: boolean) => void;
+  styles: Styles;
+  c: Palette;
+}> = ({ open, tournament, onClose, onSaved, styles, c }) => {
+  const [courts, setCourts] = useState('3');
+  const [startAt, setStartAt] = useState<Date | null>(null);
+  const [minutes, setMinutes] = useState('60');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && tournament) {
+      setCourts(String(tournament.courts ?? 3));
+      setMinutes(String(tournament.slot_minutes ?? 60));
+      setStartAt(isoTimeToDate(`${tournament.start_time ?? '09:00'}:00`));
+    }
+  }, [open, tournament]);
+
+  const save = async (generate: boolean) => {
+    if (!tournament) return;
+    setSaving(true);
+    try {
+      await updateTournamentSchedule(tournament.id, {
+        courts: parseInt(courts, 10) || 1,
+        startTime: startAt ? dateToIsoTime(startAt).slice(0, 5) : '09:00',
+        slotMinutes: parseInt(minutes, 10) || 60,
+      });
+      onSaved(generate);
+      onClose();
+    } catch (e: any) {
+      toast.error('No se pudo guardar', e?.message ?? '');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      footer={
+        <View style={{ gap: 10 }}>
+          <Pressable
+            onPress={() => save(true)}
+            disabled={saving}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              saving && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={c.textInverse} />
+            ) : (
+              <Text style={styles.saveLabel}>Guardar y generar horario</Text>
+            )}
+          </Pressable>
+          <Pressable onPress={() => save(false)} disabled={saving} hitSlop={8}>
+            <Text style={[styles.addLink, { textAlign: 'center' }]}>
+              Solo guardar
+            </Text>
+          </Pressable>
+        </View>
+      }
+    >
+      <Text style={styles.sheetEyebrow}>HORARIO</Text>
+      <Text style={styles.sheetTitle}>Configurar horario</Text>
+
+      <Text style={styles.label}>PISTAS DISPONIBLES</Text>
+      <View style={styles.input}>
+        <TextInput
+          value={courts}
+          onChangeText={(v) => setCourts(v.replace(/[^0-9]/g, ''))}
+          placeholder="3"
+          placeholderTextColor={c.textFaint}
+          style={styles.inputField}
+          keyboardType="number-pad"
+          maxLength={2}
+        />
+      </View>
+
+      <Text style={styles.label}>HORA DE INICIO</Text>
+      <TimeField value={startAt} onChange={setStartAt} placeholder="09:00" />
+
+      <Text style={styles.label}>DURACIÓN POR PARTIDO (MIN)</Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {['45', '60', '90'].map((v) => {
+          const sel = minutes === v;
+          return (
+            <Pressable
+              key={v}
+              onPress={() => setMinutes(v)}
+              style={[styles.durChip, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+            >
+              <Text style={[styles.durChipText, { color: sel ? c.textInverse : c.text }]}>
+                {v} min
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </BottomSheet>
+  );
+};
+
 export const TournamentDetailScreen = ({
   navigation,
   route,
@@ -590,6 +871,7 @@ export const TournamentDetailScreen = ({
   const [editMatch, setEditMatch] = useState<TournamentMatch | null>(null);
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
   const [tab, setTab] = useState<TabKey>('main');
+  const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -807,6 +1089,31 @@ export const TournamentDetailScreen = ({
     runGenerate(() => generateMexicanoRound(t, regsCat, matchesCat, dg, dc));
   };
 
+  const onGenerateSchedule = () => {
+    if (!t) return;
+    runGenerate(async () => {
+      const res = await autoScheduleTournament(t, regs, matches);
+      toast.success(
+        'Horario generado',
+        res.conflicts
+          ? `${res.scheduled} partidos · ${res.conflicts} con conflicto de horario`
+          : `${res.scheduled} partidos colocados por pista y hora`,
+      );
+    });
+  };
+
+  const onClearSchedule = () => {
+    if (!t) return;
+    Alert.alert('Borrar horario', '¿Quitar todas las horas y pistas asignadas?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: () => runGenerate(() => clearSchedule(t.id)),
+      },
+    ]);
+  };
+
   const shareCode = async () => {
     if (!t?.signup_code) return;
     try {
@@ -926,10 +1233,31 @@ export const TournamentDetailScreen = ({
             </ScrollView>
           ) : null}
 
-          {/* Pestañas de contenido: Cuadro/Clasificación · Jugadores · Info */}
-          <ContentTabs tab={tab} setTab={setTab} mainLabel={mainTabLabel} styles={styles} c={c} />
+          {/* Pestañas de contenido: Cuadro · Horario · Jugadores · Info */}
+          <ContentTabs
+            tab={tab}
+            setTab={setTab}
+            mainLabel={mainTabLabel}
+            showSchedule={hasBracket}
+            styles={styles}
+            c={c}
+          />
 
-          {tab === 'players' ? (
+          {tab === 'schedule' && t ? (
+            <ScheduleView
+              tournament={t}
+              matches={matches}
+              regs={regs}
+              info={regInfo}
+              onEdit={setEditMatch}
+              onConfigure={() => setScheduleCfgOpen(true)}
+              onGenerate={onGenerateSchedule}
+              onClear={onClearSchedule}
+              generating={generating}
+              styles={styles}
+              c={c}
+            />
+          ) : tab === 'players' ? (
             <PlayersView
               regs={regsCat}
               info={regInfo}
@@ -1095,6 +1423,18 @@ export const TournamentDetailScreen = ({
         }
         onClose={() => setEditMatch(null)}
         onSaved={load}
+      />
+
+      <ScheduleConfigSheet
+        open={scheduleCfgOpen}
+        tournament={t}
+        onClose={() => setScheduleCfgOpen(false)}
+        onSaved={(generate) => {
+          if (generate) onGenerateSchedule();
+          else load();
+        }}
+        styles={styles}
+        c={c}
       />
     </View>
   );
@@ -1975,6 +2315,50 @@ const makeStyles = (c: Palette) =>
     coverBanner: { height: 180, marginBottom: 4 },
     coverBannerImg: { width: '100%', height: '100%' },
     coverBannerFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
+    // Horario
+    matchWhen: { fontFamily: Fonts.mono, fontSize: 11, fontWeight: '700', color: c.accent },
+    schedConfigCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginTop: 8,
+    },
+    schedConfigLabel: { fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 1.5, color: c.textFaint, fontWeight: '600' },
+    schedConfigValue: { color: c.text, fontSize: 14, fontWeight: '600', marginTop: 3 },
+    schedTime: {
+      fontFamily: Fonts.mono,
+      fontSize: 15,
+      fontWeight: '800',
+      color: c.text,
+      marginBottom: 8,
+    },
+    conflictBanner: {
+      backgroundColor: withAlpha(c.error, 0.12),
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: withAlpha(c.error, 0.4),
+      padding: 12,
+      marginTop: 12,
+    },
+    conflictBannerText: { color: c.error, fontSize: 12.5, fontWeight: '600', lineHeight: 18 },
+    conflictTag: { color: c.error, fontSize: 11, fontWeight: '800', marginBottom: 4 },
+    durChip: {
+      flex: 1,
+      height: 46,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    durChipText: { fontSize: 14, fontWeight: '700' },
     catTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 12 },
     catTab: {
       paddingHorizontal: 16,
