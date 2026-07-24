@@ -139,6 +139,14 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: 'CANCELADO',
 };
 
+const FORMAT_LABEL: Record<string, string> = {
+  ko: 'Eliminación directa',
+  round_robin: 'Liga · todos contra todos',
+  groups_ko: 'Grupos + eliminatorias',
+  americano: 'Americano',
+  mexicano: 'Mexicano',
+};
+
 const formatStartsOn = (iso: string | null): string | null => {
   if (!iso) return null;
   const d = new Date(iso);
@@ -146,6 +154,8 @@ const formatStartsOn = (iso: string | null): string | null => {
   const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   return `${d.getDate()} ${MESES[d.getMonth()]}`;
 };
+
+type TabKey = 'main' | 'players' | 'info';
 
 // Datos de una inscripción para pintar la tarjeta de partido pro.
 type RegInfo = {
@@ -155,6 +165,23 @@ type RegInfo = {
   avatar: string | null;
   partnerAvatar: string | null;
 };
+
+// Pareja de avatares solapados (o uno solo). Muestra la foto de ambos si la tienen.
+const AvatarPair: React.FC<{
+  info: RegInfo;
+  size?: number;
+  styles: Styles;
+  c: Palette;
+}> = ({ info, size = 26, styles, c }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+    <TAvatar name={info.name} url={info.avatar} size={size} styles={styles} c={c} />
+    {info.partner ? (
+      <View style={{ marginLeft: -size * 0.42 }}>
+        <TAvatar name={info.partner} url={info.partnerAvatar} size={size} styles={styles} c={c} />
+      </View>
+    ) : null}
+  </View>
+);
 
 const initialsOf = (name: string): string =>
   name
@@ -210,7 +237,7 @@ const MatchTeam: React.FC<{
   }
   return (
     <View style={styles.teamRow}>
-      <TAvatar name={info.name} url={info.avatar} styles={styles} c={c} />
+      <AvatarPair info={info} styles={styles} c={c} />
       <Text style={[styles.teamName, win && styles.teamNameWin]} numberOfLines={1}>
         {info.name}
         {info.partner ? ` / ${info.partner}` : ''}
@@ -237,10 +264,18 @@ const MatchCard: React.FC<{
   const homeBye = !social && !m.home_reg;
   const awayBye = !social && !m.away_reg;
   const homeInfo = social
-    ? { ...info(m.home_reg), partner: info(m.home_reg2 ?? null).name }
+    ? {
+        ...info(m.home_reg),
+        partner: info(m.home_reg2 ?? null).name,
+        partnerAvatar: info(m.home_reg2 ?? null).avatar,
+      }
     : info(m.home_reg);
   const awayInfo = social
-    ? { ...info(m.away_reg), partner: info(m.away_reg2 ?? null).name }
+    ? {
+        ...info(m.away_reg),
+        partner: info(m.away_reg2 ?? null).name,
+        partnerAvatar: info(m.away_reg2 ?? null).avatar,
+      }
     : info(m.away_reg);
 
   return (
@@ -325,6 +360,195 @@ const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette }> = ({
   </LinearGradient>
 );
 
+// Barra de pestañas de contenido: Cuadro/Clasificación · Jugadores · Info.
+const ContentTabs: React.FC<{
+  tab: TabKey;
+  setTab: (t: TabKey) => void;
+  mainLabel: string;
+  styles: Styles;
+  c: Palette;
+}> = ({ tab, setTab, mainLabel, styles, c }) => {
+  const items: { key: TabKey; label: string }[] = [
+    { key: 'main', label: mainLabel },
+    { key: 'players', label: 'Jugadores' },
+    { key: 'info', label: 'Info' },
+  ];
+  return (
+    <View style={styles.contentTabs}>
+      {items.map((it) => {
+        const sel = tab === it.key;
+        return (
+          <Pressable
+            key={it.key}
+            onPress={() => setTab(it.key)}
+            style={[styles.contentTab, sel && { backgroundColor: c.text }]}
+          >
+            <Text style={[styles.contentTabText, { color: sel ? c.background : c.textMuted }]}>
+              {it.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+};
+
+// Pestaña JUGADORES: todos los inscritos con ambos avatares, siembra y datos.
+const PlayersView: React.FC<{
+  regs: TournamentRegistration[];
+  info: (id: string | null) => RegInfo;
+  social: boolean;
+  canEdit: boolean;
+  onAdd: () => void;
+  onRemove: (r: TournamentRegistration) => void;
+  divName: string | null;
+  maxPairs: number | null;
+  styles: Styles;
+  c: Palette;
+}> = ({ regs, social, canEdit, onAdd, onRemove, divName, maxPairs, styles, c }) => {
+  const ordered = [...regs].sort((a, b) => {
+    if (a.seed != null && b.seed != null) return a.seed - b.seed;
+    if (a.seed != null) return -1;
+    if (b.seed != null) return 1;
+    return a.created_at < b.created_at ? -1 : 1;
+  });
+  return (
+    <View style={{ paddingHorizontal: 22 }}>
+      <View style={styles.regHeader}>
+        <Text style={styles.sectionLabel}>
+          {social ? 'JUGADORES' : 'PAREJAS'}
+          {divName ? ` · ${divName}` : ''} · {regs.length}
+          {maxPairs ? `/${maxPairs}` : ''}
+        </Text>
+        {canEdit ? (
+          <Pressable onPress={onAdd} hitSlop={8}>
+            <Text style={styles.addLink}>+ Añadir</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {ordered.length === 0 ? (
+        <Text style={styles.emptyText}>
+          Aún no hay {social ? 'jugadores' : 'parejas'}
+          {divName ? ` en ${divName}` : ''}. Añádelos a mano o comparte el código.
+        </Text>
+      ) : (
+        <View style={{ gap: 8 }}>
+          {ordered.map((r) => {
+            const ri: RegInfo = {
+              name: r.p1_name,
+              partner: social ? null : r.p2_name,
+              seed: r.seed,
+              avatar: r.p1_avatar ?? null,
+              partnerAvatar: r.p2_avatar ?? null,
+            };
+            const meta = [
+              r.seed_points != null ? `${r.seed_points} pts` : null,
+              ...(r.availability ?? []),
+            ]
+              .filter(Boolean)
+              .join(' · ');
+            return (
+              <View key={r.id} style={styles.playerRow}>
+                {r.seed ? (
+                  <View style={styles.seedBadge}>
+                    <Text style={styles.seedBadgeText}>{r.seed}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.seedBadgeEmpty} />
+                )}
+                <AvatarPair info={ri} size={30} styles={styles} c={c} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.playerName} numberOfLines={1}>
+                    {r.p1_name}
+                    {!social && r.p2_name ? ` / ${r.p2_name}` : ''}
+                  </Text>
+                  {meta ? (
+                    <Text style={styles.playerMeta} numberOfLines={1}>
+                      {meta}
+                    </Text>
+                  ) : null}
+                </View>
+                {canEdit ? (
+                  <Pressable onPress={() => onRemove(r)} hitSlop={8}>
+                    <IconTrash size={15} color={c.textFaint} />
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+};
+
+// Pestaña INFO: datos del torneo (formato, categorías, plazas, código…).
+const InfoView: React.FC<{
+  t: Tournament | null;
+  onShareCode: () => void;
+  styles: Styles;
+  c: Palette;
+}> = ({ t, onShareCode, styles, c }) => {
+  if (!t) return null;
+  const rows: { label: string; value: string }[] = [
+    { label: 'Formato', value: FORMAT_LABEL[t.format] ?? t.format },
+    ...(!isSocialFormat(t.format)
+      ? [{ label: 'Partidos', value: formatConfig(t.match_format).label }]
+      : []),
+    {
+      label: 'Género',
+      value: t.genders?.length
+        ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' · ')
+        : '—',
+    },
+    {
+      label: 'Categorías',
+      value: t.categories?.length ? t.categories.join(' · ') : '—',
+    },
+    {
+      label: isSocialFormat(t.format) ? 'Plazas (jugadores)' : 'Plazas (parejas)',
+      value: t.max_pairs ? String(t.max_pairs) : 'Sin límite',
+    },
+    { label: 'Estado', value: STATUS_LABEL[t.status] ?? t.status },
+    { label: 'Fecha', value: formatStartsOn(t.starts_on) ?? '—' },
+  ];
+  return (
+    <View style={{ paddingHorizontal: 22 }}>
+      <Text style={[styles.sectionLabel, { marginTop: 4, marginBottom: 10 }]}>
+        INFORMACIÓN DEL TORNEO
+      </Text>
+      <View style={styles.infoCard}>
+        {rows.map((r, i) => (
+          <View key={r.label} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+            <Text style={styles.infoLabel}>{r.label}</Text>
+            <Text style={styles.infoValue} numberOfLines={2}>
+              {r.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {t.signup_code ? (
+        <View style={[styles.codeCard, { marginTop: 14 }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.codeLabel}>CÓDIGO DE INSCRIPCIÓN</Text>
+            <Text style={styles.code}>{t.signup_code}</Text>
+            <Text style={styles.codeHint}>Compártelo para que se apunten desde la app.</Text>
+          </View>
+          <Pressable
+            onPress={onShareCode}
+            hitSlop={8}
+            style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconShare size={16} color={c.accent} />
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+};
+
 export const TournamentDetailScreen = ({
   navigation,
   route,
@@ -342,6 +566,7 @@ export const TournamentDetailScreen = ({
   const [generating, setGenerating] = useState(false);
   const [editMatch, setEditMatch] = useState<TournamentMatch | null>(null);
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
+  const [tab, setTab] = useState<TabKey>('main');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -434,6 +659,13 @@ export const TournamentDetailScreen = ({
   const isSocial = isSocialFormat(t?.format ?? '');
   const isMexicano = t?.format === 'mexicano';
   const hasBracket = matchesCat.length > 0;
+  const mainTabLabel = isRR
+    ? 'Clasificación'
+    : isGroups
+      ? 'Grupos'
+      : isSocial
+        ? 'Rondas'
+        : 'Cuadro';
   const plainName = useCallback(
     (id: string | null) => regs.find((r) => r.id === id)?.p1_name ?? '—',
     [regs],
@@ -660,8 +892,25 @@ export const TournamentDetailScreen = ({
             </ScrollView>
           ) : null}
 
-          {/* Fase de inscripción */}
-          {!hasBracket ? (
+          {/* Pestañas de contenido: Cuadro/Clasificación · Jugadores · Info */}
+          <ContentTabs tab={tab} setTab={setTab} mainLabel={mainTabLabel} styles={styles} c={c} />
+
+          {tab === 'players' ? (
+            <PlayersView
+              regs={regsCat}
+              info={regInfo}
+              social={isSocial}
+              canEdit={!hasBracket}
+              onAdd={() => setAdding(true)}
+              onRemove={removeReg}
+              divName={activeDiv && divisions.length > 1 ? divLabel(activeDiv) : null}
+              maxPairs={t?.max_pairs ?? null}
+              styles={styles}
+              c={c}
+            />
+          ) : tab === 'info' ? (
+            <InfoView t={t} onShareCode={shareCode} styles={styles} c={c} />
+          ) : !hasBracket ? (
             <View style={{ paddingHorizontal: 22 }}>
               {t?.signup_code ? (
                 <View style={styles.codeCard}>
@@ -682,50 +931,21 @@ export const TournamentDetailScreen = ({
                 </View>
               ) : null}
 
-              <View style={styles.regHeader}>
-                <Text style={styles.sectionLabel}>
-                  INSCRITOS
-                  {activeDiv && divisions.length > 1 ? ` · ${divLabel(activeDiv)}` : ''} ·{' '}
-                  {regsCat.length}
-                  {t?.max_pairs ? `/${t.max_pairs}` : ''}
-                </Text>
-                <Pressable onPress={() => setAdding(true)} hitSlop={8}>
-                  <Text style={styles.addLink}>+ Añadir pareja</Text>
-                </Pressable>
-              </View>
-
-              {regsCat.length === 0 ? (
-                <Text style={styles.emptyText}>
-                  Aún no hay parejas
-                  {activeDiv && divisions.length > 1 ? ` en ${divLabel(activeDiv)}` : ''}.
-                  Añádelas a mano o comparte el código.
-                </Text>
-              ) : (
-                <View style={{ gap: 8 }}>
-                  {regsCat.map((r, i) => (
-                    <View key={r.id} style={styles.regRow}>
-                      <Text style={styles.regIdx}>{i + 1}</Text>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.regName} numberOfLines={1}>
-                          {r.p1_name}
-                          {r.p2_name ? ` / ${r.p2_name}` : ''}
-                        </Text>
-                        <Text style={styles.regMeta} numberOfLines={1}>
-                          {[
-                            r.seed_points != null ? `${r.seed_points} pts` : null,
-                            ...r.availability,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ') || 'Sin datos extra'}
-                        </Text>
-                      </View>
-                      <Pressable onPress={() => removeReg(r)} hitSlop={8}>
-                        <IconTrash size={14} color={c.textFaint} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              )}
+              <Text style={[styles.sectionLabel, { marginTop: 18 }]}>
+                {regsCat.length}{' '}
+                {isSocial
+                  ? regsCat.length === 1
+                    ? 'jugador inscrito'
+                    : 'jugadores inscritos'
+                  : regsCat.length === 1
+                    ? 'pareja inscrita'
+                    : 'parejas inscritas'}
+                {t?.max_pairs ? ` · máx ${t.max_pairs}` : ''}
+              </Text>
+              <Text style={[styles.emptyText, { marginTop: 6 }]}>
+                Gestiona los inscritos en la pestaña <Text style={{ color: c.accent, fontWeight: '700' }}>Jugadores</Text>. Cuando estén todos, genera{' '}
+                {isRR ? 'la liga' : isGroups ? 'los grupos' : isSocial ? 'las rondas' : 'el cuadro'}.
+              </Text>
 
               <Pressable
                 onPress={onGenerate}
@@ -1044,41 +1264,73 @@ const GroupsView: React.FC<{
     groupMatches.length > 0 && groupMatches.every((m) => m.status === 'finished');
   const koBrackets = Array.from(new Set(koMatches.map((m) => m.bracket)));
   const [activeBracket, setActiveBracket] = useState<string | null>(null);
+  const [activeGroup, setActiveGroup] = useState<number | null>(null);
   useEffect(() => {
     if (koBrackets.length && (!activeBracket || !koBrackets.includes(activeBracket))) {
       setActiveBracket(koBrackets[0]);
     }
   }, [koMatches.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (groupNos.length && (activeGroup == null || !groupNos.includes(activeGroup))) {
+      setActiveGroup(groupNos[0]);
+    }
+  }, [groupNos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (koMatches.length === 0) {
+    const gn = activeGroup ?? groupNos[0] ?? 0;
+    const gRegs = regs.filter((r) => r.group_no === gn);
+    const gMatches = groupMatches
+      .filter((m) => m.group_no === gn)
+      .sort((a, b) => a.slot - b.slot);
+    const st = computeStandings(gRegs, gMatches);
+    const gDone = gMatches.length > 0 && gMatches.every((m) => m.status === 'finished');
     return (
       <View>
-        {groupNos.map((gn) => {
-          const gRegs = regs.filter((r) => r.group_no === gn);
-          const gMatches = groupMatches
-            .filter((m) => m.group_no === gn)
-            .sort((a, b) => a.slot - b.slot);
-          const st = computeStandings(gRegs, gMatches);
-          return (
-            <View key={gn}>
-              <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 18 }]}>
-                GRUPO {groupName(gn)}
-              </Text>
-              <StandingsTable standings={st} styles={styles} />
-              <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 8 }}>
-                {gMatches.map((m) => (
-                  <MatchCard key={m.id} m={m} info={info} onEdit={onEdit} styles={styles} c={c} />
-                ))}
-              </View>
-            </View>
-          );
-        })}
+        {/* Sub-pestañas por grupo */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.catTabs}
+        >
+          {groupNos.map((n) => {
+            const sel = gn === n;
+            const nDone = groupMatches
+              .filter((m) => m.group_no === n)
+              .every((m) => m.status === 'finished');
+            return (
+              <Pressable
+                key={n}
+                onPress={() => setActiveGroup(n)}
+                style={[styles.catTab, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+              >
+                <Text style={[styles.catTabText, { color: sel ? c.textInverse : c.textMuted }]}>
+                  Grupo {groupName(n)}
+                  {nDone ? ' ✓' : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 14 }]}>
+          CLASIFICACIÓN · GRUPO {groupName(gn)}
+        </Text>
+        <StandingsTable standings={st} styles={styles} />
+        <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 22 }]}>
+          PARTIDOS {gDone ? '· completado' : ''}
+        </Text>
+        <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 8 }}>
+          {gMatches.map((m) => (
+            <MatchCard key={m.id} m={m} info={info} onEdit={onEdit} styles={styles} c={c} />
+          ))}
+        </View>
+
         <Pressable
           onPress={onGenerateKnockout}
           disabled={!allGroupsDone || generating}
           style={({ pressed }) => [
             styles.generateBtn,
-            { marginHorizontal: 22, marginTop: 20 },
+            { marginHorizontal: 22, marginTop: 24 },
             (!allGroupsDone || generating) && { opacity: 0.4 },
             pressed && { opacity: 0.9 },
           ]}
@@ -1619,6 +1871,64 @@ const makeStyles = (c: Palette) =>
     heroBody: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 14 },
     heroAvatars: { flexDirection: 'row', alignItems: 'center' },
     heroName: { color: c.text, fontSize: 19, fontWeight: '800', letterSpacing: -0.3 },
+    // Pestañas de contenido
+    contentTabs: {
+      flexDirection: 'row',
+      gap: 6,
+      marginHorizontal: 22,
+      marginTop: 14,
+      padding: 4,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    contentTab: {
+      flex: 1,
+      height: 38,
+      borderRadius: Radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    contentTabText: { fontSize: 13, fontWeight: '700', letterSpacing: -0.2 },
+    // Fila de jugador (pestaña Jugadores)
+    playerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    seedBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.accent15,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    seedBadgeText: { fontFamily: Fonts.mono, fontSize: 11, fontWeight: '800', color: c.accent },
+    seedBadgeEmpty: { width: 24, height: 24 },
+    playerName: { color: c.text, fontSize: 15, fontWeight: '700' },
+    playerMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    // Tarjeta de información del torneo
+    infoCard: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 14,
+    },
+    infoRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 13, gap: 12 },
+    infoRowBorder: { borderTopWidth: 1, borderColor: c.hair },
+    infoLabel: { width: 120, color: c.textMuted, fontSize: 13, fontWeight: '600' },
+    infoValue: { flex: 1, color: c.text, fontSize: 14, fontWeight: '600', textAlign: 'right' },
     catTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 12 },
     catTab: {
       paddingHorizontal: 16,

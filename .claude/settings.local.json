@@ -52,7 +52,8 @@
       "Bash(node -e \"const d=require\\('./package.json'\\).dependencies; ['react-native-purchases','@shopify/react-native-skia','react-native-view-shot','expo-notifications','expo-blur','react-native-reanimated'].forEach\\(k=>console.log\\(\\(d[k]?'✓ ':'· '\\)+k+': '+\\(d[k]||'no'\\)\\)\\)\")",
       "WebSearch",
       "WebFetch(domain:padelwize.com)",
-      "WebFetch(domain:kb.score7.io)"
+      "WebFetch(domain:kb.score7.io)",
+      "WebFetch(domain:premierpadel.com)"
     ]
   }
 }
