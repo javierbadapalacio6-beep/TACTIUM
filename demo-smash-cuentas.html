@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo · Smash Pádel Club — Cuentas TACTIUM</title>
+<style>
+  :root{
+    --bg:#0a0f0d; --bg2:#0d1512; --card:#111b16; --card2:#0f1713;
+    --hair:#1e2b25; --hair2:#28382f;
+    --text:#e9f2ec; --muted:#93a49b; --faint:#5f7168;
+    --accent:#00df82; --accent-ink:#001c12; --accent-soft:rgba(0,223,130,.12);
+    --violet:#a98bff; --amber:#ffc55c; --blue:#5cc8ff; --cyan:#4fe6cf;
+    --shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 18px 40px -24px rgba(0,0,0,.8);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f7f5; --bg2:#eef3f0; --card:#ffffff; --card2:#f7faf8;
+      --hair:#e3ebe6; --hair2:#d3ded7;
+      --text:#0e1a14; --muted:#5a6b62; --faint:#8a9a91;
+      --accent:#009d5c; --accent-ink:#ffffff; --accent-soft:rgba(0,157,92,.10);
+      --violet:#6d4dd6; --amber:#b7791f; --blue:#1f7fb8; --cyan:#0e9c86;
+      --shadow:0 1px 2px rgba(16,40,28,.04), 0 18px 40px -28px rgba(16,40,28,.22);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0a0f0d; --bg2:#0d1512; --card:#111b16; --card2:#0f1713;
+    --hair:#1e2b25; --hair2:#28382f;
+    --text:#e9f2ec; --muted:#93a49b; --faint:#5f7168;
+    --accent:#00df82; --accent-ink:#001c12; --accent-soft:rgba(0,223,130,.12);
+    --violet:#a98bff; --amber:#ffc55c; --blue:#5cc8ff; --cyan:#4fe6cf;
+    --shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 18px 40px -24px rgba(0,0,0,.8);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f7f5; --bg2:#eef3f0; --card:#ffffff; --card2:#f7faf8;
+    --hair:#e3ebe6; --hair2:#d3ded7;
+    --text:#0e1a14; --muted:#5a6b62; --faint:#8a9a91;
+    --accent:#009d5c; --accent-ink:#ffffff; --accent-soft:rgba(0,157,92,.10);
+    --violet:#6d4dd6; --amber:#b7791f; --blue:#1f7fb8; --cyan:#0e9c86;
+    --shadow:0 1px 2px rgba(16,40,28,.04), 0 18px 40px -28px rgba(16,40,28,.22);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 78% -8%, var(--accent-soft), transparent 60%),
+      var(--bg);
+    color:var(--text); font-family:var(--sans);
+    line-height:1.5; letter-spacing:-.01em;
+    padding:clamp(18px,4vw,44px);
+  }
+  .wrap{max-width:1120px;margin:0 auto}
+  a{color:inherit}
+
+  /* ── Header ─────────────────────────────── */
+  header.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:26px}
+  .brand-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--accent);text-transform:uppercase;margin:0 0 10px}
+  h1{font-size:clamp(26px,4.4vw,40px);line-height:1.04;margin:0;font-weight:800;letter-spacing:-.03em;text-wrap:balance}
+  .lede{color:var(--muted);margin:12px 0 0;max-width:60ch;font-size:15px}
+  .logo{display:inline-flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.14em;font-size:13px}
+  .logo .dot{width:22px;height:22px;border-radius:7px;background:linear-gradient(140deg,var(--accent),#0a9e64);box-shadow:0 0 0 1px rgba(0,0,0,.15) inset}
+  .themebtn{appearance:none;border:1px solid var(--hair2);background:var(--card);color:var(--muted);
+    border-radius:10px;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer;display:inline-flex;gap:7px;align-items:center}
+  .themebtn:hover{color:var(--text);border-color:var(--accent)}
+
+  /* ── Access strip ───────────────────────── */
+  .keys{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:8px 0 30px}
+  @media (max-width:640px){.keys{grid-template-columns:1fr}}
+  .keycard{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--hair2);
+    border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .keycard.code{border-color:color-mix(in srgb,var(--accent) 55%,var(--hair2))}
+  .keycard .k-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 8px}
+  .keyrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .keyval{font-family:var(--mono);font-weight:700;font-size:clamp(20px,3.6vw,28px);letter-spacing:.02em;color:var(--text)}
+  .keycard.code .keyval{color:var(--accent)}
+  .k-note{color:var(--muted);font-size:12.5px;margin:10px 0 0}
+  .k-note b{color:var(--text);font-weight:600}
+
+  /* ── Copy button ────────────────────────── */
+  .copy{appearance:none;border:1px solid var(--hair2);background:transparent;color:var(--muted);
+    border-radius:9px;padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:.15s}
+  .copy:hover{color:var(--accent);border-color:var(--accent)}
+  .copy:active{transform:translateY(1px)}
+  .copy svg{width:13px;height:13px}
+  .copy:focus-visible,.themebtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ── Section ────────────────────────────── */
+  section{margin:34px 0}
+  .s-head{display:flex;align-items:baseline;gap:12px;margin:0 0 16px}
+  .s-head h2{font-size:13px;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:600}
+  .s-head .rule{flex:1;height:1px;background:var(--hair)}
+
+  /* ── Account cards ──────────────────────── */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+  .acct{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--hair);border-radius:16px;padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:13px}
+  .acct.star{border-color:color-mix(in srgb,var(--accent) 50%,var(--hair));box-shadow:var(--shadow),0 0 0 1px var(--accent-soft)}
+  .acct-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .badge{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
+    padding:5px 9px;border-radius:999px;border:1px solid currentColor}
+  .b-club{color:var(--violet)} .b-cap{color:var(--amber)} .b-play{color:var(--blue)}
+  .b-solo{color:var(--cyan)} .b-code{color:var(--accent)}
+  .pill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:4px 8px;border-radius:999px;font-weight:600}
+  .pill.prem{color:var(--accent);background:var(--accent-soft)}
+  .pill.free{color:var(--muted);background:color-mix(in srgb,var(--muted) 14%,transparent)}
+  .who{font-size:18px;font-weight:750;letter-spacing:-.02em;margin:0}
+  .who small{display:block;font-weight:500;font-size:12.5px;color:var(--faint);letter-spacing:0;margin-top:2px}
+  .field{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg2);border:1px solid var(--hair);border-radius:10px;padding:8px 10px}
+  .field .fv{font-family:var(--mono);font-size:13px;color:var(--text);overflow-x:auto;white-space:nowrap}
+  .field .fl{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+  .see{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+  .see li{position:relative;padding-left:18px;font-size:13.5px;color:var(--muted)}
+  .see li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:2px;background:var(--accent);opacity:.85}
+  .see li b{color:var(--text);font-weight:600}
+
+  /* ── Teams table ────────────────────────── */
+  .tablewrap{overflow-x:auto;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+  table{border-collapse:collapse;width:100%;min-width:520px}
+  th,td{text-align:left;padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--hair)}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  tbody tr:last-child td{border-bottom:0}
+  td .tag{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  td.num{font-variant-numeric:tabular-nums;font-family:var(--mono);color:var(--text)}
+  .dotm{color:var(--blue)} .dotf{color:var(--violet)}
+  .starcell{color:var(--accent);font-weight:600}
+
+  /* ── Steps ──────────────────────────────── */
+  ol.steps{counter-reset:st;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+  ol.steps li{counter-increment:st;position:relative;padding:14px 16px 14px 52px;background:var(--card);border:1px solid var(--hair);border-radius:12px;font-size:14px;color:var(--muted)}
+  ol.steps li::before{content:counter(st);position:absolute;left:14px;top:12px;width:26px;height:26px;border-radius:8px;
+    display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:13px;color:var(--accent-ink);background:var(--accent)}
+  ol.steps li b{color:var(--text);font-weight:650}
+  code.kbd{font-family:var(--mono);background:var(--accent-soft);color:var(--accent);padding:2px 7px;border-radius:6px;font-size:.92em;font-weight:600}
+
+  /* ── Notes ──────────────────────────────── */
+  .notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .note{background:var(--card2);border:1px solid var(--hair);border-left:3px solid var(--accent);border-radius:10px;padding:13px 15px}
+  .note h3{margin:0 0 5px;font-size:13px;letter-spacing:-.01em}
+  .note p{margin:0;font-size:13px;color:var(--muted)}
+  .note.warn{border-left-color:var(--amber)}
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--hair);color:var(--faint);font-size:12px;font-family:var(--mono);letter-spacing:.04em;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+
+  /* ── Toast ──────────────────────────────── */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+    background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px;padding:11px 18px;border-radius:11px;
+    box-shadow:0 12px 30px -10px rgba(0,0,0,.5);transition:.22s;z-index:50;font-family:var(--mono);letter-spacing:.02em}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="brand-eyebrow">Demo en persona · Smash Pádel Club (Cantabria)</p>
+      <h1>Cuentas para la reunión</h1>
+      <p class="lede">Cinco cuentas listas para enseñar TACTIUM de punta a punta: club, capitán, jugador y el flujo de unirse con código. Todas comparten la misma contraseña. Toca cualquier valor para copiarlo.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end">
+      <span class="logo"><span class="dot"></span>TACTIUM</span>
+      <button class="themebtn" id="themeToggle" aria-label="Cambiar tema">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span id="themeLabel">Tema</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Lo que más vas a teclear -->
+  <div class="keys">
+    <div class="keycard">
+      <p class="k-label">Contraseña común (las 5 cuentas)</p>
+      <div class="keyrow">
+        <span class="keyval" id="pwd">TactiumDemo2026!</span>
+        <button class="copy" data-copy="TactiumDemo2026!">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
+      <p class="k-note">Emails <b>@tactium.io</b> — no reciben correo, pero el login funciona.</p>
+    </div>
+    <div class="keycard code">
+      <p class="k-label">Código de invitación (capitán)</p>
+      <div class="keyrow">
+        <span class="keyval" id="code">SMASH25</span>
+        <button class="copy" data-copy="SMASH25">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
+      <p class="k-note">Une a <b>Smash Masculino B</b> como capitán · válido hasta <b>30 ago 2026</b> · 1 solo uso.</p>
+    </div>
+  </div>
+
+  <!-- Cuentas -->
+  <section>
+    <div class="s-head"><h2>Las 5 cuentas</h2><span class="rule"></span></div>
+    <div class="grid">
+
+      <!-- Club -->
+      <article class="acct">
+        <div class="acct-top">
+          <span class="badge b-club">Club · Admin</span>
+          <span class="pill prem">Premium · club_pro</span>
+        </div>
+        <p class="who">Smash Pádel Club<small>Gestor del club (Panel de club)</small></p>
+        <div class="field">
+          <div><div class="fl">Email</div><div class="fv">smash.club@tactium.io</div></div>
+          <button class="copy" data-copy="smash.club@tactium.io" aria-label="Copiar email">Copiar</button>
+        </div>
+        <ul class="see">
+          <li><b>4 equipos</b>: Masculino A y B, Femenino A y B</li>
+          <li><b>Masculino A</b> con liga completa: 10 jugadores, 4 jornadas jugadas + 2 próximas, actas y alineaciones</li>
+          <li>Vista global del club, estadísticas y gestión</li>
+        </ul>
+      </article>
+
+      <!-- Capitán independiente -->
+      <article class="acct">
+        <div class="acct-top">
+          <span class="badge b-cap">Capitán · Independiente</span>
+          <span class="pill prem">Premium · captain</span>
+        </div>
+        <p class="who">Diego Salas<small>Equipo propio “Pádel Puertochico”</small></p>
+        <div class="field">
+          <div><div class="fl">Email</div><div class="fv">smash.capitan@tactium.io</div></div>
+          <button class="copy" data-copy="smash.capitan@tactium.io" aria-label="Copiar email">Copiar</button>
+        </div>
+        <ul class="see">
+          <li>Capitán de <b>su propio equipo</b> (no del club) — la persona “capitán de pago”</li>
+          <li>Liga de 3 pistas: 8 jugadores, 3 jornadas, alineaciones + acta</li>
+          <li>Marcos Ruiz (la cuenta jugador) está en <b>su plantilla</b></li>
+        </ul>
+      </article>
+
+      <!-- Jugador con equipo -->
+      <article class="acct">
+        <div class="acct-top">
+          <span class="badge b-play">Jugador · Con equipo</span>
+          <span class="pill free">Gratis</span>
+        </div>
+        <p class="who">Marcos Ruiz<small>Jugador de “Pádel Puertochico”</small></p>
+        <div class="field">
+          <div><div class="fl">Email</div><div class="fv">smash.jugador@tactium.io</div></div>
+          <button class="copy" data-copy="smash.jugador@tactium.io" aria-label="Copiar email">Copiar</button>
+        </div>
+        <ul class="see">
+          <li>Ve su calendario y <b>marca disponibilidad</b></li>
+          <li>Aparece en la alineación del capitán <b>en tiempo real</b> (demo a dos móviles con Diego)</li>
+          <li>Vista de jugador, sin gestión</li>
+        </ul>
+      </article>
+
+      <!-- Jugador suelto -->
+      <article class="acct">
+        <div class="acct-top">
+          <span class="badge b-solo">Jugador · Suelto</span>
+          <span class="pill free">Gratis</span>
+        </div>
+        <p class="who">Álvaro Gómez<small>Sin equipo (modo suelto)</small></p>
+        <div class="field">
+          <div><div class="fl">Email</div><div class="fv">smash.suelto@tactium.io</div></div>
+          <button class="copy" data-copy="smash.suelto@tactium.io" aria-label="Copiar email">Copiar</button>
+        </div>
+        <ul class="see">
+          <li><b>4 amistosos</b> con victorias y derrotas</li>
+          <li>Cara a cara (H2H) y estadísticas personales</li>
+          <li>Ideal para demostrar <b>añadir foto + compartir</b> en vivo</li>
+        </ul>
+      </article>
+
+      <!-- Capitán por código -->
+      <article class="acct star">
+        <div class="acct-top">
+          <span class="badge b-code">Capitán · Por código</span>
+          <span class="pill prem">Premium al unirse</span>
+        </div>
+        <p class="who">Sergio Campo<small>Cuenta nueva, sin equipo todavía</small></p>
+        <div class="field">
+          <div><div class="fl">Email</div><div class="fv">smash.capitan2@tactium.io</div></div>
+          <button class="copy" data-copy="smash.capitan2@tactium.io" aria-label="Copiar email">Copiar</button>
+        </div>
+        <ul class="see">
+          <li>Al entrar canjea el código <b>SMASH25</b></li>
+          <li>Pasa a ser <b>capitán de Smash Masculino B</b> (6 jugadores esperando)</li>
+          <li>Queda cubierto por el premium del club — <b>sin paywall</b></li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- Club -->
+  <section>
+    <div class="s-head"><h2>El club por dentro (cuenta “Smash Pádel Club”)</h2><span class="rule"></span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Equipo</th><th>Categoría</th><th>Jugadores</th><th>Liga</th></tr></thead>
+        <tbody>
+          <tr><td class="starcell">Smash Masculino A</td><td><span class="tag dotm">Masculino</span></td><td class="num">10</td><td>4 jornadas jugadas + 2 próximas · actas y alineaciones</td></tr>
+          <tr><td>Smash Masculino B</td><td><span class="tag dotm">Masculino</span></td><td class="num">6</td><td>Destino del código <b>SMASH25</b> — listo para montar</td></tr>
+          <tr><td>Smash Femenino A</td><td><span class="tag dotf">Femenino</span></td><td class="num">0</td><td>Vacío — para crear en vivo si quieres</td></tr>
+          <tr><td>Smash Femenino B</td><td><span class="tag dotf">Femenino</span></td><td class="num">0</td><td>Vacío</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Guion -->
+  <section>
+    <div class="s-head"><h2>Guion sugerido para la demo</h2><span class="rule"></span></div>
+    <ol class="steps">
+      <li>Entra como <b>Smash Pádel Club</b> y enseña el panel: 4 equipos, y dentro de <b>Masculino A</b> la liga con jornadas jugadas, actas y alineaciones.</li>
+      <li>Cambia a <b>Diego Salas</b> (capitán) para mostrar el día a día de un capitán: montar alineación, disponibilidad, resultados.</li>
+      <li>Con <b>Marcos Ruiz</b> (jugador) en otro móvil, marca disponibilidad y enséñalo aparecer <b>al instante</b> en la vista de Diego.</li>
+      <li>El momento del código: entra con <b>Sergio Campo</b> (cuenta nueva) → “Unirme con un código” → escribe <code class="kbd">SMASH25</code> → ya es capitán de Smash Masculino B.</li>
+      <li>Cierra con <b>Álvaro Gómez</b> (suelto): registra un amistoso, <b>añade una foto</b> y comparte la tarjeta con el resultado.</li>
+    </ol>
+  </section>
+
+  <!-- Notas -->
+  <section>
+    <div class="s-head"><h2>A tener en cuenta</h2><span class="rule"></span></div>
+    <div class="notes">
+      <div class="note">
+        <h3>Ninguna cuenta choca con el paywall</h3>
+        <p>Club y capitán tienen suscripción activa; los jugadores son gratis; y el capitán por código hereda el premium del club al unirse. Verificado.</p>
+      </div>
+      <div class="note">
+        <h3>Las fotos de amistoso están sin poner</h3>
+        <p>A propósito: así puedes demostrar en vivo la función de añadir foto y compartir la tarjeta con el resultado.</p>
+      </div>
+      <div class="note warn">
+        <h3>El código es de 1 solo uso</h3>
+        <p>Al canjear <b>SMASH25</b> queda usado. Si quieres ensayarlo antes de la reunión, pide un segundo código de repuesto.</p>
+      </div>
+      <div class="note warn">
+        <h3>Ya existe un “Smash Padel Club b” ajeno</h3>
+        <p>Hay un equipo con ese nombre de otro usuario (quizá alguien del club ya probó la app). No forma parte de estas cuentas.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>TACTIUM · guía interna de demo</span>
+    <span>Smash Pádel Club · Cantabria</span>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite">Copiado</div>
+
+<script>
+(function(){
+  // ── Copiar al portapapeles (con fallback para file://) ──
+  function copyText(text){
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(text).then(showToast).catch(function(){legacy(text)});
+    } else { legacy(text); }
+  }
+  function legacy(text){
+    var ta=document.createElement('textarea');
+    ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try{ document.execCommand('copy'); showToast(); }catch(e){}
+    document.body.removeChild(ta);
+  }
+  var toast=document.getElementById('toast'), tt;
+  function showToast(msg){
+    toast.textContent=msg||'Copiado';
+    toast.classList.add('show');
+    clearTimeout(tt); tt=setTimeout(function(){toast.classList.remove('show')},1400);
+  }
+  document.querySelectorAll('.copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var v=b.getAttribute('data-copy');
+      if(!v){ // botón dentro de un .field → coge el valor hermano
+        var f=b.closest('.field'); if(f){var el=f.querySelector('.fv'); if(el) v=el.textContent.trim();}
+      }
+      if(v) copyText(v);
+    });
+  });
+
+  // ── Toggle de tema ──
+  var root=document.documentElement, tl=document.getElementById('themeLabel');
+  function current(){
+    var set=root.getAttribute('data-theme');
+    if(set) return set;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function apply(t){ root.setAttribute('data-theme',t); tl.textContent = t==='dark' ? 'Claro' : 'Oscuro'; }
+  apply(current());
+  document.getElementById('themeToggle').addEventListener('click',function(){
+    apply(current()==='dark' ? 'light' : 'dark');
+  });
+})();
+</script>
+</body>
+</html>

@@ -23,6 +23,7 @@ import {
   listTournaments,
   createTournament,
   type Tournament,
+  isSocialFormat,
   type MatchFormat,
   type TournamentGender,
   type TournamentFormat,
@@ -51,7 +52,9 @@ const TYPES: {
 }[] = [
   { id: 'ko', label: 'Eliminación directa', sub: 'Cuadro a una vida hasta la final, con cabezas de serie' },
   { id: 'round_robin', label: 'Liga · todos contra todos', sub: 'Clasificación por puntos, sets y juegos' },
-  { id: 'groups_ko', label: 'Grupos + eliminatorias', sub: 'Próximamente', disabled: true },
+  { id: 'groups_ko', label: 'Grupos + eliminatorias', sub: 'Liguillas y luego cuadros oro/plata/bronce' },
+  { id: 'americano', label: 'Americano', sub: 'Individual · compañeros rotan · ranking por puntos' },
+  { id: 'mexicano', label: 'Mexicano', sub: 'Individual · emparejamientos por ranking cada ronda' },
 ];
 
 const MATCH_FORMATS: { id: MatchFormat; label: string; sub: string }[] = [
@@ -364,6 +367,8 @@ const CreateTournamentSheet: React.FC<{
           : 'Puedes marcar varias; cada una jugará su cuadro.'}
       </Text>
 
+      {!isSocialFormat(format) ? (
+      <>
       <Text style={styles.label}>FORMATO DE PARTIDO</Text>
       <View style={{ gap: 8 }}>
         {MATCH_FORMATS.map((f) => {
@@ -388,8 +393,12 @@ const CreateTournamentSheet: React.FC<{
           );
         })}
       </View>
+      </>
+      ) : null}
 
-      <Text style={styles.label}>PLAZAS (PAREJAS) · OPCIONAL</Text>
+      <Text style={styles.label}>
+        PLAZAS ({isSocialFormat(format) ? 'JUGADORES' : 'PAREJAS'}) · OPCIONAL
+      </Text>
       <View style={styles.input}>
         <TextInput
           value={maxPairs}

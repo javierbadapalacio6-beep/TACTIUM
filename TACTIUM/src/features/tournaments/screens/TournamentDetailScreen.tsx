@@ -28,7 +28,12 @@ import {
   generateRoundRobin,
   generateGroups,
   generateKnockoutFromGroups,
+  generateAmericano,
+  generateMexicanoRound,
   computeStandings,
+  computeIndividualStandings,
+  setSocialResult,
+  isSocialFormat,
   posBracket,
   BRACKET_LABEL,
   groupName,
@@ -38,6 +43,7 @@ import {
   type TournamentRegistration,
   type TournamentMatch,
   type StandingRow,
+  type PlayerStanding,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -214,7 +220,16 @@ export const TournamentDetailScreen = ({
 
   const isRR = t?.format === 'round_robin';
   const isGroups = t?.format === 'groups_ko';
+  const isSocial = isSocialFormat(t?.format ?? '');
+  const isMexicano = t?.format === 'mexicano';
   const hasBracket = matchesCat.length > 0;
+  const plainName = useCallback(
+    (id: string | null) => regs.find((r) => r.id === id)?.p1_name ?? '—',
+    [regs],
+  );
+  const enoughRegs = isSocial
+    ? regsCat.length >= 4 && regsCat.length % 4 === 0
+    : regsCat.length >= 2;
 
   const standings = useMemo(
     () => (isRR ? computeStandings(regsCat, matchesCat) : []),
@@ -252,6 +267,27 @@ export const TournamentDetailScreen = ({
 
   const onGenerate = () => {
     if (!t) return;
+    if (isSocial) {
+      Alert.alert(
+        isMexicano ? 'Generar 1ª ronda' : 'Generar americano',
+        isMexicano
+          ? `Se creará la 1ª ronda del mexicano con ${regsCat.length} jugadores (siembra por puntos). Las siguientes rondas se generan por el ranking tras cada resultado.`
+          : `Se crearán todas las rondas del americano con ${regsCat.length} jugadores (compañeros rotativos). No podrás añadir más jugadores.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Generar',
+            onPress: () =>
+              runGenerate(() =>
+                isMexicano
+                  ? generateMexicanoRound(t, regsCat, matchesCat, dg, dc)
+                  : generateAmericano(t, regsCat, dg, dc),
+              ),
+          },
+        ],
+      );
+      return;
+    }
     if (isGroups) {
       Alert.alert(
         'Generar grupos',
@@ -298,6 +334,11 @@ export const TournamentDetailScreen = ({
         },
       ],
     );
+  };
+
+  const onGenerateNextRound = () => {
+    if (!t) return;
+    runGenerate(() => generateMexicanoRound(t, regsCat, matchesCat, dg, dc));
   };
 
   const shareCode = async () => {
@@ -464,10 +505,10 @@ export const TournamentDetailScreen = ({
 
               <Pressable
                 onPress={onGenerate}
-                disabled={regsCat.length < 2 || generating}
+                disabled={!enoughRegs || generating}
                 style={({ pressed }) => [
                   styles.generateBtn,
-                  (regsCat.length < 2 || generating) && { opacity: 0.4 },
+                  (!enoughRegs || generating) && { opacity: 0.4 },
                   pressed && { opacity: 0.9 },
                 ]}
               >
@@ -475,18 +516,40 @@ export const TournamentDetailScreen = ({
                   <ActivityIndicator size="small" color={c.textInverse} />
                 ) : (
                   <Text style={styles.generateLabel}>
-                    {isGroups ? 'Generar grupos' : isRR ? 'Generar liga' : 'Generar cuadro'}
+                    {isMexicano
+                      ? 'Generar 1ª ronda'
+                      : t?.format === 'americano'
+                        ? 'Generar americano'
+                        : isGroups
+                          ? 'Generar grupos'
+                          : isRR
+                            ? 'Generar liga'
+                            : 'Generar cuadro'}
                     {activeDiv && divisions.length > 1 ? ` · ${divLabel(activeDiv)}` : ''}
                   </Text>
                 )}
               </Pressable>
-              {regsCat.length < 2 ? (
+              {!enoughRegs ? (
                 <Text style={styles.genHint}>
-                  Hacen falta al menos 2 parejas
+                  {isSocial
+                    ? 'Hacen falta jugadores en múltiplo de 4 (4, 8, 12…)'
+                    : 'Hacen falta al menos 2 parejas'}
                   {activeDiv && divisions.length > 1 ? ` en ${divLabel(activeDiv)}` : ''}.
                 </Text>
               ) : null}
             </View>
+          ) : isSocial ? (
+            <SocialView
+              regs={regsCat}
+              matches={matchesCat}
+              plainName={plainName}
+              isMexicano={isMexicano}
+              collapsed={collapsed}
+              toggleRound={toggleRound}
+              onEdit={setEditMatch}
+              onGenerateNextRound={onGenerateNextRound}
+              generating={generating}
+            />
           ) : isRR ? (
             <RoundRobinView
               standings={standings}
@@ -531,6 +594,7 @@ export const TournamentDetailScreen = ({
         tournamentId={tournamentId}
         gender={dg}
         category={dc}
+        social={isSocial}
         onClose={() => setAdding(false)}
         onAdded={load}
       />
@@ -538,9 +602,18 @@ export const TournamentDetailScreen = ({
       <ResultSheet
         match={editMatch}
         matchFormat={t?.match_format ?? 'bo3_stb'}
-        advance={!isRR}
-        homeName={regName(editMatch?.home_reg ?? null)}
-        awayName={regName(editMatch?.away_reg ?? null)}
+        advance={!isRR && !isSocial}
+        social={isSocial}
+        homeName={
+          isSocial
+            ? `${plainName(editMatch?.home_reg ?? null)} / ${plainName(editMatch?.home_reg2 ?? null)}`
+            : regName(editMatch?.home_reg ?? null)
+        }
+        awayName={
+          isSocial
+            ? `${plainName(editMatch?.away_reg ?? null)} / ${plainName(editMatch?.away_reg2 ?? null)}`
+            : regName(editMatch?.away_reg ?? null)
+        }
         onClose={() => setEditMatch(null)}
         onSaved={load}
       />
@@ -864,14 +937,170 @@ const GroupsView: React.FC<{
   );
 };
 
+// Vista SOCIAL (americano / mexicano): ranking individual + rondas 2vs2.
+const SocialView: React.FC<{
+  regs: TournamentRegistration[];
+  matches: TournamentMatch[];
+  plainName: (id: string | null) => string;
+  isMexicano: boolean;
+  collapsed: Set<number>;
+  toggleRound: (r: number) => void;
+  onEdit: (m: TournamentMatch) => void;
+  onGenerateNextRound: () => void;
+  generating: boolean;
+}> = ({
+  regs,
+  matches,
+  plainName,
+  isMexicano,
+  collapsed,
+  toggleRound,
+  onEdit,
+  onGenerateNextRound,
+  generating,
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const standings = useMemo(
+    () => computeIndividualStandings(regs, matches),
+    [regs, matches],
+  );
+  const rounds = useMemo(
+    () => Array.from(new Set(matches.map((m) => m.round))).sort((a, b) => a - b),
+    [matches],
+  );
+  const lastRound = rounds.length ? rounds[rounds.length - 1] : 0;
+  const lastRoundDone =
+    lastRound > 0 &&
+    matches.filter((m) => m.round === lastRound).every((m) => m.status === 'finished');
+  const pairLabel = (a: string | null, b: string | null) =>
+    `${plainName(a)} / ${plainName(b)}`;
+
+  return (
+    <View>
+      <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
+        RANKING
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: 22, paddingTop: 8 }}>
+          <View style={styles.stHeader}>
+            <Text style={styles.stPos}>#</Text>
+            <Text style={styles.stName}>JUGADOR</Text>
+            <Text style={styles.stCol}>PJ</Text>
+            <Text style={styles.stCol}>G</Text>
+            <Text style={styles.stCol}>PTS</Text>
+          </View>
+          {standings.map((s, i) => (
+            <View key={s.regId} style={styles.stRow}>
+              <Text style={styles.stPos}>{i + 1}</Text>
+              <Text style={styles.stName} numberOfLines={1}>{s.name}</Text>
+              <Text style={styles.stCol}>{s.played}</Text>
+              <Text style={styles.stCol}>{s.won}</Text>
+              <Text style={[styles.stCol, styles.stPts]}>{s.points}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      {rounds.map((round) => {
+        const col = matches
+          .filter((m) => m.round === round)
+          .sort((a, b) => a.slot - b.slot);
+        const isCol = collapsed.has(round);
+        const done = col.filter((m) => m.status === 'finished').length;
+        return (
+          <View key={round}>
+            <Pressable
+              onPress={() => toggleRound(round)}
+              style={({ pressed }) => [
+                styles.socialRoundHead,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.sectionLabel}>
+                RONDA {round} · {done}/{col.length}
+              </Text>
+              <Text style={styles.roundPillChevron}>{isCol ? '›' : '⌄'}</Text>
+            </Pressable>
+            {isCol ? null : (
+              <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 6 }}>
+                {col.map((m) => {
+                  const finished = m.status === 'finished';
+                  const homeWin = finished && (m.home_score ?? 0) >= (m.away_score ?? 0);
+                  const awayWin = finished && (m.away_score ?? 0) > (m.home_score ?? 0);
+                  return (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => onEdit(m)}
+                      style={({ pressed }) => [styles.rrMatch, pressed && { opacity: 0.85 }]}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text
+                          style={[styles.rrName, homeWin && styles.rrWin]}
+                          numberOfLines={1}
+                        >
+                          {pairLabel(m.home_reg, m.home_reg2)}
+                        </Text>
+                        <Text
+                          style={[styles.rrName, awayWin && styles.rrWin]}
+                          numberOfLines={1}
+                        >
+                          {pairLabel(m.away_reg, m.away_reg2)}
+                        </Text>
+                      </View>
+                      {finished ? (
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={styles.rrScore}>{m.home_score}</Text>
+                          <Text style={styles.rrScore}>{m.away_score}</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.rrPending}>Poner</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      })}
+
+      {isMexicano ? (
+        <Pressable
+          onPress={onGenerateNextRound}
+          disabled={!lastRoundDone || generating}
+          style={({ pressed }) => [
+            styles.generateBtn,
+            { marginHorizontal: 22, marginTop: 20 },
+            (!lastRoundDone || generating) && { opacity: 0.4 },
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          {generating ? (
+            <ActivityIndicator size="small" color={c.textInverse} />
+          ) : (
+            <Text style={styles.generateLabel}>Generar ronda {lastRound + 1}</Text>
+          )}
+        </Pressable>
+      ) : null}
+      {isMexicano && !lastRoundDone ? (
+        <Text style={styles.genHint}>
+          Cierra todos los partidos de la ronda {lastRound} para generar la siguiente.
+        </Text>
+      ) : null}
+    </View>
+  );
+};
+
 const AddPairSheet: React.FC<{
   open: boolean;
   tournamentId: string;
   gender: string | null;
   category: string | null;
+  social?: boolean;
   onClose: () => void;
   onAdded: () => void;
-}> = ({ open, tournamentId, gender, category, onClose, onAdded }) => {
+}> = ({ open, tournamentId, gender, category, social, onClose, onAdded }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [p1, setP1] = useState('');
@@ -899,7 +1128,7 @@ const AddPairSheet: React.FC<{
         gender,
         category,
         p1Name: p1,
-        p2Name: p2,
+        p2Name: social ? '' : p2,
         seedPoints: pts ? parseInt(pts, 10) : null,
       });
       onAdded();
@@ -928,22 +1157,26 @@ const AddPairSheet: React.FC<{
           {saving ? (
             <ActivityIndicator size="small" color={c.textInverse} />
           ) : (
-            <Text style={styles.saveLabel}>Añadir pareja</Text>
+            <Text style={styles.saveLabel}>{social ? 'Añadir jugador' : 'Añadir pareja'}</Text>
           )}
         </Pressable>
       }
     >
-      <Text style={styles.sheetEyebrow}>AÑADIR PAREJA</Text>
+      <Text style={styles.sheetEyebrow}>{social ? 'AÑADIR JUGADOR' : 'AÑADIR PAREJA'}</Text>
       <Text style={styles.sheetTitle}>Alta manual</Text>
 
-      <Text style={styles.label}>JUGADOR 1</Text>
+      <Text style={styles.label}>{social ? 'JUGADOR' : 'JUGADOR 1'}</Text>
       <View style={styles.input}>
         <TextInput value={p1} onChangeText={setP1} placeholder="Nombre" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
       </View>
-      <Text style={styles.label}>JUGADOR 2</Text>
-      <View style={styles.input}>
-        <TextInput value={p2} onChangeText={setP2} placeholder="Nombre (opcional)" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
-      </View>
+      {!social ? (
+        <>
+          <Text style={styles.label}>JUGADOR 2</Text>
+          <View style={styles.input}>
+            <TextInput value={p2} onChangeText={setP2} placeholder="Nombre (opcional)" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
+          </View>
+        </>
+      ) : null}
       <Text style={styles.label}>PUNTOS PARA LA SIEMBRA · OPCIONAL</Text>
       <View style={styles.input}>
         <TextInput
@@ -964,19 +1197,25 @@ const ResultSheet: React.FC<{
   match: TournamentMatch | null;
   matchFormat: string;
   advance: boolean;
+  social?: boolean;
   homeName: string;
   awayName: string;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ match, matchFormat, advance, homeName, awayName, onClose, onSaved }) => {
+}> = ({ match, matchFormat, advance, social, homeName, awayName, onClose, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const cfg = useMemo(() => formatConfig(matchFormat), [matchFormat]);
   const [rows, setRows] = useState<{ h: string; a: string }[]>([]);
+  const [pts, setPts] = useState<{ h: string; a: string }>({ h: '', a: '' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!match) return;
+    setPts({
+      h: match.home_score != null ? String(match.home_score) : '',
+      a: match.away_score != null ? String(match.away_score) : '',
+    });
     setRows(
       Array.from({ length: cfg.maxSets }, (_, i) => {
         const s = match.sets?.[i];
@@ -1003,16 +1242,23 @@ const ResultSheet: React.FC<{
     return { wonHome: wh, wonAway: wa };
   }, [rows]);
 
-  const decided = wonHome >= cfg.setsToWin || wonAway >= cfg.setsToWin;
+  const socialDecided = pts.h.trim() !== '' && pts.a.trim() !== '';
+  const decided = social
+    ? socialDecided
+    : wonHome >= cfg.setsToWin || wonAway >= cfg.setsToWin;
 
   const save = async () => {
     if (!match) return;
-    const sets = rows
-      .map((r) => [parseInt(r.h, 10), parseInt(r.a, 10)])
-      .filter(([h, a]) => !Number.isNaN(h) && !Number.isNaN(a) && (h !== 0 || a !== 0));
     setSaving(true);
     try {
-      await setMatchResult(match, sets, cfg.setsToWin, advance);
+      if (social) {
+        await setSocialResult(match, parseInt(pts.h, 10) || 0, parseInt(pts.a, 10) || 0);
+      } else {
+        const sets = rows
+          .map((r) => [parseInt(r.h, 10), parseInt(r.a, 10)])
+          .filter(([h, a]) => !Number.isNaN(h) && !Number.isNaN(a) && (h !== 0 || a !== 0));
+        await setMatchResult(match, sets, cfg.setsToWin, advance);
+      }
       toast.success('Resultado guardado');
       onSaved();
       onClose();
@@ -1050,44 +1296,86 @@ const ResultSheet: React.FC<{
         </Pressable>
       }
     >
-      <Text style={styles.sheetEyebrow}>RESULTADO · {cfg.label.toUpperCase()}</Text>
+      <Text style={styles.sheetEyebrow}>
+        RESULTADO{social ? ' · JUEGOS' : ` · ${cfg.label.toUpperCase()}`}
+      </Text>
       <Text style={styles.setTeam} numberOfLines={1}>{homeName}</Text>
       <Text style={styles.setVs}>vs</Text>
       <Text style={styles.setTeam} numberOfLines={1}>{awayName}</Text>
 
-      {rows.map((r, i) => (
-        <View key={i} style={styles.setRow}>
-          <Text style={styles.setRowLabel}>{setLabel(i)}</Text>
-          <View style={styles.setInputs}>
-            <TextInput
-              value={r.h}
-              onChangeText={(v) => setCell(i, 'h', v)}
-              placeholder="0"
-              placeholderTextColor={c.textFaint}
-              style={styles.setInput}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-            <Text style={styles.setSep}>–</Text>
-            <TextInput
-              value={r.a}
-              onChangeText={(v) => setCell(i, 'a', v)}
-              placeholder="0"
-              placeholderTextColor={c.textFaint}
-              style={styles.setInput}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
+      {social ? (
+        <>
+          <View style={styles.setRow}>
+            <Text style={styles.setRowLabel}>JUEGOS</Text>
+            <View style={styles.setInputs}>
+              <TextInput
+                value={pts.h}
+                onChangeText={(v) => setPts((p) => ({ ...p, h: v.replace(/[^0-9]/g, '') }))}
+                placeholder="0"
+                placeholderTextColor={c.textFaint}
+                style={styles.setInput}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Text style={styles.setSep}>–</Text>
+              <TextInput
+                value={pts.a}
+                onChangeText={(v) => setPts((p) => ({ ...p, a: v.replace(/[^0-9]/g, '') }))}
+                placeholder="0"
+                placeholderTextColor={c.textFaint}
+                style={styles.setInput}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+            </View>
           </View>
-        </View>
-      ))}
+          <Text style={[styles.liveResult, decided && { color: c.accent }]}>
+            {decided
+              ? `${pts.h}–${pts.a} · ${
+                  parseInt(pts.h, 10) === parseInt(pts.a, 10)
+                    ? 'empate'
+                    : `gana ${parseInt(pts.h, 10) > parseInt(pts.a, 10) ? homeName : awayName}`
+                }`
+              : 'Introduce los juegos de cada pareja'}
+          </Text>
+        </>
+      ) : (
+        <>
+          {rows.map((r, i) => (
+            <View key={i} style={styles.setRow}>
+              <Text style={styles.setRowLabel}>{setLabel(i)}</Text>
+              <View style={styles.setInputs}>
+                <TextInput
+                  value={r.h}
+                  onChangeText={(v) => setCell(i, 'h', v)}
+                  placeholder="0"
+                  placeholderTextColor={c.textFaint}
+                  style={styles.setInput}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+                <Text style={styles.setSep}>–</Text>
+                <TextInput
+                  value={r.a}
+                  onChangeText={(v) => setCell(i, 'a', v)}
+                  placeholder="0"
+                  placeholderTextColor={c.textFaint}
+                  style={styles.setInput}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+              </View>
+            </View>
+          ))}
 
-      <Text style={[styles.liveResult, decided && { color: c.accent }]}>
-        {wonHome}–{wonAway} en sets
-        {decided
-          ? ` · gana ${wonHome > wonAway ? homeName : awayName}`
-          : ' · marcador incompleto'}
-      </Text>
+          <Text style={[styles.liveResult, decided && { color: c.accent }]}>
+            {wonHome}–{wonAway} en sets
+            {decided
+              ? ` · gana ${wonHome > wonAway ? homeName : awayName}`
+              : ' · marcador incompleto'}
+          </Text>
+        </>
+      )}
     </BottomSheet>
   );
 };
@@ -1173,6 +1461,13 @@ const makeStyles = (c: Palette) =>
       marginBottom: 8,
     },
     sectionLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 2, color: c.textFaint, textTransform: 'uppercase', fontWeight: '500' },
+    socialRoundHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 22,
+      marginTop: 22,
+    },
     addLink: { color: c.accent, fontSize: 13, fontWeight: '600' },
     emptyText: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
     regRow: {

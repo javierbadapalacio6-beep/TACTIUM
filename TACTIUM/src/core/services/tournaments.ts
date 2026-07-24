@@ -3,7 +3,13 @@ import { supabase } from '@core/supabase/client';
 // Torneos del club (Fase 1: KO). Las tablas aún no están en los tipos
 // generados → casts puntuales (mismo patrón que social.ts / clubSchedule.ts).
 
-export type TournamentFormat = 'ko' | 'groups_ko' | 'round_robin' | 'americano';
+export type TournamentFormat =
+  | 'ko'
+  | 'groups_ko'
+  | 'round_robin'
+  | 'americano'
+  | 'mexicano';
+export const isSocialFormat = (f: string) => f === 'americano' || f === 'mexicano';
 // Formato del PARTIDO (sets). Ver formatConfig.
 export type MatchFormat = 'bo3_stb' | 'bo3_full' | 'bo1';
 
@@ -120,7 +126,7 @@ export async function createTournament(input: {
     // La inscripción queda abierta al crear el torneo (código compartible).
     status: 'open',
     signup_code: genCode(),
-    pair_based: true,
+    pair_based: !isSocialFormat(input.format),
   };
   const { data, error } = await from()('tournaments')
     .insert(payload)
@@ -162,6 +168,8 @@ export interface TournamentMatch {
   group_id: string | null;
   home_reg: string | null;
   away_reg: string | null;
+  home_reg2: string | null; // 2º jugador del equipo local (americano/mexicano)
+  away_reg2: string | null;
   home_score: number | null;
   away_score: number | null;
   winner_reg: string | null;
@@ -600,6 +608,189 @@ export function computeStandings(
   );
 }
 
+// ── Americano / Mexicano (jugadores individuales, ranking por puntos) ────────
+
+export interface PlayerStanding {
+  regId: string;
+  name: string;
+  played: number;
+  won: number;
+  points: number;
+}
+
+/** Ranking individual: puntos = suma de lo que anota tu equipo en cada partido. */
+export function computeIndividualStandings(
+  regs: TournamentRegistration[],
+  matches: TournamentMatch[],
+): PlayerStanding[] {
+  const byId = new Map<string, PlayerStanding>();
+  for (const r of regs)
+    byId.set(r.id, { regId: r.id, name: r.p1_name, played: 0, won: 0, points: 0 });
+  const add = (id: string | null, pts: number, win: boolean) => {
+    if (!id) return;
+    const p = byId.get(id);
+    if (!p) return;
+    p.played++;
+    p.points += pts;
+    if (win) p.won++;
+  };
+  for (const m of matches) {
+    if (m.status !== 'finished') continue;
+    const hs = m.home_score ?? 0;
+    const as = m.away_score ?? 0;
+    const homeWin = hs > as;
+    add(m.home_reg, hs, homeWin);
+    add(m.home_reg2, hs, homeWin);
+    add(m.away_reg, as, !homeWin);
+    add(m.away_reg2, as, !homeWin);
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => b.points - a.points || b.won - a.won,
+  );
+}
+
+const rotateArr = <T,>(arr: T[], by: number): T[] => {
+  const n = arr.length;
+  if (n === 0) return arr;
+  const k = ((by % n) + n) % n;
+  return [...arr.slice(k), ...arr.slice(0, k)];
+};
+
+/** AMERICANO: rondas rotando compañeros (pistas de 4). Jugadores múltiplo de 4. */
+export async function generateAmericano(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  gender: string | null,
+  category: string | null,
+): Promise<void> {
+  if (await hasDivisionMatches(tournament.id, gender, category))
+    throw new Error('Este americano ya está generado.');
+  const players = regs
+    .filter((r) => r.status !== 'withdrawn')
+    .sort(
+      (a, b) =>
+        (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
+        (a.created_at < b.created_at ? -1 : 1),
+    )
+    .map((r) => r.id);
+  const N = players.length;
+  if (N < 4 || N % 4 !== 0)
+    throw new Error('Para el americano hacen falta jugadores múltiplo de 4 (4, 8, 12…).');
+  await Promise.all(
+    players.map((id, i) =>
+      from()('tournament_registrations').update({ seed: i + 1 }).eq('id', id),
+    ),
+  );
+  const rounds = N - 1;
+  const courts = N / 4;
+  const rows: Record<string, unknown>[] = [];
+  let slot = 0;
+  for (let r = 0; r < rounds; r++) {
+    const arr = [players[0], ...rotateArr(players.slice(1), r)];
+    for (let ct = 0; ct < courts; ct++) {
+      const [a, b, cc, d] = arr.slice(ct * 4, ct * 4 + 4);
+      const teams =
+        r % 3 === 0 ? [[a, b], [cc, d]] : r % 3 === 1 ? [[a, cc], [b, d]] : [[a, d], [b, cc]];
+      rows.push({
+        tournament_id: tournament.id,
+        gender,
+        category,
+        bracket: 'amer',
+        round: r + 1,
+        slot: slot++,
+        home_reg: teams[0][0],
+        home_reg2: teams[0][1],
+        away_reg: teams[1][0],
+        away_reg2: teams[1][1],
+        status: 'pending',
+      });
+    }
+  }
+  const { error } = await from()('tournament_matches').insert(rows);
+  if (error) throw new Error(error.message);
+  await from()('tournaments').update({ status: 'in_progress' }).eq('id', tournament.id);
+}
+
+/** MEXICANO: genera la SIGUIENTE ronda emparejando por la clasificación actual. */
+export async function generateMexicanoRound(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  matches: TournamentMatch[],
+  gender: string | null,
+  category: string | null,
+): Promise<void> {
+  const players = regs.filter((r) => r.status !== 'withdrawn');
+  const N = players.length;
+  if (N < 4 || N % 4 !== 0)
+    throw new Error('Para el mexicano hacen falta jugadores múltiplo de 4 (4, 8, 12…).');
+
+  const existingRounds = matches.reduce((mx, m) => Math.max(mx, m.round), 0);
+  if (existingRounds > 0) {
+    const lastRound = matches.filter((m) => m.round === existingRounds);
+    if (!lastRound.every((m) => m.status === 'finished'))
+      throw new Error('Termina la ronda actual antes de generar la siguiente.');
+  }
+  const nextRound = existingRounds + 1;
+
+  let ordered: string[];
+  if (existingRounds === 0) {
+    ordered = [...players]
+      .sort(
+        (a, b) =>
+          (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
+          (a.created_at < b.created_at ? -1 : 1),
+      )
+      .map((r) => r.id);
+    await Promise.all(
+      ordered.map((id, i) =>
+        from()('tournament_registrations').update({ seed: i + 1 }).eq('id', id),
+      ),
+    );
+  } else {
+    ordered = computeIndividualStandings(players, matches).map((s) => s.regId);
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  const baseSlot = matches.length;
+  for (let ct = 0; ct < N / 4; ct++) {
+    const [a, b, cc, d] = ordered.slice(ct * 4, ct * 4 + 4);
+    rows.push({
+      tournament_id: tournament.id,
+      gender,
+      category,
+      bracket: 'mex',
+      round: nextRound,
+      slot: baseSlot + ct,
+      home_reg: a,
+      home_reg2: d,
+      away_reg: b,
+      away_reg2: cc,
+      status: 'pending',
+    });
+  }
+  const { error } = await from()('tournament_matches').insert(rows);
+  if (error) throw new Error(error.message);
+  await from()('tournaments').update({ status: 'in_progress' }).eq('id', tournament.id);
+}
+
+/** Resultado social (puntos por equipo; sin sets, sin avance de cuadro). */
+export async function setSocialResult(
+  match: TournamentMatch,
+  homePoints: number,
+  awayPoints: number,
+): Promise<void> {
+  const winner = homePoints >= awayPoints ? match.home_reg : match.away_reg;
+  const { error } = await from()('tournament_matches')
+    .update({
+      home_score: homePoints,
+      away_score: awayPoints,
+      winner_reg: winner,
+      status: 'finished',
+    })
+    .eq('id', match.id);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Mete el resultado por SETS y hace avanzar al ganador. `sets` = array de
  * [gamesHome, gamesAway] por set jugado. La app cuenta sets ganados y decide el
@@ -668,6 +859,7 @@ export interface TournamentLookup {
   name: string;
   genders: string[];
   categories: string[];
+  pair_based: boolean;
 }
 
 /** Busca un torneo por código (para mostrar nombre + categorías al apuntarse). */

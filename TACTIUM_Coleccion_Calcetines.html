@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTIUM · Colección Calcetines Pádel</title>
+<style>
+  :root{
+    --navy:#1F3A5F; --blue:#2E75B6; --ink:#12212f; --paper:#f4f6f9;
+    --card:#ffffff; --line:#e2e8f0; --muted:#64748b; --ball:#c6d82e;
+    --red:#b23a2e; --ok:#1e7a46; --warn:#B8860B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--paper);color:var(--ink)}
+  header.top{background:var(--navy);color:#fff;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px}
+  header.top h1{margin:0;font-size:22px;letter-spacing:.5px}
+  header.top .sub{color:#b9c8dc;font-size:13px;margin-top:3px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{background:#ffffff22;border:1px solid #ffffff33;color:#fff;border-radius:999px;padding:6px 12px;font-size:13px}
+  .btn{border:0;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-light{background:#fff;color:var(--navy)}
+  .btn-ghost{background:#ffffff1a;color:#fff;border:1px solid #ffffff44}
+  .wrap{max-width:1200px;margin:0 auto;padding:26px 22px 60px}
+  .progress{height:8px;background:#e6ebf2;border-radius:999px;overflow:hidden;margin:0 0 22px}
+  .progress > i{display:block;height:100%;background:var(--ball);width:0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .card h2{margin:0;font-size:17px}
+  .chead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:10px}
+  .num{background:var(--navy);color:#fff;border-radius:8px;min-width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  .tag{display:inline-block;font-size:11px;color:var(--muted);background:#eef2f7;border-radius:6px;padding:2px 8px;margin-top:5px}
+  .cbody{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;margin-bottom:5px}
+  pre.prompt{white-space:pre-wrap;word-break:break-word;background:#0f172a;color:#e6edf6;font-size:11.5px;line-height:1.5;border-radius:10px;padding:12px;margin:0;max-height:150px;overflow:auto}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .mini{font-size:12px;color:var(--muted)}
+  input.f,textarea.f,select.f{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;background:#fff;color:var(--ink)}
+  textarea.f{min-height:70px;resize:vertical}
+  .copy{background:var(--blue);color:#fff}
+  .copy.ok{background:var(--ok)}
+  .drop{border:2px dashed #cbd5e1;border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer;transition:.15s}
+  .drop.drag{border-color:var(--blue);background:#eef5fc;color:var(--blue)}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .thumb{position:relative;width:78px;height:78px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#f8fafc}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer}
+  .thumb b{position:absolute;top:2px;right:2px;background:#0009;color:#fff;border-radius:6px;width:18px;height:18px;line-height:18px;text-align:center;font-size:12px;cursor:pointer}
+  .statusrow{display:flex;gap:8px;align-items:center}
+  .dot{width:9px;height:9px;border-radius:50%;background:#cbd5e1;flex:0 0 auto}
+  .st-generado .dot{background:var(--warn)} .st-mockup .dot{background:var(--blue)} .st-publicado .dot{background:var(--ok)}
+  .note{background:#fff7e6;border:1px solid #f0d9a0;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#7a5c12;margin:0 0 20px}
+  .lightbox{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:30px;z-index:50}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:8px}
+  footer{max-width:1200px;margin:0 auto;padding:10px 22px 40px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>TACTIUM · Colección Calcetines Pádel</h1>
+    <div class="sub">Panel de trabajo · prompts, imágenes y fichas · se guarda en tu navegador</div>
+  </div>
+  <div class="bar">
+    <span class="pill" id="count">0 / 6 publicados</span>
+    <button class="btn btn-ghost" onclick="exportData()">Descargar copia</button>
+    <button class="btn btn-light" onclick="importData()">Importar copia</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none">
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="progress"><i id="pbar"></i></div>
+  <p class="note"><b>Recuerda:</b> personajes originales, sin la cara real de ningún jugador y <b>sin apodos como texto ni como nombre de producto</b>. La temática (alien, rey, lobo…) es genérica y segura.</p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="lightbox" id="lb" onclick="this.style.display='none'"><img id="lbimg" src=""></div>
+
+<footer>Panel interno TACTIUM · Las imágenes y textos que añadas se guardan solo en este navegador (localStorage). Usa «Descargar copia» para respaldarlos.</footer>
+
+<script>
+const PRODUCTS = [
+  {
+    id:"violin", name:"Violín Pádel", theme:"Música clásica",
+    elements:"violín, notas, clave de sol", colors:"rojo-marrón, amarillo-verde",
+    title:"Calcetines Violín Pádel · TACTIUM", price:"15,95 €",
+    desc:"¿Pádel con alma de virtuoso? Raquetas, pelotas, violines y notas por toda la caña. Estampado all-over por sublimación de alta definición. Suaves, transpirables y con puntera y talón reforzados. El regalo perfecto para cualquier adicto a la pista.",
+    prompt:`Flat hand-drawn sticker-style seamless repeating pattern for an all-over sock print, on a pure white background. Small, densely and evenly spaced motifs. An ORIGINAL fictional cartoon padel player, short curly brown hair, athletic build, all-black padel kit, white sneakers, mid-action with a black padel racket. Interspersed icons in the same style: classical red-brown violin with bow, black musical notes, treble clefs, black padel rackets, yellow-green padel balls. Bold clean outlines, bright saturated colors, playful comic style. Color accents: red-brown and yellow-green. Seamless tileable, small repeated motifs, no text, no logos, not resembling any real person. High resolution.`
+  },
+  {
+    id:"alien", name:"Alien Pádel", theme:"Espacio · gorra hacia atrás",
+    elements:"OVNIs, aliens, estrellas, planetas", colors:"verde, negro, amarillo-verde",
+    title:"Calcetines Alien Pádel · TACTIUM", price:"15,95 €",
+    desc:"De otro planeta en la pista. Un estampado galáctico con OVNIs, aliens y estrellas entre raquetas y pelotas. Sublimación all-over de alta definición, tejido cómodo y transpirable, puntera y talón reforzados.",
+    prompt:`Flat hand-drawn sticker-style seamless repeating pattern for an all-over sock print, on a pure white background. Small, densely and evenly spaced motifs. An ORIGINAL fictional cartoon padel player wearing a black cap backwards, short dark hair, athletic build, all-black padel kit, white sneakers, mid-action with a black padel racket. Interspersed icons in the same style: cartoon flying saucers/UFOs, little friendly green aliens, stars and planets, black padel rackets, yellow-green padel balls. Bold clean outlines, bright saturated colors, playful comic style. Color accents: green, black, yellow-green. Seamless tileable, small repeated motifs, no text, no logos, not resembling any real person. High resolution.`
+  },
+  {
+    id:"raton", name:"Superratón Pádel", theme:"Superhéroe",
+    elements:"ratón superhéroe, queso, rayos", colors:"rojo, amarillo, negro",
+    title:"Calcetines Superratón Pádel · TACTIUM", price:"15,95 €",
+    desc:"Pequeño pero letal. Un héroe con capa recorre la pista entre rayos y raquetas. Estampado all-over por sublimación, suave y transpirable, con puntera y talón reforzados.",
+    prompt:`Flat hand-drawn sticker-style seamless repeating pattern for an all-over sock print, on a pure white background. Small, densely and evenly spaced motifs. An ORIGINAL fictional cartoon padel player, short agile build, short dark hair, all-black padel kit, white sneakers, mid-action with a black padel racket. Interspersed icons in the same style: cartoon superhero mouse with a small red cape, cheese wedges, lightning bolts, stars, black padel rackets, yellow-green padel balls. Bold clean outlines, bright saturated colors, playful comic style. Color accents: red, yellow, black. Seamless tileable, small repeated motifs, no text, no logos, not resembling any real person. High resolution.`
+  },
+  {
+    id:"rey", name:"Rey del Pádel", theme:"Realeza",
+    elements:"coronas, cetros, escudos, laureles", colors:"oro, rojo, negro",
+    title:"Calcetines Rey del Pádel · TACTIUM", price:"15,95 €",
+    desc:"Manda en la pista. Coronas, cetros y escudos entre raquetas y pelotas para el que reina en cada punto. Sublimación all-over de alta definición, cómodo y con refuerzos.",
+    prompt:`Flat hand-drawn sticker-style seamless repeating pattern for an all-over sock print, on a pure white background. Small, densely and evenly spaced motifs. An ORIGINAL fictional cartoon padel player, confident posture, wavy dark hair, all-black padel kit, white sneakers, mid-action with a black padel racket. Interspersed icons in the same style: golden crowns, royal scepters, heraldic shields, laurel wreaths, stars, black padel rackets, yellow-green padel balls. Bold clean outlines, bright saturated colors, playful comic style. Color accents: gold, red, black. Seamless tileable, small repeated motifs, no text, no logos, not resembling any real person. High resolution.`
+  },
+  {
+    id:"burger", name:"Burger Pádel", theme:"Fast food · gorra hacia atrás",
+    elements:"hamburguesas, patatas, kétchup", colors:"rojo, amarillo, marrón",
+    title:"Calcetines Burger Pádel · TACTIUM", price:"15,95 €",
+    desc:"Con mucha hambre de victorias. Hamburguesas, patatas y kétchup se cuelan entre raquetas y pelotas en este estampado con mucho sabor. Sublimación all-over, cómodo y reforzado.",
+    prompt:`Flat hand-drawn sticker-style seamless repeating pattern for an all-over sock print, on a pure white background. Small, densely and evenly spaced motifs. An ORIGINAL fictional cartoon padel player wearing a black cap backwards, athletic build, all-black padel kit, white sneakers, mid-action with a black padel racket. Interspersed icons in the same style: cartoon hamburgers, french fries, ketchup bottles, stars, black padel rackets, yellow-green padel balls. Bold clean outlines, bright saturated colors, playful comic style. Color accents: red, yellow, brown. Seamless tileable, small repeated motifs, no text, no logos, not resembling any real person. High resolution.`
+  },
+  {
+    id:"lobo", name:"Lobo Pádel", theme:"Salvaje",
+    elements:"lobos, huellas, lunas", colors:"gris, azul, negro",
+    title:"Calcetines Lobo Pádel · TACTIUM", price:"15,95 €",
+    desc:"Instinto de depredador. Lobos, huellas y lunas acompañan cada golpe en este estampado con carácter. Sublimación all-over de alta definición, tejido transpirable y refuerzos.",
+    prompt:`Flat hand-drawn sticker-style seamless repeating pattern for an all-over sock print, on a pure white background. Small, densely and evenly spaced motifs. An ORIGINAL fictional cartoon padel player, intense focused posture, short dark hair, all-black padel kit, white sneakers, mid-action with a black padel racket. Interspersed icons in the same style: cartoon grey wolves, wolf paw prints, crescent moons, howling wolf heads, stars, black padel rackets, yellow-green padel balls. Bold clean outlines, bright saturated colors, playful comic style. Color accents: grey, blue, black. Seamless tileable, small repeated motifs, no text, no logos, not resembling any real person. High resolution.`
+  }
+];
+
+const STATUSES = ["Pendiente","Generado","Mockup","Publicado"];
+const KEY = "tactium_socks_v1";
+let store = JSON.parse(localStorage.getItem(KEY) || "{}");
+
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){ alert("No se pudo guardar (espacio del navegador lleno). Descarga una copia y borra imágenes que no uses."); } updateProgress(); }
+function get(id){ return store[id] || (store[id] = {status:"Pendiente", title:"", desc:"", price:"", images:[], notes:""}); }
+
+function updateProgress(){
+  let pub = PRODUCTS.filter(p=>get(p.id).status==="Publicado").length;
+  document.getElementById("count").textContent = pub + " / " + PRODUCTS.length + " publicados";
+  document.getElementById("pbar").style.width = (pub/PRODUCTS.length*100) + "%";
+}
+
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
+
+function render(){
+  const grid = document.getElementById("grid"); grid.innerHTML="";
+  PRODUCTS.forEach((p,i)=>{
+    const d = get(p.id);
+    if(!d.title) d.title = p.title; if(!d.price) d.price = p.price; if(!d.desc) d.desc = p.desc;
+    const card = el("div","card st-"+d.status.toLowerCase());
+    // head
+    const head = el("div","chead");
+    head.appendChild(el("div","num",(i+1)));
+    const htxt = el("div"); htxt.style.flex="1";
+    htxt.appendChild(el("h2",null,p.name));
+    htxt.appendChild(el("div","tag",p.theme));
+    head.appendChild(htxt);
+    card.appendChild(head);
+    // body
+    const b = el("div","cbody");
+
+    // status
+    const srow = el("div","statusrow");
+    srow.appendChild(el("span","dot"));
+    const sel = el("select","f"); sel.style.width="auto"; sel.style.flex="1";
+    STATUSES.forEach(s=>{ const o=el("option",null,s); o.value=s; if(s===d.status)o.selected=true; sel.appendChild(o); });
+    sel.onchange = ()=>{ d.status=sel.value; card.className="card st-"+d.status.toLowerCase(); save(); };
+    srow.appendChild(sel);
+    b.appendChild(srow);
+
+    // prompt
+    const pl = el("div");
+    pl.appendChild(el("div","label","Prompt"));
+    const pre = el("pre","prompt",p.prompt.replace(/</g,"&lt;"));
+    pl.appendChild(pre);
+    const cbtn = el("button","btn copy","Copiar prompt");
+    cbtn.onclick = ()=>{ navigator.clipboard.writeText(p.prompt).then(()=>{ cbtn.textContent="¡Copiado!"; cbtn.classList.add("ok"); setTimeout(()=>{cbtn.textContent="Copiar prompt";cbtn.classList.remove("ok");},1400); }); };
+    pl.appendChild(cbtn);
+    const meta = el("div","mini"); meta.style.marginTop="8px";
+    meta.innerHTML = "<b>Elementos:</b> "+p.elements+"<br><b>Colores:</b> "+p.colors;
+    pl.appendChild(meta);
+    b.appendChild(pl);
+
+    // images
+    const il = el("div");
+    il.appendChild(el("div","label","Imágenes (patrón + mockup)"));
+    const drop = el("div","drop","Arrastra aquí o haz clic para subir");
+    const fi = el("input"); fi.type="file"; fi.accept="image/*"; fi.multiple=true; fi.style.display="none";
+    drop.onclick = ()=>fi.click();
+    drop.ondragover = e=>{e.preventDefault();drop.classList.add("drag");};
+    drop.ondragleave = ()=>drop.classList.remove("drag");
+    drop.ondrop = e=>{e.preventDefault();drop.classList.remove("drag"); handleFiles(e.dataTransfer.files,p.id,thumbs);};
+    fi.onchange = ()=>handleFiles(fi.files,p.id,thumbs);
+    il.appendChild(drop); il.appendChild(fi);
+    const thumbs = el("div","thumbs");
+    renderThumbs(thumbs,p.id);
+    il.appendChild(thumbs);
+    b.appendChild(il);
+
+    // fields
+    b.appendChild(field("Título de producto","input",d,"title"));
+    b.appendChild(field("Descripción","textarea",d,"desc"));
+    b.appendChild(field("Precio","input",d,"price"));
+    b.appendChild(field("Notas","textarea",d,"notes"));
+
+    card.appendChild(b);
+    grid.appendChild(card);
+  });
+  updateProgress();
+}
+
+function field(label,type,d,prop){
+  const w = el("div");
+  w.appendChild(el("div","label",label));
+  const inp = document.createElement(type==="textarea"?"textarea":"input");
+  inp.className="f"; inp.value = d[prop]||"";
+  inp.oninput = ()=>{ d[prop]=inp.value; save(); };
+  w.appendChild(inp);
+  return w;
+}
+
+function renderThumbs(container,id){
+  container.innerHTML="";
+  const d = get(id);
+  (d.images||[]).forEach((src,idx)=>{
+    const t = el("div","thumb");
+    const img = el("img"); img.src=src; img.onclick=()=>openLb(src);
+    const x = el("b","×"); x.title="Quitar"; x.onclick=(e)=>{e.stopPropagation(); d.images.splice(idx,1); save(); renderThumbs(container,id);};
+    t.appendChild(img); t.appendChild(x); container.appendChild(t);
+  });
+}
+
+function handleFiles(files,id,container){
+  const d = get(id);
+  [...files].forEach(f=>{
+    if(!f.type.startsWith("image/")) return;
+    const r = new FileReader();
+    r.onload = e=>{
+      downscale(e.target.result, 1000, 0.85, (small)=>{
+        d.images.push(small); save(); renderThumbs(container,id);
+      });
+    };
+    r.readAsDataURL(f);
+  });
+}
+
+function downscale(dataUrl,max,quality,cb){
+  const img = new Image();
+  img.onload = ()=>{
+    let {width:w,height:h}=img;
+    if(w>max||h>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    c.getContext("2d").drawImage(img,0,0,w,h);
+    cb(c.toDataURL("image/jpeg",quality));
+  };
+  img.src = dataUrl;
+}
+
+function openLb(src){ document.getElementById("lbimg").src=src; document.getElementById("lb").style.display="flex"; }
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="tactium_calcetines_copia.json"; a.click();
+}
+function importData(){ document.getElementById("importFile").click(); }
+document.getElementById("importFile").onchange = function(){
+  const f=this.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ store=JSON.parse(e.target.result); save(); render(); alert("Copia importada."); }catch(err){ alert("Archivo no válido."); } };
+  r.readAsDataURL ? r.readAsText(f) : r.readAsText(f);
+};
+
+render();
+</script>
+</body>
+</html>

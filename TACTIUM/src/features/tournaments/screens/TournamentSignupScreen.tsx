@@ -110,10 +110,11 @@ export const TournamentSignupScreen = ({
 
   const needsGender = (found?.genders.length ?? 0) > 0;
   const needsCategory = (found?.categories.length ?? 0) > 0;
+  const isPair = found?.pair_based !== false;
   const valid =
     !!found &&
     !!p1.trim() &&
-    !!p2.trim() &&
+    (!isPair || !!p2.trim()) &&
     (!needsGender || !!gender) &&
     (!needsCategory || !!category);
 
@@ -131,7 +132,7 @@ export const TournamentSignupScreen = ({
         p1Name: p1,
         p1Email: p1Email || undefined,
         p1Phone: p1Phone || undefined,
-        p2Name: p2,
+        p2Name: isPair ? p2 : '',
         availability: avail,
       });
       toast.success('¡Inscripción hecha!', 'El club te confirmará el cuadro.');
@@ -284,10 +285,14 @@ export const TournamentSignupScreen = ({
           </View>
         </View>
 
-        <Text style={styles.label}>TU COMPAÑERO/A</Text>
-        <View style={styles.input}>
-          <TextInput value={p2} onChangeText={setP2} placeholder="Nombre de tu pareja" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
-        </View>
+        {isPair ? (
+          <>
+            <Text style={styles.label}>TU COMPAÑERO/A</Text>
+            <View style={styles.input}>
+              <TextInput value={p2} onChangeText={setP2} placeholder="Nombre de tu pareja" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.label}>DISPONIBILIDAD</Text>
         <Text style={styles.availHint}>
