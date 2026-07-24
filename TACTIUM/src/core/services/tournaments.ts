@@ -177,6 +177,39 @@ export async function uploadTournamentCover(
   return publicUrl;
 }
 
+/** Edita los datos del evento (no toca formato/categorías/géneros: rompería
+ * las divisiones ya sembradas). Solo el admin del club (RLS). */
+export async function updateTournament(
+  id: string,
+  fields: {
+    name?: string;
+    startsOn?: string | null;
+    location?: string | null;
+    maxPairs?: number | null;
+    prizes?: string | null;
+    extraInfo?: string | null;
+    coverUrl?: string | null;
+  },
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (fields.name !== undefined) payload.name = fields.name.trim();
+  if (fields.startsOn !== undefined) payload.starts_on = fields.startsOn;
+  if (fields.location !== undefined) payload.location = fields.location?.trim() || null;
+  if (fields.maxPairs !== undefined) payload.max_pairs = fields.maxPairs;
+  if (fields.prizes !== undefined) payload.prizes = fields.prizes?.trim() || null;
+  if (fields.extraInfo !== undefined) payload.extra_info = fields.extraInfo?.trim() || null;
+  if (fields.coverUrl !== undefined) payload.cover_url = fields.coverUrl;
+  if (Object.keys(payload).length === 0) return;
+  const { error } = await from()('tournaments').update(payload).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/** Borra el torneo (cascada: inscripciones + partidos). Solo admin del club. */
+export async function deleteTournament(id: string): Promise<void> {
+  const { error } = await from()('tournaments').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function getTournament(id: string): Promise<Tournament | null> {
   const { data, error } = await from()('tournaments')
     .select('*')

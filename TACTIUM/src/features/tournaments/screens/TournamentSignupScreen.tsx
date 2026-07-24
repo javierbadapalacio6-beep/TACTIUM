@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -110,6 +110,14 @@ export const TournamentSignupScreen = ({
     }
   };
 
+  // Si llegamos con el código precargado (desde Explorar/Seguir), busca el
+  // torneo automáticamente para que se muestren género/categoría y el botón
+  // de inscribirse funcione sin tener que pulsar "Buscar".
+  useEffect(() => {
+    if (route.params?.code && !found) doLookup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const needsGender = (found?.genders.length ?? 0) > 0;
   const needsCategory = (found?.categories.length ?? 0) > 0;
   const isPair = found?.pair_based !== false;
@@ -124,7 +132,19 @@ export const TournamentSignupScreen = ({
     (!needsCategory || !!category);
 
   const save = async () => {
-    if (!valid) {
+    if (!found) {
+      toast.error('Busca primero el torneo con su código');
+      return;
+    }
+    if (needsGender && !gender) {
+      toast.error('Elige tu género');
+      return;
+    }
+    if (needsCategory && !category) {
+      toast.error('Elige tu categoría');
+      return;
+    }
+    if (!p1.trim() || !p1Pts.trim() || (isPair && (!p2.trim() || !p2Pts.trim()))) {
       toast.error('Rellena nombres y puntos de cada jugador');
       return;
     }
@@ -392,7 +412,7 @@ export const TournamentSignupScreen = ({
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
           onPress={save}
-          disabled={!valid || saving}
+          disabled={saving}
           style={({ pressed }) => [
             styles.saveBtn,
             (!valid || saving) && { opacity: 0.5 },

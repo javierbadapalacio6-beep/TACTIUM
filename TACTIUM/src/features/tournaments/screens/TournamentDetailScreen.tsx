@@ -18,16 +18,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconShare, IconTrophy, IconTrash, BottomSheet } from '@components/ui';
+import * as ImagePicker from 'expo-image-picker';
+import { IconBack, IconShare, IconTrophy, IconTrash, IconPencil, IconCamera, BottomSheet } from '@components/ui';
 import {
   TimeField,
+  DateField,
   isoTimeToDate,
   dateToIsoTime,
+  isoDateToDate,
+  dateToIsoDate,
 } from '@components/ui/DateTimeField';
 import { toast } from '@store/toastStore';
 import { notifyTournamentPush } from '@core/push';
 import {
   getTournament,
+  updateTournament,
+  deleteTournament,
+  uploadTournamentCover,
   listRegistrations,
   listMatches,
   addRegistration,
@@ -865,6 +872,193 @@ const ScheduleConfigSheet: React.FC<{
   );
 };
 
+// Sheet de EDICIÓN del torneo (club): datos del evento + borrar. No toca
+// formato/categorías/géneros (rompería las divisiones ya sembradas).
+const EditTournamentSheet: React.FC<{
+  open: boolean;
+  tournament: Tournament | null;
+  onClose: () => void;
+  onSaved: () => void;
+  onDeleted: () => void;
+  styles: Styles;
+  c: Palette;
+}> = ({ open, tournament, onClose, onSaved, onDeleted, styles, c }) => {
+  const [name, setName] = useState('');
+  const [startsOn, setStartsOn] = useState<Date | null>(null);
+  const [location, setLocation] = useState('');
+  const [maxPairs, setMaxPairs] = useState('');
+  const [prizes, setPrizes] = useState('');
+  const [extraInfo, setExtraInfo] = useState('');
+  const [coverUri, setCoverUri] = useState<string | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && tournament) {
+      setName(tournament.name);
+      setStartsOn(isoDateToDate(tournament.starts_on));
+      setLocation(tournament.location ?? '');
+      setMaxPairs(tournament.max_pairs ? String(tournament.max_pairs) : '');
+      setPrizes(tournament.prizes ?? '');
+      setExtraInfo(tournament.extra_info ?? '');
+      setCoverUrl(tournament.cover_url ?? null);
+      setCoverUri(null);
+    }
+  }, [open, tournament]);
+
+  const pickCover = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Sin permiso', 'Da acceso a tus fotos para elegir una portada.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.7,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    setCoverUri(result.assets[0].uri);
+  };
+
+  const save = async () => {
+    if (!tournament || !name.trim()) {
+      toast.error('Ponle un nombre al torneo');
+      return;
+    }
+    setSaving(true);
+    try {
+      let cover = coverUrl;
+      if (coverUri) cover = await uploadTournamentCover(tournament.club_id, coverUri);
+      await updateTournament(tournament.id, {
+        name,
+        startsOn: startsOn ? dateToIsoDate(startsOn) : null,
+        location,
+        maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+        prizes,
+        extraInfo,
+        coverUrl: cover,
+      });
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      toast.error('No se pudo guardar', e?.message ?? '');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!tournament) return;
+    Alert.alert(
+      'Borrar torneo',
+      `¿Seguro? Se borrarán las inscripciones y los partidos de "${tournament.name}". No se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTournament(tournament.id);
+              toast.success('Torneo borrado');
+              onDeleted();
+            } catch (e: any) {
+              toast.error('No se pudo borrar', e?.message ?? '');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const shownCover = coverUri ?? coverUrl;
+
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      footer={
+        <Pressable
+          onPress={save}
+          disabled={saving || !name.trim()}
+          style={({ pressed }) => [
+            styles.saveBtn,
+            (saving || !name.trim()) && { opacity: 0.5 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color={c.textInverse} />
+          ) : (
+            <Text style={styles.saveLabel}>Guardar cambios</Text>
+          )}
+        </Pressable>
+      }
+    >
+      <Text style={styles.sheetEyebrow}>EDITAR TORNEO</Text>
+      <Text style={styles.sheetTitle}>Editar</Text>
+
+      <Text style={styles.label}>FOTO DE PORTADA</Text>
+      <Pressable
+        onPress={pickCover}
+        style={({ pressed }) => [
+          { height: 140, borderRadius: Radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: c.hairStrong, backgroundColor: c.bgCard },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        {shownCover ? (
+          <>
+            <Image source={{ uri: shownCover }} style={{ width: '100%', height: '100%' }} />
+            <View style={{ position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9999, backgroundColor: 'rgba(0,0,0,0.55)' }}>
+              <IconCamera size={14} color={c.textInverse} />
+              <Text style={{ color: c.textInverse, fontSize: 12, fontWeight: '700' }}>Cambiar</Text>
+            </View>
+          </>
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <IconCamera size={22} color={c.accent} />
+            <Text style={{ color: c.textMuted, fontSize: 13, fontWeight: '600' }}>Añadir foto</Text>
+          </View>
+        )}
+      </Pressable>
+
+      <Text style={styles.label}>NOMBRE</Text>
+      <View style={styles.input}>
+        <TextInput value={name} onChangeText={setName} placeholder="Nombre del torneo" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={60} />
+      </View>
+
+      <Text style={styles.label}>FECHA</Text>
+      <DateField value={startsOn} onChange={setStartsOn} placeholder="Elegir fecha" allowClear label="FECHA DEL TORNEO" />
+
+      <Text style={styles.label}>LUGAR</Text>
+      <View style={styles.input}>
+        <TextInput value={location} onChangeText={setLocation} placeholder="Club · ciudad" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={80} />
+      </View>
+
+      <Text style={styles.label}>PLAZAS</Text>
+      <View style={styles.input}>
+        <TextInput value={maxPairs} onChangeText={(v) => setMaxPairs(v.replace(/[^0-9]/g, ''))} placeholder="16" placeholderTextColor={c.textFaint} style={styles.inputField} keyboardType="number-pad" maxLength={3} />
+      </View>
+
+      <Text style={styles.label}>PREMIOS</Text>
+      <View style={[styles.input, { minHeight: 84, paddingVertical: 12 }]}>
+        <TextInput value={prizes} onChangeText={setPrizes} placeholder="1º: trofeo + material…" placeholderTextColor={c.textFaint} style={[styles.inputField, { minHeight: 60, textAlignVertical: 'top' }]} multiline maxLength={400} />
+      </View>
+
+      <Text style={styles.label}>INFORMACIÓN ADICIONAL</Text>
+      <View style={[styles.input, { minHeight: 84, paddingVertical: 12 }]}>
+        <TextInput value={extraInfo} onChangeText={setExtraInfo} placeholder="BBQ, música, sorteos…" placeholderTextColor={c.textFaint} style={[styles.inputField, { minHeight: 60, textAlignVertical: 'top' }]} multiline maxLength={600} />
+      </View>
+
+      <Pressable onPress={confirmDelete} hitSlop={8} style={{ marginTop: 22, alignItems: 'center' }}>
+        <Text style={{ color: c.error, fontSize: 14, fontWeight: '700' }}>Borrar torneo</Text>
+      </Pressable>
+    </BottomSheet>
+  );
+};
+
 export const TournamentDetailScreen = ({
   navigation,
   route,
@@ -884,6 +1078,7 @@ export const TournamentDetailScreen = ({
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
   const [tab, setTab] = useState<TabKey>('main');
   const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -1202,6 +1397,15 @@ export const TournamentDetailScreen = ({
             {t?.name ?? ''}
           </Text>
         </View>
+        {t ? (
+          <Pressable
+            onPress={() => setEditOpen(true)}
+            hitSlop={10}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+          >
+            <IconPencil size={17} color={c.text} />
+          </Pressable>
+        ) : null}
       </View>
 
       {loading ? (
@@ -1452,6 +1656,19 @@ export const TournamentDetailScreen = ({
         onSaved={(generate) => {
           if (generate) onGenerateSchedule();
           else load();
+        }}
+        styles={styles}
+        c={c}
+      />
+
+      <EditTournamentSheet
+        open={editOpen}
+        tournament={t}
+        onClose={() => setEditOpen(false)}
+        onSaved={load}
+        onDeleted={() => {
+          setEditOpen(false);
+          navigation.goBack();
         }}
         styles={styles}
         c={c}
