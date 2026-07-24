@@ -236,6 +236,23 @@ const seedPositions = (size: number): number[] => {
   return seeds;
 };
 
+// ¿Ya hay partidos generados en esta división? (guard anti-duplicado).
+async function hasDivisionMatches(
+  tournamentId: string,
+  gender: string | null,
+  category: string | null,
+  onlyKo = false,
+): Promise<boolean> {
+  let q = from()('tournament_matches')
+    .select('id')
+    .eq('tournament_id', tournamentId);
+  q = gender == null ? q.is('gender', null) : q.eq('gender', gender);
+  q = category == null ? q.is('category', null) : q.eq('category', category);
+  if (onlyKo) q = q.neq('bracket', 'grp');
+  const { data } = await q.limit(1);
+  return ((data ?? []) as unknown[]).length > 0;
+}
+
 // Filas de un cuadro KO a partir de parejas YA sembradas (orden = siembra).
 function koMatchRows(
   tournamentId: string,
@@ -310,6 +327,8 @@ export async function generateKoBracket(
   gender: string | null = null,
   category: string | null = null,
 ): Promise<void> {
+  if (await hasDivisionMatches(tournament.id, gender, category))
+    throw new Error('Esta división ya está generada.');
   const seeded = [...regs]
     .filter((r) => r.status !== 'withdrawn')
     .sort(
@@ -348,6 +367,8 @@ export async function generateGroups(
   category: string | null,
   groupSize: number,
 ): Promise<void> {
+  if (await hasDivisionMatches(tournament.id, gender, category))
+    throw new Error('Esta división ya está generada.');
   const seeded = [...regs]
     .filter((r) => r.status !== 'withdrawn')
     .sort(
@@ -417,6 +438,8 @@ export async function generateKnockoutFromGroups(
   gender: string | null,
   category: string | null,
 ): Promise<void> {
+  if (await hasDivisionMatches(tournament.id, gender, category, true))
+    throw new Error('Las eliminatorias ya están generadas.');
   const groupNos = Array.from(
     new Set(regs.filter((r) => r.group_no != null).map((r) => r.group_no as number)),
   ).sort((a, b) => a - b);
@@ -466,6 +489,8 @@ export async function generateRoundRobin(
   gender: string | null = null,
   category: string | null = null,
 ): Promise<void> {
+  if (await hasDivisionMatches(tournament.id, gender, category))
+    throw new Error('Esta división ya está generada.');
   const active = regs.filter((r) => r.status !== 'withdrawn');
   if (active.length < 2) throw new Error('Hacen falta al menos 2 parejas.');
   const seeded = [...active].sort(
