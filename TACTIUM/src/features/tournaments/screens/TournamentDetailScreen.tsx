@@ -25,11 +25,14 @@ import {
   addRegistration,
   deleteRegistration,
   generateKoBracket,
+  generateRoundRobin,
+  computeStandings,
   setMatchResult,
   formatConfig,
   type Tournament,
   type TournamentRegistration,
   type TournamentMatch,
+  type StandingRow,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -204,21 +207,33 @@ export const TournamentDetailScreen = ({
     [matches, dg, dc],
   );
 
+  const isRR = t?.format === 'round_robin';
   const totalRounds = matchesCat.reduce((m, x) => Math.max(m, x.round), 0);
   const hasBracket = matchesCat.length > 0;
 
+  const standings = useMemo(
+    () => (isRR ? computeStandings(regsCat, matchesCat) : []),
+    [isRR, regsCat, matchesCat],
+  );
+
   const champion = useMemo(() => {
+    if (!hasBracket) return null;
+    if (isRR) {
+      const allPlayed =
+        matchesCat.length > 0 && matchesCat.every((m) => m.status === 'finished');
+      return allPlayed ? standings[0]?.regId ?? null : null;
+    }
     const final = matchesCat.find(
       (m) => m.round === totalRounds && m.slot === 0 && m.status === 'finished',
     );
     return final?.winner_reg ?? null;
-  }, [matchesCat, totalRounds]);
+  }, [hasBracket, isRR, matchesCat, standings, totalRounds]);
 
   const onGenerate = () => {
     if (!t) return;
     Alert.alert(
       'Generar el cuadro',
-      `Se creará el cuadro${activeDiv ? ` de ${divLabel(activeDiv)}` : ''} con ${regsCat.length} parejas (siembra por puntos). No podrás añadir más parejas a esta división.`,
+      `Se ${isRR ? 'creará la liga' : 'creará el cuadro'}${activeDiv ? ` de ${divLabel(activeDiv)}` : ''} con ${regsCat.length} parejas. No podrás añadir más parejas a esta división.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -226,7 +241,8 @@ export const TournamentDetailScreen = ({
           onPress: async () => {
             setGenerating(true);
             try {
-              await generateKoBracket(t, regsCat, dg, dc);
+              if (isRR) await generateRoundRobin(t, regsCat, dg, dc);
+              else await generateKoBracket(t, regsCat, dg, dc);
               await load();
             } catch (e: any) {
               toast.error('No se pudo generar', e?.message ?? '');
@@ -414,7 +430,7 @@ export const TournamentDetailScreen = ({
                   <ActivityIndicator size="small" color={c.textInverse} />
                 ) : (
                   <Text style={styles.generateLabel}>
-                    Generar cuadro
+                    {isRR ? 'Generar liga' : 'Generar cuadro'}
                     {activeDiv && divisions.length > 1 ? ` · ${divLabel(activeDiv)}` : ''}
                   </Text>
                 )}
@@ -426,6 +442,13 @@ export const TournamentDetailScreen = ({
                 </Text>
               ) : null}
             </View>
+          ) : isRR ? (
+            <RoundRobinView
+              standings={standings}
+              matches={matchesCat}
+              regName={regName}
+              onEdit={setEditMatch}
+            />
           ) : (
             /* Cuadro */
             <View>
@@ -548,6 +571,7 @@ export const TournamentDetailScreen = ({
       <ResultSheet
         match={editMatch}
         matchFormat={t?.match_format ?? 'bo3_stb'}
+        advance={!isRR}
         homeName={regName(editMatch?.home_reg ?? null)}
         awayName={regName(editMatch?.away_reg ?? null)}
         onClose={() => setEditMatch(null)}
@@ -575,6 +599,86 @@ const MatchSide: React.FC<{
     </Text>
   </View>
 );
+
+// Vista de LIGA (round robin): tabla de clasificación + lista de partidos.
+const RoundRobinView: React.FC<{
+  standings: StandingRow[];
+  matches: TournamentMatch[];
+  regName: (id: string | null) => string;
+  onEdit: (m: TournamentMatch) => void;
+}> = ({ standings, matches, regName, onEdit }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const sorted = [...matches].sort((a, b) => a.slot - b.slot);
+  const played = matches.filter((m) => m.status === 'finished').length;
+  return (
+    <View>
+      <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
+        CLASIFICACIÓN
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: 22, paddingTop: 8 }}>
+          <View style={styles.stHeader}>
+            <Text style={styles.stPos}>#</Text>
+            <Text style={styles.stName}>PAREJA</Text>
+            <Text style={styles.stCol}>PJ</Text>
+            <Text style={styles.stCol}>G</Text>
+            <Text style={styles.stCol}>P</Text>
+            <Text style={styles.stColW}>SETS</Text>
+            <Text style={styles.stColW}>JUEGOS</Text>
+            <Text style={styles.stCol}>PTS</Text>
+          </View>
+          {standings.map((s, i) => (
+            <View key={s.regId} style={styles.stRow}>
+              <Text style={styles.stPos}>{i + 1}</Text>
+              <Text style={styles.stName} numberOfLines={1}>{s.name}</Text>
+              <Text style={styles.stCol}>{s.played}</Text>
+              <Text style={styles.stCol}>{s.won}</Text>
+              <Text style={styles.stCol}>{s.lost}</Text>
+              <Text style={styles.stColW}>{s.setsFor}-{s.setsAgainst}</Text>
+              <Text style={styles.stColW}>{s.gamesFor}-{s.gamesAgainst}</Text>
+              <Text style={[styles.stCol, styles.stPts]}>{s.points}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 24 }]}>
+        PARTIDOS · {played}/{matches.length}
+      </Text>
+      <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 6 }}>
+        {sorted.map((m) => {
+          const done = m.status === 'finished';
+          const homeWin = m.winner_reg === m.home_reg;
+          return (
+            <Pressable
+              key={m.id}
+              onPress={() => onEdit(m)}
+              style={({ pressed }) => [styles.rrMatch, pressed && { opacity: 0.85 }]}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.rrName, done && homeWin && styles.rrWin]} numberOfLines={1}>
+                  {regName(m.home_reg)}
+                </Text>
+                <Text style={[styles.rrName, done && !homeWin && styles.rrWin]} numberOfLines={1}>
+                  {regName(m.away_reg)}
+                </Text>
+              </View>
+              {done ? (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.rrScore}>{m.home_score}</Text>
+                  <Text style={styles.rrScore}>{m.away_score}</Text>
+                </View>
+              ) : (
+                <Text style={styles.rrPending}>Poner</Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
 
 const AddPairSheet: React.FC<{
   open: boolean;
@@ -675,11 +779,12 @@ const AddPairSheet: React.FC<{
 const ResultSheet: React.FC<{
   match: TournamentMatch | null;
   matchFormat: string;
+  advance: boolean;
   homeName: string;
   awayName: string;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ match, matchFormat, homeName, awayName, onClose, onSaved }) => {
+}> = ({ match, matchFormat, advance, homeName, awayName, onClose, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const cfg = useMemo(() => formatConfig(matchFormat), [matchFormat]);
@@ -723,7 +828,7 @@ const ResultSheet: React.FC<{
       .filter(([h, a]) => !Number.isNaN(h) && !Number.isNaN(a) && (h !== 0 || a !== 0));
     setSaving(true);
     try {
-      await setMatchResult(match, sets, cfg.setsToWin);
+      await setMatchResult(match, sets, cfg.setsToWin, advance);
       toast.success('Resultado guardado');
       onSaved();
       onClose();
@@ -974,6 +1079,67 @@ const makeStyles = (c: Palette) =>
     matchScore: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700', color: c.text, minWidth: 16, textAlign: 'right' },
     matchDivider: { height: 1, backgroundColor: c.hair },
     bracketHint: { color: c.textFaint, fontSize: 12, paddingHorizontal: 22, marginTop: 12 },
+    // Clasificación (liga)
+    stHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingBottom: 8,
+      borderBottomWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    stRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 9,
+      borderBottomWidth: 1,
+      borderColor: c.hair,
+    },
+    stPos: {
+      width: 22,
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.textFaint,
+    },
+    stName: { width: 150, color: c.text, fontSize: 13, fontWeight: '600', paddingRight: 8 },
+    stCol: {
+      width: 34,
+      textAlign: 'center',
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      color: c.textMuted,
+      fontWeight: '600',
+    },
+    stColW: {
+      width: 52,
+      textAlign: 'center',
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      color: c.textMuted,
+      fontWeight: '600',
+    },
+    stPts: { color: c.accent, fontWeight: '800' },
+    rrMatch: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    rrName: { color: c.textMuted, fontSize: 13, fontWeight: '500', paddingVertical: 3 },
+    rrWin: { color: c.accent, fontWeight: '800' },
+    rrScore: {
+      fontFamily: Fonts.mono,
+      fontSize: 15,
+      fontWeight: '700',
+      color: c.text,
+      paddingVertical: 1,
+    },
+    rrPending: { color: c.accent, fontSize: 12, fontWeight: '700' },
     // Sheets
     sheetEyebrow: { fontFamily: Fonts.mono, color: c.accent, fontSize: 11, letterSpacing: 2, fontWeight: '500' },
     sheetTitle: { color: c.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.4, marginTop: 4 },

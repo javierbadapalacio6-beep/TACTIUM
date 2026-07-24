@@ -25,6 +25,7 @@ import {
   type Tournament,
   type MatchFormat,
   type TournamentGender,
+  type TournamentFormat,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -41,6 +42,17 @@ const GENDER_LABEL: Record<string, string> = {
   femenino: 'Femenino',
   mixto: 'Mixto',
 };
+
+const TYPES: {
+  id: TournamentFormat;
+  label: string;
+  sub: string;
+  disabled?: boolean;
+}[] = [
+  { id: 'ko', label: 'Eliminación directa', sub: 'Cuadro a una vida hasta la final, con cabezas de serie' },
+  { id: 'round_robin', label: 'Liga · todos contra todos', sub: 'Clasificación por puntos, sets y juegos' },
+  { id: 'groups_ko', label: 'Grupos + eliminatorias', sub: 'Próximamente', disabled: true },
+];
 
 const MATCH_FORMATS: { id: MatchFormat; label: string; sub: string }[] = [
   { id: 'bo3_stb', label: 'Mejor de 3 · super tie-break', sub: '2 sets; si 1-1, super TB a 11 (dif. 2)' },
@@ -187,6 +199,7 @@ const CreateTournamentSheet: React.FC<{
   const [name, setName] = useState('');
   const [cats, setCats] = useState<string[]>([]);
   const [genders, setGenders] = useState<TournamentGender[]>(['masculino']);
+  const [format, setFormat] = useState<TournamentFormat>('ko');
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [saving, setSaving] = useState(false);
@@ -195,6 +208,7 @@ const CreateTournamentSheet: React.FC<{
     setName('');
     setCats([]);
     setGenders(['masculino']);
+    setFormat('ko');
     setMaxPairs('');
     setMatchFormat('bo3_stb');
   };
@@ -213,7 +227,7 @@ const CreateTournamentSheet: React.FC<{
       await createTournament({
         clubId,
         name: name.trim(),
-        format: 'ko',
+        format,
         matchFormat,
         genders,
         categories: cats,
@@ -270,6 +284,33 @@ const CreateTournamentSheet: React.FC<{
           maxLength={60}
           autoCapitalize="sentences"
         />
+      </View>
+
+      <Text style={styles.label}>TIPO DE TORNEO</Text>
+      <View style={{ gap: 8 }}>
+        {TYPES.map((ty) => {
+          const sel = format === ty.id;
+          return (
+            <Pressable
+              key={ty.id}
+              disabled={ty.disabled}
+              onPress={() => setFormat(ty.id)}
+              style={[
+                styles.fmtRow,
+                sel && { borderColor: c.accent, backgroundColor: c.accent10 },
+                ty.disabled && { opacity: 0.5 },
+              ]}
+            >
+              <View style={[styles.radio, sel && { borderColor: c.accent }]}>
+                {sel ? <View style={styles.radioDot} /> : null}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.fmtLabel}>{ty.label}</Text>
+                <Text style={styles.fmtSub}>{ty.sub}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Text style={styles.label}>GÉNERO · ELIGE UNO O VARIOS</Text>

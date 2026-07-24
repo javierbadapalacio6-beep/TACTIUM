@@ -329,6 +329,125 @@ export async function generateKoBracket(
 }
 
 /**
+ * Genera una LIGA (todos contra todos) para una división: crea C(N,2) partidos.
+ * No hay cuadro; la clasificación sale de los resultados (computeStandings).
+ */
+export async function generateRoundRobin(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  gender: string | null = null,
+  category: string | null = null,
+): Promise<void> {
+  const active = regs.filter((r) => r.status !== 'withdrawn');
+  if (active.length < 2) throw new Error('Hacen falta al menos 2 parejas.');
+  const seeded = [...active].sort(
+    (a, b) =>
+      (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
+      (a.created_at < b.created_at ? -1 : 1),
+  );
+  await Promise.all(
+    seeded.map((r, i) =>
+      from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
+    ),
+  );
+  const rows: Record<string, unknown>[] = [];
+  let slot = 0;
+  for (let i = 0; i < seeded.length; i++) {
+    for (let j = i + 1; j < seeded.length; j++) {
+      rows.push({
+        tournament_id: tournament.id,
+        gender,
+        category,
+        bracket: 'rr',
+        round: 1,
+        slot: slot++,
+        home_reg: seeded[i].id,
+        away_reg: seeded[j].id,
+        status: 'pending',
+      });
+    }
+  }
+  const { error } = await from()('tournament_matches').insert(rows);
+  if (error) throw new Error(error.message);
+  await from()('tournaments').update({ status: 'in_progress' }).eq('id', tournament.id);
+}
+
+export interface StandingRow {
+  regId: string;
+  name: string;
+  seed: number | null;
+  played: number;
+  won: number;
+  lost: number;
+  setsFor: number;
+  setsAgainst: number;
+  gamesFor: number;
+  gamesAgainst: number;
+  points: number;
+}
+
+/** Clasificación de una liga/grupo a partir de los partidos jugados. */
+export function computeStandings(
+  regs: TournamentRegistration[],
+  matches: TournamentMatch[],
+): StandingRow[] {
+  const nameOf = (r: TournamentRegistration) =>
+    `${r.p1_name}${r.p2_name ? ` / ${r.p2_name}` : ''}`;
+  const byId = new Map<string, StandingRow>();
+  for (const r of regs) {
+    byId.set(r.id, {
+      regId: r.id,
+      name: nameOf(r),
+      seed: r.seed,
+      played: 0,
+      won: 0,
+      lost: 0,
+      setsFor: 0,
+      setsAgainst: 0,
+      gamesFor: 0,
+      gamesAgainst: 0,
+      points: 0,
+    });
+  }
+  for (const m of matches) {
+    if (m.status !== 'finished' || !m.home_reg || !m.away_reg) continue;
+    const H = byId.get(m.home_reg);
+    const A = byId.get(m.away_reg);
+    if (!H || !A) continue;
+    H.played++;
+    A.played++;
+    H.setsFor += m.home_score ?? 0;
+    H.setsAgainst += m.away_score ?? 0;
+    A.setsFor += m.away_score ?? 0;
+    A.setsAgainst += m.home_score ?? 0;
+    for (const s of m.sets ?? []) {
+      H.gamesFor += s[0] ?? 0;
+      H.gamesAgainst += s[1] ?? 0;
+      A.gamesFor += s[1] ?? 0;
+      A.gamesAgainst += s[0] ?? 0;
+    }
+    if (m.winner_reg === m.home_reg) {
+      H.won++;
+      A.lost++;
+      H.points += 2;
+      A.points += 1;
+    } else {
+      A.won++;
+      H.lost++;
+      A.points += 2;
+      H.points += 1;
+    }
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
+      b.gamesFor - b.gamesAgainst - (a.gamesFor - a.gamesAgainst) ||
+      b.won - a.won,
+  );
+}
+
+/**
  * Mete el resultado por SETS y hace avanzar al ganador. `sets` = array de
  * [gamesHome, gamesAway] por set jugado. La app cuenta sets ganados y decide el
  * ganador (primero en llegar a `setsToWin`). Guarda el detalle en `sets` y los
@@ -338,6 +457,7 @@ export async function setMatchResult(
   match: TournamentMatch,
   sets: number[][],
   setsToWin: number,
+  advance: boolean = true,
 ): Promise<void> {
   if (!match.home_reg || !match.away_reg) {
     throw new Error('Faltan las dos parejas en este partido.');
@@ -366,6 +486,7 @@ export async function setMatchResult(
     })
     .eq('id', match.id);
   if (upd.error) throw new Error(upd.error.message);
+  if (!advance) return; // liga/grupo: no hay avance de cuadro.
 
   let q = from()('tournament_matches')
     .select('id')
