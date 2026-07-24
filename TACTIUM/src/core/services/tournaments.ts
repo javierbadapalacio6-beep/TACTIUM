@@ -45,6 +45,9 @@ export interface Tournament {
   format: TournamentFormat;
   status: TournamentStatus;
   starts_on: string | null;
+  prizes: string | null;
+  extra_info: string | null;
+  cover_url: string | null;
   signup_code: string | null;
   max_pairs: number | null;
   pair_based: boolean;
@@ -116,6 +119,9 @@ export async function createTournament(input: {
   categories?: string[];
   startsOn?: string | null;
   maxPairs?: number | null;
+  prizes?: string | null;
+  extraInfo?: string | null;
+  coverUrl?: string | null;
 }): Promise<Tournament> {
   const payload = {
     club_id: input.clubId,
@@ -126,6 +132,9 @@ export async function createTournament(input: {
     categories: input.categories ?? [],
     starts_on: input.startsOn ?? null,
     max_pairs: input.maxPairs ?? null,
+    prizes: input.prizes?.trim() || null,
+    extra_info: input.extraInfo?.trim() || null,
+    cover_url: input.coverUrl ?? null,
     // La inscripción queda abierta al crear el torneo (código compartible).
     status: 'open',
     signup_code: genCode(),
@@ -137,6 +146,29 @@ export async function createTournament(input: {
     .single();
   if (error) throw new Error(error.message);
   return data as Tournament;
+}
+
+/**
+ * Sube la foto de portada del torneo al bucket público `tournament-photos`
+ * (path `{club_id}/{file}.jpg`; RLS deja escribir solo al admin del club) y
+ * devuelve la URL pública. Se llama ANTES de crear el torneo (aún sin id), por
+ * eso el nombre de archivo es aleatorio. Patrón `fetch(uri).arrayBuffer()`.
+ */
+export async function uploadTournamentCover(
+  clubId: string,
+  uri: string,
+): Promise<string> {
+  const path = `${clubId}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
+  const response = await fetch(uri);
+  const arrayBuffer = await response.arrayBuffer();
+  const { error: upErr } = await supabase.storage
+    .from('tournament-photos')
+    .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+  if (upErr) throw upErr;
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from('tournament-photos').getPublicUrl(path);
+  return publicUrl;
 }
 
 export async function getTournament(id: string): Promise<Tournament | null> {

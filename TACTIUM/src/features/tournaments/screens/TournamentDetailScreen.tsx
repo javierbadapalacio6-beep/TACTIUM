@@ -529,6 +529,28 @@ const InfoView: React.FC<{
         ))}
       </View>
 
+      {t.prizes ? (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
+            🏆 PREMIOS
+          </Text>
+          <View style={styles.infoBlock}>
+            <Text style={styles.infoBlockText}>{t.prizes}</Text>
+          </View>
+        </>
+      ) : null}
+
+      {t.extra_info ? (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
+            ℹ️ INFORMACIÓN ADICIONAL
+          </Text>
+          <View style={styles.infoBlock}>
+            <Text style={styles.infoBlockText}>{t.extra_info}</Text>
+          </View>
+        </>
+      ) : null}
+
       {t.signup_code ? (
         <View style={[styles.codeCard, { marginTop: 14 }]}>
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -863,6 +885,17 @@ export const TournamentDetailScreen = ({
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
         >
+          {/* Portada del torneo */}
+          {t?.cover_url ? (
+            <View style={styles.coverBanner}>
+              <Image source={{ uri: t.cover_url }} style={styles.coverBannerImg} />
+              <LinearGradient
+                colors={['transparent', c.background]}
+                style={styles.coverBannerFade}
+              />
+            </View>
+          ) : null}
+
           {/* Campeón */}
           {champion ? (
             <ChampionHero info={regInfo(champion)} styles={styles} c={c} />
@@ -1929,6 +1962,18 @@ const makeStyles = (c: Palette) =>
     infoRowBorder: { borderTopWidth: 1, borderColor: c.hair },
     infoLabel: { width: 120, color: c.textMuted, fontSize: 13, fontWeight: '600' },
     infoValue: { flex: 1, color: c.text, fontSize: 14, fontWeight: '600', textAlign: 'right' },
+    infoBlock: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      padding: 16,
+    },
+    infoBlockText: { color: c.text, fontSize: 14, lineHeight: 21, fontWeight: '500' },
+    // Banner de portada
+    coverBanner: { height: 180, marginBottom: 4 },
+    coverBannerImg: { width: '100%', height: '100%' },
+    coverBannerFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
     catTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 12 },
     catTab: {
       paddingHorizontal: 16,

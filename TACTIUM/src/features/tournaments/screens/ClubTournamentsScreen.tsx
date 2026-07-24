@@ -7,7 +7,10 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Image,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,13 +18,15 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconPlus, IconChevron, IconTrophy, BottomSheet } from '@components/ui';
+import { IconPlus, IconChevron, IconTrophy, IconCamera, BottomSheet } from '@components/ui';
+import { DateField, dateToIsoDate } from '@components/ui/DateTimeField';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { toast } from '@store/toastStore';
 import {
   listTournaments,
   createTournament,
+  uploadTournamentCover,
   type Tournament,
   isSocialFormat,
   type MatchFormat,
@@ -205,6 +210,10 @@ const CreateTournamentSheet: React.FC<{
   const [format, setFormat] = useState<TournamentFormat>('ko');
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
+  const [startsOn, setStartsOn] = useState<Date | null>(null);
+  const [prizes, setPrizes] = useState('');
+  const [extraInfo, setExtraInfo] = useState('');
+  const [coverUri, setCoverUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
@@ -214,6 +223,26 @@ const CreateTournamentSheet: React.FC<{
     setFormat('ko');
     setMaxPairs('');
     setMatchFormat('bo3_stb');
+    setStartsOn(null);
+    setPrizes('');
+    setExtraInfo('');
+    setCoverUri(null);
+  };
+
+  const pickCover = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Sin permiso', 'Da acceso a tus fotos para elegir una portada.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.7,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    setCoverUri(result.assets[0].uri);
   };
   const toggleCat = (v: string) =>
     setCats((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
@@ -227,6 +256,14 @@ const CreateTournamentSheet: React.FC<{
     }
     setSaving(true);
     try {
+      let coverUrl: string | null = null;
+      if (coverUri) {
+        try {
+          coverUrl = await uploadTournamentCover(clubId, coverUri);
+        } catch (e: any) {
+          toast.error('No se pudo subir la foto', e?.message ?? 'Se creará sin portada.');
+        }
+      }
       await createTournament({
         clubId,
         name: name.trim(),
@@ -235,6 +272,10 @@ const CreateTournamentSheet: React.FC<{
         genders,
         categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+        startsOn: startsOn ? dateToIsoDate(startsOn) : null,
+        prizes,
+        extraInfo,
+        coverUrl,
       });
       toast.success('Torneo creado', 'Comparte el código para las inscripciones.');
       reset();
@@ -270,11 +311,32 @@ const CreateTournamentSheet: React.FC<{
       }
     >
       <Text style={styles.sheetEyebrow}>NUEVO TORNEO</Text>
-      <Text style={styles.sheetTitle}>Eliminación directa</Text>
+      <Text style={styles.sheetTitle}>Crear torneo</Text>
       <Text style={styles.sheetSub}>
-        Cuadro con cabezas de serie por puntos/categoría. Más formatos (grupos,
-        americano) llegarán pronto.
+        Foto, fecha, formato, categorías, premios e info del evento. Los
+        jugadores se apuntan con el código.
       </Text>
+
+      <Text style={styles.label}>FOTO DE PORTADA · OPCIONAL</Text>
+      <Pressable
+        onPress={pickCover}
+        style={({ pressed }) => [styles.coverPicker, pressed && { opacity: 0.85 }]}
+      >
+        {coverUri ? (
+          <>
+            <Image source={{ uri: coverUri }} style={styles.coverImg} />
+            <View style={styles.coverEditBadge}>
+              <IconCamera size={14} color={c.textInverse} />
+              <Text style={styles.coverEditText}>Cambiar</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.coverEmpty}>
+            <IconCamera size={22} color={c.accent} />
+            <Text style={styles.coverEmptyText}>Añadir foto del torneo</Text>
+          </View>
+        )}
+      </Pressable>
 
       <Text style={styles.label}>NOMBRE</Text>
       <View style={styles.input}>
@@ -288,6 +350,15 @@ const CreateTournamentSheet: React.FC<{
           autoCapitalize="sentences"
         />
       </View>
+
+      <Text style={styles.label}>FECHA · OPCIONAL</Text>
+      <DateField
+        value={startsOn}
+        onChange={setStartsOn}
+        placeholder="Elegir fecha"
+        allowClear
+        label="FECHA DEL TORNEO"
+      />
 
       <Text style={styles.label}>TIPO DE TORNEO</Text>
       <View style={{ gap: 8 }}>
@@ -410,6 +481,32 @@ const CreateTournamentSheet: React.FC<{
           maxLength={3}
         />
       </View>
+
+      <Text style={styles.label}>PREMIOS · OPCIONAL</Text>
+      <View style={[styles.input, styles.inputMultiline]}>
+        <TextInput
+          value={prizes}
+          onChangeText={setPrizes}
+          placeholder="1º: 500€ + trofeo · 2º: material · 3º: bono pista…"
+          placeholderTextColor={c.textFaint}
+          style={[styles.inputField, styles.inputFieldMultiline]}
+          multiline
+          maxLength={400}
+        />
+      </View>
+
+      <Text style={styles.label}>INFORMACIÓN ADICIONAL · OPCIONAL</Text>
+      <View style={[styles.input, styles.inputMultiline]}>
+        <TextInput
+          value={extraInfo}
+          onChangeText={setExtraInfo}
+          placeholder="BBQ y música tras la final · barra del club · sorteo de material entre inscritos…"
+          placeholderTextColor={c.textFaint}
+          style={[styles.inputField, styles.inputFieldMultiline]}
+          multiline
+          maxLength={600}
+        />
+      </View>
     </BottomSheet>
   );
 };
@@ -526,6 +623,36 @@ const makeStyles = (c: Palette) =>
       fontWeight: '500',
       paddingVertical: 0,
     },
+    inputMultiline: { minHeight: 84, alignItems: 'stretch', paddingVertical: 12 },
+    inputFieldMultiline: {
+      minHeight: 60,
+      textAlignVertical: 'top',
+      lineHeight: 20,
+    },
+    coverPicker: {
+      height: 150,
+      borderRadius: Radius.lg,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+    },
+    coverImg: { width: '100%', height: '100%' },
+    coverEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+    coverEmptyText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+    coverEditBadge: {
+      position: 'absolute',
+      right: 10,
+      bottom: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 9999,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    coverEditText: { color: c.textInverse, fontSize: 12, fontWeight: '700' },
     catCell: {
       width: 52,
       height: 46,
