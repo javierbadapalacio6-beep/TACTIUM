@@ -44,8 +44,11 @@ export interface Tournament {
   max_pairs: number | null;
   pair_based: boolean;
   match_format: string;
+  gender: string | null;
   created_at: string;
 }
+
+export type TournamentGender = 'masculino' | 'femenino' | 'mixto';
 
 export interface TournamentRegistration {
   id: string;
@@ -95,6 +98,7 @@ export async function createTournament(input: {
   name: string;
   format: TournamentFormat;
   matchFormat?: MatchFormat;
+  gender?: TournamentGender | null;
   category?: string | null;
   startsOn?: string | null;
   maxPairs?: number | null;
@@ -104,6 +108,7 @@ export async function createTournament(input: {
     name: input.name,
     format: input.format,
     match_format: input.matchFormat ?? 'bo3_stb',
+    gender: input.gender ?? null,
     category: input.category ?? null,
     starts_on: input.startsOn ?? null,
     max_pairs: input.maxPairs ?? null,

@@ -42,6 +42,61 @@ const roundLabel = (round: number, total: number): string => {
   if (fromEnd === 3) return 'Octavos';
   return `Ronda ${round}`;
 };
+const shortRoundLabel = (round: number, total: number): string => {
+  const fromEnd = total - round;
+  if (fromEnd === 0) return 'F';
+  if (fromEnd === 1) return 'SF';
+  if (fromEnd === 2) return 'QF';
+  if (fromEnd === 3) return '8';
+  return `R${round}`;
+};
+
+// Geometría del cuadro (para alinear rondas y dibujar los conectores en L).
+const BRACKET_H = 60; // alto de cada partido
+const BRACKET_G = 16; // hueco base entre partidos de la 1ª ronda
+const COL_W = 198; // ancho de columna de ronda
+const CONN_W = 26; // ancho de la columna de conectores
+const HEADER_H = 46; // alto reservado para la cabecera de ronda
+const PITCH1 = BRACKET_H + BRACKET_G;
+const roundMetrics = (r: number) => ({
+  pitch: PITCH1 * Math.pow(2, r - 1),
+  topOffset: (PITCH1 * (Math.pow(2, r - 1) - 1)) / 2,
+});
+
+// Líneas conectoras en L entre la ronda `round` y la siguiente.
+const RoundConnectors: React.FC<{
+  round: number;
+  targets: number;
+  totalH: number;
+  line: string;
+  hidden: boolean;
+}> = ({ round, targets, totalH, line, hidden }) => {
+  if (hidden) return <View style={{ width: CONN_W }} />;
+  const mR = roundMetrics(round);
+  const mN = roundMetrics(round + 1);
+  return (
+    <View style={{ width: CONN_W }}>
+      <View style={{ height: HEADER_H }} />
+      <View style={{ height: totalH }}>
+        {Array.from({ length: targets }, (_, k) => {
+          const yA = mR.topOffset + 2 * k * mR.pitch + BRACKET_H / 2;
+          const yB = mR.topOffset + (2 * k + 1) * mR.pitch + BRACKET_H / 2;
+          const yT = mN.topOffset + k * mN.pitch + BRACKET_H / 2;
+          const top = Math.min(yA, yB);
+          const h = Math.abs(yB - yA);
+          return (
+            <React.Fragment key={k}>
+              <View style={{ position: 'absolute', left: 0, top: yA, width: CONN_W / 2, height: 1.5, backgroundColor: line }} />
+              <View style={{ position: 'absolute', left: 0, top: yB, width: CONN_W / 2, height: 1.5, backgroundColor: line }} />
+              <View style={{ position: 'absolute', left: CONN_W / 2 - 0.75, top, width: 1.5, height: h, backgroundColor: line }} />
+              <View style={{ position: 'absolute', left: CONN_W / 2, top: yT, width: CONN_W / 2, height: 1.5, backgroundColor: line }} />
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
 
 export const TournamentDetailScreen = ({
   navigation,
@@ -59,6 +114,14 @@ export const TournamentDetailScreen = ({
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [editMatch, setEditMatch] = useState<TournamentMatch | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const toggleRound = (r: number) =>
+    setCollapsed((prev) => {
+      const n = new Set(prev);
+      if (n.has(r)) n.delete(r);
+      else n.add(r);
+      return n;
+    });
 
   const load = useCallback(async () => {
     try {
@@ -289,58 +352,104 @@ export const TournamentDetailScreen = ({
               <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
                 CUADRO
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.bracket}
-              >
-                {Array.from({ length: totalRounds }, (_, r) => r + 1).map((round) => {
-                  const col = matches
-                    .filter((m) => m.round === round && m.bracket === 'main')
-                    .sort((a, b) => a.slot - b.slot);
-                  return (
-                    <View key={round} style={styles.roundCol}>
-                      <Text style={styles.roundLabel}>
-                        {roundLabel(round, totalRounds)}
-                      </Text>
-                      <View style={styles.roundColInner}>
-                        {col.map((m) => {
-                          const playable = !!m.home_reg && !!m.away_reg;
-                          const homeWin = m.winner_reg && m.winner_reg === m.home_reg;
-                          const awayWin = m.winner_reg && m.winner_reg === m.away_reg;
-                          return (
-                            <Pressable
-                              key={m.id}
-                              disabled={!playable}
-                              onPress={() => setEditMatch(m)}
-                              style={({ pressed }) => [
-                                styles.matchCard,
-                                pressed && playable && { opacity: 0.85 },
-                              ]}
-                            >
-                              <MatchSide
-                                styles={styles}
-                                name={regName(m.home_reg)}
-                                score={m.home_score}
-                                win={!!homeWin}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ flexDirection: 'row', paddingHorizontal: 22, paddingTop: 12 }}>
+                  {(() => {
+                    const r1count = matches.filter(
+                      (m) => m.round === 1 && m.bracket === 'main',
+                    ).length;
+                    const totalH = r1count * PITCH1;
+                    return Array.from({ length: totalRounds }, (_, r) => r + 1).map(
+                      (round) => {
+                        const col = matches
+                          .filter((m) => m.round === round && m.bracket === 'main')
+                          .sort((a, b) => a.slot - b.slot);
+                        const isCol = collapsed.has(round);
+                        const { pitch, topOffset } = roundMetrics(round);
+                        return (
+                          <React.Fragment key={round}>
+                            <View style={{ width: isCol ? 52 : COL_W }}>
+                              <Pressable
+                                onPress={() => toggleRound(round)}
+                                style={({ pressed }) => [
+                                  styles.roundPill,
+                                  pressed && { opacity: 0.7 },
+                                ]}
+                              >
+                                <Text style={styles.roundPillText} numberOfLines={1}>
+                                  {isCol
+                                    ? shortRoundLabel(round, totalRounds)
+                                    : roundLabel(round, totalRounds)}
+                                </Text>
+                                <Text style={styles.roundPillChevron}>
+                                  {isCol ? '›' : '⌄'}
+                                </Text>
+                              </Pressable>
+                              {isCol ? (
+                                <View style={[styles.collapsedStrip, { height: totalH }]}>
+                                  <Text style={styles.collapsedText}>{col.length}</Text>
+                                </View>
+                              ) : (
+                                <View style={{ height: totalH }}>
+                                  {col.map((m, i) => {
+                                    const playable = !!m.home_reg && !!m.away_reg;
+                                    const homeWin =
+                                      m.winner_reg && m.winner_reg === m.home_reg;
+                                    const awayWin =
+                                      m.winner_reg && m.winner_reg === m.away_reg;
+                                    return (
+                                      <Pressable
+                                        key={m.id}
+                                        disabled={!playable}
+                                        onPress={() => setEditMatch(m)}
+                                        style={({ pressed }) => [
+                                          styles.matchCard,
+                                          {
+                                            marginTop:
+                                              i === 0 ? topOffset : pitch - BRACKET_H,
+                                            height: BRACKET_H,
+                                          },
+                                          pressed && playable && { opacity: 0.85 },
+                                        ]}
+                                      >
+                                        <MatchSide
+                                          styles={styles}
+                                          name={regName(m.home_reg)}
+                                          score={m.home_score}
+                                          win={!!homeWin}
+                                        />
+                                        <View style={styles.matchDivider} />
+                                        <MatchSide
+                                          styles={styles}
+                                          name={regName(m.away_reg)}
+                                          score={m.away_score}
+                                          win={!!awayWin}
+                                        />
+                                      </Pressable>
+                                    );
+                                  })}
+                                </View>
+                              )}
+                            </View>
+                            {round < totalRounds ? (
+                              <RoundConnectors
+                                round={round}
+                                targets={Math.floor(r1count / Math.pow(2, round))}
+                                totalH={totalH}
+                                line={c.hairStrong}
+                                hidden={isCol || collapsed.has(round + 1)}
                               />
-                              <View style={styles.matchDivider} />
-                              <MatchSide
-                                styles={styles}
-                                name={regName(m.away_reg)}
-                                score={m.away_score}
-                                win={!!awayWin}
-                              />
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })}
+                            ) : null}
+                          </React.Fragment>
+                        );
+                      },
+                    );
+                  })()}
+                </View>
               </ScrollView>
               <Text style={styles.bracketHint}>
-                Toca un partido con las dos parejas para meter el resultado.
+                Toca una ronda para ocultarla/mostrarla. Toca un partido para meter
+                el resultado.
               </Text>
             </View>
           )}
@@ -716,15 +825,52 @@ const makeStyles = (c: Palette) =>
       marginBottom: 10,
     },
     roundColInner: { flex: 1, justifyContent: 'space-around', gap: 10 },
+    roundPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 34,
+      marginBottom: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 8,
+    },
+    roundPillText: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 1,
+      color: c.accent,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+    },
+    roundPillChevron: { color: c.textFaint, fontSize: 12, fontWeight: '700' },
+    collapsedStrip: {
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      paddingTop: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hair,
+    },
+    collapsedText: {
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.textFaint,
+    },
     matchCard: {
+      justifyContent: 'center',
       backgroundColor: c.bgCard,
       borderRadius: Radius.md,
       borderWidth: 1,
       borderColor: c.hairStrong,
-      paddingVertical: 4,
       paddingHorizontal: 10,
     },
-    matchSide: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 },
+    matchSide: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
     matchName: { flex: 1, color: c.textMuted, fontSize: 12, fontWeight: '500' },
     matchNameWin: { color: c.accent, fontWeight: '800' },
     matchScore: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700', color: c.text, minWidth: 16, textAlign: 'right' },

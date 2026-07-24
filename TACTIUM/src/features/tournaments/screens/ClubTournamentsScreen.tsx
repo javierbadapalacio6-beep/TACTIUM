@@ -24,11 +24,23 @@ import {
   createTournament,
   type Tournament,
   type MatchFormat,
+  type TournamentGender,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
 
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª'];
+
+const GENDERS: { id: TournamentGender; label: string }[] = [
+  { id: 'masculino', label: 'Masculino' },
+  { id: 'femenino', label: 'Femenino' },
+  { id: 'mixto', label: 'Mixto' },
+];
+const GENDER_LABEL: Record<string, string> = {
+  masculino: 'Masculino',
+  femenino: 'Femenino',
+  mixto: 'Mixto',
+};
 
 const MATCH_FORMATS: { id: MatchFormat; label: string; sub: string }[] = [
   { id: 'bo3_stb', label: 'Mejor de 3 · super tie-break', sub: '2 sets; si 1-1, super TB a 11 (dif. 2)' },
@@ -136,7 +148,7 @@ export const ClubTournamentsScreen = ({
                     </Text>
                     <Text style={styles.cardMeta} numberOfLines={1}>
                       {[
-                        t.format === 'ko' ? 'Eliminación directa' : t.format,
+                        t.gender ? GENDER_LABEL[t.gender] : null,
                         t.category,
                         STATUS_LABEL[t.status] ?? t.status,
                       ]
@@ -172,6 +184,7 @@ const CreateTournamentSheet: React.FC<{
   const styles = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
   const [cat, setCat] = useState<string | null>(null);
+  const [gender, setGender] = useState<TournamentGender>('masculino');
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [saving, setSaving] = useState(false);
@@ -179,6 +192,7 @@ const CreateTournamentSheet: React.FC<{
   const reset = () => {
     setName('');
     setCat(null);
+    setGender('masculino');
     setMaxPairs('');
     setMatchFormat('bo3_stb');
   };
@@ -195,6 +209,7 @@ const CreateTournamentSheet: React.FC<{
         name: name.trim(),
         format: 'ko',
         matchFormat,
+        gender,
         category: cat,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
       });
@@ -249,6 +264,27 @@ const CreateTournamentSheet: React.FC<{
           maxLength={60}
           autoCapitalize="sentences"
         />
+      </View>
+
+      <Text style={styles.label}>GÉNERO</Text>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        {GENDERS.map((g) => {
+          const sel = gender === g.id;
+          return (
+            <Pressable
+              key={g.id}
+              onPress={() => setGender(g.id)}
+              style={[
+                styles.genderCell,
+                sel && { backgroundColor: c.accent, borderColor: c.accent },
+              ]}
+            >
+              <Text style={[styles.genderText, { color: sel ? c.textInverse : c.text }]}>
+                {g.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Text style={styles.label}>CATEGORÍA · OPCIONAL</Text>
@@ -440,6 +476,17 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     catText: { fontSize: 16, fontWeight: '600' },
+    genderCell: {
+      flex: 1,
+      height: 46,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    genderText: { fontSize: 14, fontWeight: '600' },
     fmtRow: {
       flexDirection: 'row',
       alignItems: 'center',
