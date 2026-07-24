@@ -1207,6 +1207,7 @@ export async function signupByCode(input: {
   p2Email?: string;
   p2Phone?: string;
   availability?: string[];
+  seedPoints?: number | null;
 }): Promise<string> {
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
@@ -1223,6 +1224,7 @@ export async function signupByCode(input: {
     p_availability: input.availability ?? [],
     p_category: input.category ?? null,
     p_gender: input.gender ?? null,
+    p_seed_points: input.seedPoints ?? null,
   });
   if (error) throw new Error(error.message);
   return data as string;

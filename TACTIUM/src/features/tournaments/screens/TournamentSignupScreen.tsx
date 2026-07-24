@@ -68,6 +68,8 @@ export const TournamentSignupScreen = ({
   );
   const [p1Phone, setP1Phone] = useState('');
   const [p2, setP2] = useState('');
+  const [p1Pts, setP1Pts] = useState('');
+  const [p2Pts, setP2Pts] = useState('');
   const [avail, setAvail] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -111,16 +113,19 @@ export const TournamentSignupScreen = ({
   const needsGender = (found?.genders.length ?? 0) > 0;
   const needsCategory = (found?.categories.length ?? 0) > 0;
   const isPair = found?.pair_based !== false;
+  const seedPoints =
+    (parseInt(p1Pts, 10) || 0) + (isPair ? parseInt(p2Pts, 10) || 0 : 0);
   const valid =
     !!found &&
     !!p1.trim() &&
-    (!isPair || !!p2.trim()) &&
+    !!p1Pts.trim() &&
+    (!isPair || (!!p2.trim() && !!p2Pts.trim())) &&
     (!needsGender || !!gender) &&
     (!needsCategory || !!category);
 
   const save = async () => {
     if (!valid) {
-      toast.error('Busca el torneo, elige categoría y rellena los nombres');
+      toast.error('Rellena nombres y puntos de cada jugador');
       return;
     }
     setSaving(true);
@@ -133,6 +138,7 @@ export const TournamentSignupScreen = ({
         p1Email: p1Email || undefined,
         p1Phone: p1Phone || undefined,
         p2Name: isPair ? p2 : '',
+        seedPoints,
         availability: avail,
       });
       toast.success('¡Inscripción hecha!', 'El club te confirmará el cuadro.');
@@ -265,9 +271,27 @@ export const TournamentSignupScreen = ({
           </View>
         ) : null}
 
-        <Text style={styles.label}>TU NOMBRE</Text>
-        <View style={styles.input}>
-          <TextInput value={p1} onChangeText={setP1} placeholder="Tu nombre" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
+        <View style={styles.two}>
+          <View style={{ flex: 2 }}>
+            <Text style={styles.label}>TU NOMBRE</Text>
+            <View style={styles.input}>
+              <TextInput value={p1} onChangeText={setP1} placeholder="Tu nombre" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
+            </View>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>TUS PUNTOS</Text>
+            <View style={styles.input}>
+              <TextInput
+                value={p1Pts}
+                onChangeText={(v) => setP1Pts(v.replace(/[^0-9]/g, ''))}
+                placeholder="0"
+                placeholderTextColor={c.textFaint}
+                style={styles.inputField}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+            </View>
+          </View>
         </View>
 
         <View style={styles.two}>
@@ -287,12 +311,38 @@ export const TournamentSignupScreen = ({
 
         {isPair ? (
           <>
-            <Text style={styles.label}>TU COMPAÑERO/A</Text>
-            <View style={styles.input}>
-              <TextInput value={p2} onChangeText={setP2} placeholder="Nombre de tu pareja" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
+            <View style={styles.two}>
+              <View style={{ flex: 2 }}>
+                <Text style={styles.label}>TU COMPAÑERO/A</Text>
+                <View style={styles.input}>
+                  <TextInput value={p2} onChangeText={setP2} placeholder="Nombre de tu pareja" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={40} />
+                </View>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>SUS PUNTOS</Text>
+                <View style={styles.input}>
+                  <TextInput
+                    value={p2Pts}
+                    onChangeText={(v) => setP2Pts(v.replace(/[^0-9]/g, ''))}
+                    placeholder="0"
+                    placeholderTextColor={c.textFaint}
+                    style={styles.inputField}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+              </View>
             </View>
+            <Text style={styles.availHint}>
+              Puntos de vuestra federación. Sumamos los dos ({seedPoints || 0}) para
+              sembrar el cuadro y que salga equilibrado.
+            </Text>
           </>
-        ) : null}
+        ) : (
+          <Text style={styles.availHint}>
+            Tus puntos de federación sirven para sembrar el cuadro y equilibrarlo.
+          </Text>
+        )}
 
         <Text style={styles.label}>DISPONIBILIDAD</Text>
         <Text style={styles.availHint}>
