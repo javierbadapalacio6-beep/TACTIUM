@@ -124,23 +124,23 @@ const RoundConnectors: React.FC<{
 };
 
 // Una "división" = un cuadro: combinación de género y categoría.
-interface Division {
+export interface Division {
   gender: string | null;
   category: string | null;
 }
-const sameDiv = (a: Division, b: Division) =>
+export const sameDiv = (a: Division, b: Division) =>
   a.gender === b.gender && a.category === b.category;
-const GENDER_LABEL: Record<string, string> = {
+export const GENDER_LABEL: Record<string, string> = {
   masculino: 'Masculino',
   femenino: 'Femenino',
   mixto: 'Mixto',
 };
-const divLabel = (d: Division): string =>
+export const divLabel = (d: Division): string =>
   [d.gender ? GENDER_LABEL[d.gender] ?? d.gender : null, d.category]
     .filter(Boolean)
     .join(' · ') || 'General';
 
-const STATUS_LABEL: Record<string, string> = {
+export const STATUS_LABEL: Record<string, string> = {
   draft: 'BORRADOR',
   open: 'ABIERTO',
   in_progress: 'EN JUEGO',
@@ -148,7 +148,7 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: 'CANCELADO',
 };
 
-const FORMAT_LABEL: Record<string, string> = {
+export const FORMAT_LABEL: Record<string, string> = {
   ko: 'Eliminación directa',
   round_robin: 'Liga · todos contra todos',
   groups_ko: 'Grupos + eliminatorias',
@@ -156,7 +156,7 @@ const FORMAT_LABEL: Record<string, string> = {
   mexicano: 'Mexicano',
 };
 
-const formatStartsOn = (iso: string | null): string | null => {
+export const formatStartsOn = (iso: string | null): string | null => {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
@@ -164,10 +164,10 @@ const formatStartsOn = (iso: string | null): string | null => {
   return `${d.getDate()} ${MESES[d.getMonth()]}`;
 };
 
-type TabKey = 'main' | 'schedule' | 'players' | 'info';
+export type TabKey = 'main' | 'schedule' | 'players' | 'info';
 
 // Hora "HH:MM" a partir de un scheduled_at ISO (hora local del dispositivo).
-const fmtTime = (iso: string | null): string | null => {
+export const fmtTime = (iso: string | null): string | null => {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
@@ -175,7 +175,7 @@ const fmtTime = (iso: string | null): string | null => {
 };
 
 // Datos de una inscripción para pintar la tarjeta de partido pro.
-type RegInfo = {
+export type RegInfo = {
   name: string;
   partner: string | null;
   seed: number | null;
@@ -266,14 +266,15 @@ const MatchTeam: React.FC<{
 
 // Tarjeta de partido estilo pro: dos parejas, badge W del ganador, sets en
 // columnas (o juegos en formatos sociales) y chevron para meter resultado.
-const MatchCard: React.FC<{
+export const MatchCard: React.FC<{
   m: TournamentMatch;
   info: (id: string | null) => RegInfo;
   onEdit: (m: TournamentMatch) => void;
   social?: boolean;
+  readOnly?: boolean;
   styles: Styles;
   c: Palette;
-}> = ({ m, info, onEdit, social, styles, c }) => {
+}> = ({ m, info, onEdit, social, readOnly, styles, c }) => {
   const finished = m.status === 'finished';
   const homeWin = finished && m.winner_reg === m.home_reg;
   const awayWin = finished && !!m.winner_reg && m.winner_reg === m.away_reg;
@@ -297,8 +298,9 @@ const MatchCard: React.FC<{
 
   return (
     <Pressable
-      onPress={() => onEdit(m)}
-      style={({ pressed }) => [styles.matchRowCard, pressed && { opacity: 0.85 }]}
+      onPress={() => (readOnly ? undefined : onEdit(m))}
+      disabled={readOnly}
+      style={({ pressed }) => [styles.matchRowCard, pressed && !readOnly && { opacity: 0.85 }]}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
         {m.scheduled_at ? (
@@ -335,7 +337,7 @@ const MatchCard: React.FC<{
             </View>
           )}
         </View>
-      ) : homeBye || awayBye ? null : (
+      ) : homeBye || awayBye || readOnly ? null : (
         <View style={styles.playChip}>
           <Text style={styles.playChipText}>›</Text>
         </View>
@@ -345,7 +347,7 @@ const MatchCard: React.FC<{
 };
 
 // Hero de campeón (torneo finalizado): tarjeta glass con la pareja ganadora.
-const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette }> = ({
+export const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette }> = ({
   info,
   styles,
   c,
@@ -384,7 +386,7 @@ const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette }> = ({
 );
 
 // Barra de pestañas de contenido: Cuadro/Clasificación · Jugadores · Info.
-const ContentTabs: React.FC<{
+export const ContentTabs: React.FC<{
   tab: TabKey;
   setTab: (t: TabKey) => void;
   mainLabel: string;
@@ -419,7 +421,7 @@ const ContentTabs: React.FC<{
 };
 
 // Pestaña JUGADORES: todos los inscritos con ambos avatares, siembra y datos.
-const PlayersView: React.FC<{
+export const PlayersView: React.FC<{
   regs: TournamentRegistration[];
   info: (id: string | null) => RegInfo;
   social: boolean;
@@ -509,7 +511,7 @@ const PlayersView: React.FC<{
 };
 
 // Pestaña INFO: datos del torneo (formato, categorías, plazas, código…).
-const InfoView: React.FC<{
+export const InfoView: React.FC<{
   t: Tournament | null;
   onShareCode: () => void;
   styles: Styles;
@@ -598,7 +600,7 @@ const InfoView: React.FC<{
 };
 
 // Pestaña HORARIO: partidos agrupados por hora, con pista y avisos de conflicto.
-const ScheduleView: React.FC<{
+export const ScheduleView: React.FC<{
   tournament: Tournament;
   matches: TournamentMatch[];
   regs: TournamentRegistration[];
@@ -608,6 +610,7 @@ const ScheduleView: React.FC<{
   onGenerate: () => void;
   onClear: () => void;
   generating: boolean;
+  readOnly?: boolean;
   styles: Styles;
   c: Palette;
 }> = ({
@@ -620,6 +623,7 @@ const ScheduleView: React.FC<{
   onGenerate,
   onClear,
   generating,
+  readOnly,
   styles,
   c,
 }) => {
@@ -650,47 +654,51 @@ const ScheduleView: React.FC<{
 
   return (
     <View style={{ paddingHorizontal: 22 }}>
-      <View style={styles.schedConfigCard}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.schedConfigLabel}>CONFIGURACIÓN</Text>
-          <Text style={styles.schedConfigValue}>
-            {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} · desde{' '}
-            {tournament.start_time} · {tournament.slot_minutes} min
-            {!tournament.starts_on ? ' · sin fecha' : ''}
-          </Text>
-        </View>
-        <Pressable onPress={onConfigure} hitSlop={8}>
-          <Text style={styles.addLink}>Configurar</Text>
-        </Pressable>
-      </View>
+      {readOnly ? null : (
+        <>
+          <View style={styles.schedConfigCard}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.schedConfigLabel}>CONFIGURACIÓN</Text>
+              <Text style={styles.schedConfigValue}>
+                {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} · desde{' '}
+                {tournament.start_time} · {tournament.slot_minutes} min
+                {!tournament.starts_on ? ' · sin fecha' : ''}
+              </Text>
+            </View>
+            <Pressable onPress={onConfigure} hitSlop={8}>
+              <Text style={styles.addLink}>Configurar</Text>
+            </Pressable>
+          </View>
 
-      <Pressable
-        onPress={onGenerate}
-        disabled={generating}
-        style={({ pressed }) => [
-          styles.generateBtn,
-          { marginTop: 14 },
-          generating && { opacity: 0.5 },
-          pressed && { opacity: 0.9 },
-        ]}
-      >
-        {generating ? (
-          <ActivityIndicator size="small" color={c.textInverse} />
-        ) : (
-          <Text style={styles.generateLabel}>
-            {scheduled.length ? 'Regenerar horario' : 'Generar horario'}
-          </Text>
-        )}
-      </Pressable>
+          <Pressable
+            onPress={onGenerate}
+            disabled={generating}
+            style={({ pressed }) => [
+              styles.generateBtn,
+              { marginTop: 14 },
+              generating && { opacity: 0.5 },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            {generating ? (
+              <ActivityIndicator size="small" color={c.textInverse} />
+            ) : (
+              <Text style={styles.generateLabel}>
+                {scheduled.length ? 'Regenerar horario' : 'Generar horario'}
+              </Text>
+            )}
+          </Pressable>
 
-      {!tournament.starts_on ? (
-        <Text style={styles.genHint}>
-          Pon una fecha al torneo (pestaña Info · el club la edita al crear) para
-          poder generar el horario.
-        </Text>
-      ) : null}
+          {!tournament.starts_on ? (
+            <Text style={styles.genHint}>
+              Pon una fecha al torneo (pestaña Info · el club la edita al crear) para
+              poder generar el horario.
+            </Text>
+          ) : null}
+        </>
+      )}
 
-      {conflicts > 0 ? (
+      {!readOnly && conflicts > 0 ? (
         <View style={styles.conflictBanner}>
           <Text style={styles.conflictBannerText}>
             ⚠️ {conflicts} {conflicts === 1 ? 'partido' : 'partidos'} en una hora que
@@ -701,9 +709,9 @@ const ScheduleView: React.FC<{
 
       {scheduled.length === 0 ? (
         <Text style={[styles.emptyText, { marginTop: 14 }]}>
-          Aún no hay horario. Genera el cuadro/los grupos y pulsa “Generar
-          horario”: repartiremos los partidos por pista y hora respetando la
-          disponibilidad de cada jugador.
+          {readOnly
+            ? 'El horario aún no está publicado. Cuando el club lo genere verás aquí tu hora y pista.'
+            : 'Aún no hay horario. Genera el cuadro/los grupos y pulsa “Generar horario”: repartiremos los partidos por pista y hora respetando la disponibilidad de cada jugador.'}
         </Text>
       ) : (
         <View style={{ marginTop: 8 }}>
@@ -712,7 +720,7 @@ const ScheduleView: React.FC<{
               <Text style={styles.schedTime}>{g.time}</Text>
               <View style={{ gap: 8 }}>
                 {g.items.map((m) => {
-                  const conf = matchScheduleConflict(m, regs, tournament);
+                  const conf = !readOnly && matchScheduleConflict(m, regs, tournament);
                   return (
                     <View key={m.id}>
                       {conf ? (
@@ -723,6 +731,7 @@ const ScheduleView: React.FC<{
                         info={info}
                         onEdit={onEdit}
                         social={isSocialFormat(tournament.format)}
+                        readOnly={readOnly}
                         styles={styles}
                         c={c}
                       />
@@ -733,11 +742,13 @@ const ScheduleView: React.FC<{
             </View>
           ))}
 
-          <Pressable onPress={onClear} hitSlop={8} style={{ marginTop: 22 }}>
-            <Text style={[styles.addLink, { color: c.error, textAlign: 'center' }]}>
-              Borrar horario
-            </Text>
-          </Pressable>
+          {readOnly ? null : (
+            <Pressable onPress={onClear} hitSlop={8} style={{ marginTop: 22 }}>
+              <Text style={[styles.addLink, { color: c.error, textAlign: 'center' }]}>
+                Borrar horario
+              </Text>
+            </Pressable>
+          )}
         </View>
       )}
     </View>
@@ -1465,11 +1476,11 @@ const MatchSide: React.FC<{
   );
 };
 
-type Styles = ReturnType<typeof makeStyles>;
+export type Styles = ReturnType<typeof makeStyles>;
 
 
 // Tabla de clasificación (liga/grupo).
-const StandingsTable: React.FC<{ standings: StandingRow[]; styles: Styles }> = ({
+export const StandingsTable: React.FC<{ standings: StandingRow[]; styles: Styles }> = ({
   standings,
   styles,
 }) => (
@@ -1502,13 +1513,14 @@ const StandingsTable: React.FC<{ standings: StandingRow[]; styles: Styles }> = (
 );
 
 // Cuadro KO (columnas por ronda + conectores + rondas colapsables).
-const BracketView: React.FC<{
+export const BracketView: React.FC<{
   matches: TournamentMatch[];
   regName: (id: string | null) => string;
   onEdit: (m: TournamentMatch) => void;
   collapsed: Set<number>;
   toggleRound: (r: number) => void;
-}> = ({ matches, regName, onEdit, collapsed, toggleRound }) => {
+  readOnly?: boolean;
+}> = ({ matches, regName, onEdit, collapsed, toggleRound, readOnly }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const totalRounds = matches.reduce((m, x) => Math.max(m, x.round), 0);
@@ -1551,12 +1563,12 @@ const BracketView: React.FC<{
                       return (
                         <Pressable
                           key={m.id}
-                          disabled={!playable}
+                          disabled={!playable || readOnly}
                           onPress={() => onEdit(m)}
                           style={({ pressed }) => [
                             styles.matchCard,
                             { marginTop: i === 0 ? topOffset : pitch - BRACKET_H, height: BRACKET_H },
-                            pressed && playable && { opacity: 0.85 },
+                            pressed && playable && !readOnly && { opacity: 0.85 },
                           ]}
                         >
                           <MatchSide styles={styles} name={regName(m.home_reg)} score={m.home_score} win={!!homeWin} />
@@ -1586,12 +1598,13 @@ const BracketView: React.FC<{
 };
 
 // Vista de LIGA: clasificación + lista de partidos.
-const RoundRobinView: React.FC<{
+export const RoundRobinView: React.FC<{
   standings: StandingRow[];
   matches: TournamentMatch[];
   info: (id: string | null) => RegInfo;
   onEdit: (m: TournamentMatch) => void;
-}> = ({ standings, matches, info, onEdit }) => {
+  readOnly?: boolean;
+}> = ({ standings, matches, info, onEdit, readOnly }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const sorted = [...matches].sort((a, b) => a.slot - b.slot);
@@ -1607,7 +1620,7 @@ const RoundRobinView: React.FC<{
       </Text>
       <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 6 }}>
         {sorted.map((m) => (
-          <MatchCard key={m.id} m={m} info={info} onEdit={onEdit} styles={styles} c={c} />
+          <MatchCard key={m.id} m={m} info={info} onEdit={onEdit} readOnly={readOnly} styles={styles} c={c} />
         ))}
       </View>
     </View>
@@ -1616,7 +1629,7 @@ const RoundRobinView: React.FC<{
 
 // Vista de GRUPOS + eliminatorias: fase de grupos (clasificación + partidos) y
 // luego los cuadros por posición (oro/plata/bronce).
-const GroupsView: React.FC<{
+export const GroupsView: React.FC<{
   regs: TournamentRegistration[];
   matches: TournamentMatch[];
   regName: (id: string | null) => string;
@@ -1626,7 +1639,8 @@ const GroupsView: React.FC<{
   onEdit: (m: TournamentMatch) => void;
   onGenerateKnockout: () => void;
   generating: boolean;
-}> = ({ regs, matches, regName, info, collapsed, toggleRound, onEdit, onGenerateKnockout, generating }) => {
+  readOnly?: boolean;
+}> = ({ regs, matches, regName, info, collapsed, toggleRound, onEdit, onGenerateKnockout, generating, readOnly }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const groupMatches = matches.filter((m) => m.bracket === 'grp');
@@ -1695,31 +1709,35 @@ const GroupsView: React.FC<{
         </Text>
         <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 8 }}>
           {gMatches.map((m) => (
-            <MatchCard key={m.id} m={m} info={info} onEdit={onEdit} styles={styles} c={c} />
+            <MatchCard key={m.id} m={m} info={info} onEdit={onEdit} readOnly={readOnly} styles={styles} c={c} />
           ))}
         </View>
 
-        <Pressable
-          onPress={onGenerateKnockout}
-          disabled={!allGroupsDone || generating}
-          style={({ pressed }) => [
-            styles.generateBtn,
-            { marginHorizontal: 22, marginTop: 24 },
-            (!allGroupsDone || generating) && { opacity: 0.4 },
-            pressed && { opacity: 0.9 },
-          ]}
-        >
-          {generating ? (
-            <ActivityIndicator size="small" color={c.textInverse} />
-          ) : (
-            <Text style={styles.generateLabel}>Generar eliminatorias</Text>
-          )}
-        </Pressable>
-        {!allGroupsDone ? (
-          <Text style={styles.genHint}>
-            Termina todos los partidos de grupo para generar las eliminatorias.
-          </Text>
-        ) : null}
+        {readOnly ? null : (
+          <>
+            <Pressable
+              onPress={onGenerateKnockout}
+              disabled={!allGroupsDone || generating}
+              style={({ pressed }) => [
+                styles.generateBtn,
+                { marginHorizontal: 22, marginTop: 24 },
+                (!allGroupsDone || generating) && { opacity: 0.4 },
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              {generating ? (
+                <ActivityIndicator size="small" color={c.textInverse} />
+              ) : (
+                <Text style={styles.generateLabel}>Generar eliminatorias</Text>
+              )}
+            </Pressable>
+            {!allGroupsDone ? (
+              <Text style={styles.genHint}>
+                Termina todos los partidos de grupo para generar las eliminatorias.
+              </Text>
+            ) : null}
+          </>
+        )}
       </View>
     );
   }
@@ -1757,13 +1775,14 @@ const GroupsView: React.FC<{
         onEdit={onEdit}
         collapsed={collapsed}
         toggleRound={toggleRound}
+        readOnly={readOnly}
       />
     </View>
   );
 };
 
 // Vista SOCIAL (americano / mexicano): ranking individual + rondas 2vs2.
-const SocialView: React.FC<{
+export const SocialView: React.FC<{
   regs: TournamentRegistration[];
   matches: TournamentMatch[];
   info: (id: string | null) => RegInfo;
@@ -1773,6 +1792,7 @@ const SocialView: React.FC<{
   onEdit: (m: TournamentMatch) => void;
   onGenerateNextRound: () => void;
   generating: boolean;
+  readOnly?: boolean;
 }> = ({
   regs,
   matches,
@@ -1783,6 +1803,7 @@ const SocialView: React.FC<{
   onEdit,
   onGenerateNextRound,
   generating,
+  readOnly,
 }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -1854,6 +1875,7 @@ const SocialView: React.FC<{
                     info={info}
                     onEdit={onEdit}
                     social
+                    readOnly={readOnly}
                     styles={styles}
                     c={c}
                   />
@@ -1864,7 +1886,7 @@ const SocialView: React.FC<{
         );
       })}
 
-      {isMexicano ? (
+      {isMexicano && !readOnly ? (
         <Pressable
           onPress={onGenerateNextRound}
           disabled={!lastRoundDone || generating}
@@ -1882,7 +1904,7 @@ const SocialView: React.FC<{
           )}
         </Pressable>
       ) : null}
-      {isMexicano && !lastRoundDone ? (
+      {isMexicano && !readOnly && !lastRoundDone ? (
         <Text style={styles.genHint}>
           Cierra todos los partidos de la ronda {lastRound} para generar la siguiente.
         </Text>
@@ -2179,7 +2201,7 @@ const ResultSheet: React.FC<{
   );
 };
 
-const makeStyles = (c: Palette) =>
+export const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
     header: {
@@ -2315,6 +2337,21 @@ const makeStyles = (c: Palette) =>
     coverBanner: { height: 180, marginBottom: 4 },
     coverBannerImg: { width: '100%', height: '100%' },
     coverBannerFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
+    // Tus partidos (vista del jugador)
+    myMatchCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.accent10,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.accent25,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    myMatchRival: { color: c.text, fontSize: 15, fontWeight: '700' },
+    myMatchMeta: { color: c.textMuted, fontSize: 12, marginTop: 3, fontWeight: '600' },
+    myMatchScore: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '800', color: c.accent },
     // Horario
     matchWhen: { fontFamily: Fonts.mono, fontSize: 11, fontWeight: '700', color: c.accent },
     schedConfigCard: {

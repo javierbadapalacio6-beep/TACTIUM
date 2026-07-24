@@ -80,7 +80,7 @@ export const ExploreTournamentsScreen = ({
   }, [search, load]);
 
   const openTournament = (t: ExploreTournament) => {
-    navigation.navigate('TournamentSignup', { code: t.signup_code ?? undefined });
+    navigation.navigate('TournamentFollow', { tournamentId: t.id });
   };
 
   return (

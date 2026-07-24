@@ -186,16 +186,10 @@ export async function getTournament(id: string): Promise<Tournament | null> {
   return (data as Tournament) ?? null;
 }
 
-export async function listRegistrations(
-  tournamentId: string,
+// Enriquece las inscripciones con la foto de perfil de los jugadores vinculados.
+async function enrichRegAvatars(
+  regs: TournamentRegistration[],
 ): Promise<TournamentRegistration[]> {
-  const { data, error } = await from()('tournament_registrations')
-    .select('*')
-    .eq('tournament_id', tournamentId)
-    .order('created_at', { ascending: true });
-  if (error) throw new Error(error.message);
-  const regs = (data ?? []) as TournamentRegistration[];
-  // Enriquecer con la foto de perfil de los jugadores vinculados (si la tienen).
   const ids = Array.from(
     new Set(
       regs
@@ -219,6 +213,50 @@ export async function listRegistrations(
     }
   }
   return regs;
+}
+
+export async function listRegistrations(
+  tournamentId: string,
+): Promise<TournamentRegistration[]> {
+  const { data, error } = await from()('tournament_registrations')
+    .select('*')
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return enrichRegAvatars((data ?? []) as TournamentRegistration[]);
+}
+
+const rpcCall = (fn: string, args: Record<string, unknown>) =>
+  (
+    supabase.rpc.bind(supabase) as unknown as (
+      f: string,
+      a: Record<string, unknown>,
+    ) => PromiseLike<RpcResult>
+  )(fn, args);
+
+/** Torneo público (solo lectura) para el jugador que lo sigue. */
+export async function publicGetTournament(id: string): Promise<Tournament | null> {
+  const { data, error } = await rpcCall('public_get_tournament', { p_id: id });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Tournament[])[0] ?? null;
+}
+
+/** Inscripciones públicas (sin email/teléfono) + avatares. */
+export async function publicListRegistrations(
+  id: string,
+): Promise<TournamentRegistration[]> {
+  const { data, error } = await rpcCall('public_tournament_regs', { p_id: id });
+  if (error) throw new Error(error.message);
+  return enrichRegAvatars((data ?? []) as TournamentRegistration[]);
+}
+
+/** Partidos públicos (solo lectura). */
+export async function publicListMatches(id: string): Promise<TournamentMatch[]> {
+  const { data, error } = await rpcCall('public_tournament_matches', { p_id: id });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as TournamentMatch[])
+    .slice()
+    .sort((a, b) => a.round - b.round || a.slot - b.slot);
 }
 
 export interface TournamentMatch {

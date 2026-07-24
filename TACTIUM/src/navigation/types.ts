@@ -137,6 +137,8 @@ export type RootStackParamList = {
   TournamentSignup: { code?: string } | undefined;
   // Explorar torneos abiertos (jugador).
   ExploreTournaments: undefined;
+  // Seguir un torneo (vista de solo lectura del jugador).
+  TournamentFollow: { tournamentId: string };
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────
