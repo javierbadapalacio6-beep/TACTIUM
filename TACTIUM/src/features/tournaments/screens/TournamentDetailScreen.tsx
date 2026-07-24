@@ -26,7 +26,12 @@ import {
   deleteRegistration,
   generateKoBracket,
   generateRoundRobin,
+  generateGroups,
+  generateKnockoutFromGroups,
   computeStandings,
+  posBracket,
+  BRACKET_LABEL,
+  groupName,
   setMatchResult,
   formatConfig,
   type Tournament,
@@ -208,7 +213,7 @@ export const TournamentDetailScreen = ({
   );
 
   const isRR = t?.format === 'round_robin';
-  const totalRounds = matchesCat.reduce((m, x) => Math.max(m, x.round), 0);
+  const isGroups = t?.format === 'groups_ko';
   const hasBracket = matchesCat.length > 0;
 
   const standings = useMemo(
@@ -223,33 +228,73 @@ export const TournamentDetailScreen = ({
         matchesCat.length > 0 && matchesCat.every((m) => m.status === 'finished');
       return allPlayed ? standings[0]?.regId ?? null : null;
     }
-    const final = matchesCat.find(
-      (m) => m.round === totalRounds && m.slot === 0 && m.status === 'finished',
+    // KO (o cuadro ORO en grupos): ganador de la final del cuadro principal.
+    const mainBracket = isGroups ? 'gold' : 'main';
+    const koMatches = matchesCat.filter((m) => m.bracket === mainBracket);
+    const tr = koMatches.reduce((mx, x) => Math.max(mx, x.round), 0);
+    const final = koMatches.find(
+      (m) => m.round === tr && m.slot === 0 && m.status === 'finished',
     );
     return final?.winner_reg ?? null;
-  }, [hasBracket, isRR, matchesCat, standings, totalRounds]);
+  }, [hasBracket, isRR, isGroups, matchesCat, standings]);
+
+  const runGenerate = async (fn: () => Promise<void>) => {
+    setGenerating(true);
+    try {
+      await fn();
+      await load();
+    } catch (e: any) {
+      toast.error('No se pudo generar', e?.message ?? '');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const onGenerate = () => {
     if (!t) return;
+    if (isGroups) {
+      Alert.alert(
+        'Generar grupos',
+        `¿De cuántas parejas por grupo? Se repartirán las ${regsCat.length} parejas por siembra.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Grupos de 3', onPress: () => runGenerate(() => generateGroups(t, regsCat, dg, dc, 3)) },
+          { text: 'Grupos de 4', onPress: () => runGenerate(() => generateGroups(t, regsCat, dg, dc, 4)) },
+        ],
+      );
+      return;
+    }
     Alert.alert(
-      'Generar el cuadro',
+      'Generar',
       `Se ${isRR ? 'creará la liga' : 'creará el cuadro'}${activeDiv ? ` de ${divLabel(activeDiv)}` : ''} con ${regsCat.length} parejas. No podrás añadir más parejas a esta división.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Generar',
-          onPress: async () => {
-            setGenerating(true);
-            try {
-              if (isRR) await generateRoundRobin(t, regsCat, dg, dc);
-              else await generateKoBracket(t, regsCat, dg, dc);
-              await load();
-            } catch (e: any) {
-              toast.error('No se pudo generar', e?.message ?? '');
-            } finally {
-              setGenerating(false);
-            }
-          },
+          onPress: () =>
+            runGenerate(() =>
+              isRR
+                ? generateRoundRobin(t, regsCat, dg, dc)
+                : generateKoBracket(t, regsCat, dg, dc),
+            ),
+        },
+      ],
+    );
+  };
+
+  const onGenerateKnockout = () => {
+    if (!t) return;
+    Alert.alert(
+      'Generar eliminatorias',
+      'Se crearán los cuadros (oro, plata, bronce…) con los clasificados de cada grupo por su posición.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Generar',
+          onPress: () =>
+            runGenerate(() =>
+              generateKnockoutFromGroups(t, regsCat, matchesCat, dg, dc),
+            ),
         },
       ],
     );
@@ -430,7 +475,7 @@ export const TournamentDetailScreen = ({
                   <ActivityIndicator size="small" color={c.textInverse} />
                 ) : (
                   <Text style={styles.generateLabel}>
-                    {isRR ? 'Generar liga' : 'Generar cuadro'}
+                    {isGroups ? 'Generar grupos' : isRR ? 'Generar liga' : 'Generar cuadro'}
                     {activeDiv && divisions.length > 1 ? ` · ${divLabel(activeDiv)}` : ''}
                   </Text>
                 )}
@@ -449,107 +494,29 @@ export const TournamentDetailScreen = ({
               regName={regName}
               onEdit={setEditMatch}
             />
+          ) : isGroups ? (
+            <GroupsView
+              regs={regsCat}
+              matches={matchesCat}
+              regName={regName}
+              collapsed={collapsed}
+              toggleRound={toggleRound}
+              onEdit={setEditMatch}
+              onGenerateKnockout={onGenerateKnockout}
+              generating={generating}
+            />
           ) : (
-            /* Cuadro */
             <View>
               <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
                 CUADRO
               </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 22, paddingTop: 12 }}>
-                  {(() => {
-                    const r1count = matchesCat.filter(
-                      (m) => m.round === 1 && m.bracket === 'main',
-                    ).length;
-                    const totalH = r1count * PITCH1;
-                    return Array.from({ length: totalRounds }, (_, r) => r + 1).map(
-                      (round) => {
-                        const col = matchesCat
-                          .filter((m) => m.round === round && m.bracket === 'main')
-                          .sort((a, b) => a.slot - b.slot);
-                        const isCol = collapsed.has(round);
-                        const { pitch, topOffset } = roundMetrics(round);
-                        return (
-                          <React.Fragment key={round}>
-                            <View style={{ width: isCol ? 52 : COL_W }}>
-                              <Pressable
-                                onPress={() => toggleRound(round)}
-                                style={({ pressed }) => [
-                                  styles.roundPill,
-                                  pressed && { opacity: 0.7 },
-                                ]}
-                              >
-                                <Text style={styles.roundPillText} numberOfLines={1}>
-                                  {isCol
-                                    ? shortRoundLabel(round, totalRounds)
-                                    : roundLabel(round, totalRounds)}
-                                </Text>
-                                <Text style={styles.roundPillChevron}>
-                                  {isCol ? '›' : '⌄'}
-                                </Text>
-                              </Pressable>
-                              {isCol ? (
-                                <View style={[styles.collapsedStrip, { height: totalH }]}>
-                                  <Text style={styles.collapsedText}>{col.length}</Text>
-                                </View>
-                              ) : (
-                                <View style={{ height: totalH }}>
-                                  {col.map((m, i) => {
-                                    const playable = !!m.home_reg && !!m.away_reg;
-                                    const homeWin =
-                                      m.winner_reg && m.winner_reg === m.home_reg;
-                                    const awayWin =
-                                      m.winner_reg && m.winner_reg === m.away_reg;
-                                    return (
-                                      <Pressable
-                                        key={m.id}
-                                        disabled={!playable}
-                                        onPress={() => setEditMatch(m)}
-                                        style={({ pressed }) => [
-                                          styles.matchCard,
-                                          {
-                                            marginTop:
-                                              i === 0 ? topOffset : pitch - BRACKET_H,
-                                            height: BRACKET_H,
-                                          },
-                                          pressed && playable && { opacity: 0.85 },
-                                        ]}
-                                      >
-                                        <MatchSide
-                                          styles={styles}
-                                          name={regName(m.home_reg)}
-                                          score={m.home_score}
-                                          win={!!homeWin}
-                                        />
-                                        <View style={styles.matchDivider} />
-                                        <MatchSide
-                                          styles={styles}
-                                          name={regName(m.away_reg)}
-                                          score={m.away_score}
-                                          win={!!awayWin}
-                                        />
-                                      </Pressable>
-                                    );
-                                  })}
-                                </View>
-                              )}
-                            </View>
-                            {round < totalRounds ? (
-                              <RoundConnectors
-                                round={round}
-                                targets={Math.floor(r1count / Math.pow(2, round))}
-                                totalH={totalH}
-                                line={c.hairStrong}
-                                hidden={isCol || collapsed.has(round + 1)}
-                              />
-                            ) : null}
-                          </React.Fragment>
-                        );
-                      },
-                    );
-                  })()}
-                </View>
-              </ScrollView>
+              <BracketView
+                matches={matchesCat.filter((m) => m.bracket === 'main')}
+                regName={regName}
+                onEdit={setEditMatch}
+                collapsed={collapsed}
+                toggleRound={toggleRound}
+              />
               <Text style={styles.bracketHint}>
                 Toca una ronda para ocultarla/mostrarla. Toca un partido para meter
                 el resultado.
@@ -600,7 +567,160 @@ const MatchSide: React.FC<{
   </View>
 );
 
-// Vista de LIGA (round robin): tabla de clasificación + lista de partidos.
+type Styles = ReturnType<typeof makeStyles>;
+
+// Fila de partido (liga/grupo): parejas + marcador en sets o "Poner".
+const MatchRow: React.FC<{
+  m: TournamentMatch;
+  regName: (id: string | null) => string;
+  onEdit: (m: TournamentMatch) => void;
+  styles: Styles;
+}> = ({ m, regName, onEdit, styles }) => {
+  const done = m.status === 'finished';
+  const homeWin = m.winner_reg === m.home_reg;
+  return (
+    <Pressable
+      onPress={() => onEdit(m)}
+      style={({ pressed }) => [styles.rrMatch, pressed && { opacity: 0.85 }]}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.rrName, done && homeWin && styles.rrWin]} numberOfLines={1}>
+          {regName(m.home_reg)}
+        </Text>
+        <Text style={[styles.rrName, done && !homeWin && styles.rrWin]} numberOfLines={1}>
+          {regName(m.away_reg)}
+        </Text>
+      </View>
+      {done ? (
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.rrScore}>{m.home_score}</Text>
+          <Text style={styles.rrScore}>{m.away_score}</Text>
+        </View>
+      ) : (
+        <Text style={styles.rrPending}>Poner</Text>
+      )}
+    </Pressable>
+  );
+};
+
+// Tabla de clasificación (liga/grupo).
+const StandingsTable: React.FC<{ standings: StandingRow[]; styles: Styles }> = ({
+  standings,
+  styles,
+}) => (
+  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <View style={{ paddingHorizontal: 22, paddingTop: 8 }}>
+      <View style={styles.stHeader}>
+        <Text style={styles.stPos}>#</Text>
+        <Text style={styles.stName}>PAREJA</Text>
+        <Text style={styles.stCol}>PJ</Text>
+        <Text style={styles.stCol}>G</Text>
+        <Text style={styles.stCol}>P</Text>
+        <Text style={styles.stColW}>SETS</Text>
+        <Text style={styles.stColW}>JUEGOS</Text>
+        <Text style={styles.stCol}>PTS</Text>
+      </View>
+      {standings.map((s, i) => (
+        <View key={s.regId} style={styles.stRow}>
+          <Text style={styles.stPos}>{i + 1}</Text>
+          <Text style={styles.stName} numberOfLines={1}>{s.name}</Text>
+          <Text style={styles.stCol}>{s.played}</Text>
+          <Text style={styles.stCol}>{s.won}</Text>
+          <Text style={styles.stCol}>{s.lost}</Text>
+          <Text style={styles.stColW}>{s.setsFor}-{s.setsAgainst}</Text>
+          <Text style={styles.stColW}>{s.gamesFor}-{s.gamesAgainst}</Text>
+          <Text style={[styles.stCol, styles.stPts]}>{s.points}</Text>
+        </View>
+      ))}
+    </View>
+  </ScrollView>
+);
+
+// Cuadro KO (columnas por ronda + conectores + rondas colapsables).
+const BracketView: React.FC<{
+  matches: TournamentMatch[];
+  regName: (id: string | null) => string;
+  onEdit: (m: TournamentMatch) => void;
+  collapsed: Set<number>;
+  toggleRound: (r: number) => void;
+}> = ({ matches, regName, onEdit, collapsed, toggleRound }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const totalRounds = matches.reduce((m, x) => Math.max(m, x.round), 0);
+  const r1count = matches.filter((m) => m.round === 1).length;
+  const totalH = r1count * PITCH1;
+  if (matches.length === 0) {
+    return <Text style={styles.bracketHint}>Sin cuadro todavía.</Text>;
+  }
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={{ flexDirection: 'row', paddingHorizontal: 22, paddingTop: 12 }}>
+        {Array.from({ length: totalRounds }, (_, r) => r + 1).map((round) => {
+          const col = matches
+            .filter((m) => m.round === round)
+            .sort((a, b) => a.slot - b.slot);
+          const isCol = collapsed.has(round);
+          const { pitch, topOffset } = roundMetrics(round);
+          return (
+            <React.Fragment key={round}>
+              <View style={{ width: isCol ? 52 : COL_W }}>
+                <Pressable
+                  onPress={() => toggleRound(round)}
+                  style={({ pressed }) => [styles.roundPill, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.roundPillText} numberOfLines={1}>
+                    {isCol ? shortRoundLabel(round, totalRounds) : roundLabel(round, totalRounds)}
+                  </Text>
+                  <Text style={styles.roundPillChevron}>{isCol ? '›' : '⌄'}</Text>
+                </Pressable>
+                {isCol ? (
+                  <View style={[styles.collapsedStrip, { height: totalH }]}>
+                    <Text style={styles.collapsedText}>{col.length}</Text>
+                  </View>
+                ) : (
+                  <View style={{ height: totalH }}>
+                    {col.map((m, i) => {
+                      const playable = !!m.home_reg && !!m.away_reg;
+                      const homeWin = m.winner_reg && m.winner_reg === m.home_reg;
+                      const awayWin = m.winner_reg && m.winner_reg === m.away_reg;
+                      return (
+                        <Pressable
+                          key={m.id}
+                          disabled={!playable}
+                          onPress={() => onEdit(m)}
+                          style={({ pressed }) => [
+                            styles.matchCard,
+                            { marginTop: i === 0 ? topOffset : pitch - BRACKET_H, height: BRACKET_H },
+                            pressed && playable && { opacity: 0.85 },
+                          ]}
+                        >
+                          <MatchSide styles={styles} name={regName(m.home_reg)} score={m.home_score} win={!!homeWin} />
+                          <View style={styles.matchDivider} />
+                          <MatchSide styles={styles} name={regName(m.away_reg)} score={m.away_score} win={!!awayWin} />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+              {round < totalRounds ? (
+                <RoundConnectors
+                  round={round}
+                  targets={Math.floor(r1count / Math.pow(2, round))}
+                  totalH={totalH}
+                  line={c.hairStrong}
+                  hidden={isCol || collapsed.has(round + 1)}
+                />
+              ) : null}
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+};
+
+// Vista de LIGA: clasificación + lista de partidos.
 const RoundRobinView: React.FC<{
   standings: StandingRow[];
   matches: TournamentMatch[];
@@ -616,66 +736,130 @@ const RoundRobinView: React.FC<{
       <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
         CLASIFICACIÓN
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={{ paddingHorizontal: 22, paddingTop: 8 }}>
-          <View style={styles.stHeader}>
-            <Text style={styles.stPos}>#</Text>
-            <Text style={styles.stName}>PAREJA</Text>
-            <Text style={styles.stCol}>PJ</Text>
-            <Text style={styles.stCol}>G</Text>
-            <Text style={styles.stCol}>P</Text>
-            <Text style={styles.stColW}>SETS</Text>
-            <Text style={styles.stColW}>JUEGOS</Text>
-            <Text style={styles.stCol}>PTS</Text>
-          </View>
-          {standings.map((s, i) => (
-            <View key={s.regId} style={styles.stRow}>
-              <Text style={styles.stPos}>{i + 1}</Text>
-              <Text style={styles.stName} numberOfLines={1}>{s.name}</Text>
-              <Text style={styles.stCol}>{s.played}</Text>
-              <Text style={styles.stCol}>{s.won}</Text>
-              <Text style={styles.stCol}>{s.lost}</Text>
-              <Text style={styles.stColW}>{s.setsFor}-{s.setsAgainst}</Text>
-              <Text style={styles.stColW}>{s.gamesFor}-{s.gamesAgainst}</Text>
-              <Text style={[styles.stCol, styles.stPts]}>{s.points}</Text>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-
+      <StandingsTable standings={standings} styles={styles} />
       <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 24 }]}>
         PARTIDOS · {played}/{matches.length}
       </Text>
       <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 6 }}>
-        {sorted.map((m) => {
-          const done = m.status === 'finished';
-          const homeWin = m.winner_reg === m.home_reg;
+        {sorted.map((m) => (
+          <MatchRow key={m.id} m={m} regName={regName} onEdit={onEdit} styles={styles} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Vista de GRUPOS + eliminatorias: fase de grupos (clasificación + partidos) y
+// luego los cuadros por posición (oro/plata/bronce).
+const GroupsView: React.FC<{
+  regs: TournamentRegistration[];
+  matches: TournamentMatch[];
+  regName: (id: string | null) => string;
+  collapsed: Set<number>;
+  toggleRound: (r: number) => void;
+  onEdit: (m: TournamentMatch) => void;
+  onGenerateKnockout: () => void;
+  generating: boolean;
+}> = ({ regs, matches, regName, collapsed, toggleRound, onEdit, onGenerateKnockout, generating }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const groupMatches = matches.filter((m) => m.bracket === 'grp');
+  const koMatches = matches.filter((m) => m.bracket !== 'grp');
+  const groupNos = Array.from(
+    new Set(regs.filter((r) => r.group_no != null).map((r) => r.group_no as number)),
+  ).sort((a, b) => a - b);
+  const allGroupsDone =
+    groupMatches.length > 0 && groupMatches.every((m) => m.status === 'finished');
+  const koBrackets = Array.from(new Set(koMatches.map((m) => m.bracket)));
+  const [activeBracket, setActiveBracket] = useState<string | null>(null);
+  useEffect(() => {
+    if (koBrackets.length && (!activeBracket || !koBrackets.includes(activeBracket))) {
+      setActiveBracket(koBrackets[0]);
+    }
+  }, [koMatches.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (koMatches.length === 0) {
+    return (
+      <View>
+        {groupNos.map((gn) => {
+          const gRegs = regs.filter((r) => r.group_no === gn);
+          const gMatches = groupMatches
+            .filter((m) => m.group_no === gn)
+            .sort((a, b) => a.slot - b.slot);
+          const st = computeStandings(gRegs, gMatches);
           return (
-            <Pressable
-              key={m.id}
-              onPress={() => onEdit(m)}
-              style={({ pressed }) => [styles.rrMatch, pressed && { opacity: 0.85 }]}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.rrName, done && homeWin && styles.rrWin]} numberOfLines={1}>
-                  {regName(m.home_reg)}
-                </Text>
-                <Text style={[styles.rrName, done && !homeWin && styles.rrWin]} numberOfLines={1}>
-                  {regName(m.away_reg)}
-                </Text>
+            <View key={gn}>
+              <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 18 }]}>
+                GRUPO {groupName(gn)}
+              </Text>
+              <StandingsTable standings={st} styles={styles} />
+              <View style={{ paddingHorizontal: 22, gap: 8, marginTop: 8 }}>
+                {gMatches.map((m) => (
+                  <MatchRow key={m.id} m={m} regName={regName} onEdit={onEdit} styles={styles} />
+                ))}
               </View>
-              {done ? (
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.rrScore}>{m.home_score}</Text>
-                  <Text style={styles.rrScore}>{m.away_score}</Text>
-                </View>
-              ) : (
-                <Text style={styles.rrPending}>Poner</Text>
-              )}
-            </Pressable>
+            </View>
           );
         })}
+        <Pressable
+          onPress={onGenerateKnockout}
+          disabled={!allGroupsDone || generating}
+          style={({ pressed }) => [
+            styles.generateBtn,
+            { marginHorizontal: 22, marginTop: 20 },
+            (!allGroupsDone || generating) && { opacity: 0.4 },
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          {generating ? (
+            <ActivityIndicator size="small" color={c.textInverse} />
+          ) : (
+            <Text style={styles.generateLabel}>Generar eliminatorias</Text>
+          )}
+        </Pressable>
+        {!allGroupsDone ? (
+          <Text style={styles.genHint}>
+            Termina todos los partidos de grupo para generar las eliminatorias.
+          </Text>
+        ) : null}
       </View>
+    );
+  }
+
+  return (
+    <View>
+      {koBrackets.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.catTabs}
+        >
+          {koBrackets.map((b) => {
+            const sel = activeBracket === b;
+            return (
+              <Pressable
+                key={b}
+                onPress={() => setActiveBracket(b)}
+                style={[styles.catTab, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+              >
+                <Text style={[styles.catTabText, { color: sel ? c.textInverse : c.textMuted }]}>
+                  {BRACKET_LABEL[b] ?? b}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+      <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 12 }]}>
+        {(BRACKET_LABEL[activeBracket ?? ''] ?? 'CUADRO').toUpperCase()}
+      </Text>
+      <BracketView
+        matches={koMatches.filter((m) => m.bracket === activeBracket)}
+        regName={regName}
+        onEdit={onEdit}
+        collapsed={collapsed}
+        toggleRound={toggleRound}
+      />
     </View>
   );
 };

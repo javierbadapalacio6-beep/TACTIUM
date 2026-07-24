@@ -57,6 +57,7 @@ export interface TournamentRegistration {
   tournament_id: string;
   gender: string | null;
   category: string | null;
+  group_no: number | null;
   pair_label: string | null;
   p1_name: string;
   p1_email: string | null;
@@ -154,6 +155,7 @@ export interface TournamentMatch {
   tournament_id: string;
   gender: string | null;
   category: string | null;
+  group_no: number | null;
   bracket: string;
   round: number;
   slot: number;
@@ -234,39 +236,19 @@ const seedPositions = (size: number): number[] => {
   return seeds;
 };
 
-/**
- * Cierra la inscripción y genera el cuadro de eliminación directa: siembra por
- * puntos (desc, nulos al final), coloca cabezas de serie en el cuadro estándar,
- * da byes a los mejores y crea todas las rondas. Marca el torneo 'in_progress'.
- */
-export async function generateKoBracket(
-  tournament: Tournament,
-  regs: TournamentRegistration[],
-  gender: string | null = null,
-  category: string | null = null,
-): Promise<void> {
-  const seeded = [...regs]
-    .filter((r) => r.status !== 'withdrawn')
-    .sort(
-      (a, b) =>
-        (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
-        (a.created_at < b.created_at ? -1 : 1),
-    );
+// Filas de un cuadro KO a partir de parejas YA sembradas (orden = siembra).
+function koMatchRows(
+  tournamentId: string,
+  seeded: TournamentRegistration[],
+  bracket: string,
+  gender: string | null,
+  category: string | null,
+): Record<string, unknown>[] {
   const N = seeded.length;
-  if (N < 2) throw new Error('Hacen falta al menos 2 parejas para el cuadro.');
-
   const size = nextPow2(N);
   const positions = seedPositions(size);
   const posReg = positions.map((seed) => (seed <= N ? seeded[seed - 1] : null));
   const rounds = Math.round(Math.log2(size));
-
-  // Persistimos el nº de cabeza de serie (para mostrarlo en el cuadro).
-  await Promise.all(
-    seeded.map((r, i) =>
-      from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
-    ),
-  );
-
   type M = {
     round: number;
     slot: number;
@@ -276,7 +258,6 @@ export async function generateKoBracket(
     winner_reg: string | null;
   };
   const byRound: M[][] = [];
-
   const r1: M[] = [];
   for (let s = 0; s < size / 2; s++) {
     const home = posReg[2 * s];
@@ -299,7 +280,6 @@ export async function generateKoBracket(
     }
     byRound.push(arr);
   }
-  // Propaga los byes de la ronda 1 a la ronda 2.
   if (rounds >= 2) {
     for (const m of r1) {
       if (m.status === 'bye' && m.winner_reg) {
@@ -309,12 +289,11 @@ export async function generateKoBracket(
       }
     }
   }
-
-  const rows = byRound.flat().map((m) => ({
-    tournament_id: tournament.id,
+  return byRound.flat().map((m) => ({
+    tournament_id: tournamentId,
     gender,
     category,
-    bracket: 'main',
+    bracket,
     round: m.round,
     slot: m.slot,
     home_reg: m.home_reg,
@@ -322,10 +301,159 @@ export async function generateKoBracket(
     status: m.status,
     winner_reg: m.winner_reg,
   }));
+}
+
+/** Cierra la inscripción y genera el cuadro KO de una división (cabezas por puntos). */
+export async function generateKoBracket(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  gender: string | null = null,
+  category: string | null = null,
+): Promise<void> {
+  const seeded = [...regs]
+    .filter((r) => r.status !== 'withdrawn')
+    .sort(
+      (a, b) =>
+        (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
+        (a.created_at < b.created_at ? -1 : 1),
+    );
+  if (seeded.length < 2) throw new Error('Hacen falta al menos 2 parejas para el cuadro.');
+  await Promise.all(
+    seeded.map((r, i) =>
+      from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
+    ),
+  );
+  const rows = koMatchRows(tournament.id, seeded, 'main', gender, category);
   const { error } = await from()('tournament_matches').insert(rows);
   if (error) throw new Error(error.message);
-
   await from()('tournaments').update({ status: 'in_progress' }).eq('id', tournament.id);
+}
+
+// Etiqueta de cuadro por posición de grupo (oro/plata/bronce…).
+export const POS_BRACKETS = ['gold', 'silver', 'bronze'];
+export const posBracket = (p: number): string => POS_BRACKETS[p - 1] ?? `pos${p}`;
+export const BRACKET_LABEL: Record<string, string> = {
+  main: 'Cuadro',
+  gold: 'Oro',
+  silver: 'Plata',
+  bronze: 'Bronce',
+};
+export const groupName = (n: number): string => String.fromCharCode(65 + n); // A, B, C…
+
+/** Genera la fase de GRUPOS (liguillas) de una división. Reparto serpiente por siembra. */
+export async function generateGroups(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  gender: string | null,
+  category: string | null,
+  groupSize: number,
+): Promise<void> {
+  const seeded = [...regs]
+    .filter((r) => r.status !== 'withdrawn')
+    .sort(
+      (a, b) =>
+        (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
+        (a.created_at < b.created_at ? -1 : 1),
+    );
+  const N = seeded.length;
+  if (N < 4) throw new Error('Para grupos hacen falta al menos 4 parejas.');
+  const G = Math.max(2, Math.ceil(N / groupSize));
+
+  // Reparto serpiente: distribuye las cabezas de serie entre los grupos.
+  const groups: TournamentRegistration[][] = Array.from({ length: G }, () => []);
+  seeded.forEach((r, i) => {
+    const row = Math.floor(i / G);
+    const pos = i % G;
+    const g = row % 2 === 0 ? pos : G - 1 - pos;
+    groups[g].push(r);
+  });
+
+  await Promise.all(
+    seeded.map((r, i) =>
+      from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
+    ),
+  );
+  await Promise.all(
+    groups.flatMap((grp, gi) =>
+      grp.map((r) =>
+        from()('tournament_registrations').update({ group_no: gi }).eq('id', r.id),
+      ),
+    ),
+  );
+
+  const rows: Record<string, unknown>[] = [];
+  let slot = 0;
+  groups.forEach((grp, gi) => {
+    for (let i = 0; i < grp.length; i++) {
+      for (let j = i + 1; j < grp.length; j++) {
+        rows.push({
+          tournament_id: tournament.id,
+          gender,
+          category,
+          bracket: 'grp',
+          group_no: gi,
+          round: 1,
+          slot: slot++,
+          home_reg: grp[i].id,
+          away_reg: grp[j].id,
+          status: 'pending',
+        });
+      }
+    }
+  });
+  const { error } = await from()('tournament_matches').insert(rows);
+  if (error) throw new Error(error.message);
+  await from()('tournaments').update({ status: 'in_progress' }).eq('id', tournament.id);
+}
+
+/**
+ * Con los grupos terminados, genera las ELIMINATORIAS por posición: el 1º de
+ * cada grupo → cuadro ORO, el 2º → PLATA, el 3º → BRONCE, etc.
+ */
+export async function generateKnockoutFromGroups(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  matches: TournamentMatch[],
+  gender: string | null,
+  category: string | null,
+): Promise<void> {
+  const groupNos = Array.from(
+    new Set(regs.filter((r) => r.group_no != null).map((r) => r.group_no as number)),
+  ).sort((a, b) => a - b);
+  if (groupNos.length === 0) throw new Error('No hay grupos.');
+
+  const standingsByGroup = new Map<number, StandingRow[]>();
+  let maxPos = 0;
+  for (const gn of groupNos) {
+    const gRegs = regs.filter((r) => r.group_no === gn);
+    const gMatches = matches.filter((m) => m.bracket === 'grp' && m.group_no === gn);
+    const st = computeStandings(gRegs, gMatches);
+    standingsByGroup.set(gn, st);
+    maxPos = Math.max(maxPos, st.length);
+  }
+
+  const regById = new Map(regs.map((r) => [r.id, r]));
+  const rows: Record<string, unknown>[] = [];
+  for (let p = 1; p <= maxPos; p++) {
+    // Clasificados en la posición p de cada grupo, ordenados por su rendimiento.
+    const quals = groupNos
+      .map((gn) => standingsByGroup.get(gn)![p - 1])
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          b.points - a.points ||
+          b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
+          b.gamesFor - b.gamesAgainst - (a.gamesFor - a.gamesAgainst),
+      )
+      .map((s) => regById.get(s.regId))
+      .filter((r): r is TournamentRegistration => !!r);
+    if (quals.length >= 2) {
+      rows.push(...koMatchRows(tournament.id, quals, posBracket(p), gender, category));
+    }
+  }
+  if (rows.length === 0) throw new Error('No hay suficientes clasificados.');
+  const { error } = await from()('tournament_matches').insert(rows);
+  if (error) throw new Error(error.message);
 }
 
 /**
