@@ -71,7 +71,13 @@ export const TournamentSignupScreen = ({
   const [p1Pts, setP1Pts] = useState('');
   const [p2Pts, setP2Pts] = useState('');
   const [avail, setAvail] = useState<string[]>([]);
+  const [anytime, setAnytime] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Disponibilidad final que se guarda: "Cualquier hora" si marca que puede
+  // siempre, o las franjas concretas que haya elegido.
+  const availability = anytime ? ['Cualquier hora'] : avail;
+  const hasAvailability = anytime || avail.length > 0;
 
   const toggleSlot = (dow: number, franja: string) => {
     const s = slotStr(dow, franja);
@@ -127,6 +133,8 @@ export const TournamentSignupScreen = ({
     !!found &&
     !!p1.trim() &&
     !!p1Pts.trim() &&
+    !!p1Phone.trim() &&
+    hasAvailability &&
     (!isPair || (!!p2.trim() && !!p2Pts.trim())) &&
     (!needsGender || !!gender) &&
     (!needsCategory || !!category);
@@ -148,6 +156,14 @@ export const TournamentSignupScreen = ({
       toast.error('Rellena nombres y puntos de cada jugador');
       return;
     }
+    if (!p1Phone.trim()) {
+      toast.error('El teléfono es obligatorio');
+      return;
+    }
+    if (!hasAvailability) {
+      toast.error('Marca tu disponibilidad (o “puedo a cualquier hora”)');
+      return;
+    }
     setSaving(true);
     try {
       await signupByCode({
@@ -159,7 +175,7 @@ export const TournamentSignupScreen = ({
         p1Phone: p1Phone || undefined,
         p2Name: isPair ? p2 : '',
         seedPoints,
-        availability: avail,
+        availability,
       });
       toast.success('¡Inscripción hecha!', 'El club te confirmará el cuadro.');
       navigation.goBack();
@@ -324,7 +340,7 @@ export const TournamentSignupScreen = ({
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>TU TELÉFONO</Text>
             <View style={styles.input}>
-              <TextInput value={p1Phone} onChangeText={setP1Phone} placeholder="opcional" placeholderTextColor={c.textFaint} style={styles.inputField} keyboardType="phone-pad" />
+              <TextInput value={p1Phone} onChangeText={setP1Phone} placeholder="obligatorio" placeholderTextColor={c.textFaint} style={styles.inputField} keyboardType="phone-pad" />
             </View>
           </View>
         </View>
@@ -365,10 +381,22 @@ export const TournamentSignupScreen = ({
         )}
 
         <Text style={styles.label}>DISPONIBILIDAD</Text>
+        <Pressable
+          onPress={() => setAnytime((v) => !v)}
+          style={[styles.anytimeBtn, anytime && { backgroundColor: c.accent, borderColor: c.accent }]}
+        >
+          <Text style={[styles.anytimeText, { color: anytime ? c.textInverse : c.text }]}>
+            {anytime ? '✓ Puedo a cualquier hora' : 'Puedo a cualquier hora'}
+          </Text>
+        </Pressable>
         <Text style={styles.availHint}>
-          Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.
+          {anytime
+            ? 'El club te podrá poner en cualquier franja.'
+            : 'Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.'}
         </Text>
-        {FRANJAS.map((franja) => {
+        {anytime
+          ? null
+          : FRANJAS.map((franja) => {
           const all = DOW.map((d) => slotStr(d, franja));
           const allSel = all.every((s) => avail.includes(s));
           return (
@@ -517,6 +545,17 @@ const makeStyles = (c: Palette) =>
     },
     catChipText: { fontSize: 15, fontWeight: '700' },
     availHint: { color: c.textMuted, fontSize: 12, marginTop: -2, marginBottom: 10, lineHeight: 17 },
+    anytimeBtn: {
+      height: 46,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    anytimeText: { fontSize: 14, fontWeight: '700' },
     franjaBlock: { marginBottom: 12 },
     franjaLabel: {
       fontFamily: Fonts.mono,

@@ -46,6 +46,7 @@ const iconFor = (type: string, color: string) => {
       return <IconCalendar size={16} color={color} />;
     case 'tournament_bracket':
     case 'tournament_schedule':
+    case 'tournament_signup':
       return <IconTrophy size={16} color={color} />;
     case 'availability_reminder':
     case 'lineup_reminder':

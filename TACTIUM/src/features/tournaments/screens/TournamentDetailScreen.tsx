@@ -436,11 +436,12 @@ export const PlayersView: React.FC<{
   canEdit: boolean;
   onAdd: () => void;
   onRemove: (r: TournamentRegistration) => void;
+  onSelect?: (r: TournamentRegistration) => void;
   divName: string | null;
   maxPairs: number | null;
   styles: Styles;
   c: Palette;
-}> = ({ regs, social, canEdit, onAdd, onRemove, divName, maxPairs, styles, c }) => {
+}> = ({ regs, social, canEdit, onAdd, onRemove, onSelect, divName, maxPairs, styles, c }) => {
   const ordered = [...regs].sort((a, b) => {
     if (a.seed != null && b.seed != null) return a.seed - b.seed;
     if (a.seed != null) return -1;
@@ -484,7 +485,12 @@ export const PlayersView: React.FC<{
               .filter(Boolean)
               .join(' · ');
             return (
-              <View key={r.id} style={styles.playerRow}>
+              <Pressable
+                key={r.id}
+                onPress={onSelect ? () => onSelect(r) : undefined}
+                disabled={!onSelect}
+                style={({ pressed }) => [styles.playerRow, pressed && onSelect && { opacity: 0.85 }]}
+              >
                 {r.seed ? (
                   <View style={styles.seedBadge}>
                     <Text style={styles.seedBadgeText}>{r.seed}</Text>
@@ -508,8 +514,10 @@ export const PlayersView: React.FC<{
                   <Pressable onPress={() => onRemove(r)} hitSlop={8}>
                     <IconTrash size={15} color={c.textFaint} />
                   </Pressable>
+                ) : onSelect ? (
+                  <Text style={styles.playChipText}>›</Text>
                 ) : null}
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -872,6 +880,63 @@ const ScheduleConfigSheet: React.FC<{
   );
 };
 
+// Sheet con la ficha de una pareja: contacto + disponibilidad (club).
+const PlayerInfoSheet: React.FC<{
+  reg: TournamentRegistration | null;
+  social: boolean;
+  onClose: () => void;
+  styles: Styles;
+  c: Palette;
+}> = ({ reg, social, onClose, styles, c }) => {
+  const Person: React.FC<{ name: string | null; email: string | null; phone: string | null; avatar: string | null }> = ({ name, email, phone, avatar }) => {
+    if (!name) return null;
+    return (
+      <View style={styles.playerRow}>
+        <TAvatar name={name} url={avatar} size={38} styles={styles} c={c} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.playerName} numberOfLines={1}>{name}</Text>
+          <Text style={styles.playerMeta}>
+            {[phone || 'Sin teléfono', email || null].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+  return (
+    <BottomSheet open={!!reg} onClose={onClose}>
+      <Text style={styles.sheetEyebrow}>{social ? 'JUGADOR' : 'PAREJA'}</Text>
+      <Text style={styles.sheetTitle}>Ficha de inscripción</Text>
+      {reg ? (
+        <View style={{ gap: 8, marginTop: 12 }}>
+          <Person name={reg.p1_name} email={reg.p1_email} phone={reg.p1_phone} avatar={reg.p1_avatar ?? null} />
+          {!social ? (
+            <Person name={reg.p2_name} email={reg.p2_email} phone={reg.p2_phone} avatar={reg.p2_avatar ?? null} />
+          ) : null}
+
+          <Text style={[styles.label, { marginTop: 10 }]}>PUNTOS DE SIEMBRA</Text>
+          <Text style={styles.infoBlockText}>
+            {reg.seed_points != null ? `${reg.seed_points} pts` : 'Sin puntos'}
+            {reg.seed ? ` · cabeza de serie nº ${reg.seed}` : ''}
+          </Text>
+
+          <Text style={[styles.label, { marginTop: 14 }]}>DISPONIBILIDAD</Text>
+          {reg.availability?.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {reg.availability.map((a, i) => (
+                <View key={i} style={styles.availChip}>
+                  <Text style={styles.availChipText}>{a}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.infoBlockText}>No indicó disponibilidad.</Text>
+          )}
+        </View>
+      ) : null}
+    </BottomSheet>
+  );
+};
+
 // Sheet de EDICIÓN del torneo (club): datos del evento + borrar. No toca
 // formato/categorías/géneros (rompería las divisiones ya sembradas).
 const EditTournamentSheet: React.FC<{
@@ -1079,6 +1144,7 @@ export const TournamentDetailScreen = ({
   const [tab, setTab] = useState<TabKey>('main');
   const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [selectedReg, setSelectedReg] = useState<TournamentRegistration | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -1489,6 +1555,7 @@ export const TournamentDetailScreen = ({
               canEdit={!hasBracket}
               onAdd={() => setAdding(true)}
               onRemove={removeReg}
+              onSelect={setSelectedReg}
               divName={activeDiv && divisions.length > 1 ? divLabel(activeDiv) : null}
               maxPairs={t?.max_pairs ?? null}
               styles={styles}
@@ -1657,6 +1724,14 @@ export const TournamentDetailScreen = ({
           if (generate) onGenerateSchedule();
           else load();
         }}
+        styles={styles}
+        c={c}
+      />
+
+      <PlayerInfoSheet
+        reg={selectedReg}
+        social={isSocial}
+        onClose={() => setSelectedReg(null)}
         styles={styles}
         c={c}
       />
@@ -2559,6 +2634,16 @@ export const makeStyles = (c: Palette) =>
       padding: 16,
     },
     infoBlockText: { color: c.text, fontSize: 14, lineHeight: 21, fontWeight: '500' },
+    availChip: {
+      paddingHorizontal: 10,
+      height: 30,
+      borderRadius: 8,
+      justifyContent: 'center',
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent25,
+    },
+    availChipText: { color: c.text, fontSize: 12, fontWeight: '600' },
     // Banner de portada
     coverBanner: { height: 180, marginBottom: 4 },
     coverBannerImg: { width: '100%', height: '100%' },
