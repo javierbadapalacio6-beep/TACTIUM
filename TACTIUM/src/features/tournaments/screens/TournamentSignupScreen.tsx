@@ -120,6 +120,12 @@ export const TournamentSignupScreen = ({
     return out;
   }, [found]);
 
+  // ¿Cada día del torneo tiene al menos una franja marcada? (obligatorio,
+  // si no es imposible que juegue las fases de ese día).
+  const dayCovered = (label: string) => avail.some((a) => a.startsWith(label + ' '));
+  const missingDays = anytime ? [] : tDays.filter((d) => !dayCovered(d.label));
+  const allDaysCovered = anytime || tDays.length === 0 || missingDays.length === 0;
+
   const toggleDaySlot = (s: string) =>
     setAvail((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const toggleWholeDay = (label: string) => {
@@ -186,6 +192,7 @@ export const TournamentSignupScreen = ({
     !!p1Pts.trim() &&
     !!p1Phone.trim() &&
     hasAvailability &&
+    allDaysCovered &&
     (!isPair || (!!p2.trim() && !!p2Pts.trim())) &&
     (!needsGender || !!gender) &&
     (!needsCategory || !!category);
@@ -213,6 +220,13 @@ export const TournamentSignupScreen = ({
     }
     if (!hasAvailability) {
       toast.error('Marca tu disponibilidad (o “puedo a cualquier hora”)');
+      return;
+    }
+    if (!allDaysCovered) {
+      toast.error(
+        'Falta disponibilidad',
+        `Marca al menos una franja en: ${missingDays.map((d) => d.full).join(', ')}.`,
+      );
       return;
     }
     setSaving(true);
@@ -444,20 +458,33 @@ export const TournamentSignupScreen = ({
           {anytime
             ? 'El club te podrá poner en cualquier franja.'
             : tDays.length > 0
-              ? 'Marca las franjas en las que puedes cada día del torneo. Toca el día para marcarlo entero. Aunque empiece por la tarde, marca la mañana si puedes: el club podría abrir huecos.'
+              ? 'Necesitas al menos una franja en CADA día del torneo (si no, no podrías jugar las fases de ese día). Toca el día para marcarlo entero. Aunque empiece por la tarde, marca la mañana si puedes: el club podría abrir huecos.'
               : 'Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.'}
         </Text>
+        {!anytime && tDays.length > 0 && missingDays.length > 0 ? (
+          <Text style={[styles.availHint, { color: c.error, fontWeight: '700', marginTop: -4 }]}>
+            Falta marcar: {missingDays.map((d) => d.full).join(', ')}.
+          </Text>
+        ) : null}
 
         {anytime ? null : tDays.length > 0 ? (
           // Rejilla por DÍAS del torneo.
           tDays.map((day) => {
             const all = FRANJAS.map((f) => daySlot(day.label, f));
             const allSel = all.every((s) => avail.includes(s));
+            const covered = dayCovered(day.label);
             return (
               <View key={day.label} style={styles.franjaBlock}>
                 <Pressable onPress={() => toggleWholeDay(day.label)} hitSlop={6}>
-                  <Text style={[styles.franjaLabel, allSel && { color: c.accent }]}>
+                  <Text
+                    style={[
+                      styles.franjaLabel,
+                      allSel && { color: c.accent },
+                      !covered && { color: c.error },
+                    ]}
+                  >
                     {day.full}
+                    {!covered ? ' · falta' : ''}
                   </Text>
                 </Pressable>
                 <View style={styles.dayRow}>
