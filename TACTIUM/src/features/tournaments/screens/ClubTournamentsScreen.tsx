@@ -228,6 +228,7 @@ const CreateTournamentSheet: React.FC<{
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
+  const [endsOn, setEndsOn] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [prizes, setPrizes] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
@@ -242,6 +243,7 @@ const CreateTournamentSheet: React.FC<{
     setMaxPairs('');
     setMatchFormat('bo3_stb');
     setStartsOn(null);
+    setEndsOn(null);
     setLocation('');
     setPrizes('');
     setExtraInfo('');
@@ -292,6 +294,7 @@ const CreateTournamentSheet: React.FC<{
         categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
+        endsOn: endsOn ? dateToIsoDate(endsOn) : null,
         location,
         prizes,
         extraInfo,
@@ -371,14 +374,29 @@ const CreateTournamentSheet: React.FC<{
         />
       </View>
 
-      <Text style={styles.label}>FECHA · OPCIONAL</Text>
-      <DateField
-        value={startsOn}
-        onChange={setStartsOn}
-        placeholder="Elegir fecha"
-        allowClear
-        label="FECHA DEL TORNEO"
-      />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>FECHA INICIO · OPCIONAL</Text>
+          <DateField
+            value={startsOn}
+            onChange={setStartsOn}
+            placeholder="Inicio"
+            allowClear
+            label="INICIO DEL TORNEO"
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>FECHA FIN · OPCIONAL</Text>
+          <DateField
+            value={endsOn}
+            onChange={setEndsOn}
+            placeholder="Fin (si dura varios días)"
+            allowClear
+            minimumDate={startsOn ?? undefined}
+            label="FIN DEL TORNEO"
+          />
+        </View>
+      </View>
 
       <Text style={styles.label}>LUGAR · OPCIONAL</Text>
       <View style={styles.input}>

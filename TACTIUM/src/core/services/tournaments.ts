@@ -45,6 +45,7 @@ export interface Tournament {
   format: TournamentFormat;
   status: TournamentStatus;
   starts_on: string | null;
+  ends_on: string | null;
   location: string | null;
   prizes: string | null;
   extra_info: string | null;
@@ -122,6 +123,7 @@ export async function createTournament(input: {
   genders?: TournamentGender[];
   categories?: string[];
   startsOn?: string | null;
+  endsOn?: string | null;
   maxPairs?: number | null;
   location?: string | null;
   prizes?: string | null;
@@ -136,6 +138,7 @@ export async function createTournament(input: {
     genders: input.genders ?? [],
     categories: input.categories ?? [],
     starts_on: input.startsOn ?? null,
+    ends_on: input.endsOn ?? null,
     max_pairs: input.maxPairs ?? null,
     location: input.location?.trim() || null,
     prizes: input.prizes?.trim() || null,
@@ -184,6 +187,7 @@ export async function updateTournament(
   fields: {
     name?: string;
     startsOn?: string | null;
+    endsOn?: string | null;
     location?: string | null;
     maxPairs?: number | null;
     prizes?: string | null;
@@ -194,6 +198,7 @@ export async function updateTournament(
   const payload: Record<string, unknown> = {};
   if (fields.name !== undefined) payload.name = fields.name.trim();
   if (fields.startsOn !== undefined) payload.starts_on = fields.startsOn;
+  if (fields.endsOn !== undefined) payload.ends_on = fields.endsOn;
   if (fields.location !== undefined) payload.location = fields.location?.trim() || null;
   if (fields.maxPairs !== undefined) payload.max_pairs = fields.maxPairs;
   if (fields.prizes !== undefined) payload.prizes = fields.prizes?.trim() || null;
@@ -1213,6 +1218,8 @@ export interface TournamentLookup {
   genders: string[];
   categories: string[];
   pair_based: boolean;
+  starts_on: string | null;
+  ends_on: string | null;
 }
 
 // Fila pública para explorar torneos (cualquier jugador, sin ser del club).

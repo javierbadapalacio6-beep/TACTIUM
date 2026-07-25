@@ -554,7 +554,13 @@ export const InfoView: React.FC<{
       value: t.max_pairs ? String(t.max_pairs) : 'Sin límite',
     },
     { label: 'Estado', value: STATUS_LABEL[t.status] ?? t.status },
-    { label: 'Fecha', value: formatStartsOn(t.starts_on) ?? '—' },
+    {
+      label: 'Fechas',
+      value:
+        t.ends_on && t.ends_on !== t.starts_on
+          ? `${formatStartsOn(t.starts_on) ?? '—'} – ${formatStartsOn(t.ends_on)}`
+          : formatStartsOn(t.starts_on) ?? '—',
+    },
     ...(t.location ? [{ label: 'Lugar', value: t.location }] : []),
   ];
   return (
@@ -950,6 +956,7 @@ const EditTournamentSheet: React.FC<{
 }> = ({ open, tournament, onClose, onSaved, onDeleted, styles, c }) => {
   const [name, setName] = useState('');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
+  const [endsOn, setEndsOn] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [maxPairs, setMaxPairs] = useState('');
   const [prizes, setPrizes] = useState('');
@@ -962,6 +969,7 @@ const EditTournamentSheet: React.FC<{
     if (open && tournament) {
       setName(tournament.name);
       setStartsOn(isoDateToDate(tournament.starts_on));
+      setEndsOn(isoDateToDate(tournament.ends_on));
       setLocation(tournament.location ?? '');
       setMaxPairs(tournament.max_pairs ? String(tournament.max_pairs) : '');
       setPrizes(tournament.prizes ?? '');
@@ -999,6 +1007,7 @@ const EditTournamentSheet: React.FC<{
       await updateTournament(tournament.id, {
         name,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
+        endsOn: endsOn ? dateToIsoDate(endsOn) : null,
         location,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         prizes,
@@ -1094,8 +1103,16 @@ const EditTournamentSheet: React.FC<{
         <TextInput value={name} onChangeText={setName} placeholder="Nombre del torneo" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={60} />
       </View>
 
-      <Text style={styles.label}>FECHA</Text>
-      <DateField value={startsOn} onChange={setStartsOn} placeholder="Elegir fecha" allowClear label="FECHA DEL TORNEO" />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>FECHA INICIO</Text>
+          <DateField value={startsOn} onChange={setStartsOn} placeholder="Inicio" allowClear label="INICIO" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>FECHA FIN</Text>
+          <DateField value={endsOn} onChange={setEndsOn} placeholder="Fin" allowClear minimumDate={startsOn ?? undefined} label="FIN" />
+        </View>
+      </View>
 
       <Text style={styles.label}>LUGAR</Text>
       <View style={styles.input}>

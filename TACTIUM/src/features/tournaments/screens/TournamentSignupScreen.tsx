@@ -42,6 +42,28 @@ const FRANJAS = [
 ];
 const slotStr = (dow: number, franja: string) => `${DOW_FULL[dow]} ${franja}`;
 
+// Días concretos del torneo (índice = getDay(): 0=Dom … 6=Sáb).
+const DOW_ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DOW_NAME = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const FRANJA_SHORT: Record<string, string> = {
+  '9:00–12:00': '9-12',
+  '12:00–15:00': '12-15',
+  '15:00–18:00': '15-18',
+  '18:00–21:00': '18-21',
+  '21:00–00:00': '21-0',
+};
+const parseIsoDate = (iso: string): Date => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+// Etiqueta de una casilla concreta del torneo: "Vie 24 18:00–21:00".
+const daySlot = (label: string, franja: string) => `${label} ${franja}`;
+
+interface TDay {
+  label: string; // "Vie 24"
+  full: string; // "Viernes 24"
+}
+
 const GENDER_LABEL: Record<string, string> = {
   masculino: 'Masculino',
   femenino: 'Femenino',
@@ -78,6 +100,35 @@ export const TournamentSignupScreen = ({
   // siempre, o las franjas concretas que haya elegido.
   const availability = anytime ? ['Cualquier hora'] : avail;
   const hasAvailability = anytime || avail.length > 0;
+
+  // Días concretos del torneo (del inicio al fin). Si no hay fecha, vacío →
+  // se cae a la rejilla de semana completa.
+  const tDays = useMemo<TDay[]>(() => {
+    if (!found?.starts_on) return [];
+    const start = parseIsoDate(found.starts_on);
+    const end = found.ends_on ? parseIsoDate(found.ends_on) : start;
+    const out: TDay[] = [];
+    const d = new Date(start);
+    let guard = 0;
+    while (d.getTime() <= end.getTime() && guard < 31) {
+      const dow = d.getDay();
+      const num = d.getDate();
+      out.push({ label: `${DOW_ABBR[dow]} ${num}`, full: `${DOW_NAME[dow]} ${num}` });
+      d.setDate(d.getDate() + 1);
+      guard++;
+    }
+    return out;
+  }, [found]);
+
+  const toggleDaySlot = (s: string) =>
+    setAvail((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  const toggleWholeDay = (label: string) => {
+    const all = FRANJAS.map((f) => daySlot(label, f));
+    const allSel = all.every((s) => avail.includes(s));
+    setAvail((prev) =>
+      allSel ? prev.filter((s) => !all.includes(s)) : Array.from(new Set([...prev, ...all])),
+    );
+  };
 
   const toggleSlot = (dow: number, franja: string) => {
     const s = slotStr(dow, franja);
@@ -392,49 +443,81 @@ export const TournamentSignupScreen = ({
         <Text style={styles.availHint}>
           {anytime
             ? 'El club te podrá poner en cualquier franja.'
-            : 'Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.'}
+            : tDays.length > 0
+              ? 'Marca las franjas en las que puedes cada día del torneo. Toca el día para marcarlo entero. Aunque empiece por la tarde, marca la mañana si puedes: el club podría abrir huecos.'
+              : 'Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.'}
         </Text>
-        {anytime
-          ? null
-          : FRANJAS.map((franja) => {
-          const all = DOW.map((d) => slotStr(d, franja));
-          const allSel = all.every((s) => avail.includes(s));
-          return (
-            <View key={franja} style={styles.franjaBlock}>
-              <Pressable onPress={() => toggleFranjaWeek(franja)} hitSlop={6}>
-                <Text
-                  style={[styles.franjaLabel, allSel && { color: c.accent }]}
-                >
-                  {franja}
-                </Text>
-              </Pressable>
-              <View style={styles.dayRow}>
-                {DOW.map((d) => {
-                  const sel = avail.includes(slotStr(d, franja));
-                  return (
-                    <Pressable
-                      key={d}
-                      onPress={() => toggleSlot(d, franja)}
-                      style={[
-                        styles.dayCell,
-                        sel && { backgroundColor: c.accent, borderColor: c.accent },
-                      ]}
-                    >
-                      <Text
+
+        {anytime ? null : tDays.length > 0 ? (
+          // Rejilla por DÍAS del torneo.
+          tDays.map((day) => {
+            const all = FRANJAS.map((f) => daySlot(day.label, f));
+            const allSel = all.every((s) => avail.includes(s));
+            return (
+              <View key={day.label} style={styles.franjaBlock}>
+                <Pressable onPress={() => toggleWholeDay(day.label)} hitSlop={6}>
+                  <Text style={[styles.franjaLabel, allSel && { color: c.accent }]}>
+                    {day.full}
+                  </Text>
+                </Pressable>
+                <View style={styles.dayRow}>
+                  {FRANJAS.map((franja) => {
+                    const s = daySlot(day.label, franja);
+                    const sel = avail.includes(s);
+                    return (
+                      <Pressable
+                        key={franja}
+                        onPress={() => toggleDaySlot(s)}
                         style={[
-                          styles.dayCellText,
-                          { color: sel ? c.textInverse : c.text },
+                          styles.dayCell,
+                          sel && { backgroundColor: c.accent, borderColor: c.accent },
                         ]}
                       >
-                        {DOW_SHORT[d]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                        <Text style={[styles.dayCellText, { color: sel ? c.textInverse : c.text }]}>
+                          {FRANJA_SHORT[franja]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })
+        ) : (
+          // Fallback: semana completa (torneo sin fecha).
+          FRANJAS.map((franja) => {
+            const all = DOW.map((d) => slotStr(d, franja));
+            const allSel = all.every((s) => avail.includes(s));
+            return (
+              <View key={franja} style={styles.franjaBlock}>
+                <Pressable onPress={() => toggleFranjaWeek(franja)} hitSlop={6}>
+                  <Text style={[styles.franjaLabel, allSel && { color: c.accent }]}>
+                    {franja}
+                  </Text>
+                </Pressable>
+                <View style={styles.dayRow}>
+                  {DOW.map((d) => {
+                    const sel = avail.includes(slotStr(d, franja));
+                    return (
+                      <Pressable
+                        key={d}
+                        onPress={() => toggleSlot(d, franja)}
+                        style={[
+                          styles.dayCell,
+                          sel && { backgroundColor: c.accent, borderColor: c.accent },
+                        ]}
+                      >
+                        <Text style={[styles.dayCellText, { color: sel ? c.textInverse : c.text }]}>
+                          {DOW_SHORT[d]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
