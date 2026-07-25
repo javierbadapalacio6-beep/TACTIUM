@@ -52,6 +52,8 @@ import {
   updateTournamentSchedule,
   clearSchedule,
   matchScheduleConflict,
+  getPhaseDays,
+  setPhaseDay,
   isSocialFormat,
   posBracket,
   BRACKET_LABEL,
@@ -633,6 +635,8 @@ export const ScheduleView: React.FC<{
   onClear: () => void;
   generating: boolean;
   readOnly?: boolean;
+  phaseDays?: Record<string, string>;
+  onSetPhaseDay?: (bracket: string, round: number, iso: string) => void;
   styles: Styles;
   c: Palette;
 }> = ({
@@ -646,9 +650,60 @@ export const ScheduleView: React.FC<{
   onClear,
   generating,
   readOnly,
+  phaseDays = {},
+  onSetPhaseDay,
   styles,
   c,
 }) => {
+  // Días del torneo (inicio → fin).
+  const days = useMemo(() => {
+    if (!tournament.starts_on) return [] as { iso: string; label: string }[];
+    const parse = (s: string) => {
+      const [y, m, d] = s.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    };
+    const start = parse(tournament.starts_on);
+    const end = tournament.ends_on ? parse(tournament.ends_on) : start;
+    const ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const out: { iso: string; label: string }[] = [];
+    const dd = new Date(start);
+    let guard = 0;
+    while (dd.getTime() <= end.getTime() && guard < 31) {
+      const iso = `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, '0')}-${String(dd.getDate()).padStart(2, '0')}`;
+      out.push({ iso, label: `${ABBR[dd.getDay()]} ${dd.getDate()}` });
+      dd.setDate(dd.getDate() + 1);
+      guard++;
+    }
+    return out;
+  }, [tournament.starts_on, tournament.ends_on]);
+  const multiDay = days.length > 1;
+
+  // Fases del torneo (para asignar día a cada una).
+  const phases = useMemo(() => {
+    const real = matches.filter((m) => m.status !== 'bye');
+    const out: { bracket: string; round: number; label: string }[] = [];
+    const brackets = Array.from(new Set(real.map((m) => m.bracket)));
+    const SINGLE: Record<string, string> = {
+      grp: 'Fase de grupos',
+      rr: 'Liga',
+      amer: 'Americano',
+      mex: 'Mexicano',
+    };
+    for (const b of brackets) {
+      if (SINGLE[b]) {
+        out.push({ bracket: b, round: 0, label: SINGLE[b] });
+      } else {
+        const bm = real.filter((m) => m.bracket === b);
+        const total = bm.reduce((mx, m) => Math.max(mx, m.round), 0);
+        const rounds = Array.from(new Set(bm.map((m) => m.round))).sort((a, z) => a - z);
+        const prefix = b === 'main' ? '' : `${BRACKET_LABEL[b] ?? b} · `;
+        for (const r of rounds) out.push({ bracket: b, round: r, label: `${prefix}${roundLabel(r, total)}` });
+      }
+    }
+    return out;
+  }, [matches]);
+
+  const dayLabelOf = (iso: string | null) => days.find((x) => x.iso === iso)?.label ?? null;
   const scheduled = useMemo(
     () =>
       matches
@@ -662,10 +717,12 @@ export const ScheduleView: React.FC<{
         ),
     [matches],
   );
-  // Agrupa por hora.
+  // Agrupa por día + hora.
   const groups: { time: string; items: TournamentMatch[] }[] = [];
   for (const m of scheduled) {
-    const time = fmtTime(m.scheduled_at) ?? '—';
+    const iso = (m.scheduled_at as string).slice(0, 10);
+    const dl = multiDay ? dayLabelOf(iso) : null;
+    const time = `${dl ? `${dl} · ` : ''}${fmtTime(m.scheduled_at) ?? '—'}`;
     const g = groups.find((x) => x.time === time);
     if (g) g.items.push(m);
     else groups.push({ time, items: [m] });
@@ -683,7 +740,8 @@ export const ScheduleView: React.FC<{
               <Text style={styles.schedConfigLabel}>CONFIGURACIÓN</Text>
               <Text style={styles.schedConfigValue}>
                 {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} · desde{' '}
-                {tournament.start_time} · {tournament.slot_minutes} min
+                {tournament.start_time} · {tournament.slot_minutes} min · descanso{' '}
+                {tournament.rest_minutes ?? 60}
                 {!tournament.starts_on ? ' · sin fecha' : ''}
               </Text>
             </View>
@@ -691,6 +749,42 @@ export const ScheduleView: React.FC<{
               <Text style={styles.addLink}>Configurar</Text>
             </Pressable>
           </View>
+
+          {multiDay && phases.length > 0 && onSetPhaseDay ? (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.sectionLabel}>DÍA DE CADA FASE</Text>
+              <Text style={[styles.genHint, { textAlign: 'left', marginTop: 4, marginBottom: 8 }]}>
+                Asigna cada fase a un día del torneo. Una fase sin día se juega el
+                día de inicio.
+              </Text>
+              <View style={{ gap: 10 }}>
+                {phases.map((ph) => {
+                  const sel = phaseDays[`${ph.bracket}:${ph.round}`] ?? null;
+                  return (
+                    <View key={`${ph.bracket}:${ph.round}`} style={styles.phaseRow}>
+                      <Text style={styles.phaseLabel} numberOfLines={1}>{ph.label}</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {days.map((day) => {
+                          const on = sel === day.iso;
+                          return (
+                            <Pressable
+                              key={day.iso}
+                              onPress={() => onSetPhaseDay(ph.bracket, ph.round, day.iso)}
+                              style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                            >
+                              <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                                {day.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
 
           <Pressable
             onPress={onGenerate}
@@ -789,12 +883,14 @@ const ScheduleConfigSheet: React.FC<{
   const [courts, setCourts] = useState('3');
   const [startAt, setStartAt] = useState<Date | null>(null);
   const [minutes, setMinutes] = useState('60');
+  const [rest, setRest] = useState('60');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open && tournament) {
       setCourts(String(tournament.courts ?? 3));
       setMinutes(String(tournament.slot_minutes ?? 60));
+      setRest(String(tournament.rest_minutes ?? 60));
       setStartAt(isoTimeToDate(`${tournament.start_time ?? '09:00'}:00`));
     }
   }, [open, tournament]);
@@ -807,6 +903,7 @@ const ScheduleConfigSheet: React.FC<{
         courts: parseInt(courts, 10) || 1,
         startTime: startAt ? dateToIsoTime(startAt).slice(0, 5) : '09:00',
         slotMinutes: parseInt(minutes, 10) || 60,
+        restMinutes: parseInt(rest, 10) || 0,
       });
       onSaved(generate);
       onClose();
@@ -877,6 +974,28 @@ const ScheduleConfigSheet: React.FC<{
             >
               <Text style={[styles.durChipText, { color: sel ? c.textInverse : c.text }]}>
                 {v} min
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.label}>DESCANSO ENTRE PARTIDOS DE UNA PAREJA</Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {[
+          { v: '0', label: 'Sin mín.' },
+          { v: '30', label: '30 min' },
+          { v: '60', label: '60 min' },
+        ].map((o) => {
+          const sel = rest === o.v;
+          return (
+            <Pressable
+              key={o.v}
+              onPress={() => setRest(o.v)}
+              style={[styles.durChip, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+            >
+              <Text style={[styles.durChipText, { color: sel ? c.textInverse : c.text }]}>
+                {o.label}
               </Text>
             </Pressable>
           );
@@ -1162,6 +1281,7 @@ export const TournamentDetailScreen = ({
   const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedReg, setSelectedReg] = useState<TournamentRegistration | null>(null);
+  const [phaseDays, setPhaseDays] = useState<Record<string, string>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -1173,14 +1293,16 @@ export const TournamentDetailScreen = ({
 
   const load = useCallback(async () => {
     try {
-      const [tt, rr, mm] = await Promise.all([
+      const [tt, rr, mm, pd] = await Promise.all([
         getTournament(tournamentId),
         listRegistrations(tournamentId),
         listMatches(tournamentId),
+        getPhaseDays(tournamentId).catch(() => ({})),
       ]);
       setT(tt);
       setRegs(rr);
       setMatches(mm);
+      setPhaseDays(pd);
     } catch (e: any) {
       toast.error('No se pudo cargar', e?.message ?? 'Inténtalo de nuevo.');
     } finally {
@@ -1386,10 +1508,29 @@ export const TournamentDetailScreen = ({
     runGenerate(() => generateMexicanoRound(t, regsCat, matchesCat, dg, dc));
   };
 
+  const onSetPhaseDay = async (bracket: string, round: number, iso: string) => {
+    if (!t) return;
+    // Alterna: si ya está en ese día, lo quita.
+    const key = `${bracket}:${round}`;
+    const next = phaseDays[key] === iso ? null : iso;
+    setPhaseDays((prev) => {
+      const copy = { ...prev };
+      if (next) copy[key] = next;
+      else delete copy[key];
+      return copy;
+    });
+    try {
+      await setPhaseDay(t.id, bracket, round, next);
+    } catch (e: any) {
+      toast.error('No se pudo guardar el día', e?.message ?? '');
+      load();
+    }
+  };
+
   const onGenerateSchedule = () => {
     if (!t) return;
     runGenerate(async () => {
-      const res = await autoScheduleTournament(t, regs, matches);
+      const res = await autoScheduleTournament(t, regs, matches, phaseDays);
       toast.success(
         'Horario generado',
         res.conflicts
@@ -1556,6 +1697,8 @@ export const TournamentDetailScreen = ({
               matches={matches}
               regs={regs}
               info={regInfo}
+              phaseDays={phaseDays}
+              onSetPhaseDay={onSetPhaseDay}
               onEdit={setEditMatch}
               onConfigure={() => setScheduleCfgOpen(true)}
               onGenerate={onGenerateSchedule}
@@ -2703,6 +2846,19 @@ export const makeStyles = (c: Palette) =>
       color: c.text,
       marginBottom: 8,
     },
+    phaseRow: { gap: 6 },
+    phaseLabel: { color: c.text, fontSize: 14, fontWeight: '700' },
+    phaseDayChip: {
+      paddingHorizontal: 12,
+      height: 34,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    phaseDayChipText: { fontSize: 13, fontWeight: '700' },
     conflictBanner: {
       backgroundColor: withAlpha(c.error, 0.12),
       borderRadius: Radius.md,
