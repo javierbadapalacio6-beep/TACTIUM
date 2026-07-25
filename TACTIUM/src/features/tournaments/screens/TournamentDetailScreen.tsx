@@ -65,6 +65,7 @@ import {
   type TournamentMatch,
   type StandingRow,
   type PlayerStanding,
+  type SeedingMode,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -555,6 +556,17 @@ export const InfoView: React.FC<{
       label: isSocialFormat(t.format) ? 'Plazas (jugadores)' : 'Plazas (parejas)',
       value: t.max_pairs ? String(t.max_pairs) : 'Sin límite',
     },
+    ...(t.format === 'ko' || t.format === 'groups_ko'
+      ? [
+          {
+            label: 'Siembra',
+            value:
+              t.seeding_mode === 'federative'
+                ? `Federativa (sorteo)${t.draw_seed ? ` · #${t.draw_seed}` : ''}`
+                : 'Por puntos',
+          },
+        ]
+      : []),
     { label: 'Estado', value: STATUS_LABEL[t.status] ?? t.status },
     {
       label: 'Fechas',
@@ -1090,6 +1102,7 @@ const EditTournamentSheet: React.FC<{
   const [extraInfo, setExtraInfo] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [seedingMode, setSeedingMode] = useState<SeedingMode>('points');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1097,6 +1110,7 @@ const EditTournamentSheet: React.FC<{
       setName(tournament.name);
       setStartsOn(isoDateToDate(tournament.starts_on));
       setEndsOn(isoDateToDate(tournament.ends_on));
+      setSeedingMode(tournament.seeding_mode ?? 'points');
       setLocation(tournament.location ?? '');
       setMaxPairs(tournament.max_pairs ? String(tournament.max_pairs) : '');
       setPrizes(tournament.prizes ?? '');
@@ -1135,6 +1149,7 @@ const EditTournamentSheet: React.FC<{
         name,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
+        seedingMode,
         location,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         prizes,
@@ -1240,6 +1255,33 @@ const EditTournamentSheet: React.FC<{
           <DateField value={endsOn} onChange={setEndsOn} placeholder="Fin" allowClear minimumDate={startsOn ?? undefined} label="FIN" />
         </View>
       </View>
+
+      {tournament?.format === 'ko' || tournament?.format === 'groups_ko' ? (
+        <>
+          <Text style={styles.label}>SIEMBRA</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {(
+              [
+                { id: 'points', label: 'Por puntos' },
+                { id: 'federative', label: 'Federativa' },
+              ] as { id: SeedingMode; label: string }[]
+            ).map((s) => {
+              const sel = seedingMode === s.id;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => setSeedingMode(s.id)}
+                  style={[styles.durChip, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+                >
+                  <Text style={[styles.durChipText, { color: sel ? c.textInverse : c.text }]}>
+                    {s.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.label}>LUGAR</Text>
       <View style={styles.input}>

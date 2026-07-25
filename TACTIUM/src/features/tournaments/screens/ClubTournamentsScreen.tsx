@@ -32,6 +32,7 @@ import {
   type MatchFormat,
   type TournamentGender,
   type TournamentFormat,
+  type SeedingMode,
 } from '@core/services/tournaments';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -227,6 +228,7 @@ const CreateTournamentSheet: React.FC<{
   const [format, setFormat] = useState<TournamentFormat>('ko');
   const [maxPairs, setMaxPairs] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
+  const [seedingMode, setSeedingMode] = useState<SeedingMode>('points');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
   const [endsOn, setEndsOn] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
@@ -242,6 +244,7 @@ const CreateTournamentSheet: React.FC<{
     setFormat('ko');
     setMaxPairs('');
     setMatchFormat('bo3_stb');
+    setSeedingMode('points');
     setStartsOn(null);
     setEndsOn(null);
     setLocation('');
@@ -293,6 +296,7 @@ const CreateTournamentSheet: React.FC<{
         genders,
         categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+        seedingMode,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
         location,
@@ -516,6 +520,37 @@ const CreateTournamentSheet: React.FC<{
         })}
       </View>
       </>
+      ) : null}
+
+      {format === 'ko' || format === 'groups_ko' ? (
+        <>
+          <Text style={styles.label}>SIEMBRA</Text>
+          <View style={{ gap: 8 }}>
+            {(
+              [
+                { id: 'points', label: 'Por puntos', sub: 'Orden estricto por puntos de la pareja (determinista).' },
+                { id: 'federative', label: 'Federativa (sorteo)', sub: 'Fija cabezas 1 y 2 y sortea las bandas (3-4, 5-8…). Sorteo reproducible.' },
+              ] as { id: SeedingMode; label: string; sub: string }[]
+            ).map((s) => {
+              const sel = seedingMode === s.id;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => setSeedingMode(s.id)}
+                  style={[styles.fmtRow, sel && { borderColor: c.accent, backgroundColor: c.accent10 }]}
+                >
+                  <View style={[styles.radio, sel && { borderColor: c.accent }]}>
+                    {sel ? <View style={styles.radioDot} /> : null}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.fmtLabel}>{s.label}</Text>
+                    <Text style={styles.fmtSub}>{s.sub}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.label}>

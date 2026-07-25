@@ -9,6 +9,11 @@ export type TournamentFormat =
   | 'round_robin'
   | 'americano'
   | 'mexicano';
+
+// Siembra del cuadro: 'points' = orden estricto por puntos (determinista);
+// 'federative' = fija cabezas 1 y 2 y sortea las bandas (3-4, 5-8…) + resto,
+// con seed guardada para reproducir el sorteo.
+export type SeedingMode = 'points' | 'federative';
 export const isSocialFormat = (f: string) => f === 'americano' || f === 'mexicano';
 // Formato del PARTIDO (sets). Ver formatConfig.
 export type MatchFormat = 'bo3_stb' | 'bo3_full' | 'bo1';
@@ -54,6 +59,8 @@ export interface Tournament {
   start_time: string;
   slot_minutes: number;
   rest_minutes: number;
+  seeding_mode: SeedingMode;
+  draw_seed: number | null;
   signup_code: string | null;
   max_pairs: number | null;
   pair_based: boolean;
@@ -130,6 +137,7 @@ export async function createTournament(input: {
   prizes?: string | null;
   extraInfo?: string | null;
   coverUrl?: string | null;
+  seedingMode?: SeedingMode;
 }): Promise<Tournament> {
   const payload = {
     club_id: input.clubId,
@@ -140,6 +148,7 @@ export async function createTournament(input: {
     categories: input.categories ?? [],
     starts_on: input.startsOn ?? null,
     ends_on: input.endsOn ?? null,
+    seeding_mode: input.seedingMode ?? 'points',
     max_pairs: input.maxPairs ?? null,
     location: input.location?.trim() || null,
     prizes: input.prizes?.trim() || null,
@@ -194,12 +203,14 @@ export async function updateTournament(
     prizes?: string | null;
     extraInfo?: string | null;
     coverUrl?: string | null;
+    seedingMode?: SeedingMode;
   },
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
   if (fields.name !== undefined) payload.name = fields.name.trim();
   if (fields.startsOn !== undefined) payload.starts_on = fields.startsOn;
   if (fields.endsOn !== undefined) payload.ends_on = fields.endsOn;
+  if (fields.seedingMode !== undefined) payload.seeding_mode = fields.seedingMode;
   if (fields.location !== undefined) payload.location = fields.location?.trim() || null;
   if (fields.maxPairs !== undefined) payload.max_pairs = fields.maxPairs;
   if (fields.prizes !== undefined) payload.prizes = fields.prizes?.trim() || null;
@@ -370,6 +381,88 @@ const nextPow2 = (n: number): number => {
   return p;
 };
 
+const nearestPow2 = (n: number): number => {
+  if (n < 1) return 1;
+  const lower = 2 ** Math.floor(Math.log2(n));
+  const upper = 2 ** Math.ceil(Math.log2(n));
+  return n - lower <= upper - n ? lower : upper; // empate → la menor (regla FEP)
+};
+
+/** Nº de cabezas de serie recomendado (regla federativa): parejas/4 a la
+ * potencia de 2 más cercana, nunca más que la mitad del cuadro. */
+export const recommendedSeeds = (n: number): number => {
+  if (n < 4) return 0;
+  return Math.min(nearestPow2(Math.round(n / 4)), nextPow2(n) / 2);
+};
+
+// PRNG determinista (mulberry32) para reproducir un sorteo a partir de su seed.
+const seededRng = (seed: number): (() => number) => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const shuffleWith = <T>(arr: T[], rng: () => number): T[] => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+/**
+ * Orden de entrada al cuadro/grupos.
+ *  - 'points': orden estricto por puntos (determinista, como hasta ahora).
+ *  - 'federative': fija cabezas 1 y 2, sortea las bandas (3-4, 5-8…) y el resto,
+ *    con el `rng` (seed guardada) para poder reproducir el sorteo.
+ */
+function orderEntrants(
+  regs: TournamentRegistration[],
+  mode: SeedingMode,
+  rng: () => number,
+): TournamentRegistration[] {
+  const byRank = [...regs].sort(
+    (a, b) =>
+      (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
+      (a.created_at < b.created_at ? -1 : 1),
+  );
+  if (mode !== 'federative') return byRank;
+  const numSeeds = recommendedSeeds(byRank.length);
+  if (numSeeds <= 2) {
+    return byRank.slice(0, numSeeds).concat(shuffleWith(byRank.slice(numSeeds), rng));
+  }
+  const seeds = byRank.slice(0, numSeeds);
+  const rest = byRank.slice(numSeeds);
+  let ordered = [seeds[0], seeds[1]];
+  let band = 2;
+  while (band < numSeeds) {
+    ordered = ordered.concat(shuffleWith(seeds.slice(band, band * 2), rng));
+    band *= 2;
+  }
+  return ordered.concat(shuffleWith(rest, rng));
+}
+
+// Resuelve el orden de siembra según el modo del torneo, generando y
+// guardando la seed del sorteo la primera vez (para reproducirlo).
+async function seedEntrants(
+  tournament: Tournament,
+  active: TournamentRegistration[],
+): Promise<TournamentRegistration[]> {
+  const mode: SeedingMode = tournament.seeding_mode ?? 'points';
+  if (mode !== 'federative') return orderEntrants(active, 'points', () => 0);
+  let seed = tournament.draw_seed;
+  if (seed == null) {
+    seed = Math.floor(Math.random() * 2147483647) + 1;
+    await from()('tournaments').update({ draw_seed: seed }).eq('id', tournament.id);
+  }
+  return orderEntrants(active, 'federative', seededRng(seed));
+}
+
 // Orden de siembra estándar para un cuadro de tamaño `size` (potencia de 2):
 // devuelve el nº de cabeza de serie por posición del cuadro (1-indexado).
 const seedPositions = (size: number): number[] => {
@@ -479,14 +572,9 @@ export async function generateKoBracket(
 ): Promise<void> {
   if (await hasDivisionMatches(tournament.id, gender, category))
     throw new Error('Esta división ya está generada.');
-  const seeded = [...regs]
-    .filter((r) => r.status !== 'withdrawn')
-    .sort(
-      (a, b) =>
-        (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
-        (a.created_at < b.created_at ? -1 : 1),
-    );
-  if (seeded.length < 2) throw new Error('Hacen falta al menos 2 parejas para el cuadro.');
+  const active = regs.filter((r) => r.status !== 'withdrawn');
+  if (active.length < 2) throw new Error('Hacen falta al menos 2 parejas para el cuadro.');
+  const seeded = await seedEntrants(tournament, active);
   await Promise.all(
     seeded.map((r, i) =>
       from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
@@ -519,15 +607,10 @@ export async function generateGroups(
 ): Promise<void> {
   if (await hasDivisionMatches(tournament.id, gender, category))
     throw new Error('Esta división ya está generada.');
-  const seeded = [...regs]
-    .filter((r) => r.status !== 'withdrawn')
-    .sort(
-      (a, b) =>
-        (b.seed_points ?? -1) - (a.seed_points ?? -1) ||
-        (a.created_at < b.created_at ? -1 : 1),
-    );
-  const N = seeded.length;
+  const active = regs.filter((r) => r.status !== 'withdrawn');
+  const N = active.length;
   if (N < 4) throw new Error('Para grupos hacen falta al menos 4 parejas.');
+  const seeded = await seedEntrants(tournament, active);
   const G = Math.max(2, Math.ceil(N / groupSize));
 
   // Reparto serpiente: distribuye las cabezas de serie entre los grupos.
@@ -741,13 +824,31 @@ export function computeStandings(
       H.points += 1;
     }
   }
-  return Array.from(byId.values()).sort(
-    (a, b) =>
-      b.points - a.points ||
+  const rows = Array.from(byId.values());
+  // Enfrentamiento directo (solo empates a 2): quién ganó el partido entre ambos.
+  const h2h = new Set<string>();
+  for (const m of matches) {
+    if (m.status === 'finished' && m.winner_reg && m.home_reg && m.away_reg) {
+      const loser = m.winner_reg === m.home_reg ? m.away_reg : m.home_reg;
+      h2h.add(`${m.winner_reg}:${loser}`);
+    }
+  }
+  const samePoints = new Map<number, number>();
+  for (const r of rows) samePoints.set(r.points, (samePoints.get(r.points) ?? 0) + 1);
+
+  return rows.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    // Empate exacto entre 2 parejas → decide el resultado directo.
+    if (samePoints.get(a.points) === 2) {
+      if (h2h.has(`${a.regId}:${b.regId}`)) return -1;
+      if (h2h.has(`${b.regId}:${a.regId}`)) return 1;
+    }
+    return (
       b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
       b.gamesFor - b.gamesAgainst - (a.gamesFor - a.gamesAgainst) ||
-      b.won - a.won,
-  );
+      b.won - a.won
+    );
+  });
 }
 
 // ── Americano / Mexicano (jugadores individuales, ranking por puntos) ────────
