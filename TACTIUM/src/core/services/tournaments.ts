@@ -1418,6 +1418,34 @@ export function matchScheduleConflict(
   });
 }
 
+/** ¿Están TODAS las parejas del partido disponibles en esa fecha+minuto? (cliente) */
+export function matchAvailableAtDate(
+  match: TournamentMatch,
+  regs: TournamentRegistration[],
+  dateIso: string,
+  minute: number,
+): boolean {
+  const [y, mo, d] = dateIso.split('-').map(Number);
+  const weekday = new Date(y, mo - 1, d).getDay();
+  const byId = new Map(regs.map((r) => [r.id, r]));
+  return matchRegIds(match).every((id) => {
+    const r = byId.get(id);
+    return r ? regAvailableAt(r, weekday, minute) : true;
+  });
+}
+
+/** Coloca (o mueve) un partido a mano en un día/hora/pista concretos. */
+export async function setMatchSlot(
+  matchId: string,
+  scheduledAtIso: string,
+  court: string,
+): Promise<void> {
+  const { error } = await from()('tournament_matches')
+    .update({ scheduled_at: scheduledAtIso, court })
+    .eq('id', matchId);
+  if (error) throw new Error(error.message);
+}
+
 /** Borra el horario asignado (todas las horas y pistas) de un torneo. */
 export async function clearSchedule(tournamentId: string): Promise<void> {
   const { error } = await from()('tournament_matches')

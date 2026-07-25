@@ -52,6 +52,8 @@ import {
   updateTournamentSchedule,
   clearSchedule,
   matchScheduleConflict,
+  matchAvailableAtDate,
+  setMatchSlot,
   getPhaseDays,
   setPhaseDay,
   isSocialFormat,
@@ -649,6 +651,7 @@ export const ScheduleView: React.FC<{
   readOnly?: boolean;
   phaseDays?: Record<string, string>;
   onSetPhaseDay?: (bracket: string, round: number, iso: string) => void;
+  onReload?: () => void;
   styles: Styles;
   c: Palette;
 }> = ({
@@ -664,6 +667,7 @@ export const ScheduleView: React.FC<{
   readOnly,
   phaseDays = {},
   onSetPhaseDay,
+  onReload,
   styles,
   c,
 }) => {
@@ -716,6 +720,11 @@ export const ScheduleView: React.FC<{
   }, [matches]);
 
   const dayLabelOf = (iso: string | null) => days.find((x) => x.iso === iso)?.label ?? null;
+  const phaseLabelOf = (m: TournamentMatch): string => {
+    const ko = ['main', 'gold', 'silver', 'bronze'].includes(m.bracket);
+    const key = ko ? `${m.bracket}:${m.round}` : `${m.bracket}:0`;
+    return phases.find((p) => `${p.bracket}:${p.round}` === key)?.label ?? '';
+  };
   const scheduled = useMemo(
     () =>
       matches
@@ -741,14 +750,16 @@ export const ScheduleView: React.FC<{
   }
   // Partidos con jugadores conocidos que quedaron SIN hora (no cabían en un
   // hueco donde todos pudieran).
-  const unplaced = matches.filter(
+  const unplacedList = matches.filter(
     (m) =>
       m.status !== 'bye' &&
       m.status !== 'finished' &&
       !!m.home_reg &&
       !!m.away_reg &&
       !m.scheduled_at,
-  ).length;
+  );
+  const unplaced = unplacedList.length;
+  const [manualMatch, setManualMatch] = useState<TournamentMatch | null>(null);
 
   return (
     <View style={{ paddingHorizontal: 22 }}>
@@ -759,8 +770,8 @@ export const ScheduleView: React.FC<{
               <Text style={styles.schedConfigLabel}>CONFIGURACIÓN</Text>
               <Text style={styles.schedConfigValue}>
                 {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} · desde{' '}
-                {tournament.start_time} · {tournament.slot_minutes} min · descanso{' '}
-                {tournament.rest_minutes ?? 60}
+                {tournament.start_time} · {tournament.slot_minutes} min ·{' '}
+                {(tournament.rest_minutes ?? 0) === 0 ? 'seguido' : `+${tournament.rest_minutes} descanso`}
                 {!tournament.starts_on ? ' · sin fecha' : ''}
               </Text>
             </View>
@@ -834,13 +845,38 @@ export const ScheduleView: React.FC<{
       )}
 
       {!readOnly && unplaced > 0 ? (
-        <View style={styles.conflictBanner}>
-          <Text style={styles.conflictBannerText}>
-            ⚠️ {unplaced} {unplaced === 1 ? 'partido' : 'partidos'} sin hueco donde todos
-            puedan jugar. Añade pistas, amplía horas o mueve alguna fase a otro día y
-            vuelve a generar.
-          </Text>
-        </View>
+        <>
+          <View style={styles.conflictBanner}>
+            <Text style={styles.conflictBannerText}>
+              ⚠️ {unplaced} {unplaced === 1 ? 'partido' : 'partidos'} sin hueco donde todos
+              puedan. Añade pistas, baja el descanso o mueve la fase a otro día y regenera
+              — o pon la hora a mano abajo.
+            </Text>
+          </View>
+          <View style={{ gap: 8, marginTop: 10 }}>
+            {unplacedList.map((m) => {
+              const h = info(m.home_reg);
+              const a = info(m.away_reg);
+              const nm = (x: RegInfo) => `${x.name}${x.partner ? ` / ${x.partner}` : ''}`;
+              return (
+                <View key={m.id} style={styles.unplacedRow}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.unplacedTeams} numberOfLines={2}>
+                      {nm(h)} vs {nm(a)}
+                    </Text>
+                    <Text style={styles.playerMeta}>{phaseLabelOf(m)}</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setManualMatch(m)}
+                    style={({ pressed }) => [styles.manualBtn, pressed && { opacity: 0.85 }]}
+                  >
+                    <Text style={styles.manualBtnText}>Poner hora</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </>
       ) : null}
 
       {scheduled.length === 0 ? (
@@ -887,7 +923,174 @@ export const ScheduleView: React.FC<{
           )}
         </View>
       )}
+
+      <ManualSlotSheet
+        match={manualMatch}
+        tournament={tournament}
+        regs={regs}
+        info={info}
+        days={days}
+        onClose={() => setManualMatch(null)}
+        onSaved={() => {
+          setManualMatch(null);
+          onReload?.();
+        }}
+        styles={styles}
+        c={c}
+      />
     </View>
+  );
+};
+
+// Sheet para colocar A MANO un partido sin hueco: día, hora y pista, marcando
+// qué horas le vienen bien a las dos parejas.
+const ManualSlotSheet: React.FC<{
+  match: TournamentMatch | null;
+  tournament: Tournament;
+  regs: TournamentRegistration[];
+  info: (id: string | null) => RegInfo;
+  days: { iso: string; label: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+  styles: Styles;
+  c: Palette;
+}> = ({ match, tournament, regs, info, days, onClose, onSaved, styles, c }) => {
+  const [dayIso, setDayIso] = useState<string | null>(null);
+  const [minute, setMinute] = useState<number | null>(null);
+  const [court, setCourt] = useState(1);
+  const [saving, setSaving] = useState(false);
+
+  const [sh, sm] = (tournament.start_time ?? '09:00').split(':').map(Number);
+  const startMin = (sh || 9) * 60 + (sm || 0);
+  const step = Math.max(15, tournament.slot_minutes);
+  const times: number[] = [];
+  for (let t = startMin; t <= 23 * 60; t += step) times.push(t);
+  const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+  useEffect(() => {
+    if (match) {
+      const iso = match.scheduled_at ? (match.scheduled_at as string).slice(0, 10) : days[0]?.iso ?? tournament.starts_on;
+      setDayIso(iso ?? null);
+      setMinute(null);
+      setCourt(parseInt((match.court ?? '').replace(/\D/g, ''), 10) || 1);
+    }
+  }, [match]);
+
+  const save = async () => {
+    if (!match || !dayIso || minute == null) {
+      toast.error('Elige día y hora');
+      return;
+    }
+    setSaving(true);
+    try {
+      const [y, mo, d] = dayIso.split('-').map(Number);
+      const dt = new Date(y, mo - 1, d);
+      dt.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+      await setMatchSlot(match.id, dt.toISOString(), `Pista ${court}`);
+      onSaved();
+    } catch (e: any) {
+      toast.error('No se pudo poner la hora', e?.message ?? '');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const h = match ? info(match.home_reg) : null;
+  const a = match ? info(match.away_reg) : null;
+  const nm = (x: RegInfo | null) => (x ? `${x.name}${x.partner ? ` / ${x.partner}` : ''}` : '');
+
+  return (
+    <BottomSheet
+      open={!!match}
+      onClose={onClose}
+      footer={
+        <Pressable
+          onPress={save}
+          disabled={saving || minute == null}
+          style={({ pressed }) => [
+            styles.saveBtn,
+            (saving || minute == null) && { opacity: 0.5 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color={c.textInverse} />
+          ) : (
+            <Text style={styles.saveLabel}>Poner en el horario</Text>
+          )}
+        </Pressable>
+      }
+    >
+      <Text style={styles.sheetEyebrow}>PONER A MANO</Text>
+      <Text style={styles.sheetTitle} numberOfLines={2}>{nm(h)} vs {nm(a)}</Text>
+      <Text style={[styles.playerMeta, { marginTop: 4 }]}>
+        Las horas donde ✓ pueden los dos van marcadas. Puedes elegir otra, pero
+        avísales.
+      </Text>
+
+      {days.length > 1 ? (
+        <>
+          <Text style={styles.label}>DÍA</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {days.map((day) => {
+              const on = dayIso === day.iso;
+              return (
+                <Pressable
+                  key={day.iso}
+                  onPress={() => setDayIso(day.iso)}
+                  style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                >
+                  <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                    {day.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
+      <Text style={styles.label}>HORA</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {times.map((t) => {
+          const on = minute === t;
+          const ok = match && dayIso ? matchAvailableAtDate(match, regs, dayIso, t) : false;
+          return (
+            <Pressable
+              key={t}
+              onPress={() => setMinute(t)}
+              style={[
+                styles.timeChip,
+                ok && { borderColor: c.accent40 },
+                on && { backgroundColor: c.accent, borderColor: c.accent },
+              ]}
+            >
+              <Text style={[styles.timeChipText, { color: on ? c.textInverse : ok ? c.accent : c.textMuted }]}>
+                {ok ? '✓ ' : ''}{hhmm(t)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.label}>PISTA</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {Array.from({ length: Math.max(1, tournament.courts) }, (_, i) => i + 1).map((ct) => {
+          const on = court === ct;
+          return (
+            <Pressable
+              key={ct}
+              onPress={() => setCourt(ct)}
+              style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+            >
+              <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                Pista {ct}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </BottomSheet>
   );
 };
 
@@ -910,7 +1113,7 @@ const ScheduleConfigSheet: React.FC<{
     if (open && tournament) {
       setCourts(String(tournament.courts ?? 3));
       setMinutes(String(tournament.slot_minutes ?? 60));
-      setRest(String(tournament.rest_minutes ?? 60));
+      setRest(String(tournament.rest_minutes ?? 0));
       setStartAt(isoTimeToDate(`${tournament.start_time ?? '09:00'}:00`));
     }
   }, [open, tournament]);
@@ -1000,12 +1203,16 @@ const ScheduleConfigSheet: React.FC<{
         })}
       </View>
 
-      <Text style={styles.label}>DESCANSO ENTRE PARTIDOS DE UNA PAREJA</Text>
+      <Text style={styles.label}>DESCANSO EXTRA ENTRE PARTIDOS DE UNA PAREJA</Text>
+      <Text style={[styles.playerMeta, { marginTop: -4, marginBottom: 8 }]}>
+        Hueco ADEMÁS de la hora del partido. "Seguido" = puede jugar a la hora
+        siguiente (la duración ya incluye el calentamiento).
+      </Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {[
-          { v: '0', label: 'Sin mín.' },
-          { v: '30', label: '30 min' },
-          { v: '60', label: '60 min' },
+          { v: '0', label: 'Seguido' },
+          { v: '30', label: '+30 min' },
+          { v: '60', label: '+60 min' },
         ].map((o) => {
           const sel = rest === o.v;
           return (
@@ -1751,6 +1958,7 @@ export const TournamentDetailScreen = ({
               info={regInfo}
               phaseDays={phaseDays}
               onSetPhaseDay={onSetPhaseDay}
+              onReload={load}
               onEdit={setEditMatch}
               onConfigure={() => setScheduleCfgOpen(true)}
               onGenerate={onGenerateSchedule}
@@ -2911,6 +3119,38 @@ export const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     phaseDayChipText: { fontSize: 13, fontWeight: '700' },
+    unplacedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: withAlpha(c.error, 0.06),
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: withAlpha(c.error, 0.3),
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    unplacedTeams: { color: c.text, fontSize: 14, fontWeight: '700' },
+    manualBtn: {
+      paddingHorizontal: 12,
+      height: 34,
+      borderRadius: 9999,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    manualBtnText: { color: c.textInverse, fontSize: 12.5, fontWeight: '800' },
+    timeChip: {
+      paddingHorizontal: 10,
+      height: 34,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    timeChipText: { fontFamily: Fonts.mono, fontSize: 12.5, fontWeight: '700' },
     conflictBanner: {
       backgroundColor: withAlpha(c.error, 0.12),
       borderRadius: Radius.md,
