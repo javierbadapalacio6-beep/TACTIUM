@@ -727,8 +727,15 @@ export const ScheduleView: React.FC<{
     if (g) g.items.push(m);
     else groups.push({ time, items: [m] });
   }
-  const conflicts = scheduled.filter((m) =>
-    matchScheduleConflict(m, regs, tournament),
+  // Partidos con jugadores conocidos que quedaron SIN hora (no cabían en un
+  // hueco donde todos pudieran).
+  const unplaced = matches.filter(
+    (m) =>
+      m.status !== 'bye' &&
+      m.status !== 'finished' &&
+      !!m.home_reg &&
+      !!m.away_reg &&
+      !m.scheduled_at,
   ).length;
 
   return (
@@ -814,11 +821,12 @@ export const ScheduleView: React.FC<{
         </>
       )}
 
-      {!readOnly && conflicts > 0 ? (
+      {!readOnly && unplaced > 0 ? (
         <View style={styles.conflictBanner}>
           <Text style={styles.conflictBannerText}>
-            ⚠️ {conflicts} {conflicts === 1 ? 'partido' : 'partidos'} en una hora que
-            no le va a alguna pareja. Ajusta pistas/horas o revísalo con ellos.
+            ⚠️ {unplaced} {unplaced === 1 ? 'partido' : 'partidos'} sin hueco donde todos
+            puedan jugar. Añade pistas, amplía horas o mueve alguna fase a otro día y
+            vuelve a generar.
           </Text>
         </View>
       ) : null}
@@ -1531,12 +1539,14 @@ export const TournamentDetailScreen = ({
     if (!t) return;
     runGenerate(async () => {
       const res = await autoScheduleTournament(t, regs, matches, phaseDays);
-      toast.success(
-        'Horario generado',
-        res.conflicts
-          ? `${res.scheduled} partidos · ${res.conflicts} con conflicto de horario`
-          : `${res.scheduled} partidos colocados por pista y hora`,
-      );
+      if (res.unplaced > 0) {
+        toast.error(
+          `${res.scheduled} colocados · ${res.unplaced} sin hueco`,
+          'No caben en un horario donde todos puedan. Añade pistas, amplía horas o mueve fases a otro día.',
+        );
+      } else {
+        toast.success('Horario generado', `${res.scheduled} partidos colocados respetando la disponibilidad.`);
+      }
       if (res.scheduled > 0) notifyTournamentPush('tournament_schedule', t.id);
     });
   };

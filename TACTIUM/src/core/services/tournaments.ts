@@ -1112,7 +1112,7 @@ function matchRegIds(m: TournamentMatch): string[] {
 
 export interface ScheduleResult {
   scheduled: number;
-  conflicts: number;
+  unplaced: number;
 }
 
 const KO_BRACKETS = new Set(['main', 'gold', 'silver', 'bronze']);
@@ -1184,24 +1184,19 @@ export async function autoScheduleTournament(
     }
   }
 
-  const updates: { id: string; scheduled_at: string; court: string }[] = [];
-  let conflicts = 0;
+  const updates: { id: string; scheduled_at: string | null; court: string | null }[] = [];
+  const placedIds = new Set<string>();
+  const allPending: TournamentMatch[] = [];
+  for (const g of byDate.values()) allPending.push(...g.pending);
 
   for (const [iso, group] of byDate) {
     const [y, mo, d] = iso.split('-').map(Number);
     const weekday = new Date(y, mo - 1, d).getDay();
 
-    // Nº de franjas del día (una pareja no juega dos a la vez ni sin descanso).
-    const perReg = new Map<string, number>();
-    for (const m of [...group.pending, ...group.done])
-      for (const id of matchRegIds(m)) perReg.set(id, (perReg.get(id) ?? 0) + 1);
-    const restSlots = Math.max(1, Math.ceil(minSep / step));
-    const maxPerReg = Math.max(1, ...perReg.values());
-    const total = group.pending.length + group.done.length;
-    const slotCount = Math.min(
-      40,
-      Math.max(maxPerReg * restSlots, Math.ceil(total / courts)) + 2,
-    );
+    // Franjas: TODO el día desde la hora de inicio hasta las 23:00, para que
+    // quepan las disponibilidades de tarde/noche (no solo "las justas").
+    const endMin = 23 * 60;
+    const slotCount = Math.min(48, Math.max(1, Math.floor((endMin - startMin) / step) + 1));
     const times = Array.from({ length: slotCount }, (_, i) => startMin + i * step);
     const timeToDate = (min: number): Date => {
       const dt = new Date(y, mo - 1, d);
@@ -1236,16 +1231,19 @@ export async function autoScheduleTournament(
     const availCount = (m: TournamentMatch): number =>
       times.reduce((n, t) => (available(m, t) ? n + 1 : n), 0);
 
-    const tryPlace = (m: TournamentMatch, fromTi: number, requireAvail: boolean): number => {
+    // Coloca SOLO en huecos donde TODOS pueden. Nunca fuerza. Devuelve el índice
+    // de hora usado, o -1 si no cabe (queda sin colocar → el club ajusta).
+    const tryPlace = (m: TournamentMatch, fromTi: number): number => {
       const ids = matchRegIds(m);
       for (let ti = fromTi; ti < times.length; ti++) {
         const min = times[ti];
         if (ids.some((id) => !regFreeAt(id, min))) continue;
-        if (requireAvail && !available(m, min)) continue;
+        if (!available(m, min)) continue;
         for (let court = 1; court <= courts; court++) {
           if (courtBusy.has(`${ti}:${court}`)) continue;
           courtBusy.add(`${ti}:${court}`);
           ids.forEach((id) => book(id, min));
+          placedIds.add(m.id);
           updates.push({
             id: m.id,
             scheduled_at: timeToDate(min).toISOString(),
@@ -1272,16 +1270,19 @@ export async function autoScheduleTournament(
           .sort((a, b) => availCount(a) - availCount(b));
         let maxTi = earliestTi - 1;
         for (const m of roundMatches) {
-          let ti = tryPlace(m, earliestTi, true);
-          if (ti < 0) {
-            ti = tryPlace(m, earliestTi, false);
-            if (ti >= 0) conflicts++;
-          }
+          const ti = tryPlace(m, earliestTi);
           if (ti > maxTi) maxTi = ti;
         }
         // La siguiente ronda de un KO empieza después de esta (dependencias).
         if (KO_BRACKETS.has(bracket)) earliestTi = maxTi + 1;
       }
+    }
+  }
+
+  // Los pendientes que no cupieron en un hueco donde todos puedan → sin hora.
+  for (const m of allPending) {
+    if (!placedIds.has(m.id)) {
+      updates.push({ id: m.id, scheduled_at: null, court: null });
     }
   }
 
@@ -1293,7 +1294,10 @@ export async function autoScheduleTournament(
     ),
   );
 
-  return { scheduled: updates.length, conflicts };
+  return {
+    scheduled: placedIds.size,
+    unplaced: allPending.length - placedIds.size,
+  };
 }
 
 /** ¿El partido cae en una hora en la que NO todos están disponibles? (para avisar) */
