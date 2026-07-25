@@ -999,6 +999,24 @@ const ManualSlotSheet: React.FC<{
   const a = match ? info(match.away_reg) : null;
   const nm = (x: RegInfo | null) => (x ? `${x.name}${x.partner ? ` / ${x.partner}` : ''}` : '');
 
+  // Disponibilidad de cada pareja para el día elegido (para colocarlo a mano).
+  const dayLabel = days.find((x) => x.iso === dayIso)?.label ?? null;
+  const partIds = match
+    ? [match.home_reg, match.home_reg2, match.away_reg, match.away_reg2].filter(
+        (x): x is string => !!x,
+      )
+    : [];
+  const franjasOf = (id: string): string => {
+    const r = regs.find((x) => x.id === id);
+    const av = r?.availability ?? [];
+    if (av.some((s) => s.toLowerCase().includes('cualquier'))) return 'Cualquier hora';
+    if (!dayLabel) return '—';
+    const fr = av
+      .filter((s) => s.startsWith(dayLabel + ' '))
+      .map((s) => s.slice(dayLabel.length + 1));
+    return fr.length ? fr.join(' · ') : 'Sin disponibilidad ese día';
+  };
+
   return (
     <BottomSheet
       open={!!match}
@@ -1049,6 +1067,25 @@ const ManualSlotSheet: React.FC<{
           </View>
         </>
       ) : null}
+
+      <Text style={styles.label}>
+        DISPONIBILIDAD{dayLabel ? ` · ${dayLabel}` : ''}
+      </Text>
+      <View style={{ gap: 6 }}>
+        {partIds.map((id) => {
+          const r = regs.find((x) => x.id === id);
+          const good = franjasOf(id);
+          const isGood = good !== 'Sin disponibilidad ese día';
+          return (
+            <View key={id} style={styles.availLine}>
+              <Text style={styles.availName} numberOfLines={1}>{r?.p1_name ?? '—'}</Text>
+              <Text style={[styles.availFranjas, !isGood && { color: c.error }]} numberOfLines={2}>
+                {good}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
 
       <Text style={styles.label}>HORA</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -3151,6 +3188,19 @@ export const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     timeChipText: { fontFamily: Fonts.mono, fontSize: 12.5, fontWeight: '700' },
+    availLine: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.sm,
+      borderWidth: 1,
+      borderColor: c.hair,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    availName: { width: 96, color: c.text, fontSize: 13, fontWeight: '700' },
+    availFranjas: { flex: 1, color: c.accent, fontSize: 12.5, fontWeight: '600' },
     conflictBanner: {
       backgroundColor: withAlpha(c.error, 0.12),
       borderRadius: Radius.md,
