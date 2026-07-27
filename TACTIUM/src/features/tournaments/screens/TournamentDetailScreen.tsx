@@ -58,7 +58,8 @@ import {
   togglePhaseDay,
   isSocialFormat,
   posBracket,
-  BRACKET_LABEL,
+  bracketLabel,
+  bracketRank,
   groupName,
   setMatchResult,
   formatConfig,
@@ -712,7 +713,7 @@ export const ScheduleView: React.FC<{
         const bm = real.filter((m) => m.bracket === b);
         const total = bm.reduce((mx, m) => Math.max(mx, m.round), 0);
         const rounds = Array.from(new Set(bm.map((m) => m.round))).sort((a, z) => a - z);
-        const prefix = b === 'main' ? '' : `${BRACKET_LABEL[b] ?? b} · `;
+        const prefix = b === 'main' ? '' : `${bracketLabel(b)} · `;
         for (const r of rounds) out.push({ bracket: b, round: r, label: `${prefix}${roundLabel(r, total)}` });
       }
     }
@@ -2423,7 +2424,9 @@ export const GroupsView: React.FC<{
   ).sort((a, b) => a - b);
   const allGroupsDone =
     groupMatches.length > 0 && groupMatches.every((m) => m.status === 'finished');
-  const koBrackets = Array.from(new Set(koMatches.map((m) => m.bracket)));
+  const koBrackets = Array.from(new Set(koMatches.map((m) => m.bracket))).sort(
+    (a, b) => bracketRank(a) - bracketRank(b),
+  );
   const [activeBracket, setActiveBracket] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<number | null>(null);
   useEffect(() => {
@@ -2532,7 +2535,7 @@ export const GroupsView: React.FC<{
                 style={[styles.catTab, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
               >
                 <Text style={[styles.catTabText, { color: sel ? c.textInverse : c.textMuted }]}>
-                  {BRACKET_LABEL[b] ?? b}
+                  {bracketLabel(b)}
                 </Text>
               </Pressable>
             );
@@ -2540,7 +2543,7 @@ export const GroupsView: React.FC<{
         </ScrollView>
       ) : null}
       <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 12 }]}>
-        {(BRACKET_LABEL[activeBracket ?? ''] ?? 'CUADRO').toUpperCase()}
+        {(activeBracket ? bracketLabel(activeBracket) : 'CUADRO').toUpperCase()}
       </Text>
       <BracketView
         matches={koMatches.filter((m) => m.bracket === activeBracket)}

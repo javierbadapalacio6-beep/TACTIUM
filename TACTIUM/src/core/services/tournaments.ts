@@ -595,6 +595,18 @@ export const BRACKET_LABEL: Record<string, string> = {
   silver: 'Plata',
   bronze: 'Bronce',
 };
+
+/** Nombre bonito de un cuadro: Oro/Plata/Bronce y "Cuadro 4º/5º…" para el resto. */
+export const bracketLabel = (b: string): string =>
+  BRACKET_LABEL[b] ?? (b.startsWith('pos') ? `Cuadro ${b.slice(3)}º` : b);
+
+/** Orden de los cuadros por posición: Oro → Plata → Bronce → 4º → 5º… */
+export const bracketRank = (b: string): number => {
+  const fixed: Record<string, number> = { gold: 0, silver: 1, bronze: 2 };
+  if (fixed[b] !== undefined) return fixed[b];
+  if (b.startsWith('pos')) return 10 + (parseInt(b.slice(3), 10) || 0);
+  return 99;
+};
 export const groupName = (n: number): string => String.fromCharCode(65 + n); // A, B, C…
 
 /** Genera la fase de GRUPOS (liguillas) de una división. Reparto serpiente por siembra. */
