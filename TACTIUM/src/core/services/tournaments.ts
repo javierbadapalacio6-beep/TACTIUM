@@ -770,6 +770,8 @@ export interface StandingRow {
   gamesFor: number;
   gamesAgainst: number;
   points: number;
+  // true si está en un empate a puntos entre 2 resuelto por el directo (h2h).
+  h2h: boolean;
 }
 
 /** Clasificación de una liga/grupo a partir de los partidos jugados. */
@@ -793,6 +795,7 @@ export function computeStandings(
       gamesFor: 0,
       gamesAgainst: 0,
       points: 0,
+      h2h: false,
     });
   }
   for (const m of matches) {
@@ -836,7 +839,7 @@ export function computeStandings(
   const samePoints = new Map<number, number>();
   for (const r of rows) samePoints.set(r.points, (samePoints.get(r.points) ?? 0) + 1);
 
-  return rows.sort((a, b) => {
+  const sorted = rows.sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     // Empate exacto entre 2 parejas → decide el resultado directo.
     if (samePoints.get(a.points) === 2) {
@@ -849,6 +852,18 @@ export function computeStandings(
       b.won - a.won
     );
   });
+  // Marca las parejas cuyo empate a 2 se resolvió por el directo.
+  for (const r of sorted) {
+    if (samePoints.get(r.points) !== 2) continue;
+    const other = sorted.find((x) => x.regId !== r.regId && x.points === r.points);
+    if (
+      other &&
+      (h2h.has(`${r.regId}:${other.regId}`) || h2h.has(`${other.regId}:${r.regId}`))
+    ) {
+      r.h2h = true;
+    }
+  }
+  return sorted;
 }
 
 // ── Americano / Mexicano (jugadores individuales, ranking por puntos) ────────

@@ -2245,34 +2245,45 @@ export type Styles = ReturnType<typeof makeStyles>;
 export const StandingsTable: React.FC<{ standings: StandingRow[]; styles: Styles }> = ({
   standings,
   styles,
-}) => (
-  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-    <View style={{ paddingHorizontal: 22, paddingTop: 8 }}>
-      <View style={styles.stHeader}>
-        <Text style={styles.stPos}>#</Text>
-        <Text style={styles.stName}>PAREJA</Text>
-        <Text style={styles.stCol}>PJ</Text>
-        <Text style={styles.stCol}>G</Text>
-        <Text style={styles.stCol}>P</Text>
-        <Text style={styles.stColW}>SETS</Text>
-        <Text style={styles.stColW}>JUEGOS</Text>
-        <Text style={styles.stCol}>PTS</Text>
-      </View>
-      {standings.map((s, i) => (
-        <View key={s.regId} style={styles.stRow}>
-          <Text style={styles.stPos}>{i + 1}</Text>
-          <Text style={styles.stName} numberOfLines={1}>{s.name}</Text>
-          <Text style={styles.stCol}>{s.played}</Text>
-          <Text style={styles.stCol}>{s.won}</Text>
-          <Text style={styles.stCol}>{s.lost}</Text>
-          <Text style={styles.stColW}>{s.setsFor}-{s.setsAgainst}</Text>
-          <Text style={styles.stColW}>{s.gamesFor}-{s.gamesAgainst}</Text>
-          <Text style={[styles.stCol, styles.stPts]}>{s.points}</Text>
+}) => {
+  const anyH2h = standings.some((s) => s.h2h);
+  return (
+    <>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: 22, paddingTop: 8 }}>
+          <View style={styles.stHeader}>
+            <Text style={styles.stPos}>#</Text>
+            <Text style={styles.stName}>PAREJA</Text>
+            <Text style={styles.stCol}>PJ</Text>
+            <Text style={styles.stCol}>G</Text>
+            <Text style={styles.stCol}>P</Text>
+            <Text style={styles.stColW}>SETS</Text>
+            <Text style={styles.stColW}>JUEGOS</Text>
+            <Text style={styles.stCol}>PTS</Text>
+          </View>
+          {standings.map((s, i) => (
+            <View key={s.regId} style={styles.stRow}>
+              <Text style={styles.stPos}>{i + 1}</Text>
+              <Text style={styles.stName} numberOfLines={1}>
+                {s.name}
+                {s.h2h ? <Text style={styles.h2hMark}> *</Text> : null}
+              </Text>
+              <Text style={styles.stCol}>{s.played}</Text>
+              <Text style={styles.stCol}>{s.won}</Text>
+              <Text style={styles.stCol}>{s.lost}</Text>
+              <Text style={styles.stColW}>{s.setsFor}-{s.setsAgainst}</Text>
+              <Text style={styles.stColW}>{s.gamesFor}-{s.gamesAgainst}</Text>
+              <Text style={[styles.stCol, styles.stPts]}>{s.points}</Text>
+            </View>
+          ))}
         </View>
-      ))}
-    </View>
-  </ScrollView>
-);
+      </ScrollView>
+      {anyH2h ? (
+        <Text style={styles.h2hLegend}>* orden por resultado directo (empate a puntos)</Text>
+      ) : null}
+    </>
+  );
+};
 
 // Cuadro KO (columnas por ronda + conectores + rondas colapsables).
 export const BracketView: React.FC<{
@@ -3418,6 +3429,14 @@ export const makeStyles = (c: Palette) =>
       fontWeight: '600',
     },
     stPts: { color: c.accent, fontWeight: '800' },
+    h2hMark: { color: c.accent, fontWeight: '900' },
+    h2hLegend: {
+      color: c.textFaint,
+      fontSize: 11,
+      fontStyle: 'italic',
+      paddingHorizontal: 22,
+      marginTop: 6,
+    },
     rrMatch: {
       flexDirection: 'row',
       alignItems: 'center',
