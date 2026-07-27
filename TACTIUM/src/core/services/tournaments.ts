@@ -1125,38 +1125,47 @@ export interface PhaseDayRow {
 
 const phaseKey = (bracket: string, round: number) => `${bracket}:${round}`;
 
-/** Días asignados a cada fase (mapa "bracket:round" → fecha ISO). */
-export async function getPhaseDays(tournamentId: string): Promise<Record<string, string>> {
+/** Días asignados a cada fase (mapa "bracket:round" → lista de fechas ISO).
+ * Una fase puede repartirse en varios días (p.ej. grupos en 3 días). */
+export async function getPhaseDays(
+  tournamentId: string,
+): Promise<Record<string, string[]>> {
   const { data, error } = await from()('tournament_phase_days')
     .select('bracket, round, play_date')
-    .eq('tournament_id', tournamentId);
+    .eq('tournament_id', tournamentId)
+    .order('play_date', { ascending: true });
   if (error) throw new Error(error.message);
-  const map: Record<string, string> = {};
-  for (const r of (data ?? []) as PhaseDayRow[]) map[phaseKey(r.bracket, r.round)] = r.play_date;
+  const map: Record<string, string[]> = {};
+  for (const r of (data ?? []) as PhaseDayRow[]) {
+    const k = phaseKey(r.bracket, r.round);
+    (map[k] ??= []).push(r.play_date);
+  }
   return map;
 }
 
-/** Asigna (o quita) el día de una fase. */
-export async function setPhaseDay(
+/** Añade o quita un día de una fase (toggle). Una fase puede tener varios. */
+export async function togglePhaseDay(
   tournamentId: string,
   bracket: string,
   round: number,
-  playDate: string | null,
+  playDate: string,
+  on: boolean,
 ): Promise<void> {
-  if (playDate === null) {
+  if (on) {
+    const { error } = await from()('tournament_phase_days').upsert(
+      { tournament_id: tournamentId, bracket, round, play_date: playDate },
+      { onConflict: 'tournament_id,bracket,round,play_date' },
+    );
+    if (error) throw new Error(error.message);
+  } else {
     const { error } = await from()('tournament_phase_days')
       .delete()
       .eq('tournament_id', tournamentId)
       .eq('bracket', bracket)
-      .eq('round', round);
+      .eq('round', round)
+      .eq('play_date', playDate);
     if (error) throw new Error(error.message);
-    return;
   }
-  const { error } = await from()('tournament_phase_days').upsert(
-    { tournament_id: tournamentId, bracket, round, play_date: playDate },
-    { onConflict: 'tournament_id,bracket,round' },
-  );
-  if (error) throw new Error(error.message);
 }
 
 const DOW_TOKENS: Record<string, number> = {
@@ -1226,33 +1235,62 @@ export function matchPhaseKey(m: TournamentMatch): string {
     : phaseKey(m.bracket, 0);
 }
 
-// Día asignado a un partido (mapa fase→fecha, con fallback a la ronda 0 del
-// bracket y, en último término, a la fecha de inicio del torneo).
-function resolveMatchDate(
-  m: TournamentMatch,
-  phaseDays: Record<string, string>,
-  fallback: string,
-): string {
-  return (
-    phaseDays[phaseKey(m.bracket, m.round)] ??
-    phaseDays[phaseKey(m.bracket, 0)] ??
-    fallback
-  );
+// Lista de fechas ISO del torneo (inicio → fin).
+function tournamentDays(t: Tournament): string[] {
+  if (!t.starts_on) return [];
+  const parse = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const start = parse(t.starts_on);
+  const end = t.ends_on ? parse(t.ends_on) : start;
+  const out: string[] = [];
+  const d = new Date(start);
+  let guard = 0;
+  while (d.getTime() <= end.getTime() && guard < 60) {
+    out.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    );
+    d.setDate(d.getDate() + 1);
+    guard++;
+  }
+  return out;
 }
 
+// Días permitidos para un partido: los de su fase (varios posibles), filtrados
+// a días válidos del torneo. Si la fase no tiene días → todos los del torneo.
+function allowedDaysFor(
+  m: TournamentMatch,
+  phaseDays: Record<string, string[]>,
+  allDays: string[],
+): string[] {
+  const raw =
+    phaseDays[phaseKey(m.bracket, m.round)] ??
+    phaseDays[phaseKey(m.bracket, 0)] ??
+    [];
+  const valid = raw.filter((d) => allDays.includes(d));
+  return valid.length ? valid : allDays;
+}
+
+const rotate = <T>(arr: T[], by: number): T[] => {
+  if (arr.length === 0) return arr;
+  const k = ((by % arr.length) + arr.length) % arr.length;
+  return [...arr.slice(k), ...arr.slice(0, k)];
+};
+
 /**
- * Genera el horario MULTI-DÍA: cada partido va al día de su fase (mapa
- * `phaseDays`; si no, a la fecha de inicio). Dentro de cada día reparte por
- * hora × pista respetando la disponibilidad de ESE día, sin solapar parejas ni
- * pistas, con un descanso mínimo entre partidos de una misma pareja, y con las
- * rondas de KO en orden (cuartos después de octavos si caen el mismo día). Los
- * partidos ya jugados conservan su hueco. Requiere `starts_on`.
+ * Genera el horario MULTI-DÍA. Cada fase puede repartirse en VARIOS días (mapa
+ * `phaseDays`: fase → lista de días); el motor distribuye sus partidos entre
+ * esos días y, dentro de cada día, por hora × pista respetando la
+ * disponibilidad de ESE día, sin solapar parejas ni pistas y con el descanso
+ * mínimo. Nunca fuerza: lo que no cabe queda sin hora (el club lo pone a mano).
+ * Los partidos ya jugados conservan su hueco. Requiere `starts_on`.
  */
 export async function autoScheduleTournament(
   tournament: Tournament,
   regs: TournamentRegistration[],
   matches: TournamentMatch[],
-  phaseDays: Record<string, string> = {},
+  phaseDays: Record<string, string[]> = {},
 ): Promise<ScheduleResult> {
   if (!tournament.starts_on)
     throw new Error('Pon una fecha al torneo antes de generar el horario.');
@@ -1260,128 +1298,127 @@ export async function autoScheduleTournament(
   const [sh, sm] = tournament.start_time.split(':').map(Number);
   const startMin = (sh || 9) * 60 + (sm || 0);
   const step = Math.max(15, tournament.slot_minutes);
-  const rest = Math.max(0, tournament.rest_minutes ?? 60);
+  const rest = Math.max(0, tournament.rest_minutes ?? 0);
   const minSep = step + rest; // separación mínima entre 2 partidos de una pareja
   const courts = Math.max(1, tournament.courts);
   const regById = new Map(regs.map((r) => [r.id, r]));
 
+  const allDays = tournamentDays(tournament);
+  const endMin = 23 * 60;
+  const slotCount = Math.min(48, Math.max(1, Math.floor((endMin - startMin) / step) + 1));
+  const times = Array.from({ length: slotCount }, (_, i) => startMin + i * step);
+
+  // Estado por día (pistas ocupadas + horas ocupadas por pareja).
+  interface DayState {
+    weekday: number;
+    courtBusy: Set<string>; // `${ti}:${court}`
+    regTimes: Map<string, number[]>; // regId → minutos ocupados
+  }
+  const dayState = new Map<string, DayState>();
+  for (const iso of allDays) {
+    const [y, mo, d] = iso.split('-').map(Number);
+    dayState.set(iso, {
+      weekday: new Date(y, mo - 1, d).getDay(),
+      courtBusy: new Set(),
+      regTimes: new Map(),
+    });
+  }
+  const isoOf = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
   const known = matches.filter(
     (m) => m.status !== 'bye' && !!m.home_reg && !!m.away_reg,
   );
-
-  // Agrupa por DÍA: los pendientes por su fase; los jugados por su día real.
-  const isoOf = (dt: Date) =>
-    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-  const byDate = new Map<string, { pending: TournamentMatch[]; done: TournamentMatch[] }>();
-  const bucket = (iso: string) => {
-    if (!byDate.has(iso)) byDate.set(iso, { pending: [], done: [] });
-    return byDate.get(iso)!;
-  };
+  // Pre-reserva de los ya jugados (conservan su hueco en su día).
   for (const m of known) {
-    if (m.status === 'finished' && m.scheduled_at) {
-      bucket(isoOf(new Date(m.scheduled_at))).done.push(m);
-    } else if (m.status !== 'finished') {
-      bucket(resolveMatchDate(m, phaseDays, tournament.starts_on)).pending.push(m);
+    if (m.status !== 'finished' || !m.scheduled_at) continue;
+    const dt = new Date(m.scheduled_at);
+    const st = dayState.get(isoOf(dt));
+    if (!st) continue;
+    const min = dt.getHours() * 60 + dt.getMinutes();
+    const ti = times.findIndex((t) => t === min);
+    const court = parseInt((m.court ?? '').replace(/\D/g, ''), 10) || 1;
+    if (ti >= 0) st.courtBusy.add(`${ti}:${court}`);
+    for (const id of matchRegIds(m)) {
+      if (!st.regTimes.has(id)) st.regTimes.set(id, []);
+      st.regTimes.get(id)!.push(min);
     }
   }
+
+  const pending = known.filter((m) => m.status !== 'finished');
+  const availableAt = (m: TournamentMatch, weekday: number, min: number): boolean =>
+    matchRegIds(m).every((id) => {
+      const r = regById.get(id);
+      return r ? regAvailableAt(r, weekday, min) : true;
+    });
+
+  // Cuántos huecos-hora le valen a un partido en un día (para ordenar por restricción).
+  const availCountDay = (m: TournamentMatch, iso: string): number => {
+    const st = dayState.get(iso);
+    if (!st) return 0;
+    return times.reduce((n, t) => (availableAt(m, st.weekday, t) ? n + 1 : n), 0);
+  };
 
   const updates: { id: string; scheduled_at: string | null; court: string | null }[] = [];
   const placedIds = new Set<string>();
-  const allPending: TournamentMatch[] = [];
-  for (const g of byDate.values()) allPending.push(...g.pending);
 
-  for (const [iso, group] of byDate) {
+  // Intenta colocar un partido en un día concreto. Devuelve true si lo coloca.
+  const placeInDay = (m: TournamentMatch, iso: string): boolean => {
+    const st = dayState.get(iso);
+    if (!st) return false;
+    const ids = matchRegIds(m);
     const [y, mo, d] = iso.split('-').map(Number);
-    const weekday = new Date(y, mo - 1, d).getDay();
-
-    // Franjas: TODO el día desde la hora de inicio hasta las 23:00, para que
-    // quepan las disponibilidades de tarde/noche (no solo "las justas").
-    const endMin = 23 * 60;
-    const slotCount = Math.min(48, Math.max(1, Math.floor((endMin - startMin) / step) + 1));
-    const times = Array.from({ length: slotCount }, (_, i) => startMin + i * step);
-    const timeToDate = (min: number): Date => {
-      const dt = new Date(y, mo - 1, d);
-      dt.setHours(Math.floor(min / 60), min % 60, 0, 0);
-      return dt;
-    };
-
-    const courtBusy = new Set<string>(); // `${ti}:${court}`
-    const regTimes = new Map<string, number[]>(); // regId → minutos ocupados
-    const book = (id: string, min: number) => {
-      if (!regTimes.has(id)) regTimes.set(id, []);
-      regTimes.get(id)!.push(min);
-    };
-    const regFreeAt = (id: string, min: number) =>
-      (regTimes.get(id) ?? []).every((b) => Math.abs(b - min) >= minSep);
-
-    // Pre-reserva de los partidos ya jugados (conservan hueco).
-    for (const m of group.done) {
-      const dt = new Date(m.scheduled_at as string);
-      const min = dt.getHours() * 60 + dt.getMinutes();
-      const ti = times.findIndex((t) => t === min);
-      const court = parseInt((m.court ?? '').replace(/\D/g, ''), 10) || 1;
-      if (ti >= 0) courtBusy.add(`${ti}:${court}`);
-      for (const id of matchRegIds(m)) book(id, min);
-    }
-
-    const available = (m: TournamentMatch, min: number): boolean =>
-      matchRegIds(m).every((id) => {
-        const r = regById.get(id);
-        return r ? regAvailableAt(r, weekday, min) : true;
-      });
-    const availCount = (m: TournamentMatch): number =>
-      times.reduce((n, t) => (available(m, t) ? n + 1 : n), 0);
-
-    // Coloca SOLO en huecos donde TODOS pueden. Nunca fuerza. Devuelve el índice
-    // de hora usado, o -1 si no cabe (queda sin colocar → el club ajusta).
-    const tryPlace = (m: TournamentMatch, fromTi: number): number => {
-      const ids = matchRegIds(m);
-      for (let ti = fromTi; ti < times.length; ti++) {
-        const min = times[ti];
-        if (ids.some((id) => !regFreeAt(id, min))) continue;
-        if (!available(m, min)) continue;
-        for (let court = 1; court <= courts; court++) {
-          if (courtBusy.has(`${ti}:${court}`)) continue;
-          courtBusy.add(`${ti}:${court}`);
-          ids.forEach((id) => book(id, min));
-          placedIds.add(m.id);
-          updates.push({
-            id: m.id,
-            scheduled_at: timeToDate(min).toISOString(),
-            court: `Pista ${court}`,
-          });
-          return ti;
-        }
-      }
-      return -1;
-    };
-
-    // Orden: primero fases no-KO (ronda 0), luego KO por bracket y ronda asc.
-    // Dentro de una ronda, los más restringidos primero.
-    const brackets = Array.from(new Set(group.pending.map((m) => m.bracket)));
-    brackets.sort((a, b) => Number(KO_BRACKETS.has(a)) - Number(KO_BRACKETS.has(b)));
-
-    for (const bracket of brackets) {
-      const bMatches = group.pending.filter((m) => m.bracket === bracket);
-      const rounds = Array.from(new Set(bMatches.map((m) => m.round))).sort((a, b) => a - b);
-      let earliestTi = 0;
-      for (const round of rounds) {
-        const roundMatches = bMatches
-          .filter((m) => m.round === round)
-          .sort((a, b) => availCount(a) - availCount(b));
-        let maxTi = earliestTi - 1;
-        for (const m of roundMatches) {
-          const ti = tryPlace(m, earliestTi);
-          if (ti > maxTi) maxTi = ti;
-        }
-        // La siguiente ronda de un KO empieza después de esta (dependencias).
-        if (KO_BRACKETS.has(bracket)) earliestTi = maxTi + 1;
+    for (let ti = 0; ti < times.length; ti++) {
+      const min = times[ti];
+      if (ids.some((id) => (st.regTimes.get(id) ?? []).some((b) => Math.abs(b - min) < minSep)))
+        continue;
+      if (!availableAt(m, st.weekday, min)) continue;
+      for (let court = 1; court <= courts; court++) {
+        if (st.courtBusy.has(`${ti}:${court}`)) continue;
+        st.courtBusy.add(`${ti}:${court}`);
+        ids.forEach((id) => {
+          if (!st.regTimes.has(id)) st.regTimes.set(id, []);
+          st.regTimes.get(id)!.push(min);
+        });
+        const dt = new Date(y, mo - 1, d);
+        dt.setHours(Math.floor(min / 60), min % 60, 0, 0);
+        placedIds.add(m.id);
+        updates.push({ id: m.id, scheduled_at: dt.toISOString(), court: `Pista ${court}` });
+        return true;
       }
     }
+    return false;
+  };
+
+  // Procesa por FASE: primero no-KO (grupos/liga/social), luego KO por ronda asc.
+  const phaseKeysOrdered = Array.from(new Set(pending.map((m) => matchPhaseKey(m)))).sort(
+    (a, b) => {
+      const ako = KO_BRACKETS.has(a.split(':')[0]);
+      const bko = KO_BRACKETS.has(b.split(':')[0]);
+      if (ako !== bko) return ako ? 1 : -1;
+      return Number(a.split(':')[1]) - Number(b.split(':')[1]);
+    },
+  );
+
+  for (const pk of phaseKeysOrdered) {
+    const phaseMatches = pending.filter((m) => matchPhaseKey(m) === pk);
+    const days = allowedDaysFor(phaseMatches[0], phaseDays, allDays);
+    // Más restringidos primero (menos huecos disponibles en total).
+    phaseMatches.sort(
+      (a, b) =>
+        days.reduce((n, dd) => n + availCountDay(a, dd), 0) -
+        days.reduce((n, dd) => n + availCountDay(b, dd), 0),
+    );
+    // Reparte entre los días de la fase (rotando el día preferido) y, si no cabe,
+    // prueba el resto de días de la fase.
+    phaseMatches.forEach((m, i) => {
+      const order = rotate(days, i);
+      for (const iso of order) if (placeInDay(m, iso)) return;
+    });
   }
 
-  // Los pendientes que no cupieron en un hueco donde todos puedan → sin hora.
-  for (const m of allPending) {
+  // Lo que no cupo en ningún día de su fase → sin hora (el club lo pone a mano).
+  for (const m of pending) {
     if (!placedIds.has(m.id)) {
       updates.push({ id: m.id, scheduled_at: null, court: null });
     }
@@ -1397,7 +1434,7 @@ export async function autoScheduleTournament(
 
   return {
     scheduled: placedIds.size,
-    unplaced: allPending.length - placedIds.size,
+    unplaced: pending.length - placedIds.size,
   };
 }
 

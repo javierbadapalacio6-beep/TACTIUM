@@ -55,7 +55,7 @@ import {
   matchAvailableAtDate,
   setMatchSlot,
   getPhaseDays,
-  setPhaseDay,
+  togglePhaseDay,
   isSocialFormat,
   posBracket,
   BRACKET_LABEL,
@@ -649,7 +649,7 @@ export const ScheduleView: React.FC<{
   onClear: () => void;
   generating: boolean;
   readOnly?: boolean;
-  phaseDays?: Record<string, string>;
+  phaseDays?: Record<string, string[]>;
   onSetPhaseDay?: (bracket: string, round: number, iso: string) => void;
   onReload?: () => void;
   styles: Styles;
@@ -782,20 +782,21 @@ export const ScheduleView: React.FC<{
 
           {multiDay && phases.length > 0 && onSetPhaseDay ? (
             <View style={{ marginTop: 16 }}>
-              <Text style={styles.sectionLabel}>DÍA DE CADA FASE</Text>
+              <Text style={styles.sectionLabel}>DÍAS DE CADA FASE</Text>
               <Text style={[styles.genHint, { textAlign: 'left', marginTop: 4, marginBottom: 8 }]}>
-                Asigna cada fase a un día del torneo. Una fase sin día se juega el
-                día de inicio.
+                Marca en qué días se juega cada fase (puedes elegir varios — p.ej.
+                grupos en 3 días). El motor reparte sus partidos entre esos días. Sin
+                día = todos.
               </Text>
               <View style={{ gap: 10 }}>
                 {phases.map((ph) => {
-                  const sel = phaseDays[`${ph.bracket}:${ph.round}`] ?? null;
+                  const selDays = phaseDays[`${ph.bracket}:${ph.round}`] ?? [];
                   return (
                     <View key={`${ph.bracket}:${ph.round}`} style={styles.phaseRow}>
                       <Text style={styles.phaseLabel} numberOfLines={1}>{ph.label}</Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                         {days.map((day) => {
-                          const on = sel === day.iso;
+                          const on = selDays.includes(day.iso);
                           return (
                             <Pressable
                               key={day.iso}
@@ -803,7 +804,7 @@ export const ScheduleView: React.FC<{
                               style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
                             >
                               <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
-                                {day.label}
+                                {on ? '✓ ' : ''}{day.label}
                               </Text>
                             </Pressable>
                           );
@@ -1575,7 +1576,7 @@ export const TournamentDetailScreen = ({
   const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedReg, setSelectedReg] = useState<TournamentRegistration | null>(null);
-  const [phaseDays, setPhaseDays] = useState<Record<string, string>>({});
+  const [phaseDays, setPhaseDays] = useState<Record<string, string[]>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -1804,17 +1805,20 @@ export const TournamentDetailScreen = ({
 
   const onSetPhaseDay = async (bracket: string, round: number, iso: string) => {
     if (!t) return;
-    // Alterna: si ya está en ese día, lo quita.
+    // Toggle: una fase puede tener varios días.
     const key = `${bracket}:${round}`;
-    const next = phaseDays[key] === iso ? null : iso;
+    const has = (phaseDays[key] ?? []).includes(iso);
+    const on = !has;
     setPhaseDays((prev) => {
+      const cur = prev[key] ?? [];
+      const next = on ? [...cur, iso].sort() : cur.filter((x) => x !== iso);
       const copy = { ...prev };
-      if (next) copy[key] = next;
+      if (next.length) copy[key] = next;
       else delete copy[key];
       return copy;
     });
     try {
-      await setPhaseDay(t.id, bracket, round, next);
+      await togglePhaseDay(t.id, bracket, round, iso, on);
     } catch (e: any) {
       toast.error('No se pudo guardar el día', e?.message ?? '');
       load();
