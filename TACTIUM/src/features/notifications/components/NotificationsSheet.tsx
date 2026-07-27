@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
@@ -12,6 +13,7 @@ import {
   IconBell,
   IconUser,
   IconTrophy,
+  IconChevron,
 } from '@components/ui';
 import { useNotificationStore } from '@store/notificationStore';
 import type { AppNotification } from '@core/services/notifications';
@@ -61,11 +63,56 @@ interface Props {
   onClose: () => void;
 }
 
+// Destino de una notificación (si lo tiene): a dónde lleva al tocarla.
+type NavTarget =
+  | { kind: 'follow'; tournamentId: string; initialTab: 'main' | 'schedule' | 'players' }
+  | { kind: 'clubDetail'; tournamentId: string };
+
+function targetOf(n: AppNotification): NavTarget | null {
+  const id = (n.data?.tournamentId ?? n.data?.tournament_id) as string | undefined;
+  if (!id) return null;
+  // Avisos al JUGADOR → su vista de seguimiento; al CLUB (inscripción) → su
+  // detalle editable en la pestaña Torneos.
+  if (n.type === 'tournament_schedule') return { kind: 'follow', tournamentId: id, initialTab: 'schedule' };
+  if (n.type === 'tournament_bracket') return { kind: 'follow', tournamentId: id, initialTab: 'main' };
+  if (n.type === 'tournament_signup') return { kind: 'clubDetail', tournamentId: id };
+  return null;
+}
+
 export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const nav = useNavigation<any>();
   const items = useNotificationStore((s) => s.items);
   const markAllRead = useNotificationStore((s) => s.markAllRead);
+
+  const onPressNotif = (n: AppNotification) => {
+    const t = targetOf(n);
+    if (!t) return;
+    onClose();
+    // Pequeño respiro para que el sheet cierre antes de navegar.
+    setTimeout(() => {
+      try {
+        if (t.kind === 'clubDetail') {
+          nav.navigate('Tournaments', {
+            screen: 'TournamentDetail',
+            params: { tournamentId: t.tournamentId },
+          });
+        } else {
+          nav.navigate('TournamentFollow', {
+            tournamentId: t.tournamentId,
+            initialTab: t.initialTab,
+          });
+        }
+      } catch {
+        // Fallback: vista de seguimiento (solo lectura).
+        nav.navigate('TournamentFollow', {
+          tournamentId: t.tournamentId,
+          initialTab: t.kind === 'follow' ? t.initialTab : 'players',
+        });
+      }
+    }, 60);
+  };
 
   // Al abrir, marcamos todas como leídas (tras un instante para que se vea
   // el resalte de "no leída" un momento).
@@ -95,10 +142,17 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
           {items.map((n: AppNotification) => {
             const unread = !n.read_at;
             const tint = unread ? c.accent : c.textMuted;
+            const nav = targetOf(n);
             return (
-              <View
+              <Pressable
                 key={n.id}
-                style={[styles.row, unread && styles.rowUnread]}
+                onPress={nav ? () => onPressNotif(n) : undefined}
+                disabled={!nav}
+                style={({ pressed }) => [
+                  styles.row,
+                  unread && styles.rowUnread,
+                  pressed && nav && { opacity: 0.85 },
+                ]}
               >
                 <View
                   style={[
@@ -122,8 +176,12 @@ export const NotificationsSheet: React.FC<Props> = ({ open, onClose }) => {
                   ) : null}
                   <Text style={styles.rowTime}>{timeAgo(n.created_at)}</Text>
                 </View>
-                {unread ? <View style={styles.unreadDot} /> : null}
-              </View>
+                {unread ? (
+                  <View style={styles.unreadDot} />
+                ) : nav ? (
+                  <IconChevron size={15} color={c.textFaint} />
+                ) : null}
+              </Pressable>
             );
           })}
         </View>

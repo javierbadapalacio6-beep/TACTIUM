@@ -138,7 +138,10 @@ export type RootStackParamList = {
   // Explorar torneos abiertos (jugador).
   ExploreTournaments: undefined;
   // Seguir un torneo (vista de solo lectura del jugador).
-  TournamentFollow: { tournamentId: string };
+  TournamentFollow: {
+    tournamentId: string;
+    initialTab?: 'main' | 'schedule' | 'players' | 'info';
+  };
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

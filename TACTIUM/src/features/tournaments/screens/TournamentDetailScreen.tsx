@@ -60,6 +60,11 @@ import {
   posBracket,
   bracketLabel,
   bracketRank,
+  isRoundBracket,
+  matchPhaseKey,
+  koRoundNameFromEnd,
+  tournamentStatusLabel,
+  formatFee,
   groupName,
   setMatchResult,
   formatConfig,
@@ -186,6 +191,66 @@ export const fmtTime = (iso: string | null): string | null => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const DOW_ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+// "Sáb 15 · 10:00" a partir de un scheduled_at ISO.
+export const fmtDayTime = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${DOW_ABBR[d.getDay()]} ${d.getDate()} · ${time}`;
+};
+// Días del torneo (inicio → fin) como [{iso, label}].
+const buildTournamentDays = (
+  startsOn: string | null,
+  endsOn: string | null,
+): { iso: string; label: string }[] => {
+  if (!startsOn) return [];
+  const parse = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const start = parse(startsOn);
+  const end = endsOn ? parse(endsOn) : start;
+  const out: { iso: string; label: string }[] = [];
+  const d = new Date(start);
+  let g = 0;
+  while (d.getTime() <= end.getTime() && g < 40) {
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    out.push({ iso, label: `${DOW_ABBR[d.getDay()]} ${d.getDate()}` });
+    d.setDate(d.getDate() + 1);
+    g++;
+  }
+  return out;
+};
+
+// Fases GENÉRICAS para asignar días (compartidas por todos los cuadros).
+const buildPlannerPhases = (
+  format: string,
+  matches: TournamentMatch[],
+): { bracket: string; round: number; label: string }[] => {
+  const out: { bracket: string; round: number; label: string }[] = [];
+  if (format === 'groups_ko' || matches.some((m) => m.bracket === 'grp'))
+    out.push({ bracket: 'grp', round: 0, label: 'Fase de grupos' });
+  if (format === 'round_robin') out.push({ bracket: 'rr', round: 0, label: 'Liga' });
+  if (format === 'americano') out.push({ bracket: 'amer', round: 0, label: 'Americano' });
+  if (format === 'mexicano') out.push({ bracket: 'mex', round: 0, label: 'Mexicano' });
+  if (format === 'ko' || format === 'groups_ko') {
+    const ko = matches.filter((m) => isRoundBracket(m.bracket));
+    let fromEnds: number[];
+    if (ko.length) {
+      const maxByB: Record<string, number> = {};
+      for (const m of ko) maxByB[m.bracket] = Math.max(maxByB[m.bracket] ?? 0, m.round);
+      fromEnds = Array.from(new Set(ko.map((m) => maxByB[m.bracket] - m.round)));
+    } else {
+      fromEnds = [3, 2, 1, 0];
+    }
+    fromEnds.sort((a, b) => b - a);
+    for (const fe of fromEnds) out.push({ bracket: 'ko', round: fe, label: koRoundNameFromEnd(fe) });
+  }
+  return out;
 };
 
 // Datos de una inscripción para pintar la tarjeta de partido pro.
@@ -319,7 +384,7 @@ export const MatchCard: React.FC<{
       <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
         {m.scheduled_at ? (
           <Text style={styles.matchWhen}>
-            🕐 {fmtTime(m.scheduled_at)}
+            🕐 {fmtDayTime(m.scheduled_at)}
             {m.court ? ` · ${m.court}` : ''}
           </Text>
         ) : null}
@@ -570,7 +635,13 @@ export const InfoView: React.FC<{
           },
         ]
       : []),
-    { label: 'Estado', value: STATUS_LABEL[t.status] ?? t.status },
+    {
+      label: 'Cuota',
+      value: t.entry_fee
+        ? `${formatFee(t.entry_fee, t.fee_currency)} · se paga en el club`
+        : 'Gratis',
+    },
+    { label: 'Estado', value: tournamentStatusLabel(t.status, t.starts_on) },
     {
       label: 'Fechas',
       value:
@@ -650,8 +721,6 @@ export const ScheduleView: React.FC<{
   onClear: () => void;
   generating: boolean;
   readOnly?: boolean;
-  phaseDays?: Record<string, string[]>;
-  onSetPhaseDay?: (bracket: string, round: number, iso: string) => void;
   onReload?: () => void;
   styles: Styles;
   c: Palette;
@@ -666,66 +735,38 @@ export const ScheduleView: React.FC<{
   onClear,
   generating,
   readOnly,
-  phaseDays = {},
-  onSetPhaseDay,
   onReload,
   styles,
   c,
 }) => {
-  // Días del torneo (inicio → fin).
-  const days = useMemo(() => {
-    if (!tournament.starts_on) return [] as { iso: string; label: string }[];
-    const parse = (s: string) => {
-      const [y, m, d] = s.split('-').map(Number);
-      return new Date(y, m - 1, d);
-    };
-    const start = parse(tournament.starts_on);
-    const end = tournament.ends_on ? parse(tournament.ends_on) : start;
-    const ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const out: { iso: string; label: string }[] = [];
-    const dd = new Date(start);
-    let guard = 0;
-    while (dd.getTime() <= end.getTime() && guard < 31) {
-      const iso = `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, '0')}-${String(dd.getDate()).padStart(2, '0')}`;
-      out.push({ iso, label: `${ABBR[dd.getDay()]} ${dd.getDate()}` });
-      dd.setDate(dd.getDate() + 1);
-      guard++;
-    }
-    return out;
-  }, [tournament.starts_on, tournament.ends_on]);
+  const days = useMemo(
+    () => buildTournamentDays(tournament.starts_on, tournament.ends_on),
+    [tournament.starts_on, tournament.ends_on],
+  );
   const multiDay = days.length > 1;
 
-  // Fases del torneo (para asignar día a cada una).
-  const phases = useMemo(() => {
-    const real = matches.filter((m) => m.status !== 'bye');
-    const out: { bracket: string; round: number; label: string }[] = [];
-    const brackets = Array.from(new Set(real.map((m) => m.bracket)));
-    const SINGLE: Record<string, string> = {
-      grp: 'Fase de grupos',
-      rr: 'Liga',
-      amer: 'Americano',
-      mex: 'Mexicano',
-    };
-    for (const b of brackets) {
-      if (SINGLE[b]) {
-        out.push({ bracket: b, round: 0, label: SINGLE[b] });
-      } else {
-        const bm = real.filter((m) => m.bracket === b);
-        const total = bm.reduce((mx, m) => Math.max(mx, m.round), 0);
-        const rounds = Array.from(new Set(bm.map((m) => m.round))).sort((a, z) => a - z);
-        const prefix = b === 'main' ? '' : `${bracketLabel(b)} · `;
-        for (const r of rounds) out.push({ bracket: b, round: r, label: `${prefix}${roundLabel(r, total)}` });
-      }
-    }
-    return out;
-  }, [matches]);
+  const SINGLE_LABEL: Record<string, string> = {
+    grp: 'Fase de grupos',
+    rr: 'Liga',
+    amer: 'Americano',
+    mex: 'Mexicano',
+  };
 
   const dayLabelOf = (iso: string | null) => days.find((x) => x.iso === iso)?.label ?? null;
+  const maxRoundOf = (b: string) =>
+    matches.reduce((mx, m) => (m.bracket === b ? Math.max(mx, m.round) : mx), 0);
   const phaseLabelOf = (m: TournamentMatch): string => {
-    const ko = ['main', 'gold', 'silver', 'bronze'].includes(m.bracket);
-    const key = ko ? `${m.bracket}:${m.round}` : `${m.bracket}:0`;
-    return phases.find((p) => `${p.bracket}:${p.round}` === key)?.label ?? '';
+    if (!isRoundBracket(m.bracket)) return SINGLE_LABEL[m.bracket] ?? 'Partidos';
+    const prefix = m.bracket === 'main' ? '' : `${bracketLabel(m.bracket)} · `;
+    return `${prefix}${roundLabel(m.round, maxRoundOf(m.bracket))}`;
   };
+  const [collapsedPh, setCollapsedPh] = useState<Set<string>>(new Set());
+  const togglePh = (k: string) =>
+    setCollapsedPh((prev) => {
+      const n = new Set(prev);
+      n.has(k) ? n.delete(k) : n.add(k);
+      return n;
+    });
   const scheduled = useMemo(
     () =>
       matches
@@ -739,16 +780,39 @@ export const ScheduleView: React.FC<{
         ),
     [matches],
   );
-  // Agrupa por día + hora.
-  const groups: { time: string; items: TournamentMatch[] }[] = [];
+  // Agrupa el horario por FASE (colapsable) → DÍA (navegable) → hora.
+  type TimeGroup = { time: string; items: TournamentMatch[] };
+  type DayGroup = { iso: string; label: string; timeGroups: TimeGroup[] };
+  type PhaseGroup = { key: string; label: string; earliest: string; count: number; dayGroups: DayGroup[] };
+  const phaseGroups: PhaseGroup[] = [];
+  const isoLabel = (iso: string) => {
+    const [y, mo, d] = iso.split('-').map(Number);
+    return `${DOW_ABBR[new Date(y, mo - 1, d).getDay()]} ${d}`;
+  };
   for (const m of scheduled) {
+    const key = matchPhaseKey(m);
+    let pg = phaseGroups.find((x) => x.key === key);
+    if (!pg) {
+      pg = { key, label: phaseLabelOf(m) || 'Partidos', earliest: m.scheduled_at as string, count: 0, dayGroups: [] };
+      phaseGroups.push(pg);
+    }
+    pg.count++;
+    if ((m.scheduled_at as string) < pg.earliest) pg.earliest = m.scheduled_at as string;
     const iso = (m.scheduled_at as string).slice(0, 10);
-    const dl = multiDay ? dayLabelOf(iso) : null;
-    const time = `${dl ? `${dl} · ` : ''}${fmtTime(m.scheduled_at) ?? '—'}`;
-    const g = groups.find((x) => x.time === time);
-    if (g) g.items.push(m);
-    else groups.push({ time, items: [m] });
+    let dg = pg.dayGroups.find((x) => x.iso === iso);
+    if (!dg) {
+      dg = { iso, label: dayLabelOf(iso) ?? isoLabel(iso), timeGroups: [] };
+      pg.dayGroups.push(dg);
+    }
+    const time = fmtTime(m.scheduled_at) ?? '—';
+    const tg = dg.timeGroups.find((x) => x.time === time);
+    if (tg) tg.items.push(m);
+    else dg.timeGroups.push({ time, items: [m] });
   }
+  phaseGroups.sort((a, b) => (a.earliest < b.earliest ? -1 : 1));
+  for (const pg of phaseGroups) pg.dayGroups.sort((a, b) => (a.iso < b.iso ? -1 : 1));
+  // Día seleccionado dentro de cada fase.
+  const [selDayByPhase, setSelDayByPhase] = useState<Record<string, string>>({});
   // Partidos con jugadores conocidos que quedaron SIN hora (no cabían en un
   // hueco donde todos pudieran).
   const unplacedList = matches.filter(
@@ -781,41 +845,11 @@ export const ScheduleView: React.FC<{
             </Pressable>
           </View>
 
-          {multiDay && phases.length > 0 && onSetPhaseDay ? (
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.sectionLabel}>DÍAS DE CADA FASE</Text>
-              <Text style={[styles.genHint, { textAlign: 'left', marginTop: 4, marginBottom: 8 }]}>
-                Marca en qué días se juega cada fase (puedes elegir varios — p.ej.
-                grupos en 3 días). El motor reparte sus partidos entre esos días. Sin
-                día = todos.
-              </Text>
-              <View style={{ gap: 10 }}>
-                {phases.map((ph) => {
-                  const selDays = phaseDays[`${ph.bracket}:${ph.round}`] ?? [];
-                  return (
-                    <View key={`${ph.bracket}:${ph.round}`} style={styles.phaseRow}>
-                      <Text style={styles.phaseLabel} numberOfLines={1}>{ph.label}</Text>
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                        {days.map((day) => {
-                          const on = selDays.includes(day.iso);
-                          return (
-                            <Pressable
-                              key={day.iso}
-                              onPress={() => onSetPhaseDay(ph.bracket, ph.round, day.iso)}
-                              style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
-                            >
-                              <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
-                                {on ? '✓ ' : ''}{day.label}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
+          {multiDay ? (
+            <Text style={[styles.genHint, { textAlign: 'left', marginTop: 8 }]}>
+              Los días de cada fase se editan con el lápiz (arriba). Aquí solo
+              generas y ajustas a mano los partidos sin hueco.
+            </Text>
           ) : null}
 
           <Pressable
@@ -889,32 +923,83 @@ export const ScheduleView: React.FC<{
         </Text>
       ) : (
         <View style={{ marginTop: 8 }}>
-          {groups.map((g) => (
-            <View key={g.time} style={{ marginTop: 16 }}>
-              <Text style={styles.schedTime}>{g.time}</Text>
-              <View style={{ gap: 8 }}>
-                {g.items.map((m) => {
-                  const conf = !readOnly && matchScheduleConflict(m, regs, tournament);
-                  return (
-                    <View key={m.id}>
-                      {conf ? (
-                        <Text style={styles.conflictTag}>⚠️ Conflicto de horario</Text>
-                      ) : null}
-                      <MatchCard
-                        m={m}
-                        info={info}
-                        onEdit={onEdit}
-                        social={isSocialFormat(tournament.format)}
-                        readOnly={readOnly}
-                        styles={styles}
-                        c={c}
-                      />
-                    </View>
-                  );
-                })}
+          {phaseGroups.map((pg) => {
+            const isCol = collapsedPh.has(pg.key);
+            const multipleDays = pg.dayGroups.length > 1;
+            const selIso = selDayByPhase[pg.key] ?? pg.dayGroups[0]?.iso;
+            const activeDay =
+              pg.dayGroups.find((d) => d.iso === selIso) ?? pg.dayGroups[0];
+            return (
+              <View key={pg.key} style={{ marginTop: 14 }}>
+                <Pressable
+                  onPress={() => togglePh(pg.key)}
+                  style={({ pressed }) => [styles.schedPhaseHead, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.schedPhaseTitle} numberOfLines={1}>
+                    {pg.label}
+                    <Text style={styles.schedPhaseCount}> · {pg.count}</Text>
+                  </Text>
+                  <Text style={styles.roundPillChevron}>{isCol ? '›' : '⌄'}</Text>
+                </Pressable>
+                {isCol ? null : (
+                  <>
+                    {multipleDays ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingTop: 10 }}
+                      >
+                        {pg.dayGroups.map((dg) => {
+                          const on = dg.iso === activeDay?.iso;
+                          return (
+                            <Pressable
+                              key={dg.iso}
+                              onPress={() =>
+                                setSelDayByPhase((prev) => ({ ...prev, [pg.key]: dg.iso }))
+                              }
+                              style={[styles.dayTab, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                            >
+                              <Text style={[styles.dayTabText, { color: on ? c.textInverse : c.textMuted }]}>
+                                {dg.label} · {dg.timeGroups.reduce((n, t) => n + t.items.length, 0)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    ) : null}
+                    {(activeDay?.timeGroups ?? []).map((g) => (
+                      <View key={g.time} style={{ marginTop: 10 }}>
+                        <Text style={styles.schedTime}>
+                          {multipleDays ? `${activeDay?.label} · ${g.time}` : g.time}
+                        </Text>
+                        <View style={{ gap: 8 }}>
+                          {g.items.map((m) => {
+                            const conf = !readOnly && matchScheduleConflict(m, regs, tournament);
+                            return (
+                              <View key={m.id}>
+                                {conf ? (
+                                  <Text style={styles.conflictTag}>⚠️ Conflicto de horario</Text>
+                                ) : null}
+                                <MatchCard
+                                  m={m}
+                                  info={info}
+                                  onEdit={onEdit}
+                                  social={isSocialFormat(tournament.format)}
+                                  readOnly={readOnly}
+                                  styles={styles}
+                                  c={c}
+                                />
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
               </View>
-            </View>
-          ))}
+            );
+          })}
 
           {readOnly ? null : (
             <Pressable onPress={onClear} hitSlop={8} style={{ marginTop: 22 }}>
@@ -1333,17 +1418,23 @@ const PlayerInfoSheet: React.FC<{
 const EditTournamentSheet: React.FC<{
   open: boolean;
   tournament: Tournament | null;
+  matches: TournamentMatch[];
+  phaseDays: Record<string, string[]>;
+  onSetPhaseDay: (bracket: string, round: number, iso: string) => void;
   onClose: () => void;
   onSaved: () => void;
   onDeleted: () => void;
   styles: Styles;
   c: Palette;
-}> = ({ open, tournament, onClose, onSaved, onDeleted, styles, c }) => {
+}> = ({ open, tournament, matches, phaseDays, onSetPhaseDay, onClose, onSaved, onDeleted, styles, c }) => {
+  const planDays = tournament ? buildTournamentDays(tournament.starts_on, tournament.ends_on) : [];
+  const planPhases = tournament ? buildPlannerPhases(tournament.format, matches) : [];
   const [name, setName] = useState('');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
   const [endsOn, setEndsOn] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [maxPairs, setMaxPairs] = useState('');
+  const [fee, setFee] = useState('');
   const [prizes, setPrizes] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -1359,6 +1450,7 @@ const EditTournamentSheet: React.FC<{
       setSeedingMode(tournament.seeding_mode ?? 'points');
       setLocation(tournament.location ?? '');
       setMaxPairs(tournament.max_pairs ? String(tournament.max_pairs) : '');
+      setFee(tournament.entry_fee != null ? String(tournament.entry_fee) : '');
       setPrizes(tournament.prizes ?? '');
       setExtraInfo(tournament.extra_info ?? '');
       setCoverUrl(tournament.cover_url ?? null);
@@ -1398,6 +1490,7 @@ const EditTournamentSheet: React.FC<{
         seedingMode,
         location,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+        entryFee: fee ? parseFloat(fee) : null,
         prizes,
         extraInfo,
         coverUrl: cover,
@@ -1529,6 +1622,42 @@ const EditTournamentSheet: React.FC<{
         </>
       ) : null}
 
+      {planDays.length > 1 && planPhases.length > 0 ? (
+        <>
+          <Text style={styles.label}>DÍAS DE CADA FASE</Text>
+          <Text style={[styles.genHint, { textAlign: 'left', marginTop: -2, marginBottom: 8 }]}>
+            Marca en qué días se juega cada fase (varios por fase). Todos los cuadros
+            (oro/plata/bronce/consolación) comparten estos días.
+          </Text>
+          <View style={{ gap: 10 }}>
+            {planPhases.map((ph) => {
+              const selDays = phaseDays[`${ph.bracket}:${ph.round}`] ?? [];
+              return (
+                <View key={`${ph.bracket}:${ph.round}`} style={{ gap: 6 }}>
+                  <Text style={styles.phaseLabel}>{ph.label}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {planDays.map((day) => {
+                      const on = selDays.includes(day.iso);
+                      return (
+                        <Pressable
+                          key={day.iso}
+                          onPress={() => onSetPhaseDay(ph.bracket, ph.round, day.iso)}
+                          style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                        >
+                          <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                            {on ? '✓ ' : ''}{day.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
       <Text style={styles.label}>LUGAR</Text>
       <View style={styles.input}>
         <TextInput value={location} onChangeText={setLocation} placeholder="Club · ciudad" placeholderTextColor={c.textFaint} style={styles.inputField} maxLength={80} />
@@ -1537,6 +1666,19 @@ const EditTournamentSheet: React.FC<{
       <Text style={styles.label}>PLAZAS</Text>
       <View style={styles.input}>
         <TextInput value={maxPairs} onChangeText={(v) => setMaxPairs(v.replace(/[^0-9]/g, ''))} placeholder="16" placeholderTextColor={c.textFaint} style={styles.inputField} keyboardType="number-pad" maxLength={3} />
+      </View>
+
+      <Text style={styles.label}>CUOTA DE INSCRIPCIÓN (€)</Text>
+      <View style={styles.input}>
+        <TextInput
+          value={fee}
+          onChangeText={(v) => setFee(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+          placeholder="0 = gratis"
+          placeholderTextColor={c.textFaint}
+          style={styles.inputField}
+          keyboardType="decimal-pad"
+          maxLength={7}
+        />
       </View>
 
       <Text style={styles.label}>PREMIOS</Text>
@@ -1885,54 +2027,15 @@ export const TournamentDetailScreen = ({
     ]);
   };
 
+  const dateRange =
+    t && formatStartsOn(t.starts_on)
+      ? t.ends_on && t.ends_on !== t.starts_on
+        ? `${formatStartsOn(t.starts_on)} – ${formatStartsOn(t.ends_on)}`
+        : formatStartsOn(t.starts_on)
+      : null;
+
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-        >
-          <IconBack size={20} color={c.text} />
-        </Pressable>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={styles.headMeta}>
-            {t?.status ? (
-              <View
-                style={[
-                  styles.statusPill,
-                  t.status === 'finished' && styles.statusPillDone,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusPillText,
-                    t.status === 'finished' && styles.statusPillTextDone,
-                  ]}
-                >
-                  {STATUS_LABEL[t.status] ?? t.status.toUpperCase()}
-                </Text>
-              </View>
-            ) : null}
-            {formatStartsOn(t?.starts_on ?? null) ? (
-              <Text style={styles.headDate}>{formatStartsOn(t?.starts_on ?? null)}</Text>
-            ) : null}
-          </View>
-          <Text style={styles.title} numberOfLines={1}>
-            {t?.name ?? ''}
-          </Text>
-        </View>
-        {t ? (
-          <Pressable
-            onPress={() => setEditOpen(true)}
-            hitSlop={10}
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-          >
-            <IconPencil size={17} color={c.text} />
-          </Pressable>
-        ) : null}
-      </View>
-
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={c.accent} />
@@ -1942,16 +2045,46 @@ export const TournamentDetailScreen = ({
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Portada del torneo */}
-          {t?.cover_url ? (
-            <View style={styles.coverBanner}>
-              <Image source={{ uri: t.cover_url }} style={styles.coverBannerImg} />
+          {/* HERO con portada */}
+          <View style={styles.hero}>
+            {t?.cover_url ? (
+              <Image source={{ uri: t.cover_url }} style={styles.heroImg} />
+            ) : (
               <LinearGradient
-                colors={['transparent', c.background]}
-                style={styles.coverBannerFade}
+                colors={[c.accent25, c.bgCard]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroImg}
               />
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.8)']}
+              style={styles.heroFade}
+            />
+            <View style={styles.heroBottom}>
+              {t?.status ? (
+                <View style={styles.heroStatusPill}>
+                  <View
+                    style={[
+                      styles.heroDot,
+                      { backgroundColor: t.status === 'finished' ? '#cfcfcf' : c.primary },
+                    ]}
+                  />
+                  <Text style={styles.heroStatusText}>
+                    {tournamentStatusLabel(t.status, t.starts_on)}
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={styles.heroTitle} numberOfLines={2}>
+                {t?.name ?? ''}
+              </Text>
+              {dateRange || t?.location ? (
+                <Text style={styles.heroMeta} numberOfLines={1}>
+                  {[dateRange, t?.location].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
             </View>
-          ) : null}
+          </View>
 
           {/* Campeón */}
           {champion ? (
@@ -1998,8 +2131,6 @@ export const TournamentDetailScreen = ({
               matches={matches}
               regs={regs}
               info={regInfo}
-              phaseDays={phaseDays}
-              onSetPhaseDay={onSetPhaseDay}
               onReload={load}
               onEdit={setEditMatch}
               onConfigure={() => setScheduleCfgOpen(true)}
@@ -2149,6 +2280,29 @@ export const TournamentDetailScreen = ({
         </ScrollView>
       )}
 
+      {/* Controles flotantes sobre el hero */}
+      <View
+        style={[styles.heroControls, { top: insets.top + 6 }]}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={10}
+          style={({ pressed }) => [styles.heroCtrlBtn, pressed && { opacity: 0.7 }]}
+        >
+          <IconBack size={20} color="#fff" />
+        </Pressable>
+        {t && !loading ? (
+          <Pressable
+            onPress={() => setEditOpen(true)}
+            hitSlop={10}
+            style={({ pressed }) => [styles.heroCtrlBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconPencil size={17} color="#fff" />
+          </Pressable>
+        ) : null}
+      </View>
+
       <AddPairSheet
         open={adding}
         tournamentId={tournamentId}
@@ -2201,6 +2355,9 @@ export const TournamentDetailScreen = ({
       <EditTournamentSheet
         open={editOpen}
         tournament={t}
+        matches={matches}
+        phaseDays={phaseDays}
+        onSetPhaseDay={onSetPhaseDay}
         onClose={() => setEditOpen(false)}
         onSaved={load}
         onDeleted={() => {
@@ -3123,6 +3280,42 @@ export const makeStyles = (c: Palette) =>
     coverBanner: { height: 180, marginBottom: 4 },
     coverBannerImg: { width: '100%', height: '100%' },
     coverBannerFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
+    // Hero de cabecera con portada
+    hero: { height: 250, backgroundColor: c.bgCard, marginBottom: 4 },
+    heroImg: { position: 'absolute', width: '100%', height: '100%' },
+    heroFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '75%' },
+    heroBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingBottom: 16 },
+    heroStatusPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      height: 24,
+      borderRadius: 9999,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      marginBottom: 8,
+    },
+    heroDot: { width: 7, height: 7, borderRadius: 4 },
+    heroStatusText: { color: '#fff', fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 1.5, fontWeight: '800' },
+    heroTitle: { color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
+    heroMeta: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '700', marginTop: 4 },
+    heroControls: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+    },
+    heroCtrlBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0,0,0,0.42)',
+    },
     // Tus partidos (vista del jugador)
     myMatchCard: {
       flexDirection: 'row',
@@ -3138,6 +3331,17 @@ export const makeStyles = (c: Palette) =>
     myMatchRival: { color: c.text, fontSize: 15, fontWeight: '700' },
     myMatchMeta: { color: c.textMuted, fontSize: 12, marginTop: 3, fontWeight: '600' },
     myMatchScore: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '800', color: c.accent },
+    enrolled: {
+      marginHorizontal: 22,
+      marginTop: 12,
+      paddingVertical: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+    },
+    enrolledText: { color: c.accent, fontSize: 14, fontWeight: '800' },
     // Horario
     matchWhen: { fontFamily: Fonts.mono, fontSize: 11, fontWeight: '700', color: c.accent },
     schedConfigCard: {
@@ -3156,11 +3360,35 @@ export const makeStyles = (c: Palette) =>
     schedConfigValue: { color: c.text, fontSize: 14, fontWeight: '600', marginTop: 3 },
     schedTime: {
       fontFamily: Fonts.mono,
-      fontSize: 15,
-      fontWeight: '800',
-      color: c.text,
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.textMuted,
       marginBottom: 8,
     },
+    schedPhaseHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    schedPhaseTitle: { color: c.text, fontSize: 15, fontWeight: '800' },
+    schedPhaseCount: { color: c.textFaint, fontWeight: '600' },
+    dayTab: {
+      paddingHorizontal: 12,
+      height: 32,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dayTabText: { fontSize: 12.5, fontWeight: '700' },
     phaseRow: { gap: 6 },
     phaseLabel: { color: c.text, fontSize: 14, fontWeight: '700' },
     phaseDayChip: {

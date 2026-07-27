@@ -20,6 +20,10 @@ import { IconBack, IconSearch, IconTrophy, IconChevron } from '@components/ui';
 import { toast } from '@store/toastStore';
 import {
   exploreTournaments,
+  myTournaments,
+  tournamentBucket,
+  tournamentStatusLabel,
+  formatFee,
   type ExploreTournament,
 } from '@core/services/tournaments';
 
@@ -33,6 +37,7 @@ const GENDER_LABEL: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   open: 'Inscripción abierta',
   in_progress: 'En juego',
+  finished: 'Finalizado',
 };
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const formatStartsOn = (iso: string | null): string | null => {
@@ -42,6 +47,57 @@ const formatStartsOn = (iso: string | null): string | null => {
   return `${d.getDate()} ${MESES[d.getMonth()]}`;
 };
 
+const TournamentCard: React.FC<{
+  t: ExploreTournament;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  c: Palette;
+}> = ({ t, onPress, styles, c }) => (
+  <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
+    {t.cover_url ? (
+      <Image source={{ uri: t.cover_url }} style={styles.cover} />
+    ) : (
+      <LinearGradient
+        colors={[c.accent15, c.bgCard]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.cover, styles.coverPlaceholder]}
+      >
+        <IconTrophy size={26} color={c.accent} />
+      </LinearGradient>
+    )}
+    <View style={styles.cardBody}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.cardName} numberOfLines={1}>{t.name}</Text>
+        <Text style={styles.cardClub} numberOfLines={1}>{t.club_name}</Text>
+        <Text style={styles.cardMeta} numberOfLines={1}>
+          {[formatStartsOn(t.starts_on), t.location].filter(Boolean).join(' · ') || 'Fecha por confirmar'}
+        </Text>
+        <View style={styles.chips}>
+          {(t.genders ?? []).map((g) => (
+            <View key={g} style={styles.chip}>
+              <Text style={styles.chipText}>{GENDER_LABEL[g] ?? g}</Text>
+            </View>
+          ))}
+          {(t.categories ?? []).slice(0, 3).map((cat) => (
+            <View key={cat} style={styles.chip}>
+              <Text style={styles.chipText}>{cat}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <IconChevron size={16} color={c.textFaint} />
+    </View>
+    <View style={styles.cardFooter}>
+      <Text style={styles.statusText}>{tournamentStatusLabel(t.status, t.starts_on)}</Text>
+      <Text style={styles.playersText}>
+        {t.entry_fee ? `${formatFee(t.entry_fee, t.fee_currency)} · ` : ''}
+        {t.players} {t.pair_based ? (t.players === 1 ? 'pareja' : 'parejas') : t.players === 1 ? 'jugador' : 'jugadores'}
+      </Text>
+    </View>
+  </Pressable>
+);
+
 export const ExploreTournamentsScreen = ({
   navigation,
 }: RootStackScreenProps<'ExploreTournaments'>) => {
@@ -49,39 +105,71 @@ export const ExploreTournamentsScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
 
+  const [mode, setMode] = useState<'explore' | 'mine'>('explore');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<ExploreTournament[]>([]);
+  const [mine, setMine] = useState<ExploreTournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(
-    async (q?: string) => {
-      try {
-        const data = await exploreTournaments(q);
-        setItems(data);
-      } catch (e: any) {
-        toast.error('No se pudieron cargar', e?.message ?? '');
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [],
-  );
+  const loadExplore = useCallback(async (q?: string) => {
+    try {
+      setItems(await exploreTournaments(q));
+    } catch (e: any) {
+      toast.error('No se pudieron cargar', e?.message ?? '');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const loadMine = useCallback(async () => {
+    try {
+      setMine(await myTournaments());
+    } catch (e: any) {
+      toast.error('No se pudieron cargar', e?.message ?? '');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    loadExplore();
+  }, [loadExplore]);
 
-  // Búsqueda con pequeño debounce.
+  // Búsqueda con debounce (solo en modo explorar).
   React.useEffect(() => {
-    const id = setTimeout(() => load(search), 300);
+    if (mode !== 'explore') return;
+    const id = setTimeout(() => loadExplore(search), 300);
     return () => clearTimeout(id);
-  }, [search, load]);
+  }, [search, mode, loadExplore]);
+
+  const switchMode = (m: 'explore' | 'mine') => {
+    setMode(m);
+    setLoading(true);
+    if (m === 'mine') loadMine();
+    else loadExplore(search);
+  };
 
   const openTournament = (t: ExploreTournament) => {
     navigation.navigate('TournamentFollow', { tournamentId: t.id });
   };
+
+  // "Mis torneos" agrupados por estado.
+  const mineSections = useMemo(() => {
+    const bucket = (t: ExploreTournament) => tournamentBucket(t.status, t.starts_on);
+    const live = mine.filter((t) => bucket(t) === 'live');
+    const upcoming = mine
+      .filter((t) => bucket(t) === 'upcoming')
+      .sort((a, b) => (a.starts_on ?? 'z').localeCompare(b.starts_on ?? 'z'));
+    const done = mine.filter((t) => bucket(t) === 'finished');
+    return [
+      { label: 'En juego', data: live },
+      { label: 'Próximos', data: upcoming },
+      { label: 'Jugados', data: done },
+    ].filter((s) => s.data.length);
+  }, [mine]);
 
   return (
     <View style={styles.root}>
@@ -95,30 +183,50 @@ export const ExploreTournamentsScreen = ({
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.eyebrow}>TORNEOS</Text>
-          <Text style={styles.title}>Explorar</Text>
+          <Text style={styles.title}>{mode === 'mine' ? 'Mis torneos' : 'Explorar'}</Text>
         </View>
       </View>
 
-      <View style={styles.searchWrap}>
-        <View style={styles.searchBox}>
-          <IconSearch size={16} color={c.textFaint} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Busca por nombre, club o lugar"
-            placeholderTextColor={c.textFaint}
-            style={styles.searchInput}
-            autoCapitalize="none"
-            returnKeyType="search"
-          />
-        </View>
-        <Pressable
-          onPress={() => navigation.navigate('TournamentSignup')}
-          style={({ pressed }) => [styles.codeBtn, pressed && { opacity: 0.85 }]}
-        >
-          <Text style={styles.codeBtnText}>Tengo código</Text>
-        </Pressable>
+      {/* Toggle Explorar / Mis torneos */}
+      <View style={styles.modeTabs}>
+        {(['explore', 'mine'] as const).map((m) => {
+          const sel = mode === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => switchMode(m)}
+              style={[styles.modeTab, sel && { backgroundColor: c.text }]}
+            >
+              <Text style={[styles.modeTabText, { color: sel ? c.background : c.textMuted }]}>
+                {m === 'explore' ? 'Explorar' : 'Mis torneos'}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
+
+      {mode === 'explore' ? (
+        <View style={styles.searchWrap}>
+          <View style={styles.searchBox}>
+            <IconSearch size={16} color={c.textFaint} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Busca por nombre, club o lugar"
+              placeholderTextColor={c.textFaint}
+              style={styles.searchInput}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+          </View>
+          <Pressable
+            onPress={() => navigation.navigate('TournamentSignup')}
+            style={({ pressed }) => [styles.codeBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.codeBtnText}>Tengo código</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.center}>
@@ -137,81 +245,51 @@ export const ExploreTournamentsScreen = ({
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load(search);
+                if (mode === 'mine') loadMine();
+                else loadExplore(search);
               }}
               tintColor={c.accent}
             />
           }
         >
-          {items.length === 0 ? (
+          {mode === 'explore' ? (
+            items.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <IconTrophy size={26} color={c.textFaint} />
+                <Text style={styles.emptyTitle}>No hay torneos abiertos</Text>
+                <Text style={styles.emptyText}>
+                  {search
+                    ? 'Prueba con otra búsqueda.'
+                    : 'Cuando un club abra inscripciones, aparecerá aquí. Si tienes un código, apúntate directamente.'}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: 12 }}>
+                {items.map((t) => (
+                  <TournamentCard key={t.id} t={t} onPress={() => openTournament(t)} styles={styles} c={c} />
+                ))}
+              </View>
+            )
+          ) : mineSections.length === 0 ? (
             <View style={styles.emptyBox}>
               <IconTrophy size={26} color={c.textFaint} />
-              <Text style={styles.emptyTitle}>No hay torneos abiertos</Text>
+              <Text style={styles.emptyTitle}>Aún no te has apuntado a ningún torneo</Text>
               <Text style={styles.emptyText}>
-                {search
-                  ? 'Prueba con otra búsqueda.'
-                  : 'Cuando un club abra inscripciones, aparecerá aquí. Si tienes un código, apúntate directamente.'}
+                Apúntate desde “Explorar” y aquí verás tus torneos en juego, próximos
+                y jugados.
               </Text>
             </View>
           ) : (
-            <View style={{ gap: 12 }}>
-              {items.map((t) => (
-                <Pressable
-                  key={t.id}
-                  onPress={() => openTournament(t)}
-                  style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}
-                >
-                  {t.cover_url ? (
-                    <Image source={{ uri: t.cover_url }} style={styles.cover} />
-                  ) : (
-                    <LinearGradient
-                      colors={[c.accent15, c.bgCard]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[styles.cover, styles.coverPlaceholder]}
-                    >
-                      <IconTrophy size={26} color={c.accent} />
-                    </LinearGradient>
-                  )}
-
-                  <View style={styles.cardBody}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.cardName} numberOfLines={1}>
-                        {t.name}
-                      </Text>
-                      <Text style={styles.cardClub} numberOfLines={1}>
-                        {t.club_name}
-                      </Text>
-                      <Text style={styles.cardMeta} numberOfLines={1}>
-                        {[formatStartsOn(t.starts_on), t.location]
-                          .filter(Boolean)
-                          .join(' · ') || 'Fecha por confirmar'}
-                      </Text>
-                      <View style={styles.chips}>
-                        {(t.genders ?? []).map((g) => (
-                          <View key={g} style={styles.chip}>
-                            <Text style={styles.chipText}>{GENDER_LABEL[g] ?? g}</Text>
-                          </View>
-                        ))}
-                        {(t.categories ?? []).slice(0, 3).map((cat) => (
-                          <View key={cat} style={styles.chip}>
-                            <Text style={styles.chipText}>{cat}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                    <IconChevron size={16} color={c.textFaint} />
+            <View style={{ gap: 4 }}>
+              {mineSections.map((s) => (
+                <View key={s.label} style={{ marginTop: 8 }}>
+                  <Text style={styles.sectionLabel}>{s.label.toUpperCase()}</Text>
+                  <View style={{ gap: 12, marginTop: 8 }}>
+                    {s.data.map((t) => (
+                      <TournamentCard key={t.id} t={t} onPress={() => openTournament(t)} styles={styles} c={c} />
+                    ))}
                   </View>
-
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.statusText}>
-                      {STATUS_LABEL[t.status] ?? t.status}
-                    </Text>
-                    <Text style={styles.playersText}>
-                      {t.players} {t.pair_based ? (t.players === 1 ? 'pareja' : 'parejas') : t.players === 1 ? 'jugador' : 'jugadores'}
-                    </Text>
-                  </View>
-                </Pressable>
+                </View>
               ))}
             </View>
           )}
@@ -243,6 +321,26 @@ const makeStyles = (c: Palette) =>
     },
     eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
     title: { color: c.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.4, marginTop: 2 },
+    modeTabs: {
+      flexDirection: 'row',
+      gap: 6,
+      marginHorizontal: 20,
+      marginBottom: 12,
+      padding: 4,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    modeTab: { flex: 1, height: 38, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+    modeTabText: { fontSize: 13, fontWeight: '700', letterSpacing: -0.2 },
+    sectionLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 2,
+      color: c.textFaint,
+      fontWeight: '600',
+    },
     searchWrap: {
       flexDirection: 'row',
       gap: 10,

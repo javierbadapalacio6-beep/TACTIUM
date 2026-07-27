@@ -27,6 +27,10 @@ import {
   listTournaments,
   createTournament,
   uploadTournamentCover,
+  togglePhaseDay,
+  koRoundNameFromEnd,
+  tournamentBucket,
+  formatFee,
   type Tournament,
   isSocialFormat,
   type MatchFormat,
@@ -97,6 +101,23 @@ export const ClubTournamentsScreen = ({
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
+  // Agrupa los torneos del club por estado (calendario).
+  const clubSections = useMemo(() => {
+    const bucket = (t: Tournament) => tournamentBucket(t.status, t.starts_on);
+    const live = items.filter((t) => bucket(t) === 'live');
+    const soon = items
+      .filter((t) => bucket(t) === 'upcoming')
+      .sort((a, b) => (a.starts_on ?? 'z').localeCompare(b.starts_on ?? 'z'));
+    const done = items
+      .filter((t) => bucket(t) === 'finished')
+      .sort((a, b) => (b.starts_on ?? '').localeCompare(a.starts_on ?? ''));
+    return [
+      { label: 'En juego', data: live },
+      { label: 'Próximamente', data: soon },
+      { label: 'Finalizados', data: done },
+    ].filter((s) => s.data.length);
+  }, [items]);
+
   const load = useCallback(async () => {
     if (!club) return;
     try {
@@ -159,45 +180,52 @@ export const ClubTournamentsScreen = ({
               </Text>
             </View>
           ) : (
-            <View style={{ gap: 10, marginTop: 18 }}>
-              {items.map((t) => (
-                <Pressable
-                  key={t.id}
-                  onPress={() =>
-                    navigation.navigate('TournamentDetail', { tournamentId: t.id })
-                  }
-                  style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
-                >
-                  {t.cover_url ? (
-                    <Image source={{ uri: t.cover_url }} style={styles.cardCover} />
-                  ) : null}
-                  <View style={styles.cardRow}>
-                    {t.cover_url ? null : (
-                      <View style={styles.cardIcon}>
-                        <IconTrophy size={18} color={c.accent} />
-                      </View>
-                    )}
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.cardName} numberOfLines={1}>
-                        {t.name}
-                      </Text>
-                      <Text style={styles.cardMeta} numberOfLines={1}>
-                        {[
-                          formatStartsOn(t.starts_on),
-                          t.location,
-                          t.genders?.length
-                            ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
-                            : null,
-                          t.categories?.length ? t.categories.join(' / ') : null,
-                          STATUS_LABEL[t.status] ?? t.status,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </Text>
-                    </View>
-                    <IconChevron size={16} color={c.textFaint} />
+            <View style={{ marginTop: 10 }}>
+              {clubSections.map((s) => (
+                <View key={s.label} style={{ marginTop: 12 }}>
+                  <Text style={styles.groupLabel}>{s.label.toUpperCase()}</Text>
+                  <View style={{ gap: 10, marginTop: 8 }}>
+                    {s.data.map((t) => (
+                      <Pressable
+                        key={t.id}
+                        onPress={() =>
+                          navigation.navigate('TournamentDetail', { tournamentId: t.id })
+                        }
+                        style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
+                      >
+                        {t.cover_url ? (
+                          <Image source={{ uri: t.cover_url }} style={styles.cardCover} />
+                        ) : null}
+                        <View style={styles.cardRow}>
+                          {t.cover_url ? null : (
+                            <View style={styles.cardIcon}>
+                              <IconTrophy size={18} color={c.accent} />
+                            </View>
+                          )}
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.cardName} numberOfLines={1}>
+                              {t.name}
+                            </Text>
+                            <Text style={styles.cardMeta} numberOfLines={1}>
+                              {[
+                                formatStartsOn(t.starts_on),
+                                t.location,
+                                t.genders?.length
+                                  ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
+                                  : null,
+                                t.categories?.length ? t.categories.join(' / ') : null,
+                                t.entry_fee ? formatFee(t.entry_fee, t.fee_currency) : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </Text>
+                          </View>
+                          <IconChevron size={16} color={c.textFaint} />
+                        </View>
+                      </Pressable>
+                    ))}
                   </View>
-                </Pressable>
+                </View>
               ))}
             </View>
           )}
@@ -227,11 +255,52 @@ const CreateTournamentSheet: React.FC<{
   const [genders, setGenders] = useState<TournamentGender[]>(['masculino']);
   const [format, setFormat] = useState<TournamentFormat>('ko');
   const [maxPairs, setMaxPairs] = useState('');
+  const [fee, setFee] = useState('');
   const [matchFormat, setMatchFormat] = useState<MatchFormat>('bo3_stb');
   const [seedingMode, setSeedingMode] = useState<SeedingMode>('points');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
   const [endsOn, setEndsOn] = useState<Date | null>(null);
+  const [phasePlan, setPhasePlan] = useState<Record<string, string[]>>({});
   const [location, setLocation] = useState('');
+
+  // Días del torneo (para el planificador de fases del formulario).
+  const ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const planDays = useMemo(() => {
+    if (!startsOn) return [] as { iso: string; label: string }[];
+    // Normaliza a medianoche (el DateField trae hora → si no, se pierde el
+    // último día cuando su hora es menor que la de inicio).
+    const e0 = endsOn ?? startsOn;
+    const d = new Date(startsOn.getFullYear(), startsOn.getMonth(), startsOn.getDate());
+    const end = new Date(e0.getFullYear(), e0.getMonth(), e0.getDate());
+    const out: { iso: string; label: string }[] = [];
+    let g = 0;
+    while (d.getTime() <= end.getTime() && g < 40) {
+      out.push({ iso: dateToIsoDate(d), label: `${ABBR[d.getDay()]} ${d.getDate()}` });
+      d.setDate(d.getDate() + 1);
+      g++;
+    }
+    return out;
+  }, [startsOn, endsOn]);
+  // Fases genéricas según el formato.
+  const planPhases = useMemo(() => {
+    const out: { key: string; label: string }[] = [];
+    if (format === 'groups_ko') out.push({ key: 'grp:0', label: 'Fase de grupos' });
+    if (format === 'round_robin') out.push({ key: 'rr:0', label: 'Liga' });
+    if (format === 'americano') out.push({ key: 'amer:0', label: 'Americano' });
+    if (format === 'mexicano') out.push({ key: 'mex:0', label: 'Mexicano' });
+    if (format === 'ko' || format === 'groups_ko')
+      for (const fe of [3, 2, 1, 0]) out.push({ key: `ko:${fe}`, label: koRoundNameFromEnd(fe) });
+    return out;
+  }, [format]);
+  const togglePlan = (key: string, iso: string) =>
+    setPhasePlan((prev) => {
+      const cur = prev[key] ?? [];
+      const next = cur.includes(iso) ? cur.filter((x) => x !== iso) : [...cur, iso];
+      const copy = { ...prev };
+      if (next.length) copy[key] = next;
+      else delete copy[key];
+      return copy;
+    });
   const [prizes, setPrizes] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -243,10 +312,12 @@ const CreateTournamentSheet: React.FC<{
     setGenders(['masculino']);
     setFormat('ko');
     setMaxPairs('');
+    setFee('');
     setMatchFormat('bo3_stb');
     setSeedingMode('points');
     setStartsOn(null);
     setEndsOn(null);
+    setPhasePlan({});
     setLocation('');
     setPrizes('');
     setExtraInfo('');
@@ -288,7 +359,7 @@ const CreateTournamentSheet: React.FC<{
           toast.error('No se pudo subir la foto', e?.message ?? 'Se creará sin portada.');
         }
       }
-      await createTournament({
+      const created = await createTournament({
         clubId,
         name: name.trim(),
         format,
@@ -296,6 +367,7 @@ const CreateTournamentSheet: React.FC<{
         genders,
         categories: cats,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+        entryFee: fee ? parseFloat(fee) : null,
         seedingMode,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
@@ -304,6 +376,20 @@ const CreateTournamentSheet: React.FC<{
         extraInfo,
         coverUrl,
       });
+      // Guarda los días asignados a cada fase (si el club los eligió).
+      const planEntries = Object.entries(phasePlan).flatMap(([key, isos]) => {
+        const [b, r] = key.split(':');
+        return isos.map((iso) => ({ b, r: parseInt(r, 10), iso }));
+      });
+      if (planEntries.length) {
+        try {
+          await Promise.all(
+            planEntries.map((e) => togglePhaseDay(created.id, e.b, e.r, e.iso, true)),
+          );
+        } catch {
+          /* no bloquea la creación; se puede reasignar en Horario */
+        }
+      }
       toast.success('Torneo creado', 'Comparte el código para las inscripciones.');
       reset();
       onCreated();
@@ -401,6 +487,42 @@ const CreateTournamentSheet: React.FC<{
           />
         </View>
       </View>
+
+      {planDays.length > 1 && planPhases.length > 0 ? (
+        <>
+          <Text style={styles.label}>DÍAS DE CADA FASE · OPCIONAL</Text>
+          <Text style={styles.planHint}>
+            Marca en qué días se juega cada fase (puedes elegir varios). Todos los
+            cuadros comparten estos días. Sin marcar = cualquier día.
+          </Text>
+          <View style={{ gap: 10 }}>
+            {planPhases.map((ph) => {
+              const sel = phasePlan[ph.key] ?? [];
+              return (
+                <View key={ph.key} style={{ gap: 6 }}>
+                  <Text style={styles.planPhase}>{ph.label}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {planDays.map((day) => {
+                      const on = sel.includes(day.iso);
+                      return (
+                        <Pressable
+                          key={day.iso}
+                          onPress={() => togglePlan(ph.key, day.iso)}
+                          style={[styles.planDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                        >
+                          <Text style={[styles.planDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                            {on ? '✓ ' : ''}{day.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.label}>LUGAR · OPCIONAL</Text>
       <View style={styles.input}>
@@ -568,6 +690,23 @@ const CreateTournamentSheet: React.FC<{
         />
       </View>
 
+      <Text style={styles.label}>CUOTA DE INSCRIPCIÓN (€) · OPCIONAL</Text>
+      <View style={styles.input}>
+        <TextInput
+          value={fee}
+          onChangeText={(t) => setFee(t.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+          placeholder="0 = gratis"
+          placeholderTextColor={c.textFaint}
+          style={styles.inputField}
+          keyboardType="decimal-pad"
+          maxLength={7}
+        />
+      </View>
+      <Text style={styles.planHint}>
+        Por ahora la cuota se muestra como información y se paga en el club. El pago
+        online llegará más adelante.
+      </Text>
+
       <Text style={styles.label}>PREMIOS · OPCIONAL</Text>
       <View style={[styles.input, styles.inputMultiline]}>
         <TextInput
@@ -670,6 +809,7 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
       backgroundColor: c.accent15,
     },
+    groupLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 2, color: c.textFaint, fontWeight: '600' },
     cardName: { color: c.text, fontSize: 15, fontWeight: '700' },
     cardMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
     // Sheet
@@ -714,6 +854,19 @@ const makeStyles = (c: Palette) =>
       paddingVertical: 0,
     },
     inputMultiline: { minHeight: 84, alignItems: 'stretch', paddingVertical: 12 },
+    planHint: { color: c.textMuted, fontSize: 12, marginTop: -2, marginBottom: 8, lineHeight: 17 },
+    planPhase: { color: c.text, fontSize: 14, fontWeight: '700' },
+    planDayChip: {
+      paddingHorizontal: 12,
+      height: 34,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    planDayChipText: { fontSize: 13, fontWeight: '700' },
     inputFieldMultiline: {
       minHeight: 60,
       textAlignVertical: 'top',

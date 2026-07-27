@@ -22,6 +22,7 @@ import {
   publicListMatches,
   computeStandings,
   isSocialFormat,
+  tournamentStatusLabel,
   type Tournament,
   type TournamentRegistration,
   type TournamentMatch,
@@ -41,8 +42,7 @@ import {
   SocialView,
   divLabel,
   sameDiv,
-  fmtTime,
-  STATUS_LABEL,
+  fmtDayTime,
   formatStartsOn,
   type RegInfo,
   type TabKey,
@@ -66,7 +66,7 @@ export const TournamentFollowScreen = ({
   const [matches, setMatches] = useState<TournamentMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
-  const [tab, setTab] = useState<TabKey>('main');
+  const [tab, setTab] = useState<TabKey>(route.params?.initialTab ?? 'main');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
@@ -195,37 +195,15 @@ export const TournamentFollowScreen = ({
     return `${rival.name}${rival.partner ? ` / ${rival.partner}` : ''}`;
   };
 
+  const dateRange =
+    t && formatStartsOn(t.starts_on)
+      ? t.ends_on && t.ends_on !== t.starts_on
+        ? `${formatStartsOn(t.starts_on)} – ${formatStartsOn(t.ends_on)}`
+        : formatStartsOn(t.starts_on)
+      : null;
+
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <View style={{ paddingTop: insets.top + 12, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingBottom: 12 }}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            hitSlop={10}
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-          >
-            <IconBack size={20} color={c.text} />
-          </Pressable>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <View style={styles.headMeta}>
-              {t?.status ? (
-                <View style={[styles.statusPill, t.status === 'finished' && styles.statusPillDone]}>
-                  <Text style={[styles.statusPillText, t.status === 'finished' && styles.statusPillTextDone]}>
-                    {STATUS_LABEL[t.status] ?? t.status.toUpperCase()}
-                  </Text>
-                </View>
-              ) : null}
-              {formatStartsOn(t?.starts_on ?? null) ? (
-                <Text style={styles.headDate}>{formatStartsOn(t?.starts_on ?? null)}</Text>
-              ) : null}
-            </View>
-            <Text style={styles.title} numberOfLines={1}>
-              {t?.name ?? ''}
-            </Text>
-          </View>
-        </View>
-      </View>
-
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={c.accent} />
@@ -236,16 +214,54 @@ export const TournamentFollowScreen = ({
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
-          {t.cover_url ? (
-            <View style={styles.coverBanner}>
-              <Image source={{ uri: t.cover_url }} style={styles.coverBannerImg} />
-              <LinearGradient colors={['transparent', c.background]} style={styles.coverBannerFade} />
+          {/* HERO con portada */}
+          <View style={styles.hero}>
+            {t.cover_url ? (
+              <Image source={{ uri: t.cover_url }} style={styles.heroImg} />
+            ) : (
+              <LinearGradient
+                colors={[c.accent25, c.bgCard]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroImg}
+              />
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.8)']}
+              style={styles.heroFade}
+            />
+            <View style={styles.heroBottom}>
+              {t.status ? (
+                <View style={styles.heroStatusPill}>
+                  <View
+                    style={[
+                      styles.heroDot,
+                      { backgroundColor: t.status === 'finished' ? '#cfcfcf' : c.primary },
+                    ]}
+                  />
+                  <Text style={styles.heroStatusText}>
+                    {tournamentStatusLabel(t.status, t.starts_on)}
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={styles.heroTitle} numberOfLines={2}>
+                {t.name}
+              </Text>
+              {dateRange || t.location ? (
+                <Text style={styles.heroMeta} numberOfLines={1}>
+                  {[dateRange, t.location].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
             </View>
-          ) : null}
+          </View>
 
           {champion ? <ChampionHero info={regInfo(champion)} styles={styles} c={c} /> : null}
 
-          {t.status === 'open' ? (
+          {myRegIds.size > 0 ? (
+            <View style={styles.enrolled}>
+              <Text style={styles.enrolledText}>✓ Ya estás inscrito en este torneo</Text>
+            </View>
+          ) : t.status === 'open' ? (
             <Pressable
               onPress={() =>
                 navigation.navigate('TournamentSignup', { code: t.signup_code ?? undefined })
@@ -269,7 +285,7 @@ export const TournamentFollowScreen = ({
                       </Text>
                       <Text style={styles.myMatchMeta} numberOfLines={1}>
                         {m.scheduled_at
-                          ? `🕐 ${fmtTime(m.scheduled_at)}${m.court ? ` · ${m.court}` : ''}`
+                          ? `🕐 ${fmtDayTime(m.scheduled_at)}${m.court ? ` · ${m.court}` : ''}`
                           : 'Hora por confirmar'}
                       </Text>
                     </View>
@@ -395,6 +411,17 @@ export const TournamentFollowScreen = ({
           )}
         </ScrollView>
       )}
+
+      {/* Botón atrás flotante sobre el hero */}
+      <View style={[styles.heroControls, { top: insets.top + 6 }]} pointerEvents="box-none">
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={10}
+          style={({ pressed }) => [styles.heroCtrlBtn, pressed && { opacity: 0.7 }]}
+        >
+          <IconBack size={20} color="#fff" />
+        </Pressable>
+      </View>
     </View>
   );
 };

@@ -22,6 +22,7 @@ import { toast } from '@store/toastStore';
 import {
   signupByCode,
   lookupTournament,
+  formatFee,
   type TournamentLookup,
 } from '@core/services/tournaments';
 
@@ -319,6 +320,14 @@ export const TournamentSignupScreen = ({
                 .filter(Boolean)
                 .join(' · ') || 'Inscripción abierta'}
             </Text>
+
+            <View style={styles.feeChip}>
+              <Text style={styles.feeChipText}>
+                {found.entry_fee
+                  ? `Inscripción: ${formatFee(found.entry_fee, found.fee_currency)} · se paga en el club`
+                  : 'Inscripción gratuita'}
+              </Text>
+            </View>
 
             {found.genders.length > 0 ? (
               <>
@@ -632,6 +641,17 @@ const makeStyles = (c: Palette) =>
     },
     foundName: { color: c.text, fontSize: 16, fontWeight: '700' },
     foundMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    feeChip: {
+      marginTop: 10,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 9999,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    feeChipText: { color: c.accent, fontSize: 12.5, fontWeight: '800' },
     foundLabel: {
       fontFamily: Fonts.mono,
       fontSize: 11,

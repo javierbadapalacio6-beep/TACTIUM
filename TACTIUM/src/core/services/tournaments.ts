@@ -14,6 +14,17 @@ export type TournamentFormat =
 // 'federative' = fija cabezas 1 y 2 y sortea las bandas (3-4, 5-8…) + resto,
 // con seed guardada para reproducir el sorteo.
 export type SeedingMode = 'points' | 'federative';
+
+/** Cuota de inscripción legible: "20 €", "12,50 €" o "Gratis". */
+export const formatFee = (
+  amount: number | null | undefined,
+  currency = 'EUR',
+): string => {
+  if (amount == null || amount <= 0) return 'Gratis';
+  const sym = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : currency;
+  const n = Number.isInteger(amount) ? String(amount) : amount.toFixed(2).replace('.', ',');
+  return currency === 'EUR' ? `${n} ${sym}` : `${sym}${n}`;
+};
 export const isSocialFormat = (f: string) => f === 'americano' || f === 'mexicano';
 // Formato del PARTIDO (sets). Ver formatConfig.
 export type MatchFormat = 'bo3_stb' | 'bo3_full' | 'bo1';
@@ -43,6 +54,41 @@ export type TournamentStatus =
   | 'finished'
   | 'canceled';
 
+const localTodayIso = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** ¿Ya ha llegado la fecha de inicio? (sin fecha = se considera empezado). */
+export const tournamentStarted = (startsOn: string | null): boolean =>
+  !startsOn || startsOn <= localTodayIso();
+
+/** Grupo/calendario según estado + fecha: un torneo con cuadro generado pero
+ * fecha futura es "próximamente", no "en juego". */
+export const tournamentBucket = (
+  status: string,
+  startsOn: string | null,
+): 'live' | 'upcoming' | 'finished' => {
+  if (status === 'finished' || status === 'canceled') return 'finished';
+  if (status === 'in_progress' && tournamentStarted(startsOn)) return 'live';
+  return 'upcoming';
+};
+
+/** Etiqueta de estado para el pill (según fecha). */
+export const tournamentStatusLabel = (
+  status: string,
+  startsOn: string | null,
+): string => {
+  switch (status) {
+    case 'finished': return 'COMPLETADO';
+    case 'canceled': return 'CANCELADO';
+    case 'in_progress': return tournamentStarted(startsOn) ? 'EN JUEGO' : 'PRÓXIMAMENTE';
+    case 'open': return 'ABIERTO';
+    case 'draft': return 'BORRADOR';
+    default: return status.toUpperCase();
+  }
+};
+
 export interface Tournament {
   id: string;
   club_id: string;
@@ -55,6 +101,9 @@ export interface Tournament {
   prizes: string | null;
   extra_info: string | null;
   cover_url: string | null;
+  entry_fee: number | null;
+  fee_currency: string;
+  payment_mode: string;
   courts: number;
   start_time: string;
   slot_minutes: number;
@@ -138,6 +187,7 @@ export async function createTournament(input: {
   extraInfo?: string | null;
   coverUrl?: string | null;
   seedingMode?: SeedingMode;
+  entryFee?: number | null;
 }): Promise<Tournament> {
   const payload = {
     club_id: input.clubId,
@@ -149,6 +199,7 @@ export async function createTournament(input: {
     starts_on: input.startsOn ?? null,
     ends_on: input.endsOn ?? null,
     seeding_mode: input.seedingMode ?? 'points',
+    entry_fee: input.entryFee ?? null,
     max_pairs: input.maxPairs ?? null,
     location: input.location?.trim() || null,
     prizes: input.prizes?.trim() || null,
@@ -204,6 +255,7 @@ export async function updateTournament(
     extraInfo?: string | null;
     coverUrl?: string | null;
     seedingMode?: SeedingMode;
+    entryFee?: number | null;
   },
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
@@ -211,6 +263,7 @@ export async function updateTournament(
   if (fields.startsOn !== undefined) payload.starts_on = fields.startsOn;
   if (fields.endsOn !== undefined) payload.ends_on = fields.endsOn;
   if (fields.seedingMode !== undefined) payload.seeding_mode = fields.seedingMode;
+  if (fields.entryFee !== undefined) payload.entry_fee = fields.entryFee;
   if (fields.location !== undefined) payload.location = fields.location?.trim() || null;
   if (fields.maxPairs !== undefined) payload.max_pairs = fields.maxPairs;
   if (fields.prizes !== undefined) payload.prizes = fields.prizes?.trim() || null;
@@ -596,9 +649,16 @@ export const BRACKET_LABEL: Record<string, string> = {
   bronze: 'Bronce',
 };
 
-/** Nombre bonito de un cuadro: Oro/Plata/Bronce y "Cuadro 4º/5º…" para el resto. */
-export const bracketLabel = (b: string): string =>
-  BRACKET_LABEL[b] ?? (b.startsWith('pos') ? `Cuadro ${b.slice(3)}º` : b);
+/** Nombre bonito de un cuadro: Oro/Plata/Bronce y "Consolación" para el resto
+ * (los cuadros por posición 4º en adelante). */
+export const bracketLabel = (b: string): string => {
+  if (BRACKET_LABEL[b]) return BRACKET_LABEL[b];
+  if (b.startsWith('pos')) {
+    const n = parseInt(b.slice(3), 10) || 0;
+    return n <= 4 ? 'Consolación' : `Consolación ${n - 3}`;
+  }
+  return b;
+};
 
 /** Orden de los cuadros por posición: Oro → Plata → Bronce → 4º → 5º… */
 export const bracketRank = (b: string): number => {
@@ -1252,14 +1312,39 @@ export interface ScheduleResult {
   unplaced: number;
 }
 
-const KO_BRACKETS = new Set(['main', 'gold', 'silver', 'bronze']);
+// Cuadros de UNA sola fase (todos sus partidos van juntos, ronda 0).
+const SINGLE_PHASE_BRACKETS = new Set(['grp', 'rr', 'amer', 'mex']);
+/** ¿Es un cuadro que se ordena por rondas (KO por posición incl. pos4/5…)? */
+export const isRoundBracket = (b: string): boolean => !SINGLE_PHASE_BRACKETS.has(b);
 
 /** Fase de un partido para el planificador: KO se ordena por ronda; grupos/
  * liga/americano/mexicano son una sola fase (ronda 0). */
 export function matchPhaseKey(m: TournamentMatch): string {
-  return KO_BRACKETS.has(m.bracket)
+  return isRoundBracket(m.bracket)
     ? phaseKey(m.bracket, m.round)
     : phaseKey(m.bracket, 0);
+}
+
+/** Nombre genérico de una ronda de KO por su distancia a la final
+ * (0=Final, 1=Semifinales, 2=Cuartos, 3=Octavos, 4=Dieciseisavos…). */
+export const koRoundNameFromEnd = (fromEnd: number): string => {
+  switch (fromEnd) {
+    case 0: return 'Final';
+    case 1: return 'Semifinales';
+    case 2: return 'Cuartos';
+    case 3: return 'Octavos';
+    case 4: return 'Dieciseisavos';
+    case 5: return 'Treintaidosavos';
+    default: return `Ronda de ${2 ** (fromEnd + 1)}`;
+  }
+};
+
+/** Clave de fase GENÉRICA para asignar días: los cuadros por posición
+ * (oro/plata/bronce/consolación) COMPARTEN día por ronda genérica → `ko:fromEnd`.
+ * Grupos/liga/social son una fase única (`grp:0`, `rr:0`…). */
+export function genericPhaseDayKey(m: TournamentMatch, maxRoundOfBracket: number): string {
+  if (!isRoundBracket(m.bracket)) return phaseKey(m.bracket, 0);
+  return `ko:${maxRoundOfBracket - m.round}`;
 }
 
 // Lista de fechas ISO del torneo (inicio → fin).
@@ -1286,15 +1371,15 @@ function tournamentDays(t: Tournament): string[] {
 
 // Días permitidos para un partido: los de su fase (varios posibles), filtrados
 // a días válidos del torneo. Si la fase no tiene días → todos los del torneo.
+// Usa la clave GENÉRICA (los cuadros por posición comparten día por ronda).
 function allowedDaysFor(
   m: TournamentMatch,
   phaseDays: Record<string, string[]>,
   allDays: string[],
+  maxRoundByBracket: Record<string, number>,
 ): string[] {
-  const raw =
-    phaseDays[phaseKey(m.bracket, m.round)] ??
-    phaseDays[phaseKey(m.bracket, 0)] ??
-    [];
+  const key = genericPhaseDayKey(m, maxRoundByBracket[m.bracket] ?? m.round);
+  const raw = phaseDays[key] ?? [];
   const valid = raw.filter((d) => allDays.includes(d));
   return valid.length ? valid : allDays;
 }
@@ -1356,6 +1441,11 @@ export async function autoScheduleTournament(
   const known = matches.filter(
     (m) => m.status !== 'bye' && !!m.home_reg && !!m.away_reg,
   );
+  // Nº de rondas por cuadro (para calcular la fase genérica de cada partido).
+  const maxRoundByBracket: Record<string, number> = {};
+  for (const m of matches)
+    if (isRoundBracket(m.bracket))
+      maxRoundByBracket[m.bracket] = Math.max(maxRoundByBracket[m.bracket] ?? 0, m.round);
   // Pre-reserva de los ya jugados (conservan su hueco en su día).
   for (const m of known) {
     if (m.status !== 'finished' || !m.scheduled_at) continue;
@@ -1420,8 +1510,8 @@ export async function autoScheduleTournament(
   // Procesa por FASE: primero no-KO (grupos/liga/social), luego KO por ronda asc.
   const phaseKeysOrdered = Array.from(new Set(pending.map((m) => matchPhaseKey(m)))).sort(
     (a, b) => {
-      const ako = KO_BRACKETS.has(a.split(':')[0]);
-      const bko = KO_BRACKETS.has(b.split(':')[0]);
+      const ako = isRoundBracket(a.split(':')[0]);
+      const bko = isRoundBracket(b.split(':')[0]);
       if (ako !== bko) return ako ? 1 : -1;
       return Number(a.split(':')[1]) - Number(b.split(':')[1]);
     },
@@ -1429,7 +1519,7 @@ export async function autoScheduleTournament(
 
   for (const pk of phaseKeysOrdered) {
     const phaseMatches = pending.filter((m) => matchPhaseKey(m) === pk);
-    const days = allowedDaysFor(phaseMatches[0], phaseDays, allDays);
+    const days = allowedDaysFor(phaseMatches[0], phaseDays, allDays, maxRoundByBracket);
     // Más restringidos primero (menos huecos disponibles en total).
     phaseMatches.sort(
       (a, b) =>
@@ -1526,6 +1616,8 @@ export interface TournamentLookup {
   pair_based: boolean;
   starts_on: string | null;
   ends_on: string | null;
+  entry_fee: number | null;
+  fee_currency: string;
 }
 
 // Fila pública para explorar torneos (cualquier jugador, sin ser del club).
@@ -1543,23 +1635,33 @@ export interface ExploreTournament {
   signup_code: string | null;
   pair_based: boolean;
   players: number;
+  entry_fee: number | null;
+  fee_currency: string;
 }
 
 /** Explora torneos abiertos de cualquier club (búsqueda por nombre/club/lugar). */
 export async function exploreTournaments(
   search?: string,
 ): Promise<ExploreTournament[]> {
-  const rpc = supabase.rpc.bind(supabase) as unknown as (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => PromiseLike<RpcResult>;
-  const { data, error } = await rpc('explore_tournaments', {
+  const { data, error } = await rpcCall('explore_tournaments', {
     p_search: search?.trim() || null,
   });
   if (error) throw new Error(error.message);
   return ((data ?? []) as ExploreTournament[]).map((r) => ({
     ...r,
     players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
+  }));
+}
+
+/** Torneos en los que el jugador está inscrito (cualquier estado). */
+export async function myTournaments(): Promise<ExploreTournament[]> {
+  const { data, error } = await rpcCall('my_tournaments', {});
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ExploreTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
   }));
 }
 
