@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -20,6 +19,8 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack } from '@components/ui';
+import { PhotoShareCard, shareCardImage } from '@components/share/PhotoShareCard';
+import { DOWNLOAD_URL } from '@core/config/referral';
 import { fetchPublicMatchday, type PublicMatchday } from '@core/services/social';
 import type { RootStackParamList } from '@navigation/types';
 
@@ -81,6 +82,19 @@ export const LeagueMatchDetailScreen = () => {
         .join(' · ')
     : '';
 
+  const cardRef = useRef<View>(null);
+  const shareText = useMemo(() => {
+    if (!md) return '';
+    const header =
+      `🎾 ${md.team_name ?? ''} ${md.score_for ?? 0}–${md.score_against ?? 0} ${md.opponent ?? ''}` +
+      (md.jornada_number != null ? ` · Jornada ${md.jornada_number}` : '');
+    return [header, '', 'Sigue tus ligas con TACTIUM 🏆', DOWNLOAD_URL].join('\n');
+  }, [md]);
+  const onShare = () => {
+    if (!md?.photo_url) return;
+    shareCardImage(cardRef, md.photo_url, shareText);
+  };
+
   return (
     <View style={styles.root}>
       <ScrollView
@@ -110,46 +124,76 @@ export const LeagueMatchDetailScreen = () => {
             </Text>
 
             {md.photo_url ? (
-              <Image source={{ uri: md.photo_url }} style={styles.photo} resizeMode="cover" />
-            ) : null}
-
-            {/* Marcador: nuestro equipo vs rival */}
-            <View style={styles.scoreCard}>
-              <ScoreRow
-                name={md.team_name ?? 'Nuestro equipo'}
-                score={md.score_for}
-                win={oc?.won === true}
-              />
-              <View style={styles.scoreDivider} />
-              <ScoreRow
-                name={md.opponent ?? 'Rival'}
-                score={md.score_against}
-                win={oc?.won === false}
-              />
-            </View>
-
-            {oc ? (
-              <View
-                style={[
-                  styles.outcomePill,
-                  {
-                    borderColor: oc.won === true ? c.accent : oc.won === false ? c.error : c.warning,
-                    backgroundColor:
-                      (oc.won === true ? c.accent : oc.won === false ? c.error : c.warning) + '14',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.outcomeText,
-                    { color: oc.won === true ? c.accent : oc.won === false ? c.error : c.warning },
-                  ]}
+              <>
+                <View style={styles.cardWrap}>
+                  <PhotoShareCard
+                    ref={cardRef}
+                    photoUri={md.photo_url}
+                    title={`${md.team_name ?? ''} ${md.score_for ?? 0} – ${md.score_against ?? 0} ${md.opponent ?? ''}`}
+                    subtitle={`${md.jornada_number != null ? `Jornada ${md.jornada_number}` : 'Partido'}${meta ? ` · ${meta}` : ''}`}
+                    detail={
+                      oc
+                        ? `${oc.label}${md.is_home != null ? ` · ${md.is_home ? 'Local' : 'Visitante'}` : ''}`
+                        : ''
+                    }
+                    homeName={md.team_name ?? 'Nuestro equipo'}
+                    homeScore={md.score_for ?? 0}
+                    awayName={md.opponent ?? 'Rival'}
+                    awayScore={md.score_against ?? 0}
+                    highlight={oc?.won === true ? 'home' : oc?.won === false ? 'away' : 'home'}
+                  />
+                </View>
+                <Pressable
+                  onPress={onShare}
+                  style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.85 }]}
                 >
-                  {oc.label}
-                  {md.is_home != null ? ` · ${md.is_home ? 'Local' : 'Visitante'}` : ''}
-                </Text>
-              </View>
-            ) : null}
+                  <Text style={styles.shareBtnLabel}>Compartir foto</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                {/* Sin foto: scoreboard clásico */}
+                <View style={styles.scoreCard}>
+                  <ScoreRow
+                    name={md.team_name ?? 'Nuestro equipo'}
+                    score={md.score_for}
+                    win={oc?.won === true}
+                  />
+                  <View style={styles.scoreDivider} />
+                  <ScoreRow
+                    name={md.opponent ?? 'Rival'}
+                    score={md.score_against}
+                    win={oc?.won === false}
+                  />
+                </View>
+                {oc ? (
+                  <View
+                    style={[
+                      styles.outcomePill,
+                      {
+                        borderColor:
+                          oc.won === true ? c.accent : oc.won === false ? c.error : c.warning,
+                        backgroundColor:
+                          (oc.won === true ? c.accent : oc.won === false ? c.error : c.warning) + '14',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.outcomeText,
+                        {
+                          color:
+                            oc.won === true ? c.accent : oc.won === false ? c.error : c.warning,
+                        },
+                      ]}
+                    >
+                      {oc.label}
+                      {md.is_home != null ? ` · ${md.is_home ? 'Local' : 'Visitante'}` : ''}
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            )}
 
             {/* Resultados por pista */}
             {md.courts.length > 0 ? (
@@ -158,7 +202,14 @@ export const LeagueMatchDetailScreen = () => {
                 <View style={styles.courtsCard}>
                   {md.courts.map((ct) => (
                     <View key={ct.court_number} style={styles.courtRow}>
-                      <Text style={styles.courtLabel}>Pista {ct.court_number}</Text>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.courtLabel}>PISTA {ct.court_number}</Text>
+                        {ct.pair ? (
+                          <Text style={styles.courtPair} numberOfLines={1}>
+                            {ct.pair}
+                          </Text>
+                        ) : null}
+                      </View>
                       <Text
                         style={[
                           styles.courtSets,
@@ -235,13 +286,16 @@ const makeStyles = (c: Palette) =>
       fontWeight: '500',
       marginBottom: 12,
     },
-    photo: {
-      width: '100%',
-      height: 210,
+    cardWrap: { alignItems: 'center', marginBottom: 4 },
+    shareBtn: {
+      height: 50,
       borderRadius: Radius.lg,
-      backgroundColor: c.bgCard,
-      marginBottom: 14,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 14,
     },
+    shareBtnLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
     scoreCard: {
       backgroundColor: c.bgCard,
       borderRadius: Radius.lg,
@@ -310,15 +364,17 @@ const makeStyles = (c: Palette) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 12,
+      gap: 12,
+      paddingVertical: 11,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderColor: c.hair,
     },
     courtLabel: {
       fontFamily: Fonts.mono,
       color: c.textFaint,
-      fontSize: 12,
-      letterSpacing: 0.5,
+      fontSize: 10,
+      letterSpacing: 1,
     },
-    courtSets: { fontFamily: Fonts.mono, color: c.text, fontSize: 15, fontWeight: '700' },
+    courtPair: { color: c.text, fontSize: 14, fontWeight: '600', marginTop: 2 },
+    courtSets: { fontFamily: Fonts.mono, color: c.text, fontSize: 15, fontWeight: '700', textAlign: 'right' },
   });

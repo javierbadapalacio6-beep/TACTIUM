@@ -134,6 +134,7 @@ export interface PublicMatchdayCourt {
   court_number: number;
   forfeit?: boolean; // pista ganada/perdida por W.O. (sin marcador)
   forfeit_us?: boolean; // dirección del W.O. (true = no nos presentamos)
+  pair?: string | null; // nuestra pareja en esa pista (alineación activa)
   sets: { us: number; them: number }[];
 }
 export interface PublicMatchday {

@@ -24,6 +24,16 @@ as $function$
                'court_number', r.court_number,
                'forfeit', bool_or(r.forfeit),
                'forfeit_us', bool_or(r.forfeit_us) filter (where r.forfeit),
+               'pair', (
+                 select nullif(trim(
+                   coalesce(lp.player_a_name, '') ||
+                   case when nullif(lp.player_b_name, '') is not null
+                        then ' / ' || lp.player_b_name else '' end), '')
+                 from public.lineup_pairs lp
+                 join public.lineup_variants v on v.id = lp.variant_id
+                 where lp.matchday_id = m.id and lp.court_number = r.court_number and v.is_active
+                 limit 1
+               ),
                'sets', coalesce(
                  jsonb_agg(jsonb_build_object('us', r.us, 'them', r.them) order by r.set_number)
                    filter (where not r.forfeit and r.us is not null and r.them is not null),
