@@ -234,21 +234,27 @@ export const ProfileScreen = () => {
           <View style={styles.grid}>
             {photos.map((ph) => {
               const isCasual = ph.kind !== 'jornada' && !!ph.match_id;
+              const isJornada = ph.kind === 'jornada' && !!ph.matchday_id;
               return (
               <Pressable
                 key={ph.match_id ?? ph.matchday_id ?? ph.photo_url}
-                disabled={!isCasual}
+                disabled={!isCasual && !isJornada}
                 onPress={
                   isCasual
                     ? () =>
                         navigation.navigate('CasualMatchDetail', {
                           matchId: ph.match_id as string,
                         })
-                    : undefined
+                    : isJornada
+                      ? () =>
+                          navigation.navigate('LeagueMatchDetail', {
+                            matchdayId: ph.matchday_id as string,
+                          })
+                      : undefined
                 }
                 style={({ pressed }) => [
                   styles.gridItem,
-                  pressed && isCasual && { opacity: 0.85 },
+                  pressed && (isCasual || isJornada) && { opacity: 0.85 },
                 ]}
               >
                 <Image
