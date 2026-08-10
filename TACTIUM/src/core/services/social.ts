@@ -132,6 +132,8 @@ export function getPublicClubProfile(id: string): Promise<PublicClubProfile> {
 // Vista read-only a la que llevan las fotos de jornada del perfil.
 export interface PublicMatchdayCourt {
   court_number: number;
+  forfeit?: boolean; // pista ganada/perdida por W.O. (sin marcador)
+  forfeit_us?: boolean; // dirección del W.O. (true = no nos presentamos)
   sets: { us: number; them: number }[];
 }
 export interface PublicMatchday {

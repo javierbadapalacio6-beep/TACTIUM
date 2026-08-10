@@ -160,9 +160,11 @@ export const LeagueMatchDetailScreen = () => {
                     <View key={ct.court_number} style={styles.courtRow}>
                       <Text style={styles.courtLabel}>Pista {ct.court_number}</Text>
                       <Text style={styles.courtSets}>
-                        {ct.sets.length
-                          ? ct.sets.map((s) => `${s.us}-${s.them}`).join('  ')
-                          : '—'}
+                        {ct.forfeit
+                          ? 'W.O.'
+                          : ct.sets.length
+                            ? ct.sets.map((s) => `${s.us}-${s.them}`).join('  ')
+                            : '—'}
                       </Text>
                     </View>
                   ))}

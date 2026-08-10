@@ -1,8 +1,9 @@
 -- Vista pública (solo lectura) de un partido de liga (jornada), para que las
--- fotos de jornada del perfil público lleven a "su partido" en cualquier perfil.
+-- fotos de jornada del perfil lleven a "su partido" en cualquier perfil.
 -- Devuelve el resumen (equipo, rival, jornada, fecha, marcador, foto) + los
--- resultados por pista (sets us/them). SECURITY DEFINER: lectura pública, como
--- las fotos que ya se muestran en el perfil.
+-- resultados por pista (sets us/them). Las pistas de W.O. van marcadas con
+-- forfeit=true (sus sets no tienen marcador) para no pintar "null-null".
+-- SECURITY DEFINER: lectura pública, como las fotos que ya se muestran.
 create or replace function public.public_get_matchday(p_id uuid)
  returns table(
    id uuid, jornada_number int, match_date date, opponent text, is_home boolean,
@@ -21,7 +22,12 @@ as $function$
            from (
              select jsonb_build_object(
                'court_number', r.court_number,
-               'sets', jsonb_agg(jsonb_build_object('us', r.us, 'them', r.them) order by r.set_number)
+               'forfeit', bool_or(r.forfeit),
+               'forfeit_us', bool_or(r.forfeit_us) filter (where r.forfeit),
+               'sets', coalesce(
+                 jsonb_agg(jsonb_build_object('us', r.us, 'them', r.them) order by r.set_number)
+                   filter (where not r.forfeit and r.us is not null and r.them is not null),
+                 '[]'::jsonb)
              ) as cc
              from public.match_results r
              where r.matchday_id = m.id
