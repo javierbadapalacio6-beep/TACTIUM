@@ -980,8 +980,9 @@ export const TournamentSignupScreen = ({
                       >
                         <Text
                           style={[styles.hourCellText, { color: off ? c.textInverse : c.text }]}
+                          numberOfLines={1}
                         >
-                          {String(Math.floor(s.from / 60)).padStart(2, '0')}
+                          {s.label}
                         </Text>
                       </Pressable>
                     );
@@ -990,7 +991,7 @@ export const TournamentSignupScreen = ({
               </View>
             ))}
             <Text style={[styles.availHint, { marginTop: 4 }]}>
-              Cada casilla es esa hora (p. ej. “18” = 18:00–19:00). En rojo = no puedes.
+              En rojo = no puedes jugar esa franja.
             </Text>
           </>
         )}
@@ -1321,8 +1322,8 @@ const makeStyles = (c: Palette) =>
     dayRow: { flexDirection: 'row', gap: 6 },
     hourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     hourCell: {
-      width: 40,
-      height: 36,
+      width: 86,
+      height: 38,
       borderRadius: Radius.sm,
       backgroundColor: c.bgCard,
       borderWidth: 1,
@@ -1330,7 +1331,7 @@ const makeStyles = (c: Palette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    hourCellText: { fontSize: 13, fontWeight: '800' },
+    hourCellText: { fontFamily: Fonts.mono, fontSize: 11.5, fontWeight: '700' },
     dayCell: {
       flex: 1,
       height: 40,
