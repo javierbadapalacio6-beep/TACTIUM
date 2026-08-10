@@ -159,9 +159,14 @@ export const LeagueMatchDetailScreen = () => {
                   {md.courts.map((ct) => (
                     <View key={ct.court_number} style={styles.courtRow}>
                       <Text style={styles.courtLabel}>Pista {ct.court_number}</Text>
-                      <Text style={styles.courtSets}>
+                      <Text
+                        style={[
+                          styles.courtSets,
+                          ct.forfeit && { color: ct.forfeit_us ? c.error : c.accent },
+                        ]}
+                      >
                         {ct.forfeit
-                          ? 'W.O.'
+                          ? `W.O. ${ct.forfeit_us ? 'en contra' : 'a favor'}`
                           : ct.sets.length
                             ? ct.sets.map((s) => `${s.us}-${s.them}`).join('  ')
                             : '—'}
