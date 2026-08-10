@@ -248,6 +248,23 @@
 const LOG = [
   {
     date: "2026-08-10",
+    title: "🎾 Vista de JUGADOR pulida: partido de liga con W.O.+dirección, parejas por pista y compartir foto; inscripción con detección automática de categoría, nivel por última temporada, franjas completas y menos texto.",
+    changes: [
+      { type: "feat", text: "<strong>🧠 Inscripción detecta tu CATEGORÍA automáticamente</strong>. Con los puntos/nivel de la pareja + las reglas del torneo, la app deduce en qué categorías encajáis: marca las elegibles con ✓, atenúa las que no, muestra una pista («Según vuestros puntos/niveles, podéis jugar: X · Y») y <strong>autoselecciona</strong> si solo hay una. El jugador ya no interpreta si es «ambos requisitos o uno»." },
+
+      { type: "fix", text: "<strong>📅 Nivel FCP por ÚLTIMA temporada</strong>. El autodetect cogía el nivel MÍNIMO histórico (mejor división de siempre); ahora resuelve la división de su <strong>última temporada</strong> (id_liga más alto). Refleja dónde juega ahora, no su mejor división pasada." },
+
+      { type: "feat", text: "<strong>🏆 Partido de liga (vista pública): W.O., parejas y compartir</strong>. La pista por W.O. muestra <strong>«W.O. a favor / en contra»</strong> (color) en vez de «null-null»; cada pista muestra su <strong>pareja</strong> (alineación activa) + marcador; y se puede <strong>compartir la foto</strong> como en amistosos (PhotoShareCard + botón). RPC <code>public_get_matchday</code> ampliado (forfeit, forfeit_us, pair)." },
+
+      { type: "fix", text: "<strong>🔎 Perfil propio: fotos de jornada abren el partido</strong>. <code>ProfileScreen</code> solo cableaba el amistoso; ahora las fotos de jornada también abren <code>LeagueMatchDetail</code> (igual que el perfil público)." },
+
+      { type: "style", text: "<strong>🧹 Inscripción menos cargada</strong>. Cuadro «¿quién eres?» (autodetect FCP) con más aire y candidatos más separados; franjas de disponibilidad muestran el rango completo (<strong>18:00–19:00</strong>) en vez de solo «18»; avisos largos recortados (puntos, email compañero, nivel)." },
+
+      { type: "chore", text: "<strong>💾 Commiteado a <code>main</code></strong> (build nuevo): fotos→partido, W.O.+dirección, parejas+compartir, fix perfil propio, autodetect categoría, nivel última temporada, spacing/copys. Torneos de prueba «Torneo de Prueba · Jugador» (JUGADOR) y «Copa Prueba · Jugador 2» (PRUEBA2) poblados para probar la capa jugador." },
+    ],
+  },
+  {
+    date: "2026-08-10",
     title: "📸 Las FOTOS del perfil llevan a su PARTIDO (amistoso y jornada) + primeros COMMITS a main para el build nuevo.",
     changes: [
       { type: "feat", text: "<strong>📸 Fotos del perfil → su partido</strong>. Las fotos de partidos del perfil público eran un <code>View</code> sin tap. Ahora: <strong>amistoso</strong> (<code>match_id</code>) abre <code>CasualMatchDetail</code>; <strong>jornada/liga</strong> (<code>matchday_id</code>) abre una <strong>nueva vista pública</strong> <code>LeagueMatchDetail</code> (solo lectura): portada + equipo vs rival + marcador + resultados por pista. Nuevo RPC <code>public_get_matchday(uuid)</code> (SECURITY DEFINER, lectura pública) con el resumen + los sets por pista. Ruta registrada en el <code>RootNavigator</code>." },
