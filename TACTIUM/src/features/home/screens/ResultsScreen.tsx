@@ -79,6 +79,9 @@ export const ResultsScreen = ({
   // La RLS `match_results_member_*` permite escribir a cualquier team_member.
   const isCaptain = useTeamStore(selectIsCaptain);
   const isPlayer = useTeamStore(selectIsPlayer);
+  // Un "player" SIN ficha vinculada no puede escribir (la RLS lo rechaza);
+  // sin esto los inputs salían activos y fallaban al guardar.
+  const myPlayerId = useTeamStore((s) => s.myPlayerId);
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const matchdayId = route.params.matchdayId;
   const focus = route.params.focus ?? 0;
@@ -87,6 +90,7 @@ export const ResultsScreen = ({
   const [matches, setMatches] = useState<Match[]>(() => buildEmptyMatches(courts));
   const [pairs, setPairs] = useState<LineupsApi.LineupPair[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [expanded, setExpanded] = useState(Math.min(focus, courts - 1));
   // savingCells = SET de strings `${court}-${setIdx}` — varias celdas
   // pueden estar guardando a la vez en pistas distintas. Antes era un
@@ -148,8 +152,10 @@ export const ResultsScreen = ({
       });
       matchesRef.current = next;
       setMatches(next);
+      setLoadError(false);
     } catch (e) {
       console.warn('Results fetch', e);
+      setLoadError(true);
     }
   }, [matchdayId, courts]);
 
@@ -169,7 +175,7 @@ export const ResultsScreen = ({
 
   const closed = matchday?.status === 'finished';
   const started = matchday ? isMatchStarted(matchday) : false;
-  const canEdit = started && !closed && (isCaptain || isPlayer);
+  const canEdit = started && !closed && (isCaptain || (isPlayer && !!myPlayerId));
 
   // ── Score agregado ──
   const teamScore = useMemo(() => {
@@ -318,40 +324,56 @@ export const ResultsScreen = ({
     if (!canEdit) return;
     const cur = matchesRef.current[court];
     const next = !cur.forfeit;
-    // Al activar, por defecto W.O. a NUESTRO favor (el rival no se presentó),
-    // que es el caso normal en el acta propia. Se conserva la dirección previa.
-    const forfeitUs = next ? cur.forfeitUs : false;
-    const nextMatches: Match[] = matchesRef.current.map((m, i) =>
-      i !== court
-        ? m
-        : {
-            ...m,
-            forfeit: next,
-            forfeitUs,
-            sets: next ? m.sets.map(() => ({ us: '', them: '' })) : m.sets,
-          },
-    );
-    matchesRef.current = nextMatches;
-    setMatches(nextMatches);
-    setSavingForfeit(court);
-    try {
-      await MatchResultsApi.setCourtForfeit(
-        matchdayId,
-        court + 1,
-        next,
-        forfeitUs,
-        SETS,
+    const hasSets = cur.sets.some((s) => s.us !== '' || s.them !== '');
+    const apply = async () => {
+      // Al activar, por defecto W.O. a NUESTRO favor (el rival no se presentó),
+      // que es el caso normal en el acta propia. Se conserva la dirección previa.
+      const forfeitUs = next ? cur.forfeitUs : false;
+      const nextMatches: Match[] = matchesRef.current.map((m, i) =>
+        i !== court
+          ? m
+          : {
+              ...m,
+              forfeit: next,
+              forfeitUs,
+              sets: next ? m.sets.map(() => ({ us: '', them: '' })) : m.sets,
+            },
       );
-    } catch (e: any) {
-      Alert.alert('No se pudo guardar', e?.message ?? '');
-      const rollback = matchesRef.current.map((m, i) =>
-        i !== court ? m : { ...m, forfeit: !next },
+      matchesRef.current = nextMatches;
+      setMatches(nextMatches);
+      setSavingForfeit(court);
+      try {
+        await MatchResultsApi.setCourtForfeit(
+          matchdayId,
+          court + 1,
+          next,
+          forfeitUs,
+          SETS,
+        );
+      } catch (e: any) {
+        Alert.alert('No se pudo guardar', e?.message ?? '');
+        const rollback = matchesRef.current.map((m, i) =>
+          i !== court ? m : { ...m, forfeit: !next },
+        );
+        matchesRef.current = rollback;
+        setMatches(rollback);
+      } finally {
+        setSavingForfeit(null);
+      }
+    };
+    // Activar W.O. con marcador ya metido borraría los sets → confirmar antes.
+    if (next && hasSets) {
+      Alert.alert(
+        'Marcar W.O.',
+        'Esta pista tiene un marcador metido. Al marcar W.O. se borrará. ¿Continuar?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Marcar W.O.', style: 'destructive', onPress: apply },
+        ],
       );
-      matchesRef.current = rollback;
-      setMatches(rollback);
-    } finally {
-      setSavingForfeit(null);
+      return;
     }
+    await apply();
   };
 
   // Cambia la dirección del W.O. (ganado/perdido) sin desactivarlo.
@@ -425,6 +447,16 @@ export const ResultsScreen = ({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {loadError ? (
+          <Pressable
+            onPress={() => reload()}
+            style={({ pressed }) => [styles.errorBanner, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.errorBannerText}>
+              No se pudieron cargar los resultados. Toca para reintentar.
+            </Text>
+          </Pressable>
+        ) : null}
         {/* === HERO === */}
         <View style={styles.heroBlock}>
           <Text style={styles.eyebrow}>
@@ -1001,6 +1033,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
 
   scroll: { paddingHorizontal: 20, paddingTop: 18 },
+  errorBanner: {
+    backgroundColor: c.error + '1A',
+    borderWidth: 1,
+    borderColor: c.error + '55',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  errorBannerText: { color: c.error, fontSize: 13, fontWeight: '600', textAlign: 'center' },
 
   // Hero
   heroBlock: { paddingHorizontal: 4, marginBottom: 6 },

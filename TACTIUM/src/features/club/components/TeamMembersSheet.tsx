@@ -51,6 +51,7 @@ export const TeamMembersSheet: React.FC<{
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [deletingTeam, setDeletingTeam] = useState(false);
 
   useEffect(() => {
     if (!open || !teamId) return;
@@ -114,11 +115,13 @@ export const TeamMembersSheet: React.FC<{
           text: 'Borrar',
           style: 'destructive',
           onPress: async () => {
+            setDeletingTeam(true);
             try {
               await deleteTeamAction(teamId);
               onClose();
             } catch (e: any) {
               Alert.alert('No se pudo borrar', e?.message ?? 'Inténtalo de nuevo.');
+              setDeletingTeam(false);
             }
           },
         },
@@ -183,6 +186,17 @@ export const TeamMembersSheet: React.FC<{
     role: TeamMembersApi.TeamRole,
   ) => {
     if (member.role === role) return;
+    // No dejar el equipo sin capitán: no degradar al ÚNICO capitán.
+    if (member.role === 'captain' && role !== 'captain') {
+      const captains = members.filter((m) => m.role === 'captain').length;
+      if (captains <= 1) {
+        Alert.alert(
+          'Debe quedar un capitán',
+          'Es el único capitán del equipo. Asciende o invita a otro antes de cambiarle el rol.',
+        );
+        return;
+      }
+    }
     setSavingId(member.id);
     try {
       const updated = await TeamMembersApi.updateTeamMemberRole(member.id, role);
@@ -227,6 +241,14 @@ export const TeamMembersSheet: React.FC<{
   };
 
   const handleRemove = (member: TeamMembersApi.TeamMemberWithProfile) => {
+    // No dejar el equipo sin capitán: no quitar al ÚNICO capitán.
+    if (member.role === 'captain' && members.filter((m) => m.role === 'captain').length <= 1) {
+      Alert.alert(
+        'Debe quedar un capitán',
+        'Es el único capitán del equipo. Asciende o invita a otro antes de quitarlo.',
+      );
+      return;
+    }
     Alert.alert(
       'Eliminar miembro',
       `¿Quitar a ${member.profile?.full_name ?? member.profile?.email ?? 'este miembro'} del equipo?`,
@@ -309,7 +331,7 @@ export const TeamMembersSheet: React.FC<{
                     hitSlop={8}
                     style={styles.removeBtn}
                   >
-                    <IconTrash size={16} color={c.err} />
+                    <IconTrash size={16} color={c.error} />
                   </Pressable>
                 </View>
 
@@ -462,7 +484,7 @@ export const TeamMembersSheet: React.FC<{
                     hitSlop={6}
                     style={styles.inviteActionBtn}
                   >
-                    <IconTrash size={14} color={c.err} />
+                    <IconTrash size={14} color={c.error} />
                   </Pressable>
                 </View>
               );
@@ -474,14 +496,17 @@ export const TeamMembersSheet: React.FC<{
         {teamId ? (
           <Pressable
             onPress={handleDeleteTeam}
+            disabled={deletingTeam}
             accessibilityRole="button"
             accessibilityLabel="Borrar equipo"
             style={({ pressed }) => [
               styles.deleteTeamBtn,
-              pressed && { opacity: 0.85 },
+              (pressed || deletingTeam) && { opacity: 0.85 },
             ]}
           >
-            <Text style={styles.deleteTeamLabel}>Borrar equipo</Text>
+            <Text style={styles.deleteTeamLabel}>
+              {deletingTeam ? 'Borrando…' : 'Borrar equipo'}
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -669,7 +694,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.4,
-    color: c.err,
+    color: c.error,
   },
   invitesSection: {
     marginTop: 18,

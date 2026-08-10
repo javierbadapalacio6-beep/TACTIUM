@@ -264,9 +264,6 @@ const ActiveSeasonCard: React.FC<{
   // texto se lea sobre el verde. Paleta oscura fija en todo su subárbol.
   const c = darkColors;
   const styles = useMemo(() => makeStyles(c), [c]);
-  const pct = season.total_matchdays
-    ? Math.round((1 / season.total_matchdays) * 100)
-    : 0;
   return (
     <Pressable
       onPress={onPress}
@@ -286,10 +283,6 @@ const ActiveSeasonCard: React.FC<{
       </View>
       <Text style={styles.activeName}>{season.name}</Text>
       <Text style={styles.activeMeta}>{buildSeasonMeta(team)}</Text>
-
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${pct}%` }]} />
-      </View>
     </Pressable>
   );
 };
@@ -548,6 +541,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flex: 1,
     backgroundColor: c.background,
   },
+  fedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent25,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 18,
+  },
+  fedCardTitle: { color: c.text, fontSize: 15, fontWeight: '800' },
+  fedCardText: { color: c.textMuted, fontSize: 12.5, marginTop: 3 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

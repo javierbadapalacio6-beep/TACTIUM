@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,9 @@ import {
   composeCustomLeague,
   describeCompetitionFormat,
 } from '@core/data/federations';
+
+import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -92,6 +95,16 @@ export const CreateTeamsForClubScreen = ({
 
   const [adding, setAdding] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // Federación Cántabra: onboarding AUTOMÁTICO por importación (no manual).
+  const isFcp = club?.federation === FCP_FEDERATION_CODE;
+  const [fcpOpen, setFcpOpen] = useState(false);
+  const fcpAutoOpened = useRef(false);
+  useEffect(() => {
+    if (isFcp && !fcpAutoOpened.current && clubTeams.length === 0) {
+      fcpAutoOpened.current = true;
+      setFcpOpen(true);
+    }
+  }, [isFcp, clubTeams.length]);
   const [newName, setNewName] = useState('');
   // Tipo de competición del equipo a añadir (mismo patrón client-side que
   // CreateTeamScreen: los presets escriben un valor canónico en league).
@@ -229,6 +242,18 @@ export const CreateTeamsForClubScreen = ({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {isFcp ? (
+          <Pressable
+            onPress={() => setFcpOpen(true)}
+            style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
+            <Text style={styles.fcpBannerText}>
+              Busca tu club y crea todos sus equipos con la plantilla y los puntos ya
+              cargados. Automático, sin teclear nada.
+            </Text>
+          </Pressable>
+        ) : null}
         <View style={styles.list}>
           {clubTeams.map((t, i) => (
             <View
@@ -259,7 +284,7 @@ export const CreateTeamsForClubScreen = ({
             </View>
           ))}
 
-          {adding ? (
+          {!isFcp && (adding ? (
             <View style={styles.addInline}>
               <View style={styles.addRow}>
                 <TextInput
@@ -530,7 +555,7 @@ export const CreateTeamsForClubScreen = ({
               </View>
               <Text style={styles.addRowText}>Añadir equipo</Text>
             </Pressable>
-          )}
+          ))}
         </View>
       </ScrollView>
 
@@ -548,6 +573,14 @@ export const CreateTeamsForClubScreen = ({
           <IconArrowRight size={18} color="#000" />
         </Pressable>
       </View>
+
+      {club ? (
+        <FcpImportSheet
+          open={fcpOpen}
+          clubId={club.id}
+          onClose={() => setFcpOpen(false)}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 };
@@ -597,6 +630,17 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: 6,
   },
   lede: { color: c.textMuted, fontSize: 14, lineHeight: 20 },
+
+  fcpBanner: {
+    marginBottom: 14,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    borderRadius: Radius.md,
+    padding: 14,
+  },
+  fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
+  fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
 
   counter: {
     paddingHorizontal: 24,

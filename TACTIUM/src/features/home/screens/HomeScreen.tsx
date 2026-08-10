@@ -71,6 +71,9 @@ export const HomeScreen = ({
 
   const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
   const [nextMatchday, setNextMatchday] = useState<MatchdaysApi.Matchday | null>(null);
+  // Nº de jornadas de la temporada activa: distingue "sin jornadas" (escanear)
+  // de "calendario ya cargado y sin jornadas pendientes" (temporada al día).
+  const [seasonMatchdayCount, setSeasonMatchdayCount] = useState(0);
   const [lineupFilled, setLineupFilled] = useState(0);
   // Alineación oficial completa de la próxima jornada: permite mostrar al
   // JUGADOR su card personal ("Juegas la P2 con Marco") — F6 del plan.
@@ -95,6 +98,7 @@ export const HomeScreen = ({
     if (prevTeamIdRef.current !== null && prevTeamIdRef.current !== currentId) {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       setNextMatchday(null);
+      setSeasonMatchdayCount(0);
       setLineupFilled(0);
       setLineupPairs([]);
       setActiveSeason(null);
@@ -129,9 +133,13 @@ export const HomeScreen = ({
           if (cancelled) return;
           setActiveSeason(season);
           if (season) {
-            const md = await MatchdaysApi.fetchUpcomingMatchday(season.id);
+            const [md, mdCount] = await Promise.all([
+              MatchdaysApi.fetchUpcomingMatchday(season.id),
+              MatchdaysApi.countMatchdays(season.id),
+            ]);
             if (cancelled) return;
             setNextMatchday(md);
+            setSeasonMatchdayCount(mdCount);
 
             if (md) {
               // Cuenta parejas completas en la variante OFICIAL para reflejar
@@ -157,6 +165,7 @@ export const HomeScreen = ({
             }
           } else {
             setNextMatchday(null);
+            setSeasonMatchdayCount(0);
             setLineupFilled(0);
             setLineupPairs([]);
           }
@@ -348,6 +357,25 @@ export const HomeScreen = ({
               </View>
             </View>
           </Pressable>
+        ) : activeSeason && seasonMatchdayCount > 0 ? (
+          // Temporada abierta con el calendario ya cargado y sin jornadas
+          // pendientes (todas disputadas). No tiene sentido "escanear": está al día.
+          <View style={[styles.hero, styles.heroEmpty]}>
+            <Text style={styles.heroEmptyTitle}>No hay más jornadas programadas</Text>
+            <Text style={styles.heroEmptyText}>
+              {isPlayer
+                ? 'Has disputado todas las jornadas del calendario.'
+                : 'El calendario está completo: no quedan jornadas por disputar en esta temporada.'}
+            </Text>
+            {canEdit ? (
+              <Pressable
+                onPress={goSeasons}
+                style={({ pressed }) => [styles.heroEmptySecondary, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.heroEmptySecondaryLabel}>Ver temporada</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : (
           <View style={[styles.hero, styles.heroEmpty]}>
             <Text style={styles.heroEmptyTitle}>Aún no hay jornadas</Text>
@@ -456,6 +484,14 @@ export const HomeScreen = ({
         <Text style={[styles.eyebrowFaint, { marginTop: 32 }]}>ATAJOS</Text>
 
         <View style={{ gap: 8 }}>
+          {team?.federation === 'FCantP' ? (
+            <ActionRow
+              icon={<IconTrophy size={20} color={c.accent} />}
+              title="Explorar la Federación"
+              hint="Clasificaciones y jornadas de toda la liga"
+              onPress={() => navigation.navigate('Federacion')}
+            />
+          ) : null}
           <ActionRow
             icon={<IconTeam size={20} color={c.accent} />}
             title={isPlayer ? 'Mi disponibilidad' : 'Disponibilidad'}
@@ -471,32 +507,6 @@ export const HomeScreen = ({
               })
             }
           />
-          {canEdit ? (
-            <>
-              <ActionRow
-                icon={<IconAnalytics size={20} color={c.accent} />}
-                title="Plantilla"
-                value={String(players.length)}
-                hint="Estadísticas y puntos FEP"
-                onPress={goTeam}
-              />
-              <ActionRow
-                icon={<IconCalendar size={20} color={c.accent} />}
-                title="Temporadas"
-                value={activeSeason ? activeSeason.name.replace('Temporada ', '') : '—'}
-                hint={
-                  activeSeason
-                    ? `${activeSeason.category ?? '—'}${
-                        activeSeason.total_matchdays != null
-                          ? ` · ${activeSeason.total_matchdays} jornadas`
-                          : ''
-                      }`
-                    : 'Sin temporada activa'
-                }
-                onPress={goSeasons}
-              />
-            </>
-          ) : null}
           {canEdit ? (
             <ActionRow
               icon={<IconGift size={20} color={c.accent} />}
@@ -541,7 +551,10 @@ export const HomeScreen = ({
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.statusTitle}>Equipo confirmado</Text>
               <Text style={styles.statusMeta}>
-                {avail} de {total} disponibles para J·07
+                {avail} de {total} disponibles
+                {nextMatchday?.jornada_number != null
+                  ? ` para la J·${String(nextMatchday.jornada_number).padStart(2, '0')}`
+                  : ''}
               </Text>
             </View>
             <Text style={styles.statusAction}>Gestionar →</Text>
@@ -633,6 +646,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flex: 1,
     backgroundColor: c.background,
   },
+  fedHomeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent25,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
+  },
+  fedHomeTitle: { color: c.text, fontSize: 15, fontWeight: '800' },
+  fedHomeText: { color: c.textMuted, fontSize: 12.5, marginTop: 3 },
   topbar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -51,6 +51,7 @@ import {
   autoScheduleTournament,
   updateTournamentSchedule,
   clearSchedule,
+  clearMatchSlot,
   matchScheduleConflict,
   matchAvailableAtDate,
   setMatchSlot,
@@ -65,9 +66,13 @@ import {
   koRoundNameFromEnd,
   tournamentStatusLabel,
   formatFee,
+  prizeItemLabel,
+  type PrizeEntry,
+  type InfoRow,
   groupName,
   setMatchResult,
   formatConfig,
+  resolveMatchFormat,
   type Tournament,
   type TournamentRegistration,
   type TournamentMatch,
@@ -75,6 +80,7 @@ import {
   type PlayerStanding,
   type SeedingMode,
 } from '@core/services/tournaments';
+import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
 
@@ -169,6 +175,7 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const FORMAT_LABEL: Record<string, string> = {
   ko: 'Eliminación directa',
+  ko_consolation: 'Eliminación + consolación',
   round_robin: 'Liga · todos contra todos',
   groups_ko: 'Grupos + eliminatorias',
   americano: 'Americano',
@@ -237,7 +244,7 @@ const buildPlannerPhases = (
   if (format === 'round_robin') out.push({ bracket: 'rr', round: 0, label: 'Liga' });
   if (format === 'americano') out.push({ bracket: 'amer', round: 0, label: 'Americano' });
   if (format === 'mexicano') out.push({ bracket: 'mex', round: 0, label: 'Mexicano' });
-  if (format === 'ko' || format === 'groups_ko') {
+  if (format === 'ko' || format === 'ko_consolation' || format === 'groups_ko') {
     const ko = matches.filter((m) => isRoundBracket(m.bracket));
     let fromEnds: number[];
     if (ko.length) {
@@ -322,12 +329,13 @@ const MatchTeam: React.FC<{
   bye?: boolean;
   styles: Styles;
   c: Palette;
-}> = ({ info, win, bye, styles, c }) => {
-  if (bye) {
+  tbd?: boolean;
+}> = ({ info, win, bye, tbd, styles, c }) => {
+  if (bye || tbd) {
     return (
       <View style={styles.teamRow}>
         <View style={[styles.avatarFallback, { width: 26, height: 26, borderRadius: 13, opacity: 0.5 }]} />
-        <Text style={styles.byeText}>BYE</Text>
+        <Text style={styles.byeText}>{tbd ? 'Por determinar' : 'BYE'}</Text>
       </View>
     );
   }
@@ -358,8 +366,16 @@ export const MatchCard: React.FC<{
   const homeWin = finished && m.winner_reg === m.home_reg;
   const awayWin = finished && !!m.winner_reg && m.winner_reg === m.away_reg;
   const sets = !social && Array.isArray(m.sets) ? m.sets : null;
-  const homeBye = !social && !m.home_reg;
-  const awayBye = !social && !m.away_reg;
+  // Un hueco sin pareja: en la 1ª ronda del cuadro PRINCIPAL es un BYE real; en
+  // rondas posteriores —o en el cuadro de CONSOLACIÓN, que se llena con los
+  // perdedores de la R1— la pareja aún no se conoce → "Por determinar".
+  const homeMissing = !social && !m.home_reg;
+  const awayMissing = !social && !m.away_reg;
+  const tbd = (m.round > 1 || m.bracket === 'consol') && !finished;
+  const homeBye = homeMissing && !tbd;
+  const awayBye = awayMissing && !tbd;
+  const homeTbd = homeMissing && tbd;
+  const awayTbd = awayMissing && tbd;
   const homeInfo = social
     ? {
         ...info(m.home_reg),
@@ -388,8 +404,8 @@ export const MatchCard: React.FC<{
             {m.court ? ` · ${m.court}` : ''}
           </Text>
         ) : null}
-        <MatchTeam info={homeInfo} win={homeWin} bye={homeBye} styles={styles} c={c} />
-        <MatchTeam info={awayInfo} win={awayWin} bye={awayBye} styles={styles} c={c} />
+        <MatchTeam info={homeInfo} win={homeWin} bye={homeBye} tbd={homeTbd} styles={styles} c={c} />
+        <MatchTeam info={awayInfo} win={awayWin} bye={awayBye} tbd={awayTbd} styles={styles} c={c} />
       </View>
 
       {finished ? (
@@ -416,7 +432,7 @@ export const MatchCard: React.FC<{
             </View>
           )}
         </View>
-      ) : homeBye || awayBye || readOnly ? null : (
+      ) : homeMissing || awayMissing || readOnly ? null : (
         <View style={styles.playChip}>
           <Text style={styles.playChipText}>›</Text>
         </View>
@@ -551,7 +567,7 @@ export const PlayersView: React.FC<{
             };
             const meta = [
               r.seed_points != null ? `${r.seed_points} pts` : null,
-              ...(r.availability ?? []),
+              r.availability?.length ? 'horario limitado' : null,
             ]
               .filter(Boolean)
               .join(' · ');
@@ -605,10 +621,24 @@ export const InfoView: React.FC<{
   c: Palette;
 }> = ({ t, onShareCode, styles, c }) => {
   if (!t) return null;
+  // Valor de "Partidos": si el club fijó formato por cuadro y difieren, se
+  // listan (Principal / Consolación / Grupos); si no, un único formato.
+  const matchFmtCuadros: [string, string][] =
+    t.format === 'ko_consolation'
+      ? [['main', 'Principal'], ['consol', 'Consolación']]
+      : t.format === 'groups_ko'
+        ? [['groups', 'Grupos'], ['main', 'Cuadros']]
+        : [['main', '']];
+  const fmtOfGroup = (k: string) => (t.phase_formats?.[k] ?? t.match_format) as string;
+  const distinctFmts = new Set(matchFmtCuadros.map(([k]) => fmtOfGroup(k)));
+  const matchFmtValue =
+    distinctFmts.size <= 1
+      ? formatConfig(t.match_format).label
+      : matchFmtCuadros.map(([k, l]) => `${l}: ${formatConfig(fmtOfGroup(k)).label}`).join(' · ');
   const rows: { label: string; value: string }[] = [
     { label: 'Formato', value: FORMAT_LABEL[t.format] ?? t.format },
     ...(!isSocialFormat(t.format)
-      ? [{ label: 'Partidos', value: formatConfig(t.match_format).label }]
+      ? [{ label: 'Partidos', value: matchFmtValue }]
       : []),
     {
       label: 'Género',
@@ -624,7 +654,7 @@ export const InfoView: React.FC<{
       label: isSocialFormat(t.format) ? 'Plazas (jugadores)' : 'Plazas (parejas)',
       value: t.max_pairs ? String(t.max_pairs) : 'Sin límite',
     },
-    ...(t.format === 'ko' || t.format === 'groups_ko'
+    ...(t.format === 'ko' || t.format === 'ko_consolation' || t.format === 'groups_ko'
       ? [
           {
             label: 'Siembra',
@@ -667,7 +697,23 @@ export const InfoView: React.FC<{
         ))}
       </View>
 
-      {t.prizes ? (
+      {t.prizes_json && t.prizes_json.length ? (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
+            🏆 PREMIOS
+          </Text>
+          <View style={styles.infoCard}>
+            {t.prizes_json.map((e, i) => (
+              <View key={`${e.place}-${i}`} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                <Text style={styles.infoLabel}>{e.place}</Text>
+                <Text style={styles.infoValue} numberOfLines={3}>
+                  {e.items.map(prizeItemLabel).join(' · ')}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : t.prizes ? (
         <>
           <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
             🏆 PREMIOS
@@ -678,14 +724,32 @@ export const InfoView: React.FC<{
         </>
       ) : null}
 
-      {t.extra_info ? (
+      {(t.info_rows && t.info_rows.length) || t.extra_info || t.observations ? (
         <>
           <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
             ℹ️ INFORMACIÓN ADICIONAL
           </Text>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoBlockText}>{t.extra_info}</Text>
-          </View>
+          {t.info_rows && t.info_rows.length ? (
+            <View style={styles.infoCard}>
+              {t.info_rows.map((r, i) => (
+                <View key={`${r.label}-${i}`} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                  <Text style={styles.infoLabel}>{r.label}</Text>
+                  <Text style={styles.infoValue} numberOfLines={3}>
+                    {r.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : t.extra_info ? (
+            <View style={styles.infoBlock}>
+              <Text style={styles.infoBlockText}>{t.extra_info}</Text>
+            </View>
+          ) : null}
+          {t.observations ? (
+            <View style={[styles.infoBlock, { marginTop: 10 }]}>
+              <Text style={styles.infoBlockText}>{t.observations}</Text>
+            </View>
+          ) : null}
         </>
       ) : null}
 
@@ -713,6 +777,12 @@ export const InfoView: React.FC<{
 export const ScheduleView: React.FC<{
   tournament: Tournament;
   matches: TournamentMatch[];
+  // Todos los partidos del torneo (todas las divisiones) — para la rejilla, que
+  // debe ver el conjunto para no solapar pistas. `matches` es solo la división
+  // activa (lo que se muestra en la lista del horario).
+  allMatches?: TournamentMatch[];
+  defaultGender?: string | null;
+  defaultCategory?: string | null;
   regs: TournamentRegistration[];
   info: (id: string | null) => RegInfo;
   onEdit: (m: TournamentMatch) => void;
@@ -727,6 +797,9 @@ export const ScheduleView: React.FC<{
 }> = ({
   tournament,
   matches,
+  allMatches,
+  defaultGender,
+  defaultCategory,
   regs,
   info,
   onEdit,
@@ -744,6 +817,13 @@ export const ScheduleView: React.FC<{
     [tournament.starts_on, tournament.ends_on],
   );
   const multiDay = days.length > 1;
+  // ¿El torneo tiene más de una DIVISIÓN (género × categoría)? El horario junta
+  // todos los cuadros, así que si hay varias categorías/géneros hay que
+  // diferenciarlas o "Cuartos" mezclaría Masculino 1ª con Masculino 2ª.
+  const multiDiv = useMemo(
+    () => new Set(matches.map((m) => `${m.gender ?? ''}|${m.category ?? ''}`)).size > 1,
+    [matches],
+  );
 
   const SINGLE_LABEL: Record<string, string> = {
     grp: 'Fase de grupos',
@@ -753,12 +833,21 @@ export const ScheduleView: React.FC<{
   };
 
   const dayLabelOf = (iso: string | null) => days.find((x) => x.iso === iso)?.label ?? null;
-  const maxRoundOf = (b: string) =>
-    matches.reduce((mx, m) => (m.bracket === b ? Math.max(mx, m.round) : mx), 0);
+  // Máx. ronda de un cuadro DENTRO de su división (categorías con distinto nº de
+  // parejas tienen distinto nº de rondas → "Final" vs "Semis" bien etiquetado).
+  const maxRoundOf = (b: string, gender: string | null, category: string | null) =>
+    matches.reduce(
+      (mx, m) =>
+        m.bracket === b && m.gender === gender && m.category === category
+          ? Math.max(mx, m.round)
+          : mx,
+      0,
+    );
   const phaseLabelOf = (m: TournamentMatch): string => {
-    if (!isRoundBracket(m.bracket)) return SINGLE_LABEL[m.bracket] ?? 'Partidos';
+    const divPrefix = multiDiv ? `${divLabel({ gender: m.gender, category: m.category })} · ` : '';
+    if (!isRoundBracket(m.bracket)) return divPrefix + (SINGLE_LABEL[m.bracket] ?? 'Partidos');
     const prefix = m.bracket === 'main' ? '' : `${bracketLabel(m.bracket)} · `;
-    return `${prefix}${roundLabel(m.round, maxRoundOf(m.bracket))}`;
+    return `${divPrefix}${prefix}${roundLabel(m.round, maxRoundOf(m.bracket, m.gender, m.category))}`;
   };
   const [collapsedPh, setCollapsedPh] = useState<Set<string>>(new Set());
   const togglePh = (k: string) =>
@@ -790,7 +879,10 @@ export const ScheduleView: React.FC<{
     return `${DOW_ABBR[new Date(y, mo - 1, d).getDay()]} ${d}`;
   };
   for (const m of scheduled) {
-    const key = matchPhaseKey(m);
+    // Con varias divisiones, la clave incluye género+categoría para que cada
+    // categoría tenga su propia sección de fase (no se mezclan los "Cuartos").
+    const key =
+      (multiDiv ? `${m.gender ?? ''}~${m.category ?? ''}~` : '') + matchPhaseKey(m);
     let pg = phaseGroups.find((x) => x.key === key);
     if (!pg) {
       pg = { key, label: phaseLabelOf(m) || 'Partidos', earliest: m.scheduled_at as string, count: 0, dayGroups: [] };
@@ -825,6 +917,7 @@ export const ScheduleView: React.FC<{
   );
   const unplaced = unplacedList.length;
   const [manualMatch, setManualMatch] = useState<TournamentMatch | null>(null);
+  const [gridOpen, setGridOpen] = useState(false);
 
   return (
     <View style={{ paddingHorizontal: 22 }}>
@@ -876,6 +969,15 @@ export const ScheduleView: React.FC<{
               Pon una fecha al torneo (pestaña Info · el club la edita al crear) para
               poder generar el horario.
             </Text>
+          ) : null}
+
+          {tournament.starts_on ? (
+            <Pressable
+              onPress={() => setGridOpen(true)}
+              style={({ pressed }) => [styles.gridBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.gridBtnText}>▦ Editar rejilla (todos los huecos)</Text>
+            </Pressable>
           ) : null}
         </>
       )}
@@ -1025,6 +1127,21 @@ export const ScheduleView: React.FC<{
         styles={styles}
         c={c}
       />
+
+      <SlotGridSheet
+        open={gridOpen}
+        tournament={tournament}
+        matches={allMatches ?? matches}
+        regs={regs}
+        info={info}
+        days={days}
+        defaultGender={defaultGender ?? null}
+        defaultCategory={defaultCategory ?? null}
+        onClose={() => setGridOpen(false)}
+        onChanged={() => onReload?.()}
+        styles={styles}
+        c={c}
+      />
     </View>
   );
 };
@@ -1049,9 +1166,13 @@ const ManualSlotSheet: React.FC<{
 
   const [sh, sm] = (tournament.start_time ?? '09:00').split(':').map(Number);
   const startMin = (sh || 9) * 60 + (sm || 0);
+  // Tope = end_time del torneo (igual que el motor de horario) para que la
+  // rejilla/manual cubran cualquier hora que el motor pueda colocar.
+  const [eh, em] = (tournament.end_time ?? '23:00').split(':').map(Number);
+  const endMin = Math.max(startMin, (eh || 23) * 60 + (em || 0));
   const step = Math.max(15, tournament.slot_minutes);
   const times: number[] = [];
-  for (let t = startMin; t <= 23 * 60; t += step) times.push(t);
+  for (let t = startMin; t <= endMin; t += step) times.push(t);
   const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
   useEffect(() => {
@@ -1093,15 +1214,15 @@ const ManualSlotSheet: React.FC<{
         (x): x is string => !!x,
       )
     : [];
-  const franjasOf = (id: string): string => {
+  // Franjas del día que el jugador NO puede (availability = horas no disponibles).
+  const noPuedeOf = (id: string): string => {
     const r = regs.find((x) => x.id === id);
     const av = r?.availability ?? [];
-    if (av.some((s) => s.toLowerCase().includes('cualquier'))) return 'Cualquier hora';
     if (!dayLabel) return '—';
     const fr = av
       .filter((s) => s.startsWith(dayLabel + ' '))
       .map((s) => s.slice(dayLabel.length + 1));
-    return fr.length ? fr.join(' · ') : 'Sin disponibilidad ese día';
+    return fr.length ? fr.join(' · ') : 'Puede a cualquier hora';
   };
 
   return (
@@ -1156,18 +1277,18 @@ const ManualSlotSheet: React.FC<{
       ) : null}
 
       <Text style={styles.label}>
-        DISPONIBILIDAD{dayLabel ? ` · ${dayLabel}` : ''}
+        NO PUEDE{dayLabel ? ` · ${dayLabel}` : ''}
       </Text>
       <View style={{ gap: 6 }}>
         {partIds.map((id) => {
           const r = regs.find((x) => x.id === id);
-          const good = franjasOf(id);
-          const isGood = good !== 'Sin disponibilidad ese día';
+          const noPuede = noPuedeOf(id);
+          const restricted = noPuede !== 'Puede a cualquier hora';
           return (
             <View key={id} style={styles.availLine}>
               <Text style={styles.availName} numberOfLines={1}>{r?.p1_name ?? '—'}</Text>
-              <Text style={[styles.availFranjas, !isGood && { color: c.error }]} numberOfLines={2}>
-                {good}
+              <Text style={[styles.availFranjas, restricted && { color: c.error }]} numberOfLines={2}>
+                {noPuede}
               </Text>
             </View>
           );
@@ -1214,6 +1335,469 @@ const ManualSlotSheet: React.FC<{
           );
         })}
       </View>
+    </BottomSheet>
+  );
+};
+
+// Rejilla de TODOS los huecos (día × hora × pista) para colocar/mover a mano:
+// toca un partido (en la rejilla o en "sin hora") para cogerlo y luego un hueco
+// libre para soltarlo. Sin arrastrar (fiable en móvil).
+const SlotGridSheet: React.FC<{
+  open: boolean;
+  tournament: Tournament;
+  matches: TournamentMatch[];
+  regs: TournamentRegistration[];
+  info: (id: string | null) => RegInfo;
+  days: { iso: string; label: string }[];
+  defaultGender?: string | null;
+  defaultCategory?: string | null;
+  onClose: () => void;
+  onChanged: () => void;
+  styles: Styles;
+  c: Palette;
+}> = ({
+  open,
+  tournament,
+  matches,
+  regs,
+  info,
+  days,
+  defaultGender,
+  defaultCategory,
+  onClose,
+  onChanged,
+  styles,
+  c,
+}) => {
+  const [dayIso, setDayIso] = useState<string | null>(null);
+  const [carried, setCarried] = useState<TournamentMatch | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Filtros de foco: categoría (género+cat) y fase (bracket:round). No ocultan
+  // los partidos de otras categorías (para no colocar encima), solo los atenúan.
+  const [catFilter, setCatFilter] = useState<string>('all'); // "gender|category"
+  const [phaseFilter, setPhaseFilter] = useState<string>('all'); // "bracket:round"
+  // Filtro para ver SOLO los partidos con conflicto de horario (jugadores que
+  // no pueden a la hora reservada — típico de rondas futuras ya rellenadas).
+  const [conflictOnly, setConflictOnly] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setDayIso(days[0]?.iso ?? tournament.starts_on ?? null);
+      setCarried(null);
+      // Al abrir desde una división concreta, pre-filtramos por ella.
+      setCatFilter(
+        defaultCategory != null || defaultGender != null
+          ? `${defaultGender ?? ''}|${defaultCategory ?? ''}`
+          : 'all',
+      );
+      setPhaseFilter('all');
+      setConflictOnly(false);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [sh, sm] = (tournament.start_time ?? '09:00').split(':').map(Number);
+  const startMin = (sh || 9) * 60 + (sm || 0);
+  // Tope = end_time del torneo (unificado con el motor y el manual), para que
+  // la rejilla tenga celda para cualquier hora colocada.
+  const [eh, em] = (tournament.end_time ?? '23:00').split(':').map(Number);
+  const endMin = Math.max(startMin, (eh || 23) * 60 + (em || 0));
+  const step = Math.max(15, tournament.slot_minutes);
+  const times: number[] = [];
+  for (let t = startMin; t <= endMin; t += step) times.push(t);
+  const courts = Array.from({ length: Math.max(1, tournament.courts) }, (_, i) => i + 1);
+  const hhmm = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  // Nombre COMPLETO de cada pareja (p1 / p2), no solo el primer nombre.
+  const fullPair = (id: string | null) => {
+    const ri = info(id);
+    return ri.partner ? `${ri.name} / ${ri.partner}` : ri.name;
+  };
+  const cardLabel = (m: TournamentMatch) => `${fullPair(m.home_reg)}  vs  ${fullPair(m.away_reg)}`;
+  // ¿Varias divisiones? Para etiquetar la categoría de cada partido en la rejilla.
+  const multiDiv =
+    new Set(matches.map((m) => `${m.gender ?? ''}|${m.category ?? ''}`)).size > 1;
+  // ¿El partido que llevo en la mano puede jugarse a este minuto? (disponibilidad
+  // de sus jugadores). Sirve para teñir los huecos libres al colocar.
+  const carriedOkAt = (min: number) =>
+    carried && dayIso ? matchAvailableAtDate(carried, regs, dayIso, min) : true;
+
+  // ── Fase (cuartos/semis/…) y filtros de foco (categoría + fase) ──────────
+  const maxRoundByBracket = useMemo(() => {
+    const mx: Record<string, number> = {};
+    for (const m of matches)
+      if (isRoundBracket(m.bracket)) mx[m.bracket] = Math.max(mx[m.bracket] ?? 0, m.round);
+    return mx;
+  }, [matches]);
+  const GRID_SINGLE: Record<string, string> = {
+    grp: 'Grupos', rr: 'Liga', amer: 'Americano', mex: 'Mexicano',
+  };
+  const phaseNameOf = (m: TournamentMatch): string => {
+    if (!isRoundBracket(m.bracket)) return GRID_SINGLE[m.bracket] ?? 'Fase';
+    const base = roundLabel(m.round, maxRoundByBracket[m.bracket] ?? m.round);
+    if (m.bracket === 'consol') return `Consol · ${base}`;
+    if (m.bracket !== 'main') return `${bracketLabel(m.bracket)} · ${base}`;
+    return base;
+  };
+  const phaseKeyOf = (m: TournamentMatch) => `${m.bracket}:${m.round}`;
+  const catKeyOf = (m: TournamentMatch) => `${m.gender ?? ''}|${m.category ?? ''}`;
+  // Etiqueta de la celda: categoría (si hay varias) + fase.
+  const cellTag = (m: TournamentMatch) => {
+    const cat = multiDiv
+      ? `${m.gender === 'femenino' ? 'F' : m.gender === 'masculino' ? 'M' : 'Mx'}·${m.category ?? ''} · `
+      : '';
+    return `${cat}${phaseNameOf(m)}`;
+  };
+  const catOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of matches)
+      if (!map.has(catKeyOf(m)))
+        map.set(catKeyOf(m), divLabel({ gender: m.gender, category: m.category }));
+    // Orden: género (masc, fem, mixto) y luego nº de categoría (1ª, 2ª, 3ª…).
+    const rank = (key: string) => {
+      const [g, cat] = key.split('|');
+      const gOrder = g === 'masculino' ? 0 : g === 'femenino' ? 1 : g === 'mixto' ? 2 : 3;
+      return gOrder * 100 + (parseInt(cat, 10) || 99);
+    };
+    return Array.from(map.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => rank(a.key) - rank(b.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches]);
+  const phaseOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of matches) if (!map.has(phaseKeyOf(m))) map.set(phaseKeyOf(m), phaseNameOf(m));
+    const rank = (k: string) => {
+      const [b, r] = k.split(':');
+      return (isRoundBracket(b) ? 100 : 0) + (b === 'consol' ? 50 : 0) + Number(r);
+    };
+    return Array.from(map.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => rank(a.key) - rank(b.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, maxRoundByBracket]);
+  // ¿Este partido colocado tiene conflicto? (alguna pareja no puede a su hora).
+  const hasConflict = (m: TournamentMatch) =>
+    !!m.scheduled_at && matchScheduleConflict(m, regs, tournament);
+  const conflictCount = useMemo(
+    () => matches.filter(hasConflict).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [matches, regs],
+  );
+  const matchInFilter = (m: TournamentMatch) =>
+    (catFilter === 'all' || catKeyOf(m) === catFilter) &&
+    (phaseFilter === 'all' || phaseKeyOf(m) === phaseFilter) &&
+    (!conflictOnly || hasConflict(m));
+
+  const placeable = matches.filter(
+    (m) => m.status !== 'bye' && !!m.home_reg && !!m.away_reg,
+  );
+  const occ: Record<string, TournamentMatch> = {};
+  for (const m of placeable) {
+    if (!m.scheduled_at) continue;
+    if ((m.scheduled_at as string).slice(0, 10) !== dayIso) continue;
+    const dt = new Date(m.scheduled_at as string);
+    const min = dt.getHours() * 60 + dt.getMinutes();
+    const ct = parseInt((m.court ?? '').replace(/\D/g, ''), 10) || 1;
+    occ[`${min}:${ct}`] = m;
+  }
+  const unscheduled = placeable.filter((m) => !m.scheduled_at && matchInFilter(m));
+
+  const doPlace = async (min: number, court: number) => {
+    if (!carried || !dayIso) return;
+    setBusy(true);
+    try {
+      const [y, mo, d] = dayIso.split('-').map(Number);
+      const dt = new Date(y, mo - 1, d);
+      dt.setHours(Math.floor(min / 60), min % 60, 0, 0);
+      await setMatchSlot(carried.id, dt.toISOString(), `Pista ${court}`);
+      setCarried(null);
+      onChanged();
+    } catch (e: any) {
+      toast.error('No se pudo mover', e?.message ?? '');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const place = (min: number, court: number) => {
+    if (!carried || !dayIso) return;
+    if (occ[`${min}:${court}`]) {
+      toast.error('Ese hueco está ocupado', 'Libéralo primero o elige otro.');
+      return;
+    }
+    // Hueco "no del todo bloqueado": si a la pareja no le vale esa hora por su
+    // disponibilidad, se puede colocar igual, pero pidiendo confirmación.
+    if (!carriedOkAt(min)) {
+      Alert.alert(
+        'La pareja no puede a esa hora',
+        `${cardLabel(carried)} marcó que NO puede jugar a las ${hhmm(min)}. ¿Colocarlo igualmente?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Colocar igualmente',
+            style: 'destructive',
+            onPress: () => {
+              void doPlace(min, court);
+            },
+          },
+        ],
+      );
+      return;
+    }
+    void doPlace(min, court);
+  };
+  const removeCarried = async () => {
+    if (!carried) return;
+    setBusy(true);
+    try {
+      await clearMatchSlot(carried.id);
+      setCarried(null);
+      onChanged();
+    } catch (e: any) {
+      toast.error('No se pudo quitar', e?.message ?? '');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <BottomSheet open={open} onClose={onClose}>
+      <Text style={styles.sheetEyebrow}>REJILLA DE HORARIO</Text>
+      <Text style={styles.sheetTitle}>Todos los huecos</Text>
+      <Text style={[styles.playerMeta, { marginTop: 4 }]}>
+        Toca un partido para cogerlo y luego un hueco libre para soltarlo. Al moverlo,
+        los huecos en verde = sus jugadores pueden a esa hora; en rojo = no.
+      </Text>
+
+      {/* Filtros de foco: conflictos, categoría y fase (atenúan lo que no cuadra) */}
+      {catOptions.length > 1 || phaseOptions.length > 1 || conflictCount > 0 ? (
+        <View style={{ marginTop: 8, gap: 6 }}>
+          {conflictCount > 0 ? (
+            <Pressable
+              onPress={() => {
+                const next = !conflictOnly;
+                setConflictOnly(next);
+                if (next) {
+                  // Ver TODOS los conflictos (quita filtros de cat/fase) y saltar
+                  // al día donde haya uno si el día actual no tiene ninguno.
+                  setCatFilter('all');
+                  setPhaseFilter('all');
+                  const curHas = matches.some(
+                    (m) => hasConflict(m) && (m.scheduled_at as string).slice(0, 10) === dayIso,
+                  );
+                  if (!curHas) {
+                    const firstConf = matches.find(hasConflict);
+                    if (firstConf?.scheduled_at)
+                      setDayIso((firstConf.scheduled_at as string).slice(0, 10));
+                  }
+                }
+              }}
+              style={[
+                styles.phaseDayChip,
+                { alignSelf: 'flex-start', borderColor: c.error + '99' },
+                conflictOnly && { backgroundColor: c.error, borderColor: c.error },
+              ]}
+            >
+              <Text style={[styles.phaseDayChipText, { color: conflictOnly ? c.textInverse : c.error }]}>
+                ⚠️ Conflictos de horario ({conflictCount})
+              </Text>
+            </Pressable>
+          ) : null}
+          {catOptions.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6 }}
+            >
+              <Pressable
+                onPress={() => setCatFilter('all')}
+                style={[styles.phaseDayChip, catFilter === 'all' && { backgroundColor: c.accent, borderColor: c.accent }]}
+              >
+                <Text style={[styles.phaseDayChipText, { color: catFilter === 'all' ? c.textInverse : c.textMuted }]}>
+                  Todas
+                </Text>
+              </Pressable>
+              {catOptions.map((o) => {
+                const on = catFilter === o.key;
+                return (
+                  <Pressable
+                    key={o.key}
+                    onPress={() => setCatFilter(on ? 'all' : o.key)}
+                    style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                  >
+                    <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                      {o.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+          {phaseOptions.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6 }}
+            >
+              <Pressable
+                onPress={() => setPhaseFilter('all')}
+                style={[styles.phaseDayChip, phaseFilter === 'all' && { backgroundColor: c.accent, borderColor: c.accent }]}
+              >
+                <Text style={[styles.phaseDayChipText, { color: phaseFilter === 'all' ? c.textInverse : c.textMuted }]}>
+                  Todas las fases
+                </Text>
+              </Pressable>
+              {phaseOptions.map((o) => {
+                const on = phaseFilter === o.key;
+                return (
+                  <Pressable
+                    key={o.key}
+                    onPress={() => setPhaseFilter(on ? 'all' : o.key)}
+                    style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                  >
+                    <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                      {o.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+        </View>
+      ) : null}
+
+      {days.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 6, paddingVertical: 10 }}
+        >
+          {days.map((day) => {
+            const on = dayIso === day.iso;
+            return (
+              <Pressable
+                key={day.iso}
+                onPress={() => setDayIso(day.iso)}
+                style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+              >
+                <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                  {day.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
+      {carried ? (
+        <View style={styles.carriedBanner}>
+          <Text style={styles.carriedText} numberOfLines={1}>
+            Moviendo: {cardLabel(carried)}
+          </Text>
+          <Pressable onPress={removeCarried} hitSlop={6}>
+            <Text style={styles.carriedRemove}>Quitar</Text>
+          </Pressable>
+          <Pressable onPress={() => setCarried(null)} hitSlop={6}>
+            <Text style={styles.carriedCancel}>Cancelar</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+        <View>
+          <View style={{ flexDirection: 'row' }}>
+            <View style={styles.gridCorner} />
+            {courts.map((ct) => (
+              <View key={ct} style={styles.gridHeadCell}>
+                <Text style={styles.gridHeadText}>P{ct}</Text>
+              </View>
+            ))}
+          </View>
+          <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+            {times.map((min) => (
+              <View key={min} style={{ flexDirection: 'row' }}>
+                <View style={styles.gridTimeCell}>
+                  <Text style={styles.gridTimeText}>{hhmm(min)}</Text>
+                </View>
+                {courts.map((ct) => {
+                  const m = occ[`${min}:${ct}`];
+                  const isCarried = !!m && !!carried && m.id === carried.id;
+                  // Hueco libre + partido en mano: ¿pueden sus jugadores a esta hora?
+                  const okHere = !m && !!carried ? carriedOkAt(min) : true;
+                  const conflict = !!m && hasConflict(m);
+                  return (
+                    <Pressable
+                      key={ct}
+                      onPress={() => (m ? setCarried(isCarried ? null : m) : place(min, ct))}
+                      disabled={busy}
+                      style={[
+                        styles.gridCell,
+                        m ? styles.gridCellFull : styles.gridCellFree,
+                        conflict && !isCarried && { borderColor: c.error, backgroundColor: c.error + '12' },
+                        isCarried && { borderColor: c.accent, borderWidth: 2 },
+                        !!carried && !m && okHere && { borderColor: c.accent, backgroundColor: c.accent10 },
+                        !!carried && !m && !okHere && { borderColor: c.error + '55', backgroundColor: c.error + '10' },
+                        m && !matchInFilter(m) && { opacity: 0.28 },
+                      ]}
+                    >
+                      {m ? (
+                        <>
+                          <Text
+                            style={[styles.gridCellCat, conflict && { color: c.error }]}
+                            numberOfLines={1}
+                          >
+                            {conflict ? '⚠️ ' : ''}
+                            {cellTag(m)}
+                          </Text>
+                          <Text style={styles.gridCellText} numberOfLines={1}>
+                            {fullPair(m.home_reg)}
+                          </Text>
+                          <Text style={styles.gridCellTextAway} numberOfLines={1}>
+                            {fullPair(m.away_reg)}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text
+                          style={[
+                            styles.gridCellFreeText,
+                            !!carried && !okHere && { color: c.error },
+                          ]}
+                        >
+                          {carried ? (okHere ? '＋' : '✕') : ''}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </ScrollView>
+
+      {unscheduled.length ? (
+        <>
+          <Text style={styles.label}>SIN HORA ({unscheduled.length})</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {unscheduled.map((m) => {
+              const on = carried?.id === m.id;
+              return (
+                <Pressable
+                  key={m.id}
+                  onPress={() => setCarried(on ? null : m)}
+                  style={[styles.unschedChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                >
+                  <Text
+                    style={[styles.unschedChipText, { color: on ? c.textInverse : c.text }]}
+                    numberOfLines={1}
+                  >
+                    {cardLabel(m)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
     </BottomSheet>
   );
 };
@@ -1395,7 +1979,7 @@ const PlayerInfoSheet: React.FC<{
             {reg.seed ? ` · cabeza de serie nº ${reg.seed}` : ''}
           </Text>
 
-          <Text style={[styles.label, { marginTop: 14 }]}>DISPONIBILIDAD</Text>
+          <Text style={[styles.label, { marginTop: 14 }]}>HORAS QUE NO PUEDE</Text>
           {reg.availability?.length ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {reg.availability.map((a, i) => (
@@ -1405,7 +1989,7 @@ const PlayerInfoSheet: React.FC<{
               ))}
             </View>
           ) : (
-            <Text style={styles.infoBlockText}>No indicó disponibilidad.</Text>
+            <Text style={styles.infoBlockText}>Puede a cualquier hora.</Text>
           )}
         </View>
       ) : null}
@@ -1435,8 +2019,9 @@ const EditTournamentSheet: React.FC<{
   const [location, setLocation] = useState('');
   const [maxPairs, setMaxPairs] = useState('');
   const [fee, setFee] = useState('');
-  const [prizes, setPrizes] = useState('');
-  const [extraInfo, setExtraInfo] = useState('');
+  const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
+  const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
+  const [observations, setObservations] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [seedingMode, setSeedingMode] = useState<SeedingMode>('points');
@@ -1451,8 +2036,17 @@ const EditTournamentSheet: React.FC<{
       setLocation(tournament.location ?? '');
       setMaxPairs(tournament.max_pairs ? String(tournament.max_pairs) : '');
       setFee(tournament.entry_fee != null ? String(tournament.entry_fee) : '');
-      setPrizes(tournament.prizes ?? '');
-      setExtraInfo(tournament.extra_info ?? '');
+      setPrizesJson(
+        tournament.prizes_json ??
+          (tournament.prizes
+            ? [{ place: '1º', items: [{ type: 'otros', desc: tournament.prizes }] }]
+            : []),
+      );
+      setInfoRows(
+        tournament.info_rows ??
+          (tournament.extra_info ? [{ label: 'Info', value: tournament.extra_info }] : []),
+      );
+      setObservations(tournament.observations ?? '');
       setCoverUrl(tournament.cover_url ?? null);
       setCoverUri(null);
     }
@@ -1491,8 +2085,12 @@ const EditTournamentSheet: React.FC<{
         location,
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         entryFee: fee ? parseFloat(fee) : null,
-        prizes,
-        extraInfo,
+        prizesJson,
+        infoRows,
+        observations,
+        // Migrado a estructurado: se limpia el texto libre antiguo.
+        prizes: null,
+        extraInfo: null,
         coverUrl: cover,
       });
       onSaved();
@@ -1595,7 +2193,7 @@ const EditTournamentSheet: React.FC<{
         </View>
       </View>
 
-      {tournament?.format === 'ko' || tournament?.format === 'groups_ko' ? (
+      {tournament?.format === 'ko' || tournament?.format === 'ko_consolation' || tournament?.format === 'groups_ko' ? (
         <>
           <Text style={styles.label}>SIEMBRA</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -1681,14 +2279,15 @@ const EditTournamentSheet: React.FC<{
         />
       </View>
 
-      <Text style={styles.label}>PREMIOS</Text>
-      <View style={[styles.input, { minHeight: 84, paddingVertical: 12 }]}>
-        <TextInput value={prizes} onChangeText={setPrizes} placeholder="1º: trofeo + material…" placeholderTextColor={c.textFaint} style={[styles.inputField, { minHeight: 60, textAlignVertical: 'top' }]} multiline maxLength={400} />
-      </View>
-
-      <Text style={styles.label}>INFORMACIÓN ADICIONAL</Text>
-      <View style={[styles.input, { minHeight: 84, paddingVertical: 12 }]}>
-        <TextInput value={extraInfo} onChangeText={setExtraInfo} placeholder="BBQ, música, sorteos…" placeholderTextColor={c.textFaint} style={[styles.inputField, { minHeight: 60, textAlignVertical: 'top' }]} multiline maxLength={600} />
+      <View style={{ marginTop: 4 }}>
+        <PrizeInfoEditor
+          prizes={prizesJson}
+          onPrizes={setPrizesJson}
+          infoRows={infoRows}
+          onInfoRows={setInfoRows}
+          observations={observations}
+          onObservations={setObservations}
+        />
       </View>
 
       <Pressable onPress={confirmDelete} hitSlop={8} style={{ marginTop: 22, alignItems: 'center' }}>
@@ -1720,6 +2319,7 @@ export const TournamentDetailScreen = ({
   const [editOpen, setEditOpen] = useState(false);
   const [selectedReg, setSelectedReg] = useState<TournamentRegistration | null>(null);
   const [phaseDays, setPhaseDays] = useState<Record<string, string[]>>({});
+  const [koBracket, setKoBracket] = useState<'main' | 'consol'>('main');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -1872,12 +2472,18 @@ export const TournamentDetailScreen = ({
 
   const onGenerate = () => {
     if (!t) return;
+    // Aviso si la categoría tiene menos parejas/jugadores que el mínimo del club.
+    const minWarn =
+      t.min_pairs != null && regsCat.length < t.min_pairs
+        ? `⚠️ Esta categoría tiene ${regsCat.length} ${isSocial ? 'jugadores' : 'parejas'}, por debajo del mínimo de ${t.min_pairs}. `
+        : '';
     if (isSocial) {
       Alert.alert(
         isMexicano ? 'Generar 1ª ronda' : 'Generar americano',
-        isMexicano
-          ? `Se creará la 1ª ronda del mexicano con ${regsCat.length} jugadores (siembra por puntos). Las siguientes rondas se generan por el ranking tras cada resultado.`
-          : `Se crearán todas las rondas del americano con ${regsCat.length} jugadores (compañeros rotativos). No podrás añadir más jugadores.`,
+        minWarn +
+          (isMexicano
+            ? `Se creará la 1ª ronda del mexicano con ${regsCat.length} jugadores (siembra por puntos). Las siguientes rondas se generan por el ranking tras cada resultado.`
+            : `Se crearán todas las rondas del americano con ${regsCat.length} jugadores (compañeros rotativos). No podrás añadir más jugadores.`),
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -1896,7 +2502,7 @@ export const TournamentDetailScreen = ({
     if (isGroups) {
       Alert.alert(
         'Generar grupos',
-        `¿De cuántas parejas por grupo? Se repartirán las ${regsCat.length} parejas por siembra.`,
+        minWarn + `¿De cuántas parejas por grupo? Se repartirán las ${regsCat.length} parejas por siembra.`,
         [
           { text: 'Cancelar', style: 'cancel' },
           { text: 'Grupos de 3', onPress: () => runGenerateBracket(() => generateGroups(t, regsCat, dg, dc, 3)) },
@@ -1907,7 +2513,8 @@ export const TournamentDetailScreen = ({
     }
     Alert.alert(
       'Generar',
-      `Se ${isRR ? 'creará la liga' : 'creará el cuadro'}${activeDiv ? ` de ${divLabel(activeDiv)}` : ''} con ${regsCat.length} parejas. No podrás añadir más parejas a esta división.`,
+      minWarn +
+        `Se ${isRR ? 'creará la liga' : 'creará el cuadro'}${activeDiv ? ` de ${divLabel(activeDiv)}` : ''} con ${regsCat.length} parejas. No podrás añadir más parejas a esta división.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -2040,9 +2647,22 @@ export const TournamentDetailScreen = ({
         <View style={styles.center}>
           <ActivityIndicator color={c.accent} />
         </View>
+      ) : !t ? (
+        <View style={[styles.center, { paddingHorizontal: 32, gap: 8 }]}>
+          <Text style={styles.notFoundTitle}>Torneo no disponible</Text>
+          <Text style={styles.notFoundText}>
+            No se encontró este torneo o ya no existe.
+          </Text>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [styles.notFoundBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.notFoundBtnText}>Volver</Text>
+          </Pressable>
+        </View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 64 + 12 + 32 }}
           showsVerticalScrollIndicator={false}
         >
           {/* HERO con portada */}
@@ -2128,7 +2748,10 @@ export const TournamentDetailScreen = ({
           {tab === 'schedule' && t ? (
             <ScheduleView
               tournament={t}
-              matches={matches}
+              matches={matchesCat}
+              allMatches={matches}
+              defaultGender={dg}
+              defaultCategory={dc}
               regs={regs}
               info={regInfo}
               onReload={load}
@@ -2260,22 +2883,53 @@ export const TournamentDetailScreen = ({
               generating={generating}
             />
           ) : (
-            <View>
-              <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
-                CUADRO
-              </Text>
-              <BracketView
-                matches={matchesCat.filter((m) => m.bracket === 'main')}
-                regName={regName}
-                onEdit={setEditMatch}
-                collapsed={collapsed}
-                toggleRound={toggleRound}
-              />
-              <Text style={styles.bracketHint}>
-                Toca una ronda para ocultarla/mostrarla. Toca un partido para meter
-                el resultado.
-              </Text>
-            </View>
+            (() => {
+              const hasConsol = matchesCat.some((m) => m.bracket === 'consol');
+              const activeKo = hasConsol ? koBracket : 'main';
+              return (
+                <View>
+                  {hasConsol ? (
+                    <View style={styles.koTabs}>
+                      {(
+                        [
+                          { id: 'main', label: 'Principal' },
+                          { id: 'consol', label: 'Consolación' },
+                        ] as { id: 'main' | 'consol'; label: string }[]
+                      ).map((b) => {
+                        const sel = activeKo === b.id;
+                        return (
+                          <Pressable
+                            key={b.id}
+                            onPress={() => setKoBracket(b.id)}
+                            style={[styles.koTab, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+                          >
+                            <Text style={[styles.koTabText, { color: sel ? c.textInverse : c.textMuted }]}>
+                              {b.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
+                      CUADRO
+                    </Text>
+                  )}
+                  <BracketView
+                    matches={matchesCat.filter((m) => m.bracket === activeKo)}
+                    regName={regName}
+                    onEdit={setEditMatch}
+                    collapsed={collapsed}
+                    toggleRound={toggleRound}
+                  />
+                  <Text style={styles.bracketHint}>
+                    {activeKo === 'consol'
+                      ? 'Cuadro de consolación: aquí caen los que pierden en la 1ª ronda del principal.'
+                      : 'Toca una ronda para ocultarla/mostrarla. Toca un partido para meter el resultado.'}
+                  </Text>
+                </View>
+              );
+            })()
           )}
         </ScrollView>
       )}
@@ -2315,7 +2969,7 @@ export const TournamentDetailScreen = ({
 
       <ResultSheet
         match={editMatch}
-        matchFormat={t?.match_format ?? 'bo3_stb'}
+        matchFormat={resolveMatchFormat(t, editMatch?.bracket ?? '')}
         advance={!isRR && !isSocial}
         social={isSocial}
         homeName={
@@ -3157,6 +3811,16 @@ export const makeStyles = (c: Palette) =>
     eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
     title: { color: c.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.4, marginTop: 2 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+    notFoundTitle: { color: c.text, fontSize: 18, fontWeight: '800' },
+    notFoundText: { color: c.textMuted, fontSize: 13.5, textAlign: 'center', lineHeight: 19 },
+    notFoundBtn: {
+      marginTop: 10,
+      backgroundColor: c.accent,
+      borderRadius: Radius.md,
+      paddingHorizontal: 24,
+      paddingVertical: 11,
+    },
+    notFoundBtnText: { color: c.textInverse, fontSize: 14, fontWeight: '800' },
     championCard: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3480,6 +4144,82 @@ export const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     catTabText: { fontSize: 14, fontWeight: '700' },
+    koTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 12, marginBottom: 2 },
+    koTab: {
+      paddingHorizontal: 16,
+      height: 36,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    koTabText: { fontSize: 13.5, fontWeight: '700' },
+    gridBtn: {
+      marginTop: 10,
+      height: 44,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gridBtnText: { color: c.text, fontSize: 14, fontWeight: '700' },
+    carriedBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 10,
+      padding: 10,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    carriedText: { flex: 1, color: c.text, fontSize: 13, fontWeight: '700' },
+    carriedRemove: { color: c.error, fontSize: 12.5, fontWeight: '800' },
+    carriedCancel: { color: c.textMuted, fontSize: 12.5, fontWeight: '700' },
+    gridCorner: { width: 52, height: 30 },
+    gridHeadCell: { width: 98, height: 26, alignItems: 'center', justifyContent: 'center' },
+    gridHeadText: { color: c.textMuted, fontSize: 11, fontWeight: '800' },
+    gridTimeCell: { width: 42, height: 52, alignItems: 'center', justifyContent: 'center' },
+    gridTimeText: { color: c.textMuted, fontSize: 11, fontWeight: '700' },
+    gridCell: {
+      width: 98,
+      height: 48,
+      margin: 1.5,
+      borderRadius: 7,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+    },
+    gridCellFull: { backgroundColor: c.bgCard, borderColor: c.hairStrong },
+    gridCellFree: { backgroundColor: c.bgRaised, borderColor: c.hairStrong },
+    gridCellCat: {
+      fontFamily: Fonts.mono,
+      fontSize: 7.5,
+      letterSpacing: 0.2,
+      color: c.accent,
+      fontWeight: '800',
+    },
+    gridCellText: { color: c.text, fontSize: 9, fontWeight: '700', textAlign: 'center' },
+    gridCellTextAway: { color: c.textMuted, fontSize: 9, fontWeight: '600', textAlign: 'center' },
+    gridCellFreeText: { color: c.accent, fontSize: 15, fontWeight: '800' },
+    unschedChip: {
+      paddingHorizontal: 10,
+      height: 34,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      maxWidth: 160,
+    },
+    unschedChipText: { fontSize: 12, fontWeight: '700' },
     codeCard: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -44,6 +44,7 @@ import * as MatchdaysApi from '@core/services/matchdays';
 import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
+import { fetchActaForMatchday, type FcpMatchdayActa } from '@core/services/fcpSeason';
 import * as MatchdayPhotoApi from '@core/services/matchdayPhoto';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
 import {
@@ -143,6 +144,18 @@ interface MatchOutcome {
   summary: string;
 }
 
+// Acta federativa de una pista (desde fcp_actas), ya orientada a MI perspectiva.
+interface CourtActa {
+  mine: string; // mi pareja (2 jugadores)
+  rival: string; // pareja rival (2 jugadores)
+  myPts: number; // suma de puntos de mi pareja
+  rvPts: number; // suma de puntos del rival
+  parciales: string | null; // "6/3 - 4/6 - 6/2"
+  setsMine: number;
+  setsRival: number;
+  state: 'won' | 'lost' | 'partial';
+}
+
 const matchOutcome = (
   results: MatchResultsApi.MatchResult[],
   court: number,
@@ -194,6 +207,7 @@ export const JornadaScreen = ({
   const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
   const [pairs, setPairs] = useState<LineupsApi.LineupPair[]>([]);
   const [results, setResults] = useState<MatchResultsApi.MatchResult[]>([]);
+  const [acta, setActa] = useState<FcpMatchdayActa | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -208,10 +222,13 @@ export const JornadaScreen = ({
   const matchPhotoCardRef = React.useRef<View>(null);
 
   const targetMatchdayId = route.params?.matchdayId;
+  // Spinner solo en la 1ª carga; los refrescos al volver a foco van en segundo
+  // plano para no parpadear a spinner con la jornada ya en pantalla.
+  const didLoadRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!team) return;
-    setLoading(true);
+    if (!didLoadRef.current) setLoading(true);
     try {
       let md: MatchdaysApi.Matchday | null = null;
       if (targetMatchdayId) {
@@ -224,24 +241,28 @@ export const JornadaScreen = ({
       if (md) {
         // JornadaScreen siempre lee de la variante activa (la "oficial").
         const activeVariant = await LineupVariantsApi.fetchActiveVariant(md.id);
-        const [lineup, res, s] = await Promise.all([
+        const [lineup, res, s, a] = await Promise.all([
           activeVariant
             ? LineupsApi.fetchLineup(activeVariant.id)
             : Promise.resolve([]),
           MatchResultsApi.fetchResults(md.id),
           SeasonsApi.fetchSeasonById(md.season_id),
+          fetchActaForMatchday(md.id),
         ]);
         setPairs(lineup);
         setResults(res);
         setSeason(s);
+        setActa(a);
       } else {
         setPairs([]);
         setResults([]);
         setSeason(null);
+        setActa(null);
       }
     } catch (e) {
       console.warn('Jornada fetch', e);
     } finally {
+      didLoadRef.current = true;
       setLoading(false);
     }
   }, [team, targetMatchdayId]);
@@ -268,6 +289,44 @@ export const JornadaScreen = ({
   }, [pairs, courts, matchday]);
 
   const isHome = matchday?.is_home ?? true;
+
+  // Acta federativa por pista. Cuando la Federación ya la publicó (hay filas en
+  // fcp_actas), MANDA sobre lo manual: parejas reales, rival, parciales y suma
+  // de puntos. Mientras no exista, cada slot muestra los valores manuales.
+  const actaByCourt = useMemo(() => {
+    const m = new Map<number, CourtActa>();
+    if (!acta) return m;
+    const num = (v: number | string | null | undefined) =>
+      v == null ? 0 : Number(v) || 0;
+    for (const p of acta.partidos) {
+      const mineLocal = acta.isHome;
+      const myPts = mineLocal
+        ? num(p.local_j1_pts) + num(p.local_j2_pts)
+        : num(p.visit_j1_pts) + num(p.visit_j2_pts);
+      const rvPts = mineLocal
+        ? num(p.visit_j1_pts) + num(p.visit_j2_pts)
+        : num(p.local_j1_pts) + num(p.local_j2_pts);
+      const setsMine = (mineLocal ? p.sets_local : p.sets_visit) ?? 0;
+      const setsRival = (mineLocal ? p.sets_visit : p.sets_local) ?? 0;
+      m.set(p.partido_num, {
+        mine:
+          [mineLocal ? p.local_j1 : p.visit_j1, mineLocal ? p.local_j2 : p.visit_j2]
+            .filter(Boolean)
+            .join(' / ') || '—',
+        rival:
+          [mineLocal ? p.visit_j1 : p.local_j1, mineLocal ? p.visit_j2 : p.local_j2]
+            .filter(Boolean)
+            .join(' / ') || '—',
+        myPts,
+        rvPts,
+        parciales: p.parciales,
+        setsMine,
+        setsRival,
+        state: setsMine > setsRival ? 'won' : setsMine < setsRival ? 'lost' : 'partial',
+      });
+    }
+    return m;
+  }, [acta]);
 
   const score = useMemo(() => {
     // Si la jornada tiene marcador agregado (cierre manual sin todos los
@@ -454,7 +513,7 @@ export const JornadaScreen = ({
             style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
           >
             <IconBack size={16} color={c.text} />
-            <Text style={styles.backLabel}>Inicio</Text>
+            <Text style={styles.backLabel}>Atrás</Text>
           </Pressable>
         </View>
         <View style={[styles.center, { flex: 1, padding: 24 }]}>
@@ -495,7 +554,9 @@ export const JornadaScreen = ({
       ? 'DERROTA'
       : 'EMPATE';
   const photoTitle = `${teamName} ${score.won}–${score.lost} ${matchday.opponent}`;
-  const photoSubtitle = `${jornadaLabel}${season ? ` · ${season.name}` : ''} · ${longDate}`;
+  // Breve para que NO se corte en la tarjeta: "Jornada 14 · sáb 12 jul"
+  // (sin el nombre largo de la liga; la marca ya va en la tarjeta).
+  const photoSubtitle = `${jornadaLabel}${dateObj ? ` · ${formatShortDay(dateObj)}` : ''}`;
   const photoDetail = outcomeLabel;
   const photoShareText = [
     `🎾 *TACTIUM · ${jornadaLabel}*`,
@@ -539,22 +600,33 @@ export const JornadaScreen = ({
     }
   };
 
-  // Compartir el RESULTADO como texto (sin foto), igual que el amistoso:
-  // WhatsApp directo (con fallback wa.me) y hoja nativa para otras apps.
-  const shareResultWhatsapp = async () => {
-    const url = `whatsapp://send?text=${encodeURIComponent(photoShareText)}`;
-    try {
-      const can = await Linking.canOpenURL(url);
-      if (can) await Linking.openURL(url);
-      else
-        await Linking.openURL(
-          `https://wa.me/?text=${encodeURIComponent(photoShareText)}`,
-        );
-    } catch {
-      // no se pudo abrir WhatsApp
-    }
+  // Eliminar la foto: si está persistida (portada del equipo) la borra de
+  // Storage (solo capitán, RLS); si es efímera local, solo la quita de la vista.
+  const removePhoto = () => {
+    Alert.alert('Eliminar foto', '¿Quitar la foto de esta jornada?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          if (matchday.photo_url && team) {
+            setPhotoUploading(true);
+            try {
+              await MatchdayPhotoApi.removeMatchPhoto(team.id, matchday.id);
+              setMatchday((prev) => (prev ? { ...prev, photo_url: null } : prev));
+            } catch (e: any) {
+              Alert.alert('No se pudo eliminar', e?.message ?? 'Inténtalo de nuevo.');
+            } finally {
+              setPhotoUploading(false);
+            }
+          }
+          setMatchPhotoUri(null);
+        },
+      },
+    ]);
   };
 
+  // Compartir el RESULTADO como texto (sin foto) por la hoja nativa.
   const shareResultNative = async () => {
     try {
       await Share.share({ message: photoShareText });
@@ -575,7 +647,7 @@ export const JornadaScreen = ({
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
           <IconBack size={16} color={c.text} />
-          <Text style={styles.backLabel}>Inicio</Text>
+          <Text style={styles.backLabel}>Atrás</Text>
         </Pressable>
         <View style={styles.navRight}>
           {!closed && isCaptain ? (
@@ -755,10 +827,10 @@ export const JornadaScreen = ({
             style={[
               styles.statusPill,
               {
-                backgroundColor: lineupReady
+                backgroundColor: lineupReady || closed
                   ? c.accent15
                   : 'rgba(242,201,76,0.15)',
-                borderColor: lineupReady
+                borderColor: lineupReady || closed
                   ? c.accent40
                   : 'rgba(242,201,76,0.40)',
               },
@@ -768,17 +840,17 @@ export const JornadaScreen = ({
               style={[
                 styles.statusPillDot,
                 {
-                  backgroundColor: lineupReady ? c.accent : c.warning,
+                  backgroundColor: lineupReady || closed ? c.accent : c.warning,
                 },
               ]}
             />
             <Text
               style={[
                 styles.statusPillText,
-                { color: lineupReady ? c.accent : c.warning },
+                { color: lineupReady || closed ? c.accent : c.warning },
               ]}
             >
-              {lineupReady ? 'VALIDADA' : 'PENDIENTE'}
+              {closed ? 'DISPUTADA' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
             </Text>
           </View>
         </View>
@@ -789,6 +861,7 @@ export const JornadaScreen = ({
             const court = i + 1;
             const pair = pairs.find((p) => p.court_number === court);
             const out = matchOutcome(results, court, isHome);
+            const ai = actaByCourt.get(court) ?? null;
             return (
               <PairResultRow
                 key={court}
@@ -799,6 +872,8 @@ export const JornadaScreen = ({
                 playerB={pair?.player_b_name ?? null}
                 pts={pair?.pair_points ?? null}
                 outcome={out}
+                acta={ai}
+                closed={closed}
                 disabled={!lineupReady || closed || !matchStarted}
                 onPress={gate(
                   () =>
@@ -916,15 +991,25 @@ export const JornadaScreen = ({
                   </Text>
                 </Pressable>
                 {isCaptain || !matchday.photo_url ? (
-                  <Pressable
-                    onPress={addOrChangePhoto}
-                    disabled={photoUploading}
-                    style={({ pressed }) => pressed && { opacity: 0.7 }}
-                  >
-                    <Text style={styles.changePhotoLabel}>
-                      {photoUploading ? 'Guardando…' : 'Cambiar foto'}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.photoActionsRow}>
+                    <Pressable
+                      onPress={addOrChangePhoto}
+                      disabled={photoUploading}
+                      style={({ pressed }) => pressed && { opacity: 0.7 }}
+                    >
+                      <Text style={styles.changePhotoLabel}>
+                        {photoUploading ? 'Guardando…' : 'Cambiar foto'}
+                      </Text>
+                    </Pressable>
+                    <Text style={styles.photoActionsSep}>·</Text>
+                    <Pressable
+                      onPress={removePhoto}
+                      disabled={photoUploading}
+                      style={({ pressed }) => pressed && { opacity: 0.7 }}
+                    >
+                      <Text style={styles.removePhotoLabel}>Eliminar foto</Text>
+                    </Pressable>
+                  </View>
                 ) : null}
               </>
             ) : isCaptain ? (
@@ -954,9 +1039,10 @@ export const JornadaScreen = ({
               </Text>
             )}
 
-            {/* Compartir el RESULTADO solo texto (sin foto), como el amistoso */}
+            {/* Un único botón global: comparte el RESULTADO (texto) por la hoja
+                nativa (WhatsApp, Telegram, etc. — cada uno elige su app). */}
             <Pressable
-              onPress={shareResultWhatsapp}
+              onPress={shareResultNative}
               style={({ pressed }) => [
                 styles.sharePhotoCta,
                 { marginTop: 4 },
@@ -964,26 +1050,17 @@ export const JornadaScreen = ({
               ]}
             >
               <IconShare size={16} color={c.accent} />
-              <Text style={styles.sharePhotoCtaLabel}>
-                Compartir resultado por WhatsApp
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={shareResultNative}
-              style={({ pressed }) => pressed && { opacity: 0.7 }}
-            >
-              <Text style={styles.changePhotoLabel}>
-                Compartir en otras apps
-              </Text>
+              <Text style={styles.sharePhotoCtaLabel}>Compartir resultado</Text>
             </Pressable>
           </View>
         ) : null}
 
-        {/* === ELIMINAR JORNADA · solo captain === */}
-        {/* Discreto al final. Confirma 2 veces (Alert) y borra en cascada
-            todas las dependencias (lineups, resultados). Players nunca ven
-            este botón — RLS de Supabase de todas formas rechazaría. */}
-        {isCaptain ? (
+        {/* === ELIMINAR JORNADA · solo captain, jornada abierta y temporada activa ===
+            Discreto al final. Confirma 2 veces (Alert) y borra en cascada todas
+            las dependencias (lineups, resultados). Se oculta si el acta está
+            cerrada o la temporada archivada (coherente con editar; no se borra
+            histórico). Players nunca ven este botón — RLS lo rechazaría igual. */}
+        {isCaptain && !closed && !seasonClosed ? (
           <Pressable
             onPress={() => {
               Alert.alert(
@@ -1289,6 +1366,9 @@ const ResultCard: React.FC<{
 
 // ============= PAIR + RESULT ROW =============
 
+const fmtPts = (n: number) =>
+  String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
 const PairResultRow: React.FC<{
   court: number;
   isTop: boolean;
@@ -1297,6 +1377,8 @@ const PairResultRow: React.FC<{
   playerB: string | null;
   pts: number | null;
   outcome: MatchOutcome;
+  acta: CourtActa | null;
+  closed: boolean;
   disabled: boolean;
   onPress: () => void;
 }> = ({
@@ -1307,26 +1389,31 @@ const PairResultRow: React.FC<{
   playerB,
   pts,
   outcome,
+  acta,
+  closed,
   disabled,
   onPress,
 }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+
+  // Cuando hay acta federativa cerrada, MANDA sobre lo manual.
+  const effState = acta ? acta.state : outcome.state;
   const tint =
-    outcome.state === 'won'
+    effState === 'won'
       ? c.accent
-      : outcome.state === 'lost'
+      : effState === 'lost'
       ? c.error
-      : outcome.state === 'partial'
+      : effState === 'partial'
       ? c.warning
       : null;
 
   const badge =
-    outcome.state === 'won'
+    effState === 'won'
       ? { label: 'V', tint: c.accent, a11y: 'Victoria' }
-      : outcome.state === 'lost'
+      : effState === 'lost'
       ? { label: 'D', tint: c.error, a11y: 'Derrota' }
-      : outcome.state === 'partial'
+      : effState === 'partial'
       ? { label: '·', tint: c.warning, a11y: 'En juego' }
       : null;
 
@@ -1336,11 +1423,17 @@ const PairResultRow: React.FC<{
     ? c.accent25
     : c.hair;
 
-  const label = ready
-    ? playerA && playerB
-      ? `${playerA} / ${playerB}`
-      : 'Sin asignar'
+  const label = acta
+    ? acta.mine
+    : ready && playerA && playerB
+    ? `${playerA} / ${playerB}`
+    : closed
+    ? '—'
     : 'Sin asignar';
+  const effPts = acta ? acta.myPts : ready ? pts : null;
+  const effSummary = acta
+    ? acta.parciales ?? `${acta.setsMine}-${acta.setsRival}`
+    : outcome.summary;
 
   return (
     <Pressable
@@ -1377,25 +1470,23 @@ const PairResultRow: React.FC<{
           <Text
             style={[
               styles.pairLabel,
-              !ready && { color: c.textMuted },
+              !ready && !acta && { color: c.textMuted },
             ]}
             numberOfLines={1}
           >
             {label}
           </Text>
           <View style={styles.pairMetaRow}>
-            {isTop && ready ? (
+            {isTop && (ready || acta) ? (
               <View style={styles.topTag}>
                 <Text style={styles.topTagText}>TOP</Text>
               </View>
             ) : null}
-            {ready ? (
-              pts != null ? (
-                <Text style={styles.pairPts}>{pts} pts</Text>
-              ) : null
-            ) : (
+            {effPts != null ? (
+              <Text style={styles.pairPts}>{acta ? fmtPts(effPts) : effPts} pts</Text>
+            ) : !ready && !acta && !closed ? (
               <Text style={styles.pairMetaFaint}>Pendiente</Text>
-            )}
+            ) : null}
           </View>
         </View>
 
@@ -1422,16 +1513,27 @@ const PairResultRow: React.FC<{
         ) : null}
       </View>
 
-      {ready && outcome.summary ? (
+      {/* Pareja rival (solo con acta federativa cerrada) */}
+      {acta ? (
+        <View style={styles.actaRivalRow}>
+          <Text style={styles.actaVs}>VS</Text>
+          <Text style={styles.actaRivalName} numberOfLines={1}>
+            {acta.rival}
+          </Text>
+          <Text style={styles.actaRivalPts}>{fmtPts(acta.rvPts)} pts</Text>
+        </View>
+      ) : null}
+
+      {effSummary ? (
         <View style={styles.setsRow}>
-          <Text style={styles.setsLabel}>SETS</Text>
+          <Text style={styles.setsLabel}>{acta ? 'PARCIALES' : 'SETS'}</Text>
           <Text
             style={[
               styles.setsValue,
               { color: tint ?? c.text },
             ]}
           >
-            {outcome.summary}
+            {effSummary}
           </Text>
         </View>
       ) : null}
@@ -2177,6 +2279,33 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontWeight: '500',
     letterSpacing: 0.4,
   },
+  // Fila del rival (acta federativa cerrada)
+  actaRivalRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actaVs: {
+    fontFamily: Fonts.mono,
+    fontSize: 9,
+    letterSpacing: 1.2,
+    color: c.textFaint,
+    fontWeight: '700',
+  },
+  actaRivalName: {
+    flex: 1,
+    minWidth: 0,
+    color: c.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  actaRivalPts: {
+    fontFamily: Fonts.mono,
+    fontSize: 11.5,
+    color: c.textFaint,
+    fontWeight: '600',
+  },
   // Rule box
   weightedText: {
     marginTop: 10,
@@ -2247,6 +2376,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   sharePhotoCtaLabel: { color: c.accent, fontSize: 14, fontWeight: '600' },
   changePhotoLabel: {
     color: c.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingVertical: 4,
+  },
+  photoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  photoActionsSep: { color: c.textFaint, fontSize: 13 },
+  removePhotoLabel: {
+    color: c.error,
     fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',

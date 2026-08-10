@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -23,12 +23,18 @@ import {
   IconX,
   IconSearch,
   IconShare,
+  IconTeam,
+  IconCalendar,
   BottomSheet,
   ScanSheet,
   Toggle, IconCamera, IconPencil } from '@components/ui';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
 import { EditTeamSheet } from '@features/team/components/EditTeamSheet';
 import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
+import { FcpSeasonUpdateSheet } from '@features/club/components/FcpSeasonUpdateSheet';
+import { FcpGroupSheet } from '@features/club/components/FcpGroupSheet';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { seasonUpdateAvailable } from '@core/services/fcpSeason';
 import { FCP_ENABLED } from '@core/config/featureFlags';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
 import { toast } from '@store/toastStore';
@@ -58,12 +64,31 @@ export const TeamScreen = () => {
   const removePlayer = useTeamStore((s) => s.removePlayer);
 
   const team = useTeamStore((s) => s.team);
+  const isFcpTeam = team?.federation === FCP_FEDERATION_CODE;
+  const [canPrepareSeason, setCanPrepareSeason] = useState(false);
+  useEffect(() => {
+    if (!team?.id || !isFcpTeam) {
+      setCanPrepareSeason(false);
+      return;
+    }
+    let cancelled = false;
+    seasonUpdateAvailable(team.id)
+      .then((v) => {
+        if (!cancelled) setCanPrepareSeason(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [team?.id, isFcpTeam]);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Player | null>(null);
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [importingFcp, setImportingFcp] = useState(false);
+  const [seasonOpen, setSeasonOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState(false);
   // Reverse trial: invitar jugadores con código es premium → gate al paywall.
   const gate = usePremiumGate();
@@ -132,7 +157,42 @@ export const TeamScreen = () => {
         <Text style={styles.eyebrow} numberOfLines={1}>
           EQUIPO
         </Text>
+        {/* Orden L→R: jugadores (preparar temporada) · clasificación/jornadas
+            (mi grupo) · escanear · compartir · añadir. El icono cuadra con lo
+            que abre: personas → plantilla, calendario → grupo (jornadas y
+            clasificación). El botón FCP (import) queda al final y solo si el
+            flag está activo. */}
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          {isFcpTeam && canPrepareSeason ? (
+            <Pressable
+              onPress={() => setSeasonOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Preparar nueva temporada de la Federación (plantilla)"
+              style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+            >
+              <IconTeam size={16} color={c.accent} />
+            </Pressable>
+          ) : null}
+          {isFcpTeam ? (
+            <Pressable
+              onPress={() => setGroupOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Mi grupo en la Federación: clasificación y jornadas"
+              style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+            >
+              <IconCalendar size={16} color={c.accent} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => setScanning(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Escanear calendario"
+            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconCamera size={16} color={c.accent} />
+          </Pressable>
           <Pressable
             onPress={openInvite}
             hitSlop={8}
@@ -141,6 +201,15 @@ export const TeamScreen = () => {
             style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
           >
             <IconShare size={14} color={c.accent} />
+          </Pressable>
+          <Pressable
+            onPress={() => setAdding(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Añadir jugador"
+            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconPlus size={16} color={c.accent} />
           </Pressable>
           {FCP_ENABLED && (
             <Pressable
@@ -153,21 +222,6 @@ export const TeamScreen = () => {
               <Text style={styles.scanBtnLabel}>FCP</Text>
             </Pressable>
           )}
-          <Pressable
-            onPress={() => setScanning(true)}
-            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
-          >
-            <IconCamera size={16} color={c.accent} />
-          </Pressable>
-          <Pressable
-            onPress={() => setAdding(true)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Añadir jugador"
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-          >
-            <IconPlus size={16} color={c.accent} />
-          </Pressable>
         </View>
       </View>
 
@@ -442,6 +496,25 @@ export const TeamScreen = () => {
         onClose={() => setImportingFcp(false)}
         onImport={handleBulkPlayers}
       />
+
+      {team ? (
+        <FcpSeasonUpdateSheet
+          open={seasonOpen}
+          teamId={team.id}
+          teamName={team.name}
+          teamGender={team.gender}
+          onClose={() => setSeasonOpen(false)}
+        />
+      ) : null}
+
+      {team ? (
+        <FcpGroupSheet
+          open={groupOpen}
+          teamId={team.id}
+          teamName={team.name}
+          onClose={() => setGroupOpen(false)}
+        />
+      ) : null}
 
       <InvitePlayersSheet
         open={inviting}

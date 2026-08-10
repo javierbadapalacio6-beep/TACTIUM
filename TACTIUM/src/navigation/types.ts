@@ -51,6 +51,13 @@ export type HomeStackParamList = {
   Lineup: { matchdayId: string };
   Results: { matchdayId: string; focus?: number };
   Availability: { matchdayId?: string };
+  // Explorar Federación reusado DENTRO del HomeStack para que, abierto desde el
+  // atajo de Home, "atrás" vuelva a Inicio (no a Temporadas). Mismos params que
+  // en SeasonsStack para reusar los componentes sin cast.
+  Federacion: undefined;
+  FcpTeam: { idEquipo: number; name?: string };
+  FcpPlayer: { idJugador: string; name?: string };
+  FcpGroup: { idGrupo: string; nombre?: string };
 };
 
 export type SeasonsStackParamList = {
@@ -59,10 +66,33 @@ export type SeasonsStackParamList = {
   // naveguen aquí abriendo directamente un sheet sin que el user tenga
   // que descubrir el botón. 'scan' = ScanSheet de calendario.
   SeasonDetail: { id: string; autoOpen?: 'scan' };
+  // Detalle federativo (Federación Cántabra): equipo rival y jugador.
+  FcpTeam: { idEquipo: number; name?: string };
+  FcpPlayer: { idJugador: string; name?: string };
+  // Navegación libre de la Federación: años → grupos → clasificación/jornadas.
+  Federacion: undefined;
+  FcpGroup: { idGrupo: string; nombre?: string };
+  // Flujo de jornada reusado DENTRO de la stack de Temporadas, para que "atrás"
+  // vuelva a la temporada (no a Inicio).
+  Jornada: { matchdayId?: string };
+  Lineup: { matchdayId: string };
+  Results: { matchdayId: string; focus?: number };
+  Availability: { matchdayId?: string };
 };
 
 export type TeamStackParamList = {
   TeamRoot: undefined;
+};
+
+// Stack de la pestaña Federación (capitán). El root decide en runtime: si el
+// equipo hereda una federación con datos (FCantP) → el explorador directo; si
+// no → un selector de federaciones. Comparte pantallas fcp_* para navegar.
+export type FederacionStackParamList = {
+  FederacionRoot: undefined;
+  Federacion: undefined;
+  FcpTeam: { idEquipo: number; name?: string };
+  FcpPlayer: { idJugador: string; name?: string };
+  FcpGroup: { idGrupo: string; nombre?: string };
 };
 
 export type ProfileStackParamList = {
@@ -74,6 +104,9 @@ export type ClubStackParamList = {
   CreateTeamFromClub: undefined;
   // Horarios de local del club (asignar hora a los partidos de local).
   ClubSchedule: undefined;
+  // La exploración de la Federación ya no vive en el ClubStack: el club_admin
+  // tiene su propia pestaña (FederacionTab → FederacionStack), igual que el
+  // capitán.
   // Reusadas del HomeStack para que el ClubDashboard pueda navegar
   // directo a una jornada (ej. tap en card de últimos resultados) sin
   // cambiar de tab. Quedan read-only automáticamente para club_admin
@@ -107,6 +140,7 @@ export type TabParamList = {
   Seasons: undefined;
   Team: undefined;
   Stats: undefined;
+  FederacionTab: undefined;
   Profile: undefined;
 };
 
@@ -160,6 +194,12 @@ export type HomeStackScreenProps<T extends keyof HomeStackParamList> =
 export type SeasonsStackScreenProps<T extends keyof SeasonsStackParamList> =
   CompositeScreenProps<
     NativeStackScreenProps<SeasonsStackParamList, T>,
+    TabScreenProps<keyof TabParamList>
+  >;
+
+export type FederacionStackScreenProps<T extends keyof FederacionStackParamList> =
+  CompositeScreenProps<
+    NativeStackScreenProps<FederacionStackParamList, T>,
     TabScreenProps<keyof TabParamList>
   >;
 

@@ -531,9 +531,12 @@ export const PaywallScreen = ({
         //     pero le falta el package `<tier>_<billing>` esperado
         //     (mal nombrado en RC dashboard, o no añadido al offering
         //     current).
-        // DIAGNÓSTICO temporal: error real de getOfferings en el dispositivo.
-        const diag = await diagnoseOfferings();
-        Alert.alert('Diagnóstico tienda (debug)', diag);
+        // Diagnóstico SOLO en dev — nunca mostrar el volcado técnico a un
+        // usuario real en producción (el toast de abajo es su mensaje).
+        if (__DEV__) {
+          const diag = await diagnoseOfferings();
+          Alert.alert('Diagnóstico tienda (debug)', diag);
+        }
         const why = !offering
           ? 'No se pudo conectar con la tienda. Revisa tu conexión y vuelve a intentarlo.'
           : `El plan ${selectedPlan.displayName} ${billing === 'monthly' ? 'Mensual' : 'Anual'} no está disponible ahora mismo. Inténtalo más tarde.`;

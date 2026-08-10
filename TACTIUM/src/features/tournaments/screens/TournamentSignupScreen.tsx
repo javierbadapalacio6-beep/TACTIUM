@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,8 +23,14 @@ import {
   signupByCode,
   lookupTournament,
   formatFee,
+  getRegistrationPartnerCode,
+  sendPartnerInviteEmail,
+  checkCategoryEligibility,
+  hourlyFranjas,
   type TournamentLookup,
 } from '@core/services/tournaments';
+import { resolveFcpPlayer, type FcpPlayerMatch } from '@core/services/fcpSearch';
+import { Share } from 'react-native';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
@@ -45,6 +51,7 @@ const slotStr = (dow: number, franja: string) => `${DOW_FULL[dow]} ${franja}`;
 
 // Días concretos del torneo (índice = getDay(): 0=Dom … 6=Sáb).
 const DOW_ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const MESES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DOW_NAME = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const FRANJA_SHORT: Record<string, string> = {
   '9:00–12:00': '9-12',
@@ -85,25 +92,34 @@ export const TournamentSignupScreen = ({
   const [looking, setLooking] = useState(false);
   const [gender, setGender] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  // 2ª categoría OPCIONAL: el jugador puede apuntarse a una segunda categoría
+  // con OTRO compañero. El precio pasa a la cuota de 2 categorías.
+  const [category2, setCategory2] = useState<string | null>(null);
+  const [p2b, setP2b] = useState('');
+  const [p2bEmail, setP2bEmail] = useState('');
+  const [p2bPts, setP2bPts] = useState('');
+  const [p2bLvl, setP2bLvl] = useState('');
   const [p1, setP1] = useState(user ? displayNameOf(user) : '');
   const [p1Email, setP1Email] = useState(
     (user?.email as string | undefined) ?? '',
   );
   const [p1Phone, setP1Phone] = useState('');
   const [p2, setP2] = useState('');
+  const [p2Email, setP2Email] = useState('');
   const [p1Pts, setP1Pts] = useState('');
   const [p2Pts, setP2Pts] = useState('');
-  const [avail, setAvail] = useState<string[]>([]);
-  const [anytime, setAnytime] = useState(false);
+  const [p1Lvl, setP1Lvl] = useState('');
+  const [p2Lvl, setP2Lvl] = useState('');
+  // Franjas de 1h que el jugador marca que NO puede (por día). Por defecto vacío
+  // = disponible a cualquier hora.
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  // Pantalla de éxito: un código de compañero por cada inscripción (1 o 2).
+  const [done, setDone] = useState<
+    { cat: string | null; partner: string; code: string; emailedTo: string | null }[] | null
+  >(null);
 
-  // Disponibilidad final que se guarda: "Cualquier hora" si marca que puede
-  // siempre, o las franjas concretas que haya elegido.
-  const availability = anytime ? ['Cualquier hora'] : avail;
-  const hasAvailability = anytime || avail.length > 0;
-
-  // Días concretos del torneo (del inicio al fin). Si no hay fecha, vacío →
-  // se cae a la rejilla de semana completa.
+  // Días concretos del torneo (del inicio al fin).
   const tDays = useMemo<TDay[]>(() => {
     if (!found?.starts_on) return [];
     const start = parseIsoDate(found.starts_on);
@@ -121,35 +137,44 @@ export const TournamentSignupScreen = ({
     return out;
   }, [found]);
 
-  // ¿Cada día del torneo tiene al menos una franja marcada? (obligatorio,
-  // si no es imposible que juegue las fases de ese día).
-  const dayCovered = (label: string) => avail.some((a) => a.startsWith(label + ' '));
-  const missingDays = anytime ? [] : tDays.filter((d) => !dayCovered(d.label));
-  const allDaysCovered = anytime || tDays.length === 0 || missingDays.length === 0;
-
-  const toggleDaySlot = (s: string) =>
-    setAvail((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  const toggleWholeDay = (label: string) => {
-    const all = FRANJAS.map((f) => daySlot(label, f));
-    const allSel = all.every((s) => avail.includes(s));
-    setAvail((prev) =>
-      allSel ? prev.filter((s) => !all.includes(s)) : Array.from(new Set([...prev, ...all])),
-    );
+  // Disponibilidad por FRANJAS DE 1H: el jugador marca las horas que NO puede,
+  // hasta el tope que fije el club. Por defecto disponible en todas.
+  const slots = useMemo(
+    () => hourlyFranjas(found?.start_time, found?.end_time),
+    [found?.start_time, found?.end_time],
+  );
+  const removeCap = found?.max_removable_hours ?? null;
+  const keyOf = (dayLabel: string, from: number) => `${dayLabel}#${from}`;
+  const toggleRemoved = (dayLabel: string, from: number) => {
+    const k = keyOf(dayLabel, from);
+    setRemoved((prev) => {
+      const n = new Set(prev);
+      if (n.has(k)) {
+        n.delete(k);
+        return n;
+      }
+      if (removeCap != null && n.size >= removeCap) {
+        toast.error(
+          `Máximo ${removeCap} ${removeCap === 1 ? 'hora' : 'horas'}`,
+          'No puedes quitar más franjas en este torneo.',
+        );
+        return prev;
+      }
+      n.add(k);
+      return n;
+    });
   };
-
-  const toggleSlot = (dow: number, franja: string) => {
-    const s = slotStr(dow, franja);
-    setAvail((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  };
-  const toggleFranjaWeek = (franja: string) => {
-    const all = DOW.map((d) => slotStr(d, franja));
-    const allSel = all.every((s) => avail.includes(s));
-    setAvail((prev) =>
-      allSel
-        ? prev.filter((s) => !all.includes(s))
-        : Array.from(new Set([...prev, ...all])),
-    );
-  };
+  // Lo que se guarda: las franjas que el jugador NO puede (las que marcó en
+  // rojo). Vacío = puede a cualquier hora. Guardar directamente las "no puede"
+  // (en vez del complemento) permite excluir un día ENTERO sin ambigüedad.
+  const availability = useMemo<string[]>(() => {
+    if (removed.size === 0 || tDays.length === 0) return [];
+    const out: string[] = [];
+    for (const day of tDays)
+      for (const s of slots)
+        if (removed.has(keyOf(day.label, s.from))) out.push(`${day.label} ${s.label}`);
+    return out;
+  }, [removed, tDays, slots]);
 
   const doLookup = async () => {
     if (code.trim().length < 4) {
@@ -167,6 +192,7 @@ export const TournamentSignupScreen = ({
       setFound(t);
       setGender(t.genders.length === 1 ? t.genders[0] : null);
       setCategory(t.categories.length === 1 ? t.categories[0] : null);
+      setCategory2(null);
     } catch (e: any) {
       toast.error('Error al buscar', e?.message ?? '');
     } finally {
@@ -187,16 +213,164 @@ export const TournamentSignupScreen = ({
   const isPair = found?.pair_based !== false;
   const seedPoints =
     (parseInt(p1Pts, 10) || 0) + (isPair ? parseInt(p2Pts, 10) || 0 : 0);
+  // Reglas de categoría (nivel/puntos) del torneo.
+  const rules = found?.category_rules ?? null;
+  const usesNivel = !!rules && (rules.mode === 'nivel' || rules.mode === 'both');
+  const nivelEntered = !!p1Lvl.trim() && (!isPair || !!p2Lvl.trim());
+  const leagueSum = nivelEntered
+    ? (parseInt(p1Lvl, 10) || 0) + (isPair ? parseInt(p2Lvl, 10) || 0 : 0)
+    : null;
+
+  // ── 2ª categoría (compañero B) ───────────────────────────────────────
+  // Solo se ofrece si el torneo tiene ≥2 categorías, es por parejas y ya se
+  // eligió la 1ª. El compañero puede ser distinto al de la 1ª categoría.
+  const hasSecondOption =
+    !!found && (found.categories?.length ?? 0) >= 2 && isPair && !!category;
+  const seedPointsB = (parseInt(p1Pts, 10) || 0) + (parseInt(p2bPts, 10) || 0);
+  const nivelEnteredB = !!p1Lvl.trim() && !!p2bLvl.trim();
+  const leagueSumB = nivelEnteredB
+    ? (parseInt(p1Lvl, 10) || 0) + (parseInt(p2bLvl, 10) || 0)
+    : null;
+  const catThresholdB =
+    rules && category2 ? rules.byCategory?.[category2] ?? null : null;
+  const eligibilityErrorB = category2
+    ? checkCategoryEligibility(
+        rules,
+        category2,
+        p1Pts.trim() && p2bPts.trim() ? seedPointsB : null,
+        leagueSumB,
+      )
+    : null;
+  // Precio a pagar: cuota de 2 categorías si hay 2ª (fallback a 2× la de 1).
+  const feeToPay = category2
+    ? found?.entry_fee_2 ?? (found?.entry_fee != null ? found.entry_fee * 2 : null)
+    : found?.entry_fee ?? null;
+  // Texto del chip: estructura de precios (1 cat / 2 cats) o cuota única.
+  const feeInfo = ((): string => {
+    if (!found) return '';
+    const oneFee = found.entry_fee;
+    const twoFee = found.entry_fee_2 ?? (oneFee != null ? oneFee * 2 : null);
+    const hasTwo = (found.categories?.length ?? 0) >= 2;
+    if (!oneFee && !twoFee) return 'Inscripción gratuita';
+    if (hasTwo && twoFee != null) {
+      return `1 categoría ${oneFee ? formatFee(oneFee, found.fee_currency) : 'gratis'} · 2 categorías ${formatFee(twoFee, found.fee_currency)} · se paga en el club`;
+    }
+    return oneFee
+      ? `Inscripción: ${formatFee(oneFee, found.fee_currency)} · se paga en el club`
+      : 'Inscripción gratuita';
+  })();
+  // Rango de fechas legible del torneo ("Sáb 15 – Dom 16 ago").
+  const datesLabel = useMemo(() => {
+    if (!found?.starts_on) return null;
+    const s = parseIsoDate(found.starts_on);
+    const sLbl = `${DOW_ABBR[s.getDay()]} ${s.getDate()} ${MESES3[s.getMonth()]}`;
+    if (!found.ends_on || found.ends_on === found.starts_on) return sLbl;
+    const e = parseIsoDate(found.ends_on);
+    return `${DOW_ABBR[s.getDay()]} ${s.getDate()} – ${DOW_ABBR[e.getDay()]} ${e.getDate()} ${MESES3[e.getMonth()]}`;
+  }, [found]);
+
+  // ── Auto-detección desde la Federación (por nombre) ──────────────────
+  // Al escribir el nombre, buscamos al jugador en la FCP y ofrecemos rellenar
+  // sus PUNTOS y su NIVEL (nº de división). Ayuda, no obligación: si no está
+  // federado o el match no cuadra, se sigue metiendo a mano.
+  const generoFilter: 'M' | 'F' | null =
+    gender === 'masculino' ? 'M' : gender === 'femenino' ? 'F' : null;
+  const [p1Matches, setP1Matches] = useState<FcpPlayerMatch[]>([]);
+  const [p2Matches, setP2Matches] = useState<FcpPlayerMatch[]>([]);
+  const [p2bMatches, setP2bMatches] = useState<FcpPlayerMatch[]>([]);
+  const p1Req = useRef(0);
+  const p2Req = useRef(0);
+  const p2bReq = useRef(0);
+
+  useEffect(() => {
+    const name = p1.trim();
+    if (name.length < 3) {
+      setP1Matches([]);
+      return;
+    }
+    const id = ++p1Req.current;
+    const t = setTimeout(async () => {
+      try {
+        const m = await resolveFcpPlayer(name, { genero: generoFilter });
+        if (p1Req.current === id) setP1Matches(m);
+      } catch {
+        if (p1Req.current === id) setP1Matches([]);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [p1, generoFilter]);
+
+  useEffect(() => {
+    const name = p2.trim();
+    if (!isPair || name.length < 3) {
+      setP2Matches([]);
+      return;
+    }
+    const id = ++p2Req.current;
+    const t = setTimeout(async () => {
+      try {
+        const m = await resolveFcpPlayer(name, { genero: generoFilter });
+        if (p2Req.current === id) setP2Matches(m);
+      } catch {
+        if (p2Req.current === id) setP2Matches([]);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [p2, isPair, generoFilter]);
+
+  useEffect(() => {
+    const name = p2b.trim();
+    if (!isPair || !category2 || name.length < 3) {
+      setP2bMatches([]);
+      return;
+    }
+    const id = ++p2bReq.current;
+    const t = setTimeout(async () => {
+      try {
+        const m = await resolveFcpPlayer(name, { genero: generoFilter });
+        if (p2bReq.current === id) setP2bMatches(m);
+      } catch {
+        if (p2bReq.current === id) setP2bMatches([]);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [p2b, isPair, category2, generoFilter]);
+
+  const applyMatchB = (m: FcpPlayerMatch) => {
+    if (m.puntos != null) setP2bPts(String(m.puntos));
+    if (m.nivel != null) setP2bLvl(String(m.nivel));
+    setP2bMatches([]);
+  };
+
+  const applyMatch = (who: 1 | 2, m: FcpPlayerMatch) => {
+    if (who === 1) {
+      if (m.puntos != null) setP1Pts(String(m.puntos));
+      if (m.nivel != null) setP1Lvl(String(m.nivel));
+      setP1Matches([]);
+    } else {
+      if (m.puntos != null) setP2Pts(String(m.puntos));
+      if (m.nivel != null) setP2Lvl(String(m.nivel));
+      setP2Matches([]);
+    }
+  };
+  const catThreshold = rules && category ? rules.byCategory?.[category] ?? null : null;
+  const eligibilityError = checkCategoryEligibility(
+    rules,
+    category,
+    p1Pts.trim() ? seedPoints : null,
+    leagueSum,
+  );
   const valid =
     !!found &&
     !!p1.trim() &&
     !!p1Pts.trim() &&
     !!p1Phone.trim() &&
-    hasAvailability &&
-    allDaysCovered &&
     (!isPair || (!!p2.trim() && !!p2Pts.trim())) &&
     (!needsGender || !!gender) &&
-    (!needsCategory || !!category);
+    (!needsCategory || !!category) &&
+    !eligibilityError &&
+    // Si eligió 2ª categoría, su compañero y puntos + elegibilidad OK.
+    (!category2 || (!!p2b.trim() && !!p2bPts.trim() && !eligibilityErrorB));
 
   const save = async () => {
     if (!found) {
@@ -219,38 +393,142 @@ export const TournamentSignupScreen = ({
       toast.error('El teléfono es obligatorio');
       return;
     }
-    if (!hasAvailability) {
-      toast.error('Marca tu disponibilidad (o “puedo a cualquier hora”)');
+    if (eligibilityError) {
+      toast.error('No cumplís los requisitos de la categoría', eligibilityError);
       return;
     }
-    if (!allDaysCovered) {
-      toast.error(
-        'Falta disponibilidad',
-        `Marca al menos una franja en: ${missingDays.map((d) => d.full).join(', ')}.`,
-      );
-      return;
+    if (category2) {
+      if (!p2b.trim() || !p2bPts.trim()) {
+        toast.error('Rellena el compañero y sus puntos de la 2ª categoría');
+        return;
+      }
+      if (eligibilityErrorB) {
+        toast.error('No cumplís los requisitos de la 2ª categoría', eligibilityErrorB);
+        return;
+      }
     }
     setSaving(true);
     try {
-      await signupByCode({
-        code,
-        gender,
-        category,
-        p1Name: p1,
-        p1Email: p1Email || undefined,
-        p1Phone: p1Phone || undefined,
-        p2Name: isPair ? p2 : '',
-        seedPoints,
-        availability,
-      });
-      toast.success('¡Inscripción hecha!', 'El club te confirmará el cuadro.');
-      navigation.goBack();
+      // Inscribe UNA categoría con su compañero; devuelve el código de compañero
+      // (o null si es individual o no se pudo recuperar).
+      const signupOne = async (
+        cat: string | null,
+        partnerName: string,
+        partnerEmail: string,
+        seed: number,
+        league: number | null,
+      ) => {
+        const regId = await signupByCode({
+          code,
+          gender,
+          category: cat,
+          p1Name: p1,
+          p1Email: p1Email || undefined,
+          p1Phone: p1Phone || undefined,
+          p2Name: isPair ? partnerName : '',
+          p2Email: isPair ? partnerEmail || undefined : undefined,
+          seedPoints: seed,
+          leagueSum: league,
+          availability,
+        });
+        if (!isPair) return null;
+        const partnerCode = await getRegistrationPartnerCode(regId).catch(() => null);
+        let emailedTo: string | null = null;
+        if (partnerCode && partnerEmail.trim()) {
+          const ok = await sendPartnerInviteEmail({
+            toEmail: partnerEmail.trim(),
+            toName: partnerName.trim() || null,
+            fromName: p1.trim() || 'Tu compañero',
+            tournamentName: found?.name ?? 'el torneo',
+            code: partnerCode,
+          });
+          if (ok) emailedTo = partnerEmail.trim();
+        }
+        return partnerCode
+          ? { cat, partner: partnerName.trim(), code: partnerCode, emailedTo }
+          : null;
+      };
+
+      const results: {
+        cat: string | null;
+        partner: string;
+        code: string;
+        emailedTo: string | null;
+      }[] = [];
+      const r1 = await signupOne(category, p2, p2Email, seedPoints, leagueSum);
+      if (r1) results.push(r1);
+      if (category2) {
+        const r2 = await signupOne(category2, p2b, p2bEmail, seedPointsB, leagueSumB);
+        if (r2) results.push(r2);
+      }
+
+      if (!isPair || results.length === 0) {
+        toast.success('¡Inscripción hecha!', 'El club te confirmará el cuadro.');
+        navigation.goBack();
+        return;
+      }
+      setDone(results);
     } catch (e: any) {
       toast.error('No se pudo inscribir', e?.message ?? 'Revisa el código.');
     } finally {
       setSaving(false);
     }
   };
+
+  const shareCode = async () => {
+    if (!done || done.length === 0) return;
+    const lines = done
+      .map((d) => `${d.cat ? d.cat + ': ' : ''}${d.partner || 'tu pareja'} → código ${d.code}`)
+      .join('\n');
+    try {
+      await Share.share({
+        message: `🎾 Te he apuntado como pareja en "${found?.name ?? 'un torneo'}" (TACTIUM).\n${lines}\nVincula tu cuenta en la app: Torneos → "Tengo un código de compañero".`,
+      });
+    } catch {
+      /* cancelado */
+    }
+  };
+
+  if (done) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: insets.bottom + 24, flexGrow: 1, justifyContent: 'center' }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={[styles.successTick]}>✓</Text>
+          <Text style={styles.successTitle}>¡Inscritos!</Text>
+          <Text style={styles.successText}>
+            {done.length > 1
+              ? 'Te has apuntado a 2 categorías. Pásale a cada compañero/a su código para que vincule su cuenta y vea el torneo.'
+              : 'El club os confirmará el cuadro. Pásale este código a tu compañero/a para que vincule su cuenta y vea el torneo en su app.'}
+          </Text>
+
+          {done.map((d, i) => (
+            <View key={i} style={styles.codeBigCard}>
+              <Text style={styles.codeBigLabel}>
+                CÓDIGO DE COMPAÑERO{d.cat ? ` · ${d.cat}` : ''}
+              </Text>
+              <Text style={styles.codeBig}>{d.code}</Text>
+              <Text style={[styles.successText, { marginTop: 6 }]}>
+                {d.partner || 'Tu pareja'}
+                {d.emailedTo ? ` · 📧 ${d.emailedTo}` : ''}
+              </Text>
+            </View>
+          ))}
+
+          <Pressable onPress={shareCode} style={styles.primaryBtn}>
+            <Text style={styles.primaryBtnText}>
+              Compartir {done.length > 1 ? 'códigos' : 'código'}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.goBack()} style={styles.secondaryBtn}>
+            <Text style={styles.secondaryBtnText}>Hecho</Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -307,26 +585,42 @@ export const TournamentSignupScreen = ({
 
         {found ? (
           <View style={styles.foundCard}>
-            <Text style={styles.foundName} numberOfLines={1}>{found.name}</Text>
-            <Text style={styles.foundMeta}>
-              {[
-                found.genders.length
-                  ? found.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
-                  : null,
-                found.categories.length
-                  ? `${found.categories.length} cat.`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' · ') || 'Inscripción abierta'}
-            </Text>
+            <Text style={styles.foundName} numberOfLines={2}>{found.name}</Text>
 
-            <View style={styles.feeChip}>
-              <Text style={styles.feeChipText}>
-                {found.entry_fee
-                  ? `Inscripción: ${formatFee(found.entry_fee, found.fee_currency)} · se paga en el club`
-                  : 'Inscripción gratuita'}
-              </Text>
+            {/* Ficha ordenada del torneo */}
+            <View style={styles.infoBox}>
+              {datesLabel ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>FECHAS</Text>
+                  <Text style={styles.infoValue}>{datesLabel}</Text>
+                </View>
+              ) : null}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>HORARIO</Text>
+                <Text style={styles.infoValue}>
+                  {(found.start_time || '09:00').slice(0, 5)}–{(found.end_time || '22:00').slice(0, 5)}
+                </Text>
+              </View>
+              {found.genders.length ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>GÉNEROS</Text>
+                  <Text style={styles.infoValue}>
+                    {found.genders.map((g) => GENDER_LABEL[g] ?? g).join(' · ')}
+                  </Text>
+                </View>
+              ) : null}
+              {found.categories.length ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>CATEGORÍAS</Text>
+                  <Text style={styles.infoValue}>{found.categories.join(' · ')}</Text>
+                </View>
+              ) : null}
+              <View style={[styles.infoRow, styles.infoRowLast]}>
+                <Text style={styles.infoLabel}>CUOTA</Text>
+                <Text style={[styles.infoValue, { color: c.accent, fontWeight: '800' }]}>
+                  {feeInfo}
+                </Text>
+              </View>
             </View>
 
             {found.genders.length > 0 ? (
@@ -363,7 +657,10 @@ export const TournamentSignupScreen = ({
                     return (
                       <Pressable
                         key={cat}
-                        onPress={() => setCategory(cat)}
+                        onPress={() => {
+                          setCategory(cat);
+                          if (category2 === cat) setCategory2(null);
+                        }}
                         style={[
                           styles.catChip,
                           sel && { backgroundColor: c.accent, borderColor: c.accent },
@@ -403,6 +700,7 @@ export const TournamentSignupScreen = ({
             </View>
           </View>
         </View>
+        <FcpSuggest c={c} styles={styles} matches={p1Matches} onPick={(m) => applyMatch(1, m)} />
 
         <View style={styles.two}>
           <View style={{ flex: 1 }}>
@@ -443,9 +741,28 @@ export const TournamentSignupScreen = ({
                 </View>
               </View>
             </View>
+            <FcpSuggest c={c} styles={styles} matches={p2Matches} onPick={(m) => applyMatch(2, m)} />
             <Text style={styles.availHint}>
               Puntos de vuestra federación. Sumamos los dos ({seedPoints || 0}) para
               sembrar el cuadro y que salga equilibrado.
+            </Text>
+
+            <Text style={styles.label}>EMAIL DE TU COMPAÑERO/A · OPCIONAL</Text>
+            <View style={styles.input}>
+              <TextInput
+                value={p2Email}
+                onChangeText={setP2Email}
+                placeholder="para enviarle el código de acceso"
+                placeholderTextColor={c.textFaint}
+                style={styles.inputField}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                maxLength={80}
+              />
+            </View>
+            <Text style={styles.availHint}>
+              Le mandaremos un código para que vincule su cuenta y vea el torneo en
+              su app. Si no lo pones, podrás copiarle el código tras apuntarte.
             </Text>
           </>
         ) : (
@@ -454,109 +771,240 @@ export const TournamentSignupScreen = ({
           </Text>
         )}
 
-        <Text style={styles.label}>DISPONIBILIDAD</Text>
-        <Pressable
-          onPress={() => setAnytime((v) => !v)}
-          style={[styles.anytimeBtn, anytime && { backgroundColor: c.accent, borderColor: c.accent }]}
-        >
-          <Text style={[styles.anytimeText, { color: anytime ? c.textInverse : c.text }]}>
-            {anytime ? '✓ Puedo a cualquier hora' : 'Puedo a cualquier hora'}
-          </Text>
-        </Pressable>
-        <Text style={styles.availHint}>
-          {anytime
-            ? 'El club te podrá poner en cualquier franja.'
-            : tDays.length > 0
-              ? 'Necesitas al menos una franja en CADA día del torneo (si no, no podrías jugar las fases de ese día). Toca el día para marcarlo entero. Aunque empiece por la tarde, marca la mañana si puedes: el club podría abrir huecos.'
-              : 'Marca cuándo puedes jugar. Toca la franja para marcar toda la semana.'}
-        </Text>
-        {!anytime && tDays.length > 0 && missingDays.length > 0 ? (
-          <Text style={[styles.availHint, { color: c.error, fontWeight: '700', marginTop: -4 }]}>
-            Falta marcar: {missingDays.map((d) => d.full).join(', ')}.
-          </Text>
+        {usesNivel ? (
+          <>
+            <View style={styles.two}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>TU NIVEL DE LIGA</Text>
+                <View style={styles.input}>
+                  <TextInput
+                    value={p1Lvl}
+                    onChangeText={(v) => setP1Lvl(v.replace(/[^0-9]/g, ''))}
+                    placeholder="ej. 4"
+                    placeholderTextColor={c.textFaint}
+                    style={styles.inputField}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+              </View>
+              {isPair ? (
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>NIVEL DE TU PAREJA</Text>
+                  <View style={styles.input}>
+                    <TextInput
+                      value={p2Lvl}
+                      onChangeText={(v) => setP2Lvl(v.replace(/[^0-9]/g, ''))}
+                      placeholder="ej. 6"
+                      placeholderTextColor={c.textFaint}
+                      style={styles.inputField}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                    />
+                  </View>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.availHint}>
+              Nº de la categoría de liga en la que juega cada uno (2ª → 2, 4ª → 4…).
+              {isPair ? ` Suma de la pareja: ${leagueSum ?? '—'}.` : ''}
+            </Text>
+          </>
         ) : null}
 
-        {anytime ? null : tDays.length > 0 ? (
-          // Rejilla por DÍAS del torneo.
-          tDays.map((day) => {
-            const all = FRANJAS.map((f) => daySlot(day.label, f));
-            const allSel = all.every((s) => avail.includes(s));
-            const covered = dayCovered(day.label);
-            return (
-              <View key={day.label} style={styles.franjaBlock}>
-                <Pressable onPress={() => toggleWholeDay(day.label)} hitSlop={6}>
-                  <Text
-                    style={[
-                      styles.franjaLabel,
-                      allSel && { color: c.accent },
-                      !covered && { color: c.error },
-                    ]}
-                  >
-                    {day.full}
-                    {!covered ? ' · falta' : ''}
-                  </Text>
-                </Pressable>
-                <View style={styles.dayRow}>
-                  {FRANJAS.map((franja) => {
-                    const s = daySlot(day.label, franja);
-                    const sel = avail.includes(s);
-                    return (
-                      <Pressable
-                        key={franja}
-                        onPress={() => toggleDaySlot(s)}
-                        style={[
-                          styles.dayCell,
-                          sel && { backgroundColor: c.accent, borderColor: c.accent },
-                        ]}
-                      >
-                        <Text style={[styles.dayCellText, { color: sel ? c.textInverse : c.text }]}>
-                          {FRANJA_SHORT[franja]}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+        {catThreshold ? (
+          <Text style={styles.limitHint}>
+            Requisito {category}:{' '}
+            {[
+              catThreshold.nivel != null &&
+              (rules?.mode === 'nivel' || rules?.mode === 'both')
+                ? `nivel ≥ ${catThreshold.nivel}`
+                : null,
+              catThreshold.puntos != null &&
+              (rules?.mode === 'points' || rules?.mode === 'both')
+                ? `puntos ≤ ${catThreshold.puntos}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        ) : null}
+        {eligibilityError ? (
+          <Text style={styles.eligibilityError}>⚠️ {eligibilityError}</Text>
+        ) : null}
+
+        {hasSecondOption && found ? (
+          <View style={styles.secondCatBlock}>
+            <Text style={styles.foundLabel}>¿APUNTARTE A UNA 2ª CATEGORÍA? · OPCIONAL</Text>
+            <View style={styles.catChips}>
+              {found.categories
+                .filter((cat) => cat !== category)
+                .map((cat) => {
+                  const sel = category2 === cat;
+                  return (
+                    <Pressable
+                      key={cat}
+                      onPress={() => setCategory2(sel ? null : cat)}
+                      style={[
+                        styles.catChip,
+                        sel && { backgroundColor: c.accent, borderColor: c.accent },
+                      ]}
+                    >
+                      <Text style={[styles.catChipText, { color: sel ? c.textInverse : c.text }]}>
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+            </View>
+
+            {category2 ? (
+              <>
+                <View style={[styles.two, { marginTop: 4 }]}>
+                  <View style={{ flex: 2 }}>
+                    <Text style={styles.label}>COMPAÑERO/A · {category2}</Text>
+                    <View style={styles.input}>
+                      <TextInput
+                        value={p2b}
+                        onChangeText={setP2b}
+                        placeholder="Otro compañero (o el mismo)"
+                        placeholderTextColor={c.textFaint}
+                        style={styles.inputField}
+                        maxLength={40}
+                      />
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>SUS PUNTOS</Text>
+                    <View style={styles.input}>
+                      <TextInput
+                        value={p2bPts}
+                        onChangeText={(v) => setP2bPts(v.replace(/[^0-9]/g, ''))}
+                        placeholder="0"
+                        placeholderTextColor={c.textFaint}
+                        style={styles.inputField}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                      />
+                    </View>
+                  </View>
                 </View>
-              </View>
-            );
-          })
+                <FcpSuggest c={c} styles={styles} matches={p2bMatches} onPick={applyMatchB} />
+
+                {usesNivel ? (
+                  <View style={styles.two}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>SU NIVEL DE LIGA</Text>
+                      <View style={styles.input}>
+                        <TextInput
+                          value={p2bLvl}
+                          onChangeText={(v) => setP2bLvl(v.replace(/[^0-9]/g, ''))}
+                          placeholder="ej. 6"
+                          placeholderTextColor={c.textFaint}
+                          style={styles.inputField}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                        />
+                      </View>
+                    </View>
+                    <View style={{ flex: 1 }} />
+                  </View>
+                ) : null}
+
+                <Text style={styles.label}>EMAIL DE TU COMPAÑERO/A · OPCIONAL</Text>
+                <View style={styles.input}>
+                  <TextInput
+                    value={p2bEmail}
+                    onChangeText={setP2bEmail}
+                    placeholder="para enviarle el código"
+                    placeholderTextColor={c.textFaint}
+                    style={styles.inputField}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    maxLength={80}
+                  />
+                </View>
+
+                {catThresholdB ? (
+                  <Text style={[styles.limitHint, { marginTop: 8 }]}>
+                    Requisito {category2}:{' '}
+                    {[
+                      catThresholdB.nivel != null &&
+                      (rules?.mode === 'nivel' || rules?.mode === 'both')
+                        ? `nivel ≥ ${catThresholdB.nivel}`
+                        : null,
+                      catThresholdB.puntos != null &&
+                      (rules?.mode === 'points' || rules?.mode === 'both')
+                        ? `puntos ≤ ${catThresholdB.puntos}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                ) : null}
+                {eligibilityErrorB ? (
+                  <Text style={styles.eligibilityError}>⚠️ {eligibilityErrorB}</Text>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        ) : null}
+
+        <Text style={styles.label}>DISPONIBILIDAD · FRANJAS DE 1H</Text>
+        {tDays.length === 0 ? (
+          <Text style={styles.availHint}>
+            El torneo aún no tiene fechas. Podrás indicar tus horas cuando el club
+            las fije; por ahora te apuntas como disponible a cualquier hora.
+          </Text>
         ) : (
-          // Fallback: semana completa (torneo sin fecha).
-          FRANJAS.map((franja) => {
-            const all = DOW.map((d) => slotStr(d, franja));
-            const allSel = all.every((s) => avail.includes(s));
-            return (
-              <View key={franja} style={styles.franjaBlock}>
-                <Pressable onPress={() => toggleFranjaWeek(franja)} hitSlop={6}>
-                  <Text style={[styles.franjaLabel, allSel && { color: c.accent }]}>
-                    {franja}
-                  </Text>
-                </Pressable>
-                <View style={styles.dayRow}>
-                  {DOW.map((d) => {
-                    const sel = avail.includes(slotStr(d, franja));
+          <>
+            <Text style={styles.availHint}>
+              Por defecto puedes a cualquier hora. Toca en rojo las franjas que{' '}
+              <Text style={{ fontWeight: '800', color: c.text }}>NO</Text> puedas.
+              {removeCap != null
+                ? ` Puedes quitar hasta ${removeCap} ${removeCap === 1 ? 'hora' : 'horas'} · ${removed.size}/${removeCap}.`
+                : ''}
+            </Text>
+            {tDays.map((day) => (
+              <View key={day.label} style={styles.franjaBlock}>
+                <Text style={styles.franjaLabel}>{day.full}</Text>
+                <View style={styles.hourGrid}>
+                  {slots.map((s) => {
+                    const off = removed.has(keyOf(day.label, s.from));
                     return (
                       <Pressable
-                        key={d}
-                        onPress={() => toggleSlot(d, franja)}
+                        key={s.from}
+                        onPress={() => toggleRemoved(day.label, s.from)}
                         style={[
-                          styles.dayCell,
-                          sel && { backgroundColor: c.accent, borderColor: c.accent },
+                          styles.hourCell,
+                          off && { backgroundColor: c.error, borderColor: c.error },
                         ]}
                       >
-                        <Text style={[styles.dayCellText, { color: sel ? c.textInverse : c.text }]}>
-                          {DOW_SHORT[d]}
+                        <Text
+                          style={[styles.hourCellText, { color: off ? c.textInverse : c.text }]}
+                        >
+                          {String(Math.floor(s.from / 60)).padStart(2, '0')}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
               </View>
-            );
-          })
+            ))}
+            <Text style={[styles.availHint, { marginTop: 4 }]}>
+              Cada casilla es esa hora (p. ej. “18” = 18:00–19:00). En rojo = no puedes.
+            </Text>
+          </>
         )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+        {found && feeToPay != null && feeToPay > 0 ? (
+          <Text style={styles.payLine}>
+            A pagar: {formatFee(feeToPay, found.fee_currency)}
+            {category2 ? ' · 2 categorías' : ''} · en el club
+          </Text>
+        ) : null}
         <Pressable
           onPress={save}
           disabled={saving}
@@ -577,9 +1025,79 @@ export const TournamentSignupScreen = ({
   );
 };
 
+// Sugerencias de la Federación bajo el nombre: candidatos con sus puntos y
+// nivel; al tocar uno se autocompletan los campos. Si hay ambigüedad de nombre,
+// se muestran varios para elegir la persona correcta.
+const FcpSuggest: React.FC<{
+  c: Palette;
+  styles: ReturnType<typeof makeStyles>;
+  matches: FcpPlayerMatch[];
+  onPick: (m: FcpPlayerMatch) => void;
+}> = ({ c, styles, matches, onPick }) => {
+  if (matches.length === 0) return null;
+  return (
+    <View style={styles.suggestWrap}>
+      <Text style={styles.suggestLabel}>
+        {matches.length > 1 ? 'FEDERACIÓN · ¿QUIÉN ERES?' : 'DETECTADO EN LA FEDERACIÓN'}
+      </Text>
+      <View style={styles.suggestRow}>
+        {matches.slice(0, 3).map((m) => (
+          <Pressable
+            key={m.idJugador}
+            onPress={() => onPick(m)}
+            style={({ pressed }) => [styles.suggestChip, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.suggestName} numberOfLines={1}>{m.name}</Text>
+            <Text style={styles.suggestMeta} numberOfLines={1}>
+              {[
+                m.equipo,
+                m.puntos != null ? `${m.puntos} pts` : null,
+                m.categoriaDiv ? `nivel ${m.nivel} (${m.categoriaDiv})` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.suggestHint}>Toca para rellenar puntos y nivel. Puedes editarlos.</Text>
+    </View>
+  );
+};
+
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
+    suggestWrap: {
+      marginTop: -2,
+      marginBottom: 10,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      borderRadius: Radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 8,
+    },
+    suggestLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 9.5,
+      letterSpacing: 1.4,
+      color: c.accent,
+      fontWeight: '700',
+    },
+    suggestRow: { gap: 6 },
+    suggestChip: {
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      borderRadius: Radius.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    suggestName: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+    suggestMeta: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11, marginTop: 2 },
+    suggestHint: { color: c.textFaint, fontSize: 10.5 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -639,8 +1157,32 @@ const makeStyles = (c: Palette) =>
       borderWidth: 1,
       borderColor: c.accent25,
     },
-    foundName: { color: c.text, fontSize: 16, fontWeight: '700' },
+    foundName: { color: c.text, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
     foundMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    infoBox: {
+      marginTop: 12,
+      borderTopWidth: 1,
+      borderColor: c.hair,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      paddingVertical: 9,
+      borderBottomWidth: 1,
+      borderColor: c.hair,
+    },
+    infoRowLast: { borderBottomWidth: 0 },
+    infoLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 1,
+      color: c.textFaint,
+      fontWeight: '700',
+      width: 92,
+      paddingTop: 1,
+    },
+    infoValue: { flex: 1, minWidth: 0, color: c.text, fontSize: 13.5, fontWeight: '600', lineHeight: 19 },
     feeChip: {
       marginTop: 10,
       alignSelf: 'flex-start',
@@ -652,6 +1194,60 @@ const makeStyles = (c: Palette) =>
       borderColor: c.accent40,
     },
     feeChipText: { color: c.accent, fontSize: 12.5, fontWeight: '800' },
+    successTick: {
+      color: c.accent,
+      fontSize: 46,
+      fontWeight: '900',
+      textAlign: 'center',
+      marginBottom: 4,
+    },
+    successTitle: {
+      color: c.text,
+      fontSize: 26,
+      fontWeight: '800',
+      textAlign: 'center',
+      letterSpacing: -0.5,
+    },
+    successText: {
+      color: c.textMuted,
+      fontSize: 14.5,
+      lineHeight: 21,
+      textAlign: 'center',
+      marginTop: 10,
+    },
+    codeBigCard: {
+      marginTop: 20,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      borderRadius: 18,
+      paddingVertical: 22,
+      alignItems: 'center',
+    },
+    codeBigLabel: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 11,
+      letterSpacing: 2,
+    },
+    codeBig: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 40,
+      fontWeight: '800',
+      letterSpacing: 8,
+      marginTop: 8,
+    },
+    primaryBtn: {
+      marginTop: 22,
+      backgroundColor: c.accent,
+      borderRadius: 14,
+      paddingVertical: 15,
+      alignItems: 'center',
+    },
+    primaryBtnText: { color: c.textInverse, fontSize: 15.5, fontWeight: '800' },
+    secondaryBtn: { marginTop: 10, paddingVertical: 14, alignItems: 'center' },
+    secondaryBtnText: { color: c.textMuted, fontSize: 15, fontWeight: '700' },
     foundLabel: {
       fontFamily: Fonts.mono,
       fontSize: 11,
@@ -663,6 +1259,22 @@ const makeStyles = (c: Palette) =>
       marginBottom: 8,
     },
     catChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    secondCatBlock: {
+      marginTop: 16,
+      padding: 14,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.accent25,
+      gap: 4,
+    },
+    payLine: {
+      color: c.accent,
+      fontSize: 13,
+      fontWeight: '800',
+      textAlign: 'center',
+      marginBottom: 10,
+    },
     catChip: {
       paddingHorizontal: 16,
       height: 42,
@@ -675,6 +1287,20 @@ const makeStyles = (c: Palette) =>
     },
     catChipText: { fontSize: 15, fontWeight: '700' },
     availHint: { color: c.textMuted, fontSize: 12, marginTop: -2, marginBottom: 10, lineHeight: 17 },
+    limitHint: {
+      color: c.accent,
+      fontSize: 12.5,
+      fontWeight: '700',
+      marginTop: -2,
+      marginBottom: 8,
+    },
+    eligibilityError: {
+      color: c.error,
+      fontSize: 13,
+      fontWeight: '700',
+      marginBottom: 10,
+      lineHeight: 18,
+    },
     anytimeBtn: {
       height: 46,
       borderRadius: Radius.md,
@@ -695,6 +1321,18 @@ const makeStyles = (c: Palette) =>
       marginBottom: 6,
     },
     dayRow: { flexDirection: 'row', gap: 6 },
+    hourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    hourCell: {
+      width: 40,
+      height: 36,
+      borderRadius: Radius.sm,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hourCellText: { fontSize: 13, fontWeight: '800' },
     dayCell: {
       flex: 1,
       height: 40,

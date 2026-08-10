@@ -23,7 +23,12 @@ export interface PublicProfileTeam {
 }
 
 export interface PublicProfilePhoto {
-  match_id: string;
+  // 'casual' = amistoso (jugador) → abre CasualMatchDetail; 'jornada' = portada
+  // de partido de liga (capitán) → no navega (solo se muestra).
+  kind?: 'casual' | 'jornada';
+  match_id?: string; // solo casual
+  matchday_id?: string; // solo jornada
+  label?: string; // "J14 · Rival" (jornada)
   photo_url: string;
   played_on: string | null;
   positive: boolean | null;

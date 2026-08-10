@@ -229,20 +229,26 @@ export const ProfileScreen = () => {
           </Pressable>
         </View>
 
-        {/* Rejilla de fotos de amistosos */}
+        {/* Rejilla de fotos: amistosos (jugador) + portadas de jornada (capitán) */}
         {photos.length > 0 ? (
           <View style={styles.grid}>
-            {photos.map((ph) => (
+            {photos.map((ph) => {
+              const isCasual = ph.kind !== 'jornada' && !!ph.match_id;
+              return (
               <Pressable
-                key={ph.match_id}
-                onPress={() =>
-                  navigation.navigate('CasualMatchDetail', {
-                    matchId: ph.match_id,
-                  })
+                key={ph.match_id ?? ph.matchday_id ?? ph.photo_url}
+                disabled={!isCasual}
+                onPress={
+                  isCasual
+                    ? () =>
+                        navigation.navigate('CasualMatchDetail', {
+                          matchId: ph.match_id as string,
+                        })
+                    : undefined
                 }
                 style={({ pressed }) => [
                   styles.gridItem,
-                  pressed && { opacity: 0.85 },
+                  pressed && isCasual && { opacity: 0.85 },
                 ]}
               >
                 <Image
@@ -264,12 +270,13 @@ export const ProfileScreen = () => {
                   </View>
                 ) : null}
               </Pressable>
-            ))}
+              );
+            })}
           </View>
         ) : (
           <View style={styles.emptyGrid}>
             <Text style={styles.emptyGridText}>
-              Las fotos de tus amistosos aparecerán aquí
+              Tus fotos de partidos aparecerán aquí
             </Text>
           </View>
         )}

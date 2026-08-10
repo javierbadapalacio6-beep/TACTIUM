@@ -44,6 +44,8 @@ import {
   type PlayerLeagueStats,
   type LeagueStatsBundle,
 } from '@core/services/playerStats';
+import { displayNameOf } from '@core/utils/format';
+import { FederacionStatsCard } from '@features/profile/components/FederacionStatsCard';
 
 // Mis estadísticas (F5a): números de LIGA del jugador, calculados de las
 // alineaciones oficiales + resultados. Es la pieza de retención del
@@ -64,7 +66,8 @@ export const MyStatsScreen = () => {
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
-  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const user = useAuthStore((s) => s.user);
+  const userId = user?.id ?? null;
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
 
@@ -352,6 +355,14 @@ export const MyStatsScreen = () => {
             </>
           ) : null}
         </View>
+
+        {/* Ficha de la Federación (si el usuario vincula su jugador FCP) */}
+        {userId ? (
+          <FederacionStatsCard
+            userId={userId}
+            userName={me?.name ?? (user ? displayNameOf(user) : null)}
+          />
+        ) : null}
 
         {loading ? (
           <View style={styles.loader}>

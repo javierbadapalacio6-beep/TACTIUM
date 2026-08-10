@@ -28,6 +28,7 @@ import {
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { HomeStack } from './HomeStack';
 import { SeasonsStack } from './SeasonsStack';
+import { FederacionStack } from './FederacionStack';
 import { ClubStack } from './ClubStack';
 import { ClubTeamsStack } from './ClubTeamsStack';
 import { TournamentsStack } from './TournamentsStack';
@@ -165,6 +166,10 @@ const HIDE_TAB_BAR_ON: ReadonlySet<string> = new Set([
   'Results',
   'Availability',
   'SeasonDetail',
+  'FcpTeam',
+  'FcpPlayer',
+  'Federacion',
+  'FcpGroup',
   'CreateTeamFromClub',
   // Vista de detalle del team desde el tab Equipos (club_admin) — oculta
   // el tab bar para enfocar la lectura del team elegido.
@@ -299,6 +304,19 @@ export const TabNavigator = () => {
               }}
             />
           ) : null}
+          {/* Federación: pestaña del club (como el capitán). El root decide
+              explorador (Cántabra) o selector de federaciones según la
+              federación del CLUB. Icono distinto del de Torneos (IconTrophy). */}
+          <Tab.Screen
+            name="FederacionTab"
+            component={FederacionStack}
+            options={{
+              tabBarLabel: 'Federación',
+              tabBarIcon: ({ focused }) => (
+                <TabIcon Icon={IconAnalytics} focused={focused} />
+              ),
+            }}
+          />
           <Tab.Screen
             name="Profile"
             component={ProfileStack}
@@ -349,18 +367,37 @@ export const TabNavigator = () => {
             />
           ) : null}
 
-          {/* Stats personales: pieza de retención del jugador (F5a). No se
-              muestra a club_admin (cuenta de organización, no juega). */}
-          <Tab.Screen
-            name="Stats"
-            component={MyStatsScreen}
-            options={{
-              tabBarLabel: 'Stats',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconAnalytics} focused={focused} />
-              ),
-            }}
-          />
+          {/* Stats personales: pieza de retención del JUGADOR (F5a). No se
+              muestra a club_admin (cuenta de organización) ni al capitán (su
+              barra es de gestión; sigue teniendo sus stats en Perfil → "Mis
+              estadísticas"). Solo tab para el jugador. */}
+          {activeRole === 'player' ? (
+            <Tab.Screen
+              name="Stats"
+              component={MyStatsScreen}
+              options={{
+                tabBarLabel: 'Stats',
+                tabBarIcon: ({ focused }) => (
+                  <TabIcon Icon={IconAnalytics} focused={focused} />
+                ),
+              }}
+            />
+          ) : null}
+
+          {/* Federación: sustituye a Stats en la barra del CAPITÁN. Abre su
+              federación heredada (Cántabra tiene datos) o el selector. */}
+          {activeRole === 'captain' ? (
+            <Tab.Screen
+              name="FederacionTab"
+              component={FederacionStack}
+              options={{
+                tabBarLabel: 'Federación',
+                tabBarIcon: ({ focused }) => (
+                  <TabIcon Icon={IconTrophy} focused={focused} />
+                ),
+              }}
+            />
+          ) : null}
 
           <Tab.Screen
             name="Profile"

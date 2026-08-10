@@ -30,6 +30,8 @@ import {
   parseSlot,
   fmtSlot,
   DOW_NAME,
+  DOW_SHORT,
+  TIME_OPTIONS,
 } from '@features/team/components/PreferredSlotsEditor';
 
 import type { ClubStackScreenProps } from '@navigation/types';
@@ -158,7 +160,7 @@ export const ClubScheduleScreen = ({
         <ScrollView
           contentContainerStyle={{
             paddingHorizontal: 22,
-            paddingBottom: insets.bottom + 32,
+            paddingBottom: insets.bottom + 64 + 12 + 32,
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -353,6 +355,7 @@ const EditScheduleSheet: React.FC<{
   const [selected, setSelected] = useState<string | null>(null); // "D|HH:MM"
   const [court, setCourt] = useState('');
   const [saving, setSaving] = useState(false);
+  const [adhocDay, setAdhocDay] = useState<number | null>(null); // día para hora ad-hoc
 
   useEffect(() => {
     if (!match) return;
@@ -363,6 +366,7 @@ const EditScheduleSheet: React.FC<{
       setSelected(null);
     }
     setCourt(match.location ?? '');
+    setAdhocDay(null);
   }, [match]);
 
   const save = async () => {
@@ -378,7 +382,18 @@ const EditScheduleSheet: React.FC<{
         location: string | null;
         match_date?: string | null;
       } = { match_time: `${time}:00`, location: court.trim() || null };
-      if (dow && match.match_date) patch.match_date = snapToDow(match.match_date, dow);
+      if (dow) {
+        if (match.match_date) {
+          patch.match_date = snapToDow(match.match_date, dow);
+        } else {
+          // Partido sin fecha: fijamos la PRÓXIMA ocurrencia de ese día (desde
+          // hoy) para no dejar "Sin fecha · HH:MM".
+          const d = new Date();
+          const cur = ((d.getDay() + 6) % 7) + 1; // 1=Lun … 7=Dom
+          d.setDate(d.getDate() + ((dow - cur + 7) % 7));
+          patch.match_date = d.toISOString().slice(0, 10);
+        }
+      }
       await updateMatchday(match.matchday_id, patch);
       notifyPush('schedule_set', match.matchday_id);
       toast.success('Horario enviado al equipo');
@@ -428,8 +443,8 @@ const EditScheduleSheet: React.FC<{
       </Text>
       {slots.length === 0 ? (
         <Text style={styles.hint}>
-          Este equipo aún no tiene franjas favoritas. Añádelas en la sección de
-          arriba (Franjas favoritas por equipo) o desde el equipo.
+          Este equipo aún no tiene franjas favoritas. Elige día y hora abajo (o
+          añade franjas favoritas desde el equipo para tenerlas a un toque).
         </Text>
       ) : (
         <View style={styles.chipsWrap}>
@@ -438,7 +453,10 @@ const EditScheduleSheet: React.FC<{
             return (
               <Pressable
                 key={s}
-                onPress={() => setSelected(s)}
+                onPress={() => {
+                  setSelected(s);
+                  setAdhocDay(null);
+                }}
                 style={[
                   styles.chip,
                   sel && { backgroundColor: c.accent, borderColor: c.accent },
@@ -454,6 +472,53 @@ const EditScheduleSheet: React.FC<{
           })}
         </View>
       )}
+
+      {/* Día + hora AD-HOC: se puede fijar cualquier horario aunque el equipo no
+          tenga franjas favoritas (antes esto era un callejón sin salida). */}
+      <Text style={[styles.sectionLabel, { marginTop: 16, marginBottom: 8 }]}>
+        {slots.length ? 'O ELIGE OTRO DÍA Y HORA' : 'ELIGE DÍA Y HORA'}
+      </Text>
+      <View style={styles.dowRow}>
+        {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+          const sel = adhocDay === d;
+          return (
+            <Pressable
+              key={d}
+              onPress={() => setAdhocDay(d)}
+              style={[
+                styles.dowCell,
+                sel && { backgroundColor: c.accent, borderColor: c.accent },
+              ]}
+            >
+              <Text style={[styles.dowText, { color: sel ? c.textInverse : c.text }]}>
+                {DOW_SHORT[d]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {adhocDay ? (
+        <View style={[styles.chipsWrap, { marginTop: 10 }]}>
+          {TIME_OPTIONS.map((t) => {
+            const slotStr = `${adhocDay}|${t}`;
+            const sel = selected === slotStr;
+            return (
+              <Pressable
+                key={t}
+                onPress={() => setSelected(slotStr)}
+                style={[
+                  styles.chip,
+                  sel && { backgroundColor: c.accent, borderColor: c.accent },
+                ]}
+              >
+                <Text style={[styles.chipText, { color: sel ? c.textInverse : c.text }]}>
+                  {t}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <View style={styles.selectedRow}>
         <Text style={styles.sectionLabel}>DÍA Y HORA</Text>
@@ -619,6 +684,18 @@ const makeStyles = (c: Palette) =>
       borderColor: c.hairStrong,
     },
     chipText: { fontFamily: Fonts.mono, fontSize: 15, fontWeight: '600' },
+    dowRow: { flexDirection: 'row', gap: 6 },
+    dowCell: {
+      flex: 1,
+      height: 40,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dowText: { fontFamily: Fonts.mono, fontSize: 14, fontWeight: '700' },
     selectedRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',

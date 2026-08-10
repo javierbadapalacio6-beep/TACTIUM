@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,8 @@ import { IconPlus, IconPencil, IconClock } from '@components/ui';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
+import { FcpImportSheet } from '../components/FcpImportSheet';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
 import { DeleteClubSheet } from '@features/club/components/DeleteClubSheet';
 import { toast } from '@store/toastStore';
@@ -56,8 +59,10 @@ export const ClubDashboardScreen = ({
   const [loading, setLoading] = useState(true);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [fcpOpen, setFcpOpen] = useState(false);
   const deleteClub = useClubStore((s) => s.deleteClub);
   const reloadTeams = useTeamStore((s) => s.loadForUser);
+  const isFcpClub = club?.federation === FCP_FEDERATION_CODE;
 
   const handleDeleteClub = async () => {
     if (!club || deleting) return;
@@ -78,6 +83,9 @@ export const ClubDashboardScreen = ({
     () => (club ? teams.filter((t) => t.club_id === club.id) : []),
     [teams, club],
   );
+  // ¿Ya se importó de la Federación? Si el club tiene algún equipo FCP, la
+  // importación ya está hecha → ocultamos el botón de importar.
+  const hasFcpTeams = clubTeams.some((t) => t.federation === FCP_FEDERATION_CODE);
 
   // Cobertura dura: cuántos equipos cubre el plan y cuántos van usados.
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
@@ -91,23 +99,38 @@ export const ClubDashboardScreen = ({
   // dejar la pantalla con loading colgado o data desfasada. El cleanup
   // del useFocusEffect marca `cancelled = true` cuando la screen pierde
   // foco; los setState posteriores se ignoran.
+  // Spinner solo en la 1ª carga; los refrescos al volver a foco van en 2º plano
+  // (no ocultar EQUIPOS/Crear/Borrar en cada visita). Estado de error para no
+  // tragarnos un fallo de red y dejar la pantalla incoherente.
+  const didLoadRef = useRef(false);
+  const [loadError, setLoadError] = useState(false);
   useFocusEffect(
     useCallback(() => {
       if (clubTeams.length === 0) {
         setOverviews([]);
+        setLoadError(false);
         setLoading(false);
         return;
       }
       let cancelled = false;
       (async () => {
-        setLoading(true);
+        if (!didLoadRef.current) setLoading(true);
         try {
           const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
-          if (!cancelled) setOverviews(data);
+          if (!cancelled) {
+            setOverviews(data);
+            setLoadError(false);
+          }
         } catch (e) {
-          if (!cancelled) console.warn('club overview', e);
+          if (!cancelled) {
+            console.warn('club overview', e);
+            setLoadError(true);
+          }
         } finally {
-          if (!cancelled) setLoading(false);
+          if (!cancelled) {
+            didLoadRef.current = true;
+            setLoading(false);
+          }
         }
       })();
       return () => {
@@ -115,6 +138,21 @@ export const ClubDashboardScreen = ({
       };
     }, [clubTeams]),
   );
+
+  const retryOverviews = useCallback(async () => {
+    if (clubTeams.length === 0) return;
+    setLoading(true);
+    try {
+      const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
+      setOverviews(data);
+      setLoadError(false);
+    } catch (e) {
+      console.warn('club overview', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [clubTeams]);
 
   // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
   // desde otra pantalla (tab o stack nested).
@@ -200,24 +238,22 @@ export const ClubDashboardScreen = ({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* KPIs club */}
-        <View style={styles.statsRow}>
-          <Stat label="EQUIPOS" value={String(clubTeams.length)} />
-          <View style={styles.statsDivider} />
-          <Stat label="FEDERACIÓN" value={club.federation ?? '—'} small />
-        </View>
-
-        <Text style={styles.intro}>
-          Vista global del club. Las jornadas y los resultados los gestiona el
-          capitán de cada equipo — desde aquí solo administras la estructura.
-        </Text>
-
         {loading ? (
           <View style={styles.loaderBox}>
             <ActivityIndicator color={c.accent} />
           </View>
         ) : (
           <>
+            {loadError ? (
+              <Pressable
+                onPress={retryOverviews}
+                style={({ pressed }) => [styles.errorBanner, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.errorBannerText}>
+                  No se pudieron cargar los datos de los equipos. Toca para reintentar.
+                </Text>
+              </Pressable>
+            ) : null}
             {/* PRÓXIMAS JORNADAS */}
             {upcomingCards.length > 0 ? (
               <View>
@@ -276,13 +312,28 @@ export const ClubDashboardScreen = ({
               onAdd={() => navigation.navigate('CreateTeamFromClub')}
               addLabel="Crear nuevo equipo"
             />
+            {isFcpClub && club && !hasFcpTeams ? (
+              <Pressable
+                onPress={() => setFcpOpen(true)}
+                style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
+                <Text style={styles.fcpBannerText}>
+                  Busca tu club y crea sus equipos con la plantilla real y los puntos ya
+                  cargados.
+                </Text>
+              </Pressable>
+            ) : null}
             {coverage.hasActiveSub ? (
               <Text style={styles.coverageLine}>
                 Cubiertos por tu plan: {coverage.used}/{coverage.quota}
                 {!coverage.hasFreeSlot ? ' · mejora el plan para más' : ''}
               </Text>
             ) : null}
-            {overviews.length === 0 ? (
+            {clubTeams.length === 0 ? (
+              // "Sin equipos" REAL (por clubTeams, no por overviews): si la carga
+              // de overviews falla con equipos existentes, no decimos "no hay
+              // equipos" — el banner de error de arriba lo cubre.
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>Aún no hay equipos</Text>
                 <Text style={styles.emptyText}>
@@ -312,7 +363,14 @@ export const ClubDashboardScreen = ({
               <View style={styles.dangerZone}>
                 <Text style={styles.dangerEyebrow}>ZONA DE PELIGRO</Text>
                 <Pressable
-                  onPress={() => setDeleteOpen(true)}
+                  onPress={() =>
+                    coverage.hasActiveSub
+                      ? Alert.alert(
+                          'Cancela primero la suscripción',
+                          'No se puede borrar un club con una suscripción activa. Cancélala en la tienda (App Store / Google Play) y, cuando caduque, podrás borrar el club.',
+                        )
+                      : setDeleteOpen(true)
+                  }
                   accessibilityRole="button"
                   accessibilityLabel="Borrar club"
                   style={({ pressed }) => [
@@ -345,6 +403,14 @@ export const ClubDashboardScreen = ({
         onConfirm={handleDeleteClub}
         onCancel={() => setDeleteOpen(false)}
       />
+
+      {club ? (
+        <FcpImportSheet
+          open={fcpOpen}
+          clubId={club.id}
+          onClose={() => setFcpOpen(false)}
+        />
+      ) : null}
     </View>
   );
 };
@@ -570,27 +636,6 @@ const TeamRow: React.FC<{
   );
 };
 
-// ─── Stat ───────────────────────────────────────────────────────────────────
-const Stat: React.FC<{ label: string; value: string; small?: boolean }> = ({
-  label,
-  value,
-  small,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-  <View style={{ flex: 1 }}>
-    <Text style={styles.statLabel}>{label}</Text>
-    <Text
-      style={[styles.statValue, small && { fontSize: 16 }]}
-      numberOfLines={1}
-    >
-      {value}
-    </Text>
-  </View>
-  );
-};
-
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.background },
   empty: { color: c.textFaint, textAlign: 'center', fontSize: 14 },
@@ -641,38 +686,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   scroll: { paddingTop: 22 },
 
-  statsRow: {
-    marginHorizontal: 22,
-    flexDirection: 'row',
-    gap: 16,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: c.hair,
-  },
-  statsDivider: { width: 1, backgroundColor: c.hair },
-  statLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    color: c.textFaint,
-    letterSpacing: 1.5,
-    fontWeight: '500',
-  },
-  statValue: {
-    color: c.text,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    marginTop: 4,
-  },
-
-  intro: {
-    color: c.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-    paddingHorizontal: 22,
-    marginTop: 14,
-  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -835,6 +848,17 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingVertical: 36,
     alignItems: 'center',
   },
+  errorBanner: {
+    marginHorizontal: 22,
+    marginBottom: 14,
+    backgroundColor: c.error + '1A',
+    borderWidth: 1,
+    borderColor: c.error + '55',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorBannerText: { color: c.error, fontSize: 13, fontWeight: '600', textAlign: 'center' },
 
   emptyCard: {
     marginHorizontal: 22,
@@ -901,6 +925,18 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: -4,
     marginBottom: 10,
   },
+  fcpBanner: {
+    marginHorizontal: 22,
+    marginTop: 4,
+    marginBottom: 12,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    borderRadius: Radius.md,
+    padding: 14,
+  },
+  fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
+  fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
   uncoveredBadge: {
     fontFamily: Fonts.mono,
     color: c.warning,

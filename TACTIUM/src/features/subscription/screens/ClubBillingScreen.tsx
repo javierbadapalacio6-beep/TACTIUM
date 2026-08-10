@@ -205,7 +205,7 @@ export const ClubBillingScreen = ({
             <Text style={styles.sectionLabel}>EQUIPOS</Text>
             <Text style={styles.usageCount}>
               {currentPlan
-                ? `${Math.min(teamCount, teamsCovered)} de ${teamsCovered} cubiertos`
+                ? `${clubTeams.filter((t) => t.covered).length} de ${teamsCovered} cubiertos`
                 : `${teamCount} sin cubrir`}
             </Text>
           </View>
@@ -239,7 +239,9 @@ export const ClubBillingScreen = ({
                     new Date(b.created_at).getTime(),
                 )
                 .map((t, i) => {
-                  const covered = currentPlan ? i < teamsCovered : false;
+                  // Cobertura REAL por equipo (flag `covered`, el que usa el
+                  // motor de entitlements), no por orden de creación.
+                  const covered = currentPlan ? !!t.covered : false;
                   return (
                     <View
                       key={t.id}

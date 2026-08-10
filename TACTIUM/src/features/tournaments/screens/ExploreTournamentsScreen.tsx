@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconSearch, IconTrophy, IconChevron } from '@components/ui';
+import { IconBack, IconSearch, IconTrophy, IconChevron, BottomSheet } from '@components/ui';
 import { toast } from '@store/toastStore';
 import {
   exploreTournaments,
@@ -24,6 +24,7 @@ import {
   tournamentBucket,
   tournamentStatusLabel,
   formatFee,
+  claimPartnerByCode,
   type ExploreTournament,
 } from '@core/services/tournaments';
 
@@ -111,6 +112,10 @@ export const ExploreTournamentsScreen = ({
   const [mine, setMine] = useState<ExploreTournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Sheet "Tengo un código de compañero".
+  const [partnerOpen, setPartnerOpen] = useState(false);
+  const [partnerCode, setPartnerCode] = useState('');
+  const [claiming, setClaiming] = useState(false);
 
   const loadExplore = useCallback(async (q?: string) => {
     try {
@@ -154,6 +159,26 @@ export const ExploreTournamentsScreen = ({
 
   const openTournament = (t: ExploreTournament) => {
     navigation.navigate('TournamentFollow', { tournamentId: t.id });
+  };
+
+  const claimPartner = async () => {
+    const code = partnerCode.trim().toUpperCase();
+    if (code.length < 4) {
+      toast.error('Introduce el código de compañero');
+      return;
+    }
+    setClaiming(true);
+    try {
+      const tournamentId = await claimPartnerByCode(code);
+      setPartnerOpen(false);
+      setPartnerCode('');
+      toast.success('¡Vinculado!', 'Ya puedes ver el torneo en Mis torneos.');
+      navigation.navigate('TournamentFollow', { tournamentId });
+    } catch (e: any) {
+      toast.error('No se pudo vincular', e?.message ?? 'Revisa el código.');
+    } finally {
+      setClaiming(false);
+    }
   };
 
   // "Mis torneos" agrupados por estado.
@@ -204,6 +229,16 @@ export const ExploreTournamentsScreen = ({
           );
         })}
       </View>
+
+      <Pressable
+        onPress={() => setPartnerOpen(true)}
+        hitSlop={6}
+        style={({ pressed }) => [styles.partnerLink, pressed && { opacity: 0.7 }]}
+      >
+        <Text style={styles.partnerLinkText}>
+          ¿Te ha apuntado tu pareja? <Text style={{ color: c.accent, fontWeight: '800' }}>Tengo un código de compañero</Text>
+        </Text>
+      </Pressable>
 
       {mode === 'explore' ? (
         <View style={styles.searchWrap}>
@@ -295,6 +330,37 @@ export const ExploreTournamentsScreen = ({
           )}
         </ScrollView>
       )}
+
+      <BottomSheet open={partnerOpen} onClose={() => setPartnerOpen(false)}>
+        <Text style={styles.sheetEyebrow}>COMPAÑERO/A</Text>
+        <Text style={styles.sheetTitle}>Tengo un código</Text>
+        <Text style={styles.sheetText}>
+          Si tu pareja te ha apuntado a un torneo, introduce el código que te ha
+          pasado (o que te llegó por email) para vincular tu cuenta y ver el torneo.
+        </Text>
+        <View style={styles.sheetInput}>
+          <TextInput
+            value={partnerCode}
+            onChangeText={(v) => setPartnerCode(v.toUpperCase().replace(/\s/g, ''))}
+            placeholder="Ej. K7P2QX"
+            placeholderTextColor={c.textFaint}
+            style={styles.sheetInputField}
+            autoCapitalize="characters"
+            maxLength={8}
+          />
+        </View>
+        <Pressable
+          onPress={claimPartner}
+          disabled={claiming}
+          style={({ pressed }) => [styles.sheetBtn, pressed && { opacity: 0.85 }]}
+        >
+          {claiming ? (
+            <ActivityIndicator color={c.textInverse} />
+          ) : (
+            <Text style={styles.sheetBtnText}>Vincular</Text>
+          )}
+        </Pressable>
+      </BottomSheet>
     </View>
   );
 };
@@ -302,6 +368,36 @@ export const ExploreTournamentsScreen = ({
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
+    partnerLink: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 6 },
+    partnerLinkText: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
+    sheetEyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
+    sheetTitle: { color: c.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.4, marginTop: 2 },
+    sheetText: { color: c.textMuted, fontSize: 14, lineHeight: 20, marginTop: 8 },
+    sheetInput: {
+      marginTop: 16,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+    },
+    sheetInputField: {
+      color: c.text,
+      fontSize: 20,
+      fontWeight: '700',
+      fontFamily: Fonts.mono,
+      letterSpacing: 4,
+      paddingVertical: 14,
+      textAlign: 'center',
+    },
+    sheetBtn: {
+      marginTop: 14,
+      backgroundColor: c.accent,
+      borderRadius: 14,
+      paddingVertical: 15,
+      alignItems: 'center',
+    },
+    sheetBtnText: { color: c.textInverse, fontSize: 15.5, fontWeight: '800' },
     header: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -14,6 +14,7 @@ import { Radius } from '@core/theme/spacing';
 import { IconBack, Toggle } from '@components/ui';
 import { ProgressRing } from '@components/ui/ProgressRing';
 import { useTeamStore } from '@store/teamStore';
+import { toast } from '@store/toastStore';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -49,12 +50,23 @@ export const AvailabilityScreen = ({
     return true;
   });
 
+  const [markingAll, setMarkingAll] = useState(false);
   const markAll = async () => {
-    await Promise.all(
-      players
-        .filter((p) => !p.available)
-        .map((p) => setPlayerAvail(p.id, true).catch(() => {})),
+    if (markingAll) return;
+    const toMark = players.filter((p) => !p.available);
+    if (toMark.length === 0) return; // ya están todos
+    setMarkingAll(true);
+    const oks = await Promise.all(
+      toMark.map((p) =>
+        setPlayerAvail(p.id, true)
+          .then(() => true)
+          .catch(() => false),
+      ),
     );
+    setMarkingAll(false);
+    if (oks.some((ok) => !ok)) {
+      toast.error('Algunos no se marcaron', 'Revisa la conexión e inténtalo de nuevo.');
+    }
   };
 
   return (
@@ -77,9 +89,13 @@ export const AvailabilityScreen = ({
         ) : (
           <Pressable
             onPress={markAll}
-            style={({ pressed }) => [styles.resetBtn, pressed && { opacity: 0.7 }]}
+            disabled={markingAll}
+            style={({ pressed }) => [
+              styles.resetBtn,
+              (pressed || markingAll) && { opacity: 0.6 },
+            ]}
           >
-            <Text style={styles.resetLabel}>Marcar todo</Text>
+            <Text style={styles.resetLabel}>{markingAll ? 'Marcando…' : 'Marcar todo'}</Text>
           </Pressable>
         )}
       </View>
@@ -91,9 +107,9 @@ export const AvailabilityScreen = ({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>DISPONIBILIDAD · J·07</Text>
+        <Text style={styles.eyebrow}>DISPONIBILIDAD</Text>
         <Text style={styles.title}>
-          {isPlayer ? '¿Estás disponible?' : '¿Quién juega esta jornada?'}
+          {isPlayer ? '¿Estás disponible?' : '¿Quién está disponible?'}
         </Text>
 
         {isPlayer && !myPlayerId ? (
@@ -141,7 +157,14 @@ export const AvailabilityScreen = ({
         </View>
 
         <View style={styles.list}>
-          {filtered.map((p, i) => {
+          {players.length === 0 ? (
+            <Text style={styles.emptyText}>
+              Aún no hay jugadores en la plantilla. Añádelos desde la pestaña Equipo.
+            </Text>
+          ) : filtered.length === 0 ? (
+            <Text style={styles.emptyText}>Nadie en este filtro.</Text>
+          ) : (
+            filtered.map((p, i) => {
             const isMine = isPlayer && p.id === myPlayerId;
             const canEdit = !isPlayer || isMine;
             return (
@@ -174,7 +197,8 @@ export const AvailabilityScreen = ({
                 />
               </View>
             );
-          })}
+            })
+          )}
         </View>
       </ScrollView>
     </View>
@@ -323,6 +347,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.hair,
     overflow: 'hidden',
+  },
+  emptyText: {
+    color: c.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    padding: 20,
   },
   row: {
     flexDirection: 'row',

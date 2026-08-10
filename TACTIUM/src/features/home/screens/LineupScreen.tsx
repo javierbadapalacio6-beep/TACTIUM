@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -203,6 +203,13 @@ export const LineupScreen = ({
   const [variants, setVariants] = useState<LineupVariant[]>([]);
   const [currentVariantId, setCurrentVariantId] = useState<string | null>(null);
   const [variantBusy, setVariantBusy] = useState(false);
+  // ¿Se ha EDITADO la alineación en esta sesión? Solo avisamos a la plantilla
+  // (lineup_published) si hubo cambios reales o si cambió la variante oficial
+  // — así abrir y "Confirmar" sin tocar nada no genera un push repetido.
+  const dirtyRef = useRef(false);
+  // Último estado PERSISTIDO por pista (`court -> "aId|bId"`), para escribir solo
+  // las pistas que cambian en cada edición (antes se reescribían las N).
+  const lastPersistedRef = useRef<Map<number, string>>(new Map());
   const [slots, setSlots] = useState<SlotState[]>(() =>
     buildEmptySlots(courts),
   );
@@ -291,6 +298,11 @@ export const LineupScreen = ({
           };
         });
         setSlots(arr);
+        // Sembramos el "último persistido" con el estado de BD → la primera
+        // edición ya solo escribe la pista que cambia.
+        lastPersistedRef.current = new Map(
+          arr.map((s) => [s.court, `${s.playerAId ?? ''}|${s.playerBId ?? ''}`]),
+        );
       } catch (e) {
         console.warn('Lineup fetch', e);
       }
@@ -487,9 +499,14 @@ export const LineupScreen = ({
   const persistAll = useCallback(
     async (next: SlotState[]) => {
       if (!currentVariantId) return;
+      dirtyRef.current = true; // hubo una edición real de la alineación
+      // Solo persistimos las pistas cuyo par cambió respecto a lo ya guardado.
+      const keyOf = (sl: SlotState) => `${sl.playerAId ?? ''}|${sl.playerBId ?? ''}`;
+      const changed = next.filter((sl) => lastPersistedRef.current.get(sl.court) !== keyOf(sl));
+      if (changed.length === 0) return;
       try {
         await Promise.all(
-          next.map((sl) =>
+          changed.map((sl) =>
             LineupsApi.setLineupPair(
               matchdayId,
               currentVariantId,
@@ -499,6 +516,8 @@ export const LineupScreen = ({
             ),
           ),
         );
+        // Marcamos como persistidas solo tras el éxito (si falla, se reintenta).
+        for (const sl of changed) lastPersistedRef.current.set(sl.court, keyOf(sl));
       } catch (e: any) {
         Alert.alert('No se pudo guardar', e?.message ?? '');
       }
@@ -512,11 +531,17 @@ export const LineupScreen = ({
       // según el toggle), así que con skipSort respetamos ese orden tal cual.
       const final =
         autoSort && !opts?.skipSort ? sortByPoints(next, playerById) : next;
-      setSlots(final);
-      void persistAll(final);
+      // Chokepoint de TODAS las ediciones de la alineación → pasa por el gate
+      // premium (reverse-trial): premium aplica al momento; sin sub, paywall y
+      // NO se toca el estado (sin optimismo huérfano). Cubre asignar, mover,
+      // quitar, generar y rellenar (todos llaman a commit).
+      gate(() => {
+        setSlots(final);
+        void persistAll(final);
+      }, 'lineup_edit')();
       return final;
     },
-    [autoSort, playerById, persistAll],
+    [autoSort, playerById, persistAll, gate],
   );
 
   const usedIds = useMemo(() => {
@@ -574,25 +599,29 @@ export const LineupScreen = ({
     if (!canEdit || !currentVariantId) return;
     const isAlreadyEmpty = slots.every((s) => filledLen(s) === 0);
     if (isAlreadyEmpty) return;
-    Alert.alert(
-      'Vaciar alineación',
-      '¿Quitar todos los jugadores de la variante actual? Quedará en blanco para empezar de cero.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Vaciar',
-          style: 'destructive',
-          onPress: () => {
-            const empty = buildEmptySlots(courts);
-            setSlots(empty);
-            void persistAll(empty);
-            pulseAll();
-            setSel(null);
+    // Vaciar escribe directo (no pasa por commit) → gate premium aquí: sin sub
+    // muestra el paywall en vez de la confirmación de vaciado.
+    gate(() => {
+      Alert.alert(
+        'Vaciar alineación',
+        '¿Quitar todos los jugadores de la variante actual? Quedará en blanco para empezar de cero.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Vaciar',
+            style: 'destructive',
+            onPress: () => {
+              const empty = buildEmptySlots(courts);
+              setSlots(empty);
+              void persistAll(empty);
+              pulseAll();
+              setSel(null);
+            },
           },
-        },
-      ],
-    );
-  }, [canEdit, currentVariantId, slots, courts, persistAll, pulseAll]);
+        ],
+      );
+    }, 'lineup_edit')();
+  }, [canEdit, currentVariantId, slots, courts, persistAll, pulseAll, gate]);
 
   const flashAvatar = useCallback((...ids: (string | null)[]) => {
     const valid = ids.filter((id): id is string => Boolean(id));
@@ -1241,10 +1270,26 @@ export const LineupScreen = ({
                   else navigation.navigate('HomeRoot');
                 }
               : gate(() => {
-                  const back = () => {
-                    // Avisar a los convocados de que la alineación está lista
-                    // (best-effort; solo el capitán y con alineación completa).
-                    if (matchdayId) void notifyPush('lineup_published', matchdayId);
+                  const back = async () => {
+                    // "Confirmar" publica la variante que el capitán ESTÁ viendo:
+                    // si no era la activa, la marcamos oficial antes de avisar.
+                    // Si no, Results/Jornada leerían otra variante (o vacía) y el
+                    // aviso apuntaría a una alineación que nadie ve.
+                    const changedActive =
+                      !!currentVariantId && currentVariantId !== activeVariantId;
+                    try {
+                      if (changedActive) {
+                        await LineupVariantsApi.setActiveVariant(currentVariantId!);
+                      }
+                    } catch {
+                      // best-effort: la variante sigue guardada aunque falle el flag
+                    }
+                    // Avisar SOLO si hubo cambios reales o cambió la variante
+                    // oficial (evita spam al abrir y confirmar sin tocar nada).
+                    if (matchdayId && (dirtyRef.current || changedActive)) {
+                      void notifyPush('lineup_published', matchdayId);
+                    }
+                    dirtyRef.current = false;
                     if (navigation.canGoBack()) navigation.goBack();
                     else navigation.navigate('HomeRoot');
                   };

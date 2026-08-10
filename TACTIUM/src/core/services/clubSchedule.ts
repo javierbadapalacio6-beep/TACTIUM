@@ -59,7 +59,12 @@ export function currentRoundMatches(matches: ClubHomeMatch[]): ClubHomeMatch[] {
     .filter((m) => m.match_date)
     .sort((a, b) => (a.match_date! < b.match_date! ? -1 : 1));
   if (dated.length === 0) return matches;
-  const d0 = dated[0].match_date!;
+  // Anclamos al primer partido de HOY en adelante (la jornada realmente en
+  // juego). Si todos son pasados, al más reciente — así un partido viejo sin
+  // cerrar no ancla la ventana al pasado y oculta los próximos.
+  const today = new Date().toISOString().slice(0, 10);
+  const anchor = dated.find((m) => m.match_date! >= today) ?? dated[dated.length - 1];
+  const d0 = anchor.match_date!;
   const end = addDays(d0, 6);
   return matches.filter(
     (m) => !m.match_date || (m.match_date >= d0 && m.match_date <= end),

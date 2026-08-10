@@ -206,7 +206,10 @@ export const PublicProfileScreen = () => {
                     contentContainerStyle={styles.photoRow}
                   >
                     {user.photos.map((ph) => (
-                      <View key={ph.match_id} style={styles.photoItem}>
+                      <View
+                        key={ph.match_id ?? ph.matchday_id ?? ph.photo_url}
+                        style={styles.photoItem}
+                      >
                         <Image
                           source={{ uri: ph.photo_url }}
                           style={styles.photoImg}

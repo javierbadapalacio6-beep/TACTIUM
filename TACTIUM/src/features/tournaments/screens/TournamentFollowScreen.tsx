@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -106,6 +106,18 @@ export const TournamentFollowScreen = ({
     for (const g of gs) for (const cat of cs) out.push({ gender: g, category: cat });
     return out;
   }, [t]);
+
+  // Auto-selecciona la primera división (género × categoría) al cargar. Sin
+  // esto, activeDiv se quedaba en null → matchesCat vacío → el cuadro no
+  // aparecía nunca en la vista del jugador.
+  useEffect(() => {
+    if (
+      divisions.length > 0 &&
+      (!activeDiv || !divisions.some((d) => sameDiv(d, activeDiv)))
+    ) {
+      setActiveDiv(divisions[0]);
+    }
+  }, [divisions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dg = activeDiv?.gender ?? null;
   const dc = activeDiv?.category ?? null;

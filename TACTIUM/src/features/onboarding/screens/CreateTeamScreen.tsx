@@ -39,6 +39,8 @@ import {
 import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
+import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -58,7 +60,9 @@ export const CreateTeamScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const createTeam = useTeamStore((s) => s.createTeam);
+  const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
   const signOut = useAuthStore((s) => s.signOut);
+  const [fcpOpen, setFcpOpen] = useState(false);
   const clubId = route.params?.clubId;
   const parentClub = useClubStore((s) =>
     clubId ? s.clubs.find((c) => c.id === clubId) ?? null : null,
@@ -87,6 +91,7 @@ export const CreateTeamScreen = ({
 
   const preset = getCompetitionPreset(comp);
   const isFederada = comp === 'federada';
+  const isFcp = isFederada && federation?.code === FCP_FEDERATION_CODE;
 
   // Valor efectivo de team.league según el tipo de competición.
   const effectiveLeague = useMemo(() => {
@@ -201,21 +206,6 @@ export const CreateTeamScreen = ({
           Configura los datos de la competición. Lo podrás editar después.
         </Text>
 
-        <Section label="Nombre del equipo">
-          <View style={styles.nameInput}>
-            <View style={styles.accentBar} />
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Padel Club"
-              placeholderTextColor={c.textFaint}
-              maxLength={50}
-              autoCapitalize="words"
-              style={styles.nameInputField}
-            />
-          </View>
-        </Section>
-
         <Section label="Competición">
           <ScrollView
             horizontal
@@ -279,13 +269,28 @@ export const CreateTeamScreen = ({
               </Pressable>
             </Section>
 
-            <Section label="Liga · Opcional">
-              <PlainInput
-                value={league}
-                onChangeText={setLeague}
-                placeholder="Liga por equipos absoluta"
-              />
-            </Section>
+            {isFcp ? (
+              <Pressable
+                onPress={() => setFcpOpen(true)}
+                style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
+                <Text style={styles.fcpBannerText}>
+                  Busca tu equipo y créalo con su plantilla y sus puntos automáticamente.
+                  No hace falta rellenar lo de abajo.
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {!isFcp ? (
+              <Section label="Liga · Opcional">
+                <PlainInput
+                  value={league}
+                  onChangeText={setLeague}
+                  placeholder="Liga por equipos absoluta"
+                />
+              </Section>
+            ) : null}
           </>
         ) : null}
 
@@ -349,6 +354,22 @@ export const CreateTeamScreen = ({
           </>
         ) : null}
 
+        {!isFcp ? (
+        <>
+        <Section label="Nombre del equipo">
+          <View style={styles.nameInput}>
+            <View style={styles.accentBar} />
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Padel Club"
+              placeholderTextColor={c.textFaint}
+              maxLength={50}
+              autoCapitalize="words"
+              style={styles.nameInputField}
+            />
+          </View>
+        </Section>
         <Section label="Categoría">
           <ScrollView
             horizontal
@@ -482,24 +503,35 @@ export const CreateTeamScreen = ({
             </View>
           ) : null}
         </View>
+        </>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
-        <Pressable
-          disabled={!valid || submitting}
-          onPress={handleNext}
-          style={({ pressed }) => [
-            styles.ctaBtn,
-            (!valid || submitting) && { opacity: 0.4 },
-            pressed && valid && !submitting && { opacity: 0.85 },
-          ]}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#001810" />
-          ) : (
-            <Text style={styles.ctaLabel}>Continuar</Text>
-          )}
-        </Pressable>
+        {isFcp ? (
+          <Pressable
+            onPress={() => setFcpOpen(true)}
+            style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.ctaLabel}>Buscar mi equipo</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            disabled={!valid || submitting}
+            onPress={handleNext}
+            style={({ pressed }) => [
+              styles.ctaBtn,
+              (!valid || submitting) && { opacity: 0.4 },
+              pressed && valid && !submitting && { opacity: 0.85 },
+            ]}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#001810" />
+            ) : (
+              <Text style={styles.ctaLabel}>Continuar</Text>
+            )}
+          </Pressable>
+        )}
       </View>
 
       <FederationPickerSheet
@@ -509,7 +541,16 @@ export const CreateTeamScreen = ({
         onPick={(f) => {
           setFederation(f);
           setFederationPickerOpen(false);
+          // Federación Cántabra: onboarding automático → abre la importación.
+          if (f.code === FCP_FEDERATION_CODE) setFcpOpen(true);
         }}
+      />
+
+      <FcpImportSheet
+        open={fcpOpen}
+        clubId={clubId ?? null}
+        onClose={() => setFcpOpen(false)}
+        onImported={() => finishOnboarding()}
       />
     </KeyboardAvoidingView>
   );
@@ -750,6 +791,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: 8,
     lineHeight: 16,
   },
+  fcpBanner: {
+    marginTop: 18,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    borderRadius: Radius.md,
+    padding: 14,
+  },
+  fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
+  fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
   compHint: {
     color: c.textMuted,
     fontSize: 12,

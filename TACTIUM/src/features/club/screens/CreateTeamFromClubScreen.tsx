@@ -104,9 +104,10 @@ export const CreateTeamFromClubScreen = ({
         name.trim() &&
           (!isFederada || league.trim()) &&
           cat &&
+          gender &&
           (!hasGroup || group),
       ),
-    [name, isFederada, league, cat, group, hasGroup],
+    [name, isFederada, league, cat, gender, group, hasGroup],
   );
 
   const handleSave = async () => {
@@ -123,8 +124,9 @@ export const CreateTeamFromClubScreen = ({
         league: effLeague || undefined,
         category: cat,
         group: hasGroup ? group : undefined,
-        // gender es opcional: si el usuario no marcó ninguno, no enviamos
-        // el campo (createTeam lo trata como undefined).
+        // Género OBLIGATORIO (garantizado por `valid`): la columna es NOT NULL
+        // con default 'masculino', así que si no se pide, un equipo fem/mixto se
+        // guardaría como masculino en silencio.
         gender: gender ?? undefined,
         clubId: club.id,
         // No tocar el flag de onboarding: estamos creando un equipo
@@ -394,7 +396,10 @@ export const CreateTeamFromClubScreen = ({
           </ScrollView>
         </Section>
 
-        <Section label="Género">
+        <Section
+          label="Género"
+          right={!gender ? <Text style={styles.reqTag}>obligatorio</Text> : undefined}
+        >
           <View style={styles.catGrid}>
             {GENDERS.map((g) => {
               const sel = gender === g.id;
@@ -509,6 +514,13 @@ const Section: React.FC<{
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.background },
+  reqTag: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    letterSpacing: 0.5,
+    color: c.warning,
+    fontWeight: '700',
+  },
   header: {
     paddingHorizontal: 20,
     flexDirection: 'row',

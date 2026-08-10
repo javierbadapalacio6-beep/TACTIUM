@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -47,23 +47,37 @@ export const ClubTeamsScreen = ({
     [teams, club],
   );
 
+  // Spinner solo en la 1ª carga (refrescos al volver a foco en 2º plano) +
+  // estado de error para no tragarnos un fallo de red.
+  const didLoadRef = useRef(false);
+  const [loadError, setLoadError] = useState(false);
   useFocusEffect(
     useCallback(() => {
       if (clubTeams.length === 0) {
         setOverviews([]);
+        setLoadError(false);
         setLoading(false);
         return;
       }
       let cancelled = false;
       (async () => {
-        setLoading(true);
+        if (!didLoadRef.current) setLoading(true);
         try {
           const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
-          if (!cancelled) setOverviews(data);
+          if (!cancelled) {
+            setOverviews(data);
+            setLoadError(false);
+          }
         } catch (e) {
-          console.warn('ClubTeamsScreen overview', e);
+          if (!cancelled) {
+            console.warn('ClubTeamsScreen overview', e);
+            setLoadError(true);
+          }
         } finally {
-          if (!cancelled) setLoading(false);
+          if (!cancelled) {
+            didLoadRef.current = true;
+            setLoading(false);
+          }
         }
       })();
       return () => {
@@ -71,6 +85,21 @@ export const ClubTeamsScreen = ({
       };
     }, [clubTeams]),
   );
+
+  const retryOverviews = useCallback(async () => {
+    if (clubTeams.length === 0) return;
+    setLoading(true);
+    try {
+      const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
+      setOverviews(data);
+      setLoadError(false);
+    } catch (e) {
+      console.warn('ClubTeamsScreen overview', e);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [clubTeams]);
 
   const handleOpenTeam = async (teamId: string) => {
     try {
@@ -115,6 +144,17 @@ export const ClubTeamsScreen = ({
         <Text style={styles.intro}>
           Selecciona un equipo para ver su jornada, alineación y resultados.
         </Text>
+
+        {loadError && !loading ? (
+          <Pressable
+            onPress={retryOverviews}
+            style={({ pressed }) => [styles.errorBanner, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.errorBannerText}>
+              No se pudieron cargar los datos de los equipos. Toca para reintentar.
+            </Text>
+          </Pressable>
+        ) : null}
 
         {loading ? (
           <View style={styles.loaderBox}>
@@ -216,6 +256,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: -0.3,
   },
   scroll: { paddingHorizontal: 22, paddingTop: 6 },
+  errorBanner: {
+    marginBottom: 12,
+    backgroundColor: c.error + '1A',
+    borderWidth: 1,
+    borderColor: c.error + '55',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorBannerText: { color: c.error, fontSize: 13, fontWeight: '600', textAlign: 'center' },
   intro: {
     color: c.textMuted,
     fontSize: 13,

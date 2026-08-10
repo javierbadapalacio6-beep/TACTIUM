@@ -15,6 +15,18 @@ export async function fetchMatchdays(seasonId: string): Promise<Matchday[]> {
   return data ?? [];
 }
 
+/** Nº de jornadas de una temporada (ligero, sin traer filas). Sirve para
+ * distinguir en Home "temporada sin jornadas" de "temporada con el calendario
+ * ya cargado pero sin jornadas pendientes". */
+export async function countMatchdays(seasonId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('matchdays')
+    .select('id', { count: 'exact', head: true })
+    .eq('season_id', seasonId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function fetchUpcomingMatchday(seasonId: string): Promise<Matchday | null> {
   // "Próxima jornada" = la cronológicamente más cercana a hoy entre las
   // no terminadas. Estrategia en dos pasadas:

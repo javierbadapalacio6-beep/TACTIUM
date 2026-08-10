@@ -10,6 +10,19 @@ import { toast } from '@store/toastStore';
 import { BottomSheet } from './BottomSheet';
 import { IconChevron, IconCheck } from './Icon';
 
+// Distintivo de género del equipo (símbolo + etiqueta + color) para no ir a
+// ciegas al elegir equipo. Colores fijos legibles en claro y oscuro.
+const genderInfo = (g?: string | null) => {
+  switch (g) {
+    case 'femenino':
+      return { symbol: '♀', short: 'FEM', label: 'Femenino', color: '#FF6BAE' };
+    case 'mixto':
+      return { symbol: '⚥', short: 'MIXTO', label: 'Mixto', color: '#B07BFF' };
+    default:
+      return { symbol: '♂', short: 'MASC', label: 'Masculino', color: '#4C8DFF' };
+  }
+};
+
 /**
  * Botón de cambio de equipo activo.
  * Solo se muestra si el usuario tiene >1 equipo visible.
@@ -31,6 +44,7 @@ export const TeamSwitcher: React.FC<{
 
   if (!team) return null;
 
+  const g = genderInfo(team.gender);
   const hasMultiple = teams.length > 1;
   const subtitle = [team.category, team.group_name && `Grupo ${team.group_name}`]
     .filter(Boolean)
@@ -46,9 +60,12 @@ export const TeamSwitcher: React.FC<{
     return (
       <View style={styles.staticBlock}>
         <Text style={styles.label}>{roleLabel}</Text>
-        <Text style={styles.teamName} numberOfLines={1}>
-          {subtitle ? `${team.name} · ${subtitle}` : team.name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={[styles.genderSymbol, { color: g.color }]}>{g.symbol}</Text>
+          <Text style={styles.teamName} numberOfLines={1}>
+            {subtitle ? `${team.name} · ${subtitle}` : team.name}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -65,9 +82,12 @@ export const TeamSwitcher: React.FC<{
       >
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.label}>EQUIPO ACTIVO</Text>
-          <Text style={styles.teamName} numberOfLines={1}>
-            {team.name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.genderSymbol, { color: g.color }]}>{g.symbol}</Text>
+            <Text style={styles.teamName} numberOfLines={1}>
+              {team.name}
+            </Text>
+          </View>
         </View>
         <IconChevron size={14} color={c.textFaint} />
       </Pressable>
@@ -78,6 +98,7 @@ export const TeamSwitcher: React.FC<{
         <View style={{ gap: 6 }}>
           {teams.map((t) => {
             const sel = t.id === team.id;
+            const rg = genderInfo(t.gender);
             return (
               <Pressable
                 key={t.id}
@@ -119,11 +140,18 @@ export const TeamSwitcher: React.FC<{
                   </Text>
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.teamRowName} numberOfLines={1}>
-                    {t.name}
-                  </Text>
+                  <View style={styles.nameRow}>
+                    <View style={[styles.genderPill, { borderColor: rg.color }]}>
+                      <Text style={[styles.genderPillText, { color: rg.color }]}>
+                        {rg.short}
+                      </Text>
+                    </View>
+                    <Text style={styles.teamRowName} numberOfLines={1}>
+                      {t.name}
+                    </Text>
+                  </View>
                   <Text style={styles.teamRowMeta} numberOfLines={1}>
-                    {[t.category, t.group_name && `Grupo ${t.group_name}`, t.league]
+                    {[rg.label, t.category, t.group_name && `Grupo ${t.group_name}`, t.league]
                       .filter(Boolean)
                       .join(' · ') || 'Sin configurar'}
                   </Text>
@@ -155,7 +183,27 @@ const makeStyles = (c: Palette) =>
       color: c.text,
       fontSize: 14,
       fontWeight: '600',
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
       marginTop: 2,
+    },
+    genderSymbol: { fontSize: 14, fontWeight: '900' },
+    genderPill: {
+      paddingHorizontal: 6,
+      height: 18,
+      borderRadius: 5,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    genderPillText: {
+      fontFamily: Fonts.mono,
+      fontSize: 9,
+      fontWeight: '800',
+      letterSpacing: 0.5,
     },
     button: {
       flexDirection: 'row',

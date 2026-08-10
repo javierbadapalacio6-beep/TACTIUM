@@ -32,7 +32,8 @@ export const ClubStack = () => {
       />
       <Stack.Screen name="ClubSchedule" component={ClubScheduleScreen} />
       {/* Jornada/Lineup/Results reusadas para navegar desde ClubDashboard
-          a un partido concreto. Read-only para club_admin. */}
+          a un partido concreto. Read-only para club_admin. La exploración
+          de la Federación vive ahora en su propia pestaña (FederacionTab). */}
       <Stack.Screen name="Jornada" component={JornadaScreen} />
       <Stack.Screen name="Lineup" component={LineupScreen} />
       <Stack.Screen name="Results" component={ResultsScreen} />

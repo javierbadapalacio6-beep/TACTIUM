@@ -13,11 +13,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconChevron } from '@components/ui';
+import { IconBack, IconChevron, IconTeam, IconCalendar } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
+import * as PlayersApi from '@core/services/players';
 import { matchdayState } from '@core/utils/matchday';
+import { FcpSeasonUpdateSheet } from '../components/FcpSeasonUpdateSheet';
+import { FcpGroupSheet } from '../components/FcpGroupSheet';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 
 import type { ClubTeamsStackScreenProps } from '@navigation/types';
 
@@ -28,9 +32,14 @@ import type { ClubTeamsStackScreenProps } from '@navigation/types';
  * jornadas. Al tap en una jornada navega a JornadaScreen — que ya queda
  * read-only para club_admin gracias a `selectIsCaptain = false`.
  *
- * IMPORTANTE: este screen NO ofrece crear temporadas, ni jornadas, ni
- * editar resultados. El gestor que quiera hacerlo cambia a Modo Capitán
- * desde Profile (los triggers DB le hacen captain real de sus teams).
+ * READ-ONLY en lo OPERATIVO: NO crea/edita jornadas, alineaciones ni
+ * resultados — eso es del capitán (el gestor cambia a Modo Capitán desde
+ * Profile; los triggers DB le hacen captain real de sus teams).
+ *
+ * SÍ ofrece GESTIÓN FEDERATIVA de estructura (etiquetada "(Federación)"):
+ * "Preparar nueva temporada" y "Mi grupo" (volcado de calendario/resultados
+ * desde la Federación). Es administración de club, no operativa de partido, y
+ * la RLS `is_team_admin` la autoriza — por eso vive aquí y no rompe el read-only.
  */
 export const ClubTeamPreviewScreen = ({
   navigation,
@@ -42,7 +51,20 @@ export const ClubTeamPreviewScreen = ({
 
   const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
   const [matchdays, setMatchdays] = useState<MatchdaysApi.Matchday[]>([]);
+  const [players, setPlayers] = useState<PlayersApi.Player[]>([]);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [seasonOpen, setSeasonOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const isFcpTeam = team?.federation === FCP_FEDERATION_CODE;
+  const reloadPlayers = useCallback(async () => {
+    if (!team) return;
+    try {
+      setPlayers(await PlayersApi.fetchPlayers(team.id));
+    } catch (e) {
+      console.warn('ClubTeamPreview reloadPlayers', e);
+    }
+  }, [team]);
 
   useFocusEffect(
     useCallback(() => {
@@ -51,9 +73,13 @@ export const ClubTeamPreviewScreen = ({
       (async () => {
         setLoading(true);
         try {
-          const s = await SeasonsApi.fetchActiveSeason(team.id);
+          const [s, ps] = await Promise.all([
+            SeasonsApi.fetchActiveSeason(team.id),
+            PlayersApi.fetchPlayers(team.id).catch(() => [] as PlayersApi.Player[]),
+          ]);
           if (cancelled) return;
           setSeason(s);
+          setPlayers(ps);
           if (!s) {
             setMatchdays([]);
             return;
@@ -89,6 +115,16 @@ export const ClubTeamPreviewScreen = ({
     [matchdays],
   );
 
+  // "Preparar nueva temporada" solo cuando la actual está cerrada o entre
+  // temporadas (no siempre visible).
+  const seasonClosed = useMemo(() => {
+    if (!season) return true;
+    if (matchdays.length === 0) return true;
+    if (matchdays.every((m) => m.outcome != null)) return true;
+    if (season.end_date && new Date(season.end_date) < new Date()) return true;
+    return false;
+  }, [season, matchdays]);
+
   const teamMeta = [team?.category, team?.league, team?.gender]
     .filter(Boolean)
     .join(' · ');
@@ -115,6 +151,34 @@ export const ClubTeamPreviewScreen = ({
           <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Equipos</Text>
         </Pressable>
+
+        {/* Acciones federativas como iconos (solo equipos FCP). "Preparar
+            nueva temporada" solo cuando la temporada está cerrada/entre
+            temporadas; "Mi grupo" siempre que sea equipo federado. */}
+        {isFcpTeam ? (
+          <View style={styles.headerActions}>
+            {seasonClosed ? (
+              <Pressable
+                onPress={() => setSeasonOpen(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Preparar nueva temporada (Federación · plantilla)"
+                style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.6 }]}
+              >
+                <IconTeam size={20} color={c.text} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => setGroupOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Mi grupo (Federación · clasificación y jornadas)"
+              style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.6 }]}
+            >
+              <IconCalendar size={20} color={c.text} />
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView
@@ -158,6 +222,50 @@ export const ClubTeamPreviewScreen = ({
               <View style={styles.statsDivider} />
               <Stat label="Empates" value={String(stats.draws)} />
             </View>
+
+            {/* Plantilla */}
+            <Text style={styles.sectionLabel}>
+              PLANTILLA{players.length ? ` · ${players.length}` : ''}
+            </Text>
+            {players.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  Este equipo aún no tiene jugadores en la plantilla.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Pressable
+                  onPress={() => setRosterOpen((o) => !o)}
+                  style={({ pressed }) => [styles.rosterToggle, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.rosterToggleText}>
+                    {rosterOpen ? 'Ocultar jugadores' : `Ver los ${players.length} jugadores`}
+                  </Text>
+                  <IconChevron size={14} color={c.accent} />
+                </Pressable>
+                {rosterOpen ? (
+                  <View style={{ gap: 6, marginTop: 8 }}>
+                    {[...players]
+                      .sort((a, b) => (b.pts ?? 0) - (a.pts ?? 0))
+                      .map((p, i) => (
+                        <View key={p.id} style={styles.rosterRow}>
+                          <Text style={styles.rosterNum}>{i + 1}</Text>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.rosterName} numberOfLines={1}>
+                              {p.name}
+                            </Text>
+                            {p.position ? (
+                              <Text style={styles.rosterPos}>{p.position}</Text>
+                            ) : null}
+                          </View>
+                          <Text style={styles.rosterPts}>{p.pts ?? 0} pts</Text>
+                        </View>
+                      ))}
+                  </View>
+                ) : null}
+              </>
+            )}
 
             {/* Próxima jornada */}
             {nextMatchday ? (
@@ -254,6 +362,26 @@ export const ClubTeamPreviewScreen = ({
           </>
         )}
       </ScrollView>
+
+      {team ? (
+        <FcpSeasonUpdateSheet
+          open={seasonOpen}
+          teamId={team.id}
+          teamName={team.name}
+          teamGender={team.gender}
+          onClose={() => setSeasonOpen(false)}
+          onDone={reloadPlayers}
+        />
+      ) : null}
+
+      {team ? (
+        <FcpGroupSheet
+          open={groupOpen}
+          teamId={team.id}
+          teamName={team.name}
+          onClose={() => setGroupOpen(false)}
+        />
+      ) : null}
     </View>
   );
 };
@@ -324,6 +452,18 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
   },
   backBtn: {
     height: 36,
@@ -399,6 +539,52 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: 10,
   },
   nextMeta: { color: c.textMuted, fontSize: 12, marginTop: 4 },
+  rosterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: c.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  rosterToggleText: { color: c.accent, fontSize: 14, fontWeight: '700' },
+  rosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: c.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: c.hair,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  rosterNum: {
+    fontFamily: Fonts.mono,
+    color: c.textFaint,
+    fontSize: 12,
+    fontWeight: '700',
+    width: 20,
+    textAlign: 'center',
+  },
+  rosterName: { color: c.text, fontSize: 14, fontWeight: '600' },
+  rosterPos: {
+    fontFamily: Fonts.mono,
+    color: c.textFaint,
+    fontSize: 10,
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  rosterPts: {
+    fontFamily: Fonts.mono,
+    color: c.accent,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   nextHint: {
     fontFamily: Fonts.mono,
     color: c.accent,
