@@ -23,8 +23,8 @@ export interface PublicProfileTeam {
 }
 
 export interface PublicProfilePhoto {
-  // 'casual' = amistoso (jugador) → abre CasualMatchDetail; 'jornada' = portada
-  // de partido de liga (capitán) → no navega (solo se muestra).
+  // 'casual' = amistoso (jugador) → abre CasualMatchDetail; 'jornada' = partido
+  // de liga (capitán) → abre LeagueMatchDetail (vista pública).
   kind?: 'casual' | 'jornada';
   match_id?: string; // solo casual
   matchday_id?: string; // solo jornada
@@ -126,6 +126,33 @@ export function getPublicUserProfile(id: string): Promise<PublicUserProfile> {
 
 export function getPublicClubProfile(id: string): Promise<PublicClubProfile> {
   return callRpc<PublicClubProfile>('get_public_club_profile', { target: id });
+}
+
+// ─── Partido de liga (jornada) público ────────────────────────────────────
+// Vista read-only a la que llevan las fotos de jornada del perfil.
+export interface PublicMatchdayCourt {
+  court_number: number;
+  sets: { us: number; them: number }[];
+}
+export interface PublicMatchday {
+  id: string;
+  jornada_number: number | null;
+  match_date: string | null;
+  opponent: string | null;
+  is_home: boolean | null;
+  score_for: number | null;
+  score_against: number | null;
+  outcome: string | null; // 'win' | 'loss' | 'draw' | null
+  photo_url: string | null;
+  team_name: string | null;
+  category: string | null;
+  group_name: string | null;
+  courts: PublicMatchdayCourt[];
+}
+
+export async function fetchPublicMatchday(id: string): Promise<PublicMatchday | null> {
+  const rows = await callRpc<PublicMatchday[]>('public_get_matchday', { p_id: id });
+  return (rows ?? [])[0] ?? null;
 }
 
 export async function listFollowers(

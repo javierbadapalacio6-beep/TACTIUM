@@ -17,6 +17,7 @@ import { MyDataScreen } from '@features/profile/screens/MyDataScreen';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
 import { SettingsScreen } from '@features/settings/screens/SettingsScreen';
 import { CasualMatchDetailScreen } from '@features/profile/screens/CasualMatchDetailScreen';
+import { LeagueMatchDetailScreen } from '@features/profile/screens/LeagueMatchDetailScreen';
 import { SearchCommunityScreen } from '@features/social/screens/SearchCommunityScreen';
 import { PublicProfileScreen } from '@features/social/screens/PublicProfileScreen';
 import { FeedScreen } from '@features/social/screens/FeedScreen';
@@ -128,6 +129,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="CasualMatchDetail"
               component={CasualMatchDetailScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="LeagueMatchDetail"
+              component={LeagueMatchDetailScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

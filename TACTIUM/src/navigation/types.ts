@@ -163,6 +163,9 @@ export type RootStackParamList = {
   MyStats: undefined;
   Settings: undefined;
   CasualMatchDetail: { matchId: string };
+  // Partido de liga (jornada) en solo lectura, público — al que llevan las
+  // fotos de jornada del perfil.
+  LeagueMatchDetail: { matchdayId: string };
   // Capa social v1 (feature/perfiles-sociales)
   SearchCommunity: undefined;
   PublicProfile: { type: 'user' | 'club'; id: string };

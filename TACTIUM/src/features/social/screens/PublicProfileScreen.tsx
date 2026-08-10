@@ -206,9 +206,26 @@ export const PublicProfileScreen = () => {
                     contentContainerStyle={styles.photoRow}
                   >
                     {user.photos.map((ph) => (
-                      <View
+                      <Pressable
                         key={ph.match_id ?? ph.matchday_id ?? ph.photo_url}
-                        style={styles.photoItem}
+                        onPress={
+                          ph.match_id
+                            ? () =>
+                                navigation.navigate('CasualMatchDetail', {
+                                  matchId: ph.match_id!,
+                                })
+                            : ph.matchday_id
+                              ? () =>
+                                  navigation.navigate('LeagueMatchDetail', {
+                                    matchdayId: ph.matchday_id!,
+                                  })
+                              : undefined
+                        }
+                        disabled={!ph.match_id && !ph.matchday_id}
+                        style={({ pressed }) => [
+                          styles.photoItem,
+                          pressed && (ph.match_id || ph.matchday_id) && { opacity: 0.85 },
+                        ]}
                       >
                         <Image
                           source={{ uri: ph.photo_url }}
@@ -220,7 +237,7 @@ export const PublicProfileScreen = () => {
                             <Text style={styles.photoBadgeTxt}>W</Text>
                           </View>
                         ) : null}
-                      </View>
+                      </Pressable>
                     ))}
                   </ScrollView>
                 </>
