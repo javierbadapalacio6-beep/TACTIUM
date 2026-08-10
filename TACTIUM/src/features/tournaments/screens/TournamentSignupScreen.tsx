@@ -743,8 +743,7 @@ export const TournamentSignupScreen = ({
             </View>
             <FcpSuggest c={c} styles={styles} matches={p2Matches} onPick={(m) => applyMatch(2, m)} />
             <Text style={styles.availHint}>
-              Puntos de vuestra federación. Sumamos los dos ({seedPoints || 0}) para
-              sembrar el cuadro y que salga equilibrado.
+              Sumamos vuestros puntos ({seedPoints || 0}) para sembrar el cuadro.
             </Text>
 
             <Text style={styles.label}>EMAIL DE TU COMPAÑERO/A · OPCIONAL</Text>
@@ -761,8 +760,7 @@ export const TournamentSignupScreen = ({
               />
             </View>
             <Text style={styles.availHint}>
-              Le mandaremos un código para que vincule su cuenta y vea el torneo en
-              su app. Si no lo pones, podrás copiarle el código tras apuntarte.
+              Le llega un código para vincular su cuenta. Si no, se lo pasas tú al apuntarte.
             </Text>
           </>
         ) : (
@@ -806,8 +804,8 @@ export const TournamentSignupScreen = ({
               ) : null}
             </View>
             <Text style={styles.availHint}>
-              Nº de la categoría de liga en la que juega cada uno (2ª → 2, 4ª → 4…).
-              {isPair ? ` Suma de la pareja: ${leagueSum ?? '—'}.` : ''}
+              Su división de liga (2ª → 2, 4ª → 4…).
+              {isPair ? ` Suma: ${leagueSum ?? '—'}.` : ''}
             </Text>
           </>
         ) : null}
@@ -1069,35 +1067,35 @@ const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
     suggestWrap: {
-      marginTop: -2,
-      marginBottom: 10,
+      marginTop: 2,
+      marginBottom: 12,
       backgroundColor: c.accent10,
       borderWidth: 1,
       borderColor: c.accent40,
       borderRadius: Radius.md,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      gap: 10,
     },
     suggestLabel: {
       fontFamily: Fonts.mono,
-      fontSize: 9.5,
+      fontSize: 10,
       letterSpacing: 1.4,
       color: c.accent,
       fontWeight: '700',
     },
-    suggestRow: { gap: 6 },
+    suggestRow: { gap: 8 },
     suggestChip: {
       backgroundColor: c.bgCard,
       borderWidth: 1,
       borderColor: c.hairStrong,
-      borderRadius: Radius.sm,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      borderRadius: Radius.md,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
-    suggestName: { color: c.text, fontSize: 13.5, fontWeight: '700' },
-    suggestMeta: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11, marginTop: 2 },
-    suggestHint: { color: c.textFaint, fontSize: 10.5 },
+    suggestName: { color: c.text, fontSize: 14.5, fontWeight: '700' },
+    suggestMeta: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11.5, marginTop: 4 },
+    suggestHint: { color: c.textFaint, fontSize: 11, marginTop: 2 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
