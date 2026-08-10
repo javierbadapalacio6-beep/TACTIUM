@@ -250,9 +250,13 @@ export async function resolveFcpPlayer(
   }
   const people = [...byPerson.values()].slice(0, 6);
 
-  // Resolver división(es) por id_equipo → nivel (nº) + género del grupo.
+  // Resolver división(es) por id_equipo → nivel (nº) + género + TEMPORADA
+  // (id_liga) del grupo, para poder quedarnos con la última temporada jugada.
   const allEquipos = [...new Set(people.flatMap((p) => [...p.equipos]))];
-  const divByEquipo = new Map<number, { nivel: number; cat: string; genero: string }>();
+  const divByEquipo = new Map<
+    number,
+    { nivel: number; cat: string; genero: string; idLiga: number }
+  >();
   if (allEquipos.length) {
     const { data: cl } = await rawFrom('fcp_clasificacion')
       .select('id_equipo, id_grupo')
@@ -261,13 +265,18 @@ export async function resolveFcpPlayer(
       (r) => !/^fase/i.test(r.id_grupo),
     );
     const grupoIds = [...new Set(clRows.map((r) => r.id_grupo))];
-    const gMap = new Map<string, { nombre: string; genero: string }>();
+    const gMap = new Map<string, { nombre: string; genero: string; idLiga: number }>();
     if (grupoIds.length) {
       const { data: gr } = await rawFrom('fcp_grupos')
-        .select('id_grupo, nombre, genero')
+        .select('id_grupo, nombre, genero, id_liga')
         .in('id_grupo', grupoIds);
-      for (const g of (gr ?? []) as { id_grupo: string; nombre: string; genero: string }[]) {
-        gMap.set(g.id_grupo, { nombre: g.nombre, genero: g.genero });
+      for (const g of (gr ?? []) as {
+        id_grupo: string;
+        nombre: string;
+        genero: string;
+        id_liga: number | null;
+      }[]) {
+        gMap.set(g.id_grupo, { nombre: g.nombre, genero: g.genero, idLiga: g.id_liga ?? 0 });
       }
     }
     for (const r of clRows) {
@@ -277,16 +286,25 @@ export async function resolveFcpPlayer(
       const nivel = cat ? parseInt(cat, 10) : NaN;
       if (!Number.isFinite(nivel)) continue;
       const prev = divByEquipo.get(r.id_equipo);
-      if (!prev || nivel < prev.nivel) divByEquipo.set(r.id_equipo, { nivel, cat: cat!, genero: g.genero });
+      // Un equipo regular pertenece a una liga; conservamos su temporada.
+      if (!prev || g.idLiga > prev.idLiga)
+        divByEquipo.set(r.id_equipo, { nivel, cat: cat!, genero: g.genero, idLiga: g.idLiga });
     }
   }
 
   const out: FcpPlayerMatch[] = people.map((p) => {
-    // nivel = división más ALTA (número menor) entre todos sus equipos.
-    let best: { nivel: number; cat: string; genero: string } | null = null;
+    // nivel = división de su ÚLTIMA temporada (id_liga más alto); a igualdad de
+    // temporada, la mejor división (número menor).
+    let best: { nivel: number; cat: string; genero: string; idLiga: number } | null = null;
     for (const eq of p.equipos) {
       const d = divByEquipo.get(eq);
-      if (d && (!best || d.nivel < best.nivel)) best = d;
+      if (!d) continue;
+      if (
+        !best ||
+        d.idLiga > best.idLiga ||
+        (d.idLiga === best.idLiga && d.nivel < best.nivel)
+      )
+        best = d;
     }
     return {
       idJugador: String(p.rep.id_jugador),
