@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTIUM · Plan de integración Federación Cántabra de Pádel</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d3748;
+    --text:#e6edf3; --muted:#8b949e; --accent:#3ddc84; --accent2:#58a6ff;
+    --warn:#f0b429; --danger:#f85149;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.65;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:0 24px}
+  header{background:linear-gradient(135deg,#0d1117 0%,#12251a 100%);border-bottom:1px solid var(--border);padding:48px 0 36px;margin-bottom:40px}
+  h1{font-size:1.9rem;letter-spacing:.5px}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted);margin-top:8px;font-size:.95rem}
+  .badge{display:inline-block;background:rgba(61,220,132,.12);color:var(--accent);border:1px solid rgba(61,220,132,.4);border-radius:20px;padding:2px 12px;font-size:.78rem;margin-top:14px;margin-right:6px}
+  h2{font-size:1.3rem;color:var(--accent);margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  h3{font-size:1.05rem;color:var(--accent2);margin:26px 0 10px}
+  p{margin:10px 0}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin:16px 0}
+  .card.green{border-left:4px solid var(--accent)}
+  .card.blue{border-left:4px solid var(--accent2)}
+  .card.warn{border-left:4px solid var(--warn)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem}
+  th{background:var(--panel2);color:var(--accent2);text-align:left;padding:9px 12px;border:1px solid var(--border)}
+  td{padding:8px 12px;border:1px solid var(--border);vertical-align:top}
+  code,.mono{font-family:'Cascadia Code','Consolas',monospace;font-size:.85em;background:var(--panel2);padding:1px 6px;border-radius:4px;color:#79c0ff}
+  pre{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0;font-size:.82rem;line-height:1.5}
+  pre code{background:none;padding:0}
+  ul,ol{margin:8px 0 8px 24px}
+  li{margin:5px 0}
+  .kv{color:var(--muted)}
+  .pill{display:inline-block;border-radius:6px;padding:1px 8px;font-size:.75rem;font-weight:600}
+  .pill.ok{background:rgba(61,220,132,.15);color:var(--accent)}
+  .pill.med{background:rgba(240,180,41,.15);color:var(--warn)}
+  .pill.hi{background:rgba(248,81,73,.15);color:var(--danger)}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+  .flow .step{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:.85rem}
+  .flow .arr{color:var(--accent);font-weight:bold}
+  .toc{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 24px}
+  .toc a{color:var(--accent2);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .verified{color:var(--accent);font-size:.8rem}
+  .strike{color:var(--muted);text-decoration:line-through}
+  footer{margin-top:60px;color:var(--muted);font-size:.8rem;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>TACTIUM <span>×</span> Federación Cántabra de Pádel</h1>
+    <div class="sub">Plan y estudio técnico: onboarding de clubs, volcado de plantillas, puntos automáticos y sección «MI FEDERACIÓN» — <strong>aprovechando el agente ya construido en SERVER4PADEL</strong></div>
+    <span class="badge">29 · julio · 2026</span>
+    <span class="badge">Endpoints verificados en vivo ✓</span>
+    <span class="badge">Agente existente auditado ✓</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="toc">
+  <strong>Índice</strong>
+  <ol>
+    <li><a href="#resumen">Resumen ejecutivo</a></li>
+    <li><a href="#mapa">Mapa de datos de la federación (verificado en vivo)</a></li>
+    <li><a href="#existente">Lo que YA tienes construido (auditoría de 4PADEL CLAUDE)</a></li>
+    <li><a href="#gap">Análisis de huecos: qué falta exactamente</a></li>
+    <li><a href="#arquitectura">Arquitectura propuesta: cómo conectar TACTIUM</a></li>
+    <li><a href="#matching">Matching de jugadores y puntos automáticos</a></li>
+    <li><a href="#onboarding">Flujo de onboarding de club federado</a></li>
+    <li><a href="#mifederacion">Sección «MI FEDERACIÓN»</a></li>
+    <li><a href="#legal">Legal y riesgos</a></li>
+    <li><a href="#fases">Fases de implementación y esfuerzo</a></li>
+    <li><a href="#prompts">🤖 Prompts listos para Claude Code (una fase = un prompt)</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="resumen">1 · Resumen ejecutivo</h2>
+
+<div class="card green">
+  <p><strong>Veredicto: viable y con la mitad del camino ya recorrido.</strong> Hice dos descubrimientos hoy:</p>
+  <p><strong>1)</strong> Inspeccioné en vivo la web oficial (<code>federacioncantabradepadel.com</code>): no hay API pública, pero todo es HTML servido por el servidor con formularios POST simples — sin login, sin captcha. Escenario ideal para scraping estable.</p>
+  <p><strong>2)</strong> En tu carpeta <code>4PADEL CLAUDE/SERVER4PADEL</code> ya existe un <strong>agente completo y maduro</strong> (<code>agente-federacion-cantabra.js</code> v2.0) que scrapea exactamente esos endpoints y los guarda en Supabase (tablas <code>fcp_*</code>), con scheduler de cron afinado al ritmo real de la FCP y una API REST encima. <strong>No hay que construir el scraper: hay que conectar TACTIUM a él.</strong></p>
+</div>
+
+<p>Estado de tus tres objetivos:</p>
+
+<table>
+  <tr><th>Objetivo</th><th>Qué existe ya</th><th>Qué falta</th></tr>
+  <tr>
+    <td><strong>Crear club → detectar FCP → elegir club/equipos → volcado de jugadores con puntos</strong></td>
+    <td>Los datos: <code>fcp_jugadores</code> tiene plantillas completas con puntos, equipo y liga</td>
+    <td>La UI de onboarding en TACTIUM + import a tus tablas de equipo</td>
+  </tr>
+  <tr>
+    <td><strong>Puntos actualizados solos, sin teclearlos</strong></td>
+    <td>Sync de rankings cada martes (2 pasadas) ya programado en <code>syncScheduler.js</code></td>
+    <td>Tabla de vínculos jugador-TACTIUM ↔ jugador-FCP + job de propagación</td>
+  </tr>
+  <tr>
+    <td><strong>«MI FEDERACIÓN»: horarios, resultados, clasificación, cualquier jugador</strong></td>
+    <td>API REST completa en <code>federationRouter.js</code>: standings, matches, rankings, ficha de jugador, actas</td>
+    <td>La pestaña/pantallas en la app TACTIUM que la consuman</td>
+  </tr>
+</table>
+
+<p><strong>Respuesta a tu pregunta:</strong> no necesito los links — localicé y probé todas las secciones de la web, y además tu propio repo ya tenía el mapa. El esfuerzo restante es sobre todo <strong>producto/UI en TACTIUM</strong>, no infraestructura de datos: estimo <strong>~1,5–2 semanas</strong> hasta tener las tres features en producción.</p>
+
+<!-- ============================================================ -->
+<h2 id="mapa">2 · Mapa de datos de la federación <span class="verified">(verificado en vivo el 29-jul-2026 con navegador)</span></h2>
+
+<h3>2.1 La plataforma</h3>
+<p>Web a medida (jQuery + Bootstrap, codificación ISO-8859-1). Los desplegables no llaman a ninguna API JSON: cada cambio hace un <strong>POST del formulario y recarga la página con los datos en el HTML</strong>. La gestión interna vive en la Extranet de <code>padelfederacion.es</code> (FEP), pero todo lo público se sirve desde el dominio propio.</p>
+
+<h3>2.2 Ligas por equipos</h3>
+<table>
+  <tr><th>Recurso</th><th>Endpoint</th><th>Parámetros</th><th>Qué devuelve</th></tr>
+  <tr>
+    <td>Índice de ligas</td>
+    <td><code>GET /Ligas</code></td>
+    <td>selector de año 2020–2026</td>
+    <td>Liga Cántabra 2026 → <code>id=28074</code> · Liga Escolar 2026 → <code>id=28538</code></td>
+  </tr>
+  <tr>
+    <td>Clasificación + calendario</td>
+    <td><code>POST /Liga_Calendario</code></td>
+    <td><code>id</code>, <code>genero</code> (F/M), <code>fase</code> (1 Regular · 2 Oro · 3 Plata · 4 Bronce · 5 Descenso), <code>grupo</code>, <code>jornada</code></td>
+    <td>Clasificación completa (posición, puntos, partidos, sets, juegos, averages) + tabla cruzada con enlace al acta de cada enfrentamiento + jornadas con fechas (J1: 16–18/01/2026 … J14: 24–26/04)</td>
+  </tr>
+  <tr>
+    <td>Acta de enfrentamiento</td>
+    <td><code>GET /Liga_Resultado</code></td>
+    <td><code>id</code>, <code>partido</code>, <code>grupo</code></td>
+    <td><strong>La joya:</strong> los 4–5 partidos con nombre completo de los 4 jugadores, <strong>puntos individuales y de pareja</strong>, sets y parciales, jornada, fecha, lugar y orden de tandas</td>
+  </tr>
+  <tr>
+    <td>Equipos de un grupo</td>
+    <td><code>POST /Liga_ListadoEquipos</code></td>
+    <td><code>id</code>, <code>genero</code>, <code>grupo</code></td>
+    <td>Equipos con enlaces <code>Liga_DetalleEquipo?IdEquipo=…</code></td>
+  </tr>
+  <tr>
+    <td>Plantilla de equipo</td>
+    <td><code>GET /Liga_DetalleEquipo</code></td>
+    <td><code>IdEquipo</code>, <code>Id</code>, <code>grupo</code></td>
+    <td>Sede + roster: Nº, Apellido 1, Apellido 2, Nombre, Categoría (ABS/INF), <strong>Puntos</strong>. Ej. real: CENTRAL PADEL A → 15 jugadores, sede SMASH PADEL CLUB</td>
+  </tr>
+</table>
+
+<div class="card blue">
+  <p><strong>Estructura real 2026 (masculino):</strong> 6 categorías × grupos A–F = 24 grupos (ids: 1ªA=<code>31249</code>, 1ªB=<code>31256</code>…), más grupos de fase («2ª CATEGORIA MASC. 3º-4º», «…17º al 20º») que son los cruces Oro/Plata/Bronce del nuevo formato. El femenino replica con 1ª–5ª. Un grupo de 8 equipos de 1ª jugó 14 jornadas, 5 partidos por enfrentamiento.</p>
+</div>
+
+<h3>2.3 Rankings individuales</h3>
+<p><code>POST /Rankings</code> con <code>modalidad</code> (ABSOLUTO/MENORES/VETERANOS), <code>rnk</code> y <code>nombre</code> (búsqueda). Ids de los 16 rankings absolutos:</p>
+<pre><code>112 RANKING LIGA MASCULINO      113 RANKING LIGA FEMENINO
+125 RANKING ABSOLUTO MASCULINO  126 RANKING ABSOLUTO FEMENINO
+114/115 1ª CAT M/F · 116/117 2ª · 118/119 3ª · 120/121 4ª · 122/129 5ª · 124 6ª M</code></pre>
+<p>Respuesta server-rendered en una sola tabla <code>Pos | Jugador/a | Puntos</code>, <strong>sin paginación</strong>: el Ranking Liga Masculino devolvió 3.852 filas de una vez («1 · JORGE RUIZ GUTIERREZ · 11.456»). Todo el universo de puntos de Cantabria = ~16 requests.</p>
+
+<h3>2.4 Resto de fuentes</h3>
+<ul>
+  <li><strong>Torneos:</strong> <code>/Torneos</code> (años 2013–2026) → <code>Torneo_previo?id=X</code> (Circuito Cántabro Absoluto, Menores, clasificatorios…).</li>
+  <li><strong>Licencias:</strong> <code>/Licencia-Buscar</code> — por DNI o nombre (útil para verificación de identidad en el claim).</li>
+  <li><strong>Normativas PDF:</strong> <code>padelfederacion.es/refs/docs/</code> («Normativa Liga Cántabra de Pádel 2026 NUEVO FORMATO»).</li>
+  <li><strong>Noticias:</strong> <code>/Hemeroteca</code> · <strong>Calendario general:</strong> <code>/Calendario</code>.</li>
+</ul>
+
+<div class="card warn">
+  <p><strong>Único dato inexistente en público:</strong> un ID numérico estable de jugador. La identidad se construye por nombre normalizado (ver §6). El nº de licencia solo aflora buscando por DNI.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="existente">3 · Lo que YA tienes construido <span class="verified">(auditoría de 4PADEL CLAUDE, 29-jul-2026)</span></h2>
+
+<p>El repo <code>4PADEL CLAUDE</code> (proyecto 4PADEL LIVE) contiene una infraestructura de datos FCP <strong>completa y en producción</strong>:</p>
+
+<table>
+  <tr><th>Pieza</th><th>Archivo</th><th>Qué hace</th></tr>
+  <tr>
+    <td><strong>Agente extractor v2.0</strong></td>
+    <td><code>SERVER4PADEL/agente-federacion-cantabra.js</code> (65 KB)</td>
+    <td>CLI con modos <code>--ligas</code>, <code>--liga=28074</code>, <code>--rankings</code>, <code>--equipos</code>, <code>--backfill-only</code>, <code>--dry-run</code>… Extrae ligas, grupos (incl. fases/playoffs con ida-vuelta, brackets), clasificaciones, partidos, plantillas y rankings → upsert en Supabase</td>
+  </tr>
+  <tr>
+    <td><strong>Esquema BD</strong></td>
+    <td>tablas <code>fcp_*</code></td>
+    <td><code>fcp_ligas</code>, <code>fcp_grupos</code>, <code>fcp_clasificacion</code>, <code>fcp_partidos</code> (con columnas de playoff: ronda, cuadro, ida/vuelta), <code>fcp_jugadores</code> (apellidos, nombre, categoría, <strong>puntos</strong>, id_equipo, liga), <code>fcp_rankings</code></td>
+  </tr>
+  <tr>
+    <td><strong>Servicio scraper</strong></td>
+    <td><code>SERVICIO EXTERNO/cantabraPadel.js</code> (54 KB)</td>
+    <td>Cliente axios+cheerio con decodificación ISO-8859-1: <code>getLeagueCalendar</code>, <code>getTeamDetails</code>, <code>getMatchResult</code> (acta completa con jugadores y parciales), <code>getRanking</code>, <code>searchPlayerInRankings</code>, <code>resolvePlayerByNameFast</code></td>
+  </tr>
+  <tr>
+    <td><strong>Sync incremental</strong></td>
+    <td><code>cantabraSyncService.js</code></td>
+    <td>Sync de calendario con detección de filas sin cambios, jornadas relevantes, calidad de dato</td>
+  </tr>
+  <tr>
+    <td><strong>Scheduler</strong></td>
+    <td><code>syncScheduler.js</code> (node-cron)</td>
+    <td>Afinado al ritmo REAL de la FCP: vie 21:00 (horarios), sáb/dom 09:00·14:00·21:00·23:30 (resultados), lun 21:30 (horarios definitivos post-cierre), <strong>mar 10:00 y 15:00 (la FCP publica rankings los martes)</strong>, mié 03:00 (sync completo semanal con plantillas)</td>
+  </tr>
+  <tr>
+    <td><strong>API REST</strong></td>
+    <td><code>federationRouter.js</code> (46 KB)</td>
+    <td><code>GET /:id/standings/:groupId</code> · <code>/:id/matches</code> · <code>/:id/rankings</code> · <code>/:id/groups</code> · <code>/:id/stats</code> · <code>/fcp/players/:historicId</code> · <code>/fcp/result/:id_partido</code> · <code>/fcp/playoff-eliminatoria/:matchId</code> · <code>POST /:id/sync</code> + estado de sincronización</td>
+  </tr>
+</table>
+
+<div class="card green">
+  <p><strong>Consecuencia:</strong> el "estudio de la federación" que pedías ya lo hizo (y lo mantiene vivo) tu propio backend. El conocimiento fino que contiene — la FCP publica rankings los martes, los horarios se cierran los lunes a las 20:00, la codificación es ISO-8859-1, los playoffs van con rowspan — vale semanas de prueba y error que no hay que repetir.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="gap">4 · Análisis de huecos: qué falta exactamente</h2>
+
+<table>
+  <tr><th>#</th><th>Hueco</th><th>Detalle</th><th>Tamaño</th></tr>
+  <tr>
+    <td>G1</td>
+    <td><strong>Puente de datos SERVER4PADEL → TACTIUM</strong></td>
+    <td>Las tablas <code>fcp_*</code> viven en el Supabase de 4PADEL LIVE; TACTIUM tiene el suyo. Hay que decidir el puente (ver §5)</td>
+    <td><span class="pill med">MEDIO</span></td>
+  </tr>
+  <tr>
+    <td>G2</td>
+    <td><strong>Vínculo jugador FCP ↔ jugador TACTIUM</strong></td>
+    <td>No existe tabla de links ni flujo de claim. Es la pieza que convierte «datos de la federación» en «MIS puntos se actualizan solos»</td>
+    <td><span class="pill med">MEDIO</span></td>
+  </tr>
+  <tr>
+    <td>G3</td>
+    <td><strong>UI de onboarding federado</strong></td>
+    <td>Buscador de club/equipos reales al crear club + volcado de plantilla. Todo el dato necesario ya está en <code>fcp_jugadores</code>/<code>fcp_clasificacion</code></td>
+    <td><span class="pill med">MEDIO</span></td>
+  </tr>
+  <tr>
+    <td>G4</td>
+    <td><strong>UI «MI FEDERACIÓN»</strong></td>
+    <td>Pantallas en TACTIUM. La API que las alimenta ya existe</td>
+    <td><span class="pill med">MEDIO</span></td>
+  </tr>
+  <tr>
+    <td>G5</td>
+    <td><strong>Historia de rankings</strong></td>
+    <td><code>fcp_rankings</code> guarda solo el estado actual (PK = id_jugador). Añadir tabla snapshot con fecha desbloquea la gráfica de evolución de puntos — feature que ni la web oficial tiene</td>
+    <td><span class="pill ok">PEQUEÑO</span></td>
+  </tr>
+  <tr>
+    <td>G6</td>
+    <td><strong>Torneos del circuito</strong></td>
+    <td>El agente cubre ligas y rankings; <code>/Torneos</code> no se sincroniza aún (hay scrapers de torneos FIP/Premier en el repo que sirven de plantilla)</td>
+    <td><span class="pill ok">PEQUEÑO</span></td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="arquitectura">5 · Arquitectura propuesta: cómo conectar TACTIUM</h2>
+
+<div class="flow">
+  <div class="step">🕷️ SERVER4PADEL<br><span class="kv">agente + scheduler (ya existe)</span></div>
+  <div class="arr">→</div>
+  <div class="step">🗄️ Tablas <code>fcp_*</code><br><span class="kv">Supabase</span></div>
+  <div class="arr">→</div>
+  <div class="step">🔗 <code>fcp_player_links</code><br><span class="kv">NUEVO — puente a TACTIUM</span></div>
+  <div class="arr">→</div>
+  <div class="step">📱 TACTIUM<br><span class="kv">onboarding · puntos · MI FEDERACIÓN</span></div>
+</div>
+
+<p>Tres opciones para el puente (G1), de menos a más acoplada:</p>
+
+<table>
+  <tr><th>Opción</th><th>Cómo</th><th>Pros</th><th>Contras</th></tr>
+  <tr>
+    <td><strong>A · Doble destino del agente</strong> <span class="pill ok">RECOMENDADA</span></td>
+    <td>El agente ya lee su Supabase de un <code>.env</code>. Se ejecuta una segunda pasada (o dual-write) contra el Supabase de TACTIUM: mismas tablas <code>fcp_*</code> creadas allí. El scheduler lanza ambos</td>
+    <td>TACTIUM lee sus propios datos con RLS, offline-friendly, sin dependencia en runtime de otro servicio; cero cambios de código en la app para leer</td>
+    <td>Duplica almacenamiento (~MB, irrelevante); un job más que vigilar</td>
+  </tr>
+  <tr>
+    <td><strong>B · TACTIUM consume la API REST</strong></td>
+    <td>La app llama a <code>federationRouter</code> (Railway) para MI FEDERACIÓN</td>
+    <td>Cero duplicación; API ya hecha</td>
+    <td>Acopla la disponibilidad de TACTIUM a otro servicio; RLS/auth a resolver; latencia; el volcado de plantillas igualmente necesita escribir en TACTIUM</td>
+  </tr>
+  <tr>
+    <td><strong>C · Supabase compartido</strong></td>
+    <td>Un único proyecto Supabase para ambas apps</td>
+    <td>Una sola fuente de verdad</td>
+    <td>Migración grande y arriesgada; mezcla ciclos de vida de dos productos. Descartada salvo que ya compartan proyecto</td>
+  </tr>
+</table>
+
+<div class="card blue">
+  <p><strong>Plan A en concreto:</strong> (1) crear las tablas <code>fcp_*</code> + las nuevas (<code>fcp_player_links</code>, <code>fcp_ranking_snapshots</code>) en el Supabase de TACTIUM vía migración; (2) parametrizar el agente con un segundo par <code>SUPABASE_URL/KEY</code> (cambio de ~20 líneas: bucle sobre destinos en los upserts); (3) el scheduler existente ya lo lanza. Si SERVER4PADEL corre en Railway, no se toca el deploy — solo variables de entorno.</p>
+</div>
+
+<h3>5.1 Tablas nuevas (migración TACTIUM)</h3>
+<pre><code>-- Puente de identidad (la pieza clave)
+CREATE TABLE fcp_player_links (
+  id            BIGSERIAL PRIMARY KEY,
+  fcp_id_jugador TEXT NOT NULL,          -- FK lógica a fcp_jugadores.id_jugador
+  user_id       UUID,                    -- usuario TACTIUM (si ha reclamado)
+  player_id     UUID,                    -- jugador de plantilla TACTIUM
+  team_id       UUID,                    -- equipo TACTIUM
+  confidence    TEXT DEFAULT 'auto',     -- auto | confirmed
+  linked_by     UUID,
+  linked_at     TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (fcp_id_jugador, team_id)
+);
+
+CREATE TABLE fcp_team_links (
+  fcp_id_equipo INTEGER NOT NULL,
+  team_id       UUID NOT NULL,
+  club_id       UUID,
+  PRIMARY KEY (fcp_id_equipo, team_id)
+);
+
+-- Historia de rankings (G5): snapshot diario/semanal
+CREATE TABLE fcp_ranking_snapshots (
+  id_jugador   TEXT,
+  id_fcp       INTEGER,
+  posicion     INTEGER,
+  puntos       NUMERIC,
+  snapshot_date DATE DEFAULT CURRENT_DATE,
+  PRIMARY KEY (id_jugador, id_fcp, snapshot_date)
+);</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="matching">6 · Matching de jugadores y puntos automáticos</h2>
+
+<h3>6.1 La clave de identidad</h3>
+<p><code>fcp_jugadores</code> ya materializa la clave que necesitamos: <code>id_jugador</code> construido a partir del nombre normalizado (el agente ya normaliza; <code>resolvePlayerByNameFast</code> ya resuelve nombre→ranking). Ventaja: <code>Liga_DetalleEquipo</code> separa Apellido 1 / Apellido 2 / Nombre en columnas, así que la normalización es fiable. Homónimos se desambiguan por equipo/club — y en última instancia con confirmación humana en el claim.</p>
+
+<h3>6.2 Flujo de actualización automática de puntos</h3>
+<div class="flow">
+  <div class="step">Martes 10:00/15:00<br><span class="kv">sync rankings (ya programado)</span></div>
+  <div class="arr">→</div>
+  <div class="step">UPDATE <code>fcp_jugadores.puntos</code><br><span class="kv">+ snapshot con fecha</span></div>
+  <div class="arr">→</div>
+  <div class="step">Trigger/job: propagar vía<br><code>fcp_player_links</code></div>
+  <div class="arr">→</div>
+  <div class="step">Alineaciones con puntos frescos<br><span class="kv">P1 ≥ P2 ≥ P3 automático</span></div>
+</div>
+<p>Tu validación de orden de fuerza (<code>requiresStrengthOrder → true</code> para FCantP en <code>federations.ts</code>) pasa de puntos tecleados a mano al dato oficial del martes. La propagación puede ser un trigger de Postgres sobre <code>fcp_jugadores</code> o un paso final del job — recomiendo job explícito (más depurable, queda registrado).</p>
+
+<h3>6.3 Claim de jugadores</h3>
+<p>Al unirse un usuario a un equipo vinculado, la app propone «¿Eres MIGUEL ANGEL FERNANDEZ SOTA (7.449 pts)?» desde el roster federativo. Un tap = link <code>confirmed</code>. El capitán puede pre-asignar el resto en el volcado. Verificación fuerte opcional contra <code>Licencia-Buscar</code> con DNI (sin almacenar el DNI, solo el nº de licencia resultante).</p>
+
+<!-- ============================================================ -->
+<h2 id="onboarding">7 · Flujo de onboarding de club federado</h2>
+
+<ol>
+  <li><strong>Crear club</strong> → selector de federación → <em>Federación Cántabra de Pádel</em>.</li>
+  <li>La app detecta catálogo sincronizado para FCantP → buscador typeahead sobre equipos reales agrupados por club: «CENTRAL» → «CENTRAL PADEL: A (1ª Masc · Grupo A) · B (…) · FEMENINO A (…)».</li>
+  <li><strong>Selección multi-equipo</strong> (masculinos y femeninos, todas las categorías): cada check crea un <code>team</code> TACTIUM con liga «Liga Cántabra de Pádel», género y categoría correctos → tu motor aplica 5M/4F y orden de fuerza sin tocar nada.</li>
+  <li><strong>Volcado de plantilla</strong> por equipo desde <code>fcp_jugadores</code>: nombre, categoría (ABS/INF) y puntos, con <code>fcp_player_link</code> en estado <code>auto</code> + <code>fcp_team_link</code>.</li>
+  <li><strong>Invitaciones:</strong> tu flujo post-volcado existente (botón 🎁 / QR) para que cada jugador reclame su ficha.</li>
+  <li>Desde ahí: puntos del martes automáticos, resultados de jornada y clasificación en MI FEDERACIÓN sin teclear nada.</li>
+</ol>
+
+<div class="card blue">
+  <p><strong>UX importante:</strong> mantener el flujo actual como fallback («mi club no aparece» → creación manual) y un botón «Re-sincronizar plantilla» para altas de mitad de temporada.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="mifederacion">8 · Sección «MI FEDERACIÓN»</h2>
+
+<p>Pestaña/entrada en Home para todos los roles cuando el equipo tiene federación con catálogo. Con la Opción A, todo se sirve desde las tablas <code>fcp_*</code> del propio Supabase de TACTIUM (rápido, RLS, sin dependencia externa en caliente):</p>
+
+<table>
+  <tr><th>Subsección</th><th>Contenido</th><th>Fuente</th></tr>
+  <tr><td>📊 Clasificación</td><td>Mi grupo destacado + navegación a cualquier grupo y fase (Regular, Oro, Plata, Bronce, Descenso), incl. brackets de playoff</td><td><code>fcp_clasificacion</code> + <code>fcp_partidos</code> (columnas playoff)</td></tr>
+  <tr><td>📅 Calendario y horarios</td><td>Jornadas con fechas, próximos enfrentamientos del equipo, horarios definitivos (lunes 21:30 ya consolidados)</td><td><code>fcp_partidos.fecha_rango/estado</code></td></tr>
+  <tr><td>🏆 Resultados y actas</td><td>Resultado por enfrentamiento y detalle partido a partido (jugadores, sets, parciales)</td><td><code>fcp_partidos</code> + acta on-demand (<code>/fcp/result/:id</code> o parser local)</td></tr>
+  <tr><td>🔍 Cualquier jugador</td><td>Buscador global: posición y puntos en los 16 rankings + <strong>evolución histórica</strong> + partidos recientes</td><td><code>fcp_rankings</code> + <code>fcp_ranking_snapshots</code> (G5)</td></tr>
+  <tr><td>🎾 Torneos</td><td>Circuito Cántabro (pruebas, fechas) con deep-link a inscripción oficial</td><td>nuevo sync ligero de <code>/Torneos</code> (G6)</td></tr>
+  <tr><td>📄 Info y normativa</td><td>Normativa 2026 (PDF), contacto FCP, noticias</td><td>links estáticos + Hemeroteca</td></tr>
+</table>
+
+<p><strong>Killer feature derivada gratis:</strong> con snapshots + actas puedes ofrecer lo que la web federativa no tiene — gráfica de evolución de puntos, head-to-head entre parejas, forma reciente del rival antes de la jornada. Encaja directo con tu card «Tu partido» y con ARENA (predicción de jornada).</p>
+
+<!-- ============================================================ -->
+<h2 id="legal">9 · Legal y riesgos</h2>
+
+<table>
+  <tr><th>Riesgo</th><th>Nivel</th><th>Mitigación</th></tr>
+  <tr>
+    <td><strong>RGPD</strong> — nombres y puntos son datos personales aunque públicos</td>
+    <td><span class="pill med">MEDIO</span></td>
+    <td>Interés legítimo defendible (datos deportivos publicados por la propia federación para difusión). Solo datos ya públicos, borrado bajo petición, sin enriquecer con otras fuentes. La jugada correcta: <strong>acuerdo con la FCP</strong> (abajo)</td>
+  </tr>
+  <tr>
+    <td><strong>Cambio de HTML</strong> rompe parsers</td>
+    <td><span class="pill med">MEDIO</span></td>
+    <td>El agente ya sobrevivió al cambio de formato 2026 (playoffs). Añadir alerta cuando un parse devuelva 0 filas donde había datos; la app degrada mostrando el último snapshot con fecha</td>
+  </tr>
+  <tr>
+    <td><strong>Bloqueo por scraping</strong></td>
+    <td><span class="pill ok">BAJO</span></td>
+    <td>&lt;100 req/día educadas; el scheduler ya concentra en horas valle. Sin señales de WAF en la web</td>
+  </tr>
+  <tr>
+    <td><strong>Homónimos</strong> en matching</td>
+    <td><span class="pill ok">BAJO</span></td>
+    <td>Desambiguación por plantilla/club + confirmación en el claim</td>
+  </tr>
+</table>
+
+<div class="card green">
+  <p><strong>Recomendación estratégica:</strong> convierte esto en tu puerta institucional. La FCP es pequeña (oficina 17–19h, un teléfono, un email): un correo enseñando «MI FEDERACIÓN» funcionando con sus datos y ofreciéndoles visibilidad gratis puede convertir el scraping tolerado en <strong>colaboración oficial</strong> (y quizá un export directo). Y es exactamente tu ventana comercial agosto–octubre: cada club cántabro que pruebe TACTIUM ve su liga real dentro desde el minuto uno — el mejor demo de venta posible.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="fases">10 · Fases de implementación y esfuerzo</h2>
+
+<table>
+  <tr><th>Fase</th><th>Entregable</th><th>Esfuerzo est.</th></tr>
+  <tr>
+    <td><strong>F0 · Puente de datos</strong> (G1, G5) <span class="pill ok">✅ ENTREGADA 29-JUL</span></td>
+    <td>Migración creada y validada en Postgres 16 (<code>TACTIUM/supabase/migrations/20260729_fcp_federation_bridge.sql</code>); agente parcheado con doble destino vía <code>TACTIUM_SUPABASE_URL</code>/<code>TACTIUM_SUPABASE_SERVICE_KEY</code> + snapshots de ranking (test unitario 6/6 PASS). Queda la activación → prompt F0 en §11</td>
+    <td>hecho</td>
+  </tr>
+  <tr>
+    <td><strong>F1 · Onboarding club federado</strong> (G3)</td>
+    <td>Buscador de club/equipos en creación de club, selección multi-equipo, volcado de plantillas con puntos, <code>fcp_team_links</code></td>
+    <td>2–3 días</td>
+  </tr>
+  <tr>
+    <td><strong>F2 · Puntos automáticos + claim</strong> (G2)</td>
+    <td>Job de propagación post-sync de rankings, flujo «¿eres tú?», re-sync de plantilla</td>
+    <td>2 días</td>
+  </tr>
+  <tr>
+    <td><strong>F3 · MI FEDERACIÓN</strong> (G4)</td>
+    <td>Pestaña con clasificación, calendario/horarios, resultados/actas, buscador global con evolución, normativa</td>
+    <td>3–4 días</td>
+  </tr>
+  <tr>
+    <td><strong>F4 · Extras</strong> (G6 + hardening)</td>
+    <td>Sync de torneos del circuito, alertas de parser roto, gráficas de evolución, contacto formal con la FCP</td>
+    <td>2 días + continuo</td>
+  </tr>
+</table>
+
+<p><strong>Total: ~1,5–2 semanas de trabajo efectivo</strong> (frente a las ~3 que costaría desde cero — el agente existente ahorra toda la capa de extracción y su afinado). Cada fase entrega valor usable por sí sola, y F0 te da certeza total en 48 h.</p>
+
+<!-- ============================================================ -->
+<h2 id="prompts">11 · 🤖 Prompts listos para Claude Code</h2>
+
+<p>Copia el prompt de la fase que toque y pégalo en Claude Code <strong>abriendo la carpeta indicada en cada uno</strong>. Van en orden: no lances una fase sin que la anterior esté verificada. Cada prompt incluye su propio criterio de "hecho".</p>
+
+<h3>Prompt F0 · Activar el puente de datos <span class="kv">(carpeta: <code>4PADEL CLAUDE</code>)</span></h3>
+<pre><code>Contexto: soy Javier, proyecto 4PADEL/TACTIUM. La F0 del plan de integración con la
+Federación Cántabra ya está preparada (29-jul-2026): existe la migración
+"4PADEL LAB PRUEBA/TACTIUM/supabase/migrations/20260729_fcp_federation_bridge.sql"
+y el agente "agente-federacion-cantabra.js" de la RAÍZ de este repo ya tiene el
+parche de doble destino (busca "DOBLE DESTINO (F0 TACTIUM)" en su cabecera:
+si TACTIUM_SUPABASE_URL y TACTIUM_SUPABASE_SERVICE_KEY existen en el entorno,
+replica cada upsert al Supabase de TACTIUM; los fallos en TACTIUM son solo
+warning y nunca rompen el sync de 4PADEL LIVE).
+
+Tu tarea, en este orden:
+1. Copia el agente parcheado de la raíz sobre SERVER4PADEL/agente-federacion-cantabra.js
+   (eran copias idénticas y deben seguir siéndolo; la de la raíz es la buena).
+   Verifica después con fc/diff que ambas copias son idénticas y pasa
+   "node --check" a las dos.
+2. Aplica la migración 20260729_fcp_federation_bridge.sql en el Supabase de
+   TACTIUM (no el de 4PADEL LIVE): si tengo supabase CLI vinculada al proyecto
+   TACTIUM usa "supabase db push" o psql; si no, dime que la pegue yo en el
+   SQL Editor del Dashboard y espera a que te confirme. Es idempotente.
+3. Variables en Railway (servicio SERVER4PADEL): si tengo railway CLI logueada,
+   añade TACTIUM_SUPABASE_URL y TACTIUM_SUPABASE_SERVICE_KEY (pídeme los valores,
+   NO los inventes ni los busques en archivos); si no hay CLI, dime exactamente
+   dónde añadirlas en el dashboard de Railway y espera mi confirmación.
+4. Commit + push de los cambios del agente (mensaje: "F0: doble destino
+   TACTIUM + snapshots de rankings") para que Railway redespliegue.
+5. Verificación end-to-end: ejecuta localmente
+   "node agente-federacion-cantabra.js --rankings" (con las env vars de TACTIUM
+   en un .env local temporal que NO se commitea) y comprueba en el Supabase de
+   TACTIUM: SELECT count(*) FROM fcp_rankings (esperado ~8.000-10.000),
+   SELECT snapshot_date, count(*) FROM fcp_ranking_snapshots GROUP BY 1
+   (debe existir la fecha de hoy). Después lanza un sync de liga:
+   "node agente-federacion-cantabra.js --liga=28074 --skip-rankings" y comprueba
+   fcp_clasificacion, fcp_partidos y fcp_jugadores con datos.
+
+Criterio de hecho: las 9 tablas fcp_* pobladas en TACTIUM, snapshots con fecha
+de hoy, Railway redesplegado con las 2 variables, y las dos copias del agente
+idénticas y committeadas. Ojo: la web de la FCP devuelve 503 a IPs de datacenter;
+los fetch se hacen desde mi máquina o desde Railway, no desde sandboxes cloud.</code></pre>
+
+<h3>Prompt F1 · Onboarding de club federado <span class="kv">(carpeta: <code>4PADEL LAB PRUEBA/TACTIUM</code>)</span></h3>
+<pre><code>Contexto: app TACTIUM (Expo/React Native + Supabase). En mi Supabase ya existen
+las tablas fcp_* pobladas por un agente externo con los datos reales de la
+Federación Cántabra de Pádel (FCantP): fcp_clasificacion (equipos con id_equipo
+y nombre por grupo), fcp_grupos (nombre tipo "1ª CATEGORIA MASCULINA - GRUPO A",
+genero M/F), fcp_jugadores (plantillas: id_jugador, nombre "APELLIDO1 APELLIDO2,
+Nombre", apellido1/apellido2/nombre_pila, categoria ABS/INF, puntos, id_equipo,
+nombre_equipo), y las tablas puente vacías fcp_team_links (fcp_id_equipo,
+team_id, club_id) y fcp_player_links (fcp_id_jugador, player_id, team_id,
+user_id, confidence 'auto'|'confirmed', linked_by). RLS: lectura authenticated.
+El selector de federación ya existe en el flujo de crear club/equipo y el motor
+de src/core/data/federations.ts ya aplica formato 5M/4F y orden de fuerza para
+FCantP — no lo toques.
+
+Implementa el onboarding de club federado:
+1. Al crear un club con federación = FCantP (código 'FCantP'), tras elegir
+   federación muestra un buscador typeahead "¿Cuál es tu club?" que consulta
+   los equipos reales: agrupa fcp_clasificacion.equipo por prefijo de club
+   (ej. "CENTRAL PADEL" agrupa "CENTRAL PADEL A/B/C"), mostrando cada equipo
+   con su grupo y género desde fcp_grupos.
+2. Selección multi-equipo con checkboxes (masculinos y femeninos). Cada equipo
+   marcado crea un team TACTIUM con league="Liga Cántabra de Pádel", el género
+   del grupo y el nombre del equipo, y registra el vínculo en fcp_team_links.
+3. Volcado de plantilla: para cada equipo creado, importa sus jugadores desde
+   fcp_jugadores (por id_equipo) como jugadores de la plantilla TACTIUM con su
+   nombre y puntos, creando fcp_player_links con confidence='auto'. Si el
+   volcado masivo choca con RLS, crea una RPC security definer
+   (import_fcp_roster) en una migración nueva.
+4. Fallback: botón "Mi club no aparece" → flujo manual actual sin cambios.
+   Añade también "Re-sincronizar plantilla" en la gestión del equipo (re-lee
+   fcp_jugadores y añade solo los que falten, sin duplicar ni borrar).
+5. tsc limpio y sin romper el flujo existente de creación de club/equipo.
+
+Criterio de hecho: puedo crear el club "CENTRAL PADEL" eligiendo 2 de sus
+equipos reales y ver sus plantillas completas con puntos dentro de TACTIUM,
+con fcp_team_links y fcp_player_links poblados.</code></pre>
+
+<h3>Prompt F2 · Puntos automáticos + claim de jugadores <span class="kv">(carpeta: <code>4PADEL LAB PRUEBA/TACTIUM</code>)</span></h3>
+<pre><code>Contexto: sigue de F1 (onboarding federado hecho). En mi Supabase, fcp_jugadores
+y fcp_rankings se refrescan solos (los martes) desde un agente externo;
+fcp_player_links vincula jugadores federativos con jugadores TACTIUM.
+fcp_ranking_snapshots guarda la historia diaria (id_jugador, puntos,
+posicion, snapshot_date).
+
+Implementa la actualización automática de puntos y el claim:
+1. Propagación: crea una migración con una función SQL
+   propagate_fcp_points() que copie fcp_jugadores.puntos → el campo de puntos
+   del jugador TACTIUM para cada fcp_player_link, y prográmala con pg_cron
+   (martes 16:00 Europe/Madrid, después de que el agente haya sincronizado
+   a las 10:00 y 15:00). Alternativa si pg_cron no está disponible en mi plan:
+   trigger AFTER UPDATE OF puntos ON fcp_jugadores.
+2. Claim: cuando un usuario se une a un equipo que tiene fcp_team_link,
+   muéstrale los jugadores de la plantilla federativa aún sin user_id con
+   "¿Eres MIGUEL ANGEL FERNANDEZ SOTA (7.449 pts)?" — al confirmar, marca el
+   fcp_player_link como confidence='confirmed' y user_id=auth.uid().
+3. En la ficha del jugador vinculado, muestra "Puntos FCP" con fecha de la
+   última actualización y una mini-gráfica de evolución desde
+   fcp_ranking_snapshots (si hay ≥2 snapshots).
+4. La validación de orden de fuerza de alineaciones (P1≥P2≥P3, ya existente)
+   debe usar estos puntos actualizados — verifica que ya lo hace y no dupliques
+   lógica.
+
+Criterio de hecho: cambio puntos a mano en fcp_jugadores, corre la propagación
+y el jugador TACTIUM vinculado los refleja; el flujo de claim funciona; tsc
+limpio.</code></pre>
+
+<h3>Prompt F3 · Pestaña MI FEDERACIÓN <span class="kv">(carpeta: <code>4PADEL LAB PRUEBA/TACTIUM</code>)</span></h3>
+<pre><code>Contexto: sigue de F1/F2. Tablas disponibles en mi Supabase (lectura
+authenticated): fcp_clasificacion (posicion, equipo, enf, puntos, pj, pg,
+sets_favor/contra por id_grupo), fcp_grupos (nombre, genero), fcp_partidos
+(equipo_local/visit, resultado, ganador, estado, jornada, fecha, hora, lugar,
+fecha_rango, y columnas de playoff: tipo, fase_nombre, ronda, cuadro),
+fcp_rankings (nombre, posicion, puntos, categoria, modalidad, id_fcp),
+fcp_ranking_snapshots (historia diaria), fcp_jugadores (plantillas),
+fcp_team_links (mi equipo ↔ equipo federativo).
+
+Implementa la sección "MI FEDERACIÓN", visible para todos los roles cuando el
+equipo tiene fcp_team_link:
+1. Clasificación: mi grupo destacado (vía fcp_team_links → id_equipo →
+   fcp_clasificacion), con navegación a cualquier grupo/fase, incluidos
+   playoffs (tipo='playoff': render de eliminatorias con ronda/cuadro).
+2. Calendario: próximos partidos de mi equipo (fecha, hora, lugar, rival) y
+   jornadas completas del grupo; los "programado" con hora/lugar destacados.
+3. Resultados: por jornada, con el detalle del enfrentamiento.
+4. Buscador de jugadores: busca en fcp_rankings por nombre (ilike), muestra
+   posición y puntos en todas sus categorías y la gráfica de evolución desde
+   fcp_ranking_snapshots.
+5. Info: enlaces a la normativa 2026 (PDF de padelfederacion.es/refs/docs) y
+   contacto de la FCP.
+Sigue el estilo visual y de navegación existente en la app (mira cómo están
+hechas las pestañas actuales, p. ej. Stats). tsc limpio.
+
+Criterio de hecho: desde un equipo vinculado veo clasificación real de mi
+grupo, mi próximo partido con hora y lugar, resultados de la última jornada,
+y encuentro a cualquier jugador de Cantabria con su evolución de puntos.</code></pre>
+
+<h3>Prompt F4 · Torneos + hardening <span class="kv">(carpeta: <code>4PADEL CLAUDE</code>)</span></h3>
+<pre><code>Contexto: agente agente-federacion-cantabra.js (raíz del repo) con doble
+destino LIVE+TACTIUM ya en producción en Railway; scheduler en
+SERVER4PADEL/syncScheduler.js. La web de la FCP lista torneos en
+GET /Torneos (selector de año) con detalle en GET /Torneo_previo?id=X.
+En el repo hay scrapers de torneos (agente-fip-rankings.js, scraper-*.js)
+que sirven de referencia de estilo.
+
+Implementa:
+1. Sync de torneos FCP: nueva tabla fcp_torneos (id_torneo PK, nombre,
+   fecha_inicio, fecha_fin, año, url, updated_at) en AMBOS Supabase
+   (migración para TACTIUM + SQL para LIVE), parser de /Torneos en el agente
+   (nuevo modo --torneos) respetando el patrón de doble destino y el delay
+   de 1200ms, y un cron diario a las 05:00 en syncScheduler.js.
+2. Alertas de parser roto: si un sync de rankings devuelve 0 filas en una
+   categoría que antes tenía datos, o un grupo pierde su clasificación,
+   loguea un error visible y (si hay webhook/env DISCORD_WEBHOOK_URL o
+   similar) envía aviso. No abortes el sync por ello.
+3. node --check y mantener las dos copias del agente (raíz y SERVER4PADEL/)
+   idénticas. Commit + push.
+
+Criterio de hecho: fcp_torneos poblada con los torneos 2026 en ambos Supabase,
+cron nuevo registrado, y una prueba simulada de "0 filas" genera la alerta.</code></pre>
+
+<div class="card blue">
+  <p><strong>Decisiones ya tomadas</strong> (no re-preguntar en las sesiones de Claude Code): SERVER4PADEL corre en Railway; 4PADEL LIVE y TACTIUM usan proyectos Supabase distintos; la estrategia es doble destino del agente (Opción A del §5); la copia canónica del agente es la de la <strong>raíz</strong> del repo 4PADEL CLAUDE.</p>
+</div>
+
+<footer>TACTIUM · Plan de integración FCP · 29-jul-2026 · endpoints verificados en vivo sobre federacioncantabradepadel.com · agente existente auditado en 4PADEL CLAUDE/SERVER4PADEL</footer>
+
+</div>
+</body>
+</html>
