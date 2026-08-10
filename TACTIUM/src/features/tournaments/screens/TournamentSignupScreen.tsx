@@ -221,6 +221,34 @@ export const TournamentSignupScreen = ({
     ? (parseInt(p1Lvl, 10) || 0) + (isPair ? parseInt(p2Lvl, 10) || 0 : 0)
     : null;
 
+  // ── Detección automática de categoría ────────────────────────────────
+  // Con los puntos/nivel de la pareja + las reglas del torneo, deducimos en
+  // qué categorías encajáis (el jugador no tiene que interpretar las normas).
+  const ptsEntered = !!p1Pts.trim() && (!isPair || !!p2Pts.trim());
+  const canDetectCat = useMemo(() => {
+    if (!rules) return false;
+    const needPts = rules.mode === 'points' || rules.mode === 'both';
+    const needNiv = rules.mode === 'nivel' || rules.mode === 'both';
+    return (!needPts || ptsEntered) && (!needNiv || nivelEntered);
+  }, [rules, ptsEntered, nivelEntered]);
+  const catElig = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const cat of found?.categories ?? [])
+      map[cat] =
+        checkCategoryEligibility(rules, cat, ptsEntered ? seedPoints : null, leagueSum) === null;
+    return map;
+  }, [found, rules, ptsEntered, seedPoints, leagueSum]);
+  const eligibleCats = useMemo(
+    () => (found?.categories ?? []).filter((cat) => catElig[cat]),
+    [found, catElig],
+  );
+  // Si con los datos solo encaja UNA categoría y no hay ninguna elegida, la
+  // seleccionamos sola (la app "te dice" tu categoría).
+  useEffect(() => {
+    if (canDetectCat && !category && eligibleCats.length === 1) setCategory(eligibleCats[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canDetectCat, eligibleCats, category]);
+
   // ── 2ª categoría (compañero B) ───────────────────────────────────────
   // Solo se ofrece si el torneo tiene ≥2 categorías, es por parejas y ya se
   // eligió la 1ª. El compañero puede ser distinto al de la 1ª categoría.
@@ -654,6 +682,9 @@ export const TournamentSignupScreen = ({
                 <View style={styles.catChips}>
                   {found.categories.map((cat) => {
                     const sel = category === cat;
+                    // Con datos suficientes, atenúa las categorías que no cumplís.
+                    const dim = canDetectCat && !catElig[cat] && !sel;
+                    const okMark = canDetectCat && catElig[cat] && !sel;
                     return (
                       <Pressable
                         key={cat}
@@ -664,15 +695,27 @@ export const TournamentSignupScreen = ({
                         style={[
                           styles.catChip,
                           sel && { backgroundColor: c.accent, borderColor: c.accent },
+                          okMark && { borderColor: c.accent40 },
+                          dim && { opacity: 0.4 },
                         ]}
                       >
                         <Text style={[styles.catChipText, { color: sel ? c.textInverse : c.text }]}>
                           {cat}
+                          {okMark ? ' ✓' : ''}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
+                {canDetectCat ? (
+                  <Text style={styles.detectHint}>
+                    {eligibleCats.length
+                      ? `Según vuestros ${
+                          rules?.mode === 'nivel' ? 'niveles' : rules?.mode === 'points' ? 'puntos' : 'puntos y niveles'
+                        }, podéis jugar: ${eligibleCats.join(' · ')}.`
+                      : 'Con esos datos no cumplís los requisitos de ninguna categoría.'}
+                  </Text>
+                ) : null}
               </>
             ) : null}
           </View>
@@ -1258,6 +1301,13 @@ const makeStyles = (c: Palette) =>
       marginBottom: 8,
     },
     catChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    detectHint: {
+      color: c.accent,
+      fontSize: 12.5,
+      fontWeight: '700',
+      lineHeight: 18,
+      marginTop: 10,
+    },
     secondCatBlock: {
       marginTop: 16,
       padding: 14,
