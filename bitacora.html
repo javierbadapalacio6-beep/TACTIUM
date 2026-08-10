@@ -248,6 +248,15 @@
 const LOG = [
   {
     date: "2026-08-10",
+    title: "📸 Las FOTOS del perfil llevan a su PARTIDO (amistoso y jornada) + primeros COMMITS a main para el build nuevo.",
+    changes: [
+      { type: "feat", text: "<strong>📸 Fotos del perfil → su partido</strong>. Las fotos de partidos del perfil público eran un <code>View</code> sin tap. Ahora: <strong>amistoso</strong> (<code>match_id</code>) abre <code>CasualMatchDetail</code>; <strong>jornada/liga</strong> (<code>matchday_id</code>) abre una <strong>nueva vista pública</strong> <code>LeagueMatchDetail</code> (solo lectura): portada + equipo vs rival + marcador + resultados por pista. Nuevo RPC <code>public_get_matchday(uuid)</code> (SECURITY DEFINER, lectura pública) con el resumen + los sets por pista. Ruta registrada en el <code>RootNavigator</code>." },
+
+      { type: "chore", text: "<strong>💾 Primeros commits a <code>main</code> para el BUILD NUEVO</strong>. <code>df4abd70</code> feat (toda la app: torneos + Federación club/capitán + capa jugador + logo FCP), <code>41a1ab66</code> docs (bitácora + plan FCP), <code>12b12b81</code> feat (fotos → partido). Se deja fuera el ruido local (<code>.expo/devices.json</code>, <code>.claude/settings.local.json</code>). El usuario seguirá comprobando cosas." },
+    ],
+  },
+  {
+    date: "2026-08-10",
     title: "🙋 TORNEOS · capa JUGADOR: fix del cuadro que no aparecía (no se auto-seleccionaba la división) + ficha de inscripción reorganizada. Para el build nuevo.",
     changes: [
       { type: "fix", text: "<strong>🎯 Vista del jugador: el CUADRO no aparecía nunca</strong>. En <code>TournamentFollowScreen</code> la división activa (género×categoría) arrancaba en <code>null</code> y —a diferencia de la vista del club— <strong>nunca se auto-seleccionaba la primera</strong>, así que <code>matchesCat</code> filtraba por null → vacío → «El cuadro aún no está publicado» aunque existiera. Añadido el efecto que auto-selecciona la <strong>primera división disponible</strong> al cargar. Afectaba a TODOS los torneos en la vista de jugador (incluso los de una sola categoría). Ahora el jugador ve directamente el cuadro/horario de la 1ª categoría y puede cambiar con los chips." },
