@@ -43,6 +43,7 @@ import {
   generateRoundRobin,
   generateGroups,
   generateKnockoutFromGroups,
+  generatePrincipalConsolationFromGroups,
   generateAmericano,
   generateMexicanoRound,
   computeStandings,
@@ -198,7 +199,8 @@ const MATCH_FORMAT_CUADROS: Record<string, { key: string; label: string }[]> = {
   ],
   groups_ko: [
     { key: 'groups', label: 'Fase de grupos' },
-    { key: 'main', label: 'Cuadros eliminatorios' },
+    { key: 'main', label: 'Cuadro principal' },
+    { key: 'consol', label: 'Cuadro de consolación' },
   ],
   round_robin: [{ key: 'groups', label: '' }],
 };
@@ -649,7 +651,7 @@ export const InfoView: React.FC<{
     t.format === 'ko_consolation'
       ? [['main', 'Principal'], ['consol', 'Consolación']]
       : t.format === 'groups_ko'
-        ? [['groups', 'Grupos'], ['main', 'Cuadros']]
+        ? [['groups', 'Grupos'], ['main', 'Principal'], ['consol', 'Consolación']]
         : [['main', '']];
   const fmtOfGroup = (k: string) => (t.phase_formats?.[k] ?? t.match_format) as string;
   const distinctFmts = new Set(matchFmtCuadros.map(([k]) => fmtOfGroup(k)));
@@ -2524,8 +2526,9 @@ export const TournamentDetailScreen = ({
         matchesCat.length > 0 && matchesCat.every((m) => m.status === 'finished');
       return allPlayed ? standings[0]?.regId ?? null : null;
     }
-    // KO (o cuadro ORO en grupos): ganador de la final del cuadro principal.
-    const mainBracket = isGroups ? 'gold' : 'main';
+    // KO: ganador de la final del cuadro principal. En grupos+KO el principal
+    // es 'main' (modelo principal+consolación) o 'gold' (modelo por posición).
+    const mainBracket = matchesCat.some((m) => m.bracket === 'main') ? 'main' : 'gold';
     const koMatches = matchesCat.filter((m) => m.bracket === mainBracket);
     const tr = koMatches.reduce((mx, x) => Math.max(mx, x.round), 0);
     const final = koMatches.find(
@@ -2617,11 +2620,18 @@ export const TournamentDetailScreen = ({
     if (!t) return;
     Alert.alert(
       'Generar eliminatorias',
-      'Se crearán los cuadros (oro, plata, bronce…) con los clasificados de cada grupo por su posición.',
+      '¿Cómo reparto a los clasificados de los grupos?\n\n· Principal + consolación: los 2 primeros de cada grupo (+ los mejores 3os para llenar el cuadro) al cuadro principal; el resto a consolación.\n\n· Por posición: un cuadro por posición (Oro=1os, Plata=2os, Bronce=3os…).',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Generar',
+          text: 'Principal + consolación',
+          onPress: () =>
+            runGenerate(() =>
+              generatePrincipalConsolationFromGroups(t, regsCat, matchesCat, dg, dc),
+            ),
+        },
+        {
+          text: 'Por posición (oro/plata…)',
           onPress: () =>
             runGenerate(() =>
               generateKnockoutFromGroups(t, regsCat, matchesCat, dg, dc),

@@ -96,7 +96,8 @@ const MATCH_FORMAT_CUADROS: Record<string, { key: string; label: string }[]> = {
   ],
   groups_ko: [
     { key: 'groups', label: 'Fase de grupos' },
-    { key: 'main', label: 'Cuadros eliminatorios' },
+    { key: 'main', label: 'Cuadro principal' },
+    { key: 'consol', label: 'Cuadro de consolación' },
   ],
   round_robin: [{ key: 'groups', label: '' }],
 };

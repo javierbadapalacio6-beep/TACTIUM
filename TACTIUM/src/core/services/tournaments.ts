@@ -1029,6 +1029,84 @@ export async function generateKnockoutFromGroups(
 }
 
 /**
+ * Con los grupos terminados (modelo Smash: PRINCIPAL + CONSOLACIÓN): los
+ * `qualifiersPerGroup` primeros de cada grupo (por defecto 2) pasan al cuadro
+ * PRINCIPAL; se añaden AUTOMÁTICAMENTE los MEJORES TERCEROS necesarios para
+ * llenar el cuadro hasta la siguiente potencia de 2 (sin byes cuando alcanza),
+ * y el RESTO de eliminados va al cuadro de CONSOLACIÓN (KO independiente ya
+ * sembrado, no se nutre de los perdedores del principal).
+ */
+export async function generatePrincipalConsolationFromGroups(
+  tournament: Tournament,
+  regs: TournamentRegistration[],
+  matches: TournamentMatch[],
+  gender: string | null,
+  category: string | null,
+  qualifiersPerGroup = 2,
+): Promise<void> {
+  if (await hasDivisionMatches(tournament.id, gender, category, true))
+    throw new Error('Las eliminatorias ya están generadas.');
+  const groupNos = Array.from(
+    new Set(regs.filter((r) => r.group_no != null).map((r) => r.group_no as number)),
+  ).sort((a, b) => a - b);
+  if (groupNos.length === 0) throw new Error('No hay grupos.');
+
+  const regById = new Map(regs.map((r) => [r.id, r]));
+  const standingsByGroup = new Map<number, StandingRow[]>();
+  let maxPos = 0;
+  for (const gn of groupNos) {
+    const gRegs = regs.filter((r) => r.group_no === gn);
+    const gMatches = matches.filter((m) => m.bracket === 'grp' && m.group_no === gn);
+    const st = computeStandings(gRegs, gMatches);
+    standingsByGroup.set(gn, st);
+    maxPos = Math.max(maxPos, st.length);
+  }
+  const rowToReg = (s: StandingRow | undefined) => (s ? regById.get(s.regId) ?? null : null);
+  const cmpRows = (a: StandingRow, b: StandingRow) =>
+    b.points - a.points ||
+    b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
+    b.gamesFor - b.gamesAgainst - (a.gamesFor - a.gamesAgainst);
+  // Todos los clasificados de la posición `p` de cada grupo, mejor primero.
+  const tierAt = (p: number): TournamentRegistration[] =>
+    groupNos
+      .map((gn) => standingsByGroup.get(gn)![p - 1])
+      .filter((s): s is StandingRow => !!s)
+      .sort(cmpRows)
+      .map(rowToReg)
+      .filter((r): r is TournamentRegistration => !!r);
+
+  // Directos: posiciones 1..q (todos los 1os, luego los 2os…).
+  const direct: TournamentRegistration[] = [];
+  for (let p = 1; p <= qualifiersPerGroup; p++) direct.push(...tierAt(p));
+  if (direct.length < 2) throw new Error('No hay suficientes clasificados.');
+
+  // Mejores (q+1)os para rellenar el principal hasta potencia de 2 (automático).
+  const nextTier = tierAt(qualifiersPerGroup + 1);
+  const target = nextPow2(direct.length);
+  const need = Math.max(0, target - direct.length);
+  const extraToMain = nextTier.slice(0, need);
+  const mainSeeded = [...direct, ...extraToMain];
+
+  // Consolación = el resto de eliminados (los (q+1)os que no subieron, luego
+  // los (q+2)os…), sembrados por posición y rendimiento.
+  const inMain = new Set(mainSeeded.map((r) => r.id));
+  const consolSeeded: TournamentRegistration[] = [];
+  for (let p = qualifiersPerGroup + 1; p <= maxPos; p++)
+    consolSeeded.push(...tierAt(p).filter((r) => !inMain.has(r.id)));
+
+  await Promise.all(
+    mainSeeded.map((r, i) =>
+      from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
+    ),
+  );
+  const rows = koMatchRows(tournament.id, mainSeeded, 'main', gender, category);
+  if (consolSeeded.length >= 2)
+    rows.push(...koMatchRows(tournament.id, consolSeeded, 'consol', gender, category));
+  const { error } = await from()('tournament_matches').insert(rows);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Genera una LIGA (todos contra todos) para una división: crea C(N,2) partidos.
  * No hay cuadro; la clasificación sale de los resultados (computeStandings).
  */
@@ -1511,12 +1589,15 @@ export async function setMatchResult(
   }
 
   // CONSOLACIÓN: el perdedor de la 1ª ronda del cuadro principal pasa al cuadro
-  // de consolación, si el torneo lo tiene.
+  // de consolación, SOLO si ese hueco está vacío. En `ko_consolation` la
+  // consolación arranca vacía y se nutre así; en grupos+KO (principal+consol)
+  // la consolación ya viene SEMBRADA con los eliminados de los grupos, así que
+  // el hueco estará ocupado y este feed se salta (no la pisa).
   if (match.bracket === 'main' && match.round === 1 && loser) {
     const cs = Math.floor(match.slot / 2);
     const side = match.slot % 2; // 0 = home, 1 = away
     let cq = from()('tournament_matches')
-      .select('id')
+      .select('id, home_reg, away_reg')
       .eq('tournament_id', match.tournament_id)
       .eq('bracket', 'consol')
       .eq('round', 1)
@@ -1524,13 +1605,15 @@ export async function setMatchResult(
     cq = match.category == null ? cq.is('category', null) : cq.eq('category', match.category);
     cq = match.gender == null ? cq.is('gender', null) : cq.eq('gender', match.gender);
     const { data: cmatch } = await cq.maybeSingle();
-    if (cmatch?.id) {
+    const cm = cmatch as { id: string; home_reg: string | null; away_reg: string | null } | null;
+    const slotTaken = cm ? (side === 0 ? cm.home_reg != null : cm.away_reg != null) : true;
+    if (cm?.id && !slotTaken) {
       await from()('tournament_matches')
         .update(side === 0 ? { home_reg: loser } : { away_reg: loser })
-        .eq('id', cmatch.id);
+        .eq('id', cm.id);
       // El hueco de consolación se reservó sin saber quién bajaría: si a este
       // perdedor no le vale por disponibilidad, se saca a "sin hora".
-      await clearSlotIfUnavailable(cmatch.id);
+      await clearSlotIfUnavailable(cm.id);
       // Si el rival en consolación sale de un BYE del principal (nunca habrá
       // perdedor), este pasa directo a la siguiente ronda de consolación.
       const siblingSlot = 2 * cs + (1 - side);
@@ -1540,7 +1623,7 @@ export async function setMatchResult(
       if (sibStatus === null || sibStatus === 'bye') {
         await from()('tournament_matches')
           .update({ status: 'bye', winner_reg: loser })
-          .eq('id', cmatch.id);
+          .eq('id', cm.id);
         await advanceInBracket(
           {
             tournament_id: match.tournament_id,
