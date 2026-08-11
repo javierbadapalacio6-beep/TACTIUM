@@ -268,7 +268,7 @@ export const PublicHomeScreen = ({
           {FEDERATIONS.length > FED_PREVIEW && (
             <Pressable onPress={() => setAllFeds(!allFeds)} hitSlop={8}>
               <Text style={styles.secMore}>
-                {allFeds ? 'Ver menos' : `Ver las ${FEDERATIONS.length}`}
+                {allFeds ? 'Ver menos' : 'Ver todas'}
               </Text>
             </Pressable>
           )}
