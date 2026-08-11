@@ -141,7 +141,21 @@ export interface CategoryThreshold {
 }
 export interface CategoryRules {
   mode: CategoryRuleMode;
+  // Clave: `${categoría}` (todos los géneros) o `${género}|${categoría}` cuando
+  // el club fija umbrales distintos por género. Se resuelve con fallback.
   byCategory: Record<string, CategoryThreshold | null>;
+}
+
+/** Umbral de una categoría según el género (fallback: género|cat → cat). */
+export function resolveCategoryThreshold(
+  rules: CategoryRules | null | undefined,
+  category: string | null,
+  gender: string | null,
+): CategoryThreshold | null {
+  if (!rules || !category) return null;
+  const bc = rules.byCategory ?? {};
+  const byGender = gender ? bc[`${gender}|${category}`] : undefined;
+  return (byGender !== undefined ? byGender : bc[category]) ?? null;
 }
 
 /**
@@ -152,11 +166,12 @@ export interface CategoryRules {
 export function checkCategoryEligibility(
   rules: CategoryRules | null | undefined,
   category: string | null,
+  gender: string | null,
   pairPoints: number | null,
   pairNivel: number | null,
 ): string | null {
   if (!rules || !category) return null;
-  const t = rules.byCategory?.[category];
+  const t = resolveCategoryThreshold(rules, category, gender);
   if (!t) return null; // LIBRE / sin regla
   const checkPts = rules.mode === 'points' || rules.mode === 'both';
   const checkNiv = rules.mode === 'nivel' || rules.mode === 'both';

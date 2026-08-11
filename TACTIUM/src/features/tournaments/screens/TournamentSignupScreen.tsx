@@ -26,6 +26,7 @@ import {
   getRegistrationPartnerCode,
   sendPartnerInviteEmail,
   checkCategoryEligibility,
+  resolveCategoryThreshold,
   hourlyFranjas,
   type TournamentLookup,
 } from '@core/services/tournaments';
@@ -244,9 +245,10 @@ export const TournamentSignupScreen = ({
     const map: Record<string, boolean> = {};
     for (const cat of found?.categories ?? [])
       map[cat] =
-        checkCategoryEligibility(rules, cat, ptsEntered ? seedPoints : null, leagueSum) === null;
+        checkCategoryEligibility(rules, cat, gender, ptsEntered ? seedPoints : null, leagueSum) ===
+        null;
     return map;
-  }, [found, rules, ptsEntered, seedPoints, leagueSum]);
+  }, [found, rules, gender, ptsEntered, seedPoints, leagueSum]);
   const eligibleCats = useMemo(
     () => (found?.categories ?? []).filter((cat) => catElig[cat]),
     [found, catElig],
@@ -270,13 +272,13 @@ export const TournamentSignupScreen = ({
   const leagueSumB = nivelEnteredB
     ? p1Niv + (p2bNoFed ? 0 : parseInt(p2bLvl, 10) || 0)
     : null;
-  const catThresholdB =
-    rules && category2 ? rules.byCategory?.[category2] ?? null : null;
+  const catThresholdB = resolveCategoryThreshold(rules, category2, gender);
   const eligibilityErrorB = category2
     ? checkCategoryEligibility(
         rules,
         category2,
-        p1Pts.trim() && p2bPts.trim() ? seedPointsB : null,
+        gender,
+        (p1NoFed || p1Pts.trim()) && (p2bNoFed || p2bPts.trim()) ? seedPointsB : null,
         leagueSumB,
       )
     : null;
@@ -392,11 +394,12 @@ export const TournamentSignupScreen = ({
       setP2Matches([]);
     }
   };
-  const catThreshold = rules && category ? rules.byCategory?.[category] ?? null : null;
+  const catThreshold = resolveCategoryThreshold(rules, category, gender);
   const eligibilityError = checkCategoryEligibility(
     rules,
     category,
-    p1Pts.trim() ? seedPoints : null,
+    gender,
+    (p1NoFed || p1Pts.trim()) ? seedPoints : null,
     leagueSum,
   );
   const valid =

@@ -302,6 +302,8 @@ const CreateTournamentSheet: React.FC<{
   const [catThresh, setCatThresh] = useState<
     Record<string, { nivel: string; puntos: string }>
   >({});
+  // Género que se está editando en los límites (solo relevante si hay >1 género).
+  const [ruleGender, setRuleGender] = useState<TournamentGender>('masculino');
   // Tope de franjas de 1h que un jugador puede quitar en la inscripción.
   const [maxRemovable, setMaxRemovable] = useState('');
   const [startsOn, setStartsOn] = useState<Date | null>(null);
@@ -414,6 +416,14 @@ const CreateTournamentSheet: React.FC<{
         (a, b) => GENDER_ORDER.indexOf(a) - GENDER_ORDER.indexOf(b),
       ),
     );
+  // Clave de límite: con varios géneros cada categoría puede tener nivel/puntos
+  // distintos por género → "género|categoría"; con un solo género basta la
+  // categoría (retrocompatible con torneos antiguos).
+  const multiGender = genders.length > 1;
+  const catKey = (g: TournamentGender, cat: string) =>
+    multiGender ? `${g}|${cat}` : cat;
+  // El género que se edita debe estar entre los seleccionados.
+  const activeRuleGender = genders.includes(ruleGender) ? ruleGender : genders[0];
 
   const save = async () => {
     if (!clubId || !name.trim()) {
@@ -435,11 +445,17 @@ const CreateTournamentSheet: React.FC<{
         string,
         { puntos: number | null; nivel: number | null } | null
       > = {};
-      for (const cat of cats) {
-        const th = catThresh[cat];
+      const buildThresh = (key: string) => {
+        const th = catThresh[key];
         const puntos = th?.puntos ? parseInt(th.puntos, 10) : null;
         const nivel = th?.nivel ? parseInt(th.nivel, 10) : null;
-        byCategory[cat] = puntos || nivel ? { puntos: puntos || null, nivel: nivel || null } : null;
+        return puntos || nivel ? { puntos: puntos || null, nivel: nivel || null } : null;
+      };
+      if (multiGender) {
+        for (const g of genders)
+          for (const cat of cats) byCategory[`${g}|${cat}`] = buildThresh(`${g}|${cat}`);
+      } else {
+        for (const cat of cats) byCategory[cat] = buildThresh(cat);
       }
       // Formato por cuadro según el tipo de torneo; el default del torneo
       // (match_format) es el del cuadro principal (o el primero si no hay 'main').
@@ -811,13 +827,43 @@ const CreateTournamentSheet: React.FC<{
                   );
                 })}
               </View>
+              {multiGender ? (
+                <>
+                  <Text style={[styles.catHint, { marginTop: 10, marginBottom: 0 }]}>
+                    Los límites pueden variar por género. Elige el género y ajusta sus
+                    categorías.
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                    {genders.map((g) => {
+                      const sel = activeRuleGender === g;
+                      return (
+                        <Pressable
+                          key={g}
+                          onPress={() => setRuleGender(g)}
+                          style={[
+                            styles.ruleModeChip,
+                            sel && { backgroundColor: c.accent, borderColor: c.accent },
+                          ]}
+                        >
+                          <Text
+                            style={[styles.ruleModeText, { color: sel ? c.textInverse : c.text }]}
+                          >
+                            {GENDER_LABEL[g] ?? g}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
               <View style={{ gap: 8, marginTop: 10 }}>
                 {cats.map((cat) => {
-                  const th = catThresh[cat] ?? { nivel: '', puntos: '' };
+                  const key = catKey(activeRuleGender, cat);
+                  const th = catThresh[key] ?? { nivel: '', puntos: '' };
                   const setT = (patch: Partial<{ nivel: string; puntos: string }>) =>
                     setCatThresh((prev) => ({
                       ...prev,
-                      [cat]: { ...(prev[cat] ?? { nivel: '', puntos: '' }), ...patch },
+                      [key]: { ...(prev[key] ?? { nivel: '', puntos: '' }), ...patch },
                     }));
                   return (
                     <View key={cat} style={styles.ruleRow}>
