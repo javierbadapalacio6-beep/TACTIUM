@@ -79,6 +79,7 @@ import {
   type StandingRow,
   type PlayerStanding,
   type SeedingMode,
+  type MatchFormat,
 } from '@core/services/tournaments';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
 
@@ -181,6 +182,27 @@ export const FORMAT_LABEL: Record<string, string> = {
   americano: 'Americano',
   mexicano: 'Mexicano',
 };
+
+// Formatos de partido y cuadros con formato propio (espejo del asistente de
+// crear en ClubTournamentsScreen; las claves casan con `phaseFormatGroup`).
+const MATCH_FORMATS: { id: MatchFormat; label: string; sub: string }[] = [
+  { id: 'bo3_stb', label: 'Mejor de 3 · super tie-break', sub: '2 sets; si 1-1, super TB a 11 (dif. 2)' },
+  { id: 'bo3_full', label: 'Mejor de 3 sets', sub: '2 sets; 3º set completo si 1-1' },
+  { id: 'bo1', label: '1 set', sub: 'Un solo set decide' },
+];
+const MATCH_FORMAT_CUADROS: Record<string, { key: string; label: string }[]> = {
+  ko: [{ key: 'main', label: '' }],
+  ko_consolation: [
+    { key: 'main', label: 'Cuadro principal' },
+    { key: 'consol', label: 'Cuadro de consolación' },
+  ],
+  groups_ko: [
+    { key: 'groups', label: 'Fase de grupos' },
+    { key: 'main', label: 'Cuadros eliminatorios' },
+  ],
+  round_robin: [{ key: 'groups', label: '' }],
+};
+const cuadrosForFormat = (f: string) => MATCH_FORMAT_CUADROS[f] ?? [{ key: 'main', label: '' }];
 
 export const formatStartsOn = (iso: string | null): string | null => {
   if (!iso) return null;
@@ -2025,6 +2047,9 @@ const EditTournamentSheet: React.FC<{
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [seedingMode, setSeedingMode] = useState<SeedingMode>('points');
+  // Formato de partido por cuadro (editable con el torneo ya empezado; solo
+  // afecta a los partidos aún sin resultado, se lee en vivo al puntuar).
+  const [phaseFmt, setPhaseFmt] = useState<Record<string, MatchFormat>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -2049,6 +2074,12 @@ const EditTournamentSheet: React.FC<{
       setObservations(tournament.observations ?? '');
       setCoverUrl(tournament.cover_url ?? null);
       setCoverUri(null);
+      const base = (tournament.match_format ?? 'bo3_stb') as MatchFormat;
+      const fmt: Record<string, MatchFormat> = {};
+      cuadrosForFormat(tournament.format).forEach((cu) => {
+        fmt[cu.key] = (tournament.phase_formats?.[cu.key] ?? base) as MatchFormat;
+      });
+      setPhaseFmt(fmt);
     }
   }, [open, tournament]);
 
@@ -2077,8 +2108,21 @@ const EditTournamentSheet: React.FC<{
     try {
       let cover = coverUrl;
       if (coverUri) cover = await uploadTournamentCover(tournament.club_id, coverUri);
+      // Formato por cuadro (solo para torneos no sociales). El match_format
+      // global se mantiene alineado al del cuadro principal.
+      const cuadros = cuadrosForFormat(tournament.format);
+      const fmtOf = (k: string): MatchFormat => phaseFmt[k] ?? 'bo3_stb';
+      const phaseFormats: Record<string, MatchFormat> = {};
+      cuadros.forEach((cu) => {
+        phaseFormats[cu.key] = fmtOf(cu.key);
+      });
+      const defaultFmt = fmtOf(phaseFormats.main ? 'main' : cuadros[0]?.key ?? 'main');
+      const fmtFields = isSocialFormat(tournament.format)
+        ? {}
+        : { matchFormat: defaultFmt, phaseFormats };
       await updateTournament(tournament.id, {
         name,
+        ...fmtFields,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
         seedingMode,
@@ -2217,6 +2261,45 @@ const EditTournamentSheet: React.FC<{
               );
             })}
           </View>
+        </>
+      ) : null}
+
+      {tournament && !isSocialFormat(tournament.format) ? (
+        <>
+          {cuadrosForFormat(tournament.format).map((cuadro) => {
+            const cur = phaseFmt[cuadro.key] ?? 'bo3_stb';
+            return (
+              <View key={cuadro.key}>
+                <Text style={styles.label}>
+                  {cuadro.label ? `FORMATO · ${cuadro.label.toUpperCase()}` : 'FORMATO DE PARTIDO'}
+                </Text>
+                <View style={{ gap: 8 }}>
+                  {MATCH_FORMATS.map((f) => {
+                    const sel = cur === f.id;
+                    return (
+                      <Pressable
+                        key={f.id}
+                        onPress={() => setPhaseFmt((prev) => ({ ...prev, [cuadro.key]: f.id }))}
+                        style={[styles.fmtRow, sel && { borderColor: c.accent, backgroundColor: c.accent10 }]}
+                      >
+                        <View style={[styles.radio, sel && { borderColor: c.accent }]}>
+                          {sel ? <View style={styles.radioDot} /> : null}
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.fmtLabel}>{f.label}</Text>
+                          <Text style={styles.fmtSub}>{f.sub}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
+          <Text style={[styles.genHint, { textAlign: 'left', marginTop: 6 }]}>
+            Cambiar el formato solo afecta a los partidos aún sin resultado; los ya
+            puntuados se quedan como están.
+          </Text>
         </>
       ) : null}
 
@@ -4285,6 +4368,29 @@ export const makeStyles = (c: Palette) =>
     },
     generateLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
     genHint: { color: c.textFaint, fontSize: 12, textAlign: 'center', marginTop: 8 },
+    // Formato de partido por cuadro (hoja de editar)
+    fmtRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    radio: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.accent },
+    fmtLabel: { color: c.text, fontSize: 14, fontWeight: '600' },
+    fmtSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
     // Bracket
     bracket: { paddingHorizontal: 22, paddingTop: 12, gap: 14 },
     roundCol: { width: 190 },

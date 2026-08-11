@@ -453,10 +453,14 @@ export async function updateTournament(
     coverUrl?: string | null;
     seedingMode?: SeedingMode;
     entryFee?: number | null;
+    matchFormat?: MatchFormat;
+    phaseFormats?: Record<string, MatchFormat> | null;
   },
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
   if (fields.name !== undefined) payload.name = fields.name.trim();
+  if (fields.matchFormat !== undefined) payload.match_format = fields.matchFormat;
+  if (fields.phaseFormats !== undefined) payload.phase_formats = fields.phaseFormats ?? {};
   if (fields.startsOn !== undefined) payload.starts_on = fields.startsOn;
   if (fields.endsOn !== undefined) payload.ends_on = fields.endsOn;
   if (fields.seedingMode !== undefined) payload.seeding_mode = fields.seedingMode;
