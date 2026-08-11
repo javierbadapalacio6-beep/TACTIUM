@@ -44,6 +44,9 @@ export {
   IconTicket,
   IconGift,
   IconTrophy,
+  IconLogIn,
+  IconSun,
+  IconMoon,
   IconLink,
   IconBell,
 } from './Icon';

@@ -553,3 +553,53 @@ export const IconFile = make(18, ({ color, strokeWidth }) => (
     />
   </>
 ));
+
+/** Entrar — el clásico: flecha que entra por la puerta. */
+export const IconLogIn = make(20, ({ color, strokeWidth }) => (
+  <>
+    <Path
+      d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M10 16l4-4-4-4"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M14 12H4"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+    />
+  </>
+));
+
+/** Sol — tema claro. */
+export const IconSun = make(20, ({ color, strokeWidth }) => (
+  <>
+    <Circle cx="12" cy="12" r="4.2" stroke={color} strokeWidth={strokeWidth} />
+    <Path
+      d="M12 2.6v2M12 19.4v2M5.1 5.1l1.4 1.4M17.5 17.5l1.4 1.4M2.6 12h2M19.4 12h2M5.1 18.9l1.4-1.4M17.5 6.5l1.4-1.4"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+    />
+  </>
+));
+
+/** Luna — tema oscuro. */
+export const IconMoon = make(20, ({ color, strokeWidth }) => (
+  <Path
+    d="M20 13.4A8.2 8.2 0 1 1 10.6 4a6.6 6.6 0 0 0 9.4 9.4z"
+    stroke={color}
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  />
+));
