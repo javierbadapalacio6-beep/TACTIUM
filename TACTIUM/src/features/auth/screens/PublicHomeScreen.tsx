@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  Image,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,8 +24,10 @@ import {
   IconChevron,
 } from '@components/ui';
 import { FEDERATIONS } from '@core/data/federations';
+import { federationLogo } from '@core/data/federationLogos';
 import {
   exploreTournaments,
+  formatFee,
   type ExploreTournament,
 } from '@core/services/tournaments';
 import { useThemeStore } from '@store/themeStore';
@@ -47,8 +50,21 @@ import type { AuthStackScreenProps } from '@navigation/types';
  * registro para funciones que no lo necesitan.)
  */
 
-/** La única federación con datos scrapeados hoy. El resto van atenuadas. */
-const ACTIVE_FED = 'FCantP';
+/**
+ * Federaciones con datos scrapeados. El resto se enseñan atenuadas y con
+ * «Próximamente». Al añadir una nueva, basta con meter su código aquí.
+ */
+const ACTIVE_FEDS = new Set(['FCantP']);
+
+/**
+ * Primero las que tienen datos y luego el resto, cada grupo en su orden
+ * alfabético. Sin esto, la única que hoy funciona salía sexta y la lista
+ * abría con cinco «Próximamente» seguidos, que es la peor primera impresión
+ * posible. `sort` es estable, así que el alfabético de origen se conserva.
+ */
+const ORDERED_FEDS = [...FEDERATIONS].sort(
+  (a, b) => Number(ACTIVE_FEDS.has(b.code)) - Number(ACTIVE_FEDS.has(a.code)),
+);
 
 /** Cuántas federaciones se listan antes de "ver todas". */
 const FED_PREVIEW = 6;
@@ -107,7 +123,7 @@ export const PublicHomeScreen = ({
     navigation.getParent()?.navigate('TournamentFollow', { tournamentId: id });
 
   const [allFeds, setAllFeds] = useState(false);
-  const feds = allFeds ? FEDERATIONS : FEDERATIONS.slice(0, FED_PREVIEW);
+  const feds = allFeds ? ORDERED_FEDS : ORDERED_FEDS.slice(0, FED_PREVIEW);
   const searching = term.length > 0;
 
   return (
@@ -213,6 +229,7 @@ export const PublicHomeScreen = ({
                 onPress={() => openTournament(t.id)}
                 style={({ pressed }) => [styles.tCard, pressed && { opacity: 0.85 }]}
               >
+                <View style={styles.chipRow}>
                 <View
                   style={[
                     styles.chip,
@@ -243,6 +260,16 @@ export const PublicHomeScreen = ({
                   </Text>
                 </View>
 
+                {/* La cuota es de lo primero que se pregunta el jugador. */}
+                {t.entry_fee ? (
+                  <View style={[styles.chip, { borderColor: c.hairStrong }]}>
+                    <Text style={[styles.chipText, { color: c.textMuted }]}>
+                      {formatFee(t.entry_fee, t.fee_currency)}
+                    </Text>
+                  </View>
+                ) : null}
+                </View>
+
                 <Text style={styles.tName} numberOfLines={2}>
                   {t.name}
                 </Text>
@@ -265,7 +292,7 @@ export const PublicHomeScreen = ({
         {/* ── Federaciones ─────────────────────────────────────────── */}
         <View style={styles.secHead}>
           <Text style={styles.secLabel}>FEDERACIONES</Text>
-          {FEDERATIONS.length > FED_PREVIEW && (
+          {ORDERED_FEDS.length > FED_PREVIEW && (
             <Pressable onPress={() => setAllFeds(!allFeds)} hitSlop={8}>
               <Text style={styles.secMore}>
                 {allFeds ? 'Ver menos' : 'Ver todas'}
@@ -275,7 +302,8 @@ export const PublicHomeScreen = ({
         </View>
 
         {feds.map((f) => {
-          const active = f.code === ACTIVE_FED;
+          const active = ACTIVE_FEDS.has(f.code);
+          const logo = federationLogo(f.code);
           return (
             <Pressable
               key={f.code}
@@ -287,14 +315,19 @@ export const PublicHomeScreen = ({
                 pressed && active && { opacity: 0.85 },
               ]}
             >
-              <View style={[styles.fedBadge, !active && styles.fedBadgeSoon]}>
-                <Text
-                  style={[styles.fedBadgeText, !active && { color: c.textFaint }]}
-                  numberOfLines={1}
-                >
-                  {f.shortName.slice(0, 5)}
-                </Text>
-              </View>
+              {/* Escudo real si lo tenemos; si no, las siglas. */}
+              {logo ? (
+                <Image source={logo} style={styles.fedLogo} resizeMode="contain" />
+              ) : (
+                <View style={[styles.fedBadge, !active && styles.fedBadgeSoon]}>
+                  <Text
+                    style={[styles.fedBadgeText, !active && { color: c.textFaint }]}
+                    numberOfLines={1}
+                  >
+                    {f.shortName.slice(0, 5)}
+                  </Text>
+                </View>
+              )}
 
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.fedName} numberOfLines={1}>
@@ -416,6 +449,7 @@ const makeStyles = (c: Palette) =>
       borderWidth: 1,
       borderColor: c.hair,
     },
+    chipRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
     chip: {
       alignSelf: 'flex-start',
       paddingHorizontal: 8,
@@ -478,6 +512,7 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     fedBadgeSoon: { backgroundColor: c.bgCard2 },
+    fedLogo: { width: 32, height: 32, borderRadius: 10 },
     fedBadgeText: {
       color: c.accent,
       fontFamily: Fonts.mono,

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Image,
   Share,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -275,9 +276,29 @@ export const TournamentFollowScreen = ({
             </View>
           ) : t.status === 'open' ? (
             <Pressable
-              onPress={() =>
-                navigation.navigate('TournamentSignup', { code: t.signup_code ?? undefined })
-              }
+              onPress={() => {
+                // Apuntarse es una acción con identidad detrás: hay que saber
+                // QUIÉN se inscribe. Sin sesión, el botón se ve y se pulsa —
+                // esconderlo dejaría la ficha sin decir que el torneo admite
+                // inscripciones — pero lleva a la entrada en vez de fallar.
+                if (!uid) {
+                  Alert.alert(
+                    'Inicia sesión para apuntarte',
+                    'Para inscribirte en un torneo necesitas una cuenta de jugador. Mirar el cuadro no requiere cuenta.',
+                    [
+                      { text: 'Ahora no', style: 'cancel' },
+                      {
+                        text: 'Iniciar sesión',
+                        onPress: () => navigation.getParent()?.navigate('AuthFlow'),
+                      },
+                    ],
+                  );
+                  return;
+                }
+                navigation.navigate('TournamentSignup', {
+                  code: t.signup_code ?? undefined,
+                });
+              }}
               style={({ pressed }) => [styles.generateBtn, { marginHorizontal: 22, marginTop: 12 }, pressed && { opacity: 0.9 }]}
             >
               <Text style={styles.generateLabel}>Apuntarme a este torneo</Text>
