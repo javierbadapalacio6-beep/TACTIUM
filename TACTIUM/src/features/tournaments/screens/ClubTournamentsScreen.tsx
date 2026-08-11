@@ -46,7 +46,7 @@ import {
   computeTournamentBilling,
   clubTournamentCap,
 } from '@core/entitlements/tournamentBilling';
-import { startTournamentCheckout } from '@core/services/tournamentCheckout';
+import { requestTournamentPayment } from '@core/services/tournamentCheckout';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -514,13 +514,16 @@ const CreateTournamentSheet: React.FC<{
         observations,
         coverUrl,
       });
-      // El torneo ya existe pero está retenido: se abre el checkout de Stripe.
-      // Al confirmar el webhook pasa a 'open' y aparece la inscripción.
+      // El torneo ya existe pero está retenido. El enlace de pago se envía por
+      // correo (la app no puede enlazar a un pago que no sea IAP; ver
+      // tournamentCheckout.ts). Al confirmar el webhook pasa a 'open'.
       if (needsPayment) {
-        await startTournamentCheckout(created.id);
+        const r = await requestTournamentPayment(created.id).catch(() => null);
         toast.info(
           'Torneo pendiente de pago',
-          'Se publicará en cuanto se confirme el pago.',
+          r?.emailed
+            ? `Te hemos enviado el enlace de pago a ${r.to}. Se publicará en cuanto se confirme.`
+            : 'Te enviaremos el enlace de pago por correo. Se publicará en cuanto se confirme.',
         );
         reset();
         onCreated();

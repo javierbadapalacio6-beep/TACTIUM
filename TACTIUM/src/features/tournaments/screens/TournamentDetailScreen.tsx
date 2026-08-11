@@ -82,7 +82,7 @@ import {
   type SeedingMode,
   type MatchFormat,
 } from '@core/services/tournaments';
-import { startTournamentCheckout } from '@core/services/tournamentCheckout';
+import { requestTournamentPayment } from '@core/services/tournamentCheckout';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -2441,21 +2441,30 @@ export const TournamentDetailScreen = ({
     }, [load]),
   );
 
-  // Torneo retenido por el cobro: reabre el checkout. El servidor decide — si
-  // ya estuviera cubierto responde sin cobrar, y si hay una sesión abierta la
-  // reutiliza en vez de crear otra. Al volver del navegador, `useFocusEffect`
-  // recarga y el torneo aparecerá ya publicado.
-  const resumePayment = useCallback(async () => {
+  // Torneo retenido por el cobro. NO abrimos ningún pago desde aquí: la app no
+  // puede enlazar a un método de pago ajeno a IAP (Apple 3.1.1a). Lo único que
+  // hace este botón es pedir que nos REENVÍEN el correo con el enlace, que es
+  // comunicación fuera de la app y sí está permitida (3.1.3).
+  // El servidor decide: si el torneo ya estuviera cubierto, lo publica y no
+  // manda nada.
+  const resendPaymentEmail = useCallback(async () => {
     if (!t) return;
     setPaying(true);
     try {
-      const r = await startTournamentCheckout(t.id);
+      const r = await requestTournamentPayment(t.id);
       if (r.paid) {
         toast.success('Torneo desbloqueado', 'Ya está cubierto: se ha publicado.');
         await load();
+      } else if (r.emailed) {
+        toast.success('Correo enviado', `Te hemos escrito a ${r.to}.`);
+      } else {
+        toast.info(
+          'No hemos podido enviarte el correo',
+          'Inténtalo de nuevo en unos minutos.',
+        );
       }
     } catch (e: any) {
-      toast.error('No se pudo abrir el pago', e?.message ?? 'Inténtalo de nuevo.');
+      toast.error('No se pudo preparar el pago', e?.message ?? 'Inténtalo de nuevo.');
     } finally {
       setPaying(false);
     }
@@ -2828,10 +2837,11 @@ export const TournamentDetailScreen = ({
               <Text style={styles.payBannerTitle}>Pendiente de pago</Text>
               <Text style={styles.payBannerText}>
                 Este torneo no está publicado: no admite inscripciones ni tiene
-                código para compartir hasta que se complete el pago.
+                código para compartir. Te hemos enviado por correo lo que
+                necesitas para completarlo.
               </Text>
               <Pressable
-                onPress={resumePayment}
+                onPress={resendPaymentEmail}
                 disabled={paying}
                 style={({ pressed }) => [
                   styles.payBannerBtn,
@@ -2840,7 +2850,7 @@ export const TournamentDetailScreen = ({
                 ]}
               >
                 <Text style={styles.payBannerBtnText}>
-                  {paying ? 'Abriendo…' : 'Completar pago'}
+                  {paying ? 'Enviando…' : 'Reenviarme el correo'}
                 </Text>
               </Pressable>
             </View>

@@ -1,0 +1,1664 @@
+@import "tailwindcss";
+
+/* ============================================================================
+ * TACTIUM web · design tokens
+ * ----------------------------------------------------------------------------
+ * Espejo de `TACTIUM/src/core/theme/colors.ts` (app móvil) y de
+ * `tactium-landing/CLAUDE DESIGN/colors_and_type.css` (skill de marca).
+ *
+ * Tres capas de tema, igual que `useThemeStore` en la app:
+ *   1. oscuro por defecto
+ *   2. `prefers-color-scheme: light`  → modo "sistema"
+ *   3. `:root[data-theme="light|dark"]` → toggle manual, gana siempre
+ * El modo "sistema" se representa QUITANDO el atributo, no poniéndolo a
+ * "system": así vuelve a mandar la media query.
+ * ==========================================================================*/
+
+:root {
+  /* ── Oscuro · la firma de la marca ──────────────────────────── */
+  --bg: #030f0f;
+  --bg-raised: #081818;
+  --bg-card: #0c2222;
+  --bg-card-2: #0f2a28;
+
+  --primary: #03624c;
+  --primary-dim: #02463a;
+  --accent: #00df82;
+  --accent-dim: #00b86b;
+
+  --text: #e8f5ef;
+  --text-muted: rgba(232, 245, 239, 0.7);
+  --text-faint: rgba(232, 245, 239, 0.5);
+  --text-inverse: #001810;
+
+  --hair: rgba(232, 245, 239, 0.06);
+  --hair-strong: rgba(232, 245, 239, 0.1);
+
+  --warning: #f2c94c;
+  --error: #ff6b6b;
+  --warning-soft: rgba(242, 201, 76, 0.1);
+  --error-soft: rgba(255, 107, 107, 0.1);
+
+  --accent-10: rgba(0, 223, 130, 0.1);
+  --accent-25: rgba(0, 223, 130, 0.25);
+  --accent-40: rgba(0, 223, 130, 0.4);
+  --accent-55: rgba(0, 223, 130, 0.55);
+
+  --shadow-card: 0 20px 50px -15px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-card-strong: 0 50px 100px -20px rgba(0, 0, 0, 0.8),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-cta: 0 8px 24px -6px rgba(0, 223, 130, 0.4);
+  --shadow-cta-strong: 0 14px 40px -8px rgba(0, 223, 130, 0.55);
+
+  /* Ambient backdrop — el `AmbientBackdrop` de la app, en CSS. */
+  --amb: radial-gradient(60% 60% at 50% 22%, rgba(3, 98, 76, 0.55), transparent 70%),
+    radial-gradient(55% 55% at 22% 86%, rgba(0, 223, 130, 0.18), transparent 70%);
+  --skel: linear-gradient(90deg, var(--bg-card-2) 0%, rgba(232, 245, 239, 0.07) 50%, var(--bg-card-2) 100%);
+  --blur-bg: rgba(8, 24, 24, 0.72);
+  --scrim: rgba(3, 15, 15, 0.62);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+
+  --ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 460ms;
+
+  color-scheme: dark;
+
+  /* ── Valores del tema CLARO · fuente única ────────────────────
+     No se usan directamente: los remapean los dos bloques de tema
+     de abajo. Declarados una sola vez para que no existan dos
+     listas de hex que se desincronicen. */
+  --lt-bg: #f4f7f5;
+  --lt-bg-raised: #ffffff;
+  --lt-bg-card: #ffffff;
+  --lt-bg-card-2: #eef3f0;
+
+  --lt-primary: #03624c;
+  --lt-primary-dim: #024a39;
+  --lt-accent: #00995e; /* NO #00DF82 — no pasa contraste sobre claro */
+  --lt-accent-dim: #007d4d;
+
+  --lt-text: #0e1a14;
+  --lt-text-muted: rgba(14, 26, 20, 0.64);
+  --lt-text-faint: rgba(14, 26, 20, 0.42);
+  --lt-text-inverse: #ffffff;
+
+  --lt-hair: rgba(14, 26, 20, 0.08);
+  --lt-hair-strong: rgba(14, 26, 20, 0.14);
+
+  --lt-warning: #b7791f;
+  --lt-error: #d93b41;
+  --lt-warning-soft: rgba(183, 121, 31, 0.1);
+  --lt-error-soft: rgba(217, 59, 65, 0.08);
+
+  --lt-accent-10: rgba(0, 153, 94, 0.1);
+  --lt-accent-25: rgba(0, 153, 94, 0.22);
+  --lt-accent-40: rgba(0, 153, 94, 0.38);
+  --lt-accent-55: rgba(0, 153, 94, 0.5);
+}
+
+/* Bloque de tema claro. Se aplica en dos sitios (media query para el modo
+   "sistema", atributo para el toggle manual) remapeando los `--lt-*`. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --bg: var(--lt-bg);
+    --bg-raised: var(--lt-bg-raised);
+    --bg-card: var(--lt-bg-card);
+    --bg-card-2: var(--lt-bg-card-2);
+
+    --primary: var(--lt-primary);
+    --primary-dim: var(--lt-primary-dim);
+    --accent: var(--lt-accent);
+    --accent-dim: var(--lt-accent-dim);
+
+    --text: var(--lt-text);
+    --text-muted: var(--lt-text-muted);
+    --text-faint: var(--lt-text-faint);
+    --text-inverse: var(--lt-text-inverse);
+
+    --hair: var(--lt-hair);
+    --hair-strong: var(--lt-hair-strong);
+
+    --warning: var(--lt-warning);
+    --error: var(--lt-error);
+    --warning-soft: var(--lt-warning-soft);
+    --error-soft: var(--lt-error-soft);
+
+    --accent-10: var(--lt-accent-10);
+    --accent-25: var(--lt-accent-25);
+    --accent-40: var(--lt-accent-40);
+    --accent-55: var(--lt-accent-55);
+
+    /* Sombras tintadas con el texto, opacidad baja, desenfoque corto:
+       las recetas oscuras manchan de gris un lienzo casi blanco. */
+    --shadow-card: 0 10px 30px -12px rgba(14, 26, 20, 0.14),
+      inset 0 0 0 1px rgba(14, 26, 20, 0.05);
+    --shadow-card-strong: 0 24px 56px -18px rgba(14, 26, 20, 0.2),
+      inset 0 0 0 1px rgba(14, 26, 20, 0.06);
+    --shadow-cta: 0 6px 18px -6px rgba(0, 153, 94, 0.35);
+    --shadow-cta-strong: 0 10px 28px -8px rgba(0, 153, 94, 0.45);
+
+    /* El halo verde es la firma del oscuro; en claro es suciedad. */
+    --amb: radial-gradient(60% 60% at 50% 22%, rgba(3, 98, 76, 0.1), transparent 70%);
+    --skel: linear-gradient(90deg, var(--bg-card-2) 0%, rgba(14, 26, 20, 0.05) 50%, var(--bg-card-2) 100%);
+    --blur-bg: rgba(255, 255, 255, 0.78);
+    --scrim: rgba(14, 26, 20, 0.38);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: var(--lt-bg);
+  --bg-raised: var(--lt-bg-raised);
+  --bg-card: var(--lt-bg-card);
+  --bg-card-2: var(--lt-bg-card-2);
+
+  --primary: var(--lt-primary);
+  --primary-dim: var(--lt-primary-dim);
+  --accent: var(--lt-accent);
+  --accent-dim: var(--lt-accent-dim);
+
+  --text: var(--lt-text);
+  --text-muted: var(--lt-text-muted);
+  --text-faint: var(--lt-text-faint);
+  --text-inverse: var(--lt-text-inverse);
+
+  --hair: var(--lt-hair);
+  --hair-strong: var(--lt-hair-strong);
+
+  --warning: var(--lt-warning);
+  --error: var(--lt-error);
+  --warning-soft: var(--lt-warning-soft);
+  --error-soft: var(--lt-error-soft);
+
+  --accent-10: var(--lt-accent-10);
+  --accent-25: var(--lt-accent-25);
+  --accent-40: var(--lt-accent-40);
+  --accent-55: var(--lt-accent-55);
+
+  --shadow-card: 0 10px 30px -12px rgba(14, 26, 20, 0.14),
+    inset 0 0 0 1px rgba(14, 26, 20, 0.05);
+  --shadow-card-strong: 0 24px 56px -18px rgba(14, 26, 20, 0.2),
+    inset 0 0 0 1px rgba(14, 26, 20, 0.06);
+  --shadow-cta: 0 6px 18px -6px rgba(0, 153, 94, 0.35);
+  --shadow-cta-strong: 0 10px 28px -8px rgba(0, 153, 94, 0.45);
+
+  --amb: radial-gradient(60% 60% at 50% 22%, rgba(3, 98, 76, 0.1), transparent 70%);
+  --skel: linear-gradient(90deg, var(--bg-card-2) 0%, rgba(14, 26, 20, 0.05) 50%, var(--bg-card-2) 100%);
+  --blur-bg: rgba(255, 255, 255, 0.78);
+  --scrim: rgba(14, 26, 20, 0.38);
+}
+
+/* Tokens visibles desde Tailwind: bg-bg, text-text-muted, border-hair… */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-card: var(--bg-card);
+  --color-bg-card-2: var(--bg-card-2);
+  --color-primary: var(--primary);
+  --color-primary-dim: var(--primary-dim);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-10: var(--accent-10);
+  --color-accent-25: var(--accent-25);
+  --color-accent-40: var(--accent-40);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-text-inverse: var(--text-inverse);
+  --color-hair: var(--hair);
+  --color-hair-strong: var(--hair-strong);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+/* ── Base ──────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  /* El cambio de tema se funde, no parpadea. Sólo en el lienzo: una
+     transición global con `*` arrastra en listas largas. */
+  transition: background var(--dur-base) var(--ease),
+    color var(--dur-base) var(--ease);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-dim);
+}
+
+/* Foco visible en ambos temas — buena parte de la web se usa con teclado. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Tipografía de marca ───────────────────────────────────────── */
+.eyebrow {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.eyebrow-faint {
+  color: var(--text-faint);
+}
+.eyebrow-error {
+  color: var(--error);
+}
+
+.mono {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.data {
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* ── Recetas de componente ─────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  font-family: "Satoshi", sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--dur-fast) var(--ease);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border: none;
+  box-shadow: var(--shadow-cta);
+}
+.btn-accent:hover:not(:disabled) {
+  box-shadow: var(--shadow-cta-strong);
+  transform: translateY(-1px);
+}
+.btn-accent:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--hair-strong);
+  font-weight: 500;
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--accent-40);
+  background: var(--accent-10);
+}
+
+.btn-danger {
+  background: var(--error);
+  color: #fff;
+  border: none;
+}
+
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--hair-strong);
+  font-weight: 500;
+}
+.btn-danger-ghost:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 5px 11px;
+  white-space: nowrap;
+  color: var(--accent);
+  border: 1px solid var(--accent-40);
+}
+.chip-mute {
+  color: var(--text-faint);
+  border-color: var(--hair-strong);
+}
+.chip-warning {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.chip-solid {
+  color: var(--text-inverse);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Skeletons de carga */
+.skel {
+  background: var(--skel);
+  background-size: 200% 100%;
+  animation: skel 1.4s linear infinite;
+  border-radius: var(--r-sm);
+}
+@keyframes skel {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Lienzo con fondo ambiental */
+.amb {
+  background: var(--amb), var(--bg);
+}
+
+/* ══ Shell de la aplicación ═════════════════════════════════════ */
+
+/* ── Barra lateral ─────────────────────────────────────────────── */
+.tw-sidebar {
+  display: none;
+}
+.tw-side-brand {
+  padding: 20px 16px 16px;
+  display: flex;
+  align-items: center;
+}
+.tw-side-brand-mini {
+  display: none;
+}
+.tw-side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+}
+.tw-side-eyebrow {
+  padding: 6px 10px 8px;
+}
+.tw-side-team {
+  padding: 8px 10px 12px;
+  position: relative;
+}
+.tw-side-user {
+  border-top: 1px solid var(--hair);
+  padding: 12px 10px;
+  position: relative;
+}
+
+.tw-navitem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-navitem:hover {
+  background: var(--bg-card-2);
+  color: var(--text);
+}
+.tw-navitem.is-active {
+  color: var(--accent);
+  background: var(--accent-10);
+  box-shadow: inset 2px 0 0 var(--accent-40);
+}
+.tw-navitem.is-active:hover {
+  color: var(--accent);
+  background: var(--accent-10);
+}
+
+.tw-teambtn,
+.tw-userbtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--hair-strong);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-userbtn {
+  border-color: transparent;
+  background: transparent;
+}
+.tw-teambtn:hover,
+.tw-userbtn:hover {
+  background: var(--bg-card-2);
+  border-color: var(--accent-40);
+}
+
+/* ── Popovers ──────────────────────────────────────────────────── */
+.tw-popover {
+  border-radius: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--hair-strong);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 60;
+}
+.tw-popitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font-family: "Satoshi", sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-popitem:hover {
+  background: var(--bg-card-2);
+}
+
+/* ── Barra superior ────────────────────────────────────────────── */
+.tw-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 16px;
+  background: var(--blur-bg);
+  backdrop-filter: blur(14px) saturate(180%);
+  border-bottom: 1px solid var(--hair);
+}
+.tw-topbar-title {
+  display: none;
+}
+.tw-topbar-brand {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.tw-search {
+  display: none;
+}
+.tw-searchbox {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--hair-strong);
+  background: var(--bg-card);
+  color: var(--text-faint);
+  font-size: 13px;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-searchbox:hover {
+  border-color: var(--accent-40);
+  color: var(--text-muted);
+}
+.tw-kbd {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  border: 1px solid var(--hair-strong);
+  border-radius: 6px;
+  padding: 2px 6px;
+  flex: none;
+}
+
+.tw-iconbtn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-iconbtn:hover {
+  background: var(--bg-card);
+  color: var(--accent);
+  border-color: var(--accent-40);
+}
+.tw-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-cta);
+}
+
+.tw-bell {
+  position: absolute;
+  top: 56px;
+  right: 0;
+  width: min(360px, calc(100vw - 32px));
+  border-radius: 20px;
+  overflow: hidden;
+  gap: 0;
+}
+.tw-bell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--hair);
+}
+.tw-bell-row {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-bell-row:hover {
+  background: var(--bg-card-2);
+}
+
+/* ── Lienzo y tab bar ──────────────────────────────────────────── */
+.tw-content {
+  padding: 24px 16px 120px;
+}
+.tw-tabbar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 50;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 22px;
+  background: var(--blur-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--hair-strong);
+  box-shadow: var(--shadow-card);
+}
+.tw-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 4px;
+  border-radius: 14px;
+  color: var(--text-faint);
+  transition: all var(--dur-fast) var(--ease);
+}
+/* El halo accent engloba icono Y etiqueta, no sólo el icono. */
+.tw-tab.is-active {
+  color: var(--accent);
+  background: var(--accent-10);
+}
+
+/* ── Tablet: barra lateral colapsada a 72px ────────────────────── */
+@media (min-width: 768px) {
+  .tw-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 72px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-raised);
+    border-right: 1px solid var(--hair);
+    z-index: 45;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .tw-main {
+    margin-left: 72px;
+  }
+  .tw-tabbar {
+    display: none;
+  }
+  .tw-topbar-brand {
+    display: none;
+  }
+  .tw-topbar-title {
+    display: block;
+    min-width: 200px;
+    flex: none;
+  }
+  .tw-content {
+    padding: 28px 24px 48px;
+  }
+
+  /* Sólo iconos: se ocultan las etiquetas y el eyebrow de rol. */
+  .tw-navitem-label,
+  .tw-side-eyebrow,
+  .tw-side-brand > span:first-child {
+    display: none;
+  }
+  .tw-side-brand {
+    justify-content: center;
+    padding: 18px 0 12px;
+  }
+  .tw-side-brand-mini {
+    display: flex;
+  }
+  .tw-side-nav {
+    padding: 8px;
+    align-items: center;
+  }
+  .tw-navitem {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    gap: 0;
+  }
+  .tw-side-team,
+  .tw-side-user {
+    padding: 8px;
+  }
+  .tw-teambtn,
+  .tw-userbtn {
+    justify-content: center;
+    padding: 8px;
+    gap: 0;
+  }
+  /* El popover del equipo no cabe en 72px: se saca al lado. */
+  .tw-popover {
+    position: absolute;
+    left: calc(100% + 8px);
+    bottom: 0;
+    width: 220px;
+  }
+}
+
+/* ── Escritorio: barra lateral completa ────────────────────────── */
+@media (min-width: 1024px) {
+  .tw-sidebar {
+    width: 240px;
+  }
+  .tw-main {
+    margin-left: 240px;
+  }
+  .tw-topbar {
+    padding: 0 24px;
+    gap: 24px;
+  }
+  .tw-topbar-title {
+    min-width: 230px;
+  }
+  .tw-search {
+    display: flex;
+    flex: 1;
+    justify-content: center;
+  }
+  .tw-content {
+    padding: 32px 24px 48px;
+  }
+
+  .tw-navitem-label,
+  .tw-side-eyebrow {
+    display: block;
+  }
+  .tw-side-brand {
+    justify-content: flex-start;
+    padding: 20px 16px 16px;
+  }
+  .tw-side-brand > span:first-child {
+    display: flex;
+  }
+  .tw-side-brand-mini {
+    display: none;
+  }
+  .tw-side-nav {
+    padding: 12px 10px;
+    align-items: stretch;
+  }
+  .tw-navitem {
+    width: auto;
+    height: auto;
+    justify-content: flex-start;
+    padding: 9px 10px;
+    gap: 11px;
+  }
+  .tw-side-team {
+    padding: 8px 10px 12px;
+  }
+  .tw-side-user {
+    padding: 12px 10px;
+  }
+  .tw-teambtn,
+  .tw-userbtn {
+    justify-content: flex-start;
+    padding: 10px;
+    gap: 10px;
+  }
+  .tw-popover {
+    position: static;
+    width: auto;
+  }
+}
+
+/* ── Entrada · bienvenida y altas ──────────────────────────────── */
+.tw-welcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+}
+.tw-welcome-visual {
+  order: -1;
+}
+@media (min-width: 900px) {
+  .tw-welcome {
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+  }
+  .tw-welcome-visual {
+    order: 0;
+  }
+}
+
+.tw-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+@media (min-width: 720px) {
+  .tw-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.tw-team-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.tw-team-row > :first-child {
+  display: none;
+}
+@media (min-width: 860px) {
+  .tw-team-row {
+    grid-template-columns: 28px 1.4fr 1.6fr 0.8fr 40px;
+    gap: 14px;
+  }
+  .tw-team-row > :first-child {
+    display: block;
+  }
+}
+
+.tw-players-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 940px) {
+  .tw-players-grid {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}
+
+.tw-player-head,
+.tw-player-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) 100px 118px 34px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 14px;
+}
+.tw-player-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-player-row {
+  border-bottom: 1px solid var(--hair);
+}
+.tw-cell-input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-family: "Satoshi", sans-serif;
+  font-size: 13.5px;
+  outline: none;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-cell-input:hover {
+  background: var(--bg-card-2);
+}
+.tw-cell-input:focus {
+  border-color: var(--accent-40);
+  background: var(--bg-card-2);
+}
+select.tw-cell-input {
+  cursor: pointer;
+}
+
+/* ── Inicio ────────────────────────────────────────────────────── */
+.tw-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .tw-home-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+.tw-home-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 22px;
+}
+.tw-stat-label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-stat-value {
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.tw-solo-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.tw-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+/* Fila de jornada */
+.tw-md-row {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  grid-template-areas: "round rival chev" "round meta chev" "round chip chev";
+  gap: 4px 14px;
+  align-items: center;
+  padding: 14px 18px;
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-md-row:hover {
+  background: var(--bg-card-2);
+}
+.tw-md-row > :nth-child(1) {
+  grid-area: round;
+}
+.tw-md-row > :nth-child(2) {
+  grid-area: rival;
+}
+.tw-md-row > :nth-child(3) {
+  grid-area: meta;
+}
+.tw-md-row > :nth-child(4) {
+  grid-area: chip;
+}
+.tw-md-row > :nth-child(5) {
+  grid-area: chev;
+}
+@media (min-width: 820px) {
+  .tw-md-row {
+    grid-template-columns: 52px minmax(0, 1.4fr) minmax(0, 1fr) 110px 20px;
+    grid-template-areas: "round rival meta chip chev";
+    gap: 16px;
+  }
+}
+
+/* ── Jornada · marcador ────────────────────────────────────────── */
+.tw-jornada-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .tw-jornada-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}
+
+/* La tabla del acta no se estrangula: por debajo de su ancho mínimo scrolla.
+   Si no, los nombres de las parejas se parten en tres líneas y la cabecera
+   se solapa. */
+.tw-score-wrap {
+  overflow-x: auto;
+}
+.tw-score-head,
+.tw-score-row {
+  display: grid;
+  grid-template-columns: 34px minmax(150px, 1fr) repeat(3, 78px) minmax(132px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 20px;
+  min-width: 660px;
+}
+.tw-score-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-score-row {
+  border-bottom: 1px solid var(--hair);
+}
+/* En pantallas estrechas la tabla scrolla en vez de romperse. */
+@media (max-width: 700px) {
+  .tw-score-head,
+  .tw-score-row {
+    min-width: 620px;
+  }
+  .tw-score-head {
+    overflow-x: auto;
+  }
+}
+
+.tw-set-input {
+  width: 34px;
+  height: 38px;
+  text-align: center;
+  border-radius: 9px;
+  border: 1px solid var(--hair-strong);
+  background: var(--bg-card-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.tw-set-input:focus {
+  border-color: var(--accent);
+}
+.tw-set-input[readonly] {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.tw-score-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 20px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--hair-strong);
+  background: var(--bg-card-2);
+}
+
+.tw-sets-row {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  max-width: 380px;
+}
+
+/* ── Alineación · el lienzo ────────────────────────────────────── */
+/* Sin el tope de 1280: aquí el ancho ES la funcionalidad. */
+.tw-lineup-wrap {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.tw-lineup-head {
+  position: sticky;
+  top: 64px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 0 18px;
+  margin-bottom: 8px;
+  background: var(--bg);
+}
+.tw-variants {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.tw-lineup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .tw-lineup-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  .tw-bench {
+    position: sticky;
+    top: 152px;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+  }
+}
+
+.tw-slot-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 520px) {
+  .tw-slot-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tw-player-chip {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--hair-strong);
+  background: var(--bg-card-2);
+  transition: all var(--dur-fast) var(--ease);
+  user-select: none;
+}
+.tw-player-chip:hover {
+  border-color: var(--accent-40);
+}
+.tw-player-chip:active {
+  cursor: grabbing;
+}
+
+/* ── Plantilla y disponibilidad ────────────────────────────────── */
+.tw-avail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+}
+
+.tw-roster-scroll {
+  overflow-x: auto;
+}
+.tw-roster-head,
+.tw-roster-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) 110px 110px 150px 80px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 20px;
+  min-width: 700px;
+}
+.tw-roster-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-roster-row {
+  border-bottom: 1px solid var(--hair);
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-roster-row:last-child {
+  border-bottom: none;
+}
+.tw-roster-row:hover {
+  background: var(--bg-card-2);
+}
+.tw-sort-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  transition: color var(--dur-fast) var(--ease);
+}
+.tw-sort-btn:hover {
+  color: var(--accent);
+}
+.tw-edit-btn {
+  border: 1px solid var(--hair-strong);
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-edit-btn:hover {
+  border-color: var(--accent-40);
+  color: var(--accent);
+}
+
+/* ── Cuadro de eliminatorias ───────────────────────────────────── */
+.tw-bracket-scroll {
+  overflow-x: auto;
+  padding: 24px;
+}
+.tw-bracket {
+  display: flex;
+  gap: 28px;
+  min-width: max-content;
+  align-items: stretch;
+}
+.tw-bracket-col {
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+}
+/* Los enfrentamientos se reparten el alto: así cada ronda queda centrada
+   respecto a la anterior y las líneas conectoras cuadran solas. */
+.tw-bracket-ties {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 12px;
+}
+.tw-tie {
+  position: relative;
+  border-radius: 12px;
+  background: var(--bg-card-2);
+  overflow: hidden;
+}
+/* Conector hacia la ronda siguiente. */
+.tw-bracket-col:not(:last-child) .tw-tie::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 28px;
+  height: 1px;
+  background: var(--hair-strong);
+}
+
+/* ── Club ──────────────────────────────────────────────────────── */
+.tw-club-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.tw-club-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 980px) {
+  .tw-club-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.tw-schedule-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 1060px) {
+  .tw-schedule-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+.tw-sched-head,
+.tw-sched-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.6fr) 150px minmax(140px, 1fr) 120px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 20px;
+  min-width: 640px;
+}
+.tw-sched-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Rejilla día × hora del selector de horario */
+.tw-slot-grid {
+  display: grid;
+  grid-template-columns: 44px repeat(6, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+/* ── Torneos ───────────────────────────────────────────────────── */
+.tw-tourney-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 1080px) {
+  .tw-tourney-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+.tw-tourney-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.tw-tourney-cover {
+  position: relative;
+  height: 110px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.tw-steps {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tw-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.tw-limit-row,
+.tw-phase-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-card-2);
+}
+@media (min-width: 640px) {
+  .tw-limit-row {
+    grid-template-columns: 50px 1fr 1fr;
+  }
+  .tw-phase-row {
+    grid-template-columns: 110px 1fr;
+    align-items: center;
+  }
+}
+
+/* Rejilla de disponibilidad del inscrito */
+.tw-avail-slots {
+  display: grid;
+  grid-template-columns: 60px repeat(4, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+/* ── Detalle de torneo ─────────────────────────────────────────── */
+.tw-signup-head,
+.tw-signup-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) 90px 110px 90px 110px 130px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 20px;
+  min-width: 780px;
+}
+.tw-signup-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-signup-row {
+  border-bottom: 1px solid var(--hair);
+}
+
+.tw-standings-head,
+.tw-standings-row {
+  display: grid;
+  grid-template-columns: 46px minmax(160px, 2fr) repeat(8, 68px);
+  gap: 10px;
+  align-items: center;
+  padding: 11px 20px;
+  min-width: 820px;
+  font-size: 12.5px;
+}
+.tw-standings-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+}
+.tw-standings-row {
+  border-bottom: 1px solid var(--hair);
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-standings-row:hover {
+  background: var(--bg-card-2);
+}
+
+/* Rejilla del horario: pistas × horas, con arrastre */
+.tw-grid-scroll {
+  overflow-x: auto;
+  padding: 20px;
+}
+.tw-sched-canvas {
+  display: grid;
+  gap: 8px;
+  min-width: max-content;
+}
+.tw-slot-cell {
+  min-height: 84px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--hair);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-match-card {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-card-2);
+  border: 1px solid var(--hair-strong);
+  cursor: grab;
+  user-select: none;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-match-card:hover {
+  border-color: var(--accent-40);
+}
+.tw-match-card:active {
+  cursor: grabbing;
+}
+
+/* ── Federación · tablas densas ────────────────────────────────── */
+/* Prioridad: que se lean 20 filas de un vistazo. Fila compacta,
+   hairlines en vez de bordes, cero sombras dentro de la tabla. */
+.tw-fcp-head,
+.tw-fcp-table-row {
+  display: grid;
+  grid-template-columns: 44px minmax(160px, 2fr) repeat(8, 62px);
+  gap: 8px;
+  align-items: center;
+  padding: 10px 20px;
+  min-width: 760px;
+  font-size: 12.5px;
+}
+.tw-fcp-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+}
+.tw-fcp-table-row {
+  border-bottom: 1px solid var(--hair);
+  transition: background var(--dur-fast) var(--ease);
+  color: inherit;
+}
+.tw-fcp-table-row:nth-child(even) {
+  background: color-mix(in srgb, var(--text) 2%, transparent);
+}
+.tw-fcp-table-row:hover {
+  background: var(--bg-card-2);
+}
+
+.tw-fcp-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1.6fr) minmax(0, 1fr) 70px 20px;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 20px;
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-fcp-row:hover {
+  background: var(--bg-card-2);
+}
+
+.tw-select {
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--hair-strong);
+  background: var(--bg-card-2);
+  color: var(--text);
+  font-family: "Satoshi", sans-serif;
+  font-size: 12.5px;
+  cursor: pointer;
+  outline: none;
+}
+
+/* ── Comunidad ─────────────────────────────────────────────────── */
+.tw-feed-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .tw-feed-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+.tw-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+/* ── Toast y banner de sin conexión ────────────────────────────── */
+.tw-toast {
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  max-width: min(380px, calc(100vw - 32px));
+  left: 16px;
+  right: 16px;
+  top: 12px;
+}
+@media (min-width: 768px) {
+  .tw-toast {
+    left: auto;
+    top: auto;
+    right: 24px;
+    bottom: 24px;
+  }
+}
+.tw-offline {
+  position: sticky;
+  top: 0;
+  z-index: 70;
+  padding: 7px 16px;
+  text-align: center;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--warning);
+}
+
+/* ── Ajustes · rejilla de secciones ────────────────────────────── */
+.tw-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.tw-settings-nav {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  padding: 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+@media (min-width: 1024px) {
+  .tw-settings-grid {
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 28px;
+  }
+  .tw-settings-nav {
+    position: sticky;
+    top: 88px;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 10px;
+    overflow-x: visible;
+  }
+}
+
+/* ── Facturación · fila de equipo ──────────────────────────────── */
+.tw-billing-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name chip" "meta chip";
+  gap: 4px 16px;
+  align-items: center;
+  padding: 12px 18px;
+}
+.tw-billing-row > :nth-child(1) {
+  grid-area: name;
+}
+.tw-billing-row > :nth-child(2) {
+  grid-area: meta;
+}
+.tw-billing-row > :nth-child(3) {
+  grid-area: chip;
+}
+@media (min-width: 768px) {
+  .tw-billing-row {
+    grid-template-columns: 1.6fr 1fr 130px;
+    grid-template-areas: "name meta chip";
+    gap: 16px;
+    padding: 12px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

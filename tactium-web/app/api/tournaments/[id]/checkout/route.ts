@@ -6,6 +6,7 @@ import {
   computeTournamentBilling,
   PLAN_TOURNAMENT_PAIR_CAP,
 } from "@/lib/tournament-billing";
+import { sendTournamentPaymentEmail } from "@/lib/email";
 
 // POST /api/tournaments/:id/checkout
 // Crea la sesión de Stripe Checkout del fee del torneo (cobro POR ADELANTADO
@@ -22,6 +23,13 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
+
+  // `deliver: "email"` → el enlace de pago NO se devuelve, se manda por correo.
+  // Es el modo que usa la app móvil: Apple prohíbe que la app incluya enlaces a
+  // métodos de pago ajenos a IAP (3.1.1a), pero permite expresamente
+  // comunicarse con el usuario fuera de la app sobre ellos (3.1.3).
+  const body = (await req.json().catch(() => ({}))) as { deliver?: string };
+  const byEmail = body.deliver === "email";
 
   if (!stripeConfigured()) {
     return NextResponse.json(
@@ -156,6 +164,30 @@ export async function POST(
 
   const stripe = getStripe();
 
+  // Entrega del enlace: a la web se le devuelve, a la app se le manda por
+  // correo (ver nota de Apple arriba). En modo email la respuesta NUNCA
+  // incluye la URL, para que la app no pueda abrirla ni por accidente.
+  const deliver = async (url: string, reused = false) => {
+    if (!byEmail) return NextResponse.json({ url, reused });
+    const { data: u } = await admin.auth.admin.getUserById(userId);
+    const to = u.user?.email;
+    if (!to) {
+      return NextResponse.json(
+        { error: "Tu cuenta no tiene email para enviarte el enlace de pago." },
+        { status: 422 },
+      );
+    }
+    const sent = await sendTournamentPaymentEmail({
+      to,
+      tournamentName: t.name ?? "",
+      maxPairs: t.max_pairs,
+      amountEur: amountCents / 100,
+      isTopUp,
+      url,
+    });
+    return NextResponse.json({ emailed: sent, to });
+  };
+
   // ── Idempotencia ──────────────────────────────────────────────────────────
   // Si ya hay una sesión pendiente por el MISMO importe y sigue abierta en
   // Stripe, se reutiliza en vez de crear otra (evita filas basura y que el
@@ -175,7 +207,7 @@ export async function POST(
         .retrieve(p.stripe_session_id)
         .catch(() => null);
       if (prev?.status === "open" && prev.url) {
-        return NextResponse.json({ url: prev.url, reused: true });
+        return deliver(prev.url, true);
       }
       stale = true; // caducada o ya completada por otra vía
     }
@@ -227,5 +259,5 @@ export async function POST(
     .update({ billing_status: "pending_payment" })
     .eq("id", t.id);
 
-  return NextResponse.json({ url: session.url });
+  return deliver(session.url ?? "");
 }

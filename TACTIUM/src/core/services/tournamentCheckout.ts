@@ -1,18 +1,27 @@
-import { Linking } from 'react-native';
 import { supabase } from '@core/supabase/client';
 import { TACTIUM_WEB_BASE_URL } from '@core/entitlements/tournamentBilling';
 
-// Cobro por torneo (Fase 2): pide a la web la sesión de Stripe Checkout y abre
-// el pago en el navegador. La confirmación real la hace el webhook (fuente de
-// verdad); al pagar, el torneo queda con `billing_status='paid'` y se puede
-// publicar. DORMIDO tras `TOURNAMENT_BILLING_ENABLED` hasta activar Stripe.
+// Cobro por torneo (Fase 2). El pago se hace SIEMPRE en la web (Stripe); la
+// confirmación real la da el webhook, y al confirmarse el torneo pasa de
+// 'draft' a 'open' (se publica).
+//
+// IMPORTANTE — por qué esto NO abre el navegador:
+// La guideline 3.1.1(a) de Apple prohíbe que la app incluya botones, enlaces
+// externos o cualquier call to action que lleve a un método de pago distinto
+// de IAP (en todas las storefronts menos la de EE. UU.), y TACTIUM ya usa IAP
+// para las suscripciones, así que el entitlement de enlaces externos está
+// descartado. La 3.1.3 sí permite "send communications outside of the app to
+// their user base about purchasing methods other than in-app purchase": por eso
+// pedimos al servidor que mande el enlace POR CORREO y la respuesta ni siquiera
+// incluye la URL. Mismo comportamiento en iOS y Android, a propósito.
 
 export interface CheckoutResult {
-  paid?: boolean; // incluido/gratis: no hace falta pagar
-  opened?: boolean; // se abrió el checkout de Stripe
+  paid?: boolean; // incluido/gratis/ya cubierto: no hay nada que cobrar
+  emailed?: boolean; // se ha enviado el enlace de pago por correo
+  to?: string; // dirección a la que se envió (para el mensaje de la UI)
 }
 
-export async function startTournamentCheckout(
+export async function requestTournamentPayment(
   tournamentId: string,
 ): Promise<CheckoutResult> {
   const {
@@ -28,21 +37,19 @@ export async function startTournamentCheckout(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
+      body: JSON.stringify({ deliver: 'email' }),
     },
   );
 
   const body = (await res.json().catch(() => ({}))) as {
-    url?: string;
     paid?: boolean;
+    emailed?: boolean;
+    to?: string;
     error?: string;
   };
   if (!res.ok) {
-    throw new Error(body.error ?? 'No se pudo iniciar el pago del torneo.');
+    throw new Error(body.error ?? 'No se pudo preparar el pago del torneo.');
   }
   if (body.paid) return { paid: true };
-  if (body.url) {
-    await Linking.openURL(body.url);
-    return { opened: true };
-  }
-  throw new Error('Respuesta de pago inesperada.');
+  return { emailed: body.emailed === true, to: body.to };
 }
