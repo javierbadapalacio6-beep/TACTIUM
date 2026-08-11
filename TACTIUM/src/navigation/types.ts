@@ -9,6 +9,9 @@ export type AuthStackParamList = {
   // dentro de ella, no la puerta de entrada.
   PublicHome: undefined;
   Login: undefined;
+  // Planes visibles SIN cuenta. Solo informan: la suscripción se contrata
+  // dentro de la app tras entrar y el torneo se paga por el enlace del correo.
+  Plans: undefined;
   // Federación en modo público. Mismos nombres de ruta que en el stack de
   // Temporadas para que las pantallas naveguen igual en los dos sitios.
   Federacion: undefined;

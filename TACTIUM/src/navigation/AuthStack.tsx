@@ -5,6 +5,7 @@ import { useColors } from '@core/theme';
 import { WelcomeScreen } from '@features/auth/screens/WelcomeScreen';
 import { PublicHomeScreen } from '@features/auth/screens/PublicHomeScreen';
 import { LoginScreen } from '@features/auth/screens/LoginScreen';
+import { PublicPlansScreen } from '@features/auth/screens/PublicPlansScreen';
 import { FederacionScreen } from '@features/seasons/screens/FederacionScreen';
 import { FcpGroupScreen } from '@features/seasons/screens/FcpGroupScreen';
 import { FcpTeamScreen } from '@features/seasons/screens/FcpTeamScreen';
@@ -60,6 +61,7 @@ export const AuthStack = () => {
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="PublicHome" component={PublicHomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Plans" component={PublicPlansScreen} />
 
       <Stack.Screen name="Federacion" component={PublicFederacion} />
       <Stack.Screen name="FcpGroup" component={PublicFcpGroup} />

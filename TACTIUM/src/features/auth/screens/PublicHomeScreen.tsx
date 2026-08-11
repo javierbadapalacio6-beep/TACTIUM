@@ -512,10 +512,10 @@ export const PublicHomeScreen = ({
               <Text style={styles.ctaPrimaryText}>Crear cuenta</Text>
             </Pressable>
             <Pressable
-              onPress={goLogin}
+              onPress={() => navigation.navigate('Plans')}
               style={({ pressed }) => [styles.ctaGhost, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.ctaGhostText}>Ya tengo cuenta</Text>
+              <Text style={styles.ctaGhostText}>Ver planes</Text>
             </Pressable>
           </View>
 
