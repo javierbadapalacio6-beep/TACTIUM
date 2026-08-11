@@ -110,6 +110,10 @@ export const TournamentSignupScreen = ({
   const [p2Pts, setP2Pts] = useState('');
   const [p1Lvl, setP1Lvl] = useState('');
   const [p2Lvl, setP2Lvl] = useState('');
+  // "No juega federado": sus puntos y nivel cuentan como 0 (no tiene ficha FCP).
+  const [p1NoFed, setP1NoFed] = useState(false);
+  const [p2NoFed, setP2NoFed] = useState(false);
+  const [p2bNoFed, setP2bNoFed] = useState(false);
   // Franjas de 1h que el jugador marca que NO puede (por día). Por defecto vacío
   // = disponible a cualquier hora.
   const [removed, setRemoved] = useState<Set<string>>(new Set());
@@ -211,20 +215,25 @@ export const TournamentSignupScreen = ({
   const needsGender = (found?.genders.length ?? 0) > 0;
   const needsCategory = (found?.categories.length ?? 0) > 0;
   const isPair = found?.pair_based !== false;
-  const seedPoints =
-    (parseInt(p1Pts, 10) || 0) + (isPair ? parseInt(p2Pts, 10) || 0 : 0);
+  // Contribución de cada jugador (0 si NO es federado: sin ficha FCP → 0).
+  const p1P = p1NoFed ? 0 : parseInt(p1Pts, 10) || 0;
+  const p2P = p2NoFed ? 0 : parseInt(p2Pts, 10) || 0;
+  const seedPoints = p1P + (isPair ? p2P : 0);
   // Reglas de categoría (nivel/puntos) del torneo.
   const rules = found?.category_rules ?? null;
   const usesNivel = !!rules && (rules.mode === 'nivel' || rules.mode === 'both');
-  const nivelEntered = !!p1Lvl.trim() && (!isPair || !!p2Lvl.trim());
-  const leagueSum = nivelEntered
-    ? (parseInt(p1Lvl, 10) || 0) + (isPair ? parseInt(p2Lvl, 10) || 0 : 0)
-    : null;
+  // Nivel "conocido" de un jugador = no federado (cuenta 0) o introducido.
+  const p1NivKnown = p1NoFed || !!p1Lvl.trim();
+  const p2NivKnown = p2NoFed || !!p2Lvl.trim();
+  const nivelEntered = p1NivKnown && (!isPair || p2NivKnown);
+  const p1Niv = p1NoFed ? 0 : parseInt(p1Lvl, 10) || 0;
+  const p2Niv = p2NoFed ? 0 : parseInt(p2Lvl, 10) || 0;
+  const leagueSum = nivelEntered ? p1Niv + (isPair ? p2Niv : 0) : null;
 
   // ── Detección automática de categoría ────────────────────────────────
   // Con los puntos/nivel de la pareja + las reglas del torneo, deducimos en
   // qué categorías encajáis (el jugador no tiene que interpretar las normas).
-  const ptsEntered = !!p1Pts.trim() && (!isPair || !!p2Pts.trim());
+  const ptsEntered = (p1NoFed || !!p1Pts.trim()) && (!isPair || p2NoFed || !!p2Pts.trim());
   const canDetectCat = useMemo(() => {
     if (!rules) return false;
     const needPts = rules.mode === 'points' || rules.mode === 'both';
@@ -254,10 +263,12 @@ export const TournamentSignupScreen = ({
   // eligió la 1ª. El compañero puede ser distinto al de la 1ª categoría.
   const hasSecondOption =
     !!found && (found.categories?.length ?? 0) >= 2 && isPair && !!category;
-  const seedPointsB = (parseInt(p1Pts, 10) || 0) + (parseInt(p2bPts, 10) || 0);
-  const nivelEnteredB = !!p1Lvl.trim() && !!p2bLvl.trim();
+  const p2bP = p2bNoFed ? 0 : parseInt(p2bPts, 10) || 0;
+  const seedPointsB = p1P + p2bP;
+  const p2bNivKnown = p2bNoFed || !!p2bLvl.trim();
+  const nivelEnteredB = p1NivKnown && p2bNivKnown;
   const leagueSumB = nivelEnteredB
-    ? (parseInt(p1Lvl, 10) || 0) + (parseInt(p2bLvl, 10) || 0)
+    ? p1Niv + (p2bNoFed ? 0 : parseInt(p2bLvl, 10) || 0)
     : null;
   const catThresholdB =
     rules && category2 ? rules.byCategory?.[category2] ?? null : null;
@@ -391,14 +402,14 @@ export const TournamentSignupScreen = ({
   const valid =
     !!found &&
     !!p1.trim() &&
-    !!p1Pts.trim() &&
+    (p1NoFed || !!p1Pts.trim()) &&
     !!p1Phone.trim() &&
-    (!isPair || (!!p2.trim() && !!p2Pts.trim())) &&
+    (!isPair || (!!p2.trim() && (p2NoFed || !!p2Pts.trim()))) &&
     (!needsGender || !!gender) &&
     (!needsCategory || !!category) &&
     !eligibilityError &&
     // Si eligió 2ª categoría, su compañero y puntos + elegibilidad OK.
-    (!category2 || (!!p2b.trim() && !!p2bPts.trim() && !eligibilityErrorB));
+    (!category2 || (!!p2b.trim() && (p2bNoFed || !!p2bPts.trim()) && !eligibilityErrorB));
 
   const save = async () => {
     if (!found) {
@@ -413,8 +424,12 @@ export const TournamentSignupScreen = ({
       toast.error('Elige tu categoría');
       return;
     }
-    if (!p1.trim() || !p1Pts.trim() || (isPair && (!p2.trim() || !p2Pts.trim()))) {
-      toast.error('Rellena nombres y puntos de cada jugador');
+    if (
+      !p1.trim() ||
+      (!p1NoFed && !p1Pts.trim()) ||
+      (isPair && (!p2.trim() || (!p2NoFed && !p2Pts.trim())))
+    ) {
+      toast.error('Rellena nombres y puntos (o marca "no federado")');
       return;
     }
     if (!p1Phone.trim()) {
@@ -426,7 +441,7 @@ export const TournamentSignupScreen = ({
       return;
     }
     if (category2) {
-      if (!p2b.trim() || !p2bPts.trim()) {
+      if (!p2b.trim() || (!p2bNoFed && !p2bPts.trim())) {
         toast.error('Rellena el compañero y sus puntos de la 2ª categoría');
         return;
       }
@@ -730,20 +745,24 @@ export const TournamentSignupScreen = ({
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>TUS PUNTOS</Text>
-            <View style={styles.input}>
+            <View style={[styles.input, p1NoFed && { opacity: 0.5 }]}>
               <TextInput
-                value={p1Pts}
+                value={p1NoFed ? '0' : p1Pts}
                 onChangeText={(v) => setP1Pts(v.replace(/[^0-9]/g, ''))}
                 placeholder="0"
                 placeholderTextColor={c.textFaint}
                 style={styles.inputField}
                 keyboardType="number-pad"
                 maxLength={6}
+                editable={!p1NoFed}
               />
             </View>
           </View>
         </View>
-        <FcpSuggest c={c} styles={styles} matches={p1Matches} onPick={(m) => applyMatch(1, m)} />
+        {p1NoFed ? null : (
+          <FcpSuggest c={c} styles={styles} matches={p1Matches} onPick={(m) => applyMatch(1, m)} />
+        )}
+        <FedToggle noFed={p1NoFed} onToggle={() => setP1NoFed((v) => !v)} styles={styles} c={c} />
 
         <View style={styles.two}>
           <View style={{ flex: 1 }}>
@@ -771,20 +790,24 @@ export const TournamentSignupScreen = ({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>SUS PUNTOS</Text>
-                <View style={styles.input}>
+                <View style={[styles.input, p2NoFed && { opacity: 0.5 }]}>
                   <TextInput
-                    value={p2Pts}
+                    value={p2NoFed ? '0' : p2Pts}
                     onChangeText={(v) => setP2Pts(v.replace(/[^0-9]/g, ''))}
                     placeholder="0"
                     placeholderTextColor={c.textFaint}
                     style={styles.inputField}
                     keyboardType="number-pad"
                     maxLength={6}
+                    editable={!p2NoFed}
                   />
                 </View>
               </View>
             </View>
-            <FcpSuggest c={c} styles={styles} matches={p2Matches} onPick={(m) => applyMatch(2, m)} />
+            {p2NoFed ? null : (
+              <FcpSuggest c={c} styles={styles} matches={p2Matches} onPick={(m) => applyMatch(2, m)} />
+            )}
+            <FedToggle noFed={p2NoFed} onToggle={() => setP2NoFed((v) => !v)} styles={styles} c={c} />
             <Text style={styles.availHint}>
               Sumamos vuestros puntos ({seedPoints || 0}) para sembrar el cuadro.
             </Text>
@@ -815,29 +838,31 @@ export const TournamentSignupScreen = ({
             <View style={styles.two}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>TU NIVEL DE LIGA</Text>
-                <View style={styles.input}>
+                <View style={[styles.input, p1NoFed && { opacity: 0.5 }]}>
                   <TextInput
-                    value={p1Lvl}
+                    value={p1NoFed ? '0' : p1Lvl}
                     onChangeText={(v) => setP1Lvl(v.replace(/[^0-9]/g, ''))}
                     placeholder="ej. 4"
                     placeholderTextColor={c.textFaint}
                     style={styles.inputField}
                     keyboardType="number-pad"
                     maxLength={2}
+                    editable={!p1NoFed}
                   />
                 </View>
               </View>
               {isPair ? (
                 <View style={{ flex: 1 }}>
                   <Text style={styles.label}>NIVEL DE TU PAREJA</Text>
-                  <View style={styles.input}>
+                  <View style={[styles.input, p2NoFed && { opacity: 0.5 }]}>
                     <TextInput
-                      value={p2Lvl}
+                      value={p2NoFed ? '0' : p2Lvl}
                       onChangeText={(v) => setP2Lvl(v.replace(/[^0-9]/g, ''))}
                       placeholder="ej. 6"
                       placeholderTextColor={c.textFaint}
                       style={styles.inputField}
                       keyboardType="number-pad"
+                      editable={!p2NoFed}
                       maxLength={2}
                     />
                   </View>
@@ -915,34 +940,39 @@ export const TournamentSignupScreen = ({
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.label}>SUS PUNTOS</Text>
-                    <View style={styles.input}>
+                    <View style={[styles.input, p2bNoFed && { opacity: 0.5 }]}>
                       <TextInput
-                        value={p2bPts}
+                        value={p2bNoFed ? '0' : p2bPts}
                         onChangeText={(v) => setP2bPts(v.replace(/[^0-9]/g, ''))}
                         placeholder="0"
                         placeholderTextColor={c.textFaint}
                         style={styles.inputField}
                         keyboardType="number-pad"
                         maxLength={6}
+                        editable={!p2bNoFed}
                       />
                     </View>
                   </View>
                 </View>
-                <FcpSuggest c={c} styles={styles} matches={p2bMatches} onPick={applyMatchB} />
+                {p2bNoFed ? null : (
+                  <FcpSuggest c={c} styles={styles} matches={p2bMatches} onPick={applyMatchB} />
+                )}
+                <FedToggle noFed={p2bNoFed} onToggle={() => setP2bNoFed((v) => !v)} styles={styles} c={c} />
 
                 {usesNivel ? (
                   <View style={styles.two}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.label}>SU NIVEL DE LIGA</Text>
-                      <View style={styles.input}>
+                      <View style={[styles.input, p2bNoFed && { opacity: 0.5 }]}>
                         <TextInput
-                          value={p2bLvl}
+                          value={p2bNoFed ? '0' : p2bLvl}
                           onChangeText={(v) => setP2bLvl(v.replace(/[^0-9]/g, ''))}
                           placeholder="ej. 6"
                           placeholderTextColor={c.textFaint}
                           style={styles.inputField}
                           keyboardType="number-pad"
                           maxLength={2}
+                          editable={!p2bNoFed}
                         />
                       </View>
                     </View>
@@ -1062,6 +1092,21 @@ export const TournamentSignupScreen = ({
 // Sugerencias de la Federación bajo el nombre: candidatos con sus puntos y
 // nivel; al tocar uno se autocompletan los campos. Si hay ambigüedad de nombre,
 // se muestran varios para elegir la persona correcta.
+// Check "no juega federado": pone a 0 los puntos y el nivel de ese jugador.
+const FedToggle: React.FC<{
+  noFed: boolean;
+  onToggle: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  c: Palette;
+}> = ({ noFed, onToggle, styles, c }) => (
+  <Pressable onPress={onToggle} hitSlop={6} style={styles.fedToggle}>
+    <View style={[styles.fedBox, noFed && { backgroundColor: c.accent, borderColor: c.accent }]}>
+      {noFed ? <Text style={styles.fedCheck}>✓</Text> : null}
+    </View>
+    <Text style={styles.fedLabel}>No juega federado (cuenta 0 puntos y nivel)</Text>
+  </Pressable>
+);
+
 const FcpSuggest: React.FC<{
   c: Palette;
   styles: ReturnType<typeof makeStyles>;
@@ -1293,6 +1338,24 @@ const makeStyles = (c: Palette) =>
       marginBottom: 8,
     },
     catChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    fedToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+      marginTop: -2,
+      marginBottom: 12,
+    },
+    fedBox: {
+      width: 20,
+      height: 20,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    fedCheck: { color: c.textInverse, fontSize: 12, fontWeight: '900' },
+    fedLabel: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
     detectHint: {
       color: c.accent,
       fontSize: 12.5,
