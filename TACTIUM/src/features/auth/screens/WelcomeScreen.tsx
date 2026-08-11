@@ -103,7 +103,7 @@ export const WelcomeScreen = ({
 
   const finish = () => {
     markWelcomeSeen();
-    navigation.replace('Login');
+    navigation.replace('PublicHome');
   };
 
   const renderTitle = (title: string) => {

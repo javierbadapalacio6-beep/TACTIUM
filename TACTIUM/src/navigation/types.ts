@@ -5,7 +5,16 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 // ─── Auth Stack ─────────────────────────────────────────────────────
 export type AuthStackParamList = {
   Welcome: undefined;
+  // Home PÚBLICA: lo primero al abrir sin cuenta. El login es un botón
+  // dentro de ella, no la puerta de entrada.
+  PublicHome: undefined;
   Login: undefined;
+  // Federación en modo público. Mismos nombres de ruta que en el stack de
+  // Temporadas para que las pantallas naveguen igual en los dos sitios.
+  Federacion: undefined;
+  FcpGroup: { idGrupo: string; nombre?: string };
+  FcpTeam: { idEquipo: number; name?: string };
+  FcpPlayer: { idJugador: string; name?: string };
 };
 
 // ─── Onboarding Stack ───────────────────────────────────────────────
