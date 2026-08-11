@@ -34,7 +34,7 @@ export interface TournamentTier {
 }
 export const TOURNAMENT_TIERS: TournamentTier[] = [
   { label: "Gratis", pairs: 16, priceEur: null },
-  { label: "Hasta 40 parejas", pairs: 40, priceEur: 22 },
+  { label: "Hasta 40 parejas", pairs: 40, priceEur: 25 },
   { label: "Hasta 90 parejas", pairs: 90, priceEur: 67 },
   { label: "Hasta 150 parejas", pairs: 150, priceEur: 117 },
   { label: "Hasta 200 parejas", pairs: 200, priceEur: 160 },

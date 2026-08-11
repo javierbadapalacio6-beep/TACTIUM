@@ -9,7 +9,7 @@ export interface TournamentTier {
 // Capacidad igualada a Xporty, 8 € por debajo en cada tramo (ver la app).
 export const TOURNAMENT_TIERS: TournamentTier[] = [
   { pairs: 16, priceEur: 0 },
-  { pairs: 40, priceEur: 22 },
+  { pairs: 40, priceEur: 25 },
   { pairs: 90, priceEur: 67 },
   { pairs: 150, priceEur: 117 },
   { pairs: 200, priceEur: 160 },
