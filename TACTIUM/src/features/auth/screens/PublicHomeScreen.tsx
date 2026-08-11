@@ -18,6 +18,7 @@ import { TactiumMark } from '@components/brand/TactiumMark';
 import {
   AmbientBackdrop,
   IconSearch,
+  IconTrophy,
   IconLogIn,
   IconSun,
   IconMoon,
@@ -229,6 +230,21 @@ export const PublicHomeScreen = ({
 
         <Text style={styles.eyebrow}>EXPLORAR</Text>
         <Text style={styles.title}>El pádel federado,{'\n'}sin crear cuenta</Text>
+
+        {/* Atajo arriba para quien NO viene a mirar sino a organizar. La
+            tarjeta grande sigue al final: esto es una puerta, no un muro —
+            una línea que no estorba a quien solo quiere ver su torneo. */}
+        <Pressable
+          onPress={() => navigation.navigate('Plans')}
+          style={({ pressed }) => [styles.topCta, pressed && { opacity: 0.8 }]}
+        >
+          <IconTrophy size={15} color={c.accent} />
+          <Text style={styles.topCtaText}>
+            ¿Montas torneos o llevas un equipo?
+          </Text>
+          <Text style={styles.topCtaLink}>Ver planes</Text>
+          <IconChevron size={14} color={c.accent} />
+        </Pressable>
 
         {/* ── Buscador ─────────────────────────────────────────────── */}
         <View style={styles.search}>
@@ -568,6 +584,21 @@ const makeStyles = (c: Palette) =>
       letterSpacing: -0.5,
       marginBottom: 18,
     },
+
+    topCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      borderRadius: 12,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent25,
+      marginBottom: 18,
+    },
+    topCtaText: { color: c.text, fontSize: 12.5, flex: 1, flexShrink: 1 },
+    topCtaLink: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
 
     search: {
       flexDirection: 'row',
