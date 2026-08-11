@@ -40,7 +40,13 @@ const BARE_ROUTES = ["/entrar", "/alta", "/recuperar", "/empezar", "/bienvenida"
  * `anon` mediante RPC `SECURITY DEFINER` (torneos, comunidad, perfiles).
  * Todo lo demás está bajo RLS y exige estar dentro.
  */
-const PUBLIC_ROUTES = ["/torneos", "/comunidad", "/u/", "/pro"];
+const PUBLIC_ROUTES = [
+  "/torneos",
+  "/comunidad",
+  "/u/",
+  "/pro",
+  "/federacion",
+];
 
 /** Pantalla para rutas privadas sin sesión. */
 function SignedOut() {

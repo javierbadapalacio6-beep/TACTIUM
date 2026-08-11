@@ -66,12 +66,13 @@ export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
 /**
  * Navegación del marco PÚBLICO (visitante sin sesión).
  *
- * Sólo destinos que la base de datos sirve a `anon` mediante RPC
- * `SECURITY DEFINER`. Federación aún no tiene RPC pública, así que todavía no
- * aparece aquí: enlazarla mandaría al visitante a la pantalla de "entra".
+ * Sólo destinos que la base de datos sirve sin sesión: torneos, comunidad y
+ * perfiles por RPC `SECURITY DEFINER`; federación por política de lectura
+ * pública sobre las tablas `fcp_*`.
  */
 export const PUBLIC_NAV: NavEntry[] = [
   { href: "/torneos", label: "Torneos", icon: "trophy" },
+  { href: "/federacion", label: "Federación", icon: "flag" },
   { href: "/comunidad", label: "Comunidad", icon: "globe" },
   { href: "/pro", label: "Planes", icon: "receipt" },
 ];

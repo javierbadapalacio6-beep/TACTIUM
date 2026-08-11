@@ -38,22 +38,9 @@ function ptsPerMatch(t: FcpStanding): string {
   return (t.puntos / t.pj).toFixed(2).replace(".", ",");
 }
 
-function NeedsSession() {
-  return (
-    <Card>
-      <EmptyState
-        icon={<IconFlag size={34} />}
-        title="Necesitas iniciar sesión"
-        body="Los datos federativos están protegidos por RLS y sólo se sirven a usuarios autenticados."
-        action={
-          <Link href="/entrar" className="btn btn-accent" style={{ padding: "13px 22px" }}>
-            Iniciar sesión
-          </Link>
-        }
-      />
-    </Card>
-  );
-}
+/* Estas pantallas ya NO piden sesión: las tablas `fcp_*` tienen lectura
+   pública (migración 20260811c). Son datos que la federación publica en
+   abierto, y además es lo que mejor posiciona en buscadores. */
 
 /* ═══ 01 · SELECTOR ═══════════════════════════════════════════════ */
 export function FederationPicker() {
@@ -144,14 +131,12 @@ export function FederationExplore({ slug }: { slug: string }) {
   const [query, setQuery] = useState("");
   const [gender, setGender] = useState("Ambos");
 
-  const groups = useAsync(() => fetchFcpGroups(200), [user?.id], !!user);
+  const groups = useAsync(() => fetchFcpGroups(200), [user?.id]);
   const players = useAsync(
     () => searchFcpPlayers(query),
     [query, user?.id],
-    !!user && tab === "jugadores" && query.trim().length >= 3
+    tab === "jugadores" && query.trim().length >= 3
   );
-
-  if (!user) return <NeedsSession />;
 
   const q = query.trim().toLowerCase();
   const allGroups = groups.data ?? [];
@@ -369,14 +354,12 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
   const { user } = useSession();
   const [tab, setTab] = useState<"clasificacion" | "jornadas">("clasificacion");
 
-  const standings = useAsync(() => fetchFcpStandings(id), [id, user?.id], !!user);
+  const standings = useAsync(() => fetchFcpStandings(id), [id, user?.id]);
   const matches = useAsync(
     () => fetchFcpMatches(id),
     [id, user?.id],
-    !!user && tab === "jornadas"
+    tab === "jornadas"
   );
-
-  if (!user) return <NeedsSession />;
   if (standings.loading) return <SkeletonCard />;
 
   const rows = standings.data ?? [];
@@ -540,10 +523,9 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
   const { data, loading, error } = useAsync(
     () => fetchFcpTeamPlayers(idEquipo),
     [idEquipo, user?.id],
-    !!user && Number.isFinite(idEquipo)
+    Number.isFinite(idEquipo)
   );
 
-  if (!user) return <NeedsSession />;
   if (loading) return <SkeletonCard />;
 
   const players = data ?? [];
@@ -613,13 +595,8 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
 /* ═══ 05 · JUGADOR FEDERADO ═══════════════════════════════════════ */
 export function FcpPlayerView({ id }: { id: string }) {
   const { user } = useSession();
-  const { data, loading } = useAsync(
-    () => searchFcpPlayers(id, 1),
-    [id, user?.id],
-    !!user
-  );
+  const { data, loading } = useAsync(() => searchFcpPlayers(id, 1), [id, user?.id]);
 
-  if (!user) return <NeedsSession />;
   if (loading) return <SkeletonCard />;
 
   const p = (data ?? [])[0];
