@@ -163,8 +163,19 @@ export const PublicPlansScreen = ({
           })}
         </View>
 
-        {planCard(CAPTAIN_PLAN)}
-        {CLUB_PLANS.map((p) => planCard(p, p.tier === 'club_pro'))}
+        {/* En carril horizontal: cuatro tarjetas apiladas obligaban a
+            recorrer media pantalla por plan y a comparar de memoria. Al lado
+            se comparan de un vistazo, que es lo que se hace con precios. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rail}
+          style={styles.railOuter}
+        >
+          {planCard(CAPTAIN_PLAN)}
+          {CLUB_PLANS.map((p) => planCard(p, p.tier === 'club_pro'))}
+        </ScrollView>
+
 
         <Text style={styles.note}>
           {TRIAL_DURATION_DAYS} días de prueba al crear tu primer equipo. Se
@@ -180,10 +191,16 @@ export const PublicPlansScreen = ({
           tú con tu pasarela: TACTIUM no se queda comisión.
         </Text>
 
-        <View style={styles.tierWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rail}
+          style={styles.railOuter}
+        >
           {TOURNAMENT_TIERS.map((t) => (
             <View key={t.pairs} style={styles.tier}>
-              <Text style={styles.tierPairs}>HASTA {t.pairs} PAREJAS</Text>
+              <Text style={styles.tierPairs}>HASTA {t.pairs}</Text>
+              <Text style={styles.tierPairsSub}>PAREJAS</Text>
               <Text
                 style={[
                   styles.tierPrice,
@@ -194,7 +211,7 @@ export const PublicPlansScreen = ({
               </Text>
             </View>
           ))}
-        </View>
+        </ScrollView>
 
         <Text style={styles.note}>
           +{TOURNAMENT_EXTRA_PAIR_EUR} € por pareja por encima del tramo. El
@@ -263,7 +280,11 @@ const makeStyles = (c: Palette) =>
     toggleText: { color: c.textMuted, fontSize: 13, fontWeight: '500' },
     toggleTextOn: { color: c.accent, fontWeight: '700' },
 
+    railOuter: { marginHorizontal: -18, marginBottom: 14 },
+    rail: { paddingHorizontal: 18, gap: 11, alignItems: 'stretch' },
+
     card: {
+      width: 248,
       padding: 18,
       borderRadius: Radius.lg,
       backgroundColor: c.bgCard,
@@ -333,18 +354,14 @@ const makeStyles = (c: Palette) =>
       marginTop: 4,
     },
 
-    tierWrap: { gap: 8 },
     tier: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 14,
+      width: 132,
+      paddingHorizontal: 14,
+      paddingVertical: 15,
       borderRadius: 13,
       backgroundColor: c.bgCard,
       borderWidth: 1,
       borderColor: c.hair,
-      marginBottom: 4,
     },
     tierPairs: {
       color: c.textFaint,
@@ -352,11 +369,19 @@ const makeStyles = (c: Palette) =>
       fontSize: 9.5,
       letterSpacing: 1.4,
     },
+    tierPairsSub: {
+      color: c.textFaint,
+      fontFamily: Fonts.mono,
+      fontSize: 9.5,
+      letterSpacing: 1.4,
+      marginTop: 2,
+    },
     tierPrice: {
       color: c.text,
       fontFamily: Fonts.mono,
-      fontSize: 17,
+      fontSize: 19,
       fontWeight: '700',
+      marginTop: 12,
     },
 
     cta: {
