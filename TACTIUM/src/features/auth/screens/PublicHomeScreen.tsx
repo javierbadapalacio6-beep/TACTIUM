@@ -30,6 +30,7 @@ import { federationLogo } from '@core/data/federationLogos';
 import {
   exploreTournaments,
   formatFee,
+  tournamentBucket,
   type ExploreTournament,
 } from '@core/services/tournaments';
 import { useThemeStore } from '@store/themeStore';
@@ -72,6 +73,19 @@ const ORDERED_FEDS = [...FEDERATIONS].sort(
 
 /** Cuántas federaciones se listan antes de "ver todas". */
 const FED_PREVIEW = 6;
+
+/**
+ * Filtros del carrusel. Se apoyan en `tournamentBucket`, que es el mismo
+ * criterio que usa "Mis torneos" — un torneo `in_progress` cuya fecha aún no
+ * ha llegado cuenta como próximo, no como en juego.
+ */
+type Bucket = 'all' | 'live' | 'upcoming' | 'finished';
+const BUCKETS: [Bucket, string][] = [
+  ['all', 'Todos'],
+  ['live', 'En juego'],
+  ['upcoming', 'Próximamente'],
+  ['finished', 'Finalizados'],
+];
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Inscripción abierta',
@@ -130,6 +144,32 @@ export const PublicHomeScreen = ({
   const [allFeds, setAllFeds] = useState(false);
   const feds = allFeds ? ORDERED_FEDS : ORDERED_FEDS.slice(0, FED_PREVIEW);
   const searching = term.length > 0;
+
+  const [bucket, setBucket] = useState<Bucket>('all');
+
+  // Filtra por estado y deja SIEMPRE los más recientes delante. Sin fecha van
+  // al final: un torneo sin fechar no es más nuevo, es que no se sabe.
+  const shown = useMemo(() => {
+    const list =
+      bucket === 'all'
+        ? rows
+        : rows.filter((t) => tournamentBucket(t.status, t.starts_on) === bucket);
+    return [...list].sort((a, b) =>
+      (b.starts_on ?? '').localeCompare(a.starts_on ?? ''),
+    );
+  }, [rows, bucket]);
+
+  /** Cuántos hay en cada filtro, para no ofrecer uno que da vacío. */
+  const counts = useMemo(() => {
+    const acc: Record<Bucket, number> = {
+      all: rows.length,
+      live: 0,
+      upcoming: 0,
+      finished: 0,
+    };
+    for (const t of rows) acc[tournamentBucket(t.status, t.starts_on)] += 1;
+    return acc;
+  }, [rows]);
 
   return (
     <View style={styles.root}>
@@ -238,7 +278,7 @@ export const PublicHomeScreen = ({
         {/* ── Torneos ──────────────────────────────────────────────── */}
         <View style={styles.secHead}>
           <Text style={styles.secLabel}>
-            {searching ? 'RESULTADOS' : 'TORNEOS PRÓXIMOS'}
+            {searching ? 'RESULTADOS' : 'TORNEOS'}
           </Text>
           {rows.length > 0 && (
             <Pressable
@@ -250,11 +290,42 @@ export const PublicHomeScreen = ({
           )}
         </View>
 
+        {/* Filtros por estado. Solo se ofrece el que tiene algo detrás: un
+            chip que devuelve una lista vacía es una promesa incumplida. */}
+        {rows.length > 0 && (
+          <View style={styles.filterRow}>
+            {BUCKETS.filter(([k]) => k === 'all' || counts[k] > 0).map(
+              ([k, label]) => {
+                const on = bucket === k;
+                return (
+                  <Pressable
+                    key={k}
+                    onPress={() => setBucket(k)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      on && styles.filterChipOn,
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.filterText, on && styles.filterTextOn]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              },
+            )}
+          </View>
+        )}
+
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator color={c.accent} />
           </View>
-        ) : rows.length === 0 ? (
+        ) : shown.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
               {searching
@@ -269,7 +340,7 @@ export const PublicHomeScreen = ({
             contentContainerStyle={styles.rail}
             style={styles.railOuter}
           >
-            {rows.slice(0, 10).map((t) => (
+            {shown.slice(0, 12).map((t) => (
               <Pressable
                 key={t.id}
                 onPress={() => openTournament(t.id)}
@@ -498,6 +569,23 @@ const makeStyles = (c: Palette) =>
       letterSpacing: 2,
     },
     secMore: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
+
+    filterRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 14,
+    },
+    filterChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    filterChipOn: { borderColor: c.accent, backgroundColor: c.accent10 },
+    filterText: { color: c.textMuted, fontSize: 12, fontWeight: '500' },
+    filterTextOn: { color: c.accent, fontWeight: '700' },
 
     favWrap: {
       flexDirection: 'row',
