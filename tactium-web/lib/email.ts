@@ -8,6 +8,36 @@
 // "send communications outside of the app to their user base about purchasing
 // methods other than in-app purchase". Por eso el enlace de Stripe viaja por
 // correo y NUNCA se le devuelve a la app.
+//
+// NOTAS DE MAQUETACIÓN (un correo no es una página web):
+// · Todo va en TABLAS y con estilos EN LÍNEA: Outlook usa el motor de Word y
+//   se come flex, grid y casi todo el CSS de <head>.
+// · El botón es "bulletproof" (tabla + <a> de bloque) y siempre lleva debajo la
+//   URL en texto, porque hay clientes que no pintan el fondo del botón.
+// · Nada de SVG ni webfonts: Gmail los descarta. Logo en PNG alojado y stack de
+//   fuentes del sistema.
+// · Preheader oculto: es la línea que la bandeja enseña junto al asunto.
+
+const BRAND = {
+  black: "#030F0F", // TACTIUM Black
+  surface: "#102322", // Neutral 20
+  border: "#35504A", // Neutral 40
+  text: "#E8F5EF", // Soft White
+  muted: "#A9BBB4", // Neutral 80
+  faint: "#6E827B", // Neutral 60
+  accent: "#00DF82", // TACTIUM Green
+  onAccent: "#001810", // texto sobre relleno verde
+} as const;
+
+const SANS =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const MONO =
+  "'SFMono-Regular',Consolas,'Liberation Mono',Menlo,Courier,monospace";
+
+/** Logo alojado en Storage público (Gmail no pinta SVG ni data: URIs). */
+const LOGO_URL =
+  process.env.EMAIL_LOGO_URL ??
+  `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/brand/email/logo-240.png`;
 
 const esc = (s: string) =>
   s
@@ -21,49 +51,168 @@ export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
-export async function sendTournamentPaymentEmail(input: {
-  to: string;
+/** Envoltorio de marca: cabecera con logo, cuerpo y pie. */
+function shell(preheader: string, body: string): string {
+  return `<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<title>TACTIUM</title>
+</head>
+<body style="margin:0;padding:0;background:${BRAND.black};">
+  <!-- Preheader: lo que se lee en la bandeja junto al asunto. -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0">${esc(preheader)}</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.black};">
+    <tr><td align="center" style="padding:32px 16px 40px">
+
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%">
+
+        <!-- Cabecera -->
+        <tr><td style="padding:0 0 28px">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="padding-right:12px" valign="middle">
+                <img src="${esc(LOGO_URL)}" width="36" height="36" alt="TACTIUM"
+                     style="display:block;width:36px;height:36px;border:0;border-radius:9px">
+              </td>
+              <td valign="middle">
+                <span style="font-family:${SANS};font-size:17px;font-weight:700;letter-spacing:3px;color:${BRAND.text}">TACTIUM</span>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+
+        ${body}
+
+        <!-- Pie -->
+        <tr><td style="padding:34px 0 0;border-top:1px solid ${BRAND.surface}">
+          <p style="margin:18px 0 0;font-family:${SANS};font-size:12px;line-height:18px;color:${BRAND.faint}">
+            Este correo se ha enviado automáticamente desde TACTIUM porque
+            gestionas un club. Si no esperabas recibirlo, puedes ignorarlo.
+          </p>
+        </td></tr>
+
+      </table>
+
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+/** Botón bulletproof (tabla + ancla de bloque) para que Outlook lo pinte. */
+function button(url: string, label: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto">
+    <tr><td align="center" bgcolor="${BRAND.accent}" style="border-radius:9999px">
+      <a href="${esc(url)}"
+         style="display:inline-block;padding:14px 30px;font-family:${SANS};font-size:15px;font-weight:700;color:${BRAND.onAccent};text-decoration:none;border-radius:9999px">${esc(label)}</a>
+    </td></tr>
+  </table>`;
+}
+
+export interface TournamentPaymentEmail {
   tournamentName: string;
   maxPairs: number | null;
   amountEur: number;
   isTopUp: boolean;
   url: string;
-}): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false;
-  const from = process.env.EMAIL_FROM ?? "TACTIUM <onboarding@resend.dev>";
+}
 
+/** Compone el correo (separado del envío para poder previsualizarlo/testearlo). */
+export function renderTournamentPaymentEmail(input: TournamentPaymentEmail): {
+  subject: string;
+  html: string;
+  text: string;
+} {
   const amount = input.amountEur.toLocaleString("es-ES", {
     style: "currency",
     currency: "EUR",
   });
   const tName = input.tournamentName || "tu torneo";
   const concepto = input.isTopUp
-    ? `ampliación a ${input.maxPairs} plazas`
-    : `cuota de organización (${input.maxPairs} plazas)`;
+    ? `Ampliación a ${input.maxPairs} plazas`
+    : `Cuota de organización · ${input.maxPairs} plazas`;
   const subject = `Completa el pago de "${tName}" · ${amount}`;
+  const preheader = input.isTopUp
+    ? `Has ampliado las plazas: queda por abonar la diferencia, ${amount}.`
+    : `Tu torneo se publica en cuanto se confirme el pago de ${amount}.`;
 
-  const html = `<!doctype html><html><body style="margin:0;background:#0b0f14;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e7edf3">
-  <div style="max-width:520px;margin:0 auto;padding:32px 24px">
-    <div style="font-size:13px;letter-spacing:3px;color:#39d98a;font-weight:600">TACTIUM</div>
-    <h1 style="font-size:22px;margin:14px 0 6px">Tu torneo está pendiente de pago</h1>
-    <p style="font-size:15px;line-height:22px;color:#b6c2cf;margin:0 0 20px">
-      <b style="color:#e7edf3">"${esc(tName)}"</b> no admite inscripciones todavía.
-      En cuanto completes el pago se publica y podrás compartir el código.
-    </p>
-    <div style="background:#121821;border:1px solid #223041;border-radius:14px;padding:20px;text-align:center">
-      <div style="font-size:12px;letter-spacing:2px;color:#7f8ea0">${esc(concepto.toUpperCase())}</div>
-      <div style="font-size:34px;font-weight:800;color:#39d98a;margin-top:8px">${esc(amount)}</div>
-      <a href="${esc(input.url)}" style="display:inline-block;margin-top:18px;padding:13px 26px;border-radius:9999px;background:#39d98a;color:#0b0f14;font-size:15px;font-weight:800;text-decoration:none">Completar el pago</a>
-    </div>
-    <p style="font-size:13px;line-height:20px;color:#7f8ea0;margin:20px 0 0">
-      El enlace es de un solo torneo y caduca en unas horas. Si expira, vuelve a
-      guardar el torneo desde TACTIUM y te enviaremos uno nuevo.
-    </p>
-    <p style="font-size:12px;color:#6b7888;margin-top:28px">Si no esperabas este correo, puedes ignorarlo.</p>
-  </div></body></html>`;
+  const body = `
+    <tr><td style="padding:0 0 8px">
+      <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.accent};text-transform:uppercase">Pendiente de pago</div>
+    </td></tr>
 
-  const text = `Tu torneo "${tName}" está pendiente de pago.\n\n${concepto}: ${amount}\n\nCompleta el pago aquí:\n${input.url}\n\nEn cuanto se confirme, el torneo se publica y podrás compartir el código de inscripción.`;
+    <tr><td style="padding:0 0 14px">
+      <h1 style="margin:0;font-family:${SANS};font-size:26px;line-height:32px;font-weight:700;color:${BRAND.text}">
+        ${esc(tName)}
+      </h1>
+    </td></tr>
+
+    <tr><td style="padding:0 0 26px">
+      <p style="margin:0;font-family:${SANS};font-size:15px;line-height:23px;color:${BRAND.muted}">
+        ${
+          input.isTopUp
+            ? "Has ampliado las plazas del torneo. Solo se cobra la diferencia sobre lo que ya habías pagado."
+            : "Tu torneo aún no admite inscripciones ni tiene código para compartir. En cuanto se confirme el pago se publica automáticamente."
+        }
+      </p>
+    </td></tr>
+
+    <!-- Tarjeta de importe -->
+    <tr><td style="padding:0 0 22px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:16px">
+        <tr><td align="center" style="padding:28px 24px">
+          <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.faint};text-transform:uppercase">${esc(concepto)}</div>
+          <div style="font-family:${SANS};font-size:40px;line-height:48px;font-weight:700;color:${BRAND.accent};padding:6px 0 20px">${esc(amount)}</div>
+          ${button(input.url, "Completar el pago")}
+        </td></tr>
+      </table>
+    </td></tr>
+
+    <!-- Enlace en texto: hay clientes que no pintan el botón -->
+    <tr><td style="padding:0 0 6px">
+      <p style="margin:0;font-family:${SANS};font-size:12px;line-height:19px;color:${BRAND.faint}">
+        ¿No funciona el botón? Copia esta dirección en tu navegador:<br>
+        <a href="${esc(input.url)}" style="color:${BRAND.accent};text-decoration:underline;word-break:break-all">${esc(input.url)}</a>
+      </p>
+    </td></tr>
+
+    <tr><td style="padding:16px 0 0">
+      <p style="margin:0;font-family:${SANS};font-size:13px;line-height:20px;color:${BRAND.muted}">
+        El enlace vale solo para este torneo y caduca en unas horas. Si expira,
+        pídenos otro desde el aviso del torneo en la app.
+      </p>
+    </td></tr>`;
+
+  const text = [
+    `TACTIUM · Pendiente de pago`,
+    ``,
+    `${tName}`,
+    input.isTopUp
+      ? `Has ampliado las plazas del torneo. Solo se cobra la diferencia sobre lo ya pagado.`
+      : `Tu torneo aun no admite inscripciones ni tiene codigo para compartir. En cuanto se confirme el pago se publica automaticamente.`,
+    ``,
+    `${concepto}: ${amount}`,
+    ``,
+    `Completa el pago aqui:`,
+    input.url,
+    ``,
+    `El enlace vale solo para este torneo y caduca en unas horas.`,
+  ].join("\n");
+
+  return { subject, html: shell(preheader, body), text };
+}
+
+export async function sendTournamentPaymentEmail(
+  input: TournamentPaymentEmail & { to: string },
+): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return false;
+  const from = process.env.EMAIL_FROM ?? "TACTIUM <onboarding@resend.dev>";
+  const { subject, html, text } = renderTournamentPaymentEmail(input);
 
   try {
     const r = await fetch("https://api.resend.com/emails", {
