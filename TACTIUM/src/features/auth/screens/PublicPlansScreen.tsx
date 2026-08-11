@@ -88,7 +88,12 @@ export const PublicPlansScreen = ({
       {/* El importe FACTURADO manda; el equivalente mensual va debajo y
           pequeño. Es la regla que costó un rechazo de Apple (3.1.2c). */}
       <View style={styles.priceRow}>
-        <Text style={[styles.price, featured && { color: c.accent }]}>
+        <Text
+          style={[styles.price, featured && { color: c.accent }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
           {formatEur(yearly ? p.priceYearlyEur : p.priceMonthlyEur)}
         </Text>
         <Text style={styles.pricePeriod}>{yearly ? '/AÑO' : '/MES'}</Text>
@@ -206,6 +211,9 @@ export const PublicPlansScreen = ({
                   styles.tierPrice,
                   t.priceEur === 0 && { color: c.accent },
                 ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
               >
                 {t.priceEur === 0 ? 'Gratis' : formatEur(t.priceEur)}
               </Text>
@@ -285,6 +293,7 @@ const makeStyles = (c: Palette) =>
 
     card: {
       width: 248,
+      overflow: 'hidden',
       padding: 18,
       borderRadius: Radius.lg,
       backgroundColor: c.bgCard,
@@ -309,6 +318,7 @@ const makeStyles = (c: Palette) =>
     },
     cardTitle: { color: c.text, fontSize: 18, fontWeight: '800' },
     cardSub: {
+      flexShrink: 1,
       color: c.textMuted,
       fontSize: 12.5,
       marginTop: 5,
@@ -319,14 +329,17 @@ const makeStyles = (c: Palette) =>
       alignItems: 'baseline',
       gap: 7,
       marginTop: 16,
+      minWidth: 0,
     },
     price: {
       color: c.text,
       fontFamily: Fonts.mono,
-      fontSize: 30,
+      fontSize: 28,
       fontWeight: '700',
+      flexShrink: 1,
     },
     pricePeriod: {
+      flexShrink: 0,
       color: c.textFaint,
       fontFamily: Fonts.mono,
       fontSize: 10.5,
@@ -355,7 +368,8 @@ const makeStyles = (c: Palette) =>
     },
 
     tier: {
-      width: 132,
+      width: 148,
+      overflow: 'hidden',
       paddingHorizontal: 14,
       paddingVertical: 15,
       borderRadius: 13,
