@@ -15,6 +15,8 @@ import {
   IconShield,
   IconSun,
 } from "./Icon";
+import { LogoMark } from "./LogoMark";
+import { LogoSpinner } from "./TactiumLogo3D";
 import { PublicShell } from "./PublicShell";
 import { Wordmark } from "./Wordmark";
 import {
@@ -183,16 +185,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           placeItems: "center",
         }}
       >
-        <span
-          className="mono"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.2em",
-            color: "var(--text-faint)",
-          }}
-        >
-          CARGANDO…
-        </span>
+        {/* Resolver la sesión suele ser instantáneo; cuando no lo es, el
+            spinner de marca aparece solo (lleva su propio retardo). */}
+        <LogoSpinner size={104} />
       </div>
     );
   }
@@ -216,6 +211,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="tw-sidebar">
         <div className="tw-side-brand">
           <Wordmark />
+          {/* Barra lateral colapsada (tablet): sólo la tesela con el isotipo. */}
           <span className="tw-side-brand-mini">
             <span
               style={{
@@ -223,15 +219,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 height: 26,
                 borderRadius: 8,
                 background: "var(--primary)",
-                color: "var(--accent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontWeight: 900,
-                fontSize: 14,
               }}
             >
-              T
+              <LogoMark size={19} color="var(--accent)" />
             </span>
           </span>
         </div>

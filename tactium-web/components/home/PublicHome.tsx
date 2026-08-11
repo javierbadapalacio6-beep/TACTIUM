@@ -53,9 +53,9 @@ export function PublicHome() {
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
       {/* ── Entrada ──────────────────────────────────────────────────
-          La pista 3D entra primero y se queda girando de fondo; el texto y
-          el buscador se componen encima escalonados. No es una cortinilla
-          que haya que esperar: el contenido llega en el mismo gesto. */}
+          La pista 3D entra y se queda de fondo; el texto y el
+          buscador se componen encima escalonados. No es una cortinilla que
+          haya que esperar: el contenido llega en el mismo gesto. */}
       <section className="tw-pub-hero">
         <div className="tw-pub-hero-3d" aria-hidden="true">
           <PadelCourt3D centerX={0.72} />

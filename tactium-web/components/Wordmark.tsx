@@ -1,9 +1,15 @@
+import { LogoMark } from "./LogoMark";
+
 /**
- * Logotipo TACTIUM: tesela "T" + wordmark.
+ * Logotipo TACTIUM: tesela con el isotipo + wordmark.
  *
- * El punto de la "I" es un cuadrado en accent — es el único accent permitido
- * dentro del wordmark (BRAND_SYSTEM · Wordmark Rules). La tesela lleva relleno
- * `--primary` en los dos temas, así que no necesita variante clara.
+ * La tesela lleva el ISOTIPO de verdad (`LogoMark`), no una "T" tipográfica:
+ * la marca tiene sus cortes horizontales y una letra de la fuente no es el
+ * logo. Relleno `--primary` en los dos temas, así que no necesita variante
+ * clara (BRAND_SYSTEM · Logo Behavior).
+ *
+ * El punto de la "I" es un cuadrado en accent — el único accent permitido
+ * dentro del wordmark (BRAND_SYSTEM · Wordmark Rules).
  *
  * Vive en su propio archivo porque lo usan los dos marcos (el de la app y el
  * público) y si colgara de uno de ellos se importarían en círculo.
@@ -18,16 +24,13 @@ export function Wordmark({ size = 16 }: { size?: number }) {
           height: tile,
           borderRadius: 8,
           background: "var(--primary)",
-          color: "var(--accent)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontWeight: 900,
-          fontSize: size * 0.95,
           flex: "none",
         }}
       >
-        T
+        <LogoMark size={Math.round(tile * 0.72)} color="var(--accent)" />
       </span>
       <span
         style={{
