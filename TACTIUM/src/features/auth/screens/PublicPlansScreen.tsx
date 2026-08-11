@@ -61,11 +61,16 @@ const PLAN_FEATURES: Record<string, string[]> = {
 
 export const PublicPlansScreen = ({
   navigation,
+  route,
 }: AuthStackScreenProps<'Plans'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const [yearly, setYearly] = useState(true);
+
+  // Si se llega desde el carril de torneos, ese bloque va primero: quien ha
+  // dicho que monta torneos no debería aterrizar en planes de equipo.
+  const tournamentsFirst = route.params?.focus === 'tournaments';
 
   const planCard = (p: PlanDescriptor, featured = false) => (
     <View key={p.tier} style={[styles.card, featured && styles.cardFeatured]}>
@@ -142,7 +147,94 @@ export const PublicPlansScreen = ({
           torneo, sin suscripción — y si ya tienes plan de club, entra incluido
           hasta el tope de tu plan.
         </Text>
+        {tournamentsFirst ? (
+          <>
+        {/* ── Torneos ──────────────────────────────────────────────── */}
+        <Text
+          style={[styles.secLabel, !tournamentsFirst && { marginTop: 32 }]}
+        >
+          MONTAR UN TORNEO
+        </Text>
+        <Text style={styles.lede}>
+          Pago único por torneo según sus plazas. Las inscripciones las cobras
+          tú con tu pasarela: TACTIUM no se queda comisión.
+        </Text>
 
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rail}
+          style={styles.railOuter}
+        >
+          {TOURNAMENT_TIERS.map((t) => (
+            <View key={t.pairs} style={styles.tier}>
+              <Text style={styles.tierPairs}>HASTA {t.pairs}</Text>
+              <Text style={styles.tierPairsSub}>PAREJAS</Text>
+              <Text
+                style={[
+                  styles.tierPrice,
+                  t.priceEur === 0 && { color: c.accent },
+                ]}
+                numberOfLines={1}
+              >
+                {t.priceEur === 0 ? 'Gratis' : formatEur(t.priceEur)}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+
+        <Text style={styles.note}>
+          +{TOURNAMENT_EXTRA_PAIR_EUR} € por pareja por encima del tramo. El
+          enlace de pago llega por correo.
+        </Text>
+        {/* ── Gestión de equipos ───────────────────────────────────── */}
+        <Text
+          style={[styles.secLabel, tournamentsFirst && { marginTop: 32 }]}
+        >
+          GESTIÓN DE EQUIPOS
+        </Text>
+
+        <View style={styles.toggle}>
+          {([
+            [false, 'Mensual'],
+            [true, 'Anual'],
+          ] as [boolean, string][]).map(([v, label]) => {
+            const on = yearly === v;
+            return (
+              <Pressable
+                key={label}
+                onPress={() => setYearly(v)}
+                style={[styles.toggleBtn, on && styles.toggleBtnOn]}
+              >
+                <Text style={[styles.toggleText, on && styles.toggleTextOn]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* En carril horizontal: cuatro tarjetas apiladas obligaban a
+            recorrer media pantalla por plan y a comparar de memoria. Al lado
+            se comparan de un vistazo, que es lo que se hace con precios. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rail}
+          style={styles.railOuter}
+        >
+          {planCard(CAPTAIN_PLAN)}
+          {CLUB_PLANS.map((p) => planCard(p, p.tier === 'club_pro'))}
+        </ScrollView>
+
+
+        <Text style={styles.note}>
+          {TRIAL_DURATION_DAYS} días de prueba al crear tu primer equipo. Se
+          contrata dentro de la app.
+        </Text>
+          </>
+        ) : (
+          <>
         {/* ── Gestión de equipos ───────────────────────────────────── */}
         <Text style={styles.secLabel}>GESTIÓN DE EQUIPOS</Text>
 
@@ -184,7 +276,6 @@ export const PublicPlansScreen = ({
           {TRIAL_DURATION_DAYS} días de prueba al crear tu primer equipo. Se
           contrata dentro de la app.
         </Text>
-
         {/* ── Torneos ──────────────────────────────────────────────── */}
         <Text style={[styles.secLabel, { marginTop: 32 }]}>
           MONTAR UN TORNEO
@@ -221,7 +312,8 @@ export const PublicPlansScreen = ({
           +{TOURNAMENT_EXTRA_PAIR_EUR} € por pareja por encima del tramo. El
           enlace de pago llega por correo.
         </Text>
-
+          </>
+        )}
         <Pressable
           onPress={() => navigation.navigate('Login')}
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}

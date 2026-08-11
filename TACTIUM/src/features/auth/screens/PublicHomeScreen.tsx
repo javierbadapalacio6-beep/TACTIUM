@@ -19,6 +19,7 @@ import {
   AmbientBackdrop,
   IconSearch,
   IconTrophy,
+  IconTeam,
   IconLogIn,
   IconSun,
   IconMoon,
@@ -72,6 +73,33 @@ const ACTIVE_FEDS = new Set(['FCantP']);
 const ORDERED_FEDS = [...FEDERATIONS].sort(
   (a, b) => Number(ACTIVE_FEDS.has(b.code)) - Number(ACTIVE_FEDS.has(a.code)),
 );
+
+type Role = 'equipo' | 'torneos';
+
+/**
+ * Los dos perfiles que abren la app. El copy dice lo que la app hace de
+ * verdad: se siembra por puntos y nivel de la federación cántabra, no por
+ * ranking FEP.
+ */
+const LANE_BY_KEY = {
+  equipo: {
+    label: 'Llevo un equipo',
+    Icon: IconTeam,
+    benefit:
+      'Alineaciones ordenadas por puntos, disponibilidad de la plantilla y el acta de cada jornada sin chats de 80 mensajes.',
+    cta: 'Ver planes de equipo',
+    note: '14 días de prueba al crear tu primer equipo',
+  },
+  torneos: {
+    label: 'Monto torneos',
+    Icon: IconTrophy,
+    benefit:
+      'Cuadros, grupos y horarios en minutos. Inscripción con código, resultados en directo y las plazas controladas.',
+    cta: 'Ver precios de torneo',
+    note: 'Hasta 16 parejas el torneo es gratis',
+  },
+} as const;
+const LANES = Object.entries(LANE_BY_KEY) as [Role, (typeof LANE_BY_KEY)[Role]][];
 
 /** Cuántas federaciones se listan antes de "ver todas". */
 const FED_PREVIEW = 6;
@@ -157,6 +185,7 @@ export const PublicHomeScreen = ({
   const searching = term.length > 0;
 
   const [bucket, setBucket] = useState<Bucket>('all');
+  const [role, setRole] = useState<Role>('equipo');
 
   // Filtra por estado y deja SIEMPRE los más recientes delante. Sin fecha van
   // al final: un torneo sin fechar no es más nuevo, es que no se sabe.
@@ -512,33 +541,61 @@ export const PublicHomeScreen = ({
             El cierre de la pantalla: hasta aquí todo era mirar. Va al final
             a propósito — quien ha llegado hasta abajo ya ha visto de qué va
             esto, y es cuando la propuesta tiene sentido. */}
+        {/* ── TACTIUM PRO · la pista dividida ──────────────────────────
+            La pregunta segmenta y los dos carriles son la pista vista desde
+            arriba, partida por la red. El beneficio y el botón cambian con
+            el carril, así que el visitante lee lo suyo y no un cajón de
+            sastre para los dos perfiles. */}
         <View style={styles.ctaCard}>
-          <Text style={styles.ctaEyebrow}>ORGANIZA</Text>
-          <Text style={styles.ctaTitle}>¿Montas torneos o llevas un equipo?</Text>
-          <Text style={styles.ctaBody}>
-            Cuadros, horarios y resultados en directo para tus torneos. Y para
-            tu equipo federado: alineaciones, jornadas y actas en un sitio.
-          </Text>
-
-          <View style={styles.ctaRow}>
-            <Pressable
-              onPress={goLogin}
-              style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.9 }]}
-            >
-              <Text style={styles.ctaPrimaryText}>Crear cuenta</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => navigation.navigate('Plans')}
-              style={({ pressed }) => [styles.ctaGhost, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.ctaGhostText}>Ver planes</Text>
-            </Pressable>
+          <View style={styles.proPill}>
+            <View style={styles.proDot} />
+            <Text style={styles.proPillText}>TACTIUM PRO</Text>
           </View>
 
-          <Text style={styles.ctaNote}>
-            Hasta 16 parejas, el torneo es gratis · 14 días de prueba en los
-            planes de equipo
+          <Text style={styles.ctaTitle}>
+            ¿Llevas un equipo{' '}
+            <Text style={{ color: c.accent }}>o montas torneos?</Text>
           </Text>
+
+          <View style={styles.lanes} accessibilityRole="radiogroup">
+            {LANES.map(([key, lane], i) => {
+              const on = role === key;
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => setRole(key)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  style={[
+                    styles.lane,
+                    on && styles.laneOn,
+                    // La red: sólo la línea que parte las dos mitades.
+                    i === 1 && styles.laneNet,
+                  ]}
+                >
+                  <lane.Icon size={20} color={on ? c.textInverse : c.textFaint} />
+                  <Text style={[styles.laneText, on && styles.laneTextOn]}>
+                    {lane.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.ctaBody}>{LANE_BY_KEY[role].benefit}</Text>
+
+          <Pressable
+            onPress={() =>
+              navigation.navigate('Plans', {
+                focus: role === 'equipo' ? 'teams' : 'tournaments',
+              })
+            }
+            style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.ctaPrimaryText}>{LANE_BY_KEY[role].cta}</Text>
+          </Pressable>
+
+          <Text style={styles.ctaNote}>{LANE_BY_KEY[role].note}</Text>
         </View>
       </ScrollView>
     </View>
@@ -642,6 +699,50 @@ const makeStyles = (c: Palette) =>
       borderWidth: 1,
       borderColor: c.accent25,
     },
+    proPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 11,
+      paddingVertical: 5,
+      borderRadius: 999,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent,
+      marginBottom: 14,
+    },
+    proDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.accent },
+    proPillText: {
+      color: c.accent,
+      fontFamily: Fonts.mono,
+      fontSize: 9,
+      letterSpacing: 2,
+    },
+
+    // Los dos carriles = la pista vista desde arriba, partida por la red.
+    lanes: {
+      flexDirection: 'row',
+      borderRadius: 14,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      marginTop: 16,
+      marginBottom: 14,
+    },
+    lane: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 7,
+      paddingVertical: 14,
+      paddingHorizontal: 8,
+      backgroundColor: c.bgCard2,
+    },
+    laneOn: { backgroundColor: c.accent },
+    laneNet: { borderLeftWidth: 2, borderLeftColor: c.text },
+    laneText: { color: c.textFaint, fontSize: 12.5, fontWeight: '700' },
+    laneTextOn: { color: c.textInverse },
+
     ctaEyebrow: {
       color: c.accent,
       fontFamily: Fonts.mono,
