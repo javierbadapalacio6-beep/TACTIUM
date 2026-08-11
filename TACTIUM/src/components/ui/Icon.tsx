@@ -603,3 +603,23 @@ export const IconMoon = make(20, ({ color, strokeWidth }) => (
     strokeLinejoin="round"
   />
 ));
+
+/** Estrella — favoritos. Rellena cuando está marcado. */
+export const IconStar = make(20, ({ color, strokeWidth }, c) => (
+  <Path
+    d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.75L12 16.9l-5.2 2.7 1-5.75-4.2-4.1 5.8-.85z"
+    stroke={color}
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    fill="none"
+  />
+));
+
+/** Estrella rellena — favorito activo. */
+export const IconStarFilled = make(20, ({ color }) => (
+  <Path
+    d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.75L12 16.9l-5.2 2.7 1-5.75-4.2-4.1 5.8-.85z"
+    fill={color}
+  />
+));

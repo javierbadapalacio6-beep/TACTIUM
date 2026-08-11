@@ -5,7 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconChevron } from '@components/ui';
+import { IconBack, IconChevron, IconStar, IconStarFilled } from '@components/ui';
+import { useFavoritesStore } from '@store/favoritesStore';
+import { toggleFavorite } from '@core/services/favorites';
 import { fetchFcpTeamProfile, type FcpTeamProfile } from '@core/services/fcpProfiles';
 import type { SeasonsStackScreenProps } from '@navigation/types';
 
@@ -14,6 +16,9 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const { idEquipo, name } = route.params;
+  const isFav = useFavoritesStore((s) =>
+    s.items.some((f) => f.kind === 'team' && f.refId === String(idEquipo)),
+  );
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FcpTeamProfile | null>(null);
@@ -43,6 +48,27 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
         >
           <IconBack size={16} color={c.text} />
           <Text style={styles.navBtnLabel}>Clasificación</Text>
+        </Pressable>
+
+        {/* Favorito: funciona sin cuenta y sube al registrarse. */}
+        <Pressable
+          onPress={() =>
+            toggleFavorite({
+              kind: 'team',
+              refId: String(idEquipo),
+              label: name ?? 'Equipo',
+            })
+          }
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+          style={({ pressed }) => [{ marginLeft: 'auto' }, pressed && { opacity: 0.6 }]}
+        >
+          {isFav ? (
+            <IconStarFilled size={19} color={c.accent} />
+          ) : (
+            <IconStar size={19} color={c.textFaint} />
+          )}
         </Pressable>
       </View>
 

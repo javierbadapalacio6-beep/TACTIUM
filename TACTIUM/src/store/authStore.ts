@@ -89,12 +89,26 @@ export const useAuthStore = create<AuthState>()(
           isHydrating: false,
         });
 
+        // Favoritos marcados como invitado: al entrar se suben y se fusionan
+        // con los de la cuenta. Import diferido para no cargar el servicio
+        // (ni su cadena) en el arranque de quien no ha marcado nada.
+        const syncFavs = (uid: string) => {
+          void import('@core/services/favorites')
+            .then((m) => m.syncFavorites(uid))
+            .catch(() => {});
+        };
+        if (validSession?.user?.id) syncFavs(validSession.user.id);
+
         supabase.auth.onAuthStateChange((_event, session) => {
+          const prevId = get().user?.id ?? null;
           set({
             session,
             user: session?.user ?? null,
             isAuthenticated: !!session,
           });
+          // Solo al pasar de sin-sesión (o de otra cuenta) a esta.
+          const nextId = session?.user?.id ?? null;
+          if (nextId && nextId !== prevId) syncFavs(nextId);
         });
       },
 

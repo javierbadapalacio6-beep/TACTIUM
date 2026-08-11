@@ -47,6 +47,8 @@ export {
   IconLogIn,
   IconSun,
   IconMoon,
+  IconStar,
+  IconStarFilled,
   IconLink,
   IconBell,
 } from './Icon';

@@ -22,6 +22,8 @@ import {
   IconSun,
   IconMoon,
   IconChevron,
+  IconStar,
+  IconStarFilled,
 } from '@components/ui';
 import { FEDERATIONS } from '@core/data/federations';
 import { federationLogo } from '@core/data/federationLogos';
@@ -31,6 +33,8 @@ import {
   type ExploreTournament,
 } from '@core/services/tournaments';
 import { useThemeStore } from '@store/themeStore';
+import { useFavoritesStore } from '@store/favoritesStore';
+import { toggleFavorite } from '@core/services/favorites';
 
 import type { AuthStackScreenProps } from '@navigation/types';
 
@@ -122,6 +126,7 @@ export const PublicHomeScreen = ({
   const openTournament = (id: string) =>
     navigation.getParent()?.navigate('TournamentFollow', { tournamentId: id });
 
+  const favorites = useFavoritesStore((s) => s.items);
   const [allFeds, setAllFeds] = useState(false);
   const feds = allFeds ? ORDERED_FEDS : ORDERED_FEDS.slice(0, FED_PREVIEW);
   const searching = term.length > 0;
@@ -188,6 +193,47 @@ export const PublicHomeScreen = ({
             autoCorrect={false}
           />
         </View>
+
+        {/* ── Favoritos ────────────────────────────────────────────────
+            Solo aparece cuando hay alguno: una sección vacía en la primera
+            pantalla es ruido. Vive en el dispositivo, así que un invitado
+            puede marcar su federación y encontrársela mañana. */}
+        {favorites.length > 0 && !searching ? (
+          <>
+            <View style={styles.secHead}>
+              <Text style={styles.secLabel}>TUS FAVORITOS</Text>
+            </View>
+            <View style={styles.favWrap}>
+              {favorites.slice(0, 8).map((f) => (
+                <Pressable
+                  key={`${f.kind}:${f.refId}`}
+                  onPress={() => {
+                    if (f.kind === 'federation') navigation.navigate('Federacion');
+                    else if (f.kind === 'team')
+                      navigation.navigate('FcpTeam', {
+                        idEquipo: Number(f.refId),
+                        name: f.label,
+                      });
+                    else
+                      navigation.navigate('FcpPlayer', {
+                        idJugador: f.refId,
+                        name: f.label,
+                      });
+                  }}
+                  style={({ pressed }) => [
+                    styles.favChip,
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <IconStarFilled size={12} color={c.accent} />
+                  <Text style={styles.favChipText} numberOfLines={1}>
+                    {f.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         {/* ── Torneos ──────────────────────────────────────────────── */}
         <View style={styles.secHead}>
@@ -304,6 +350,9 @@ export const PublicHomeScreen = ({
         {feds.map((f) => {
           const active = ACTIVE_FEDS.has(f.code);
           const logo = federationLogo(f.code);
+          const isFav = favorites.some(
+            (x) => x.kind === 'federation' && x.refId === f.code,
+          );
           return (
             <Pressable
               key={f.code}
@@ -338,8 +387,33 @@ export const PublicHomeScreen = ({
                 </Text>
               </View>
 
+              {/* La estrella funciona SIN cuenta: se guarda en el
+                  dispositivo y sube al registrarse. */}
               {active ? (
-                <IconChevron size={16} color={c.accent} />
+                <>
+                  <Pressable
+                    onPress={() =>
+                      toggleFavorite({
+                        kind: 'federation',
+                        refId: f.code,
+                        label: f.name,
+                        meta: f.region,
+                      })
+                    }
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'
+                    }
+                  >
+                    {isFav ? (
+                      <IconStarFilled size={17} color={c.accent} />
+                    ) : (
+                      <IconStar size={17} color={c.textFaint} />
+                    )}
+                  </Pressable>
+                  <IconChevron size={16} color={c.accent} />
+                </>
               ) : (
                 <Text style={styles.fedSoonText}>PRÓXIMAMENTE</Text>
               )}
@@ -424,6 +498,26 @@ const makeStyles = (c: Palette) =>
       letterSpacing: 2,
     },
     secMore: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
+
+    favWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 26,
+    },
+    favChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      maxWidth: 200,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    favChipText: { color: c.text, fontSize: 12.5, fontWeight: '600', flexShrink: 1 },
 
     loading: { paddingVertical: 34, alignItems: 'center' },
     empty: {

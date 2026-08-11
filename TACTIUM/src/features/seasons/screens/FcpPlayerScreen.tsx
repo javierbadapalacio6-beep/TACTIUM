@@ -5,7 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack } from '@components/ui';
+import { IconBack, IconStar, IconStarFilled } from '@components/ui';
+import { useFavoritesStore } from '@store/favoritesStore';
+import { toggleFavorite } from '@core/services/favorites';
 import {
   fetchFcpPlayerProfile,
   fetchFcpPlayerYears,
@@ -23,6 +25,9 @@ export const FcpPlayerScreen = ({ navigation, route }: SeasonsStackScreenProps<'
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const { idJugador, name } = route.params;
+  const isFav = useFavoritesStore((s) =>
+    s.items.some((f) => f.kind === 'player' && f.refId === idJugador),
+  );
 
   const [profile, setProfile] = useState<FcpPlayerProfile | null>(null);
   const [years, setYears] = useState<FcpPlayerYearTeam[]>([]);
@@ -76,6 +81,27 @@ export const FcpPlayerScreen = ({ navigation, route }: SeasonsStackScreenProps<'
         >
           <IconBack size={16} color={c.text} />
           <Text style={styles.navBtnLabel}>Atrás</Text>
+        </Pressable>
+
+        {/* Favorito: funciona sin cuenta y sube al registrarse. */}
+        <Pressable
+          onPress={() =>
+            toggleFavorite({
+              kind: 'player',
+              refId: idJugador,
+              label: profile?.name ?? name ?? 'Jugador',
+            })
+          }
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+          style={({ pressed }) => [{ marginLeft: 'auto' }, pressed && { opacity: 0.6 }]}
+        >
+          {isFav ? (
+            <IconStarFilled size={19} color={c.accent} />
+          ) : (
+            <IconStar size={19} color={c.textFaint} />
+          )}
         </Pressable>
       </View>
 
