@@ -31,6 +31,7 @@ import {
   exploreTournaments,
   formatFee,
   tournamentBucket,
+  tournamentStatusLabel,
   type ExploreTournament,
 } from '@core/services/tournaments';
 import { useThemeStore } from '@store/themeStore';
@@ -87,10 +88,19 @@ const BUCKETS: [Bucket, string][] = [
   ['finished', 'Finalizados'],
 ];
 
-const STATUS_LABEL: Record<string, string> = {
-  open: 'Inscripción abierta',
-  in_progress: 'En juego',
-  finished: 'Finalizado',
+/**
+ * Color del chip de estado, por el MISMO criterio que el filtro: manda la
+ * fecha, no el estado crudo de la fila.
+ */
+const chipColor = (
+  t: ExploreTournament,
+  c: Palette,
+  part: 'border' | 'text',
+): string => {
+  const b = tournamentBucket(t.status, t.starts_on);
+  if (b === 'live') return c.warning;
+  if (b === 'upcoming') return c.accent;
+  return part === 'border' ? c.hairStrong : c.textFaint;
 };
 
 const fmtDate = (iso: string | null) => {
@@ -350,30 +360,20 @@ export const PublicHomeScreen = ({
                 <View
                   style={[
                     styles.chip,
-                    {
-                      borderColor:
-                        t.status === 'open'
-                          ? c.accent
-                          : t.status === 'in_progress'
-                            ? c.warning
-                            : c.hairStrong,
-                    },
+                    { borderColor: chipColor(t, c, 'border') },
                   ]}
                 >
                   <Text
                     style={[
                       styles.chipText,
-                      {
-                        color:
-                          t.status === 'open'
-                            ? c.accent
-                            : t.status === 'in_progress'
-                              ? c.warning
-                              : c.textFaint,
-                      },
+                      { color: chipColor(t, c, 'text') },
                     ]}
                   >
-                    {STATUS_LABEL[t.status] ?? t.status}
+                    {/* Etiqueta POR FECHA, no por estado crudo: un torneo
+                        `in_progress` que empieza la semana que viene decía
+                        "En juego" en la tarjeta y caía bajo "Próximamente"
+                        en el filtro. Ahora los dos usan el mismo criterio. */}
+                    {tournamentStatusLabel(t.status, t.starts_on)}
                   </Text>
                 </View>
 
