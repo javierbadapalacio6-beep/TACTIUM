@@ -222,6 +222,9 @@ export interface Tournament {
   max_pairs: number | null;
   // Mínimo de parejas recomendado por categoría (aviso al generar). NULL = sin mínimo.
   min_pairs: number | null;
+  // Cobro por torneo: none | included | free | pending_payment | paid.
+  // Lo escribe SOLO el servidor (checkout/webhook); un trigger lo protege.
+  billing_status: string | null;
   pair_based: boolean;
   match_format: string;
   // Formato de partido por CUADRO (override de match_format). Claves:

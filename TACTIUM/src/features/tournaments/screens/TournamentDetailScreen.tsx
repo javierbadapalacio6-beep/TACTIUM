@@ -82,6 +82,7 @@ import {
   type SeedingMode,
   type MatchFormat,
 } from '@core/services/tournaments';
+import { startTournamentCheckout } from '@core/services/tournamentCheckout';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -2405,6 +2406,7 @@ export const TournamentDetailScreen = ({
   const [selectedReg, setSelectedReg] = useState<TournamentRegistration | null>(null);
   const [phaseDays, setPhaseDays] = useState<Record<string, string[]>>({});
   const [koBracket, setKoBracket] = useState<'main' | 'consol'>('main');
+  const [paying, setPaying] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
@@ -2438,6 +2440,26 @@ export const TournamentDetailScreen = ({
       load();
     }, [load]),
   );
+
+  // Torneo retenido por el cobro: reabre el checkout. El servidor decide — si
+  // ya estuviera cubierto responde sin cobrar, y si hay una sesión abierta la
+  // reutiliza en vez de crear otra. Al volver del navegador, `useFocusEffect`
+  // recarga y el torneo aparecerá ya publicado.
+  const resumePayment = useCallback(async () => {
+    if (!t) return;
+    setPaying(true);
+    try {
+      const r = await startTournamentCheckout(t.id);
+      if (r.paid) {
+        toast.success('Torneo desbloqueado', 'Ya está cubierto: se ha publicado.');
+        await load();
+      }
+    } catch (e: any) {
+      toast.error('No se pudo abrir el pago', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setPaying(false);
+    }
+  }, [t, load]);
 
   const regName = useCallback(
     (id: string | null): string => {
@@ -2798,6 +2820,31 @@ export const TournamentDetailScreen = ({
               ) : null}
             </View>
           </View>
+
+          {/* Retenido por el pago: sin esto el torneo se quedaba en Borrador
+              sin ninguna forma de retomar el checkout abandonado. */}
+          {t?.status === 'draft' ? (
+            <View style={styles.payBanner}>
+              <Text style={styles.payBannerTitle}>Pendiente de pago</Text>
+              <Text style={styles.payBannerText}>
+                Este torneo no está publicado: no admite inscripciones ni tiene
+                código para compartir hasta que se complete el pago.
+              </Text>
+              <Pressable
+                onPress={resumePayment}
+                disabled={paying}
+                style={({ pressed }) => [
+                  styles.payBannerBtn,
+                  pressed && { opacity: 0.85 },
+                  paying && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.payBannerBtnText}>
+                  {paying ? 'Abriendo…' : 'Completar pago'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {/* Campeón */}
           {champion ? (
@@ -4011,6 +4058,34 @@ export const makeStyles = (c: Palette) =>
       borderColor: c.hairStrong,
       paddingHorizontal: 14,
     },
+    payBanner: {
+      marginHorizontal: 16,
+      marginTop: 16,
+      padding: 14,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: withAlpha(c.primary, 0.45),
+      backgroundColor: withAlpha(c.primary, 0.1),
+      gap: 8,
+    },
+    payBannerTitle: {
+      color: c.text,
+      fontSize: 15,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+    },
+    payBannerText: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
+    payBannerBtn: {
+      alignSelf: 'flex-start',
+      marginTop: 2,
+      paddingHorizontal: 16,
+      height: 38,
+      borderRadius: 9999,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    payBannerBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
     infoRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 13, gap: 12 },
     infoRowBorder: { borderTopWidth: 1, borderColor: c.hair },
     infoLabel: { width: 120, color: c.textMuted, fontSize: 13, fontWeight: '600' },
