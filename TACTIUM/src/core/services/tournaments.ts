@@ -760,11 +760,56 @@ function koMatchRows(
   bracket: string,
   gender: string | null,
   category: string | null,
+  // Grupo de cada pareja (solo grupos+KO): fuerza que dos parejas del MISMO
+  // grupo NO se crucen en 1ª ronda (se reordenan los rivales para evitarlo).
+  groupOf?: Map<string, number | null>,
 ): Record<string, unknown>[] {
   const N = seeded.length;
   const size = nextPow2(N);
   const positions = seedPositions(size);
   const posReg = positions.map((seed) => (seed <= N ? seeded[seed - 1] : null));
+  // Evita el cruce del mismo grupo en 1ª ronda: mantiene fijas las cabezas
+  // (huecos "home") y los BYEs, y solo permuta los RIVALES entre partidos
+  // reales hasta deshacer los conflictos (varias pasadas).
+  if (groupOf) {
+    const nm = size / 2;
+    const g = (r: TournamentRegistration | null) => (r ? groupOf.get(r.id) ?? null : null);
+    const clash = (a: TournamentRegistration | null, b: TournamentRegistration | null) => {
+      const ga = g(a);
+      return ga != null && ga === g(b);
+    };
+    const real = (s: number) => posReg[2 * s] != null && posReg[2 * s + 1] != null;
+    for (let pass = 0; pass < 6; pass++) {
+      let changed = false;
+      for (let s = 0; s < nm; s++) {
+        if (!real(s) || !clash(posReg[2 * s], posReg[2 * s + 1])) continue;
+        let fixed = false;
+        // 1) intercambia el rival de s con el rival de otro partido real.
+        for (let t = 0; t < nm && !fixed; t++) {
+          if (t === s || !real(t)) continue;
+          const hS = posReg[2 * s], aT = posReg[2 * t + 1];
+          const hT = posReg[2 * t], aS = posReg[2 * s + 1];
+          if (!clash(hS, aT) && !clash(hT, aS)) {
+            posReg[2 * s + 1] = aT;
+            posReg[2 * t + 1] = aS;
+            fixed = changed = true;
+          }
+        }
+        // 2) fallback: intercambia el rival de s con la cabeza de otro partido.
+        for (let t = 0; t < nm && !fixed; t++) {
+          if (t === s || !real(t)) continue;
+          const hS = posReg[2 * s], hT = posReg[2 * t];
+          const aS = posReg[2 * s + 1], aT = posReg[2 * t + 1];
+          if (!clash(hS, hT) && !clash(aS, aT)) {
+            posReg[2 * s + 1] = hT;
+            posReg[2 * t] = aS;
+            fixed = changed = true;
+          }
+        }
+      }
+      if (!changed) break;
+    }
+  }
   const rounds = Math.round(Math.log2(size));
   type M = {
     round: number;
@@ -1099,9 +1144,12 @@ export async function generatePrincipalConsolationFromGroups(
       from()('tournament_registrations').update({ seed: i + 1 }).eq('id', r.id),
     ),
   );
-  const rows = koMatchRows(tournament.id, mainSeeded, 'main', gender, category);
+  const groupOf = new Map(regs.map((r) => [r.id, r.group_no ?? null]));
+  const rows = koMatchRows(tournament.id, mainSeeded, 'main', gender, category, groupOf);
   if (consolSeeded.length >= 2)
-    rows.push(...koMatchRows(tournament.id, consolSeeded, 'consol', gender, category));
+    rows.push(
+      ...koMatchRows(tournament.id, consolSeeded, 'consol', gender, category, groupOf),
+    );
   const { error } = await from()('tournament_matches').insert(rows);
   if (error) throw new Error(error.message);
 }
