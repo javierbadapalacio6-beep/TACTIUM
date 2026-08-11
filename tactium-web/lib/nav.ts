@@ -63,6 +63,19 @@ export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
   ],
 };
 
+/**
+ * Navegación del marco PÚBLICO (visitante sin sesión).
+ *
+ * Sólo destinos que la base de datos sirve a `anon` mediante RPC
+ * `SECURITY DEFINER`. Federación aún no tiene RPC pública, así que todavía no
+ * aparece aquí: enlazarla mandaría al visitante a la pantalla de "entra".
+ */
+export const PUBLIC_NAV: NavEntry[] = [
+  { href: "/torneos", label: "Torneos", icon: "trophy" },
+  { href: "/comunidad", label: "Comunidad", icon: "globe" },
+  { href: "/pro", label: "Planes", icon: "receipt" },
+];
+
 /** El jugador suelto no pertenece a ninguna plantilla: sin selector. */
 export function hasTeamSwitcher(role: Role): boolean {
   return role !== "suelto";
