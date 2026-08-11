@@ -20,6 +20,14 @@ export const TOURNAMENT_TIERS: TournamentTier[] = [
 export const TOURNAMENT_EXTRA_PAIR_EUR = 2; // recargo por pareja por encima del tramo/tope
 export const TOURNAMENT_FREE_PAIRS = 16;
 
+// Interruptor del cobro por torneo. DORMIDO hasta que el checkout de Stripe
+// esté configurado y probado (Fase 2). En `false` no cambia nada: los torneos
+// se crean como hasta ahora. Encender SOLO cuando la web tenga las claves.
+export const TOURNAMENT_BILLING_ENABLED = false;
+
+// Base de la web de TACTIUM (checkout). TODO: mover a config/env por entorno.
+export const TACTIUM_WEB_BASE_URL = 'https://tactium.io';
+
 /** Precio del tramo para un club SIN suscripción, según las plazas. */
 export function perTournamentPriceEur(maxPairs: number): number {
   for (const t of TOURNAMENT_TIERS) {

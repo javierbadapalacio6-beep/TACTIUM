@@ -41,6 +41,13 @@ import {
   type InfoRow,
 } from '@core/services/tournaments';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
+import {
+  TOURNAMENT_BILLING_ENABLED,
+  computeTournamentBilling,
+  clubTournamentCap,
+} from '@core/entitlements/tournamentBilling';
+import { startTournamentCheckout } from '@core/services/tournamentCheckout';
+import { useSubscriptionStore } from '@store/subscriptionStore';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
 
@@ -490,6 +497,28 @@ const CreateTournamentSheet: React.FC<{
         observations,
         coverUrl,
       });
+      // ── Cobro por torneo (Fase 2) · DORMIDO tras el flag ────────────────
+      // Con el cobro activo: si el torneo supera lo incluido en el plan (o el
+      // club no tiene sub y pasa del gratis), se abre el checkout de Stripe.
+      // El torneo queda "pending_payment" hasta que el webhook confirme.
+      if (TOURNAMENT_BILLING_ENABLED) {
+        const subs = useSubscriptionStore.getState().subscriptions;
+        const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subs);
+        const billing = computeTournamentBilling({
+          maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+          planPairCap: pairCap,
+          hasActiveSub,
+        });
+        if (billing.kind === 'payable') {
+          await startTournamentCheckout(created.id);
+          toast.info('Falta el pago', 'Completa el pago para publicar el torneo.');
+          reset();
+          onCreated();
+          onClose();
+          return;
+        }
+      }
+
       // Guarda los días asignados a cada fase (si el club los eligió).
       const planEntries = Object.entries(phasePlan).flatMap(([key, isos]) => {
         const [b, r] = key.split(':');
