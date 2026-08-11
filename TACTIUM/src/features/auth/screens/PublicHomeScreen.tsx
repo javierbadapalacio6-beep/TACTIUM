@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   TextInput,
   Image,
   ActivityIndicator,
+  Animated,
+  Easing,
+  AccessibilityInfo,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -187,6 +190,61 @@ export const PublicHomeScreen = ({
   const [bucket, setBucket] = useState<Bucket>('all');
   const [role, setRole] = useState<Role>('equipo');
 
+  // ── Animación del CTA ───────────────────────────────────────────────
+  // Dos gestos, los dos al servicio del contenido y ninguno decorativo:
+  //  · el beneficio hace fundido al cambiar de carril, para que se vea QUE
+  //    ha cambiado (si aparece de golpe, mucha gente no lo registra);
+  //  · el botón late muy despacio, lo justo para que el ojo vuelva a él.
+  // Ambos se apagan si el sistema pide menos movimiento.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const benefitOpacity = useRef(new Animated.Value(1)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const sub = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReduceMotion,
+    );
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      benefitOpacity.setValue(1);
+      return;
+    }
+    benefitOpacity.setValue(0);
+    Animated.timing(benefitOpacity, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [role, reduceMotion, benefitOpacity]);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1400,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 1400,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, pulse]);
+
   // Filtra por estado y deja SIEMPRE los más recientes delante. Sin fecha van
   // al final: un torneo sin fechar no es más nuevo, es que no se sabe.
   const shown = useMemo(() => {
@@ -260,20 +318,6 @@ export const PublicHomeScreen = ({
         <Text style={styles.eyebrow}>EXPLORAR</Text>
         <Text style={styles.title}>El pádel federado,{'\n'}sin crear cuenta</Text>
 
-        {/* Atajo arriba para quien NO viene a mirar sino a organizar. La
-            tarjeta grande sigue al final: esto es una puerta, no un muro —
-            una línea que no estorba a quien solo quiere ver su torneo. */}
-        <Pressable
-          onPress={() => navigation.navigate('Plans')}
-          style={({ pressed }) => [styles.topCta, pressed && { opacity: 0.8 }]}
-        >
-          <IconTrophy size={15} color={c.accent} />
-          <Text style={styles.topCtaText}>
-            ¿Montas torneos o llevas un equipo?
-          </Text>
-          <Text style={styles.topCtaLink}>Ver planes</Text>
-          <IconChevron size={14} color={c.accent} />
-        </Pressable>
 
         {/* ── Buscador ─────────────────────────────────────────────── */}
         <View style={styles.search}>
@@ -582,18 +626,36 @@ export const PublicHomeScreen = ({
             })}
           </View>
 
-          <Text style={styles.ctaBody}>{LANE_BY_KEY[role].benefit}</Text>
+          <Animated.Text style={[styles.ctaBody, { opacity: benefitOpacity }]}>
+            {LANE_BY_KEY[role].benefit}
+          </Animated.Text>
 
-          <Pressable
-            onPress={() =>
-              navigation.navigate('Plans', {
-                focus: role === 'equipo' ? 'teams' : 'tournaments',
-              })
-            }
-            style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.9 }]}
+          <Animated.View
+            style={{
+              transform: [
+                {
+                  scale: pulse.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.022],
+                  }),
+                },
+              ],
+            }}
           >
-            <Text style={styles.ctaPrimaryText}>{LANE_BY_KEY[role].cta}</Text>
-          </Pressable>
+            <Pressable
+              onPress={() =>
+                navigation.navigate('Plans', {
+                  focus: role === 'equipo' ? 'teams' : 'tournaments',
+                })
+              }
+              style={({ pressed }) => [
+                styles.ctaPrimary,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.ctaPrimaryText}>{LANE_BY_KEY[role].cta}</Text>
+            </Pressable>
+          </Animated.View>
 
           <Text style={styles.ctaNote}>{LANE_BY_KEY[role].note}</Text>
         </View>
@@ -641,21 +703,6 @@ const makeStyles = (c: Palette) =>
       letterSpacing: -0.5,
       marginBottom: 18,
     },
-
-    topCta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 14,
-      paddingVertical: 11,
-      borderRadius: 12,
-      backgroundColor: c.accent10,
-      borderWidth: 1,
-      borderColor: c.accent25,
-      marginBottom: 18,
-    },
-    topCtaText: { color: c.text, fontSize: 12.5, flex: 1, flexShrink: 1 },
-    topCtaLink: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
 
     search: {
       flexDirection: 'row',
