@@ -474,7 +474,24 @@ const CreateTournamentSheet: React.FC<{
         phaseFormats[cu.key] = fmtOf(cu.key);
       });
       const defaultFmt = fmtOf(phaseFormats.main ? 'main' : cuadros[0]?.key ?? 'main');
+      // ── Cobro por torneo (Fase 2) · DORMIDO tras el flag ──────────────────
+      // Si el torneo hay que pagarlo, nace RETENIDO ('draft'): sin inscripción
+      // abierta ni código que compartir. Solo el webhook de Stripe lo publica.
+      // El precio definitivo lo calcula el servidor; esto solo decide si retener.
+      const needsPayment = (() => {
+        if (!TOURNAMENT_BILLING_ENABLED) return false;
+        const subs = useSubscriptionStore.getState().subscriptions;
+        const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subs);
+        return (
+          computeTournamentBilling({
+            maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+            planPairCap: pairCap,
+            hasActiveSub,
+          }).kind === 'payable'
+        );
+      })();
       const created = await createTournament({
+        ...(needsPayment ? { status: 'draft' as const } : {}),
         clubId,
         name: name.trim(),
         format,
@@ -497,26 +514,18 @@ const CreateTournamentSheet: React.FC<{
         observations,
         coverUrl,
       });
-      // ── Cobro por torneo (Fase 2) · DORMIDO tras el flag ────────────────
-      // Con el cobro activo: si el torneo supera lo incluido en el plan (o el
-      // club no tiene sub y pasa del gratis), se abre el checkout de Stripe.
-      // El torneo queda "pending_payment" hasta que el webhook confirme.
-      if (TOURNAMENT_BILLING_ENABLED) {
-        const subs = useSubscriptionStore.getState().subscriptions;
-        const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subs);
-        const billing = computeTournamentBilling({
-          maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
-          planPairCap: pairCap,
-          hasActiveSub,
-        });
-        if (billing.kind === 'payable') {
-          await startTournamentCheckout(created.id);
-          toast.info('Falta el pago', 'Completa el pago para publicar el torneo.');
-          reset();
-          onCreated();
-          onClose();
-          return;
-        }
+      // El torneo ya existe pero está retenido: se abre el checkout de Stripe.
+      // Al confirmar el webhook pasa a 'open' y aparece la inscripción.
+      if (needsPayment) {
+        await startTournamentCheckout(created.id);
+        toast.info(
+          'Torneo pendiente de pago',
+          'Se publicará en cuanto se confirme el pago.',
+        );
+        reset();
+        onCreated();
+        onClose();
+        return;
       }
 
       // Guarda los días asignados a cada fase (si el club los eligió).

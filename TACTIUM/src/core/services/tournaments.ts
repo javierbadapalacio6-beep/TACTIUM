@@ -373,6 +373,9 @@ export async function createTournament(input: {
   categoryRules?: CategoryRules | null;
   endTime?: string | null;
   maxRemovableHours?: number | null;
+  // Cobro por torneo: si el torneo hay que pagarlo, nace en 'draft' (retenido,
+  // sin inscripción) y el webhook de Stripe lo pasa a 'open' al confirmarse.
+  status?: TournamentStatus;
 }): Promise<Tournament> {
   const payload = {
     club_id: input.clubId,
@@ -399,8 +402,9 @@ export async function createTournament(input: {
     info_rows: cleanInfoRows(input.infoRows),
     observations: input.observations?.trim() || null,
     cover_url: input.coverUrl ?? null,
-    // La inscripción queda abierta al crear el torneo (código compartible).
-    status: 'open',
+    // La inscripción queda abierta al crear el torneo (código compartible),
+    // salvo que el torneo esté retenido a la espera de pago ('draft').
+    status: input.status ?? 'open',
     signup_code: genCode(),
     pair_based: !isSocialFormat(input.format),
   };

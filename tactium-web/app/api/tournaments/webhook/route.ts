@@ -44,22 +44,37 @@ export async function POST(req: Request) {
         ? session.payment_intent
         : (session.payment_intent?.id ?? null);
 
-    // Marca el pago como pagado.
-    await admin
+    // Marca el pago como pagado y recupera qué tamaño cubre.
+    const { data: payment } = await admin
       .from("tournament_payments")
       .update({
         status: "paid",
         paid_at: new Date().toISOString(),
         stripe_payment_intent: paymentIntent,
       })
-      .eq("stripe_session_id", session.id);
+      .eq("stripe_session_id", session.id)
+      .select("tournament_id, covers_pairs")
+      .maybeSingle();
 
-    // Desbloquea el torneo (listo para publicar).
-    const tournamentId = session.metadata?.tournament_id;
+    // Desbloquea el torneo: queda pagado, se anota la cobertura y, si estaba
+    // retenido en borrador por el pago, se PUBLICA (pasa a inscripción abierta).
+    const tournamentId = payment?.tournament_id ?? session.metadata?.tournament_id;
     if (tournamentId) {
+      const { data: t } = await admin
+        .from("tournaments")
+        .select("status, covered_pairs")
+        .eq("id", tournamentId)
+        .maybeSingle();
       await admin
         .from("tournaments")
-        .update({ billing_status: "paid" })
+        .update({
+          billing_status: "paid",
+          covered_pairs: Math.max(
+            payment?.covers_pairs ?? 0,
+            t?.covered_pairs ?? 0,
+          ),
+          ...(t?.status === "draft" ? { status: "open" } : {}),
+        })
         .eq("id", tournamentId);
     }
   }
