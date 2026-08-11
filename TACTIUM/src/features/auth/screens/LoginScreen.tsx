@@ -34,7 +34,7 @@ import type { AuthStackScreenProps } from '@navigation/types';
 type Mode = 'choice' | 'email';
 type Tab = 'signin' | 'signup';
 
-export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) => {
+export const LoginScreen = ({ navigation }: AuthStackScreenProps<'Login'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [mode, setMode] = useState<Mode>('choice');
@@ -202,6 +202,7 @@ export const LoginScreen = ({ navigation: _ }: AuthStackScreenProps<'Login'>) =>
           onEmail={() => setMode('email')}
           busy={oauthBusy}
           showApple={Platform.OS === 'ios'}
+          onExplore={() => navigation.getParent()?.navigate('ExploreTournaments')}
         />
       ) : (
         <EmailView
@@ -236,6 +237,8 @@ interface ChoiceProps {
   onEmail: () => void;
   busy: null | 'apple' | 'google';
   showApple: boolean;
+  /** Entrar en modo explorar (torneos públicos) sin iniciar sesión. */
+  onExplore: () => void;
 }
 
 const ChoiceView: React.FC<ChoiceProps> = ({
@@ -246,6 +249,7 @@ const ChoiceView: React.FC<ChoiceProps> = ({
   onEmail,
   busy,
   showApple,
+  onExplore,
 }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -324,6 +328,23 @@ const ChoiceView: React.FC<ChoiceProps> = ({
           <IconMail size={18} color={c.accent} />
           <Text style={[styles.providerLabel, { color: c.accent }]}>
             Continuar con email
+          </Text>
+        </Pressable>
+
+        {/* Mirar no debería costar una cuenta. Un club comparte el enlace de
+            su torneo y quien lo abre tiene que poder ver el cuadro sin más;
+            la cuenta se pide al inscribirse, que es cuando hace falta saber
+            quién eres. */}
+        <Pressable
+          onPress={onExplore}
+          hitSlop={8}
+          style={({ pressed }) => [
+            { alignSelf: 'center', marginTop: 18 },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={[styles.providerLabel, { color: c.accent, fontSize: 14 }]}>
+            Explorar torneos sin cuenta
           </Text>
         </Pressable>
 
@@ -525,6 +546,7 @@ const EmailView: React.FC<EmailProps> = ({
             </Text>
           </Text>
         </Pressable>
+
       </View>
     </View>
   );

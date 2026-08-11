@@ -61,11 +61,37 @@ export const RootNavigator = () => {
   const showMainTabs =
     isAuthenticated && (!!team || soloMode) && !isOnboarding;
 
+  // ── Pantallas PÚBLICAS ────────────────────────────────────────────────
+  // Se ven con y sin sesión. Un torneo se comparte por WhatsApp y quien abre
+  // el enlace puede no tener cuenta: si lo primero que ve es un login, se
+  // pierde. Leen de RPC `SECURITY DEFINER` concedidas a `anon`, así que no
+  // necesitan sesión para funcionar.
+  //
+  // Inscribirse NO está aquí a propósito: es una acción con identidad detrás
+  // y vive en la rama autenticada.
+  const publicScreens = (
+    <>
+      <Stack.Screen
+        name="ExploreTournaments"
+        component={ExploreTournamentsScreen}
+        options={{ presentation: 'card', animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="TournamentFollow"
+        component={TournamentFollowScreen}
+        options={{ presentation: 'card', animation: 'slide_from_right' }}
+      />
+    </>
+  );
+
   return (
     <>
       <Stack.Navigator screenOptions={screenOptions}>
         {!isAuthenticated ? (
-          <Stack.Screen name="AuthFlow" component={AuthStack} />
+          <>
+            <Stack.Screen name="AuthFlow" component={AuthStack} />
+            {publicScreens}
+          </>
         ) : !showMainTabs ? (
           <Stack.Screen name="OnboardingFlow" component={OnboardingStack} />
         ) : (
@@ -174,22 +200,7 @@ export const RootNavigator = () => {
                 animation: 'slide_from_right',
               }}
             />
-            <Stack.Screen
-              name="ExploreTournaments"
-              component={ExploreTournamentsScreen}
-              options={{
-                presentation: 'card',
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name="TournamentFollow"
-              component={TournamentFollowScreen}
-              options={{
-                presentation: 'card',
-                animation: 'slide_from_right',
-              }}
-            />
+            {publicScreens}
           </>
         )}
       </Stack.Navigator>
