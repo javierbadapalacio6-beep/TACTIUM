@@ -1833,3 +1833,92 @@ select.tw-cell-input {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ═══ HERO DE LA PORTADA PÚBLICA ══════════════════════════════════════
+   La pista 3D entra, se asienta y sigue girando de fondo; el texto se
+   compone encima escalonado. Entrada ORQUESTADA, no cortinilla: nadie
+   tiene que esperar a que termine nada para leer o buscar. */
+.tw-pub-hero {
+  position: relative;
+  isolation: isolate;
+  margin: -8px 0 26px;
+  padding: 28px 0 4px;
+  min-height: 340px;
+  display: flex;
+  align-items: center;
+}
+.tw-pub-hero-3d {
+  position: absolute;
+  inset: -40px -24px auto;
+  height: 420px;
+  z-index: -1;
+  opacity: 0;
+  /* Llega ligeramente grande y se asienta: da el gesto de "aterrizar". */
+  transform: scale(1.06);
+  animation: tw-court-in 900ms var(--ease) 60ms forwards;
+  /* Se desvanece por abajo para que no compita con las tarjetas. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+@keyframes tw-court-in {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.tw-pub-hero-copy > * {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: tw-rise 620ms var(--ease) forwards;
+}
+/* Escalonado: cada pieza entra detrás de la anterior. */
+.tw-pub-hero-copy > *:nth-child(1) { animation-delay: 280ms; }
+.tw-pub-hero-copy > *:nth-child(2) { animation-delay: 380ms; }
+.tw-pub-hero-copy > *:nth-child(3) { animation-delay: 470ms; }
+.tw-pub-hero-copy > *:nth-child(4) { animation-delay: 560ms; }
+@keyframes tw-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tw-pub-hero-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 14px 18px;
+  max-width: 560px;
+  border-radius: 999px;
+  border: 1px solid var(--hair-strong);
+  background: var(--blur-bg);
+  backdrop-filter: blur(10px) saturate(160%);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.tw-pub-hero-search:focus-within {
+  border-color: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .tw-pub-hero {
+    min-height: 300px;
+  }
+  .tw-pub-hero-3d {
+    height: 320px;
+    opacity: 0.55;
+  }
+}
+
+/* Sin animación de entrada para quien la ha desactivado: todo visible ya.
+   La propia pista se queda quieta (lo resuelve el componente). */
+@media (prefers-reduced-motion: reduce) {
+  .tw-pub-hero-3d,
+  .tw-pub-hero-copy > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

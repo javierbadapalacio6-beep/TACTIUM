@@ -8,6 +8,7 @@ import { useAsync } from "@/lib/use-async";
 import { Card, Eyebrow } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconFlag, IconSearch, IconTrophy } from "@/components/Icon";
+import { PadelCourt3D } from "@/components/PadelCourt3D";
 
 /**
  * Portada pública — lo primero que ve quien llega sin cuenta.
@@ -51,59 +52,56 @@ export function PublicHome() {
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-      {/* ── Entrada ──────────────────────────────────────────────── */}
-      <header style={{ marginBottom: 28 }}>
-        <Eyebrow style={{ marginBottom: 10 }}>EXPLORAR</Eyebrow>
-        <h1 style={{ fontSize: 38, lineHeight: 1.04, maxWidth: "18ch" }}>
-          Torneos y federación, sin crear cuenta
-        </h1>
-        <p
-          style={{
-            margin: "14px 0 0",
-            fontSize: 15,
-            color: "var(--text-muted)",
-            maxWidth: "62ch",
-            textWrap: "pretty",
-          }}
-        >
-          Cuadros, horarios y resultados de los torneos que organizan los
-          clubes, y la competición federada al completo. Entra sólo cuando
-          quieras inscribirte o gestionar tu equipo.
-        </p>
-      </header>
-
-      <Card style={{ padding: 18, marginBottom: 22 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid var(--hair-strong)",
-            background: "var(--bg-card-2)",
-          }}
-        >
-          <IconSearch size={15} />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Busca un torneo por nombre, club o lugar"
-            aria-label="Buscar torneo"
-            style={{
-              flex: 1,
-              minWidth: 0,
-              border: "none",
-              background: "transparent",
-              color: "var(--text)",
-              fontSize: 14,
-              outline: "none",
-              fontFamily: "'Satoshi', sans-serif",
-            }}
-          />
+      {/* ── Entrada ──────────────────────────────────────────────────
+          La pista 3D entra primero y se queda girando de fondo; el texto y
+          el buscador se componen encima escalonados. No es una cortinilla
+          que haya que esperar: el contenido llega en el mismo gesto. */}
+      <section className="tw-pub-hero">
+        <div className="tw-pub-hero-3d" aria-hidden="true">
+          <PadelCourt3D centerX={0.72} />
         </div>
-      </Card>
+
+        <header className="tw-pub-hero-copy">
+          <Eyebrow style={{ marginBottom: 10 }}>EXPLORAR</Eyebrow>
+          <h1 style={{ fontSize: 38, lineHeight: 1.04, maxWidth: "18ch" }}>
+            Torneos y federación, sin crear cuenta
+          </h1>
+          <p
+            style={{
+              margin: "14px 0 0",
+              fontSize: 15,
+              color: "var(--text-muted)",
+              maxWidth: "56ch",
+              textWrap: "pretty",
+            }}
+          >
+            Cuadros, horarios y resultados de los torneos que organizan los
+            clubes, y la competición federada al completo. Entra sólo cuando
+            quieras inscribirte o gestionar tu equipo.
+          </p>
+
+          <div className="tw-pub-hero-search">
+            <IconSearch size={16} />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Busca un torneo por nombre, club o lugar"
+              aria-label="Buscar torneo"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "none",
+                background: "transparent",
+                color: "var(--text)",
+                fontSize: 14.5,
+                outline: "none",
+                fontFamily: "'Satoshi', sans-serif",
+              }}
+            />
+          </div>
+        </header>
+      </section>
 
       {/* ── Torneos ──────────────────────────────────────────────── */}
       <div
