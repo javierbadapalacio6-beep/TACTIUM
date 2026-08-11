@@ -17,7 +17,13 @@ import {
 } from "./Icon";
 import { PublicShell } from "./PublicShell";
 import { Wordmark } from "./Wordmark";
-import { NAV_BY_ROLE, TABS_BY_ROLE, hasTeamSwitcher, routeMeta } from "@/lib/nav";
+import {
+  NAV_BY_ROLE,
+  TABS_BY_ROLE,
+  hasTeamSwitcher,
+  isPublicPath,
+  routeMeta,
+} from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 
@@ -35,18 +41,8 @@ import { useTheme } from "@/lib/theme";
 /** Rutas sin shell: onboarding y acceso ocupan toda la pantalla. */
 const BARE_ROUTES = ["/entrar", "/alta", "/recuperar", "/empezar", "/bienvenida"];
 
-/**
- * Rutas que funcionan sin sesión. Son las que la base de datos expone a
- * `anon` mediante RPC `SECURITY DEFINER` (torneos, comunidad, perfiles).
- * Todo lo demás está bajo RLS y exige estar dentro.
- */
-const PUBLIC_ROUTES = [
-  "/torneos",
-  "/comunidad",
-  "/u/",
-  "/pro",
-  "/federacion",
-];
+// Qué rutas funcionan sin sesión vive en `lib/nav.ts` (`isPublicPath`), que es
+// donde está también el menú del marco público.
 
 /** Pantalla para rutas privadas sin sesión. */
 function SignedOut() {
@@ -205,8 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // el MARCO PÚBLICO. Antes se servían con este mismo shell y el visitante veía
   // una barra lateral de rol "INVITADO" llena de destinos que no podía abrir.
   if (!user) {
-    const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
-    if (!isPublic) return <SignedOut />;
+    if (!isPublicPath(pathname)) return <SignedOut />;
     return <PublicShell>{children}</PublicShell>;
   }
 

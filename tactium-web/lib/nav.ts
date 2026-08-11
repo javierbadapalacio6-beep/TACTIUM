@@ -77,6 +77,26 @@ export const PUBLIC_NAV: NavEntry[] = [
   { href: "/pro", label: "Planes", icon: "receipt" },
 ];
 
+/** Prefijos de ruta que funcionan sin sesión. */
+export const PUBLIC_ROUTES = [
+  "/torneos",
+  "/federacion",
+  "/comunidad",
+  "/u/",
+  "/pro",
+];
+
+/**
+ * ¿Esta ruta se puede ver sin sesión?
+ *
+ * La portada va aparte y con igualdad exacta: `"/"` es prefijo de TODO, así
+ * que meterla en la lista de arriba abriría la aplicación entera.
+ */
+export function isPublicPath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  return PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+}
+
 /** El jugador suelto no pertenece a ninguna plantilla: sin selector. */
 export function hasTeamSwitcher(role: Role): boolean {
   return role !== "suelto";

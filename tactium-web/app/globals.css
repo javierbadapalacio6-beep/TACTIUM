@@ -1820,3 +1820,16 @@ select.tw-cell-input {
     padding-right: max(24px, calc((100vw - 1200px) / 2));
   }
 }
+
+/* Portada pública: federación + alta, a dos columnas cuando cabe. */
+.tw-pub-home-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 26px;
+}
+@media (min-width: 900px) {
+  .tw-pub-home-split {
+    grid-template-columns: 1fr 1fr;
+  }
+}
