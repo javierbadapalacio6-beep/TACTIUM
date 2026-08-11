@@ -22,6 +22,10 @@ export interface PlanDescriptor {
   // Cuántos equipos cubre este plan. Sólo aplica a `club_*`; para `captain`
   // siempre es 1 (un solo equipo del propio capitán).
   teamQuota: number;
+  // Tamaño máximo de torneo (nº de parejas) INCLUIDO en el plan. `null` = el
+  // plan no incluye organización de torneos (p. ej. `captain`). Por encima del
+  // tope se paga por torneo (recargo por pareja). Sincronizado con la landing.
+  tournamentPairCap: number | null;
   // Etiqueta corta para UI ("Pro", "Elite", etc.). Para captain = "Capitán".
   shortLabel: string;
 }
@@ -34,6 +38,7 @@ export const CAPTAIN_PLAN: PlanDescriptor = {
   priceYearlyEur: 47.99,
   displayName: 'Capitán',
   teamQuota: 1,
+  tournamentPairCap: null,
   shortLabel: 'Capitán',
 };
 
@@ -45,6 +50,7 @@ export const CLUB_STARTER_PLAN: PlanDescriptor = {
   priceYearlyEur: 115.99,
   displayName: 'Club Starter',
   teamQuota: 3,
+  tournamentPairCap: 32,
   shortLabel: 'Starter',
 };
 
@@ -56,6 +62,7 @@ export const CLUB_PRO_PLAN: PlanDescriptor = {
   priceYearlyEur: 239.99,
   displayName: 'Club Pro',
   teamQuota: 10,
+  tournamentPairCap: 64,
   shortLabel: 'Pro',
 };
 
@@ -67,6 +74,7 @@ export const CLUB_ELITE_PLAN: PlanDescriptor = {
   priceYearlyEur: 384.99,
   displayName: 'Club Elite',
   teamQuota: 25,
+  tournamentPairCap: 128,
   shortLabel: 'Elite',
 };
 
