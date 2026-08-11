@@ -225,20 +225,19 @@ export const PublicHomeScreen = ({
 
   useEffect(() => {
     if (reduceMotion) return;
+    // Una sola pasada 0→1 que se reinicia: la onda sale y se apaga, y la
+    // siguiente empieza de nuevo. Con una secuencia ida y vuelta el halo se
+    // encogía reapareciendo, que se lee como un parpadeo, no como un pulso.
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 1400,
-          easing: Easing.inOut(Easing.quad),
+          duration: 1500,
+          easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 1400,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
+        // Respiro entre ondas: sin él, insiste demasiado.
+        Animated.delay(900),
       ]),
     );
     loop.start();
@@ -630,18 +629,28 @@ export const PublicHomeScreen = ({
             {LANE_BY_KEY[role].benefit}
           </Animated.Text>
 
-          <Animated.View
-            style={{
-              transform: [
+          <View style={styles.ctaBtnWrap}>
+            {/* Halo: crece y se apaga, como una onda saliendo del botón. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.ctaHalo,
                 {
-                  scale: pulse.interpolate({
+                  opacity: pulse.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [1, 1.022],
+                    outputRange: [0.42, 0],
                   }),
+                  transform: [
+                    {
+                      scale: pulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.96, 1.14],
+                      }),
+                    },
+                  ],
                 },
-              ],
-            }}
-          >
+              ]}
+            />
             <Pressable
               onPress={() =>
                 navigation.navigate('Plans', {
@@ -655,7 +664,7 @@ export const PublicHomeScreen = ({
             >
               <Text style={styles.ctaPrimaryText}>{LANE_BY_KEY[role].cta}</Text>
             </Pressable>
-          </Animated.View>
+          </View>
 
           <Text style={styles.ctaNote}>{LANE_BY_KEY[role].note}</Text>
         </View>
@@ -811,6 +820,17 @@ const makeStyles = (c: Palette) =>
       marginTop: 8,
     },
     ctaRow: { flexDirection: 'row', gap: 9, marginTop: 16 },
+    ctaBtnWrap: { position: 'relative', marginTop: 4 },
+    ctaHalo: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      borderRadius: 999,
+      backgroundColor: c.accent,
+    },
+
     ctaPrimary: {
       flex: 1,
       height: 46,
@@ -834,7 +854,7 @@ const makeStyles = (c: Palette) =>
       color: c.textFaint,
       fontSize: 11.5,
       lineHeight: 16,
-      marginTop: 12,
+      marginTop: 22,
       textAlign: 'center',
     },
 
