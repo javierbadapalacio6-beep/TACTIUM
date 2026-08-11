@@ -77,13 +77,13 @@ export const PublicPlansScreen = ({
 
       <Text style={styles.cardTitle}>{p.displayName}</Text>
       <Text style={styles.cardSub}>
-        {p.teamQuota === 1
-          ? 'Un equipo'
-          : `Hasta ${p.teamQuota} equipos`}
-        {p.tournamentPairCap
-          ? ` · torneos hasta ${p.tournamentPairCap} parejas`
-          : ''}
+        {p.teamQuota === 1 ? 'Un equipo' : `Hasta ${p.teamQuota} equipos`}
       </Text>
+      {p.tournamentPairCap ? (
+        <Text style={styles.cardSub}>
+          Torneos hasta {p.tournamentPairCap} parejas
+        </Text>
+      ) : null}
 
       {/* El importe FACTURADO manda; el equivalente mensual va debajo y
           pequeño. Es la regla que costó un rechazo de Apple (3.1.2c). */}
@@ -91,8 +91,6 @@ export const PublicPlansScreen = ({
         <Text
           style={[styles.price, featured && { color: c.accent }]}
           numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.7}
         >
           {formatEur(yearly ? p.priceYearlyEur : p.priceMonthlyEur)}
         </Text>
@@ -212,8 +210,6 @@ export const PublicPlansScreen = ({
                   t.priceEur === 0 && { color: c.accent },
                 ]}
                 numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.75}
               >
                 {t.priceEur === 0 ? 'Gratis' : formatEur(t.priceEur)}
               </Text>
@@ -292,8 +288,7 @@ const makeStyles = (c: Palette) =>
     rail: { paddingHorizontal: 18, gap: 11, alignItems: 'stretch' },
 
     card: {
-      width: 248,
-      overflow: 'hidden',
+      width: 262,
       padding: 18,
       borderRadius: Radius.lg,
       backgroundColor: c.bgCard,
@@ -334,7 +329,7 @@ const makeStyles = (c: Palette) =>
     price: {
       color: c.text,
       fontFamily: Fonts.mono,
-      fontSize: 28,
+      fontSize: 25,
       fontWeight: '700',
       flexShrink: 1,
     },
@@ -368,8 +363,7 @@ const makeStyles = (c: Palette) =>
     },
 
     tier: {
-      width: 148,
-      overflow: 'hidden',
+      width: 152,
       paddingHorizontal: 14,
       paddingVertical: 15,
       borderRadius: 13,
@@ -393,7 +387,7 @@ const makeStyles = (c: Palette) =>
     tierPrice: {
       color: c.text,
       fontFamily: Fonts.mono,
-      fontSize: 19,
+      fontSize: 17,
       fontWeight: '700',
       marginTop: 12,
     },
