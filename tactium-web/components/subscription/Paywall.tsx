@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { BENEFITS, PLANS } from "@/lib/account-data";
+import { CLUB_PLANS, formatEur } from "@/lib/plans";
+import {
+  TOURNAMENT_TIERS,
+  TOURNAMENT_EXTRA_PAIR_EUR,
+} from "@/lib/tournament-billing";
 import { Card, Eyebrow } from "@/components/ui";
 import { IconCheck } from "@/components/Icon";
 
@@ -123,9 +127,9 @@ export function Paywall() {
             alignItems: "start",
           }}
         >
-          {PLANS.map((p) => (
+          {CLUB_PLANS.map((p) => (
             <Card
-              key={p.name}
+              key={p.tier}
               style={{
                 border: `1.5px solid ${
                   p.featured ? "var(--accent)" : "transparent"
@@ -145,7 +149,7 @@ export function Paywall() {
                   letterSpacing: "-0.01em",
                 }}
               >
-                {p.name}
+                {p.displayName}
               </div>
               <div
                 style={{
@@ -155,7 +159,7 @@ export function Paywall() {
                   textWrap: "pretty",
                 }}
               >
-                {p.desc}
+                {p.audience}
               </div>
 
               {/* Importe facturado — el precio dominante. */}
@@ -176,7 +180,7 @@ export function Paywall() {
                     color: p.featured ? "var(--accent)" : "var(--text)",
                   }}
                 >
-                  {yearly ? p.yearly : p.monthly}
+                  {formatEur(yearly ? p.priceYearlyEur : p.priceMonthlyEur)}
                 </span>
                 <span
                   className="mono"
@@ -201,7 +205,7 @@ export function Paywall() {
                     color: "var(--text-faint)",
                   }}
                 >
-                  {p.yearlyEquivalent}
+                  {`equivale a ${formatEur(p.priceYearlyEur / 12)}/mes`}
                 </div>
               )}
 
@@ -223,7 +227,7 @@ export function Paywall() {
                   gap: 12,
                 }}
               >
-                {BENEFITS.map((b) => (
+                {p.features.map((b) => (
                   <li
                     key={b}
                     style={{
@@ -338,6 +342,78 @@ export function Paywall() {
             ))}
           </ol>
         </Card>
+
+        {/* ── Torneos ────────────────────────────────────────────────
+            Carril aparte: un club puede querer sólo organizar torneos y no
+            gestionar equipos. Aquí no hay suscripción — se paga el torneo. */}
+        <div style={{ marginTop: 48 }}>
+          <Eyebrow>TORNEOS SUELTOS</Eyebrow>
+          <h2 style={{ margin: "10px 0 0", fontSize: 26, lineHeight: 1.1 }}>
+            ¿Sólo quieres montar un torneo?
+          </h2>
+          <p
+            style={{
+              margin: "10px 0 0",
+              fontSize: 14.5,
+              color: "var(--text-muted)",
+              maxWidth: "62ch",
+              textWrap: "pretty",
+            }}
+          >
+            No hace falta suscripción. Pagas una vez, por el tamaño del torneo,
+            y las inscripciones las cobras tú con tu pasarela: TACTIUM no se
+            queda comisión. Si ya tienes plan de club, tus torneos van incluidos
+            hasta el tope de tu plan.
+          </p>
+
+          <div
+            style={{
+              marginTop: 22,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {TOURNAMENT_TIERS.map((t) => (
+              <Card key={t.pairs} style={{ padding: 20 }}>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: "0.16em",
+                    color: "var(--text-faint)",
+                  }}
+                >
+                  HASTA {t.pairs} PAREJAS
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    marginTop: 10,
+                    fontSize: 30,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    color: t.priceEur === 0 ? "var(--accent)" : "var(--text)",
+                  }}
+                >
+                  {t.priceEur === 0 ? "Gratis" : formatEur(t.priceEur)}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <p
+            className="mono"
+            style={{
+              margin: "14px 0 0",
+              fontSize: 11,
+              letterSpacing: "0.1em",
+              color: "var(--text-faint)",
+            }}
+          >
+            +{TOURNAMENT_EXTRA_PAIR_EUR} € POR PAREJA POR ENCIMA DEL TRAMO
+          </p>
+        </div>
 
         <div
           style={{

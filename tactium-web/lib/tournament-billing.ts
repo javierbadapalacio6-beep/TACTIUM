@@ -20,9 +20,9 @@ export const TOURNAMENT_FREE_PAIRS = 16;
 // Topes de torneo incluidos por plan de club (mirror de plans.ts).
 export const PLAN_TOURNAMENT_PAIR_CAP: Record<string, number | null> = {
   captain: null,
-  club_starter: 40,
-  club_pro: 90,
-  club_elite: 150,
+  club_starter: 32,
+  club_pro: 64,
+  club_elite: 128,
 };
 
 export function perTournamentPriceEur(maxPairs: number): number {

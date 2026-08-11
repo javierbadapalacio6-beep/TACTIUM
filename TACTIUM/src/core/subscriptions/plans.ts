@@ -50,7 +50,7 @@ export const CLUB_STARTER_PLAN: PlanDescriptor = {
   priceYearlyEur: 115.99,
   displayName: 'Club Starter',
   teamQuota: 3,
-  tournamentPairCap: 40,
+  tournamentPairCap: 32,
   shortLabel: 'Starter',
 };
 
@@ -62,7 +62,7 @@ export const CLUB_PRO_PLAN: PlanDescriptor = {
   priceYearlyEur: 239.99,
   displayName: 'Club Pro',
   teamQuota: 10,
-  tournamentPairCap: 90,
+  tournamentPairCap: 64,
   shortLabel: 'Pro',
 };
 
@@ -74,7 +74,7 @@ export const CLUB_ELITE_PLAN: PlanDescriptor = {
   priceYearlyEur: 384.99,
   displayName: 'Club Elite',
   teamQuota: 25,
-  tournamentPairCap: 150,
+  tournamentPairCap: 128,
   shortLabel: 'Elite',
 };
 
