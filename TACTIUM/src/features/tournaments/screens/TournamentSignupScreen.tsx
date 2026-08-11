@@ -807,9 +807,7 @@ export const TournamentSignupScreen = ({
             </Text>
           </>
         ) : (
-          <Text style={styles.availHint}>
-            Tus puntos de federación sirven para sembrar el cuadro y equilibrarlo.
-          </Text>
+          <Text style={styles.availHint}>Tus puntos sirven para sembrar el cuadro.</Text>
         )}
 
         {usesNivel ? (
@@ -991,20 +989,17 @@ export const TournamentSignupScreen = ({
           </View>
         ) : null}
 
-        <Text style={styles.label}>DISPONIBILIDAD · FRANJAS DE 1H</Text>
+        <Text style={styles.label}>DISPONIBILIDAD</Text>
         {tDays.length === 0 ? (
           <Text style={styles.availHint}>
-            El torneo aún no tiene fechas. Podrás indicar tus horas cuando el club
-            las fije; por ahora te apuntas como disponible a cualquier hora.
+            Sin fechas aún · te apuntas disponible a cualquier hora.
           </Text>
         ) : (
           <>
             <Text style={styles.availHint}>
-              Por defecto puedes a cualquier hora. Toca en rojo las franjas que{' '}
-              <Text style={{ fontWeight: '800', color: c.text }}>NO</Text> puedas.
-              {removeCap != null
-                ? ` Puedes quitar hasta ${removeCap} ${removeCap === 1 ? 'hora' : 'horas'} · ${removed.size}/${removeCap}.`
-                : ''}
+              Marca en rojo las franjas que{' '}
+              <Text style={{ fontWeight: '800', color: c.text }}>NO</Text> puedes.
+              {removeCap != null ? ` (máx ${removeCap} · ${removed.size}/${removeCap})` : ''}
             </Text>
             {tDays.map((day) => (
               <View key={day.label} style={styles.franjaBlock}>
@@ -1033,9 +1028,6 @@ export const TournamentSignupScreen = ({
                 </View>
               </View>
             ))}
-            <Text style={[styles.availHint, { marginTop: 4 }]}>
-              En rojo = no puedes jugar esa franja.
-            </Text>
           </>
         )}
       </ScrollView>
@@ -1102,7 +1094,7 @@ const FcpSuggest: React.FC<{
           </Pressable>
         ))}
       </View>
-      <Text style={styles.suggestHint}>Toca para rellenar puntos y nivel. Puedes editarlos.</Text>
+      <Text style={styles.suggestHint}>Toca para autorrellenar.</Text>
     </View>
   );
 };
