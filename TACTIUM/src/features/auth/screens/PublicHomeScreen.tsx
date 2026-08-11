@@ -491,6 +491,39 @@ export const PublicHomeScreen = ({
             </Pressable>
           );
         })}
+
+        {/* ── Para clubes y capitanes ──────────────────────────────────
+            El cierre de la pantalla: hasta aquí todo era mirar. Va al final
+            a propósito — quien ha llegado hasta abajo ya ha visto de qué va
+            esto, y es cuando la propuesta tiene sentido. */}
+        <View style={styles.ctaCard}>
+          <Text style={styles.ctaEyebrow}>ORGANIZA</Text>
+          <Text style={styles.ctaTitle}>¿Montas torneos o llevas un equipo?</Text>
+          <Text style={styles.ctaBody}>
+            Cuadros, horarios y resultados en directo para tus torneos. Y para
+            tu equipo federado: alineaciones, jornadas y actas en un sitio.
+          </Text>
+
+          <View style={styles.ctaRow}>
+            <Pressable
+              onPress={goLogin}
+              style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.ctaPrimaryText}>Crear cuenta</Text>
+            </Pressable>
+            <Pressable
+              onPress={goLogin}
+              style={({ pressed }) => [styles.ctaGhost, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.ctaGhostText}>Ya tengo cuenta</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.ctaNote}>
+            Hasta 16 parejas, el torneo es gratis · 14 días de prueba en los
+            planes de equipo
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -569,6 +602,62 @@ const makeStyles = (c: Palette) =>
       letterSpacing: 2,
     },
     secMore: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
+
+    ctaCard: {
+      marginTop: 20,
+      padding: 20,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.accent25,
+    },
+    ctaEyebrow: {
+      color: c.accent,
+      fontFamily: Fonts.mono,
+      fontSize: 9.5,
+      letterSpacing: 2.2,
+      marginBottom: 8,
+    },
+    ctaTitle: {
+      color: c.text,
+      fontSize: 18,
+      lineHeight: 23,
+      fontWeight: '800',
+      letterSpacing: -0.2,
+    },
+    ctaBody: {
+      color: c.textMuted,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 8,
+    },
+    ctaRow: { flexDirection: 'row', gap: 9, marginTop: 16 },
+    ctaPrimary: {
+      flex: 1,
+      height: 46,
+      borderRadius: 999,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    ctaPrimaryText: { color: c.textInverse, fontSize: 14, fontWeight: '700' },
+    ctaGhost: {
+      flex: 1,
+      height: 46,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    ctaGhostText: { color: c.text, fontSize: 14, fontWeight: '700' },
+    ctaNote: {
+      color: c.textFaint,
+      fontSize: 11.5,
+      lineHeight: 16,
+      marginTop: 12,
+      textAlign: 'center',
+    },
 
     filterRow: {
       flexDirection: 'row',
