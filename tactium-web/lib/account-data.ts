@@ -98,71 +98,9 @@ export interface ClubTeam {
   covered: boolean;
 }
 
-export const CLUB_TEAMS: ClubTeam[] = [
-  { name: "Halcones A", meta: "1ª · MASCULINO", covered: true },
-  { name: "Halcones B", meta: "2ª · MASCULINO", covered: true },
-  { name: "Halcones Femenino", meta: "1ª · FEMENINO", covered: true },
-  { name: "Halcones Veteranos", meta: "2ª · MASCULINO", covered: true },
-  { name: "Halcones C", meta: "3ª · MASCULINO", covered: true },
-  { name: "Halcones Juvenil", meta: "3ª · MIXTO", covered: true },
-  { name: "Halcones D", meta: "4ª · MASCULINO", covered: true },
-  { name: "Halcones Femenino B", meta: "2ª · FEMENINO", covered: true },
-  { name: "Halcones Escuela", meta: "SIN CATEGORÍA", covered: false },
-  { name: "Halcones Sénior", meta: "3ª · MIXTO", covered: false },
-  { name: "Halcones E", meta: "4ª · MASCULINO", covered: false },
-];
 
-export const CLUB_PLAN = {
-  name: "Club · 10 equipos",
-  price: "29,99 €",
-  period: "/MES",
-  renews: "31/08",
-  limit: 10,
-} as const;
 
-// ── Planes / paywall ───────────────────────────────────────────────
-export const BENEFITS: string[] = [
-  "Convocatorias en 1 toque, sin chats de 80 mensajes",
-  "Calendario y rankings escaneados desde la federación",
-  "Alineaciones ordenadas por puntos automáticamente",
-  "Torneos completos: grupos, cuadros y horarios",
-];
 
-export interface Plan {
-  name: string;
-  desc: string;
-  /** Importe realmente facturado en cada ciclo. */
-  monthly: string;
-  yearly: string;
-  /** Equivalente mensual del plan anual — SIEMPRE secundario al facturado. */
-  yearlyEquivalent: string;
-  featured?: boolean;
-}
-
-export const PLANS: Plan[] = [
-  {
-    name: "Hasta 3 equipos",
-    desc: "Clubes pequeños",
-    monthly: "11,99 €",
-    yearly: "119,90 €",
-    yearlyEquivalent: "equivale a 9,99 €/mes",
-  },
-  {
-    name: "Hasta 10 equipos",
-    desc: "La mayoría de clubes federados",
-    monthly: "29,99 €",
-    yearly: "299,90 €",
-    yearlyEquivalent: "equivale a 24,99 €/mes",
-    featured: true,
-  },
-  {
-    name: "Hasta 25 equipos",
-    desc: "Escuelas y academias",
-    monthly: "59,99 €",
-    yearly: "599,90 €",
-    yearlyEquivalent: "equivale a 49,99 €/mes",
-  },
-];
 
 // ── Suscripción · origen de compra ─────────────────────────────────
 /**
@@ -185,34 +123,6 @@ export interface Subscription {
   willNotRenew?: boolean;
 }
 
-export const SUBSCRIPTION_CASES: Record<"A" | "B" | "C", Subscription> = {
-  A: {
-    source: "none",
-    planName: "Plan gratuito",
-    state: "SIN PLAN",
-    price: "0 €",
-    period: "/MES",
-    renewNote: "Sin renovación · sin cobros",
-  },
-  B: {
-    source: "stripe",
-    planName: "Club · 10 equipos",
-    state: "ACTIVA",
-    price: "29,99 €",
-    period: "/MES",
-    renewNote: "Próxima renovación · 31/08",
-    scheduledPlan: { name: "Club · 25 equipos", date: "31/08" },
-  },
-  C: {
-    source: "app_store",
-    planName: "Equipo · 1 equipo",
-    state: "ACTIVA",
-    price: "4,99 €",
-    period: "/MES",
-    renewNote: "Renueva el 31/08 en tu tienda",
-    willNotRenew: true,
-  },
-};
 
 /** Etiqueta corta del origen, para el badge de la tarjeta de plan. */
 export function sourceLabel(source: SubscriptionSource): string {

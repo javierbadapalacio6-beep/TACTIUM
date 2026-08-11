@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 
 import {
-  CLUB_PLAN,
   FREE_PLAYERS,
   initials,
   ACCOUNT_EMAIL,
 } from "@/lib/account-data";
+import { ALL_PLANS, formatEur } from "@/lib/plans";
+import { fetchSubscription } from "@/lib/queries";
+import { useAsync } from "@/lib/use-async";
 import { Card, Eyebrow } from "@/components/ui";
 import {
   IconCalendar,
@@ -398,6 +400,18 @@ export function Invitaciones() {
 
 /* ═══ SUSCRIPCIÓN · resumen ═══════════════════════════════════════ */
 export function SuscripcionResumen() {
+  // Datos reales: antes pintaba el plan de maqueta (10 equipos a 29,99 €,
+  // que no es ningun plan que exista) para cualquier usuario.
+  const { data, loading } = useAsync(() => fetchSubscription(), []);
+  const plan = ALL_PLANS.find((p) => p.tier === data?.planTier) ?? null;
+  const yearly = data?.billingPeriod === 'yearly';
+  const renews = data?.currentPeriodEnd
+    ? new Date(data.currentPeriodEnd).toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: 'long',
+      })
+    : null;
+
   return (
     <Card>
       <Eyebrow>SUSCRIPCIÓN</Eyebrow>
@@ -429,9 +443,11 @@ export function SuscripcionResumen() {
                 letterSpacing: "-0.01em",
               }}
             >
-              {CLUB_PLAN.name}
+              {loading ? '…' : (plan?.displayName ?? 'Plan gratuito')}
             </span>
-            <span className="chip">ACTIVA</span>
+            <span className="chip">
+              {!plan ? 'SIN PLAN' : data?.status === 'trialing' ? 'EN PRUEBA' : 'ACTIVA'}
+            </span>
           </div>
           <div
             className="mono"
@@ -442,7 +458,15 @@ export function SuscripcionResumen() {
               color: "var(--text-muted)",
             }}
           >
-            {CLUB_PLAN.price}/mes · renueva el {CLUB_PLAN.renews}
+            {plan
+              ? [
+                  formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur) +
+                    (yearly ? "/año" : "/mes"),
+                  renews ? `renueva el ${renews}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Sin renovación · sin cobros"}
           </div>
         </div>
         <Link

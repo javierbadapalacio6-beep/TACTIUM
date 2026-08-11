@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 
 import {
-  SUBSCRIPTION_CASES,
   isStoreManaged,
   sourceLabel,
   storeName,
+  type Subscription,
+  type SubscriptionSource,
 } from "@/lib/account-data";
+import { fetchSubscription, type DbSubscription } from "@/lib/queries";
+import { ALL_PLANS, formatEur } from "@/lib/plans";
+import { useAsync } from "@/lib/use-async";
 import { Card, Eyebrow, PageHeader } from "@/components/ui";
+import { SkeletonCard } from "@/components/states";
 import { IconClock, IconLock } from "@/components/Icon";
 
 /**
@@ -23,21 +27,78 @@ import { IconClock, IconLock } from "@/components/Icon";
  *   · la tarjeta queda en solo lectura con el aviso de dónde se gestiona
  * Saltarse esto es lo que produce suscripciones y cobros duplicados.
  *
- * El selector de caso de abajo es andamiaje temporal: todavía no hay consulta
- * a la base de datos, así que expone los tres estados para poder verlos. Se
- * borra en cuanto `subscription` venga de Supabase.
+ * Los datos son REALES: salen de `subscriptions` vía `fetchSubscription()`.
+ * Antes esta pantalla tenía un selector de casos de maqueta con precios
+ * inventados (el plan de 10 equipos ponía 29,99 € cuando cobra 24,99 €).
  */
-type CaseKey = "A" | "B" | "C";
 
-const CASE_LABELS: Record<CaseKey, string> = {
-  A: "A · Sin suscripción",
-  B: "B · Comprada en la web",
-  C: "C · Comprada en la App Store",
+/** De dónde viene la compra, según la plataforma que guardó el webhook. */
+function sourceOf(platform: string | null | undefined): SubscriptionSource {
+  if (platform === "stripe" || platform === "web") return "stripe";
+  if (platform === "ios" || platform === "app_store") return "app_store";
+  if (platform === "android" || platform === "play_store") return "play_store";
+  return "none";
+}
+
+const STATE_LABEL: Record<string, string> = {
+  trialing: "EN PRUEBA",
+  active: "ACTIVA",
+  grace_period: "PAGO PENDIENTE",
 };
 
+const fmtDate = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleDateString("es-ES", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : "—";
+
+/** Traduce la fila de la base de datos a lo que pinta la pantalla. */
+function toSubscription(row: DbSubscription | null): Subscription {
+  if (!row) {
+    return {
+      source: "none",
+      planName: "Plan gratuito",
+      state: "SIN PLAN",
+      price: "0 €",
+      period: "/MES",
+      renewNote: "Sin renovación · sin cobros",
+    };
+  }
+  const plan = ALL_PLANS.find((p) => p.tier === row.planTier);
+  const yearly = row.billingPeriod === "yearly";
+  const scheduled = row.scheduledPlanTier
+    ? ALL_PLANS.find((p) => p.tier === row.scheduledPlanTier)
+    : null;
+
+  return {
+    source: sourceOf(row.platform),
+    planName: plan?.displayName ?? row.planTier,
+    state: STATE_LABEL[row.status] ?? row.status.toUpperCase(),
+    price: plan
+      ? formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)
+      : "—",
+    period: yearly ? "/AÑO" : "/MES",
+    renewNote:
+      row.status === "trialing"
+        ? `Primer cobro el ${fmtDate(row.currentPeriodEnd)}`
+        : `Próxima renovación · ${fmtDate(row.currentPeriodEnd)}`,
+    ...(scheduled
+      ? {
+          scheduledPlan: {
+            name: scheduled.displayName,
+            date: fmtDate(row.currentPeriodEnd),
+          },
+        }
+      : null),
+  };
+}
+
 export function MiSuscripcion() {
-  const [caseKey, setCaseKey] = useState<CaseKey>("B");
-  const sub = SUBSCRIPTION_CASES[caseKey];
+  const { data, loading, error } = useAsync(() => fetchSubscription(), []);
+  const sub = toSubscription(data);
 
   const storeManaged = isStoreManaged(sub.source);
   const webManaged = sub.source === "stripe";
@@ -51,50 +112,14 @@ export function MiSuscripcion() {
         lede="Tu plan, de dónde viene y qué puedes hacer con él desde aquí."
       />
 
-      {/* ── Andamiaje temporal · quitar al conectar Supabase ───────── */}
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          marginBottom: 24,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <span
-          className="mono"
-          style={{
-            fontSize: 9.5,
-            letterSpacing: "0.18em",
-            color: "var(--text-faint)",
-          }}
-        >
-          SIN DATOS REALES · ELIGE EL CASO
-        </span>
-        {(Object.keys(CASE_LABELS) as CaseKey[]).map((k) => {
-          const on = caseKey === k;
-          return (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setCaseKey(k)}
-              className="btn"
-              style={{
-                padding: "9px 16px",
-                fontSize: 12.5,
-                fontWeight: on ? 700 : 500,
-                background: on ? "var(--accent-10)" : "transparent",
-                color: on ? "var(--accent)" : "var(--text-muted)",
-                border: `1px solid ${
-                  on ? "var(--accent)" : "var(--hair-strong)"
-                }`,
-              }}
-            >
-              {CASE_LABELS[k]}
-            </button>
-          );
-        })}
-      </div>
+      {loading && <SkeletonCard />}
+      {error && (
+        <Card style={{ marginBottom: 20 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
+            No se ha podido leer tu suscripción: {error}
+          </p>
+        </Card>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <Eyebrow>MI SUSCRIPCIÓN</Eyebrow>
