@@ -6,11 +6,13 @@ export interface TournamentTier {
   pairs: number;
   priceEur: number;
 }
+// Capacidad igualada a Xporty, precio ~20% por debajo (ver tournamentBilling.ts).
 export const TOURNAMENT_TIERS: TournamentTier[] = [
   { pairs: 16, priceEur: 0 },
-  { pairs: 32, priceEur: 25 },
-  { pairs: 64, priceEur: 55 },
-  { pairs: 128, priceEur: 99 },
+  { pairs: 40, priceEur: 25 },
+  { pairs: 90, priceEur: 59 },
+  { pairs: 150, priceEur: 99 },
+  { pairs: 200, priceEur: 139 },
 ];
 export const TOURNAMENT_EXTRA_PAIR_EUR = 2;
 export const TOURNAMENT_FREE_PAIRS = 16;
@@ -18,9 +20,9 @@ export const TOURNAMENT_FREE_PAIRS = 16;
 // Topes de torneo incluidos por plan de club (mirror de plans.ts).
 export const PLAN_TOURNAMENT_PAIR_CAP: Record<string, number | null> = {
   captain: null,
-  club_starter: 32,
-  club_pro: 64,
-  club_elite: 128,
+  club_starter: 40,
+  club_pro: 90,
+  club_elite: 150,
 };
 
 export function perTournamentPriceEur(maxPairs: number): number {

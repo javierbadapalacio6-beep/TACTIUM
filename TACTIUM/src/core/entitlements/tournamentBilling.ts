@@ -11,11 +11,18 @@ export interface TournamentTier {
   pairs: number; // tope de parejas del tramo
   priceEur: number; // 0 = gratis
 }
+// Tramos alineados con la competencia (Xporty) en CAPACIDAD, por debajo en
+// PRECIO (~20% menos en cada tramo):
+//   40 parejas  → 25 € (Xporty 30 €)     150 parejas → 99 €  (Xporty 125 €)
+//   90 parejas  → 59 € (Xporty 75 €)     200 parejas → 139 € (Xporty 168 €)
+// El tramo gratis (16) también supera al suyo (15) y sin sus límites de
+// 1 competición activa / 1 categoría / 2 fases.
 export const TOURNAMENT_TIERS: TournamentTier[] = [
   { pairs: 16, priceEur: 0 },
-  { pairs: 32, priceEur: 25 },
-  { pairs: 64, priceEur: 55 },
-  { pairs: 128, priceEur: 99 },
+  { pairs: 40, priceEur: 25 },
+  { pairs: 90, priceEur: 59 },
+  { pairs: 150, priceEur: 99 },
+  { pairs: 200, priceEur: 139 },
 ];
 export const TOURNAMENT_EXTRA_PAIR_EUR = 2; // recargo por pareja por encima del tramo/tope
 export const TOURNAMENT_FREE_PAIRS = 16;

@@ -34,12 +34,13 @@ export interface TournamentTier {
 }
 export const TOURNAMENT_TIERS: TournamentTier[] = [
   { label: "Gratis", pairs: 16, priceEur: null },
-  { label: "Hasta 32 parejas", pairs: 32, priceEur: 25 },
-  { label: "Hasta 64 parejas", pairs: 64, priceEur: 55 },
-  { label: "Hasta 128 parejas", pairs: 128, priceEur: 99 },
+  { label: "Hasta 40 parejas", pairs: 40, priceEur: 25 },
+  { label: "Hasta 90 parejas", pairs: 90, priceEur: 59 },
+  { label: "Hasta 150 parejas", pairs: 150, priceEur: 99 },
+  { label: "Hasta 200 parejas", pairs: 200, priceEur: 139 },
 ];
 export const TOURNAMENT_EXTRA_PAIR_EUR = 2;
-export const TOURNAMENT_BULK_DISCOUNT_PERCENT = 15; // 3+ torneos al año
+export const TOURNAMENT_BULK_DISCOUNT_PERCENT = 20; // 3+ torneos al año
 
 export const CAPTAIN_PLAN: PlanDescriptor = {
   tier: "captain",
@@ -69,10 +70,10 @@ export const CLUB_STARTER_PLAN: PlanDescriptor = {
   displayName: "Club Starter",
   shortLabel: "Starter",
   teamQuota: 3,
-  tournamentPairCap: 32,
+  tournamentPairCap: 40,
   features: [
     "Hasta 3 equipos cubiertos",
-    "Torneos incluidos hasta 32 parejas",
+    "Torneos incluidos hasta 40 parejas",
     "Capitanes invitados sin coste extra",
     "Panel global del club",
     "Soporte prioritario por email",
@@ -88,10 +89,10 @@ export const CLUB_PRO_PLAN: PlanDescriptor = {
   displayName: "Club Pro",
   shortLabel: "Pro",
   teamQuota: 10,
-  tournamentPairCap: 64,
+  tournamentPairCap: 90,
   features: [
     "Hasta 10 equipos cubiertos",
-    "Torneos incluidos hasta 64 parejas",
+    "Torneos incluidos hasta 90 parejas",
     "Multi-categoría (M/F/Mixto)",
     "Horarios de pista + rejilla",
     "Todas las features de Starter",
@@ -107,10 +108,10 @@ export const CLUB_ELITE_PLAN: PlanDescriptor = {
   displayName: "Club Elite",
   shortLabel: "Elite",
   teamQuota: 25,
-  tournamentPairCap: 128,
+  tournamentPairCap: 150,
   features: [
     "Hasta 25 equipos cubiertos",
-    "Torneos incluidos hasta 128 parejas",
+    "Torneos incluidos hasta 150 parejas",
     "Reporting avanzado por categoría",
     "Todas las features de Pro",
     "Soporte por WhatsApp directo",
