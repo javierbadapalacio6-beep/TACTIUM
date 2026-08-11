@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   fetchFcpGroups,
+  fetchFcpLeagues,
   fetchFcpMatches,
+  fetchFcpRanking,
   fetchFcpStandings,
   fetchFcpTeamPlayers,
   searchFcpPlayers,
+  searchFcpTeams,
   type FcpGroup,
   type FcpStanding,
 } from "@/lib/queries";
@@ -19,10 +22,13 @@ import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconChevronRight, IconFlag, IconSearch } from "@/components/Icon";
 
 /**
- * Federación — datos reales de las tablas `fcp_*`.
+ * Federación — datos reales de las tablas `fcp_*`, con lectura pública
+ * (migración 20260811c). Son datos que la federación publica en abierto.
  *
- * ⚠️ Estas tablas exigen `authenticated`: sin sesión no devuelven nada. Es lo
- * que impide, hoy por hoy, usar la Federación como reclamo de buscadores.
+ * La estructura es la MISMA que la pantalla Explorar Federación de la app:
+ * pestañas Todo · Equipos · Jugadores · Rankings y filtros en línea de año,
+ * género, categoría y grupo. Si las dos superficies enseñan lo mismo con la
+ * misma forma, quien salta de una a otra no tiene que reaprender nada.
  */
 
 const FEDERATIONS = [
@@ -124,37 +130,170 @@ export function FederationPicker() {
   );
 }
 
-/* ═══ 02 · EXPLORAR ═══════════════════════════════════════════════ */
+type Tab = "todo" | "equipos" | "jugadores" | "rankings";
+const TABS: [Tab, string][] = [
+  ["todo", "Todo"],
+  ["equipos", "Equipos"],
+  ["jugadores", "Jugadores"],
+  ["rankings", "Rankings"],
+];
+
+/** Una fila de filtro: etiqueta + chips en una línea que hace scroll. */
+function FilterRow({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  if (options.length <= 1) return null;
+  return (
+    <div className="tw-fcp-filter">
+      <span className="tw-fcp-filter-label">{label}</span>
+      <div className="tw-fcp-filter-chips">
+        {options.map((o) => {
+          const on = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onChange(o.value)}
+              aria-pressed={on}
+              className={"tw-fcp-chip" + (on ? " is-on" : "")}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function FederationExplore({ slug }: { slug: string }) {
-  const { user } = useSession();
-  const [tab, setTab] = useState<"grupos" | "jugadores">("grupos");
+  const [tab, setTab] = useState<Tab>("todo");
   const [query, setQuery] = useState("");
-  const [gender, setGender] = useState("Ambos");
+  const [term, setTerm] = useState("");
+  const [year, setYear] = useState<number | null>(null);
+  const [gender, setGender] = useState<"all" | "M" | "F">("all");
+  const [cat, setCat] = useState("all");
+  const [grupo, setGrupo] = useState("all");
 
-  const groups = useAsync(() => fetchFcpGroups(200), [user?.id]);
+  // Una consulta por tecla es una consulta de más.
+  useEffect(() => {
+    const id = setTimeout(() => setTerm(query.trim()), 300);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  const leagues = useAsync(() => fetchFcpLeagues(), []);
+
+  // Por defecto, la temporada más reciente.
+  useEffect(() => {
+    if (year == null && leagues.data?.length) setYear(leagues.data[0].idLiga);
+  }, [leagues.data, year]);
+
+  const groups = useAsync(() => fetchFcpGroups(year), [year], year != null);
+  const allGroups = useMemo(() => groups.data ?? [], [groups.data]);
+
+  // ── Opciones de los filtros, derivadas de los propios datos ─────────────
+  const catOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const g of allGroups) {
+      if (gender !== "all" && g.genero !== gender) continue;
+      if (g.categoria) set.add(g.categoria);
+    }
+    const sorted = [...set].sort(
+      (a, b) => parseInt(a, 10) - parseInt(b, 10)
+    );
+    return [
+      { value: "all", label: "Todas" },
+      ...sorted.map((c) => ({ value: c, label: c })),
+    ];
+  }, [allGroups, gender]);
+
+  const grupoOptions = useMemo(
+    () =>
+      allGroups.filter(
+        (g) =>
+          !g.esPlayoff &&
+          (gender === "all" || g.genero === gender) &&
+          (cat === "all" || g.categoria === cat)
+      ),
+    [allGroups, gender, cat]
+  );
+
+  // Si el grupo elegido deja de casar con los demás filtros, se suelta.
+  useEffect(() => {
+    if (grupo !== "all" && !grupoOptions.some((g) => g.idGrupo === grupo)) {
+      setGrupo("all");
+    }
+  }, [grupoOptions, grupo]);
+
+  // ── Grupos que se listan ────────────────────────────────────────────────
+  const shownGroups = useMemo(() => {
+    const t = term.toLowerCase();
+    return allGroups.filter((g) => {
+      if (gender !== "all" && g.genero !== gender) return false;
+      if (cat !== "all" && g.categoria !== cat) return false;
+      if (grupo !== "all" && g.idGrupo !== grupo) return false;
+      return !t || g.nombre.toLowerCase().includes(t);
+    });
+  }, [allGroups, gender, cat, grupo, term]);
+
+  const scopedGroupIds = useMemo(
+    () =>
+      grupo !== "all" ? [grupo] : grupoOptions.map((g) => g.idGrupo),
+    [grupo, grupoOptions]
+  );
+
+  // ── Datos por pestaña ───────────────────────────────────────────────────
+  const teams = useAsync(
+    () =>
+      searchFcpTeams({
+        query: term,
+        grupoIds: term.length < 2 ? scopedGroupIds : undefined,
+        limit: 60,
+      }),
+    [term, scopedGroupIds.join(",")],
+    tab === "equipos" && (term.length >= 2 || scopedGroupIds.length > 0)
+  );
+
   const players = useAsync(
-    () => searchFcpPlayers(query),
-    [query, user?.id],
-    tab === "jugadores" && query.trim().length >= 3
+    () => searchFcpPlayers(term, 40),
+    [term],
+    tab === "jugadores" && term.length >= 3
   );
 
-  const q = query.trim().toLowerCase();
-  const allGroups = groups.data ?? [];
-  const rows = allGroups.filter((g) => {
-    if (gender !== "Ambos" && (g.genero ?? "").toLowerCase() !== gender.toLowerCase())
-      return false;
-    return !q || g.nombre.toLowerCase().includes(q);
-  });
-
-  const genders = Array.from(
-    new Set(allGroups.map((g) => g.genero).filter(Boolean) as string[])
+  const ranking = useAsync(
+    () =>
+      fetchFcpRanking({ genero: gender, categoria: cat, query: term, limit: 150 }),
+    [gender, cat, term],
+    tab === "rankings"
   );
+
+  const filtersOn = gender !== "all" || cat !== "all" || grupo !== "all";
+  const reset = () => {
+    setGender("all");
+    setCat("all");
+    setGrupo("all");
+  };
+
+  const yearOptions = (leagues.data ?? []).map((l) => ({
+    value: String(l.idLiga),
+    label: l.temporada ?? String(l.idLiga),
+  }));
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto" }}>
       <div style={{ marginBottom: 22 }}>
         <Eyebrow>FEDERACIÓN CÁNTABRA</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Federación Cántabra de Pádel</h1>
+        <h1 style={{ marginTop: 10, fontSize: 30 }}>
+          Federación Cántabra de Pádel
+        </h1>
         <p
           className="mono"
           style={{
@@ -164,7 +303,16 @@ export function FederationExplore({ slug }: { slug: string }) {
             color: "var(--text-faint)",
           }}
         >
-          {groups.loading ? "CARGANDO…" : `${allGroups.length} GRUPOS · DATOS REALES`}
+          {/* El contador habla de lo que hay debajo, no siempre de grupos. */}
+          {tab === "rankings"
+            ? `${(ranking.data ?? []).length} JUGADORES EN EL RANKING`
+            : tab === "jugadores"
+              ? `${(players.data ?? []).length} JUGADORES`
+              : tab === "equipos"
+                ? `${(teams.data ?? []).length} EQUIPOS`
+                : groups.loading
+                  ? "CARGANDO…"
+                  : `${shownGroups.length} DE ${allGroups.length} GRUPOS`}
         </p>
       </div>
 
@@ -186,7 +334,13 @@ export function FederationExplore({ slug }: { slug: string }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
-              tab === "grupos" ? "Busca un grupo…" : "Busca un jugador (3 letras)…"
+              tab === "jugadores"
+                ? "Busca un jugador (3 letras)…"
+                : tab === "equipos"
+                  ? "Busca un equipo…"
+                  : tab === "rankings"
+                    ? "Busca en el ranking…"
+                    : "Busca un grupo…"
             }
             aria-label="Buscar en la federación"
             style={{
@@ -202,19 +356,16 @@ export function FederationExplore({ slug }: { slug: string }) {
           />
         </div>
 
+        {/* Pestañas */}
         <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {(
-            [
-              ["grupos", "Grupos"],
-              ["jugadores", "Jugadores"],
-            ] as const
-          ).map(([k, label]) => {
+          {TABS.map(([k, label]) => {
             const on = tab === k;
             return (
               <button
                 key={k}
                 type="button"
                 onClick={() => setTab(k)}
+                aria-pressed={on}
                 className="btn"
                 style={{
                   padding: "9px 16px",
@@ -229,26 +380,59 @@ export function FederationExplore({ slug }: { slug: string }) {
               </button>
             );
           })}
+        </div>
 
-          <div style={{ flex: 1 }} />
+        {/* Filtros en línea. En Rankings el grupo no pinta nada: la lista es
+            por género y categoría, no por grupo. */}
+        <div className="tw-fcp-filters">
+          <FilterRow
+            label="Temporada"
+            value={String(year ?? "")}
+            options={yearOptions}
+            onChange={(v) => setYear(Number(v))}
+          />
+          <FilterRow
+            label="Género"
+            value={gender}
+            options={[
+              { value: "all", label: "Ambos" },
+              { value: "M", label: "Masculino" },
+              { value: "F", label: "Femenino" },
+            ]}
+            onChange={(v) => setGender(v as "all" | "M" | "F")}
+          />
+          <FilterRow
+            label="Categoría"
+            value={cat}
+            options={catOptions}
+            onChange={setCat}
+          />
+          {tab !== "rankings" && (
+            <FilterRow
+              label="Grupo"
+              value={grupo}
+              options={[
+                { value: "all", label: "Todos" },
+                ...grupoOptions.map((g) => ({
+                  value: g.idGrupo,
+                  label: g.nombre,
+                })),
+              ]}
+              onChange={setGrupo}
+            />
+          )}
 
-          {tab === "grupos" && genders.length > 0 && (
-            <select
-              value={gender}
-              onChange={(e) => setGender(e.target.value)}
-              aria-label="Género"
-              className="tw-select"
-            >
-              {["Ambos", ...genders].map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
+          {filtersOn && (
+            <button type="button" onClick={reset} className="tw-fcp-reset">
+              Restablecer filtros
+            </button>
           )}
         </div>
       </Card>
 
-      {tab === "grupos" ? (
-        groups.loading ? (
+      {/* ── TODO · grupos ─────────────────────────────────────────── */}
+      {tab === "todo" &&
+        (groups.loading ? (
           <SkeletonCard />
         ) : groups.error ? (
           <Card>
@@ -258,23 +442,23 @@ export function FederationExplore({ slug }: { slug: string }) {
               body={groups.error}
             />
           </Card>
-        ) : rows.length === 0 ? (
+        ) : shownGroups.length === 0 ? (
           <Card>
             <EmptyState
               icon={<IconFlag size={34} />}
-              title="No hay grupos con esos filtros."
-              body="Prueba a quitar el filtro de género o busca otro nombre."
+              title="No hay grupos con esos filtros"
+              body="Prueba a quitar la categoría o el género."
             />
           </Card>
         ) : (
           <div className="tw-club-teams">
-            {rows.map((g: FcpGroup) => (
+            {shownGroups.map((g: FcpGroup) => (
               <Link
                 key={g.idGrupo}
                 href={`/federacion/${slug}/grupo/${encodeURIComponent(g.idGrupo)}`}
                 style={{ color: "inherit" }}
               >
-                <Card style={{ padding: 20 }}>
+                <Card style={{ padding: 20, height: "100%" }}>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>{g.nombre}</div>
                   <div
                     className="mono"
@@ -285,66 +469,181 @@ export function FederationExplore({ slug }: { slug: string }) {
                       color: "var(--text-faint)",
                     }}
                   >
-                    {[g.genero, g.temporada].filter(Boolean).join(" · ").toUpperCase()}
+                    {[
+                      g.genero === "F" ? "FEMENINO" : "MASCULINO",
+                      g.categoria,
+                      g.esPlayoff ? "FASE FINAL" : null,
+                      g.temporada,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 </Card>
               </Link>
             ))}
           </div>
-        )
-      ) : query.trim().length < 3 ? (
-        <Card>
-          <EmptyState
-            icon={<IconSearch size={34} />}
-            title="Escribe el nombre de un jugador"
-            body="Mínimo 3 letras. Hay más de 27.000 jugadores federados."
-          />
-        </Card>
-      ) : players.loading ? (
-        <SkeletonCard />
-      ) : players.error ? (
-        <Card>
-          <EmptyState
-            icon={<IconFlag size={34} />}
-            title="Error en la búsqueda"
-            body={players.error}
-          />
-        </Card>
-      ) : (players.data ?? []).length === 0 ? (
-        <Card>
-          <EmptyState icon={<IconSearch size={34} />} title="Sin coincidencias" />
-        </Card>
-      ) : (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          {(players.data ?? []).map((p, i, arr) => (
-            <div
-              key={p.idJugador}
-              className="tw-fcp-row"
-              style={{
-                borderBottom: i === arr.length - 1 ? "none" : "1px solid var(--hair)",
-              }}
-            >
-              <span
-                className="mono"
-                style={{ fontSize: 11, color: "var(--text-faint)" }}
+        ))}
+
+      {/* ── EQUIPOS ───────────────────────────────────────────────── */}
+      {tab === "equipos" &&
+        (teams.loading ? (
+          <SkeletonCard />
+        ) : teams.error ? (
+          <Card>
+            <EmptyState
+              icon={<IconFlag size={34} />}
+              title="Error en la búsqueda"
+              body={teams.error}
+            />
+          </Card>
+        ) : (teams.data ?? []).length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<IconSearch size={34} />}
+              title="Sin equipos"
+              body="Escribe un nombre o acota por categoría y grupo."
+            />
+          </Card>
+        ) : (
+          <div className="tw-club-teams">
+            {(teams.data ?? []).map((t) => (
+              <Link
+                key={t.idEquipo}
+                href={`/federacion/${slug}/equipo/${t.idEquipo}`}
+                style={{ color: "inherit" }}
               >
-                {i + 1}
-              </span>
-              <span style={{ fontSize: 13.5, fontWeight: 700 }}>{p.nombre}</span>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {p.nombreEquipo ?? "—"}
-              </span>
-              <span
-                className="mono"
-                style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
+                <Card style={{ padding: 18, height: "100%" }}>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{t.equipo}</div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ))}
+
+      {/* ── JUGADORES ─────────────────────────────────────────────── */}
+      {tab === "jugadores" &&
+        (term.length < 3 ? (
+          <Card>
+            <EmptyState
+              icon={<IconSearch size={34} />}
+              title="Escribe el nombre de un jugador"
+              body="Mínimo 3 letras. Hay más de 27.000 jugadores federados."
+            />
+          </Card>
+        ) : players.loading ? (
+          <SkeletonCard />
+        ) : players.error ? (
+          <Card>
+            <EmptyState
+              icon={<IconFlag size={34} />}
+              title="Error en la búsqueda"
+              body={players.error}
+            />
+          </Card>
+        ) : (players.data ?? []).length === 0 ? (
+          <Card>
+            <EmptyState icon={<IconSearch size={34} />} title="Sin coincidencias" />
+          </Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            {(players.data ?? []).map((p, i, arr) => (
+              <Link
+                key={p.idJugador}
+                href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
+                style={{ color: "inherit" }}
               >
-                {p.puntos}
-              </span>
-              <span />
+                <div
+                  className="tw-fcp-row"
+                  style={{
+                    borderBottom:
+                      i === arr.length - 1 ? "none" : "1px solid var(--hair)",
+                  }}
+                >
+                  <span
+                    className="mono"
+                    style={{ fontSize: 11, color: "var(--text-faint)" }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{p.nombre}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {p.nombreEquipo ?? "—"}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
+                  >
+                    {p.puntos}
+                  </span>
+                  <IconChevronRight size={15} />
+                </div>
+              </Link>
+            ))}
+          </Card>
+        ))}
+
+      {/* ── RANKINGS ──────────────────────────────────────────────── */}
+      {tab === "rankings" &&
+        (ranking.loading ? (
+          <SkeletonCard />
+        ) : ranking.error ? (
+          <Card>
+            <EmptyState
+              icon={<IconFlag size={34} />}
+              title="No se pudo cargar el ranking"
+              body={ranking.error}
+            />
+          </Card>
+        ) : (ranking.data ?? []).length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<IconFlag size={34} />}
+              title="No hay ranking para esa combinación"
+              body="Cambia el género o la categoría."
+            />
+          </Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div className="tw-fcp-rank-row tw-fcp-rank-head">
+              <span>#</span>
+              <span>Jugador</span>
+              <span style={{ textAlign: "right" }}>Puntos</span>
             </div>
-          ))}
-        </Card>
-      )}
+            {(ranking.data ?? []).map((r, i, arr) => (
+              <div
+                key={`${r.posicion}-${r.name}`}
+                className="tw-fcp-rank-row"
+                style={{
+                  borderBottom:
+                    i === arr.length - 1 ? "none" : "1px solid var(--hair)",
+                }}
+              >
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: r.posicion <= 3 ? "var(--accent)" : "var(--text-faint)",
+                  }}
+                >
+                  {r.posicion}
+                </span>
+                <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {r.puntos ?? "—"}
+                </span>
+              </div>
+            ))}
+          </Card>
+        ))}
     </div>
   );
 }

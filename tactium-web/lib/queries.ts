@@ -519,21 +519,170 @@ export interface FcpGroup {
   nombre: string;
   genero: string | null;
   temporada: string | null;
+  /** "5ª" extraída del nombre — es por lo que se filtra por categoría. */
+  categoria: string | null;
+  /** Fase final (oro/plata/playoff) frente a fase regular. */
+  esPlayoff: boolean;
 }
 
-export async function fetchFcpGroups(limit = 200): Promise<FcpGroup[]> {
-  const { data, error } = await supabaseBrowser()
+/**
+ * Categoría corta a partir del nombre del grupo: "5ª CATEGORIA MASC." → "5ª".
+ * Espejo de `catShort` en la app (`core/services/fcpSearch.ts`).
+ */
+export const catShort = (s: string | null | undefined): string | null => {
+  const m = (s ?? "").match(/(\d+)\s*ª/);
+  return m ? `${m[1]}ª` : null;
+};
+
+export interface FcpLeague {
+  idLiga: number;
+  nombre: string;
+  temporada: string | null;
+}
+
+/**
+ * Temporadas disponibles, de la más reciente a la más antigua.
+ *
+ * Sólo las ligas que TIENEN grupos scrapeados: la federación crea entradas de
+ * liga que luego quedan vacías (en 2026 hay tres y sólo una con datos), y
+ * ofrecerlas daría un filtro que devuelve cero. Mismo criterio que
+ * `fetchFcpYears` en la app.
+ */
+export async function fetchFcpLeagues(): Promise<FcpLeague[]> {
+  const [{ data: grupos }, { data: ligas, error }] = await Promise.all([
+    supabaseBrowser().from("fcp_grupos").select("id_liga"),
+    supabaseBrowser().from("fcp_ligas").select("id_liga, nombre, temporada"),
+  ]);
+  if (error) throw error;
+  const withData = new Set((grupos ?? []).map((g) => g.id_liga));
+  return (ligas ?? [])
+    .filter((l) => withData.has(l.id_liga))
+    .map((l) => ({
+      idLiga: l.id_liga,
+      nombre: l.nombre ?? String(l.id_liga),
+      temporada: l.temporada,
+    }))
+    .sort((a, b) => (b.temporada ?? "").localeCompare(a.temporada ?? ""));
+}
+
+/**
+ * Grupos de una liga, ORDENADOS: primero la fase regular y dentro por nombre.
+ * Sin esto salen en el orden que devuelve la base de datos, que no es ninguno.
+ * Mismo criterio que `fetchFcpGroups` en la app.
+ */
+export async function fetchFcpGroups(
+  idLiga?: number | null,
+  limit = 600
+): Promise<FcpGroup[]> {
+  let sel = supabaseBrowser()
     .from("fcp_grupos")
-    .select("id_grupo, id_liga, nombre, genero, temporada")
-    .order("temporada", { ascending: false })
+    .select("id_grupo, id_liga, nombre, genero, temporada");
+  if (idLiga != null) sel = sel.eq("id_liga", idLiga);
+  const { data, error } = await sel.limit(limit);
+  if (error) throw error;
+  return (data ?? [])
+    .map((g) => {
+      const nombre = g.nombre ?? g.id_grupo;
+      return {
+        idGrupo: g.id_grupo,
+        idLiga: g.id_liga,
+        nombre,
+        genero: g.genero,
+        temporada: g.temporada,
+        categoria: catShort(nombre),
+        esPlayoff:
+          /^fase/i.test(g.id_grupo) || /ORO|PLATA|PLAY\s*OFF/i.test(nombre),
+      };
+    })
+    .sort((a, b) => {
+      if (a.esPlayoff !== b.esPlayoff) return a.esPlayoff ? 1 : -1;
+      return a.nombre.localeCompare(b.nombre, "es");
+    });
+}
+
+/**
+ * Nombre de la lista de ranking en la FCP según género y categoría. Las listas
+ * generales usan "MASCULINO/FEMENINO"; las de división "MASCULINA/FEMENINA".
+ * Copiado literal de la app: si no casa exacto, la consulta no devuelve nada.
+ */
+export function rankingCategoria(
+  genero: "all" | "M" | "F",
+  categoria: string
+): string {
+  const f = genero === "F";
+  if (!categoria || categoria === "all")
+    return `RANKING LIGA ${f ? "FEMENINO" : "MASCULINO"}`;
+  return `${categoria} CATEGORIA ${f ? "FEMENINA" : "MASCULINA"}`;
+}
+
+export interface FcpTeamResult {
+  idEquipo: number;
+  equipo: string;
+  idGrupo: string;
+}
+
+/**
+ * Equipos federados. Salen de la clasificación, que es donde vive el nombre
+ * del equipo junto a su grupo; `fcp_grupos` no los lista.
+ */
+export async function searchFcpTeams(opts: {
+  query?: string;
+  grupoIds?: string[];
+  limit?: number;
+}): Promise<FcpTeamResult[]> {
+  const { query = "", grupoIds, limit = 60 } = opts;
+  let sel = supabaseBrowser()
+    .from("fcp_clasificacion")
+    .select("id_equipo, equipo, id_grupo");
+  const q = query.replace(/[%,()]/g, " ").trim();
+  if (q.length >= 2) sel = sel.ilike("equipo", `%${q}%`);
+  if (grupoIds?.length) sel = sel.in("id_grupo", grupoIds.slice(0, 200));
+  const { data, error } = await sel.limit(limit * 4);
+  if (error) throw error;
+
+  // Un equipo aparece una vez por grupo: nos quedamos con una fila por equipo.
+  const seen = new Map<number, FcpTeamResult>();
+  for (const r of data ?? []) {
+    if (r.id_equipo == null || seen.has(r.id_equipo)) continue;
+    seen.set(r.id_equipo, {
+      idEquipo: r.id_equipo,
+      equipo: r.equipo ?? "—",
+      idGrupo: r.id_grupo,
+    });
+  }
+  return [...seen.values()]
+    .sort((a, b) => a.equipo.localeCompare(b.equipo, "es"))
+    .slice(0, limit);
+}
+
+export interface FcpRankingRow {
+  posicion: number;
+  name: string;
+  puntos: number | null;
+}
+
+/** Ranking FCP por género/categoría. Con término, filtra por nombre. */
+export async function fetchFcpRanking(opts: {
+  genero: "all" | "M" | "F";
+  categoria: string;
+  query?: string;
+  limit?: number;
+}): Promise<FcpRankingRow[]> {
+  const { genero, categoria, query = "", limit = 150 } = opts;
+  let sel = supabaseBrowser()
+    .from("fcp_rankings")
+    .select("posicion, nombre, puntos")
+    .eq("categoria", rankingCategoria(genero, categoria));
+  const q = query.replace(/[%,()]/g, " ").trim();
+  if (q.length >= 2) sel = sel.ilike("nombre", `%${q}%`);
+  const { data, error } = await sel
+    .order("posicion", { ascending: true })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []).map((g) => ({
-    idGrupo: g.id_grupo,
-    idLiga: g.id_liga,
-    nombre: g.nombre ?? g.id_grupo,
-    genero: g.genero,
-    temporada: g.temporada,
+  return (data ?? []).map((r) => ({
+    posicion: r.posicion,
+    name: r.nombre ?? "—",
+    puntos: r.puntos == null ? null : Number(r.puntos),
   }));
 }
 

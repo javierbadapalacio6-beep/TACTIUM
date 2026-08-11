@@ -1922,3 +1922,106 @@ select.tw-cell-input {
     transform: none;
   }
 }
+
+/* ═══ FEDERACIÓN · FILTROS Y RANKING ══════════════════════════════════
+   Misma estructura que Explorar Federación en la app: filas de filtro con
+   etiqueta y chips en una línea que hace scroll, para que se vean sin
+   desplegar nada. */
+.tw-fcp-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
+}
+.tw-fcp-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.tw-fcp-filter-label {
+  flex: none;
+  width: 84px;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-fcp-filter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.tw-fcp-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+.tw-fcp-chip {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--hair-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: "Satoshi", sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+.tw-fcp-chip:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+.tw-fcp-chip.is-on {
+  background: var(--accent-10);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.tw-fcp-reset {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-family: "Satoshi", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Ranking: tres columnas, número tabular para que los puntos cuadren. */
+.tw-fcp-rank-row {
+  display: grid;
+  grid-template-columns: 46px 1fr 88px;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 20px;
+}
+.tw-fcp-rank-head {
+  border-bottom: 1px solid var(--hair-strong);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+@media (max-width: 640px) {
+  .tw-fcp-filter {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .tw-fcp-filter-label {
+    width: auto;
+  }
+}
