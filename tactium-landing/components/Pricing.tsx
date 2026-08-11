@@ -7,6 +7,9 @@ import {
   annualDiscountPercent,
   formatEur,
   TRIAL_DURATION_DAYS,
+  TOURNAMENT_TIERS,
+  TOURNAMENT_EXTRA_PAIR_EUR,
+  TOURNAMENT_BULK_DISCOUNT_PERCENT,
   type PlanDescriptor,
 } from "@/lib/plans";
 import { AnimatedPrice } from "./AnimatedPrice";
@@ -76,8 +79,74 @@ export function Pricing() {
         <p className="mt-8 text-center text-xs text-[var(--color-text-faint)] font-mono tracking-wide">
           PAGO RECURRENTE EN APP STORE / GOOGLE PLAY · CANCELA DESDE AJUSTES
         </p>
+
+        <TournamentPricing />
       </div>
     </section>
+  );
+}
+
+// Segundo carril: clubes que SOLO quieren torneos, sin suscripción.
+function TournamentPricing() {
+  return (
+    <div className="mt-16 sm:mt-20">
+      <div className="text-center mb-8">
+        <p className="font-mono text-[11px] tracking-[0.25em] font-medium text-[var(--color-accent)] mb-3">
+          ¿SOLO QUIERES TORNEOS?
+        </p>
+        <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          Paga solo por el torneo que montes
+        </h3>
+        <p className="mt-3 text-[var(--color-text-muted)] max-w-xl mx-auto">
+          Sin suscripción ni cuota mensual. Cuenta de club gratis; pagas según
+          las parejas de cada torneo. Todas las categorías y fases incluidas.
+        </p>
+      </div>
+
+      <div className="max-w-3xl mx-auto rounded-2xl border border-[var(--color-accent-40)] bg-[var(--color-bg-card)] overflow-hidden shadow-[0_24px_60px_-24px_rgba(0,223,130,0.28)]">
+        {TOURNAMENT_TIERS.map((t, i) => (
+          <div
+            key={t.label}
+            className={`flex items-center justify-between gap-4 px-5 sm:px-7 py-4 ${
+              i > 0 ? "border-t border-[var(--color-hair)]" : ""
+            } ${t.priceEur === null ? "bg-[var(--color-accent-10)]" : ""}`}
+          >
+            <span className="font-semibold text-[var(--color-text)]">
+              {t.priceEur === null ? "Gratis" : t.label}
+            </span>
+            <span
+              className={`font-mono text-lg sm:text-xl font-extrabold tabular-nums ${
+                t.priceEur === null
+                  ? "text-[var(--color-accent)]"
+                  : "text-[var(--color-text)]"
+              }`}
+            >
+              {t.priceEur === null ? `Hasta ${t.pairs} parejas` : formatEur(t.priceEur)}
+            </span>
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-2 px-5 sm:px-7 py-4 border-t border-[var(--color-hair)]">
+          {[
+            `+${TOURNAMENT_EXTRA_PAIR_EUR} €/pareja extra`,
+            `−${TOURNAMENT_BULK_DISCOUNT_PERCENT}% si montas 3+ torneos al año`,
+            "Se paga al publicar · factura incluida",
+          ].map((chip) => (
+            <span
+              key={chip}
+              className="font-mono text-[11px] tracking-wide text-[var(--color-accent)] border border-[var(--color-accent-40)] bg-[var(--color-accent-10)] rounded-full px-3 py-1.5"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-5 text-center text-sm text-[var(--color-text-muted)] max-w-2xl mx-auto">
+        Las inscripciones se cobran con{" "}
+        <span className="text-[var(--color-text)] font-semibold">tu propia pasarela</span>{" "}
+        (Stripe, TPV, Bizum…): el dinero llega a tu cuenta, sin comisiones nuestras.
+      </p>
+    </div>
   );
 }
 

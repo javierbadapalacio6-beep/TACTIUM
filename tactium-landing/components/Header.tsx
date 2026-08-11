@@ -29,6 +29,18 @@ export function Header() {
             Para quién
           </a>
           <a
+            href="#federacion"
+            className="hover:text-[var(--color-text)] transition"
+          >
+            Federación
+          </a>
+          <a
+            href="#torneos"
+            className="hover:text-[var(--color-text)] transition"
+          >
+            Torneos
+          </a>
+          <a
             href="#features"
             className="hover:text-[var(--color-text)] transition"
           >

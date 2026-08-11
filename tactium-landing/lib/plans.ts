@@ -19,9 +19,27 @@ export interface PlanDescriptor {
   shortLabel: string;
   // Cuántos equipos cubre el plan. Para captain individual, 1.
   teamQuota: number;
+  // Tamaño máximo de torneo incluido en el plan (nº de parejas). null = el plan
+  // no incluye organización de torneos (p. ej. Capitán).
+  tournamentPairCap: number | null;
   // Bullets de features que aparecen en la card de pricing.
   features: string[];
 }
+
+// ── Pago por torneo (clubes que solo quieren torneos, sin suscripción) ───────
+export interface TournamentTier {
+  label: string;
+  pairs: number;
+  priceEur: number | null; // null = gratis
+}
+export const TOURNAMENT_TIERS: TournamentTier[] = [
+  { label: "Gratis", pairs: 16, priceEur: null },
+  { label: "Hasta 32 parejas", pairs: 32, priceEur: 25 },
+  { label: "Hasta 64 parejas", pairs: 64, priceEur: 55 },
+  { label: "Hasta 128 parejas", pairs: 128, priceEur: 99 },
+];
+export const TOURNAMENT_EXTRA_PAIR_EUR = 2;
+export const TOURNAMENT_BULK_DISCOUNT_PERCENT = 15; // 3+ torneos al año
 
 export const CAPTAIN_PLAN: PlanDescriptor = {
   tier: "captain",
@@ -32,6 +50,7 @@ export const CAPTAIN_PLAN: PlanDescriptor = {
   displayName: "Capitán",
   shortLabel: "Capitán",
   teamQuota: 1,
+  tournamentPairCap: null,
   features: [
     "1 equipo de hasta 30 jugadores",
     "Alineaciones inteligentes en cada jornada",
@@ -50,11 +69,12 @@ export const CLUB_STARTER_PLAN: PlanDescriptor = {
   displayName: "Club Starter",
   shortLabel: "Starter",
   teamQuota: 3,
+  tournamentPairCap: 32,
   features: [
     "Hasta 3 equipos cubiertos",
+    "Torneos incluidos hasta 32 parejas",
     "Capitanes invitados sin coste extra",
     "Panel global del club",
-    "Todas las features del plan Capitán",
     "Soporte prioritario por email",
   ],
 };
@@ -68,12 +88,13 @@ export const CLUB_PRO_PLAN: PlanDescriptor = {
   displayName: "Club Pro",
   shortLabel: "Pro",
   teamQuota: 10,
+  tournamentPairCap: 64,
   features: [
     "Hasta 10 equipos cubiertos",
+    "Torneos incluidos hasta 64 parejas",
     "Multi-categoría (M/F/Mixto)",
-    "Estadísticas comparativas entre equipos",
+    "Horarios de pista + rejilla",
     "Todas las features de Starter",
-    "Onboarding de capitanes guiado",
   ],
 };
 
@@ -86,10 +107,11 @@ export const CLUB_ELITE_PLAN: PlanDescriptor = {
   displayName: "Club Elite",
   shortLabel: "Elite",
   teamQuota: 25,
+  tournamentPairCap: 128,
   features: [
     "Hasta 25 equipos cubiertos",
+    "Torneos incluidos hasta 128 parejas",
     "Reporting avanzado por categoría",
-    "Export a CSV / Excel",
     "Todas las features de Pro",
     "Soporte por WhatsApp directo",
   ],

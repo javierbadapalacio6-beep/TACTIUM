@@ -3,6 +3,7 @@ import { AppStoreBadge } from "./AppStoreBadge";
 import { PlayStoreBadge } from "./PlayStoreBadge";
 import { HeroAnimator } from "./HeroAnimator";
 import { HeroAuroraCursor } from "./HeroAuroraCursor";
+import { PadelCourt3D } from "./PadelCourt3D";
 import { PhoneFrame } from "./PhoneFrame";
 
 // Hero principal. Estructura:
@@ -28,6 +29,9 @@ export function Hero() {
         <div className="aurora-blob-cursor" />
       </div>
       <div className="aurora-grid" aria-hidden="true" />
+
+      {/* Pista de pádel 3D (wireframe animado) — el elemento dinámico del hero. */}
+      <PadelCourt3D />
 
       <HeroAnimator />
       <HeroAuroraCursor />
