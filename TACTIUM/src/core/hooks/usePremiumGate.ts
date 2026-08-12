@@ -8,6 +8,7 @@ import { useTeamStore } from '@store/teamStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { clubCoverage } from '@core/entitlements/coverage';
+import { PREMIUM_STATUSES } from '@core/subscriptions/plans';
 
 import type { RootStackParamList } from '@navigation/types';
 
@@ -142,6 +143,17 @@ export function useTeamGate() {
     (team: GateTeam, fn: GateFn, intent?: string) => () =>
       run(team, fn, intent),
     [run],
+  );
+}
+
+/**
+ * ¿El usuario tiene ALGUNA suscripción activa? Reactivo (se repinta al cambiar
+ * las subs). Role-agnóstico y sin depender de un equipo — útil en el onboarding,
+ * donde aún puede no haber team, para decidir si ofrecer el volcado automático.
+ */
+export function useHasActiveSub(): boolean {
+  return useSubscriptionStore((s) =>
+    s.subscriptions.some((x) => PREMIUM_STATUSES.includes(x.status)),
   );
 }
 

@@ -15,7 +15,19 @@ interface ClubState {
   loadForUser: () => Promise<void>;
   reset: () => void;
   setActiveClub: (clubId: string | null) => void;
-  createClub: (input: { name: string; federation?: string }) => Promise<Club>;
+  createClub: (input: {
+    name: string;
+    federation?: string;
+    tournamentsOnly?: boolean;
+  }) => Promise<Club>;
+  // Desbloquea la gestión de equipos en un club creado en modo "solo torneos":
+  // pone `tournaments_only=false` y el menú del club pasa a completo. Puede fijar
+  // de paso la federación del club (los equipos la heredan; sin ella solo hay
+  // ligas privadas). `federation === undefined` la deja como estaba.
+  unlockTeamManagement: (
+    clubId: string,
+    federation?: string | null,
+  ) => Promise<void>;
   deleteClub: (clubId: string) => Promise<void>;
 }
 
@@ -57,6 +69,15 @@ export const useClubStore = create<ClubState>()((set, get) => ({
     const club = await ClubsApi.createClub(input);
     set((s) => ({ clubs: [...s.clubs, club], activeClubId: club.id }));
     return club;
+  },
+
+  unlockTeamManagement: async (clubId, federation) => {
+    const patch: ClubsApi.ClubUpdate = { tournaments_only: false };
+    if (federation !== undefined) patch.federation = federation;
+    const updated = await ClubsApi.updateClub(clubId, patch);
+    set((s) => ({
+      clubs: s.clubs.map((c) => (c.id === clubId ? updated : c)),
+    }));
   },
 
   deleteClub: async (clubId) => {

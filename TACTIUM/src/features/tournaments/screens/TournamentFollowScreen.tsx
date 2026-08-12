@@ -93,6 +93,17 @@ export const TournamentFollowScreen = ({
     }, [load]),
   );
 
+  // Vuelta del pago del torneo (deep link `tactium://tournament/{id}?paid=1`):
+  // confirma el cobro. La ficha ya se recarga sola en foco y mostrará el
+  // torneo publicado; aquí solo damos el acuse. Depende del valor de `paid`
+  // para no repetir el aviso en cada render.
+  const paid = route.params?.paid;
+  useEffect(() => {
+    if (paid) {
+      toast.success('Pago confirmado', 'Tu torneo ya está publicado.');
+    }
+  }, [paid]);
+
   const toggleRound = (r: number) =>
     setCollapsed((prev) => {
       const next = new Set(prev);

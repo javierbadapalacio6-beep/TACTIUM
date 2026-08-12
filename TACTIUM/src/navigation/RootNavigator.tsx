@@ -13,6 +13,7 @@ import { PlayerClaimGate } from '@features/onboarding/components/PlayerClaimGate
 import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
 import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
 import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
+import { ActivateTeamManagementScreen } from '@features/club/screens/ActivateTeamManagementScreen';
 import { MyDataScreen } from '@features/profile/screens/MyDataScreen';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
 import { SettingsScreen } from '@features/settings/screens/SettingsScreen';
@@ -32,6 +33,7 @@ export const RootNavigator = () => {
   const c = useColors();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const team = useTeamStore((s) => s.team);
+  const activeRole = useTeamStore((s) => s.activeRole);
   const isOnboarding = useTeamStore((s) => s.isOnboarding);
   const soloMode = useTeamStore((s) => s.soloMode);
   const hasLoadedOnce = useTeamStore((s) => s.hasLoadedOnce);
@@ -58,8 +60,12 @@ export const RootNavigator = () => {
     );
   }
 
+  // `activeRole === 'club_admin'` sin equipo = organizador de torneos (club en
+  // modo "solo torneos"): entra al menú recortado sin necesidad de crear equipo.
   const showMainTabs =
-    isAuthenticated && (!!team || soloMode) && !isOnboarding;
+    isAuthenticated &&
+    (!!team || soloMode || activeRole === 'club_admin') &&
+    !isOnboarding;
 
   // ── Pantallas PÚBLICAS ────────────────────────────────────────────────
   // Se ven con y sin sesión. Un torneo se comparte por WhatsApp y quien abre
@@ -123,6 +129,14 @@ export const RootNavigator = () => {
             <Stack.Screen
               name="ClubBilling"
               component={ClubBillingScreen}
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="ActivateTeamManagement"
+              component={ActivateTeamManagementScreen}
               options={{
                 presentation: 'card',
                 animation: 'slide_from_right',

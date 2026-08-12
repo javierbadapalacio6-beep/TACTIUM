@@ -1,10 +1,16 @@
 // Página de retorno cuando el club cancela el pago del torneo.
+//
+// `src` marca el origen: `app` (checkout iniciado desde el móvil) ofrece volver
+// a la app por el esquema propio; `web` se queda en el navegador con un atajo al
+// panel. Sin `paid` — aquí no se ha cobrado nada.
 export default async function PagoCanceladoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tid?: string }>;
+  searchParams: Promise<{ tid?: string; src?: string }>;
 }) {
-  const { tid } = await searchParams;
+  const { tid, src } = await searchParams;
+  const fromApp = src === "app";
+
   return (
     <main
       style={{
@@ -24,12 +30,13 @@ export default async function PagoCanceladoPage({
           Pago cancelado
         </h1>
         <p style={{ color: "rgba(232,245,239,0.7)", lineHeight: 1.5 }}>
-          No se ha cobrado nada. Puedes volver a la app y publicar el torneo
-          cuando quieras.
+          {fromApp
+            ? "No se ha cobrado nada. Puedes volver a la app y publicar el torneo cuando quieras."
+            : "No se ha cobrado nada. Puedes volver a tu panel y publicar el torneo cuando quieras."}
         </p>
-        {tid ? (
+        {tid && fromApp ? (
           <a
-            href={`tactium://torneos/${tid}`}
+            href={`tactium://tournament/${tid}`}
             style={{
               display: "inline-block",
               marginTop: 20,
@@ -43,7 +50,23 @@ export default async function PagoCanceladoPage({
           >
             Volver a la app
           </a>
-        ) : null}
+        ) : (
+          <a
+            href="/club/torneos"
+            style={{
+              display: "inline-block",
+              marginTop: 20,
+              padding: "12px 22px",
+              borderRadius: 999,
+              border: "1px solid rgba(232,245,239,0.2)",
+              color: "#E8F5EF",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Ir a mis torneos
+          </a>
+        )}
       </div>
     </main>
   );

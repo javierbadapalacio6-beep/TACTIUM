@@ -237,8 +237,13 @@ export async function POST(
       },
     ],
     metadata: { tournament_id: t.id, club_id: t.club_id },
-    success_url: `${origin}/torneos/pago-ok?tid=${t.id}`,
-    cancel_url: `${origin}/torneos/pago-cancelado?tid=${t.id}`,
+    // `src` marca el ORIGEN del checkout para que la página de retorno sepa qué
+    // hacer: `app` (entrega por correo → el pago se inició desde el móvil) ofrece
+    // volver a la app; `web` (la URL se devolvió directa → el usuario ya está en
+    // el navegador) se queda en la web. La regla de Apple obliga a que la app
+    // vaya siempre por correo, así que `byEmail` ES la señal de "viene de la app".
+    success_url: `${origin}/torneos/pago-ok?tid=${t.id}&src=${byEmail ? "app" : "web"}`,
+    cancel_url: `${origin}/torneos/pago-cancelado?tid=${t.id}&src=${byEmail ? "app" : "web"}`,
   });
 
   // Registra el intento (pendiente) y marca el torneo a la espera de pago.

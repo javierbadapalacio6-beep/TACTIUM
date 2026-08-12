@@ -2,8 +2,10 @@ import React, { useMemo } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useColors } from '@core/theme';
+import { OnboardingIntentScreen } from '@features/onboarding/screens/OnboardingIntentScreen';
 import { OnboardingChoiceScreen } from '@features/onboarding/screens/OnboardingChoiceScreen';
 import { CreateClubScreen } from '@features/onboarding/screens/CreateClubScreen';
+import { CreateTournamentClubScreen } from '@features/onboarding/screens/CreateTournamentClubScreen';
 import { CreateTeamsForClubScreen } from '@features/onboarding/screens/CreateTeamsForClubScreen';
 import { CreateTeamScreen } from '@features/onboarding/screens/CreateTeamScreen';
 import { AddPlayersScreen } from '@features/onboarding/screens/AddPlayersScreen';
@@ -25,8 +27,13 @@ export const OnboardingStack = () => {
   );
   return (
     <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen name="OnboardingIntent" component={OnboardingIntentScreen} />
       <Stack.Screen name="OnboardingChoice" component={OnboardingChoiceScreen} />
       <Stack.Screen name="CreateClub" component={CreateClubScreen} />
+      <Stack.Screen
+        name="CreateTournamentClub"
+        component={CreateTournamentClubScreen}
+      />
       <Stack.Screen name="CreateTeamsForClub" component={CreateTeamsForClubScreen} />
       <Stack.Screen name="CreateTeam" component={CreateTeamScreen} />
       <Stack.Screen name="AddPlayers" component={AddPlayersScreen} />

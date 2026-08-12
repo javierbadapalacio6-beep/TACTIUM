@@ -11,7 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
@@ -49,7 +50,10 @@ import {
 import { requestTournamentPayment } from '@core/services/tournamentCheckout';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 
-import type { TournamentsStackScreenProps } from '@navigation/types';
+import type {
+  TournamentsStackScreenProps,
+  RootStackParamList,
+} from '@navigation/types';
 
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª'];
 
@@ -136,10 +140,18 @@ export const ClubTournamentsScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
+  // Navegación a nivel Root (para abrir la pantalla de activación, que vive
+  // sobre las tabs junto al paywall). El nav de la stack de torneos no la ve.
+  const rootNav =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [items, setItems] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+
+  // Club en modo "solo torneos": el CTA abre el paso de activación (elegir
+  // federación + desbloquear + paywall). El desbloqueo real ocurre allí.
+  const handleUnlock = () => rootNav.navigate('ActivateTeamManagement');
 
   // Agrupa los torneos del club por estado (calendario).
   const clubSections = useMemo(() => {
@@ -189,6 +201,25 @@ export const ClubTournamentsScreen = ({
         </View>
         <NotificationBell />
       </View>
+
+      {club?.tournaments_only ? (
+        <Pressable
+          onPress={handleUnlock}
+          style={({ pressed }) => [
+            styles.unlockCard,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.unlockTitle}>¿También gestionas equipos?</Text>
+            <Text style={styles.unlockHint}>
+              Actívalo y tendrás alineaciones, jornadas y plantillas — sin perder
+              tus torneos.
+            </Text>
+          </View>
+          <Text style={styles.unlockCta}>Activar →</Text>
+        </Pressable>
+      ) : null}
 
       {loading ? (
         <View style={styles.center}>
@@ -318,6 +349,39 @@ const CreateTournamentSheet: React.FC<{
   const [endsOn, setEndsOn] = useState<Date | null>(null);
   const [phasePlan, setPhasePlan] = useState<Record<string, string[]>>({});
   const [location, setLocation] = useState('');
+
+  // ── Coste en vivo del torneo ──────────────────────────────────────────────
+  // Según el tamaño (max_pairs) y el plan del club: se recalcula al teclear las
+  // plazas y alimenta tanto el chip informativo como el texto del botón final.
+  // DORMIDO tras TOURNAMENT_BILLING_ENABLED: con el flag en false no se cobra,
+  // así que no anunciamos importes que no se van a aplicar (billing = null).
+  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
+  const billing = useMemo(() => {
+    if (!TOURNAMENT_BILLING_ENABLED) return null;
+    const mp = maxPairs ? parseInt(maxPairs, 10) : null;
+    const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subscriptions);
+    return computeTournamentBilling({
+      maxPairs: mp,
+      planPairCap: pairCap,
+      hasActiveSub,
+    });
+  }, [maxPairs, clubId, subscriptions]);
+  const billingLabel = useMemo(() => {
+    if (!billing) return null;
+    switch (billing.kind) {
+      case 'free':
+        return 'Gratis · hasta 16 parejas';
+      case 'included':
+        return 'Incluido en tu plan';
+      case 'needs_size':
+        return 'Fija las plazas para ver el precio';
+      case 'payable':
+        return billing.reason === 'overage'
+          ? `+${billing.amountEur} € · exceso sobre tu plan`
+          : `${billing.amountEur} € · pago del torneo`;
+    }
+  }, [billing]);
+  const payAmount = billing?.kind === 'payable' ? billing.amountEur : null;
 
   // Días del torneo (para el planificador de fases del formulario).
   const ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -567,7 +631,21 @@ const CreateTournamentSheet: React.FC<{
       open={open}
       onClose={onClose}
       footer={
-        <View style={styles.wizFooter}>
+        <View>
+          {/* Coste en vivo (dormido tras el flag): el usuario ve el precio
+              formándose mientras configura, sin muro de entrada. */}
+          {billingLabel ? (
+            <View style={styles.billingChip}>
+              <View
+                style={[
+                  styles.billingDot,
+                  { backgroundColor: payAmount != null ? c.accent : c.textMuted },
+                ]}
+              />
+              <Text style={styles.billingChipText}>{billingLabel}</Text>
+            </View>
+          ) : null}
+          <View style={styles.wizFooter}>
           {step > 0 ? (
             <Pressable
               onPress={() => setStep((s) => Math.max(0, s - 1))}
@@ -603,10 +681,15 @@ const CreateTournamentSheet: React.FC<{
               {saving ? (
                 <ActivityIndicator size="small" color={c.textInverse} />
               ) : (
-                <Text style={styles.saveLabel}>Crear torneo</Text>
+                <Text style={styles.saveLabel}>
+                  {payAmount != null
+                    ? `Crear y pagar · ${payAmount} €`
+                    : 'Crear torneo'}
+                </Text>
               )}
             </Pressable>
           )}
+          </View>
         </View>
       }
     >
@@ -1151,6 +1234,36 @@ const CreateTournamentSheet: React.FC<{
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
+    unlockCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginHorizontal: 22,
+      marginTop: 6,
+      marginBottom: 4,
+      padding: 14,
+      borderRadius: Radius.lg,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    unlockTitle: {
+      color: c.text,
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
+    unlockHint: {
+      color: c.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: 2,
+    },
+    unlockCta: {
+      color: c.accent,
+      fontSize: 13,
+      fontWeight: '700',
+    },
     topbar: {
       paddingHorizontal: 22,
       flexDirection: 'row',
@@ -1243,6 +1356,27 @@ const makeStyles = (c: Palette) =>
     progressRow: { flexDirection: 'row', gap: 6, marginTop: 14 },
     progressSeg: { flex: 1, height: 4, borderRadius: 2, backgroundColor: c.hairStrong },
     wizFooter: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+    billingChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      alignSelf: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      marginBottom: 10,
+    },
+    billingDot: { width: 7, height: 7, borderRadius: 4 },
+    billingChipText: {
+      fontFamily: Fonts.mono,
+      color: c.text,
+      fontSize: 12,
+      fontWeight: '600',
+      letterSpacing: 0.2,
+    },
     wizBack: {
       height: 52,
       paddingHorizontal: 22,

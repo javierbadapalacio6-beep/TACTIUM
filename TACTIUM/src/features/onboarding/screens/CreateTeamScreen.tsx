@@ -41,6 +41,7 @@ import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
 import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { useHasActiveSub } from '@core/hooks/usePremiumGate';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -63,6 +64,27 @@ export const CreateTeamScreen = ({
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
   const signOut = useAuthStore((s) => s.signOut);
   const [fcpOpen, setFcpOpen] = useState(false);
+  // El volcado desde la Federación es premium. En onboarding ofrecemos elegir:
+  // prueba (paywall descartable) o crear el equipo a mano.
+  const hasSub = useHasActiveSub();
+  const requestFcpImport = () => {
+    if (hasSub) {
+      setFcpOpen(true);
+      return;
+    }
+    Alert.alert(
+      'Volcado automático',
+      'Vuelca tu plantilla de la Federación con los puntos oficiales — es una función premium. Empieza tu prueba gratis para usarlo, o crea tu equipo a mano ahora.',
+      [
+        { text: 'A mano', style: 'cancel' },
+        {
+          text: 'Empezar prueba',
+          onPress: () =>
+            navigation.navigate('Paywall', { intent: 'captain', optional: true }),
+        },
+      ],
+    );
+  };
   const clubId = route.params?.clubId;
   const parentClub = useClubStore((s) =>
     clubId ? s.clubs.find((c) => c.id === clubId) ?? null : null,
@@ -271,7 +293,7 @@ export const CreateTeamScreen = ({
 
             {isFcp ? (
               <Pressable
-                onPress={() => setFcpOpen(true)}
+                onPress={requestFcpImport}
                 style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
               >
                 <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
@@ -510,7 +532,7 @@ export const CreateTeamScreen = ({
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
         {isFcp ? (
           <Pressable
-            onPress={() => setFcpOpen(true)}
+            onPress={requestFcpImport}
             style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
           >
             <Text style={styles.ctaLabel}>Buscar mi equipo</Text>

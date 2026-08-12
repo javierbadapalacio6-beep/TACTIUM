@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
@@ -30,7 +31,7 @@ import { useTeamGate } from '@core/hooks/usePremiumGate';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
 
-import type { ClubStackScreenProps } from '@navigation/types';
+import type { ClubStackScreenProps, RootStackParamList } from '@navigation/types';
 
 const MONTH_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const WEEKDAY_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -92,6 +93,18 @@ export const ClubDashboardScreen = ({
   const coverage = clubCoverage(club?.id ?? null, teams, subscriptions);
   // Gate POR EQUIPO (no el activo): tocar un equipo no cubierto ofrece cubrirlo.
   const teamGate = useTeamGate();
+
+  // El VOLCADO desde la Federación es premium (acción de más valor). Si el club
+  // no tiene suscripción activa, el banner lleva al paywall en vez de importar.
+  const rootNav =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const openFcpImport = () => {
+    if (!coverage.hasActiveSub) {
+      rootNav.navigate('Paywall', { intent: 'club' });
+      return;
+    }
+    setFcpOpen(true);
+  };
 
   // Refresh con cancellation guard: si el user navega tabs rápido, el
   // useFocusEffect dispara reload() varias veces. Sin guard, el primer
@@ -314,7 +327,7 @@ export const ClubDashboardScreen = ({
             />
             {isFcpClub && club && !hasFcpTeams ? (
               <Pressable
-                onPress={() => setFcpOpen(true)}
+                onPress={openFcpImport}
                 style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
               >
                 <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>

@@ -93,6 +93,11 @@ export const TeamScreen = () => {
   // Reverse trial: invitar jugadores con código es premium → gate al paywall.
   const gate = usePremiumGate();
   const openInvite = gate(() => setInviting(true), 'invite_create');
+  // La IMPORTACIÓN COMPLETA de plantilla (volcado masivo con puntos: escaneo del
+  // ranking o import de la Federación) es premium — es la acción de más valor.
+  // Añadir un jugador suelto sigue siendo gratis (montar estructura).
+  const openScan = gate(() => setScanning(true), 'import_roster');
+  const openFcpImport = gate(() => setImportingFcp(true), 'import_roster');
 
   const handleBulkPlayers = async (scanned: ScannedPlayer[]) => {
     // UPSERT por nombre normalizado: si el jugador ya existe en la
@@ -186,9 +191,9 @@ export const TeamScreen = () => {
             </Pressable>
           ) : null}
           <Pressable
-            onPress={() => setScanning(true)}
+            onPress={openScan}
             accessibilityRole="button"
-            accessibilityLabel="Escanear calendario"
+            accessibilityLabel="Importar plantilla escaneando el ranking"
             style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
           >
             <IconCamera size={16} color={c.accent} />
@@ -213,7 +218,7 @@ export const TeamScreen = () => {
           </Pressable>
           {FCP_ENABLED && (
             <Pressable
-              onPress={() => setImportingFcp(true)}
+              onPress={openFcpImport}
               style={({ pressed }) => [styles.fcpBtn, pressed && { opacity: 0.7 }]}
               accessibilityRole="button"
               accessibilityLabel="Importar desde la Federación Cántabra"

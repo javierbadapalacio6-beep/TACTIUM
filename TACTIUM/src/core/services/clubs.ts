@@ -20,6 +20,9 @@ export async function fetchMyClubs(): Promise<Club[]> {
 export async function createClub(input: {
   name: string;
   federation?: string;
+  // Club creado en modo "solo torneos": la app muestra el menú recortado
+  // (Torneos + Perfil) hasta que el owner desbloquea la gestión de equipos.
+  tournamentsOnly?: boolean;
 }): Promise<Club> {
   const { data: sessionData } = await supabase.auth.getSession();
   const session = sessionData.session;
@@ -30,6 +33,10 @@ export async function createClub(input: {
     owner_id: session.user.id,
     name: input.name,
     federation: input.federation ?? null,
+    // Solo se referencia la columna cuando hace falta (modo torneos). Así la
+    // creación normal de club no depende de que la migración esté aplicada:
+    // el default de la BD (`false`) cubre el caso corriente.
+    ...(input.tournamentsOnly ? { tournaments_only: true } : {}),
   };
   const { data, error } = await supabase
     .from('clubs')

@@ -40,6 +40,7 @@ import {
 
 import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { useHasActiveSub } from '@core/hooks/usePremiumGate';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -99,12 +100,34 @@ export const CreateTeamsForClubScreen = ({
   const isFcp = club?.federation === FCP_FEDERATION_CODE;
   const [fcpOpen, setFcpOpen] = useState(false);
   const fcpAutoOpened = useRef(false);
+  // El volcado desde la Federación es premium. Con sub: se auto-abre (conveniencia
+  // para clubes FCP). Sin sub: NO auto-abrimos ni soltamos un Alert sorpresa —
+  // el usuario ve el banner y al tocarlo recibe el aviso con opción de omitir.
+  const hasSub = useHasActiveSub();
   useEffect(() => {
-    if (isFcp && !fcpAutoOpened.current && clubTeams.length === 0) {
+    if (isFcp && hasSub && !fcpAutoOpened.current && clubTeams.length === 0) {
       fcpAutoOpened.current = true;
       setFcpOpen(true);
     }
-  }, [isFcp, clubTeams.length]);
+  }, [isFcp, hasSub, clubTeams.length]);
+  const requestFcpImport = () => {
+    if (hasSub) {
+      setFcpOpen(true);
+      return;
+    }
+    Alert.alert(
+      'Volcado automático',
+      'Crea todos los equipos del club con la plantilla y los puntos oficiales de la Federación — es una función premium. Empieza tu prueba gratis para usarlo, o crea los equipos a mano ahora.',
+      [
+        { text: 'A mano', style: 'cancel' },
+        {
+          text: 'Empezar prueba',
+          onPress: () =>
+            navigation.navigate('Paywall', { intent: 'club', optional: true }),
+        },
+      ],
+    );
+  };
   const [newName, setNewName] = useState('');
   // Tipo de competición del equipo a añadir (mismo patrón client-side que
   // CreateTeamScreen: los presets escriben un valor canónico en league).
@@ -244,7 +267,7 @@ export const CreateTeamsForClubScreen = ({
       >
         {isFcp ? (
           <Pressable
-            onPress={() => setFcpOpen(true)}
+            onPress={requestFcpImport}
             style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
           >
             <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>

@@ -95,6 +95,11 @@ export const PaywallScreen = ({
     | {
         nextScreen?: string;
         intent?: 'captain' | 'club';
+        // Upsell OPCIONAL (p.ej. ofrecer el volcado automático en AddPlayers):
+        // muestra los planes del onboarding pero es DESCARTABLE — botón cerrar,
+        // atrás permitido, y al terminar/cancelar vuelve atrás en vez de avanzar
+        // ni cerrar sesión. Sin esto, el paywall del onboarding es un gate duro.
+        optional?: boolean;
         pendingTeam?: {
           name: string;
           federation?: string;
@@ -106,7 +111,12 @@ export const PaywallScreen = ({
       }
     | undefined;
   const nextScreen = params?.nextScreen;
-  const isOnboarding = Boolean(nextScreen);
+  // El upsell opcional muestra los planes del onboarding aunque no traiga
+  // `nextScreen` (al terminar/cerrar hace goBack, no avanza).
+  const isOnboarding = Boolean(nextScreen) || Boolean(params?.optional);
+  // Gate DURO = onboarding obligatorio (crear subject). El upsell opcional es
+  // onboarding en contenido pero descartable en comportamiento.
+  const hardGate = isOnboarding && !params?.optional;
   // El flow Capitán empaqueta los datos de CreateTeam aquí: tras success
   // del trial creamos el team (el trigger DB ya pasa porque la sub user/
   // captain acaba de insertarse) y navegamos a AddPlayers.
@@ -120,10 +130,10 @@ export const PaywallScreen = ({
 
   useFocusEffect(
     useCallback(() => {
-      if (!isOnboarding) return undefined;
+      if (!hardGate) return undefined;
       const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
       return () => sub.remove();
-    }, [isOnboarding]),
+    }, [hardGate]),
   );
 
   const handleExitOnboarding = () => {
@@ -424,7 +434,7 @@ export const PaywallScreen = ({
           // muestra el plan al instante. Reconciliamos con la DB en segundo
           // plano (cuando el webhook actualice la fila).
           void refreshSubs(userId);
-          if (isOnboarding && nextScreen) {
+          if (hardGate && nextScreen) {
             (navigation as any).replace(nextScreen);
           } else {
             navigation.goBack();
@@ -576,7 +586,7 @@ export const PaywallScreen = ({
       // ya enlazada al club.
       await refreshSubs(userId);
 
-      if (isOnboarding && nextScreen) {
+      if (hardGate && nextScreen) {
         (navigation as any).replace(nextScreen);
       } else {
         navigation.goBack();
@@ -702,7 +712,7 @@ export const PaywallScreen = ({
         entering={FadeIn.duration(220)}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
-        {isOnboarding ? (
+        {hardGate ? (
           // Hard gate: sin botón de cerrar. El usuario solo sale vía
           // "Empezar prueba" o "Salir y cerrar sesión" en el footer.
           <View style={{ width: 36 }} />
@@ -984,7 +994,7 @@ export const PaywallScreen = ({
           </Text>
         ) : null}
         <View style={styles.footerLinks}>
-          {isOnboarding ? (
+          {hardGate ? (
             <Pressable
               onPress={handleExitOnboarding}
               hitSlop={6}

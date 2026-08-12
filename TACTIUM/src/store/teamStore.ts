@@ -320,6 +320,35 @@ export const useTeamStore = create<TeamState>()(
           ]);
 
           if (teams.length === 0) {
+            // Organizador de torneos: club creado en modo "solo torneos" (sin
+            // equipos). Aunque no tenga equipo, es un club_admin y entra al
+            // menú recortado (Torneos + Perfil), no al onboarding ni al modo
+            // suelto de jugador. Los torneos cuelgan del club, así que existe
+            // un club aunque no haya equipos.
+            const orgClub = useClubStore
+              .getState()
+              .clubs.find((cl) => cl.tournaments_only);
+            if (orgClub) {
+              if (get().soloMode || get().soloUpgrade)
+                set({ soloMode: false, soloUpgrade: false });
+              set({
+                team: null,
+                players: [],
+                teams: [],
+                memberships,
+                activeRole: 'club_admin',
+                activeRoleOverride: null,
+                activeTeamId: null,
+                myPlayerId: null,
+                myPlayerLoaded: true,
+                myPlayerTeamIds: [],
+                isLoading: false,
+                hasLoadedOnce: true,
+                isOnboarding: false,
+              });
+              return;
+            }
+
             // Jugador suelto que vuelve a entrar: su elección local se
             // borró en el logout, pero si su cuenta ya tiene amistosos
             // entra directo a su modo sin re-pasar por la bienvenida.

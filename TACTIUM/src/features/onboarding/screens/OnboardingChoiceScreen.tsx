@@ -51,10 +51,12 @@ export const OnboardingChoiceScreen = ({
     setSoloMode(true);
   };
 
-  // Si el usuario ya tiene un club pero salió antes de crear los equipos,
-  // saltamos la elección y vamos directo al paso de equipos del club.
+  // Si el usuario ya tiene un club de gestión (no "solo torneos") pero salió
+  // antes de crear los equipos, saltamos la elección y vamos directo al paso de
+  // equipos. Los clubes "solo torneos" no cuentan: ese modo entra al menú
+  // recortado, no pasa por aquí.
   useEffect(() => {
-    if (clubs.length > 0) {
+    if (clubs.some((cl) => !cl.tournaments_only)) {
       navigation.replace('CreateTeamsForClub');
     }
   }, [clubs, navigation]);

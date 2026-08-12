@@ -36,6 +36,7 @@ import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
 import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
 import { useTeamStore } from '@store/teamStore';
+import { useClubStore, selectActiveClub } from '@store/clubStore';
 
 import type { TabParamList } from './types';
 
@@ -233,6 +234,10 @@ export const TabNavigator = () => {
   const c = useColors();
   const activeRole = useTeamStore((s) => s.activeRole);
   const hasTeam = useTeamStore((s) => !!s.team);
+  // Club en modo "solo torneos": menú recortado a Torneos + Perfil hasta que el
+  // owner desbloquee la gestión de equipos.
+  const activeClub = useClubStore(selectActiveClub);
+  const tournamentsOnly = activeClub?.tournaments_only ?? false;
 
   return (
     <Tab.Navigator
@@ -271,6 +276,33 @@ export const TabNavigator = () => {
       }}
     >
       {activeRole === 'club_admin' ? (
+        tournamentsOnly ? (
+          // ── Menú RECORTADO (club "solo torneos") ──────────────────────────
+          // Solo Torneos + Perfil. El CTA para desbloquear la gestión de
+          // equipos vive dentro de la pantalla de Torneos.
+          <>
+            <Tab.Screen
+              name="Tournaments"
+              component={TournamentsStack}
+              options={{
+                tabBarLabel: 'Torneos',
+                tabBarIcon: ({ focused }) => (
+                  <TabIcon Icon={IconTrophy} focused={focused} />
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Profile"
+              component={ProfileStack}
+              options={{
+                tabBarLabel: 'Perfil',
+                tabBarIcon: ({ focused }) => (
+                  <TabIcon Icon={IconUser} focused={focused} />
+                ),
+              }}
+            />
+          </>
+        ) : (
         <>
           <Tab.Screen
             name="Club"
@@ -328,6 +360,7 @@ export const TabNavigator = () => {
             }}
           />
         </>
+        )
       ) : (
         <>
           <Tab.Screen

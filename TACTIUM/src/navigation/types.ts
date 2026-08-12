@@ -24,8 +24,12 @@ export type AuthStackParamList = {
 
 // ─── Onboarding Stack ───────────────────────────────────────────────
 export type OnboardingStackParamList = {
+  // Bifurcación inicial: organizar torneos vs gestionar equipos.
+  OnboardingIntent: undefined;
   OnboardingChoice: undefined;
   CreateClub: undefined;
+  // Paso mínimo (solo nombre) para el club en modo "solo torneos".
+  CreateTournamentClub: undefined;
   CreateTeamsForClub: undefined;
   CreateTeam: { clubId?: string } | undefined;
   AddPlayers: undefined;
@@ -36,11 +40,16 @@ export type OnboardingStackParamList = {
   // para que el back NO devuelva al pago.
   Paywall: {
     intent: 'captain' | 'club';
-    // `nextScreen` tras iniciar trial:
+    // Upsell OPCIONAL dentro del onboarding (p.ej. ofrecer el volcado automático
+    // en AddPlayers): planes de onboarding pero DESCARTABLE (cerrar/atrás vuelven
+    // a la pantalla anterior, sin cerrar sesión). Sin esto es un gate obligatorio.
+    optional?: boolean;
+    // `nextScreen` tras iniciar trial (solo gate DURO; el upsell opcional lo
+    // omite y hace goBack):
     //  · CreateTeamsForClub → flow Club (club ya creado antes del paywall).
     //  · AddPlayers         → flow Capitán (el paywall recibe `pendingTeam`
     //    en params, crea el team tras success y enseguida navega aquí).
-    nextScreen: 'CreateTeamsForClub' | 'AddPlayers';
+    nextScreen?: 'CreateTeamsForClub' | 'AddPlayers';
     // Solo flow Capitán: datos del form de CreateTeam que esperan ser
     // insertados tras arrancar el trial. Permite mostrar paywall después
     // de que el usuario haya rellenado el form (sunk-cost → menos abandono)
@@ -173,6 +182,9 @@ export type RootStackParamList = {
   Paywall: { intent?: string } | undefined;
   Subscription: undefined;
   ClubBilling: undefined;
+  // Activar la gestión de equipos en un club "solo torneos": elige federación
+  // (opcional) → desbloquea → paywall de suscripción (upsell).
+  ActivateTeamManagement: undefined;
   MyData: undefined;
   MyStats: undefined;
   Settings: undefined;
@@ -188,10 +200,13 @@ export type RootStackParamList = {
   TournamentSignup: { code?: string } | undefined;
   // Explorar torneos abiertos (jugador).
   ExploreTournaments: undefined;
-  // Seguir un torneo (vista de solo lectura del jugador).
+  // Seguir un torneo (vista de solo lectura del jugador). También es el
+  // destino del deep link de vuelta tras pagar: `paid` llega como '1' desde
+  // `tactium://tournament/{id}?paid=1` y dispara el aviso de pago confirmado.
   TournamentFollow: {
     tournamentId: string;
     initialTab?: 'main' | 'schedule' | 'players' | 'info';
+    paid?: string;
   };
 };
 

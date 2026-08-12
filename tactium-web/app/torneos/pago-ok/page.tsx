@@ -1,11 +1,20 @@
+import { ReturnToApp } from "./ReturnToApp";
+
 // Página de retorno tras un pago de torneo correcto. La confirmación REAL la
 // hace el webhook (fuente de verdad); esto es solo la pantalla de vuelta.
+//
+// `src` marca el origen del checkout:
+//   · app → el pago se inició desde el móvil: ofrecemos volver a la app.
+//   · web → el usuario ya está en el navegador (pagó desde el escritorio):
+//           se queda en la web, con un atajo a su panel de torneos.
 export default async function PagoOkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tid?: string }>;
+  searchParams: Promise<{ tid?: string; src?: string }>;
 }) {
-  const { tid } = await searchParams;
+  const { tid, src } = await searchParams;
+  const fromApp = src === "app";
+
   return (
     <main
       style={{
@@ -25,12 +34,18 @@ export default async function PagoOkPage({
           Pago completado
         </h1>
         <p style={{ color: "rgba(232,245,239,0.7)", lineHeight: 1.5 }}>
-          Tu torneo ya está listo para publicar. Vuelve a la app de TACTIUM para
-          abrir la inscripción.
+          {fromApp
+            ? "Tu torneo ya está publicado. Vuelve a la app de TACTIUM para gestionarlo."
+            : "Tu torneo ya está publicado. Puedes volver a tu panel para gestionarlo."}
         </p>
-        {tid ? (
+
+        {tid && fromApp ? (
+          // Iniciado desde el móvil → volver a la app (contador + botón).
+          <ReturnToApp tid={tid} />
+        ) : (
+          // Pago desde la web → se queda en la web.
           <a
-            href={`tactium://torneos/${tid}`}
+            href="/club/torneos"
             style={{
               display: "inline-block",
               marginTop: 20,
@@ -42,9 +57,9 @@ export default async function PagoOkPage({
               textDecoration: "none",
             }}
           >
-            Volver a la app
+            Ir a mis torneos
           </a>
-        ) : null}
+        )}
       </div>
     </main>
   );

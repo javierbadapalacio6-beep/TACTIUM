@@ -14,6 +14,7 @@ import { AnimatedSplash } from './src/components/brand/AnimatedSplash';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 import { RootNavigator } from './src/navigation';
+import { linking } from './src/navigation/linking';
 import { Colors, type Palette } from './src/core/theme/colors';
 import { useColors, useResolvedScheme } from './src/core/theme/useColors';
 import { useAuthStore } from './src/store/authStore';
@@ -193,7 +194,18 @@ export default function App() {
   return (
     <GestureHandlerRootView style={[styles.root, { backgroundColor: c.background }]}>
       <SafeAreaProvider>
-        <NavigationContainer theme={navTheme}>
+        <NavigationContainer
+          theme={navTheme}
+          linking={linking}
+          // Mientras React Navigation resuelve un deep link de arranque (p. ej.
+          // la vuelta del pago), pinta el mismo loader de marca en vez de un
+          // frame en blanco. El AnimatedSplash sigue por encima igualmente.
+          fallback={
+            <View style={[styles.loader, { backgroundColor: c.background }]}>
+              <ActivityIndicator color={c.accent} size="large" />
+            </View>
+          }
+        >
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
           {/* ResponsiveFrame: en teléfono es transparente; en tablet/iPad
               centra toda la app en una columna de ancho máximo sobre el

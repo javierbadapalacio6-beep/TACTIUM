@@ -27,6 +27,7 @@ import {
   ScanSheet,
 } from '@components/ui';
 import { useTeamStore, type Side } from '@store/teamStore';
+import { useHasActiveSub } from '@core/hooks/usePremiumGate';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
 import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
@@ -58,6 +59,30 @@ export const AddPlayersScreen = ({
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
 
   const [adding, setAdding] = useState(false);
+
+  // El VOLCADO AUTOMÁTICO (escaneo del ranking o import de la Federación) es
+  // premium. En el onboarding no lo bloqueamos a lo bruto: ofrecemos elegir.
+  // Si ya tiene sub (p.ej. volvió del paywall), abre directo. `useHasActiveSub`
+  // es reactivo → se refresca al volver del paywall con la prueba iniciada.
+  const hasSub = useHasActiveSub();
+  const requestBulkImport = (open: () => void) => {
+    if (hasSub) {
+      open();
+      return;
+    }
+    Alert.alert(
+      'Volcado automático',
+      'Escanea tu ranking y volcamos tu plantilla entera con los puntos oficiales — es una función premium. Empieza tu prueba gratis para usarlo, o añade tus jugadores a mano ahora (podrás volcarla después).',
+      [
+        { text: 'Añadir a mano', style: 'cancel' },
+        {
+          text: 'Empezar prueba',
+          onPress: () =>
+            navigation.navigate('Paywall', { intent: 'captain', optional: true }),
+        },
+      ],
+    );
+  };
   const [submittingAdd, setSubmittingAdd] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [importingFcp, setImportingFcp] = useState(false);
@@ -164,7 +189,7 @@ export const AddPlayersScreen = ({
         {/* Atajo: escanear ranking FEP directamente desde onboarding.
             Mismo flow que en TeamScreen → ScanSheet con OCR. */}
         <Pressable
-          onPress={() => setScanning(true)}
+          onPress={() => requestBulkImport(() => setScanning(true))}
           accessibilityRole="button"
           accessibilityLabel="Escanear plantilla"
           style={({ pressed }) => [
@@ -187,7 +212,7 @@ export const AddPlayersScreen = ({
         {/* Atajo: volcar la plantilla oficial desde la Federación Cántabra. */}
         {FCP_ENABLED && (
           <Pressable
-            onPress={() => setImportingFcp(true)}
+            onPress={() => requestBulkImport(() => setImportingFcp(true))}
             accessibilityRole="button"
             accessibilityLabel="Importar desde la Federación Cántabra"
             style={({ pressed }) => [
