@@ -1,25 +1,283 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useState } from "react";
 
 import {
-  CONSOLATION_ROUNDS,
-  GROUPS,
-  KO_ROUNDS,
   SCHEDULED,
   SCHEDULE_CONFIG,
   SCHEDULE_COURTS,
   SCHEDULE_HOURS,
-  SIGNUPS,
-  STATE_LABEL,
-  tournamentById,
   type BracketTie,
   type ScheduledMatch,
 } from "@/lib/tournament-data";
+import {
+  fetchTournament,
+  fetchTournamentMatches,
+  fetchTournamentRegs,
+} from "@/lib/queries";
+import { useAsync } from "@/lib/use-async";
+import { generateKoBracket } from "@/lib/tournament-engine";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconAlert, IconCopy, IconTrophy, IconZap } from "@/components/Icon";
+
+/* ── Formas de los datos reales (RPC públicas, espejo de la app) ──────
+   Ver TACTIUM/src/core/services/tournaments.ts: publicGetTournament /
+   publicListMatches / publicListRegistrations. */
+interface RealTournament {
+  id: string;
+  name: string;
+  format: string;
+  status: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  location: string | null;
+  signup_code: string | null;
+  max_pairs: number | null;
+  entry_fee: number | null;
+  fee_currency: string | null;
+  gender: string | null;
+  genders: string[] | null;
+  category: string | null;
+  categories: string[] | null;
+  // No siempre lo devuelve la RPC pública; se usa si viene.
+  club_name?: string | null;
+}
+
+interface RealReg {
+  id: string;
+  gender: string | null;
+  category: string | null;
+  group_no: number | null;
+  pair_label: string | null;
+  p1_name: string;
+  p2_name: string | null;
+  p1_phone: string | null;
+  p1_email: string | null;
+  seed: number | null;
+  seed_points: number | null;
+  status: string;
+}
+
+interface RealMatch {
+  id: string;
+  gender: string | null;
+  category: string | null;
+  group_no: number | null;
+  bracket: string;
+  round: number;
+  slot: number;
+  home_reg: string | null;
+  away_reg: string | null;
+  home_reg2: string | null;
+  away_reg2: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  winner_reg: string | null;
+  status: string;
+  sets: number[][] | null;
+}
+
+/* ── Etiquetas ───────────────────────────────────────────────────── */
+const FORMAT_LABEL: Record<string, string> = {
+  ko: "Cuadro",
+  ko_consolation: "Cuadro con consolación",
+  groups_ko: "Grupos + Cuadro",
+  round_robin: "Liga",
+  americano: "Americano",
+  mexicano: "Mexicano",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: "Borrador",
+  open: "Inscripción abierta",
+  in_progress: "En juego",
+  finished: "Finalizado",
+  canceled: "Cancelado",
+};
+
+const isSocialFormat = (f: string) => f === "americano" || f === "mexicano";
+
+/* ── Fechas (locale es-ES) ───────────────────────────────────────── */
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+}
+
+function fmtDates(a: string | null, b: string | null): string {
+  const da = fmtDate(a);
+  const db = fmtDate(b);
+  if (da && db && da !== db) return `${da} – ${db}`;
+  return da || db;
+}
+
+/* ── Nombre de la pareja / jugador ───────────────────────────────── */
+function pairName(r: RealReg | undefined): string {
+  if (!r) return "—";
+  if (r.pair_label) return r.pair_label;
+  return [r.p1_name, r.p2_name].filter(Boolean).join(" · ");
+}
+
+/* ── Marcador de un partido a partir de sus sets (juegos por set) ─── */
+function setsToScore(sets: number[][] | null): string {
+  if (!Array.isArray(sets) || sets.length === 0) return "";
+  return sets
+    .map((s) => `${s?.[0] ?? 0}-${s?.[1] ?? 0}`)
+    .join(" ");
+}
+
+/* ── Cuadros: orden y etiqueta (espejo de bracketRank/bracketLabel) ─ */
+const BRACKET_TITLE: Record<string, string> = {
+  main: "CUADRO PRINCIPAL",
+  consol: "CUADRO DE CONSOLACIÓN",
+  gold: "CUADRO ORO",
+  silver: "CUADRO PLATA",
+  bronze: "CUADRO BRONCE",
+};
+
+function bracketRank(b: string): number {
+  const fixed: Record<string, number> = {
+    main: -1,
+    gold: 0,
+    silver: 1,
+    bronze: 2,
+    consol: 5,
+  };
+  if (fixed[b] !== undefined) return fixed[b];
+  if (b.startsWith("pos")) return 10 + (parseInt(b.slice(3), 10) || 0);
+  return 99;
+}
+
+function bracketTitle(b: string): string {
+  if (BRACKET_TITLE[b]) return BRACKET_TITLE[b];
+  if (b.startsWith("pos")) {
+    const n = parseInt(b.slice(3), 10) || 0;
+    return n <= 4 ? "CUADRO DE CONSOLACIÓN" : `CONSOLACIÓN ${n - 3}`;
+  }
+  return `CUADRO ${b.toUpperCase()}`;
+}
+
+/* ── Etiqueta de ronda (espejo de roundLabel de la app) ──────────── */
+function roundLabel(round: number, total: number): string {
+  const fromEnd = total - round;
+  if (fromEnd === 0) return "FINAL";
+  if (fromEnd === 1) return "SEMIFINALES";
+  if (fromEnd === 2) return "CUARTOS";
+  if (fromEnd === 3) return "OCTAVOS";
+  return `RONDA ${round}`;
+}
+
+const groupLetter = (n: number): string => String.fromCharCode(65 + n); // A, B, C…
+
+/* ── Clasificación de parejas (espejo de computeStandings) ───────── */
+interface StandRow {
+  regId: string;
+  name: string;
+  played: number;
+  won: number;
+  lost: number;
+  setsFor: number;
+  setsAgainst: number;
+  gamesFor: number;
+  gamesAgainst: number;
+  points: number;
+}
+
+function computeStandings(regs: RealReg[], matches: RealMatch[]): StandRow[] {
+  const byId = new Map<string, StandRow>();
+  for (const r of regs) {
+    byId.set(r.id, {
+      regId: r.id,
+      name: pairName(r),
+      played: 0,
+      won: 0,
+      lost: 0,
+      setsFor: 0,
+      setsAgainst: 0,
+      gamesFor: 0,
+      gamesAgainst: 0,
+      points: 0,
+    });
+  }
+  for (const m of matches) {
+    if (m.status !== "finished" || !m.home_reg || !m.away_reg) continue;
+    const H = byId.get(m.home_reg);
+    const A = byId.get(m.away_reg);
+    if (!H || !A) continue;
+    H.played++;
+    A.played++;
+    H.setsFor += m.home_score ?? 0;
+    H.setsAgainst += m.away_score ?? 0;
+    A.setsFor += m.away_score ?? 0;
+    A.setsAgainst += m.home_score ?? 0;
+    for (const s of m.sets ?? []) {
+      H.gamesFor += s?.[0] ?? 0;
+      H.gamesAgainst += s?.[1] ?? 0;
+      A.gamesFor += s?.[1] ?? 0;
+      A.gamesAgainst += s?.[0] ?? 0;
+    }
+    if (m.winner_reg === m.home_reg) {
+      H.won++;
+      A.lost++;
+      H.points += 2;
+      A.points += 1;
+    } else if (m.winner_reg === m.away_reg) {
+      A.won++;
+      H.lost++;
+      A.points += 2;
+      H.points += 1;
+    }
+  }
+  return [...byId.values()].sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
+      b.gamesFor - b.gamesAgainst - (a.gamesFor - a.gamesAgainst) ||
+      b.won - a.won,
+  );
+}
+
+/* ── Clasificación individual · americano/mexicano (computeIndividual) */
+interface PlayerRow {
+  regId: string;
+  name: string;
+  played: number;
+  won: number;
+  points: number;
+}
+
+function computeIndividual(
+  regs: RealReg[],
+  matches: RealMatch[],
+): PlayerRow[] {
+  const byId = new Map<string, PlayerRow>();
+  for (const r of regs)
+    byId.set(r.id, { regId: r.id, name: r.p1_name ?? "—", played: 0, won: 0, points: 0 });
+  const add = (id: string | null, pts: number, win: boolean) => {
+    if (!id) return;
+    const p = byId.get(id);
+    if (!p) return;
+    p.played++;
+    p.points += pts;
+    if (win) p.won++;
+  };
+  for (const m of matches) {
+    if (m.status !== "finished") continue;
+    const hs = m.home_score ?? 0;
+    const as = m.away_score ?? 0;
+    const hw = hs > as;
+    add(m.home_reg, hs, hw);
+    add(m.home_reg2, hs, hw);
+    add(m.away_reg, as, !hw);
+    add(m.away_reg2, as, !hw);
+  }
+  return [...byId.values()].sort((a, b) => b.points - a.points || b.won - a.won);
+}
 
 type Tab =
   | "inscripciones"
@@ -450,16 +708,45 @@ export function TournamentDetail({
   /** Vista de jugador/espectador: sin acciones de organizador. */
   spectator?: boolean;
 }) {
-  const t = tournamentById(id);
   const [tab, setTab] = useState<Tab>(spectator ? "cuadro" : "inscripciones");
   const [followed, setFollowed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const standings = useMemo(
-    () => GROUPS.flatMap((g) => g.pairs).sort((a, b) => b.pts - a.pts),
-    []
+  // Torneo, partidos e inscripciones en paralelo: son independientes bajo las
+  // RPC públicas (funcionan también sin sesión, igual que en la app).
+  const { data, loading, error } = useAsync(
+    async () => {
+      const [tour, matches, regs] = await Promise.all([
+        fetchTournament(id),
+        fetchTournamentMatches(id),
+        fetchTournamentRegs(id),
+      ]);
+      return {
+        tour: (tour as RealTournament | null) ?? null,
+        matches: matches as unknown as RealMatch[],
+        regs: regs as unknown as RealReg[],
+      };
+    },
+    [id, reloadKey],
   );
 
+  if (loading) return <SkeletonCard />;
+  if (error) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconAlert size={34} />}
+          title="No se pudo cargar el torneo"
+          body={error}
+        />
+      </Card>
+    );
+  }
+
+  const t = data?.tour ?? null;
   if (!t) {
     return (
       <Card>
@@ -472,9 +759,150 @@ export function TournamentDetail({
     );
   }
 
+  const matches = data?.matches ?? [];
+  const regs = data?.regs ?? [];
+
   const visibleTabs = spectator
     ? TABS.filter(([k]) => k !== "inscripciones" && k !== "config")
     : TABS;
+
+  /* ── Cabecera ─────────────────────────────────────────────────── */
+  const typeLabel = FORMAT_LABEL[t.format] ?? t.format;
+  const statusLabel = STATUS_LABEL[t.status] ?? t.status;
+  const cats = t.categories?.length
+    ? t.categories
+    : t.category
+      ? [t.category]
+      : [];
+  const gens = t.genders?.length ? t.genders : t.gender ? [t.gender] : [];
+  const dateStr = fmtDates(t.starts_on, t.ends_on);
+  const metaLine = [t.club_name, t.location, dateStr || "Fecha por confirmar"]
+    .filter(Boolean)
+    .join(" · ");
+
+  /* ── Derivados de partidos ────────────────────────────────────── */
+  const social = isSocialFormat(t.format);
+  const groupMatches = matches.filter((m) => m.bracket === "grp");
+  const koMatches = matches.filter(
+    (m) => !["grp", "rr", "amer", "mex"].includes(m.bracket),
+  );
+
+  // Generar el cuadro KO de todas las divisiones (género × categoría) que aún
+  // no tengan partidos. Solo formatos de eliminatoria; grupos/round-robin/
+  // sociales usan otros generadores (aún no portados). Pasa por `guardedWrite`.
+  const canGenerateKo =
+    !spectator &&
+    (t.format === "ko" || t.format === "ko_consolation") &&
+    koMatches.length === 0 &&
+    regs.length >= 2;
+
+  async function generateBracket() {
+    if (busy) return;
+    setBusy(true);
+    const gg = gens.length ? gens : [null];
+    const cc = cats.length ? cats : [null];
+    const res = await guardedWrite("generar el cuadro", async () => {
+      for (const g of gg)
+        for (const c of cc) await generateKoBracket(id, g, c);
+    });
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Cuadro generado");
+    } else {
+      setToast(res.reason);
+    }
+  }
+
+  // Grupos: una liguilla por group_no, con su clasificación.
+  const groupNos = Array.from(
+    new Set(groupMatches.map((m) => m.group_no).filter((n): n is number => n != null)),
+  ).sort((a, b) => a - b);
+  const groups = groupNos.map((gn) => ({
+    key: gn,
+    name: `GRUPO ${groupLetter(gn)}`,
+    rows: computeStandings(
+      regs.filter((r) => r.group_no === gn),
+      groupMatches.filter((m) => m.group_no === gn),
+    ),
+  }));
+
+  // Clasificación general: liga (round_robin), grupos combinados o social.
+  const classMatches = social
+    ? matches.filter((m) => m.bracket === "amer" || m.bracket === "mex")
+    : matches.filter((m) => m.bracket === "rr" || m.bracket === "grp");
+  const hasClass = classMatches.length > 0;
+  const classRows: {
+    key: string;
+    name: string;
+    played: number | null;
+    won: number | null;
+    lost: number | null;
+    setsFor: number | null;
+    setsAgainst: number | null;
+    gamesFor: number | null;
+    gamesAgainst: number | null;
+    pts: number;
+  }[] = social
+    ? computeIndividual(regs, classMatches).map((p) => ({
+        key: p.regId,
+        name: p.name,
+        played: p.played,
+        won: p.won,
+        lost: null,
+        setsFor: null,
+        setsAgainst: null,
+        gamesFor: null,
+        gamesAgainst: null,
+        pts: p.points,
+      }))
+    : computeStandings(regs, classMatches).map((s) => ({
+        key: s.regId,
+        name: s.name,
+        played: s.played,
+        won: s.won,
+        lost: s.lost,
+        setsFor: s.setsFor,
+        setsAgainst: s.setsAgainst,
+        gamesFor: s.gamesFor,
+        gamesAgainst: s.gamesAgainst,
+        pts: s.points,
+      }));
+
+  // Cuadros KO (principal, consolación, oro/plata/bronce…) ordenados.
+  const nameById = new Map(regs.map((r) => [r.id, pairName(r)]));
+  const nameOr = (regId: string | null): string =>
+    regId ? nameById.get(regId) ?? "—" : "Por determinar";
+  const koKeys = Array.from(new Set(koMatches.map((m) => m.bracket))).sort(
+    (a, b) => bracketRank(a) - bracketRank(b),
+  );
+  const koBrackets = koKeys.map((key) => {
+    const bm = koMatches.filter((m) => m.bracket === key);
+    const total = bm.reduce((mx, m) => Math.max(mx, m.round), 0);
+    const roundNums = Array.from(new Set(bm.map((m) => m.round))).sort(
+      (a, b) => a - b,
+    );
+    const rounds: { round: string; ties: BracketTie[] }[] = roundNums.map(
+      (rn) => ({
+        round: roundLabel(rn, total),
+        ties: bm
+          .filter((m) => m.round === rn)
+          .sort((a, b) => a.slot - b.slot)
+          .map((m) => ({
+            a: nameOr(m.home_reg),
+            b: nameOr(m.away_reg),
+            score: setsToScore(m.sets),
+            winner:
+              m.winner_reg === m.home_reg
+                ? 0
+                : m.winner_reg === m.away_reg
+                  ? 1
+                  : -1,
+          })),
+      }),
+    );
+    return { key, title: bracketTitle(key), rounds };
+  });
 
   return (
     <div className="tw-lineup-wrap">
@@ -491,7 +919,7 @@ export function TournamentDetail({
             }}
           >
             <div>
-              <Eyebrow>TORNEO · {t.type.toUpperCase()}</Eyebrow>
+              <Eyebrow>TORNEO · {typeLabel.toUpperCase()}</Eyebrow>
               <h1 style={{ margin: "12px 0 0", fontSize: 32, lineHeight: 1.04 }}>
                 {t.name}
               </h1>
@@ -504,20 +932,20 @@ export function TournamentDetail({
                   color: "var(--text-muted)",
                 }}
               >
-                {t.club} · {t.place} · {t.dates ?? "Fecha por confirmar"}
+                {metaLine}
               </div>
               <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {t.categories.map((c) => (
+                {cats.map((c) => (
                   <span key={c} className="chip chip-mute">
                     {c}
                   </span>
                 ))}
-                {t.genders.map((g) => (
+                {gens.map((g) => (
                   <span key={g} className="chip chip-mute">
                     {g}
                   </span>
                 ))}
-                <span className="chip">{STATE_LABEL[t.state]}</span>
+                <span className="chip">{statusLabel}</span>
               </div>
             </div>
 
@@ -556,7 +984,7 @@ export function TournamentDetail({
             </div>
           </div>
 
-          {!spectator && (
+          {!spectator && t.signup_code && (
             <div
               style={{
                 marginTop: 22,
@@ -579,14 +1007,14 @@ export function TournamentDetail({
                   color: "var(--accent)",
                 }}
               >
-                {t.code}
+                {t.signup_code}
               </span>
               <button
                 type="button"
                 aria-label="Copiar código"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(t.code);
+                    await navigator.clipboard.writeText(t.signup_code ?? "");
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1800);
                   } catch {
@@ -637,140 +1065,183 @@ export function TournamentDetail({
       </div>
 
       {/* ── Contenido ────────────────────────────────────────────── */}
-      {tab === "inscripciones" && (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div className="tw-roster-scroll">
-            <div className="tw-signup-head">
-              <span>Pareja</span>
-              <span>Categoría</span>
-              <span>Género</span>
-              <span>Puntos</span>
-              <span>Cuota</span>
-              <span>Contacto</span>
-            </div>
-            {SIGNUPS.map((s) => (
-              <div key={s.pair} className="tw-signup-row">
-                <span style={{ fontSize: 13.5, fontWeight: 700 }}>{s.pair}</span>
-                <span className="mono" style={{ fontSize: 12 }}>
-                  {s.category}
-                </span>
-                <span
-                  className="mono"
-                  style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--text-faint)" }}
-                >
-                  {s.gender.toUpperCase()}
-                </span>
-                <span className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
-                  {s.pts}
-                </span>
-                <span>
-                  {s.paid ? (
-                    <span className="chip">Pagada</span>
-                  ) : (
-                    <span className="chip chip-warning">Pendiente</span>
-                  )}
-                </span>
-                <span
-                  className="mono"
-                  style={{ fontSize: 11, color: "var(--text-muted)" }}
-                >
-                  {s.phone}
-                </span>
+      {tab === "inscripciones" &&
+        (regs.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<IconTrophy size={34} />}
+              title="Sin inscripciones todavía"
+              body="Comparte el código para que las parejas se apunten desde la app."
+            />
+          </Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div className="tw-roster-scroll">
+              <div className="tw-signup-head">
+                <span>Pareja</span>
+                <span>Categoría</span>
+                <span>Género</span>
+                <span>Puntos</span>
+                <span>Cuota</span>
+                <span>Contacto</span>
               </div>
+              {regs.map((r) => (
+                <div key={r.id} className="tw-signup-row">
+                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{pairName(r)}</span>
+                  <span className="mono" style={{ fontSize: 12 }}>
+                    {r.category ?? "—"}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--text-faint)" }}
+                  >
+                    {(r.gender ?? "").toUpperCase()}
+                  </span>
+                  <span className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
+                    {r.seed_points ?? "—"}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 11, color: "var(--text-faint)" }}
+                  >
+                    —
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 11, color: "var(--text-muted)" }}
+                  >
+                    {r.p1_phone ?? "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ))}
+
+      {tab === "grupos" &&
+        (groups.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<IconTrophy size={34} />}
+              title="Sin grupos todavía"
+              body="La fase de grupos aparecerá aquí cuando el club la genere."
+            />
+          </Card>
+        ) : (
+          <div className="tw-club-grid">
+            {groups.map((g) => (
+              <Card key={g.key} style={{ padding: 0, overflow: "hidden" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--hair)" }}>
+                  <Eyebrow>{g.name}</Eyebrow>
+                </div>
+                {g.rows.map((p, i) => (
+                  <div
+                    key={p.regId}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "12px 20px",
+                      borderBottom:
+                        i === g.rows.length - 1 ? "none" : "1px solid var(--hair)",
+                    }}
+                  >
+                    <span
+                      className="mono"
+                      style={{ fontSize: 11, color: "var(--text-faint)", width: 18 }}
+                    >
+                      {i + 1}
+                    </span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>
+                      {p.name}
+                    </span>
+                    <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      {p.won}-{p.lost}
+                    </span>
+                    <span
+                      className="mono"
+                      style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
+                    >
+                      {p.points}
+                    </span>
+                  </div>
+                ))}
+              </Card>
             ))}
           </div>
-        </Card>
-      )}
+        ))}
 
-      {tab === "grupos" && (
-        <div className="tw-club-grid">
-          {GROUPS.map((g) => (
-            <Card key={g.name} style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--hair)" }}>
-                <Eyebrow>{g.name}</Eyebrow>
+      {tab === "clasificacion" &&
+        (!hasClass ? (
+          <Card>
+            <EmptyState
+              icon={<IconTrophy size={34} />}
+              title="Sin clasificación todavía"
+              body="Aparecerá en cuanto se jueguen los primeros partidos."
+            />
+          </Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div className="tw-roster-scroll">
+              <div className="tw-standings-head">
+                {["POS", "PAREJA", "PJ", "PG", "PP", "SETS +", "SETS −", "JUEGOS +", "JUEGOS −", "PTS"].map(
+                  (h) => (
+                    <span key={h}>{h}</span>
+                  )
+                )}
               </div>
-              {g.pairs.map((p, i) => (
-                <div
-                  key={p.pair}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 20px",
-                    borderBottom:
-                      i === g.pairs.length - 1 ? "none" : "1px solid var(--hair)",
-                    boxShadow: p.through ? "inset 2px 0 0 var(--accent)" : "none",
-                  }}
-                >
-                  <span
-                    className="mono"
-                    style={{ fontSize: 11, color: "var(--text-faint)", width: 18 }}
-                  >
-                    {i + 1}
-                  </span>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: p.through ? 700 : 500 }}>
-                    {p.pair}
-                  </span>
-                  <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    {p.won}-{p.lost}
-                  </span>
-                  <span
-                    className="mono"
-                    style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
-                  >
+              {classRows.map((p, i) => (
+                <div key={p.key} className="tw-standings-row">
+                  <span className="mono">{i + 1}</span>
+                  <span style={{ fontWeight: 700 }}>{p.name}</span>
+                  <span className="mono">{p.played ?? "—"}</span>
+                  <span className="mono">{p.won ?? "—"}</span>
+                  <span className="mono">{p.lost ?? "—"}</span>
+                  <span className="mono">{p.setsFor ?? "—"}</span>
+                  <span className="mono">{p.setsAgainst ?? "—"}</span>
+                  <span className="mono">{p.gamesFor ?? "—"}</span>
+                  <span className="mono">{p.gamesAgainst ?? "—"}</span>
+                  <span className="mono" style={{ color: "var(--accent)", fontWeight: 700 }}>
                     {p.pts}
                   </span>
                 </div>
               ))}
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {tab === "clasificacion" && (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div className="tw-roster-scroll">
-            <div className="tw-standings-head">
-              {["POS", "PAREJA", "PJ", "PG", "PP", "SETS +", "SETS −", "JUEGOS +", "JUEGOS −", "PTS"].map(
-                (h) => (
-                  <span key={h}>{h}</span>
-                )
-              )}
             </div>
-            {standings.map((p, i) => (
-              <div
-                key={p.pair}
-                className="tw-standings-row"
-                style={{
-                  boxShadow: p.through ? "inset 2px 0 0 var(--accent)" : "none",
-                }}
-              >
-                <span className="mono">{i + 1}</span>
-                <span style={{ fontWeight: 700 }}>{p.pair}</span>
-                <span className="mono">{p.played}</span>
-                <span className="mono">{p.won}</span>
-                <span className="mono">{p.lost}</span>
-                <span className="mono">{p.setsFor}</span>
-                <span className="mono">{p.setsAgainst}</span>
-                <span className="mono">{p.gamesFor}</span>
-                <span className="mono">{p.gamesAgainst}</span>
-                <span className="mono" style={{ color: "var(--accent)", fontWeight: 700 }}>
-                  {p.pts}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+          </Card>
+        ))}
 
-      {tab === "cuadro" && (
-        <Card style={{ padding: "24px 0" }}>
-          <Bracket rounds={KO_ROUNDS} title="CUADRO PRINCIPAL" />
-          {t.type === "Cuadro con consolación" && (
-            <Bracket rounds={CONSOLATION_ROUNDS} title="CUADRO DE CONSOLACIÓN" />
-          )}
-        </Card>
-      )}
+      {tab === "cuadro" &&
+        (koBrackets.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<IconTrophy size={34} />}
+              title="Sin cuadro todavía"
+              body={
+                canGenerateKo
+                  ? "Genera el cuadro cuando la inscripción esté cerrada: se siembran las parejas y se crean los partidos."
+                  : "El cuadro aparecerá aquí cuando el club lo genere."
+              }
+              action={
+                canGenerateKo ? (
+                  <button
+                    className="btn btn-accent"
+                    disabled={busy}
+                    onClick={generateBracket}
+                    style={{ padding: "13px 24px", fontSize: 14 }}
+                  >
+                    {busy ? "Generando…" : "Generar cuadro"}
+                  </button>
+                ) : undefined
+              }
+            />
+          </Card>
+        ) : (
+          <Card style={{ padding: "24px 0" }}>
+            {koBrackets.map((b) => (
+              <Bracket key={b.key} rounds={b.rounds} title={b.title} />
+            ))}
+          </Card>
+        ))}
 
       {tab === "horario" && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
@@ -793,6 +1264,8 @@ export function TournamentDetail({
           </Link>
         </Card>
       )}
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
