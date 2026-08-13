@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useState } from "react";
+import { Fragment, useState, type CSSProperties } from "react";
 
 import {
   SCHEDULED,
@@ -25,6 +25,9 @@ import {
   generateMexicanoRound,
   generateKnockoutFromGroups,
   generatePrincipalConsolationFromGroups,
+  setMatchResult,
+  setSocialResult,
+  type ResultMatch,
 } from "@/lib/tournament-engine";
 import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
@@ -50,8 +53,33 @@ interface RealTournament {
   genders: string[] | null;
   category: string | null;
   categories: string[] | null;
+  match_format: string | null;
+  phase_formats: Record<string, string> | null;
   // No siempre lo devuelve la RPC pública; se usa si viene.
   club_name?: string | null;
+}
+
+/* ── Formato de partido (espejo de formatConfig/resolveMatchFormat de la app) ─ */
+function formatConfig(f: string): { maxSets: number; setsToWin: number } {
+  switch (f) {
+    case "bo3_full":
+      return { maxSets: 3, setsToWin: 2 };
+    case "bo1":
+      return { maxSets: 1, setsToWin: 1 };
+    case "bo3_stb":
+    default:
+      return { maxSets: 3, setsToWin: 2 };
+  }
+}
+// Cuadro → grupo de formato: consol / groups / main (oro/plata/bronce → main).
+function phaseFormatGroup(bracket: string): "main" | "consol" | "groups" {
+  if (bracket === "consol") return "consol";
+  if (bracket === "grp" || bracket === "rr") return "groups";
+  return "main";
+}
+function resolveMatchFormat(t: RealTournament, bracket: string): string {
+  const override = t.phase_formats?.[phaseFormatGroup(bracket)];
+  return override ?? t.match_format ?? "bo3_stb";
 }
 
 interface RealReg {
@@ -305,11 +333,13 @@ const TABS: [Tab, string][] = [
 ];
 
 /* ── Cuadro ────────────────────────────────────────────────────── */
+type UiTie = BracketTie & { onEnter?: () => void };
+
 function Bracket({
   rounds,
   title,
 }: {
-  rounds: { round: string; ties: BracketTie[] }[];
+  rounds: { round: string; ties: UiTie[] }[];
   title?: string;
 }) {
   return (
@@ -335,7 +365,25 @@ function Bracket({
               </div>
               <div className="tw-bracket-ties">
                 {col.ties.map((t, i) => (
-                  <div key={i} className="tw-tie">
+                  <div
+                    key={i}
+                    className="tw-tie"
+                    onClick={t.onEnter}
+                    role={t.onEnter ? "button" : undefined}
+                    tabIndex={t.onEnter ? 0 : undefined}
+                    onKeyDown={
+                      t.onEnter
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              t.onEnter!();
+                            }
+                          }
+                        : undefined
+                    }
+                    style={t.onEnter ? { cursor: "pointer" } : undefined}
+                    title={t.onEnter ? "Meter resultado" : undefined}
+                  >
                     {[t.a, t.b].map((name, side) => {
                       const isWinner = t.winner === side;
                       const decided = t.winner >= 0;
@@ -707,6 +755,138 @@ function ScheduleGrid() {
   );
 }
 
+/* ── Modal para meter un resultado ─────────────────────────────── */
+interface EntryTarget {
+  match: RealMatch;
+  homeName: string;
+  awayName: string;
+  isSocial: boolean;
+  maxSets: number;
+  setsToWin: number;
+  advance: boolean;
+}
+
+function ResultModal({
+  target,
+  busy,
+  onSave,
+  onClose,
+}: {
+  target: EntryTarget;
+  busy: boolean;
+  onSave: (sets: number[][], social: [number, number]) => void;
+  onClose: () => void;
+}) {
+  const { homeName, awayName, isSocial, maxSets } = target;
+  const [sets, setSets] = useState<[string, string][]>(
+    Array.from({ length: maxSets }, () => ["", ""] as [string, string]),
+  );
+  const [pts, setPts] = useState<[string, string]>(["", ""]);
+
+  const setCell = (i: number, side: 0 | 1, v: string) =>
+    setSets((prev) => {
+      const next = prev.map((s) => [...s] as [string, string]);
+      next[i][side] = v.replace(/[^0-9]/g, "").slice(0, 2);
+      return next;
+    });
+
+  const submit = () => {
+    if (isSocial) {
+      onSave([], [parseInt(pts[0], 10) || 0, parseInt(pts[1], 10) || 0]);
+    } else {
+      const parsed = sets
+        .map((s) => [parseInt(s[0], 10) || 0, parseInt(s[1], 10) || 0])
+        .filter((s) => s[0] !== 0 || s[1] !== 0);
+      onSave(parsed, [0, 0]);
+    }
+  };
+
+  const inputStyle: CSSProperties = {
+    width: 52,
+    padding: "8px 6px",
+    textAlign: "center",
+    fontSize: 15,
+    borderRadius: 8,
+    border: "1px solid var(--hair)",
+    background: "var(--surface)",
+    color: "var(--text)",
+  };
+
+  return (
+    <Modal open onClose={onClose} labelledBy="tw-result-title">
+      <div style={{ display: "grid", gap: 14 }}>
+        <h3 id="tw-result-title" style={{ margin: 0, fontSize: 16 }}>
+          Resultado
+        </h3>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>
+          {homeName} <span style={{ color: "var(--text-faint)" }}>vs</span> {awayName}
+        </div>
+        {isSocial ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input
+              inputMode="numeric"
+              value={pts[0]}
+              onChange={(e) =>
+                setPts([e.target.value.replace(/[^0-9]/g, "").slice(0, 2), pts[1]])
+              }
+              style={inputStyle}
+              aria-label={`Puntos ${homeName}`}
+            />
+            <span className="mono" style={{ color: "var(--text-faint)" }}>
+              —
+            </span>
+            <input
+              inputMode="numeric"
+              value={pts[1]}
+              onChange={(e) =>
+                setPts([pts[0], e.target.value.replace(/[^0-9]/g, "").slice(0, 2)])
+              }
+              style={inputStyle}
+              aria-label={`Puntos ${awayName}`}
+            />
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {sets.map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  className="mono"
+                  style={{ fontSize: 11, color: "var(--text-faint)", width: 44 }}
+                >
+                  SET {i + 1}
+                </span>
+                <input
+                  inputMode="numeric"
+                  value={s[0]}
+                  onChange={(e) => setCell(i, 0, e.target.value)}
+                  style={inputStyle}
+                />
+                <span className="mono" style={{ color: "var(--text-faint)" }}>
+                  —
+                </span>
+                <input
+                  inputMode="numeric"
+                  value={s[1]}
+                  onChange={(e) => setCell(i, 1, e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button className="btn btn-accent" onClick={submit} disabled={busy}>
+            {busy ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ── Pantalla ──────────────────────────────────────────────────── */
 export function TournamentDetail({
   id,
@@ -722,6 +902,7 @@ export function TournamentDetail({
   const [reloadKey, setReloadKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [entry, setEntry] = useState<EntryTarget | null>(null);
 
   // Torneo, partidos e inscripciones en paralelo: son independientes bajo las
   // RPC públicas (funcionan también sin sesión, igual que en la app).
@@ -958,6 +1139,57 @@ export function TournamentDetail({
   const nameById = new Map(regs.map((r) => [r.id, pairName(r)]));
   const nameOr = (regId: string | null): string =>
     regId ? nameById.get(regId) ?? "—" : "Por determinar";
+
+  // Abre el modal de resultado para un partido concreto.
+  const openEntry = (m: RealMatch, advance: boolean, isSocial: boolean) => {
+    const fmt = formatConfig(resolveMatchFormat(t, m.bracket));
+    setEntry({
+      match: m,
+      homeName: nameOr(m.home_reg),
+      awayName: nameOr(m.away_reg),
+      isSocial,
+      maxSets: fmt.maxSets,
+      setsToWin: fmt.setsToWin,
+      advance,
+    });
+  };
+
+  // Guarda el resultado del partido abierto (sets → avance, o social).
+  async function saveResult(sets: number[][], social: [number, number]) {
+    if (!entry || busy) return;
+    setBusy(true);
+    const m = entry.match;
+    const res = await guardedWrite("guardar el resultado", async () => {
+      if (entry.isSocial) {
+        await setSocialResult(
+          { id: m.id, home_reg: m.home_reg, away_reg: m.away_reg },
+          social[0],
+          social[1],
+        );
+      } else {
+        const rm: ResultMatch = {
+          id: m.id,
+          tournament_id: id,
+          bracket: m.bracket,
+          round: m.round,
+          slot: m.slot,
+          gender: m.gender,
+          category: m.category,
+          home_reg: m.home_reg,
+          away_reg: m.away_reg,
+        };
+        await setMatchResult(rm, sets, entry.setsToWin, entry.advance);
+      }
+    });
+    setBusy(false);
+    if (res.ok) {
+      setEntry(null);
+      setReloadKey((k) => k + 1);
+      setToast("Resultado guardado.");
+    } else {
+      setToast(res.reason);
+    }
+  }
   const koKeys = Array.from(new Set(koMatches.map((m) => m.bracket))).sort(
     (a, b) => bracketRank(a) - bracketRank(b),
   );
@@ -967,25 +1199,27 @@ export function TournamentDetail({
     const roundNums = Array.from(new Set(bm.map((m) => m.round))).sort(
       (a, b) => a - b,
     );
-    const rounds: { round: string; ties: BracketTie[] }[] = roundNums.map(
-      (rn) => ({
-        round: roundLabel(rn, total),
-        ties: bm
-          .filter((m) => m.round === rn)
-          .sort((a, b) => a.slot - b.slot)
-          .map((m) => ({
-            a: nameOr(m.home_reg),
-            b: nameOr(m.away_reg),
-            score: setsToScore(m.sets),
-            winner:
-              m.winner_reg === m.home_reg
-                ? 0
-                : m.winner_reg === m.away_reg
-                  ? 1
-                  : -1,
-          })),
-      }),
-    );
+    const rounds: { round: string; ties: UiTie[] }[] = roundNums.map((rn) => ({
+      round: roundLabel(rn, total),
+      ties: bm
+        .filter((m) => m.round === rn)
+        .sort((a, b) => a.slot - b.slot)
+        .map((m) => ({
+          a: nameOr(m.home_reg),
+          b: nameOr(m.away_reg),
+          score: setsToScore(m.sets),
+          winner:
+            m.winner_reg === m.home_reg
+              ? 0
+              : m.winner_reg === m.away_reg
+                ? 1
+                : -1,
+          onEnter:
+            organizer && m.home_reg && m.away_reg && m.status !== "bye"
+              ? () => openEntry(m, true, false)
+              : undefined,
+        })),
+    }));
     return { key, title: bracketTitle(key), rounds };
   });
 
@@ -1468,6 +1702,15 @@ export function TournamentDetail({
             Editar torneo
           </Link>
         </Card>
+      )}
+
+      {entry && (
+        <ResultModal
+          target={entry}
+          busy={busy}
+          onSave={saveResult}
+          onClose={() => setEntry(null)}
+        />
       )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
