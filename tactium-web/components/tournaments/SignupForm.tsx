@@ -10,8 +10,16 @@ import {
   SIGNUP_HOURS,
   tournamentById,
 } from "@/lib/tournament-data";
+import { tournamentSignup } from "@/lib/queries";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
 import { IconCheck, IconSearch } from "@/components/Icon";
+
+const SIGNUP_GENDER_DB: Record<string, string> = {
+  Masculino: "masculino",
+  Femenino: "femenino",
+  Mixto: "mixto",
+};
 
 /**
  * Ficha de inscripción. Es pública: se llega con el código del torneo.
@@ -81,6 +89,41 @@ export function SignupForm({ id }: { id: string }) {
 
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [signErr, setSignErr] = useState<string | null>(null);
+
+  async function submitSignup() {
+    if (busy) return;
+    if (!name.trim() || !mateName.trim()) {
+      setSignErr("Faltan los nombres de la pareja.");
+      return;
+    }
+    if (code.trim().length < 4) {
+      setSignErr("Falta el código del torneo.");
+      return;
+    }
+    const seed =
+      (parseInt(pts || "0", 10) || 0) + (parseInt(matePts || "0", 10) || 0);
+    const league =
+      (parseInt(level || "0", 10) || 0) + (parseInt(mateLevel || "0", 10) || 0);
+    setBusy(true);
+    setSignErr(null);
+    const res = await guardedWrite("inscribir la pareja", () =>
+      tournamentSignup({
+        code,
+        category,
+        gender: SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase(),
+        p1Name: name,
+        p2Name: mateName,
+        seedPoints: seed || null,
+        leagueSum: league || null,
+        availability: [...blocked],
+      }),
+    );
+    setBusy(false);
+    if (res.ok) setDone(true);
+    else setSignErr(res.reason);
+  }
 
   const hint = FCP_HINTS[name.trim().toLowerCase()];
   const mateHint = FCP_HINTS[mateName.trim().toLowerCase()];
@@ -547,13 +590,18 @@ export function SignupForm({ id }: { id: string }) {
             </div>
           </Card>
 
+          {signErr && (
+            <p style={{ margin: "0 0 12px", color: "var(--error)", fontSize: 13 }}>
+              {signErr}
+            </p>
+          )}
           <button
             className="btn btn-accent"
-            disabled={name.trim().length < 3}
-            onClick={() => setDone(true)}
+            disabled={busy || name.trim().length < 3}
+            onClick={submitSignup}
             style={{ width: "100%", padding: 16, fontSize: 15 }}
           >
-            Apuntarme al torneo
+            {busy ? "Inscribiendo…" : "Apuntarme al torneo"}
           </button>
         </>
       )}

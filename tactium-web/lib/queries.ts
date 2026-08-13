@@ -793,6 +793,36 @@ export async function fetchTournamentRegs(id: string) {
   return (data ?? []) as Record<string, unknown>[];
 }
 
+/** Inscripción pública a un torneo por código (el que llama es el jugador 1).
+ *  RPC tournament_signup: valida elegibilidad y crea la inscripción en servidor. */
+export async function tournamentSignup(input: {
+  code: string;
+  category?: string | null;
+  gender?: string | null;
+  p1Name: string;
+  p2Name: string;
+  seedPoints?: number | null;
+  leagueSum?: number | null;
+  availability?: string[];
+}): Promise<string> {
+  const { data, error } = await supabaseBrowser().rpc("tournament_signup", {
+    p_code: input.code.trim().toUpperCase(),
+    p1_name: input.p1Name.trim(),
+    p1_email: null,
+    p1_phone: null,
+    p2_name: input.p2Name.trim(),
+    p2_email: null,
+    p2_phone: null,
+    p_availability: input.availability ?? [],
+    p_category: input.category ?? null,
+    p_gender: input.gender ?? null,
+    p_seed_points: input.seedPoints ?? null,
+    p_league_sum: input.leagueSum ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 /* ── Comunidad · RPC ───────────────────────────────────────────── */
 export interface CommunityHit {
   type: "user" | "club";
