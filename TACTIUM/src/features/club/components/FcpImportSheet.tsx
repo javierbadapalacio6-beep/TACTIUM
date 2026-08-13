@@ -35,6 +35,9 @@ export const FcpImportSheet: React.FC<{
   const [activeClub, setActiveClub] = useState<FcpClubGroup | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
+  // Sin club (capitán independiente) = gestiona UN solo equipo → selección
+  // única (radio). Con club, multi-selección para volcar todos sus equipos.
+  const single = clubId === null;
 
   // Carga todo el catálogo una vez al abrir; el filtro es local.
   useEffect(() => {
@@ -61,6 +64,10 @@ export const FcpImportSheet: React.FC<{
 
   const toggle = (id: number) =>
     setSelected((prev) => {
+      if (single) {
+        // Selección única: tocar un equipo deja SOLO ese; re-tocarlo lo quita.
+        return prev.has(id) ? new Set() : new Set([id]);
+      }
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
@@ -116,14 +123,19 @@ export const FcpImportSheet: React.FC<{
     >
       <Text style={styles.eyebrow}>FEDERACIÓN CÁNTABRA</Text>
       <Text style={styles.title}>
-        {activeClub ? activeClub.club : 'Importa tu club'}
+        {activeClub
+          ? activeClub.club
+          : single
+            ? 'Importa tu equipo'
+            : 'Importa tu club'}
       </Text>
 
       {activeClub ? (
         <>
           <Text style={styles.sub}>
-            Marca los equipos a crear. Se volcará la plantilla real de cada uno con
-            sus puntos.
+            {single
+              ? 'Elige tu equipo. Se volcará su plantilla real con los puntos oficiales.'
+              : 'Marca los equipos a crear. Se volcará la plantilla real de cada uno con sus puntos.'}
           </Text>
           <Pressable onPress={() => setActiveClub(null)} hitSlop={6} style={{ marginTop: 8 }}>
             <Text style={styles.back}>‹ Elegir otro club</Text>
@@ -137,7 +149,7 @@ export const FcpImportSheet: React.FC<{
                   onPress={() => toggle(t.id_equipo)}
                   style={[styles.teamRow, on && { borderColor: c.accent, backgroundColor: c.accent10 }]}
                 >
-                  <View style={[styles.check, on && { backgroundColor: c.accent, borderColor: c.accent }]}>
+                  <View style={[styles.check, single && styles.checkRadio, on && { backgroundColor: c.accent, borderColor: c.accent }]}>
                     {on ? <Text style={styles.checkMark}>✓</Text> : null}
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -183,7 +195,11 @@ export const FcpImportSheet: React.FC<{
                     key={g.club}
                     onPress={() => {
                       setActiveClub(g);
-                      setSelected(new Set(g.teams.map((t) => t.id_equipo)));
+                      // Club: pre-marca todos sus equipos. Independiente: ninguno,
+                      // el capitán elige el suyo (selección única).
+                      setSelected(
+                        single ? new Set() : new Set(g.teams.map((t) => t.id_equipo)),
+                      );
                     }}
                     style={({ pressed }) => [styles.clubRow, pressed && { opacity: 0.85 }]}
                   >
@@ -256,6 +272,7 @@ const makeStyles = (c: Palette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    checkRadio: { borderRadius: 12 },
     checkMark: { color: c.textInverse, fontSize: 14, fontWeight: '900' },
     importBtn: {
       height: 52,

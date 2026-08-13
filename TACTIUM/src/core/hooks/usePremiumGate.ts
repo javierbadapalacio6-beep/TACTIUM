@@ -166,6 +166,10 @@ export function useIsPremium(): boolean {
   const role = useTeamStore((s) => s.activeRole);
   const team = useTeamStore((s) => s.team);
   const isPremiumFn = useSubscriptionStore((s) => s.isPremium);
+  // Suscribirse a `subscriptions` hace el hook REACTIVO: `isPremiumFn` lee la
+  // lista actual, pero sin esto el componente no repinta al cambiar las subs
+  // (p.ej. al volver del paywall con la prueba iniciada).
+  useSubscriptionStore((s) => s.subscriptions);
   const result = isPremiumFn(
     userId,
     role === 'club_admin' ? 'admin' : role,

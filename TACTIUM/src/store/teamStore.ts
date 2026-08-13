@@ -89,6 +89,8 @@ interface TeamState {
 
   /** Cubre un equipo de club con el plan (permanente) y recarga teams. */
   coverTeam: (teamId: string) => Promise<void>;
+  /** Cubre varios equipos de golpe (recarga una sola vez al final). */
+  coverTeams: (teamIds: string[]) => Promise<void>;
 
   /** Borra un equipo (cascada) y recarga teams. */
   deleteTeam: (teamId: string) => Promise<void>;
@@ -588,6 +590,19 @@ export const useTeamStore = create<TeamState>()(
       coverTeam: async (teamId) => {
         await TeamsApi.coverTeam(teamId);
         // Recargamos para traer el flag `covered` actualizado a todos los teams.
+        await get().loadForUser();
+      },
+
+      coverTeams: async (teamIds) => {
+        if (!teamIds.length) return;
+        // Secuencial: `cover_team` valida el cupo por llamada, así que si por
+        // lo que fuera se pidieran de más, las que exceden fallan sin romper
+        // las que sí caben.
+        for (const id of teamIds) {
+          await TeamsApi.coverTeam(id).catch((e) =>
+            console.warn('coverTeam failed', id, e),
+          );
+        }
         await get().loadForUser();
       },
 

@@ -64,8 +64,12 @@ export const CreateTeamScreen = ({
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
   const signOut = useAuthStore((s) => s.signOut);
   const [fcpOpen, setFcpOpen] = useState(false);
+  // Modo "a mano" para un equipo FCP: el usuario rechazó el volcado premium y
+  // quiere rellenar los campos manualmente. Muestra el form manual + "Crear
+  // equipo" en vez del banner de importar.
+  const [fcpManual, setFcpManual] = useState(false);
   // El volcado desde la Federación es premium. En onboarding ofrecemos elegir:
-  // prueba (paywall descartable) o crear el equipo a mano.
+  // prueba (paywall descartable) o crear el equipo a mano (campos manuales).
   const hasSub = useHasActiveSub();
   const requestFcpImport = () => {
     if (hasSub) {
@@ -76,7 +80,7 @@ export const CreateTeamScreen = ({
       'Volcado automático',
       'Vuelca tu plantilla de la Federación con los puntos oficiales — es una función premium. Empieza tu prueba gratis para usarlo, o crea tu equipo a mano ahora.',
       [
-        { text: 'A mano', style: 'cancel' },
+        { text: 'A mano', style: 'cancel', onPress: () => setFcpManual(true) },
         {
           text: 'Empezar prueba',
           onPress: () =>
@@ -114,6 +118,10 @@ export const CreateTeamScreen = ({
   const preset = getCompetitionPreset(comp);
   const isFederada = comp === 'federada';
   const isFcp = isFederada && federation?.code === FCP_FEDERATION_CODE;
+  // Modo importación vs manual para equipos FCP. `showImport` = banner + CTA
+  // "Buscar mi equipo"; si no, se enseñan los campos manuales + "Crear equipo".
+  const showImport = isFcp && !fcpManual;
+  const showManual = !isFcp || fcpManual;
 
   // Valor efectivo de team.league según el tipo de competición.
   const effectiveLeague = useMemo(() => {
@@ -291,7 +299,7 @@ export const CreateTeamScreen = ({
               </Pressable>
             </Section>
 
-            {isFcp ? (
+            {showImport ? (
               <Pressable
                 onPress={requestFcpImport}
                 style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
@@ -376,7 +384,7 @@ export const CreateTeamScreen = ({
           </>
         ) : null}
 
-        {!isFcp ? (
+        {showManual ? (
         <>
         <Section label="Nombre del equipo">
           <View style={styles.nameInput}>
@@ -530,7 +538,7 @@ export const CreateTeamScreen = ({
       </ScrollView>
 
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
-        {isFcp ? (
+        {showImport ? (
           <Pressable
             onPress={requestFcpImport}
             style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
@@ -563,8 +571,11 @@ export const CreateTeamScreen = ({
         onPick={(f) => {
           setFederation(f);
           setFederationPickerOpen(false);
-          // Federación Cántabra: onboarding automático → abre la importación.
-          if (f.code === FCP_FEDERATION_CODE) setFcpOpen(true);
+          setFcpManual(false);
+          // No auto-abrimos la importación al elegir la federación: el volcado
+          // es premium y debe ser una acción explícita (tocar «Importar» →
+          // aviso con opción de omitir). Elegir Cántabra solo muestra el
+          // banner/CTA de importar.
         }}
       />
 

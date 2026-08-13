@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,7 +24,6 @@ import { AmbientBackdrop, NeonDot } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
 import { useTeamStore } from '@store/teamStore';
-import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 
 // Timings de la secuencia de entrada — inspirado en stagger de anime.js
 // aplicado con layout animations de Reanimated. Reglas del UX guide:
@@ -42,7 +41,6 @@ export const OnboardingChoiceScreen = ({
   const insets = useSafeAreaInsets();
   const signOut = useAuthStore((s) => s.signOut);
   const clubs = useClubStore((s) => s.clubs);
-  const [redeemOpen, setRedeemOpen] = useState(false);
   const setSoloMode = useTeamStore((st) => st.setSoloMode);
   const soloUpgrade = useTeamStore((st) => st.soloUpgrade);
   const setSoloUpgrade = useTeamStore((st) => st.setSoloUpgrade);
@@ -186,68 +184,6 @@ export const OnboardingChoiceScreen = ({
           </Animated.View>
         </View>
 
-        {!soloUpgrade ? (
-          <>
-        <Animated.View
-          style={styles.divider}
-          entering={FadeIn.delay(STAGGER_STEP * 7).duration(280)}
-        >
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>O</Text>
-          <View style={styles.dividerLine} />
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInUp.delay(STAGGER_STEP * 8)
-            .duration(320)
-            .easing(Easing.out(Easing.cubic))}
-        >
-          <Pressable
-            onPress={() => setRedeemOpen(true)}
-            style={({ pressed }) => [
-              styles.redeem,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <View style={styles.freeBadge}>
-              <Text style={styles.freeBadgeText}>SOY JUGADOR</Text>
-            </View>
-            <Text style={styles.redeemTitle}>Me han invitado a un equipo</Text>
-            <Text style={styles.redeemHint}>
-              Mi capitán o club ya tiene equipo creado{'\n'}
-              y me ha enviado una invitación para unirme.
-            </Text>
-          </Pressable>
-        </Animated.View>
-
-        {/* Modo jugador suelto (F8): entrar SIN equipo ni invitación.
-            Es la puerta del loop de amistosos: el invitado de un partido
-            se instala, entra por aquí y canjea su código en Stats. */}
-        <Animated.View
-          entering={FadeInUp.delay(STAGGER_STEP * 8.5)
-            .duration(320)
-            .easing(Easing.out(Easing.cubic))}
-        >
-          <Pressable
-            onPress={() => setSoloMode(true)}
-            style={({ pressed }) => [
-              styles.redeem,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <View style={styles.freeBadge}>
-              <Text style={styles.freeBadgeText}>GRATIS</Text>
-            </View>
-            <Text style={styles.redeemTitle}>Juego por mi cuenta</Text>
-            <Text style={styles.redeemHint}>
-              Registra amistosos con tus colegas, canjea un código de{'\n'}
-              partido y sigue tus estadísticas. Sin equipo ni invitación.
-            </Text>
-          </Pressable>
-        </Animated.View>
-          </>
-        ) : null}
-
         <Animated.View
           style={styles.footer}
           entering={FadeIn.delay(STAGGER_STEP * 9).duration(260)}
@@ -258,11 +194,6 @@ export const OnboardingChoiceScreen = ({
           </Text>
         </Animated.View>
       </ScrollView>
-
-      <RedeemInvitationSheet
-        open={redeemOpen}
-        onClose={() => setRedeemOpen(false)}
-      />
     </View>
   );
 };

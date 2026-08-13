@@ -247,6 +247,23 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-08-13",
+    title: "🧹 PULIDO DE LA RONDA DE REVISIÓN: aviso del volcado consistente en todas las pantallas, crear equipo FCP «a mano», import de capitán = 1 equipo, auto-cobertura al detectar la sub, y las vías de JUGADOR en la primera pantalla.",
+    changes: [
+      { type: "fix", text: "<strong>🔔 El aviso del volcado, consistente en TODAS las superficies</strong>. Antes: onboarding mostraba el aviso «A mano / Empezar prueba», pero <code>ClubDashboard</code> y <code>TeamScreen</code> saltaban directos al paywall. Ahora el aviso sale en todas (con sub abre directo; sin sub, elige). En <code>TeamScreen</code> se usa <code>useIsPremium</code> (mira la <strong>cobertura del equipo</strong>): un capitán de club cuyo equipo cubre la sub del club importa directo, sin toparse con un paywall que no le toca. <code>useIsPremium</code> ahora es reactivo (refresca al volver del paywall)." },
+
+      { type: "fix", text: "<strong>🎾 Crear equipo FCP: sin auto-abrir y con opción «a mano»</strong>. Elegir la federación Cántabra <strong>ya no auto-abre</strong> el volcado (era un pop-up sorpresa que se saltaba el aviso); ahora solo muestra el botón «Importar», que pasa por el aviso. Y al pulsar <strong>«A mano»</strong> aparecen los campos manuales (nombre, categoría, grupo) + «Continuar» — antes el modo FCP los ocultaba y te dejaba atascado sin poder rellenar nada." },
+
+      { type: "fix", text: "<strong>1️⃣ Import de capitán independiente = un solo equipo</strong>. En <code>FcpImportSheet</code>, sin club (<code>clubId=null</code>) la selección es <strong>única</strong> (radio): al elegir el club ya no se pre-marcan todos sus equipos; el capitán elige el suyo. Para un club sigue siendo multi-selección (vuelca todos)." },
+
+      { type: "feat", text: "<strong>✅ Auto-cobertura al detectar la suscripción</strong>. En la home del club, al activar una sub, los equipos se cubren <strong>solos</strong> — el gestor no va uno a uno. Regla segura: solo cuando TODO cabe (nº de equipos ≤ cupo del plan); si hay más equipos que plazas, se deja manual (cubrir es permanente, no fijamos los equivocados). Nueva acción <code>coverTeams</code> (cubre varios, recarga una vez) + efecto con guarda anti-bucle que se autotermina." },
+
+      { type: "feat", text: "<strong>🧭 Las vías de JUGADOR, en la primera pantalla</strong>. <code>OnboardingIntent</code> ahora ofrece las 4 intenciones: Organizar torneos · Gestionar equipos · <strong>Me han invitado</strong> · <strong>Juego por mi cuenta</strong> (bajo un separador «O SOY JUGADOR»). Se quitaron de <code>OnboardingChoice</code> (al que se llega por «Gestionar equipos»), que ahora solo muestra las opciones de gestión. Pantalla scrollable para que quepan." },
+
+      { type: "decision", text: "<strong>🛡️ «Herencia» de sub por capitán independiente: NO era un fallo</strong>. Se auditó a fondo (import + pertenencia + derechos en cliente y DB) y se verificó en la app: un capitán independiente crea su equipo con <code>club_id=null</code> → no hay nada del club que heredar; la única forma de entrar a un equipo de club es canjear su código (= unirse). El modelo ya lo impide. Defensa extra (marcador <code>club_members</code> para exigir pertenencia real) queda anotada por si acaso, pero hoy no hace falta." },
+    ],
+  },
+  {
     date: "2026-08-12",
     title: "🔒 ACTIVAR EQUIPOS + GATE DEL VOLCADO: el paso para pasar de «solo torneos» a club completo (federación → desbloqueo → paywall), y la importación de plantilla deja de ser gratis — sin suscripción no hay volcado automático, en ningún sitio.",
     changes: [

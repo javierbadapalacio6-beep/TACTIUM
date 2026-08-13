@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -17,6 +17,7 @@ import { AmbientBackdrop, NeonDot, IconTrophy, IconTeam } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
 import { useTeamStore } from '@store/teamStore';
+import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -36,6 +37,8 @@ export const OnboardingIntentScreen = ({
   const signOut = useAuthStore((s) => s.signOut);
   const clubs = useClubStore((s) => s.clubs);
   const soloUpgrade = useTeamStore((s) => s.soloUpgrade);
+  const setSoloMode = useTeamStore((s) => s.setSoloMode);
+  const [redeemOpen, setRedeemOpen] = useState(false);
 
   // Casos en los que NO mostramos la bifurcación:
   //  · "De jugador a gestor" (soloUpgrade) → directo a gestionar equipos.
@@ -85,7 +88,11 @@ export const OnboardingIntentScreen = ({
         </Animated.View>
       </View>
 
-      <View style={[styles.body, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView
+        style={styles.bodyScroll}
+        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <Animated.Text
           style={styles.eyebrow}
           entering={FadeInDown.delay(STAGGER_STEP * 2)
@@ -142,16 +149,73 @@ export const OnboardingIntentScreen = ({
           </Animated.View>
         </View>
 
+        {/* Vía JUGADOR: no gestiona nada, solo juega. Separada de las de gestión
+            porque es otra intención (y gratis). */}
+        <Animated.View
+          style={styles.divider}
+          entering={FadeIn.delay(STAGGER_STEP * 7).duration(280)}
+        >
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>O SOY JUGADOR</Text>
+          <View style={styles.dividerLine} />
+        </Animated.View>
+
+        <Animated.View
+          entering={FadeInUp.delay(STAGGER_STEP * 8)
+            .duration(320)
+            .easing(Easing.out(Easing.cubic))}
+        >
+          <Pressable
+            onPress={() => setRedeemOpen(true)}
+            style={({ pressed }) => [styles.redeem, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.freeBadge}>
+              <Text style={styles.freeBadgeText}>ME HAN INVITADO</Text>
+            </View>
+            <Text style={styles.redeemTitle}>Me han invitado a un equipo</Text>
+            <Text style={styles.redeemHint}>
+              Mi capitán o club ya tiene equipo creado y me ha enviado una
+              invitación para unirme.
+            </Text>
+          </Pressable>
+        </Animated.View>
+
+        <Animated.View
+          entering={FadeInUp.delay(STAGGER_STEP * 8.5)
+            .duration(320)
+            .easing(Easing.out(Easing.cubic))}
+          style={{ marginTop: 10 }}
+        >
+          <Pressable
+            onPress={() => setSoloMode(true)}
+            style={({ pressed }) => [styles.redeem, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.freeBadge}>
+              <Text style={styles.freeBadgeText}>GRATIS</Text>
+            </View>
+            <Text style={styles.redeemTitle}>Juego por mi cuenta</Text>
+            <Text style={styles.redeemHint}>
+              Registra amistosos con tus colegas, canjea un código de partido y
+              sigue tus estadísticas. Sin equipo ni invitación.
+            </Text>
+          </Pressable>
+        </Animated.View>
+
         <Animated.View
           style={styles.footer}
-          entering={FadeIn.delay(STAGGER_STEP * 8).duration(260)}
+          entering={FadeIn.delay(STAGGER_STEP * 9).duration(260)}
         >
           <Text style={styles.footnote}>
             Los torneos necesitan una suscripción o el pago del propio torneo.{'\n'}
-            Podrás gestionar equipos más adelante sin perder nada.
+            Podrás cambiar de modo más adelante sin perder nada.
           </Text>
         </Animated.View>
-      </View>
+      </ScrollView>
+
+      <RedeemInvitationSheet
+        open={redeemOpen}
+        onClose={() => setRedeemOpen(false)}
+      />
     </View>
   );
 };
@@ -204,8 +268,13 @@ const makeStyles = (c: Palette) =>
       fontWeight: '700',
       letterSpacing: 2,
     },
-    body: {
+    bodyScroll: {
       flex: 1,
+    },
+    body: {
+      // flexGrow (no flex:1) para que fluya y haga scroll cuando no cabe, pero
+      // ocupe todo el alto (footer abajo) cuando sobra.
+      flexGrow: 1,
       paddingHorizontal: 24,
       paddingTop: 28,
     },
@@ -232,6 +301,58 @@ const makeStyles = (c: Palette) =>
       marginBottom: 24,
     },
     options: { gap: 12 },
+    divider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginVertical: 18,
+    },
+    dividerLine: { flex: 1, height: 1, backgroundColor: c.hairStrong },
+    dividerText: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 11,
+      letterSpacing: 2,
+      fontWeight: '500',
+    },
+    redeem: {
+      backgroundColor: 'transparent',
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hair,
+      borderStyle: 'dashed',
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    freeBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 5,
+      marginBottom: 6,
+    },
+    freeBadgeText: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
+    redeemTitle: {
+      color: c.text,
+      fontSize: 13,
+      fontWeight: '600',
+      letterSpacing: -0.2,
+    },
+    redeemHint: {
+      color: c.textMuted,
+      fontSize: 11,
+      lineHeight: 15,
+      marginTop: 3,
+    },
     card: {
       backgroundColor: c.bgCard,
       borderRadius: Radius.lg,

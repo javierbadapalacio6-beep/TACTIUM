@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -94,16 +94,44 @@ export const ClubDashboardScreen = ({
   // Gate POR EQUIPO (no el activo): tocar un equipo no cubierto ofrece cubrirlo.
   const teamGate = useTeamGate();
 
+  // AUTO-COBERTURA: al detectar una sub de club activa, cubrimos los equipos
+  // solos para que el gestor no tenga que ir uno a uno. Regla segura: solo si
+  // TODO cabe (nº de equipos ≤ cupo del plan); si hay más equipos que plazas,
+  // hay que elegir cuáles → se deja manual (cubrir es permanente). El efecto se
+  // autotermina: tras cubrir, `loadForUser` marca `covered` y no queda ninguno.
+  const coverTeams = useTeamStore((s) => s.coverTeams);
+  const autoCovering = useRef(false);
+  useEffect(() => {
+    if (!club?.id || !coverage.hasActiveSub || autoCovering.current) return;
+    if (clubTeams.length === 0 || clubTeams.length > coverage.quota) return;
+    const uncovered = clubTeams.filter((t) => !t.covered);
+    if (uncovered.length === 0) return;
+    autoCovering.current = true;
+    coverTeams(uncovered.map((t) => t.id)).finally(() => {
+      autoCovering.current = false;
+    });
+  }, [club?.id, coverage.hasActiveSub, coverage.quota, clubTeams, coverTeams]);
+
   // El VOLCADO desde la Federación es premium (acción de más valor). Si el club
   // no tiene suscripción activa, el banner lleva al paywall en vez de importar.
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const openFcpImport = () => {
-    if (!coverage.hasActiveSub) {
-      rootNav.navigate('Paywall', { intent: 'club' });
+    if (coverage.hasActiveSub) {
+      setFcpOpen(true);
       return;
     }
-    setFcpOpen(true);
+    Alert.alert(
+      'Volcado automático',
+      'Crea los equipos del club con la plantilla y los puntos oficiales de la Federación — es una función premium. Con suscripción es automático; sin ella, crea los equipos a mano.',
+      [
+        { text: 'A mano', style: 'cancel' },
+        {
+          text: 'Ver planes',
+          onPress: () => rootNav.navigate('Paywall', { intent: 'club' }),
+        },
+      ],
+    );
   };
 
   // Refresh con cancellation guard: si el user navega tabs rápido, el

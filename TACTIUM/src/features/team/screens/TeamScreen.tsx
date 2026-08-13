@@ -11,7 +11,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, useIsDark, type Palette } from '@core/theme';
@@ -47,7 +48,8 @@ import {
 } from '@core/utils/validation';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
-import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { usePremiumGate, useIsPremium } from '@core/hooks/usePremiumGate';
+import type { RootStackParamList } from '@navigation/types';
 import { uploadPlayerPhoto, removePlayerPhoto } from '@core/services/playerPhoto';
 import { displayName, initialsOf, photoOf } from '@core/utils/playerName';
 
@@ -95,9 +97,32 @@ export const TeamScreen = () => {
   const openInvite = gate(() => setInviting(true), 'invite_create');
   // La IMPORTACIÓN COMPLETA de plantilla (volcado masivo con puntos: escaneo del
   // ranking o import de la Federación) es premium — es la acción de más valor.
-  // Añadir un jugador suelto sigue siendo gratis (montar estructura).
-  const openScan = gate(() => setScanning(true), 'import_roster');
-  const openFcpImport = gate(() => setImportingFcp(true), 'import_roster');
+  // Mismo aviso que en el onboarding: con premium abre directo; si no, ofrece
+  // «A mano / Ver planes». Se usa `useIsPremium` (mira la COBERTURA del equipo):
+  // un capitán de club tiene su equipo cubierto por la sub del club → importa
+  // directo, sin aviso. Añadir un jugador suelto sigue siendo gratis.
+  const isPremium = useIsPremium();
+  const rootNav =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const requestImport = (open: () => void) => {
+    if (isPremium) {
+      open();
+      return;
+    }
+    Alert.alert(
+      'Volcado automático',
+      'Escanea tu ranking (o impórtalo de la Federación) y volcamos tu plantilla entera con los puntos oficiales — es una función premium. Con suscripción es automático; sin ella, añade tus jugadores a mano.',
+      [
+        { text: 'A mano', style: 'cancel' },
+        {
+          text: 'Ver planes',
+          onPress: () => rootNav.navigate('Paywall', { intent: 'captain' }),
+        },
+      ],
+    );
+  };
+  const openScan = () => requestImport(() => setScanning(true));
+  const openFcpImport = () => requestImport(() => setImportingFcp(true));
 
   const handleBulkPlayers = async (scanned: ScannedPlayer[]) => {
     // UPSERT por nombre normalizado: si el jugador ya existe en la
