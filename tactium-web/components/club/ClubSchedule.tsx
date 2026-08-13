@@ -1,15 +1,16 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
+import { DAYS, HOURS } from "@/lib/club-data";
 import {
-  CLUB_FIXTURES,
-  DAYS,
-  FAVOURITE_SLOTS,
-  HOURS,
-} from "@/lib/club-data";
+  fetchClubHomeSchedule,
+  type DbClubHomeMatch,
+} from "@/lib/queries";
+import { useSession } from "@/lib/session";
+import { useAsync } from "@/lib/use-async";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { Toast } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconCheck, IconClock } from "@/components/Icon";
 
 /**
@@ -19,6 +20,10 @@ import { IconCheck, IconClock } from "@/components/Icon";
  * equipo que juega en casa. Al abrir el selector, las franjas que ese equipo
  * marcó como favoritas se resaltan en accent; las demás quedan atenuadas pero
  * siguen siendo elegibles.
+ *
+ * Datos REALES (solo lectura): los partidos de local, sus horas/pistas actuales
+ * y las franjas favoritas salen de la RPC `get_club_home_schedule`. Asignar y
+ * «guardar y avisar» siguen en estado local — la escritura llega en la fase 2.
  */
 interface Slot {
   day: string;
@@ -26,23 +31,56 @@ interface Slot {
   court: string;
 }
 
-export function ClubSchedule() {
-  const homeFixtures = CLUB_FIXTURES.filter((f) => f.home);
+const WEEKDAY = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"];
+const dayOf = (iso: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? "" : WEEKDAY[d.getDay()];
+};
 
-  const [slots, setSlots] = useState<Record<string, Slot | null>>(() =>
-    Object.fromEntries(
-      homeFixtures.map((f) => [
-        f.team,
-        f.time
-          ? { day: f.date.startsWith("dom") ? "DOM" : "SÁB", hour: f.time, court: f.court ?? "" }
-          : null,
-      ])
-    )
+export function ClubSchedule() {
+  const { clubId } = useSession();
+  const { data, loading, error } = useAsync(
+    () => fetchClubHomeSchedule(clubId!),
+    [clubId],
+    !!clubId,
   );
+  const fixtures: DbClubHomeMatch[] = useMemo(() => data ?? [], [data]);
+
+  // Franjas favoritas reales por equipo (horas 'HH:MM').
+  const favByTeam = useMemo(() => {
+    const m: Record<string, string[]> = {};
+    for (const f of fixtures) m[f.team_name] = f.preferred_home_slots ?? [];
+    return m;
+  }, [fixtures]);
+
+  const [slots, setSlots] = useState<Record<string, Slot | null>>({});
+  // Inicializa los slots con lo que ya hay en la BD cuando llegan los datos.
+  // Solo la primera vez por equipo — no pisa lo que el usuario toque en sesión.
+  const initedFor = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!fixtures.length) return;
+    setSlots((prev) => {
+      const next = { ...prev };
+      for (const f of fixtures) {
+        if (initedFor.current.has(f.team_name)) continue;
+        initedFor.current.add(f.team_name);
+        next[f.team_name] = f.match_time
+          ? {
+              day: dayOf(f.match_date),
+              hour: f.match_time.slice(0, 5),
+              court: f.location ?? "",
+            }
+          : null;
+      }
+      return next;
+    });
+  }, [fixtures]);
+
   const [picking, setPicking] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
 
-  const assigned = Object.values(slots).filter(Boolean).length;
+  const assigned = fixtures.filter((f) => slots[f.team_name]).length;
 
   function assign(team: string, day: string, hour: string) {
     setSlots((s) => ({
@@ -59,7 +97,31 @@ export function ClubSchedule() {
     }));
   }
 
-  const favs = picking ? (FAVOURITE_SLOTS[picking] ?? []) : [];
+  const favHours = picking ? (favByTeam[picking] ?? []) : [];
+
+  if (loading) return <SkeletonCard />;
+  if (error) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconClock size={34} />}
+          title="No se pudo cargar el horario"
+          body={error}
+        />
+      </Card>
+    );
+  }
+  if (fixtures.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconClock size={34} />}
+          title="Sin partidos de local"
+          body="Cuando tus equipos tengan jornadas en casa por jugar, aparecerán aquí para asignarles día, hora y pista."
+        />
+      </Card>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto" }}>
@@ -91,16 +153,19 @@ export function ClubSchedule() {
               flexWrap: "wrap",
             }}
           >
-            <Eyebrow>JORNADA ACTUAL</Eyebrow>
+            <Eyebrow>PARTIDOS DE LOCAL</Eyebrow>
             <span
               className="mono"
               style={{
                 fontSize: 10.5,
                 letterSpacing: "0.14em",
-                color: assigned === homeFixtures.length ? "var(--accent)" : "var(--warning)",
+                color:
+                  assigned === fixtures.length
+                    ? "var(--accent)"
+                    : "var(--warning)",
               }}
             >
-              {assigned}/{homeFixtures.length} ASIGNADOS
+              {assigned}/{fixtures.length} ASIGNADOS
             </span>
           </div>
 
@@ -111,20 +176,20 @@ export function ClubSchedule() {
             <span>Estado</span>
           </div>
 
-          {homeFixtures.map((f, i) => {
-            const s = slots[f.team];
+          {fixtures.map((f, i) => {
+            const s = slots[f.team_name];
             return (
               <div
-                key={f.team}
+                key={f.matchday_id}
                 className="tw-sched-row"
                 style={{
                   borderBottom:
-                    i === homeFixtures.length - 1 ? "none" : "1px solid var(--hair)",
+                    i === fixtures.length - 1 ? "none" : "1px solid var(--hair)",
                 }}
               >
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: "block", fontSize: 13.5, fontWeight: 700 }}>
-                    {f.team}
+                    {f.team_name}
                   </span>
                   <span
                     style={{
@@ -134,13 +199,14 @@ export function ClubSchedule() {
                       color: "var(--text-muted)",
                     }}
                   >
-                    vs {f.rival}
+                    {f.jornada_number != null ? `J·${f.jornada_number} · ` : ""}
+                    vs {f.opponent ?? "—"}
                   </span>
                 </span>
 
                 <button
                   type="button"
-                  onClick={() => setPicking(f.team)}
+                  onClick={() => setPicking(f.team_name)}
                   className="mono"
                   style={{
                     padding: "10px 12px",
@@ -154,16 +220,16 @@ export function ClubSchedule() {
                     textAlign: "left",
                   }}
                 >
-                  {s ? `${s.day} ${s.hour}` : "Sin fecha · HH:MM"}
+                  {s ? `${s.day} ${s.hour}`.trim() : "Sin fecha · HH:MM"}
                 </button>
 
                 <input
                   type="text"
                   value={s?.court ?? ""}
                   disabled={!s}
-                  onChange={(e) => setCourt(f.team, e.target.value)}
+                  onChange={(e) => setCourt(f.team_name, e.target.value)}
                   placeholder="Pista 1, Central…"
-                  aria-label={`Pista para ${f.team}`}
+                  aria-label={`Pista para ${f.team_name}`}
                   style={{
                     width: "100%",
                     padding: "10px 12px",
@@ -205,12 +271,12 @@ export function ClubSchedule() {
         <Card>
           <Eyebrow>FRANJAS FAVORITAS POR EQUIPO</Eyebrow>
           <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
-            {homeFixtures.map((f) => {
-              const list = FAVOURITE_SLOTS[f.team] ?? [];
+            {fixtures.map((f) => {
+              const list = favByTeam[f.team_name] ?? [];
               return (
-                <div key={f.team}>
+                <div key={f.matchday_id}>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-                    {f.team}
+                    {f.team_name}
                   </div>
                   {list.length === 0 ? (
                     <span
@@ -251,7 +317,7 @@ export function ClubSchedule() {
           {picking}
         </h2>
         <p style={{ margin: "0 0 20px", fontSize: 13, color: "var(--text-muted)" }}>
-          {favs.length > 0
+          {favHours.length > 0
             ? "Sus franjas favoritas van resaltadas · o elige otro día y hora."
             : "Este equipo no ha marcado franjas favoritas."}
         </p>
@@ -288,7 +354,7 @@ export function ClubSchedule() {
                 {d}
               </span>
               {HOURS.map((h) => {
-                const fav = favs.includes(`${d} ${h}`);
+                const fav = favHours.includes(h);
                 const cur =
                   picking && slots[picking]?.day === d && slots[picking]?.hour === h;
                 return (

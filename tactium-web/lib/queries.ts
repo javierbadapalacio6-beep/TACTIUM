@@ -329,6 +329,34 @@ export async function fetchClub(clubId: string) {
   return data;
 }
 
+/* ── Horarios de local del club (RPC get_club_home_schedule) ─────── */
+export interface DbClubHomeMatch {
+  matchday_id: string;
+  team_id: string;
+  team_name: string;
+  jornada_number: number | null;
+  match_date: string | null; // 'YYYY-MM-DD'
+  match_time: string | null; // 'HH:MM:SS'
+  location: string | null;
+  opponent: string | null;
+  status: string;
+  preferred_home_slots: string[]; // franjas favoritas del equipo ('HH:MM')
+}
+
+/** Partidos de LOCAL (no cerrados) de todos los equipos del club. */
+export async function fetchClubHomeSchedule(
+  clubId: string,
+): Promise<DbClubHomeMatch[]> {
+  const { data, error } = await supabaseBrowser().rpc("get_club_home_schedule", {
+    target_club: clubId,
+  });
+  if (error) throw error;
+  return ((data ?? []) as DbClubHomeMatch[]).map((m) => ({
+    ...m,
+    preferred_home_slots: m.preferred_home_slots ?? [],
+  }));
+}
+
 /* ── Suscripción ───────────────────────────────────────────────── */
 export interface DbSubscription {
   id: string;
