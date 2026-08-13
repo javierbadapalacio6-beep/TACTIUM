@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import {
+  createMatchday,
   fetchMatchdays,
   fetchSeasons,
   type DbMatchday,
@@ -11,8 +12,9 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconCalendar, IconLock, IconPlus } from "@/components/Icon";
 
 /** Etiqueta de formato a partir de la fase que guarda la base de datos. */
@@ -64,6 +66,15 @@ export function SeasonDetail({ id }: { id: string }) {
   const teamId = activeTeam?.id ?? null;
   const [tab, setTab] = useState<"jornadas" | "cuadro">("jornadas");
   const [newOpen, setNewOpen] = useState(false);
+  // Formulario de nueva jornada.
+  const [jorRival, setJorRival] = useState("");
+  const [jorDate, setJorDate] = useState("");
+  const [jorTime, setJorTime] = useState("");
+  const [jorLoc, setJorLoc] = useState("");
+  const [jorHome, setJorHome] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // La temporada vive bajo el equipo; las jornadas se piden por su id. Ambas van
   // en paralelo porque son independientes bajo RLS.
@@ -75,7 +86,7 @@ export function SeasonDetail({ id }: { id: string }) {
       ]);
       return { season: seasons.find((s) => s.id === id) ?? null, matchdays };
     },
-    [id, teamId, user?.id],
+    [id, teamId, user?.id, reloadKey],
     !!user,
   );
 
@@ -112,6 +123,40 @@ export function SeasonDetail({ id }: { id: string }) {
 
   const rounds = [...matchdays].sort((a, b) => a.round - b.round);
   const nextRound = rounds.find((r) => r.status !== "finished");
+
+  async function saveJornada() {
+    if (busy) return;
+    if (!jorRival.trim()) {
+      setToast("Pon el rival de la jornada.");
+      return;
+    }
+    const nextNum =
+      matchdays.reduce((m, j) => Math.max(m, j.round), 0) + 1;
+    setBusy(true);
+    const res = await guardedWrite("crear la jornada", () =>
+      createMatchday(id, {
+        jornada_number: nextNum,
+        opponent: jorRival.trim(),
+        match_date: jorDate || null,
+        match_time: jorTime || null,
+        is_home: jorHome,
+        location: jorLoc.trim() || null,
+      }),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setNewOpen(false);
+      setJorRival("");
+      setJorDate("");
+      setJorTime("");
+      setJorLoc("");
+      setJorHome(true);
+      setReloadKey((k) => k + 1);
+      setToast("Jornada creada");
+    } else {
+      setToast(res.reason);
+    }
+  }
 
   // Balance y tasa de victorias a partir de las jornadas con acta cerrada.
   const finished = matchdays.filter((m) => m.status === "finished");
@@ -465,13 +510,21 @@ export function SeasonDetail({ id }: { id: string }) {
         </h2>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {[
-            { l: "RIVAL", ph: "Club Visitante", type: "text" },
-            { l: "FECHA DEL PARTIDO", ph: "", type: "date" },
-            { l: "HORA DEL PARTIDO", ph: "", type: "time" },
-            { l: "LUGAR (OPCIONAL)", ph: "Ej. Club Pádel Indoor, Pista 3", type: "text" },
-          ].map((f) => (
-            <label key={f.l}>
+          {(
+            [
+              ["RIVAL", "Club Visitante", "text", jorRival, setJorRival],
+              ["FECHA DEL PARTIDO", "", "date", jorDate, setJorDate],
+              ["HORA DEL PARTIDO", "", "time", jorTime, setJorTime],
+              [
+                "LUGAR (OPCIONAL)",
+                "Ej. Club Pádel Indoor, Pista 3",
+                "text",
+                jorLoc,
+                setJorLoc,
+              ],
+            ] as const
+          ).map(([l, ph, type, val, set]) => (
+            <label key={l}>
               <span
                 className="mono"
                 style={{
@@ -482,11 +535,13 @@ export function SeasonDetail({ id }: { id: string }) {
                   marginBottom: 7,
                 }}
               >
-                {f.l}
+                {l}
               </span>
               <input
-                type={f.type}
-                placeholder={f.ph}
+                type={type}
+                placeholder={ph}
+                value={val}
+                onChange={(e) => set(e.target.value)}
                 style={{
                   width: "100%",
                   padding: "12px 14px",
@@ -524,24 +579,37 @@ export function SeasonDetail({ id }: { id: string }) {
                 background: "var(--bg-card-2)",
               }}
             >
-              {["En nuestras pistas", "Fuera de casa"].map((s, i) => (
-                <span
-                  key={s}
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    padding: "9px 10px",
-                    borderRadius: 9,
-                    fontSize: 12.5,
-                    fontWeight: i === 0 ? 700 : 500,
-                    background: i === 0 ? "var(--accent-10)" : "transparent",
-                    color: i === 0 ? "var(--accent)" : "var(--text-muted)",
-                    boxShadow: i === 0 ? "inset 0 0 0 1.5px var(--accent)" : "none",
-                  }}
-                >
-                  {s}
-                </span>
-              ))}
+              {(
+                [
+                  ["En nuestras pistas", true],
+                  ["Fuera de casa", false],
+                ] as const
+              ).map(([s, home]) => {
+                const on = jorHome === home;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setJorHome(home)}
+                    style={{
+                      flex: 1,
+                      textAlign: "center",
+                      padding: "9px 10px",
+                      borderRadius: 9,
+                      fontSize: 12.5,
+                      fontWeight: on ? 700 : 500,
+                      cursor: "pointer",
+                      background: on ? "var(--accent-10)" : "transparent",
+                      color: on ? "var(--accent)" : "var(--text-muted)",
+                      border: "none",
+                      boxShadow: on ? "inset 0 0 0 1.5px var(--accent)" : "none",
+                      fontFamily: "'Satoshi', sans-serif",
+                    }}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -556,13 +624,16 @@ export function SeasonDetail({ id }: { id: string }) {
           </button>
           <button
             className="btn btn-accent"
-            onClick={() => setNewOpen(false)}
+            disabled={busy}
+            onClick={saveJornada}
             style={{ padding: "12px 22px", fontSize: 13.5 }}
           >
-            Crear jornada
+            {busy ? "Creando…" : "Crear jornada"}
           </button>
         </div>
       </Modal>
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

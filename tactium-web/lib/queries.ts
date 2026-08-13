@@ -181,6 +181,30 @@ export async function fetchMatchday(id: string): Promise<DbMatchday | null> {
   return data ? mapMatchday(data) : null;
 }
 
+/** Crea una jornada en una temporada (insert en matchdays). */
+export async function createMatchday(
+  seasonId: string,
+  input: {
+    jornada_number: number;
+    opponent: string;
+    match_date?: string | null;
+    match_time?: string | null;
+    is_home?: boolean;
+    location?: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabaseBrowser().from("matchdays").insert({
+    season_id: seasonId,
+    jornada_number: input.jornada_number,
+    opponent: input.opponent,
+    match_date: input.match_date ?? null,
+    match_time: input.match_time ?? null,
+    is_home: input.is_home ?? true,
+    location: input.location ?? null,
+  });
+  if (error) throw error;
+}
+
 /** La próxima jornada sin jugar de la temporada activa. */
 export async function fetchNextMatchday(
   seasonId: string
