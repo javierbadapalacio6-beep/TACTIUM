@@ -841,6 +841,202 @@ export async function generateAmericano(
   await markInProgress(tournamentId);
 }
 
+/* ── Resultados y avance de cuadro ─────────────────────────────────── */
+
+/** Partido mínimo necesario para meter resultado / avanzar. */
+export interface ResultMatch {
+  id: string;
+  tournament_id: string;
+  bracket: string;
+  round: number;
+  slot: number;
+  gender: string | null;
+  category: string | null;
+  home_reg: string | null;
+  away_reg: string | null;
+}
+
+/** Coloca a `winner` en el hueco de la ronda siguiente del MISMO cuadro.
+ *  Devuelve true si había ronda siguiente (false si `m` era la final).
+ *  Nota: a diferencia de la app, NO recoloca huecos por disponibilidad (la web
+ *  no dirige el planificador; la app lo recoloca la próxima vez que lo toca). */
+async function advanceInBracket(
+  m: {
+    tournament_id: string;
+    bracket: string;
+    round: number;
+    slot: number;
+    category: string | null;
+    gender: string | null;
+  },
+  winner: string,
+): Promise<boolean> {
+  const sb = supabaseBrowser();
+  let q = sb
+    .from("tournament_matches")
+    .select("id")
+    .eq("tournament_id", m.tournament_id)
+    .eq("bracket", m.bracket)
+    .eq("round", m.round + 1)
+    .eq("slot", Math.floor(m.slot / 2));
+  q = m.category == null ? q.is("category", null) : q.eq("category", m.category);
+  q = m.gender == null ? q.is("gender", null) : q.eq("gender", m.gender);
+  const { data: next } = await q.maybeSingle();
+  const nx = next as { id: string } | null;
+  if (!nx?.id) return false;
+  await sb
+    .from("tournament_matches")
+    .update(m.slot % 2 === 0 ? { home_reg: winner } : { away_reg: winner })
+    .eq("id", nx.id);
+  return true;
+}
+
+/** Estado de un partido concreto (para detectar BYEs del principal al llenar
+ *  la consolación). Devuelve null si no existe. */
+async function matchStatusAt(
+  tournamentId: string,
+  bracket: string,
+  round: number,
+  slot: number,
+  category: string | null,
+  gender: string | null,
+): Promise<string | null> {
+  const sb = supabaseBrowser();
+  let q = sb
+    .from("tournament_matches")
+    .select("status")
+    .eq("tournament_id", tournamentId)
+    .eq("bracket", bracket)
+    .eq("round", round)
+    .eq("slot", slot);
+  q = category == null ? q.is("category", null) : q.eq("category", category);
+  q = gender == null ? q.is("gender", null) : q.eq("gender", gender);
+  const { data } = await q.maybeSingle();
+  return (data as { status?: string } | null)?.status ?? null;
+}
+
+/**
+ * Mete el resultado por SETS y hace avanzar al ganador. `sets` = array de
+ * [gamesHome, gamesAway] por set jugado. Cuenta sets ganados y decide el ganador
+ * (primero en llegar a `setsToWin`). En `ko_consolation`, el perdedor de la 1ª
+ * ronda del cuadro principal pasa al cuadro de consolación.
+ */
+export async function setMatchResult(
+  match: ResultMatch,
+  sets: number[][],
+  setsToWin: number,
+  advance = true,
+): Promise<void> {
+  if (!match.home_reg || !match.away_reg)
+    throw new Error("Faltan las dos parejas en este partido.");
+  const clean = sets.filter((s) => s.length === 2 && (s[0] !== 0 || s[1] !== 0));
+  let wonHome = 0;
+  let wonAway = 0;
+  for (const [h, a] of clean) {
+    if (h === a) throw new Error("Un set no puede quedar empatado.");
+    if (h > a) wonHome++;
+    else wonAway++;
+  }
+  if (wonHome < setsToWin && wonAway < setsToWin)
+    throw new Error("Marcador incompleto: nadie ha ganado los sets necesarios.");
+  const winner = wonHome > wonAway ? match.home_reg : match.away_reg;
+  const sb = supabaseBrowser();
+  const upd = await sb
+    .from("tournament_matches")
+    .update({
+      sets: clean,
+      home_score: wonHome,
+      away_score: wonAway,
+      winner_reg: winner,
+      status: "finished",
+    })
+    .eq("id", match.id);
+  if (upd.error) throw upd.error;
+  if (!advance) return; // liga/grupo: sin avance de cuadro.
+
+  const loser = winner === match.home_reg ? match.away_reg : match.home_reg;
+  const hadNext = await advanceInBracket(match, winner);
+  // Solo la final del cuadro PRINCIPAL cierra el torneo ('main' en KO, 'gold' en
+  // grupos+KO). Las finales de otros cuadros pueden cerrarse antes y NO cierran.
+  if (!hadNext && (match.bracket === "main" || match.bracket === "gold")) {
+    await sb
+      .from("tournaments")
+      .update({ status: "finished" })
+      .eq("id", match.tournament_id);
+  }
+
+  // CONSOLACIÓN: el perdedor de la 1ª ronda del principal baja al cuadro de
+  // consolación SOLO si el hueco está vacío (en principal+consol ya viene
+  // sembrado y no se pisa).
+  if (match.bracket === "main" && match.round === 1 && loser) {
+    const cs = Math.floor(match.slot / 2);
+    const side = match.slot % 2; // 0 = home, 1 = away
+    let cq = sb
+      .from("tournament_matches")
+      .select("id, home_reg, away_reg")
+      .eq("tournament_id", match.tournament_id)
+      .eq("bracket", "consol")
+      .eq("round", 1)
+      .eq("slot", cs);
+    cq = match.category == null ? cq.is("category", null) : cq.eq("category", match.category);
+    cq = match.gender == null ? cq.is("gender", null) : cq.eq("gender", match.gender);
+    const { data: cmatch } = await cq.maybeSingle();
+    const cm = cmatch as
+      | { id: string; home_reg: string | null; away_reg: string | null }
+      | null;
+    const slotTaken = cm ? (side === 0 ? cm.home_reg != null : cm.away_reg != null) : true;
+    if (cm?.id && !slotTaken) {
+      await sb
+        .from("tournament_matches")
+        .update(side === 0 ? { home_reg: loser } : { away_reg: loser })
+        .eq("id", cm.id);
+      // Si el rival en consolación sale de un BYE del principal (nunca habrá
+      // perdedor), pasa directo a la siguiente ronda de consolación.
+      const siblingSlot = 2 * cs + (1 - side);
+      const sibStatus = await matchStatusAt(
+        match.tournament_id, "main", 1, siblingSlot, match.category, match.gender,
+      );
+      if (sibStatus === null || sibStatus === "bye") {
+        await sb
+          .from("tournament_matches")
+          .update({ status: "bye", winner_reg: loser })
+          .eq("id", cm.id);
+        await advanceInBracket(
+          {
+            tournament_id: match.tournament_id,
+            bracket: "consol",
+            round: 1,
+            slot: cs,
+            category: match.category,
+            gender: match.gender,
+          },
+          loser,
+        );
+      }
+    }
+  }
+}
+
+/** Resultado social (puntos por equipo; sin sets, sin avance de cuadro). */
+export async function setSocialResult(
+  match: { id: string; home_reg: string | null; away_reg: string | null },
+  homePoints: number,
+  awayPoints: number,
+): Promise<void> {
+  const winner = homePoints >= awayPoints ? match.home_reg : match.away_reg;
+  const sb = supabaseBrowser();
+  const { error } = await sb
+    .from("tournament_matches")
+    .update({
+      home_score: homePoints,
+      away_score: awayPoints,
+      winner_reg: winner,
+      status: "finished",
+    })
+    .eq("id", match.id);
+  if (error) throw error;
+}
+
 /** MEXICANO: genera la SIGUIENTE ronda emparejando por la clasificación actual. */
 export async function generateMexicanoRound(
   tournamentId: string,
