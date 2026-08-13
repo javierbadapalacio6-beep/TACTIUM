@@ -6,13 +6,15 @@ import { useEffect, useMemo, useState } from "react";
 import { courtTotals, gameTotals, type CourtResult } from "@/lib/team-data";
 import {
   fetchMatchdayBundle,
+  saveCourtSets,
   type DbPlayer,
   type MatchdayBundle,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconCalendar, IconLock } from "@/components/Icon";
 
 /**
@@ -67,6 +69,8 @@ export function ResultsView({ id }: { id: string }) {
   // los resultados reales: `match_results` trae una fila por set, aquí se
   // agrupan por pista.
   const [sets, setSets] = useState<Record<number, [number, number][]>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const [savingCourt, setSavingCourt] = useState<number | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -181,6 +185,17 @@ export function ResultsView({ id }: { id: string }) {
     }));
   }
 
+  // Guardar el resultado de una pista. Pasa por `guardedWrite`: con el
+  // interruptor de escritura apagado no toca la BD y avisa en el toast.
+  async function saveCourt(court: number) {
+    setSavingCourt(court);
+    const res = await guardedWrite("guardar el resultado", () =>
+      saveCourtSets(id, court, sets[court] ?? EMPTY_SETS),
+    );
+    setSavingCourt(null);
+    setToast(res.ok ? "Resultado guardado" : res.reason);
+  }
+
   const mine = courts.find((c) => c.mine);
   const rest = courts.filter((c) => !c.mine);
 
@@ -275,8 +290,13 @@ export function ResultsView({ id }: { id: string }) {
 
         {c.mine && !readOnly && (
           <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
-            <button className="btn btn-accent" style={{ padding: "11px 20px", fontSize: 13 }}>
-              Listo
+            <button
+              className="btn btn-accent"
+              disabled={savingCourt === c.court}
+              onClick={() => saveCourt(c.court)}
+              style={{ padding: "11px 20px", fontSize: 13 }}
+            >
+              {savingCourt === c.court ? "Guardando…" : "Listo"}
             </button>
             <button
               className="btn btn-ghost"
@@ -339,6 +359,27 @@ export function ResultsView({ id }: { id: string }) {
         >
           <IconLock size={16} />
           Acta cerrada · no se pueden modificar resultados.
+        </div>
+      )}
+
+      {!readOnly && !WRITES_ENABLED && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "14px 18px",
+            borderRadius: 12,
+            background: "var(--bg-card-2)",
+            border: "1px solid var(--hair-strong)",
+            color: "var(--text-muted)",
+            marginBottom: 20,
+            fontSize: 13,
+          }}
+        >
+          <IconLock size={16} />
+          Modo solo lectura · la web aún no escribe en la base de datos. Puedes
+          teclear el resultado, pero «Listo» no lo guardará todavía.
         </div>
       )}
 
@@ -412,6 +453,13 @@ export function ResultsView({ id }: { id: string }) {
           Volver a la jornada
         </Link>
       </div>
+
+      {toast && (
+        <Toast
+          title={toast}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

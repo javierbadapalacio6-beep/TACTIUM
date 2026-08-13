@@ -257,6 +257,91 @@ export async function fetchResults(matchdayId: string): Promise<DbResultRow[]> {
   }));
 }
 
+/* ── Escrituras de resultados (match_results) ───────────────────────
+   Espejo de TACTIUM/src/core/services/matchResults.ts. Estas funciones NO
+   comprueban el interruptor de escritura: siempre pasan por `guardedWrite`
+   en el componente, que las deja inertes si las escrituras están apagadas. */
+
+/** Upsert de un set concreto de una pista (matchday+pista+set es único). */
+export async function upsertSetResult(
+  matchdayId: string,
+  court: number,
+  setNumber: number,
+  us: number | null,
+  them: number | null,
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("match_results")
+    .upsert(
+      {
+        matchday_id: matchdayId,
+        court_number: court,
+        set_number: setNumber,
+        us,
+        them,
+        forfeit: false,
+      },
+      { onConflict: "matchday_id,court_number,set_number" },
+    );
+  if (error) throw error;
+}
+
+/** Guarda los sets de una pista de golpe: los que tienen marcador se upsertan;
+ *  los vacíos se borran (vuelven a «sin resultado»). */
+export async function saveCourtSets(
+  matchdayId: string,
+  court: number,
+  sets: [number, number][],
+): Promise<void> {
+  for (let i = 0; i < sets.length; i++) {
+    const [us, them] = sets[i];
+    if (us > 0 || them > 0) {
+      await upsertSetResult(matchdayId, court, i + 1, us, them);
+    } else {
+      const { error } = await supabaseBrowser()
+        .from("match_results")
+        .delete()
+        .eq("matchday_id", matchdayId)
+        .eq("court_number", court)
+        .eq("set_number", i + 1);
+      if (error) throw error;
+    }
+  }
+}
+
+/** W.O. de una pista: inserta sets con forfeit=true, o borra la pista si false. */
+export async function setCourtForfeit(
+  matchdayId: string,
+  court: number,
+  forfeit: boolean,
+  forfeitUs = false,
+  sets = 3,
+): Promise<void> {
+  const sb = supabaseBrowser();
+  if (forfeit) {
+    const rows = Array.from({ length: sets }, (_, i) => ({
+      matchday_id: matchdayId,
+      court_number: court,
+      set_number: i + 1,
+      us: null,
+      them: null,
+      forfeit: true,
+      forfeit_us: forfeitUs,
+    }));
+    const { error } = await sb
+      .from("match_results")
+      .upsert(rows, { onConflict: "matchday_id,court_number,set_number" });
+    if (error) throw error;
+  } else {
+    const { error } = await sb
+      .from("match_results")
+      .delete()
+      .eq("matchday_id", matchdayId)
+      .eq("court_number", court);
+    if (error) throw error;
+  }
+}
+
 /**
  * Todo lo que necesita la pantalla de jornada, en una sola pasada.
  *
