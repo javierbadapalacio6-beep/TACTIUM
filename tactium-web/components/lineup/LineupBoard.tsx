@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   fetchMatchdayBundle,
+  saveLineupVariant,
   type DbPlayer,
   type MatchdayBundle,
 } from "@/lib/queries";
@@ -237,17 +238,18 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   }
 
   async function confirmLineup() {
-    const res = await guardedWrite("guardar la alineación", async () => {
-      throw new Error("pendiente de implementar el upsert de lineups");
-    });
-    setConfirmOpen(false);
-    setToast(
-      res.ok
-        ? notify
-          ? "Alineación confirmada y avisada"
-          : "Alineación confirmada"
-        : res.reason
+    if (!variantId) {
+      setConfirmOpen(false);
+      setToast("No hay una variante de alineación activa para guardar.");
+      return;
+    }
+    const res = await guardedWrite("guardar la alineación", () =>
+      saveLineupVariant(id, variantId, courts),
     );
+    setConfirmOpen(false);
+    // El «avisar al equipo» (notificación push/in-app) es una escritura aparte
+    // que aún no está portada; por eso el mensaje solo confirma el guardado.
+    setToast(res.ok ? "Alineación guardada" : res.reason);
   }
 
   if (!teamId) {

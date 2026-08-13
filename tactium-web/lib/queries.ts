@@ -213,6 +213,44 @@ export async function fetchLineup(
   }));
 }
 
+/**
+ * Guarda la alineación de una variante: por cada pista, upsert de la pareja
+ * (matchday_id, variant_id, court_number, player_a/b) si tiene al menos un
+ * jugador, o borra la fila si está vacía. Identidad `(variant_id, court_number)`.
+ * Espejo de `setLineupPair`/`clearLineupPair` de la app. Pasa por `guardedWrite`.
+ */
+export async function saveLineupVariant(
+  matchdayId: string,
+  variantId: string,
+  courts: [string | null, string | null][],
+): Promise<void> {
+  const sb = supabaseBrowser();
+  for (let i = 0; i < courts.length; i++) {
+    const [a, b] = courts[i];
+    const court = i + 1;
+    if (a || b) {
+      const { error } = await sb.from("lineups").upsert(
+        {
+          matchday_id: matchdayId,
+          variant_id: variantId,
+          court_number: court,
+          player_a_id: a,
+          player_b_id: b,
+        },
+        { onConflict: "variant_id,court_number" },
+      );
+      if (error) throw error;
+    } else {
+      const { error } = await sb
+        .from("lineups")
+        .delete()
+        .eq("variant_id", variantId)
+        .eq("court_number", court);
+      if (error) throw error;
+    }
+  }
+}
+
 /* ── Disponibilidad ────────────────────────────────────────────── */
 export async function fetchAvailability(
   matchdayId: string
