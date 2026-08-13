@@ -8,7 +8,9 @@ import {
   TOURNAMENT_TIERS,
   TOURNAMENT_EXTRA_PAIR_EUR,
 } from "@/lib/tournament-billing";
+import { useSession } from "@/lib/session";
 import { Card, Eyebrow } from "@/components/ui";
+import { Toast } from "@/components/states";
 import { IconCheck } from "@/components/Icon";
 
 type Cycle = "monthly" | "yearly";
@@ -25,6 +27,50 @@ type Cycle = "monthly" | "yearly";
 export function Paywall() {
   const [cycle, setCycle] = useState<Cycle>("yearly");
   const yearly = cycle === "yearly";
+
+  const { user, clubId } = useSession();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Contrata un plan de club: abre Stripe Checkout (prueba 14 días). El sujeto es
+  // el club del usuario; el importe lo calcula el servidor desde plans.ts.
+  async function subscribe(tier: string) {
+    if (busy) return;
+    if (!user) {
+      window.location.href = "/entrar";
+      return;
+    }
+    if (!clubId) {
+      setToast("Primero crea tu club para contratar un plan de club.");
+      return;
+    }
+    setBusy(tier);
+    try {
+      const res = await fetch("/api/subscription/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          tier,
+          cycle,
+          subjectType: "club",
+          subjectId: clubId,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setToast(data.error ?? "No se pudo iniciar el pago.");
+    } catch {
+      setToast("No se pudo conectar con la pasarela de pago.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const segStyle = (on: boolean) => ({
     padding: "9px 22px",
@@ -261,6 +307,8 @@ export function Paywall() {
 
               <button
                 type="button"
+                onClick={() => subscribe(p.tier)}
+                disabled={busy !== null}
                 className={"btn " + (p.featured ? "btn-accent" : "btn-ghost")}
                 style={{
                   marginTop: 24,
@@ -269,7 +317,7 @@ export function Paywall() {
                   fontSize: 14,
                 }}
               >
-                Empezar prueba 14 días
+                {busy === p.tier ? "Abriendo pago…" : "Empezar prueba 14 días"}
               </button>
             </Card>
           ))}
@@ -468,6 +516,8 @@ export function Paywall() {
           </Link>
         </div>
       </div>
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

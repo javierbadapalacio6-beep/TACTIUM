@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import {
   isStoreManaged,
@@ -99,6 +100,29 @@ function toSubscription(row: DbSubscription | null): Subscription {
 export function MiSuscripcion() {
   const { data, loading, error } = useAsync(() => fetchSubscription(), []);
   const sub = toSubscription(data);
+  const [portalBusy, setPortalBusy] = useState(false);
+
+  // Abre el portal de facturación de Stripe (cancelar, método de pago, facturas).
+  async function openPortal() {
+    if (portalBusy) return;
+    setPortalBusy(true);
+    try {
+      const res = await fetch("/api/subscription/portal", { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (res.ok && body.url) {
+        window.location.href = body.url;
+        return;
+      }
+      alert(body.error ?? "No se pudo abrir la gestión de la suscripción.");
+    } catch {
+      alert("No se pudo conectar con la pasarela de pago.");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
 
   const storeManaged = isStoreManaged(sub.source);
   const webManaged = sub.source === "stripe";
@@ -330,10 +354,12 @@ export function MiSuscripcion() {
               <div style={{ flex: 1 }} />
               <button
                 type="button"
+                onClick={openPortal}
+                disabled={portalBusy}
                 className="btn btn-danger-ghost"
                 style={{ padding: "12px 20px", fontSize: 13.5 }}
               >
-                Cancelar suscripción
+                {portalBusy ? "Abriendo…" : "Cancelar suscripción"}
               </button>
             </div>
           )}
