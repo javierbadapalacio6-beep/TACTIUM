@@ -4,11 +4,18 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { type Position } from "@/lib/team-data";
-import { fetchPlayers, type DbPlayer } from "@/lib/queries";
+import {
+  createPlayer,
+  deletePlayer,
+  fetchPlayers,
+  updatePlayer,
+  type DbPlayer,
+} from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal, Toggle } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import {
   IconCalendar,
   IconCopy,
@@ -36,9 +43,10 @@ export function Roster() {
   const { activeTeam } = useSession();
   const teamId = activeTeam?.id ?? null;
 
+  const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync(
     () => fetchPlayers(teamId!),
-    [teamId],
+    [teamId, reloadKey],
     !!teamId
   );
   const PLAYERS: DbPlayer[] = data ?? [];
@@ -50,6 +58,60 @@ export function Roster() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Alta o edición de un jugador (el modal usa id="new" para el alta).
+  async function savePlayer() {
+    if (!editing || !teamId || busy) return;
+    if (!editing.name.trim()) {
+      setToast("Ponle un nombre al jugador.");
+      return;
+    }
+    setBusy(true);
+    const isNew = editing.id === "new";
+    const res = await guardedWrite(
+      isNew ? "añadir el jugador" : "guardar el jugador",
+      () =>
+        isNew
+          ? createPlayer(teamId, {
+              name: editing.name.trim(),
+              pts: editing.pts,
+              position: editing.position,
+            })
+          : updatePlayer(editing.id, {
+              name: editing.name.trim(),
+              pts: editing.pts,
+              position: editing.position,
+              active: editing.active,
+              alias: editing.alias,
+            }),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setEditing(null);
+      setReloadKey((k) => k + 1);
+      setToast(isNew ? "Jugador añadido" : "Jugador guardado");
+    } else {
+      setToast(res.reason);
+    }
+  }
+
+  async function removePlayer() {
+    if (!editing || editing.id === "new" || busy) return;
+    setBusy(true);
+    const res = await guardedWrite("eliminar el jugador", () =>
+      deletePlayer(editing.id),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setEditing(null);
+      setReloadKey((k) => k + 1);
+      setToast("Jugador eliminado");
+    } else {
+      setToast(res.reason);
+    }
+  }
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -584,6 +646,8 @@ export function Roster() {
               {editing.id !== "new" && (
                 <button
                   className="btn btn-danger-ghost"
+                  disabled={busy}
+                  onClick={removePlayer}
                   style={{ padding: "12px 18px", fontSize: 13.5, marginRight: "auto" }}
                 >
                   Eliminar
@@ -598,10 +662,11 @@ export function Roster() {
               </button>
               <button
                 className="btn btn-accent"
-                onClick={() => setEditing(null)}
+                disabled={busy}
+                onClick={savePlayer}
                 style={{ padding: "12px 22px", fontSize: 13.5 }}
               >
-                Guardar
+                {busy ? "Guardando…" : "Guardar"}
               </button>
             </div>
           </>
@@ -750,6 +815,8 @@ export function Roster() {
           </button>
         </div>
       </Modal>
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

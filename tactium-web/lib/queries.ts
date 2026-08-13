@@ -48,6 +48,42 @@ export async function fetchPlayers(teamId: string): Promise<DbPlayer[]> {
   }));
 }
 
+/* ── Escrituras de plantilla (players) ──────────────────────────── */
+export async function createPlayer(
+  teamId: string,
+  input: { name: string; pts: number; position: string },
+): Promise<void> {
+  const { error } = await supabaseBrowser().from("players").insert({
+    team_id: teamId,
+    name: input.name,
+    pts: input.pts,
+    position: input.position,
+  });
+  if (error) throw error;
+}
+
+export async function updatePlayer(
+  id: string,
+  patch: {
+    name?: string;
+    pts?: number;
+    position?: string;
+    active?: boolean;
+    alias?: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("players")
+    .update(patch)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePlayer(id: string): Promise<void> {
+  const { error } = await supabaseBrowser().from("players").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /* ── Temporadas ────────────────────────────────────────────────── */
 export interface DbSeason {
   id: string;
