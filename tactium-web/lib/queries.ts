@@ -782,6 +782,38 @@ export async function searchCommunity(q: string): Promise<CommunityHit[]> {
   return (data ?? []) as CommunityHit[];
 }
 
+/* ── Seguir / dejar de seguir (tabla follows) ───────────────────── */
+export async function followTarget(
+  type: "user" | "club",
+  id: string,
+): Promise<void> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("Inicia sesión para seguir.");
+  const { error } = await sb
+    .from("follows")
+    .insert({ follower_id: user.id, target_type: type, target_id: id });
+  if (error) throw error;
+}
+
+export async function unfollowTarget(
+  type: "user" | "club",
+  id: string,
+): Promise<void> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("Inicia sesión.");
+  const { error } = await sb
+    .from("follows")
+    .delete()
+    .match({ follower_id: user.id, target_type: type, target_id: id });
+  if (error) throw error;
+}
+
 export interface FeedRow {
   kind: "casual" | "league";
   ref_id: string;

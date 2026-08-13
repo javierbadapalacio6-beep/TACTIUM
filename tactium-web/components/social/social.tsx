@@ -7,13 +7,17 @@ import {
   fetchCasualMatches,
   fetchFeed,
   fetchPublicProfile,
+  followTarget,
   searchCommunity,
+  unfollowTarget,
+  type CommunityHit,
   type DbCasual,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { BarList, Ring, WonLostBar } from "@/components/charts";
 import { IconChevronRight, IconGlobe, IconSearch, IconUsers } from "@/components/Icon";
 
@@ -200,6 +204,27 @@ export function Community() {
   const people = hits.filter((h) => h.type === "user");
   const clubs = hits.filter((h) => h.type === "club");
 
+  // Estado local de seguimiento (sobre lo que devuelve la búsqueda) para pintar
+  // optimista sin recargar. `busy` bloquea el botón mientras escribe.
+  const [follow, setFollow] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function toggleFollow(h: CommunityHit) {
+    if (busy) return;
+    const now = follow[h.id] ?? h.is_following;
+    setBusy(h.id);
+    setFollow((f) => ({ ...f, [h.id]: !now })); // optimista
+    const res = await guardedWrite(now ? "dejar de seguir" : "seguir", () =>
+      now ? unfollowTarget(h.type, h.id) : followTarget(h.type, h.id),
+    );
+    setBusy(null);
+    if (!res.ok) {
+      setFollow((f) => ({ ...f, [h.id]: now })); // revertir
+      setToast(res.reason);
+    }
+  }
+
   return (
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
       <div style={{ marginBottom: 22 }}>
@@ -313,9 +338,20 @@ export function Community() {
                           {h.followers_count} seguidores
                         </span>
                       </Link>
-                      <span className={"chip " + (h.is_following ? "" : "chip-mute")}>
-                        {h.is_following ? "Siguiendo" : "Seguir"}
-                      </span>
+                      {(() => {
+                        const on = follow[h.id] ?? h.is_following;
+                        return (
+                          <button
+                            type="button"
+                            disabled={busy === h.id}
+                            onClick={() => toggleFollow(h)}
+                            className={"chip " + (on ? "" : "chip-mute")}
+                            style={{ cursor: "pointer" }}
+                          >
+                            {on ? "Siguiendo" : "Seguir"}
+                          </button>
+                        );
+                      })()}
                     </div>
                   ))}
                 </Card>
@@ -323,6 +359,8 @@ export function Community() {
             ))}
         </div>
       )}
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
