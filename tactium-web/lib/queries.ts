@@ -84,6 +84,51 @@ export async function deletePlayer(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/* ── Alta de club / equipo (onboarding) ─────────────────────────── */
+export async function createClub(
+  name: string,
+  federation?: string | null,
+): Promise<string> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("No hay sesión activa.");
+  const { data, error } = await sb
+    .from("clubs")
+    .insert({ owner_id: user.id, name, federation: federation ?? null })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function createTeam(input: {
+  name: string;
+  gender?: string;
+  federation?: string | null;
+  clubId?: string | null;
+}): Promise<string> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) throw new Error("No hay sesión activa.");
+  const { data, error } = await sb
+    .from("teams")
+    .insert({
+      owner_id: user.id,
+      name: input.name,
+      gender: input.gender ?? "masculino",
+      federation: input.federation ?? null,
+      club_id: input.clubId ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
 /* ── Temporadas ────────────────────────────────────────────────── */
 export interface DbSeason {
   id: string;

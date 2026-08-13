@@ -16,6 +16,14 @@ import {
   IconUserPlus,
   IconUsers,
 } from "@/components/Icon";
+import { createClub, createTeam } from "@/lib/queries";
+import { guardedWrite } from "@/lib/writes";
+
+const GENDER_DB: Record<string, string> = {
+  Masculino: "masculino",
+  Femenino: "femenino",
+  Mixto: "mixto",
+};
 
 /* ═══ 03 · ¿CÓMO VAS A EMPEZAR? ═══════════════════════════════════ */
 
@@ -252,6 +260,27 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
   const [gender, setGender] = useState<(typeof GENDERS)[number]>("Masculino");
   const [order, setOrder] = useState<(typeof ORDERS)[number]>("Se valida");
   const [matches, setMatches] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (busy || name.trim().length < 2) return;
+    // El alta de equipo DENTRO de un club necesita el id del club, que aún no
+    // fluye entre pasos en la web → ese caso se hace desde el panel del club.
+    if (fromClub) {
+      router.push("/empezar/jugadores");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("crear el equipo", () =>
+      createTeam({ name: name.trim(), gender: GENDER_DB[gender] ?? "masculino" }),
+    );
+    setBusy(false);
+    // Recarga completa: la sesión detecta el equipo y aterriza en su plantilla.
+    if (res.ok) window.location.href = "/equipo";
+    else setErr(res.reason);
+  }
 
   const body = (
     <>
@@ -345,14 +374,17 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
         </Field>
       </div>
 
+      {err && (
+        <p style={{ marginTop: 16, color: "var(--error)", fontSize: 13 }}>{err}</p>
+      )}
       <button
         type="button"
         className="btn btn-accent"
-        disabled={name.trim().length < 2}
-        onClick={() => router.push("/empezar/jugadores")}
-        style={{ marginTop: 28, width: "100%", padding: 15, fontSize: 15 }}
+        disabled={busy || name.trim().length < 2}
+        onClick={submit}
+        style={{ marginTop: 20, width: "100%", padding: 15, fontSize: 15 }}
       >
-        Crear equipo
+        {busy ? "Creando…" : "Crear equipo"}
       </button>
     </>
   );
@@ -363,8 +395,23 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
 /* ═══ 05 · CREAR CLUB ═════════════════════════════════════════════ */
 
 export function CreateClub() {
-  const router = useRouter();
   const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (busy || name.trim().length < 2) return;
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("crear el club", () =>
+      createClub(name.trim()),
+    );
+    setBusy(false);
+    // Recarga completa para que la sesión detecte el club nuevo y aterrice en
+    // su panel (donde ya se pueden crear equipos y gestionar todo).
+    if (res.ok) window.location.href = "/club";
+    else setErr(res.reason);
+  }
 
   return (
     <EntryFrame>
@@ -435,14 +482,17 @@ export function CreateClub() {
         </Field>
       </div>
 
+      {err && (
+        <p style={{ marginTop: 16, color: "var(--error)", fontSize: 13 }}>{err}</p>
+      )}
       <button
         type="button"
         className="btn btn-accent"
-        disabled={name.trim().length < 2}
-        onClick={() => router.push("/empezar/club/equipos")}
-        style={{ marginTop: 28, width: "100%", padding: 15, fontSize: 15 }}
+        disabled={busy || name.trim().length < 2}
+        onClick={submit}
+        style={{ marginTop: 20, width: "100%", padding: 15, fontSize: 15 }}
       >
-        Crear club
+        {busy ? "Creando…" : "Crear club"}
       </button>
     </EntryFrame>
   );
