@@ -17,7 +17,15 @@ import {
   fetchTournamentRegs,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
-import { generateKoBracket } from "@/lib/tournament-engine";
+import {
+  generateKoBracket,
+  generateGroups,
+  generateRoundRobin,
+  generateAmericano,
+  generateMexicanoRound,
+  generateKnockoutFromGroups,
+  generatePrincipalConsolationFromGroups,
+} from "@/lib/tournament-engine";
 import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
 import { EmptyState, SkeletonCard, Toast } from "@/components/states";
@@ -787,32 +795,109 @@ export function TournamentDetail({
     (m) => !["grp", "rr", "amer", "mex"].includes(m.bracket),
   );
 
-  // Generar el cuadro KO de todas las divisiones (género × categoría) que aún
-  // no tengan partidos. Solo formatos de eliminatoria; grupos/round-robin/
-  // sociales usan otros generadores (aún no portados). Pasa por `guardedWrite`.
-  const canGenerateKo =
-    !spectator &&
-    (t.format === "ko" || t.format === "ko_consolation") &&
-    koMatches.length === 0 &&
-    regs.length >= 2;
+  const rrMatches = matches.filter((m) => m.bracket === "rr");
+  const socialMatches = matches.filter(
+    (m) => m.bracket === "amer" || m.bracket === "mex",
+  );
 
-  async function generateBracket() {
+  // Motor de cuadros: despacha la generación por formato, recorriendo TODAS las
+  // divisiones (género × categoría). Espejo de TournamentDetailScreen (app).
+  // Todo pasa por `guardedWrite`, así que queda inerte en modo solo lectura.
+  const organizer = !spectator;
+  const koFormat = t.format === "ko" || t.format === "ko_consolation";
+  const isRR = t.format === "round_robin";
+  const isGroupsKo = t.format === "groups_ko";
+  const isAmericano = t.format === "americano";
+  const isMexicano = t.format === "mexicano";
+
+  const genDivs: [string | null, string | null][] = (
+    gens.length ? gens : [null]
+  ).flatMap((g) =>
+    (cats.length ? cats : [null]).map(
+      (c) => [g, c] as [string | null, string | null],
+    ),
+  );
+
+  // Fases de grupos+cuadro.
+  const groupsGenerated = groupMatches.length > 0;
+  const groupsDone =
+    groupsGenerated && groupMatches.every((m) => m.status === "finished");
+  const koExists = koMatches.length > 0;
+
+  // Ejecuta `fn` en cada división, tolerando las ya generadas (para poder
+  // generar el resto). Una sola llamada al guard envuelve todo el lote.
+  async function runGen(
+    what: string,
+    okMsg: string,
+    fn: (g: string | null, c: string | null) => Promise<void>,
+  ) {
     if (busy) return;
     setBusy(true);
-    const gg = gens.length ? gens : [null];
-    const cc = cats.length ? cats : [null];
-    const res = await guardedWrite("generar el cuadro", async () => {
-      for (const g of gg)
-        for (const c of cc) await generateKoBracket(id, g, c);
+    let did = 0;
+    const res = await guardedWrite(what, async () => {
+      for (const [g, c] of genDivs) {
+        try {
+          await fn(g, c);
+          did++;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "";
+          if (!/ya (está|están|estan)\s+genera|ya\s+genera/i.test(msg)) throw e;
+        }
+      }
     });
     setBusy(false);
     if (res.ok) {
       setReloadKey((k) => k + 1);
-      setToast("Cuadro generado");
+      setToast(did > 0 ? okMsg : "No había nada nuevo que generar.");
     } else {
       setToast(res.reason);
     }
   }
+
+  const genKo = () =>
+    runGen("generar el cuadro", "Cuadro generado.", (g, c) =>
+      generateKoBracket(id, g, c),
+    );
+  const genRoundRobin = () =>
+    runGen("generar la liga", "Liga generada.", (g, c) =>
+      generateRoundRobin(id, g, c),
+    );
+  const genGroups = (size: number) =>
+    runGen("generar los grupos", "Grupos generados.", (g, c) =>
+      generateGroups(id, g, c, size),
+    );
+  const genKnockoutByPosition = () =>
+    runGen("generar las eliminatorias", "Eliminatorias generadas.", (g, c) =>
+      generateKnockoutFromGroups(id, g, c),
+    );
+  const genPrincipalConsol = () =>
+    runGen("generar las eliminatorias", "Eliminatorias generadas.", (g, c) =>
+      generatePrincipalConsolationFromGroups(id, g, c),
+    );
+  const genAmericano = () =>
+    runGen("generar el americano", "Americano generado.", (g, c) =>
+      generateAmericano(id, g, c),
+    );
+  const genMexicanoRound = () =>
+    runGen("generar la ronda", "Ronda generada.", (g, c) =>
+      generateMexicanoRound(id, g, c),
+    );
+
+  // Botones de generación disponibles según formato y fase.
+  const canGenerateKo = organizer && koFormat && !koExists && regs.length >= 2;
+  const canGenerateGroups = organizer && isGroupsKo && !groupsGenerated && regs.length >= 4;
+  const canGenerateKnockout =
+    organizer && isGroupsKo && groupsDone && !koExists;
+  const canGenerateRR = organizer && isRR && rrMatches.length === 0 && regs.length >= 2;
+  const canGenerateAmericano =
+    organizer && isAmericano && socialMatches.length === 0 && regs.length >= 4;
+  // Mexicano: 1ª ronda si no hay nada; siguiente ronda si la última terminó.
+  const mexRounds = socialMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
+  const mexLastDone =
+    mexRounds > 0 &&
+    socialMatches.filter((m) => m.round === mexRounds).every((m) => m.status === "finished");
+  const canGenerateMexicano =
+    organizer && isMexicano && (socialMatches.length === 0 || mexLastDone) && regs.length >= 4;
 
   // Grupos: una liguilla por group_no, con su clasificación.
   const groupNos = Array.from(
@@ -1124,7 +1209,40 @@ export function TournamentDetail({
             <EmptyState
               icon={<IconTrophy size={34} />}
               title="Sin grupos todavía"
-              body="La fase de grupos aparecerá aquí cuando el club la genere."
+              body={
+                canGenerateGroups
+                  ? "Reparte las parejas en grupos por siembra. Elige el tamaño de grupo."
+                  : "La fase de grupos aparecerá aquí cuando el club la genere."
+              }
+              action={
+                canGenerateGroups ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <button
+                      className="btn btn-accent"
+                      disabled={busy}
+                      onClick={() => genGroups(3)}
+                      style={{ padding: "13px 20px", fontSize: 13.5 }}
+                    >
+                      Grupos de 3
+                    </button>
+                    <button
+                      className="btn btn-accent"
+                      disabled={busy}
+                      onClick={() => genGroups(4)}
+                      style={{ padding: "13px 20px", fontSize: 13.5 }}
+                    >
+                      Grupos de 4
+                    </button>
+                  </div>
+                ) : undefined
+              }
             />
           </Card>
         ) : (
@@ -1177,11 +1295,68 @@ export function TournamentDetail({
             <EmptyState
               icon={<IconTrophy size={34} />}
               title="Sin clasificación todavía"
-              body="Aparecerá en cuanto se jueguen los primeros partidos."
+              body={
+                canGenerateRR
+                  ? "Genera la liga: todos contra todos. La clasificación saldrá de los resultados."
+                  : canGenerateAmericano
+                    ? "Genera el americano: todas las rondas con compañeros rotativos."
+                    : canGenerateMexicano
+                      ? "Genera la 1ª ronda. Las siguientes se emparejan por el ranking tras cada resultado."
+                      : "Aparecerá en cuanto se jueguen los primeros partidos."
+              }
+              action={
+                canGenerateRR ? (
+                  <button
+                    className="btn btn-accent"
+                    disabled={busy}
+                    onClick={genRoundRobin}
+                    style={{ padding: "13px 24px", fontSize: 14 }}
+                  >
+                    {busy ? "Generando…" : "Generar liga"}
+                  </button>
+                ) : canGenerateAmericano ? (
+                  <button
+                    className="btn btn-accent"
+                    disabled={busy}
+                    onClick={genAmericano}
+                    style={{ padding: "13px 24px", fontSize: 14 }}
+                  >
+                    {busy ? "Generando…" : "Generar americano"}
+                  </button>
+                ) : canGenerateMexicano ? (
+                  <button
+                    className="btn btn-accent"
+                    disabled={busy}
+                    onClick={genMexicanoRound}
+                    style={{ padding: "13px 24px", fontSize: 14 }}
+                  >
+                    {busy ? "Generando…" : "Generar 1ª ronda"}
+                  </button>
+                ) : undefined
+              }
             />
           </Card>
         ) : (
           <Card style={{ padding: 0, overflow: "hidden" }}>
+            {canGenerateMexicano && mexRounds > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  padding: "12px 16px",
+                  borderBottom: "1px solid var(--hair)",
+                }}
+              >
+                <button
+                  className="btn btn-accent"
+                  disabled={busy}
+                  onClick={genMexicanoRound}
+                  style={{ padding: "9px 16px", fontSize: 13 }}
+                >
+                  {busy ? "Generando…" : "Generar siguiente ronda"}
+                </button>
+              </div>
+            )}
             <div className="tw-roster-scroll">
               <div className="tw-standings-head">
                 {["POS", "PAREJA", "PJ", "PG", "PP", "SETS +", "SETS −", "JUEGOS +", "JUEGOS −", "PTS"].map(
@@ -1219,18 +1394,48 @@ export function TournamentDetail({
               body={
                 canGenerateKo
                   ? "Genera el cuadro cuando la inscripción esté cerrada: se siembran las parejas y se crean los partidos."
-                  : "El cuadro aparecerá aquí cuando el club lo genere."
+                  : canGenerateKnockout
+                    ? "Los grupos han terminado. Genera las eliminatorias eligiendo cómo repartir a los clasificados."
+                    : isGroupsKo && !groupsDone
+                      ? "El cuadro aparecerá cuando termine la fase de grupos."
+                      : "El cuadro aparecerá aquí cuando el club lo genere."
               }
               action={
                 canGenerateKo ? (
                   <button
                     className="btn btn-accent"
                     disabled={busy}
-                    onClick={generateBracket}
+                    onClick={genKo}
                     style={{ padding: "13px 24px", fontSize: 14 }}
                   >
                     {busy ? "Generando…" : "Generar cuadro"}
                   </button>
+                ) : canGenerateKnockout ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <button
+                      className="btn btn-accent"
+                      disabled={busy}
+                      onClick={genPrincipalConsol}
+                      style={{ padding: "13px 20px", fontSize: 13.5 }}
+                    >
+                      Principal + consolación
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      disabled={busy}
+                      onClick={genKnockoutByPosition}
+                      style={{ padding: "13px 20px", fontSize: 13.5 }}
+                    >
+                      Por posición (oro/plata…)
+                    </button>
+                  </div>
                 ) : undefined
               }
             />
