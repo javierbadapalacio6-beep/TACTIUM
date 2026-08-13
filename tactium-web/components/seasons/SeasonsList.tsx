@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { type SeasonFormat } from "@/lib/team-data";
-import { fetchSeasons, type DbSeason } from "@/lib/queries";
+import { createSeason, fetchSeasons, type DbSeason } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconCalendar, IconChevronRight, IconPlus } from "@/components/Icon";
 
 const FORMATS: { key: SeasonFormat; note: string }[] = [
@@ -16,6 +17,12 @@ const FORMATS: { key: SeasonFormat; note: string }[] = [
   { key: "Liga + Playoff", note: "Formato completo" },
   { key: "Eliminatorias", note: "Playoff" },
 ];
+
+const FORMAT_TO_PHASE: Record<SeasonFormat, DbSeason["phase"]> = {
+  "Liga regular": "liga",
+  "Liga + Playoff": "mixto",
+  Eliminatorias: "playoff",
+};
 
 /** Nombre legible de la fase que guarda la base de datos. */
 const PHASE_LABEL: Record<DbSeason["phase"], string> = {
@@ -27,18 +34,47 @@ const PHASE_LABEL: Record<DbSeason["phase"], string> = {
 export function SeasonsList() {
   const { activeTeam } = useSession();
   const teamId = activeTeam?.id ?? null;
+  const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync(
     () => fetchSeasons(teamId!),
-    [teamId],
+    [teamId, reloadKey],
     !!teamId
   );
   const SEASONS = data ?? [];
 
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<SeasonFormat>("Liga + Playoff");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const active = SEASONS.filter((s) => s.active);
   const past = SEASONS.filter((s) => !s.active);
+
+  async function saveSeason() {
+    if (busy || !teamId) return;
+    if (!name.trim()) {
+      setToast("Ponle un nombre a la temporada.");
+      return;
+    }
+    setBusy(true);
+    const res = await guardedWrite("crear la temporada", () =>
+      createSeason(teamId, {
+        name: name.trim(),
+        phase: FORMAT_TO_PHASE[format],
+        category: activeTeam?.category ?? null,
+      }),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setOpen(false);
+      setName("");
+      setReloadKey((k) => k + 1);
+      setToast("Temporada creada");
+    } else {
+      setToast(res.reason);
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto" }}>
@@ -306,6 +342,8 @@ export function SeasonsList() {
             <input
               type="text"
               placeholder="Temporada 26/27"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               style={{
                 width: "100%",
                 padding: "12px 14px",
@@ -430,13 +468,20 @@ export function SeasonsList() {
           </button>
           <button
             className="btn btn-accent"
-            onClick={() => setOpen(false)}
+            disabled={busy}
+            onClick={saveSeason}
             style={{ padding: "12px 22px", fontSize: 13.5 }}
           >
-            {active.length > 0 ? "Cerrar y crear nueva" : "Crear temporada"}
+            {busy
+              ? "Creando…"
+              : active.length > 0
+                ? "Cerrar y crear nueva"
+                : "Crear temporada"}
           </button>
         </div>
       </Modal>
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

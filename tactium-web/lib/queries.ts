@@ -113,6 +113,28 @@ export async function fetchSeasons(teamId: string): Promise<DbSeason[]> {
   }));
 }
 
+/** Crea una temporada (insert en seasons). El trigger de BD cierra la activa
+ *  anterior si procede. Pasa por `guardedWrite`. */
+export async function createSeason(
+  teamId: string,
+  input: {
+    name: string;
+    phase: DbSeason["phase"];
+    category?: string | null;
+    totalMatchdays?: number | null;
+  },
+): Promise<void> {
+  const { error } = await supabaseBrowser().from("seasons").insert({
+    team_id: teamId,
+    name: input.name,
+    phase: input.phase,
+    category: input.category ?? null,
+    total_matchdays: input.totalMatchdays ?? null,
+    active: true,
+  });
+  if (error) throw error;
+}
+
 /** La temporada activa del equipo, o la más reciente si no hay ninguna activa. */
 export async function fetchActiveSeason(
   teamId: string
