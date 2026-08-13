@@ -11,8 +11,29 @@ import {
   STATE_LABEL,
   type TournamentType,
 } from "@/lib/tournament-data";
+import { createTournament } from "@/lib/queries";
+import { useSession } from "@/lib/session";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Toggle } from "@/components/ui";
 import { IconCheck, IconCopy, IconUpload } from "@/components/Icon";
+
+// Mapeo del asistente (labels legibles) al modelo de la BD.
+const TYPE_TO_FORMAT: Record<TournamentType, string> = {
+  Americano: "americano",
+  Cuadro: "ko",
+  "Grupos + Cuadro": "groups_ko",
+  "Cuadro con consolación": "ko_consolation",
+};
+const MATCH_TO_DB: Record<string, string> = {
+  "3 sets": "bo3_full",
+  "2 sets + súper tie-break": "bo3_stb",
+  "Set único a 9": "bo1",
+};
+const GENDER_TO_DB: Record<string, string> = {
+  Masculino: "masculino",
+  Femenino: "femenino",
+  Mixto: "mixto",
+};
 
 const STEPS = [
   { n: 1, label: "PASO 1 · BÁSICOS", note: "Lo esencial del torneo" },
@@ -114,6 +135,35 @@ export function CreateTournament() {
   const [format, setFormat] = useState<string>(MATCH_FORMATS[1]);
   const [created, setCreated] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { clubId } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (busy) return;
+    if (!clubId) {
+      setErr("Necesitas un club para crear torneos.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("crear el torneo", () =>
+      createTournament({
+        clubId,
+        name: name.trim(),
+        format: TYPE_TO_FORMAT[type],
+        matchFormat: MATCH_TO_DB[format] ?? "bo3_stb",
+        genders: genders
+          .map((g) => GENDER_TO_DB[g])
+          .filter((g): g is string => !!g),
+        categories: cats,
+        seedingMode: seeded ? "points" : "federative",
+      }),
+    );
+    setBusy(false);
+    if (res.ok) setCreated(true);
+    else setErr(res.reason);
+  }
 
   const drafts = TOURNAMENTS.filter((t) => t.state === "borrador");
   const canNext = step !== 1 || name.trim().length > 2;
@@ -599,13 +649,19 @@ export function CreateTournament() {
           ) : (
             <button
               className="btn btn-accent"
-              onClick={() => setCreated(true)}
+              disabled={busy || name.trim().length < 3}
+              onClick={submit}
               style={{ padding: "12px 24px", fontSize: 13.5 }}
             >
-              Crear torneo
+              {busy ? "Creando…" : "Crear torneo"}
             </button>
           )}
         </div>
+        {err && (
+          <p style={{ marginTop: 14, color: "var(--error)", fontSize: 13 }}>
+            {err}
+          </p>
+        )}
       </Card>
 
       {/* Torneos del club */}

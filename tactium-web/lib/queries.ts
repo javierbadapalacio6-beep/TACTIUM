@@ -747,6 +747,35 @@ export async function fetchTournament(id: string) {
   return Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
 }
 
+/** Crea un torneo (insert en tournaments). Espejo de los campos que siempre
+ *  pone la app; el cobro por torneo (draft + enlace) es un flujo aparte. */
+export async function createTournament(input: {
+  clubId: string;
+  name: string;
+  format: string;
+  matchFormat?: string;
+  genders?: string[];
+  categories?: string[];
+  seedingMode?: string;
+}): Promise<string> {
+  const { data, error } = await supabaseBrowser()
+    .from("tournaments")
+    .insert({
+      club_id: input.clubId,
+      name: input.name,
+      format: input.format,
+      match_format: input.matchFormat ?? "bo3_stb",
+      phase_formats: {},
+      genders: input.genders ?? [],
+      categories: input.categories ?? [],
+      seeding_mode: input.seedingMode ?? "points",
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
 export async function fetchTournamentMatches(id: string) {
   const { data, error } = await supabaseBrowser().rpc(
     "public_tournament_matches",
