@@ -380,6 +380,15 @@ export async function setCourtForfeit(
   }
 }
 
+/** Cierra el acta de una jornada (RPC close_matchday). Calcula el resultado a
+ *  partir de los match_results y bloquea la edición. Pasa por `guardedWrite`. */
+export async function closeMatchday(matchdayId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("close_matchday", {
+    target_matchday: matchdayId,
+  });
+  if (error) throw error;
+}
+
 /**
  * Todo lo que necesita la pantalla de jornada, en una sola pasada.
  *

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  closeMatchday,
   fetchMatchdayBundle,
   type DbPlayer,
   type MatchdayBundle,
@@ -225,9 +226,7 @@ export function MatchdayView({ id }: { id: string }) {
   }
 
   async function closeActa() {
-    const res = await guardedWrite("cerrar el acta", async () => {
-      throw new Error("pendiente de implementar el RPC close_matchday");
-    });
+    const res = await guardedWrite("cerrar el acta", () => closeMatchday(id));
     setConfirmClose(false);
     setToast(res.ok ? "Acta cerrada" : res.reason);
   }
