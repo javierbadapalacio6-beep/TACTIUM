@@ -16,7 +16,7 @@ import {
   IconUserPlus,
   IconUsers,
 } from "@/components/Icon";
-import { createClub, createTeam } from "@/lib/queries";
+import { createClub, createTeam, redeemInvitation } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
 
 const GENDER_DB: Record<string, string> = {
@@ -70,10 +70,25 @@ export function Start() {
   const router = useRouter();
   const [picked, setPicked] = useState<string>("equipo");
   const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const current = PATHS.find((p) => p.key === picked)!;
   const needsCode = picked === "invitado";
   const canGo = needsCode ? code.trim().length >= 4 : true;
+
+  async function redeem() {
+    if (busy || code.trim().length < 4) return;
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("canjear el código", () =>
+      redeemInvitation(code),
+    );
+    setBusy(false);
+    // Recarga completa: la sesión detecta el equipo al que te has unido.
+    if (res.ok) window.location.href = "/";
+    else setErr(res.reason);
+  }
 
   return (
     <EntryFrame wide>
@@ -200,13 +215,19 @@ export function Start() {
               <button
                 type="button"
                 className="btn btn-accent"
-                disabled={!canGo}
+                disabled={!canGo || busy}
+                onClick={redeem}
                 style={{ padding: "13px 22px", fontSize: 13.5, borderRadius: 12 }}
               >
-                Unirme
+                {busy ? "…" : "Unirme"}
               </button>
             </div>
           </Field>
+          {err && (
+            <p style={{ marginTop: 12, color: "var(--error)", fontSize: 13 }}>
+              {err}
+            </p>
+          )}
         </div>
       )}
 

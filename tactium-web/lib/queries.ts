@@ -103,6 +103,14 @@ export async function createClub(
   return data.id as string;
 }
 
+/** Canjea un código de invitación para unirse a un equipo (RPC). */
+export async function redeemInvitation(code: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("redeem_team_invitation", {
+    invitation_code: code.trim().toUpperCase(),
+  });
+  if (error) throw error;
+}
+
 export async function createTeam(input: {
   name: string;
   gender?: string;
