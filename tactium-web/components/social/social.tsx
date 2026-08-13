@@ -318,26 +318,42 @@ export function Community() {
                       }}
                     >
                       <Avatar name={h.name} url={h.avatar_url} size={38} />
-                      <Link
-                        href={h.type === "user" ? `/u/${h.id}` : "/comunidad"}
-                        style={{ flex: 1, minWidth: 0, color: "inherit" }}
-                      >
-                        <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
-                          {h.name}
-                        </span>
-                        <span
-                          className="mono"
-                          style={{
-                            display: "block",
-                            marginTop: 3,
-                            fontSize: 10.5,
-                            color: "var(--text-faint)",
-                          }}
-                        >
-                          {h.subtitle ?? (h.type === "club" ? "Club" : "Jugador")} ·{" "}
-                          {h.followers_count} seguidores
-                        </span>
-                      </Link>
+                      {(() => {
+                        // Los jugadores tienen perfil público (`/u/:id`); los
+                        // clubes aún no, así que su fila no navega (evita el
+                        // enlace muerto a /comunidad).
+                        const inner = (
+                          <>
+                            <span
+                              style={{ display: "block", fontSize: 14, fontWeight: 700 }}
+                            >
+                              {h.name}
+                            </span>
+                            <span
+                              className="mono"
+                              style={{
+                                display: "block",
+                                marginTop: 3,
+                                fontSize: 10.5,
+                                color: "var(--text-faint)",
+                              }}
+                            >
+                              {h.subtitle ?? (h.type === "club" ? "Club" : "Jugador")} ·{" "}
+                              {h.followers_count} seguidores
+                            </span>
+                          </>
+                        );
+                        return h.type === "user" ? (
+                          <Link
+                            href={`/u/${h.id}`}
+                            style={{ flex: 1, minWidth: 0, color: "inherit" }}
+                          >
+                            {inner}
+                          </Link>
+                        ) : (
+                          <div style={{ flex: 1, minWidth: 0 }}>{inner}</div>
+                        );
+                      })()}
                       {(() => {
                         const on = follow[h.id] ?? h.is_following;
                         return (

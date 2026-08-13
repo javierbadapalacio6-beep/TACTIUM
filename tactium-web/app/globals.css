@@ -238,6 +238,10 @@ html,
 body {
   margin: 0;
   padding: 0;
+  /* El body nunca scrollea en horizontal: los elementos a sangre completa (p.ej.
+     el lienzo 3D del hero público, ~±20px) se recortan aquí. `clip` en vez de
+     `hidden` para no crear un contenedor de scroll que rompa position:sticky. */
+  overflow-x: clip;
   background: var(--bg);
   color: var(--text);
   font-family: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;

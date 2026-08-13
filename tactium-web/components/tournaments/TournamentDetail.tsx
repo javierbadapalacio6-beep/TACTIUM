@@ -1025,9 +1025,34 @@ export function TournamentDetail({
   const matches = data?.matches ?? [];
   const regs = data?.regs ?? [];
 
-  const visibleTabs = spectator
-    ? TABS.filter(([k]) => k !== "inscripciones" && k !== "config")
-    : TABS;
+  // Pestañas según el FORMATO: un cuadro KO no tiene grupos ni clasificación;
+  // una liga/social no tiene cuadro. Se ocultan las que no aplican (antes salían
+  // vacías). El organizador ve además Inscripciones y Configuración.
+  const fmt = t.format;
+  const showGrupos =
+    fmt === "groups_ko" || matches.some((m) => m.bracket === "grp");
+  const showClasificacion =
+    fmt === "round_robin" ||
+    fmt === "americano" ||
+    fmt === "mexicano" ||
+    fmt === "groups_ko";
+  const showCuadro =
+    fmt === "ko" ||
+    fmt === "ko_consolation" ||
+    fmt === "groups_ko" ||
+    matches.some((m) => !["grp", "rr", "amer", "mex"].includes(m.bracket));
+  const visibleTabs = TABS.filter(([k]) => {
+    if (spectator && (k === "inscripciones" || k === "config")) return false;
+    if (k === "grupos") return showGrupos;
+    if (k === "clasificacion") return showClasificacion;
+    if (k === "cuadro") return showCuadro;
+    return true; // inscripciones, horario, config
+  });
+  // Si el tab activo no está entre los visibles (p.ej. arranca en 'cuadro' pero
+  // es una liga), cae al primero disponible.
+  const curTab: Tab = visibleTabs.some(([k]) => k === tab)
+    ? tab
+    : (visibleTabs[0]?.[0] ?? tab);
 
   /* ── Cabecera ─────────────────────────────────────────────────── */
   const typeLabel = FORMAT_LABEL[t.format] ?? t.format;
@@ -1435,7 +1460,7 @@ export function TournamentDetail({
       {/* ── Pestañas ─────────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
         {visibleTabs.map(([k, label]) => {
-          const on = tab === k;
+          const on = curTab === k;
           return (
             <button
               key={k}
@@ -1458,7 +1483,7 @@ export function TournamentDetail({
       </div>
 
       {/* ── Contenido ────────────────────────────────────────────── */}
-      {tab === "inscripciones" &&
+      {curTab === "inscripciones" &&
         (regs.length === 0 ? (
           <Card>
             <EmptyState
@@ -1511,7 +1536,7 @@ export function TournamentDetail({
           </Card>
         ))}
 
-      {tab === "grupos" &&
+      {curTab === "grupos" &&
         (groups.length === 0 ? (
           <Card>
             <EmptyState
@@ -1621,7 +1646,7 @@ export function TournamentDetail({
           </div>
         ))}
 
-      {tab === "clasificacion" &&
+      {curTab === "clasificacion" &&
         (!hasClass ? (
           <Card>
             <EmptyState
@@ -1717,7 +1742,7 @@ export function TournamentDetail({
           </Card>
         ))}
 
-      {tab === "clasificacion" &&
+      {curTab === "clasificacion" &&
         (isRR || social) &&
         (social ? socialMatches.length > 0 : rrMatches.length > 0) && (
           <Card style={{ padding: 0, overflow: "hidden", marginTop: 16 }}>
@@ -1734,7 +1759,7 @@ export function TournamentDetail({
           </Card>
         )}
 
-      {tab === "cuadro" &&
+      {curTab === "cuadro" &&
         (koBrackets.length === 0 ? (
           <Card>
             <EmptyState
@@ -1797,13 +1822,13 @@ export function TournamentDetail({
           </Card>
         ))}
 
-      {tab === "horario" && (
+      {curTab === "horario" && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
           <ScheduleGrid />
         </Card>
       )}
 
-      {tab === "config" && (
+      {curTab === "config" && (
         <Card>
           <Eyebrow>CONFIGURACIÓN</Eyebrow>
           <p style={{ margin: "16px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
