@@ -887,6 +887,80 @@ function ResultModal({
   );
 }
 
+/* ── Lista de partidos clicables (grupos / liga / rondas sociales) ─ */
+function MatchRows({
+  matches,
+  nameOr,
+  organizer,
+  isSocial,
+  onEnter,
+}: {
+  matches: RealMatch[];
+  nameOr: (id: string | null) => string;
+  organizer: boolean;
+  isSocial: boolean;
+  onEnter: (m: RealMatch) => void;
+}) {
+  const sorted = [...matches].sort((a, b) => a.round - b.round || a.slot - b.slot);
+  return (
+    <>
+      {sorted.map((m, i) => {
+        const can = organizer && !!m.home_reg && !!m.away_reg;
+        const done = m.status === "finished";
+        const score = isSocial
+          ? done
+            ? `${m.home_score ?? 0}–${m.away_score ?? 0}`
+            : ""
+          : setsToScore(m.sets);
+        return (
+          <div
+            key={m.id}
+            onClick={can ? () => onEnter(m) : undefined}
+            role={can ? "button" : undefined}
+            tabIndex={can ? 0 : undefined}
+            onKeyDown={
+              can
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onEnter(m);
+                    }
+                  }
+                : undefined
+            }
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "11px 20px",
+              borderBottom: i === sorted.length - 1 ? "none" : "1px solid var(--hair)",
+              cursor: can ? "pointer" : "default",
+            }}
+            title={can ? "Meter resultado" : undefined}
+          >
+            <span style={{ flex: 1, fontSize: 13, fontWeight: done ? 700 : 500 }}>
+              {nameOr(m.home_reg)}
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>
+              {score || "vs"}
+            </span>
+            <span
+              style={{
+                flex: 1,
+                fontSize: 13,
+                fontWeight: done ? 700 : 500,
+                textAlign: "right",
+              }}
+            >
+              {nameOr(m.away_reg)}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 /* ── Pantalla ──────────────────────────────────────────────────── */
 export function TournamentDetail({
   id,
@@ -1518,6 +1592,30 @@ export function TournamentDetail({
                     </span>
                   </div>
                 ))}
+                {(() => {
+                  const gm = groupMatches.filter((m) => m.group_no === g.key);
+                  if (gm.length === 0) return null;
+                  return (
+                    <>
+                      <div
+                        style={{
+                          padding: "8px 20px",
+                          borderTop: "1px solid var(--hair)",
+                          background: "var(--surface-2, transparent)",
+                        }}
+                      >
+                        <Eyebrow>PARTIDOS</Eyebrow>
+                      </div>
+                      <MatchRows
+                        matches={gm}
+                        nameOr={nameOr}
+                        organizer={organizer}
+                        isSocial={false}
+                        onEnter={(m) => openEntry(m, false, false)}
+                      />
+                    </>
+                  );
+                })()}
               </Card>
             ))}
           </div>
@@ -1618,6 +1716,23 @@ export function TournamentDetail({
             </div>
           </Card>
         ))}
+
+      {tab === "clasificacion" &&
+        (isRR || social) &&
+        (social ? socialMatches.length > 0 : rrMatches.length > 0) && (
+          <Card style={{ padding: 0, overflow: "hidden", marginTop: 16 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--hair)" }}>
+              <Eyebrow>PARTIDOS</Eyebrow>
+            </div>
+            <MatchRows
+              matches={social ? socialMatches : rrMatches}
+              nameOr={nameOr}
+              organizer={organizer}
+              isSocial={social}
+              onEnter={(m) => openEntry(m, false, social)}
+            />
+          </Card>
+        )}
 
       {tab === "cuadro" &&
         (koBrackets.length === 0 ? (
