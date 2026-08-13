@@ -3,10 +3,37 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { MATCHDAYS, SEASONS, TEAM, winRate } from "@/lib/team-data";
+import {
+  fetchMatchdays,
+  fetchSeasons,
+  type DbMatchday,
+  type DbSeason,
+} from "@/lib/queries";
+import { useSession } from "@/lib/session";
+import { useAsync } from "@/lib/use-async";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState } from "@/components/states";
+import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconCalendar, IconLock, IconPlus } from "@/components/Icon";
+
+/** Etiqueta de formato a partir de la fase que guarda la base de datos. */
+const PHASE_FORMAT: Record<DbSeason["phase"], string> = {
+  liga: "Liga regular",
+  playoff: "Eliminatorias",
+  mixto: "Liga + Playoff",
+};
+
+/** Fecha del partido: «sáb 12 jul», o vacío si no hay o no es válida. */
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString("es-ES", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+}
 
 /** Cuadro de eliminatorias: columnas por ronda con conectores. */
 const BRACKET = [
@@ -33,13 +60,75 @@ const BRACKET = [
 ];
 
 export function SeasonDetail({ id }: { id: string }) {
-  const season = SEASONS.find((s) => s.id === id) ?? SEASONS[0];
+  const { user, activeTeam } = useSession();
+  const teamId = activeTeam?.id ?? null;
   const [tab, setTab] = useState<"jornadas" | "cuadro">("jornadas");
   const [newOpen, setNewOpen] = useState(false);
 
-  const hasBracket = season.format !== "Liga regular";
-  const rounds = [...MATCHDAYS].sort((a, b) => a.round - b.round);
-  const nextRound = rounds.find((r) => r.state === "pending");
+  // La temporada vive bajo el equipo; las jornadas se piden por su id. Ambas van
+  // en paralelo porque son independientes bajo RLS.
+  const { data, loading, error } = useAsync(
+    async () => {
+      const [seasons, matchdays] = await Promise.all([
+        teamId ? fetchSeasons(teamId) : Promise.resolve<DbSeason[]>([]),
+        fetchMatchdays(id),
+      ]);
+      return { season: seasons.find((s) => s.id === id) ?? null, matchdays };
+    },
+    [id, teamId, user?.id],
+    !!user,
+  );
+
+  if (loading) return <SkeletonCard />;
+  if (error) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconCalendar size={34} />}
+          title="No se pudo cargar la temporada"
+          body={error}
+        />
+      </Card>
+    );
+  }
+
+  const dbSeason = data?.season ?? null;
+  if (!dbSeason) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconCalendar size={34} />}
+          title="Temporada no encontrada"
+          body="Puede que no exista o que no tengas acceso a ella."
+        />
+      </Card>
+    );
+  }
+
+  const matchdays = data?.matchdays ?? [];
+  const format = PHASE_FORMAT[dbSeason.phase] ?? "Liga regular";
+  const hasBracket = format !== "Liga regular";
+  const archived = !dbSeason.active;
+
+  const rounds = [...matchdays].sort((a, b) => a.round - b.round);
+  const nextRound = rounds.find((r) => r.status !== "finished");
+
+  // Balance y tasa de victorias a partir de las jornadas con acta cerrada.
+  const finished = matchdays.filter((m) => m.status === "finished");
+  const seasonWon = finished.filter((m) => m.outcome === "win").length;
+  const seasonDrawn = finished.filter((m) => m.outcome === "draw").length;
+  const seasonLost = finished.filter((m) => m.outcome === "loss").length;
+  const played = finished.length;
+  const totalRounds = dbSeason.totalMatchdays ?? matchdays.length;
+  const winRatePct = played ? Math.round((seasonWon / played) * 100) : 0;
+
+  const teamLine = [
+    activeTeam?.name,
+    activeTeam?.category,
+    "Federación Cántabra de Pádel",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto" }}>
@@ -54,9 +143,9 @@ export function SeasonDetail({ id }: { id: string }) {
             flexWrap: "wrap",
           }}
         >
-          <h1 style={{ fontSize: 30 }}>{season.name}</h1>
-          <span className={"chip " + (season.active ? "" : "chip-mute")}>
-            {season.active ? "Activa" : "Archivada"}
+          <h1 style={{ fontSize: 30 }}>{dbSeason.name}</h1>
+          <span className={"chip " + (dbSeason.active ? "" : "chip-mute")}>
+            {dbSeason.active ? "Activa" : "Archivada"}
           </span>
           <span
             className="mono"
@@ -66,7 +155,7 @@ export function SeasonDetail({ id }: { id: string }) {
               color: "var(--text-faint)",
             }}
           >
-            {season.format.toUpperCase()}
+            {format.toUpperCase()}
           </span>
         </div>
         <p
@@ -78,11 +167,11 @@ export function SeasonDetail({ id }: { id: string }) {
             color: "var(--text-faint)",
           }}
         >
-          {TEAM.name} · {TEAM.category} · Federación Cántabra de Pádel
+          {teamLine}
         </p>
       </div>
 
-      {season.archived && (
+      {archived && (
         <div
           style={{
             display: "flex",
@@ -104,10 +193,10 @@ export function SeasonDetail({ id }: { id: string }) {
 
       <div className="tw-solo-stats" style={{ marginBottom: 22 }}>
         {[
-          { l: "JORNADAS", v: String(season.rounds) },
-          { l: "JUGADAS", v: `${season.played}/${season.rounds}` },
-          { l: "BALANCE", v: `${season.won}-${season.drawn}-${season.lost}` },
-          { l: "TASA V.", v: `${winRate(season)}%`, accent: true },
+          { l: "JORNADAS", v: String(totalRounds) },
+          { l: "JUGADAS", v: `${played}/${totalRounds}` },
+          { l: "BALANCE", v: `${seasonWon}-${seasonDrawn}-${seasonLost}` },
+          { l: "TASA V.", v: `${winRatePct}%`, accent: true },
         ].map((k) => (
           <Card key={k.l} style={{ padding: 18 }}>
             <div className="mono tw-stat-label">{k.l}</div>
@@ -161,7 +250,7 @@ export function SeasonDetail({ id }: { id: string }) {
           );
         })}
         <div style={{ flex: 1 }} />
-        {!season.archived && (
+        {!archived && (
           <button
             className="btn btn-accent"
             onClick={() => setNewOpen(true)}
@@ -185,10 +274,15 @@ export function SeasonDetail({ id }: { id: string }) {
           </Card>
         ) : (
           <Card style={{ padding: 0, overflow: "hidden" }}>
-            {rounds.map((j, i) => {
+            {rounds.map((j: DbMatchday, i) => {
               const isNext = j.id === nextRound?.id;
-              const won = j.score && j.score[0] > j.score[1];
-              const drew = j.score && j.score[0] === j.score[1];
+              const hasScore =
+                j.scoreFor !== null && j.scoreAgainst !== null;
+              const won = hasScore && j.scoreFor! > j.scoreAgainst!;
+              const drew = hasScore && j.scoreFor === j.scoreAgainst;
+              const meta = [fmtDate(j.date), j.time?.slice(0, 5), j.location]
+                .filter(Boolean)
+                .join(" · ");
               return (
                 <Link
                   key={j.id}
@@ -212,7 +306,7 @@ export function SeasonDetail({ id }: { id: string }) {
                     J·{j.round}
                   </span>
                   <span style={{ fontSize: 14, fontWeight: 700 }}>
-                    vs {j.rival}
+                    vs {j.opponent}
                   </span>
                   <span
                     className="mono"
@@ -222,13 +316,13 @@ export function SeasonDetail({ id }: { id: string }) {
                       color: "var(--text-muted)",
                     }}
                   >
-                    {j.date} · {j.time} · {j.venue}
+                    {meta}
                   </span>
                   <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span className={"chip " + (j.home ? "" : "chip-mute")}>
-                      {j.home ? "Local" : "Visitante"}
+                    <span className={"chip " + (j.isHome ? "" : "chip-mute")}>
+                      {j.isHome ? "Local" : "Visitante"}
                     </span>
-                    {j.score ? (
+                    {hasScore ? (
                       <span
                         className="mono"
                         style={{
@@ -241,7 +335,7 @@ export function SeasonDetail({ id }: { id: string }) {
                               : "var(--error)",
                         }}
                       >
-                        {j.score[0]}–{j.score[1]}
+                        {j.scoreFor}–{j.scoreAgainst}
                       </span>
                     ) : isNext ? (
                       <span className="chip">Próxima</span>
@@ -255,7 +349,7 @@ export function SeasonDetail({ id }: { id: string }) {
                       color: "var(--text-faint)",
                     }}
                   >
-                    {j.state === "closed" ? "ACTA" : ""}
+                    {j.status === "finished" ? "ACTA" : ""}
                   </span>
                 </Link>
               );

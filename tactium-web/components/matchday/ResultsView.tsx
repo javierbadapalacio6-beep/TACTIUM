@@ -1,65 +1,150 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { courtTotals, gameTotals, type CourtResult } from "@/lib/team-data";
 import {
-  LINEUP_VARIANTS,
-  RIVAL_PAIRS,
-  TEAM,
-  courtTotals,
-  gameTotals,
-  matchdayById,
-  playerById,
-} from "@/lib/team-data";
+  fetchMatchdayBundle,
+  type DbPlayer,
+  type MatchdayBundle,
+} from "@/lib/queries";
+import { useSession } from "@/lib/session";
+import { useAsync } from "@/lib/use-async";
 import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState } from "@/components/states";
+import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconCalendar, IconLock } from "@/components/Icon";
 
 /**
- * Resultados.
+ * Resultados — datos reales.
  *
  * Es la pantalla que usan los JUGADORES para meter el resultado de su propio
  * partido, no solo el capitán. Por eso la pista del usuario se resalta arriba
  * con el rótulo "TU PARTIDO" y el resto queda por debajo.
+ *
+ * De sólo lectura por ahora: el acta se pinta desde `match_results` (una fila
+ * por set) y los controles de entrada quedan como estaban, pendientes de la
+ * fase de guardado.
  */
+
+const EMPTY_SETS: [number, number][] = [
+  [0, 0],
+  [0, 0],
+  [0, 0],
+];
+
+/** Pista lista para pintar: pareja de la alineación activa + W.O. real. */
+interface Court {
+  court: number;
+  pair: [DbPlayer | null, DbPlayer | null];
+  mine: boolean;
+  forfeit: boolean;
+  forfeitUs: boolean | null;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "Fecha por confirmar";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export function ResultsView({ id }: { id: string }) {
-  const m = matchdayById(id);
-  const official = LINEUP_VARIANTS.find((v) => v.official) ?? LINEUP_VARIANTS[0];
+  const { activeTeam, user } = useSession();
+  const teamId = activeTeam?.id ?? null;
 
-  const courts = useMemo(
-    () =>
-      RIVAL_PAIRS.map((rp, i) => {
-        const pair = official.pairs[i] ?? [null, null];
-        const mine = pair.some((pid) => playerById(pid)?.isMe);
-        return { court: i + 1, pair, rival: rp, mine };
-      }),
-    [official]
+  const { data, loading, error } = useAsync<MatchdayBundle | null>(
+    () => fetchMatchdayBundle(id, teamId!),
+    [id, teamId],
+    !!teamId
   );
 
-  const [sets, setSets] = useState<Record<number, [number, number][]>>(() =>
-    Object.fromEntries(
-      courts.map((c) => [
-        c.court,
-        [
-          [0, 0],
-          [0, 0],
-          [0, 0],
-        ] as [number, number][],
-      ])
-    )
-  );
+  // Sets por pista, editables en local (aún sin guardar). Se rellenan al llegar
+  // los resultados reales: `match_results` trae una fila por set, aquí se
+  // agrupan por pista.
+  const [sets, setSets] = useState<Record<number, [number, number][]>>({});
 
-  const asResults = courts.map((c) => ({
-    court: c.court,
-    ours: c.pair as [string, string],
-    rivalPair: c.rival.split(" · ") as [string, string],
-    sets: sets[c.court],
-  }));
-  const totals = courtTotals(asResults);
-  const games = gameTotals(asResults);
+  useEffect(() => {
+    if (!data) return;
+    const byCourt: Record<number, [number, number][]> = {};
+    for (const l of data.lineup) {
+      byCourt[l.court] = EMPTY_SETS.map((s) => [...s] as [number, number]);
+    }
+    for (const r of data.results) {
+      if (!byCourt[r.court]) {
+        byCourt[r.court] = EMPTY_SETS.map((s) => [...s] as [number, number]);
+      }
+      const idx = Math.max(0, r.set - 1);
+      if (idx < 3) byCourt[r.court][idx] = [r.us, r.them];
+    }
+    setSets(byCourt);
+  }, [data]);
 
-  if (!m) {
+  // Pistas: pareja de la alineación activa, si es mía (mi jugador vinculado) y
+  // el W.O. si lo hubiera.
+  const courts = useMemo<Court[]>(() => {
+    if (!data) return [];
+    const byId = new Map(data.players.map((p) => [p.id, p]));
+
+    const map = new Map<number, Court>();
+    for (const l of data.lineup) {
+      const a = l.playerA ? byId.get(l.playerA) ?? null : null;
+      const b = l.playerB ? byId.get(l.playerB) ?? null : null;
+      map.set(l.court, {
+        court: l.court,
+        pair: [a, b],
+        mine: [a, b].some((p) => p != null && p.userId === user?.id),
+        forfeit: false,
+        forfeitUs: null,
+      });
+    }
+    for (const r of data.results) {
+      const c =
+        map.get(r.court) ??
+        ({
+          court: r.court,
+          pair: [null, null],
+          mine: false,
+          forfeit: false,
+          forfeitUs: null,
+        } as Court);
+      if (r.forfeit) {
+        c.forfeit = true;
+        c.forfeitUs = r.forfeitUs;
+      }
+      map.set(r.court, c);
+    }
+    return [...map.values()].sort((a, b) => a.court - b.court);
+  }, [data, user?.id]);
+
+  if (!teamId) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconCalendar size={34} />}
+          title="Sin equipo activo"
+          body="Entra con una cuenta que pertenezca a un equipo."
+        />
+      </Card>
+    );
+  }
+  if (loading) return <SkeletonCard />;
+  if (error) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconCalendar size={34} />}
+          title="No se pudieron cargar los resultados"
+          body={error}
+        />
+      </Card>
+    );
+  }
+  if (!data) {
     return (
       <Card>
         <EmptyState
@@ -71,13 +156,24 @@ export function ResultsView({ id }: { id: string }) {
     );
   }
 
-  const readOnly = m.state === "closed";
+  const m = data.matchday;
+  const readOnly = m.status === "finished";
+
+  const asResults: CourtResult[] = courts.map((c) => ({
+    court: c.court,
+    ours: null,
+    rivalPair: ["", ""],
+    sets: sets[c.court] ?? EMPTY_SETS,
+    walkover: c.forfeit ? (c.forfeitUs ? "us" : "them") : undefined,
+  }));
+  const totals = courtTotals(asResults);
+  const games = gameTotals(asResults);
 
   function edit(court: number, si: number, side: 0 | 1, v: string) {
     const n = Math.max(0, Math.min(9, Number(v.replace(/\D/g, "")) || 0));
     setSets((s) => ({
       ...s,
-      [court]: s[court].map((pair, i) =>
+      [court]: (s[court] ?? EMPTY_SETS).map((pair, i) =>
         i === si
           ? ((side === 0 ? [n, pair[1]] : [pair[0], n]) as [number, number])
           : pair
@@ -88,10 +184,9 @@ export function ResultsView({ id }: { id: string }) {
   const mine = courts.find((c) => c.mine);
   const rest = courts.filter((c) => !c.mine);
 
-  function CourtCard({ c }: { c: (typeof courts)[number] }) {
-    const a = playerById(c.pair[0]);
-    const b = playerById(c.pair[1]);
-    const s = sets[c.court];
+  function CourtCard({ c }: { c: Court }) {
+    const [a, b] = c.pair;
+    const s = sets[c.court] ?? EMPTY_SETS;
     const u = s.filter(([x, y]) => x > y).length;
     const t = s.filter(([x, y]) => y > x).length;
     const has = u + t > 0;
@@ -140,7 +235,7 @@ export function ResultsView({ id }: { id: string }) {
             {a && b ? `${a.name} · ${b.name}` : "Sin alineación"}
           </div>
           <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>
-            vs {c.rival}
+            vs {m.opponent}
           </div>
         </div>
 
@@ -210,7 +305,7 @@ export function ResultsView({ id }: { id: string }) {
       <div style={{ marginBottom: 24 }}>
         <Eyebrow>RESULTADOS · J·{m.round}</Eyebrow>
         <h1 style={{ marginTop: 10, fontSize: 30 }}>
-          {TEAM.name} vs {m.rival}
+          {activeTeam?.name} vs {m.opponent}
         </h1>
         <div
           className="mono"
@@ -221,7 +316,9 @@ export function ResultsView({ id }: { id: string }) {
             color: "var(--text-muted)",
           }}
         >
-          {m.date} · {m.time} · {m.home ? "LOCAL" : "VISITANTE"}
+          {formatDate(m.date)}
+          {m.time ? ` · ${m.time.slice(0, 5)}` : ""} ·{" "}
+          {m.isHome ? "LOCAL" : "VISITANTE"}
         </div>
       </div>
 
@@ -245,12 +342,22 @@ export function ResultsView({ id }: { id: string }) {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {mine && <CourtCard c={mine} />}
-        {rest.map((c) => (
-          <CourtCard key={c.court} c={c} />
-        ))}
-      </div>
+      {courts.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={34} />}
+            title="Sin alineación"
+            body="Aún no hay parejas por pista para esta jornada."
+          />
+        </Card>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {mine && <CourtCard c={mine} />}
+          {rest.map((c) => (
+            <CourtCard key={c.court} c={c} />
+          ))}
+        </div>
+      )}
 
       <Card style={{ marginTop: 20 }}>
         <Eyebrow>RESUMEN</Eyebrow>

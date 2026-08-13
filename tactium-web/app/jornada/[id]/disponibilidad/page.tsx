@@ -1,9 +1,10 @@
-"use client";
-
-import { useSession } from "@/lib/session";
 import { AvailabilityView } from "@/components/team/Availability";
 
-export default function DisponibilidadPage() {
-  const { role } = useSession();
-  return <AvailabilityView isCaptain={role === "capitan" || role === "club"} />;
+export default async function DisponibilidadPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <AvailabilityView id={id} />;
 }

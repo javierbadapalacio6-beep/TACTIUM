@@ -1,13 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { NEXT_MATCHDAY, PLAYERS, type Availability as Av } from "@/lib/team-data";
+import { type Availability as Av, type Position } from "@/lib/team-data";
+import { useSession } from "@/lib/session";
+import { useAsync } from "@/lib/use-async";
+import {
+  fetchAvailability,
+  fetchMatchday,
+  fetchPlayers,
+  type DbMatchday,
+} from "@/lib/queries";
 import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState } from "@/components/states";
+import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconCheck, IconUsers } from "@/components/Icon";
 
 type Filter = "todos" | "disp" | "bajas";
+
+/** Fila de la plantilla con su estado de disponibilidad para esta jornada. */
+interface Row {
+  id: string;
+  name: string;
+  pts: number;
+  pos: Position;
+  /** Baja: no entra en alineación aunque esté disponible. */
+  out: boolean;
+  avail: Av;
+  /** El jugador vinculado a la cuenta que mira la pantalla. */
+  isMe: boolean;
+}
 
 function initials(n: string) {
   return n
@@ -18,19 +39,99 @@ function initials(n: string) {
     .toUpperCase();
 }
 
-export function AvailabilityView({ isCaptain }: { isCaptain: boolean }) {
-  const [state, setState] = useState<Record<string, Av>>(
-    () => Object.fromEntries(PLAYERS.map((p) => [p.id, p.avail]))
+/**
+ * Disponibilidad — datos reales.
+ *
+ * La plantilla sale de `players` (bajo RLS, la del equipo activo) y el estado
+ * por jornada de la tabla `availability`: si un jugador no tiene fila, aún no ha
+ * marcado y sale como «sin marcar». Los controles se mantienen visibles pero
+ * NO persisten: marcar disponibilidad es una fase posterior. Aquí sólo se lee.
+ */
+export function AvailabilityView({ id }: { id: string }) {
+  const { activeTeam, role, user } = useSession();
+  const teamId = activeTeam?.id ?? null;
+  const isCaptain = role === "capitan" || role === "club";
+
+  const { data, loading, error } = useAsync(
+    () =>
+      Promise.all([
+        fetchMatchday(id),
+        fetchPlayers(teamId!),
+        fetchAvailability(id),
+      ]),
+    [id, teamId],
+    !!teamId
   );
+
+  const matchday: DbMatchday | null = data?.[0] ?? null;
+
+  const players: Row[] = useMemo(() => {
+    if (!data) return [];
+    const [, dbPlayers, avail] = data;
+    return dbPlayers.map((p) => {
+      const a = avail[p.id];
+      return {
+        id: p.id,
+        name: p.name,
+        pts: p.pts,
+        pos: p.position,
+        out: !p.active,
+        avail: a === undefined ? "unset" : a ? "yes" : "no",
+        isMe: !!user && p.userId === user.id,
+      };
+    });
+  }, [data, user]);
+
+  const [state, setState] = useState<Record<string, Av>>({});
   const [filter, setFilter] = useState<Filter>("todos");
   const [saving, setSaving] = useState(false);
 
-  const active = PLAYERS.filter((p) => !p.out);
+  // El estado editable arranca del estado real cuando llegan los datos.
+  useEffect(() => {
+    setState(Object.fromEntries(players.map((p) => [p.id, p.avail])));
+  }, [players]);
+
+  if (!teamId) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconUsers size={34} />}
+          title="Sin equipo activo"
+          body="Entra con una cuenta que pertenezca a un equipo."
+        />
+      </Card>
+    );
+  }
+  if (loading) return <SkeletonCard />;
+  if (error) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconUsers size={34} />}
+          title="No se pudo cargar la disponibilidad"
+          body={error}
+        />
+      </Card>
+    );
+  }
+  if (!matchday) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconUsers size={34} />}
+          title="Jornada no encontrada"
+          body="Abre una jornada del calendario para ver la disponibilidad."
+        />
+      </Card>
+    );
+  }
+
+  const active = players.filter((p) => !p.out);
   const yes = active.filter((p) => state[p.id] === "yes").length;
   const unset = active.filter((p) => state[p.id] === "unset").length;
-  const pct = Math.round((yes / active.length) * 100);
+  const pct = active.length ? Math.round((yes / active.length) * 100) : 0;
 
-  const list = PLAYERS.filter((p) => {
+  const list = players.filter((p) => {
     if (filter === "disp") return state[p.id] === "yes";
     if (filter === "bajas") return state[p.id] === "no" || p.out;
     return true;
@@ -38,8 +139,8 @@ export function AvailabilityView({ isCaptain }: { isCaptain: boolean }) {
   // El jugador vinculado a la cuenta va primero: es su propia marca.
   const sorted = [...list].sort((a, b) => Number(!!b.isMe) - Number(!!a.isMe));
 
-  function mark(id: string, v: Av) {
-    setState((s) => ({ ...s, [id]: s[id] === v ? "unset" : v }));
+  function mark(rowId: string, v: Av) {
+    setState((s) => ({ ...s, [rowId]: s[rowId] === v ? "unset" : v }));
   }
 
   function markAll() {
@@ -48,7 +149,7 @@ export function AvailabilityView({ isCaptain }: { isCaptain: boolean }) {
       Object.fromEntries(
         Object.entries(s).map(([k, v]) => [
           k,
-          PLAYERS.find((p) => p.id === k)?.out ? v : "yes",
+          players.find((p) => p.id === k)?.out ? v : "yes",
         ])
       )
     );
@@ -69,7 +170,7 @@ export function AvailabilityView({ isCaptain }: { isCaptain: boolean }) {
             color: "var(--text-muted)",
           }}
         >
-          Jornada {NEXT_MATCHDAY.round} · vs {NEXT_MATCHDAY.rival} · cierra el
+          Jornada {matchday.round} · vs {matchday.opponent} · cierra el
           jueves a las 20:00
         </p>
       </div>
