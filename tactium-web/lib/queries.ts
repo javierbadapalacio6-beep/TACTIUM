@@ -266,6 +266,55 @@ export async function fetchAvailability(
   );
 }
 
+/** Capitán/club marca la disponibilidad de un jugador (upsert directo). */
+export async function setPlayerAvailability(
+  matchdayId: string,
+  playerId: string,
+  available: boolean,
+): Promise<void> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  const { error } = await sb.from("availability").upsert(
+    {
+      matchday_id: matchdayId,
+      player_id: playerId,
+      available,
+      updated_by: user?.id ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "matchday_id,player_id" },
+  );
+  if (error) throw error;
+}
+
+/** Quita la marca de un jugador (vuelve a «sin marcar»). */
+export async function clearPlayerAvailability(
+  matchdayId: string,
+  playerId: string,
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("availability")
+    .delete()
+    .eq("matchday_id", matchdayId)
+    .eq("player_id", playerId);
+  if (error) throw error;
+}
+
+/** El propio jugador marca SU disponibilidad (RPC set_player_self_availability,
+ *  que resuelve la jornada relevante en el servidor). */
+export async function setSelfAvailability(
+  playerId: string,
+  available: boolean,
+): Promise<void> {
+  const { error } = await supabaseBrowser().rpc(
+    "set_player_self_availability",
+    { p_player_id: playerId, p_available: available },
+  );
+  if (error) throw error;
+}
+
 /* ── Resultados ────────────────────────────────────────────────── */
 export interface DbResultRow {
   court: number;

@@ -6,13 +6,17 @@ import { type Availability as Av, type Position } from "@/lib/team-data";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
+  clearPlayerAvailability,
   fetchAvailability,
   fetchMatchday,
   fetchPlayers,
+  setPlayerAvailability,
+  setSelfAvailability,
   type DbMatchday,
 } from "@/lib/queries";
+import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconCheck, IconUsers } from "@/components/Icon";
 
 type Filter = "todos" | "disp" | "bajas";
@@ -85,6 +89,7 @@ export function AvailabilityView({ id }: { id: string }) {
   const [state, setState] = useState<Record<string, Av>>({});
   const [filter, setFilter] = useState<Filter>("todos");
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   // El estado editable arranca del estado real cuando llegan los datos.
   useEffect(() => {
@@ -139,21 +144,42 @@ export function AvailabilityView({ id }: { id: string }) {
   // El jugador vinculado a la cuenta va primero: es su propia marca.
   const sorted = [...list].sort((a, b) => Number(!!b.isMe) - Number(!!a.isMe));
 
-  function mark(rowId: string, v: Av) {
-    setState((s) => ({ ...s, [rowId]: s[rowId] === v ? "unset" : v }));
+  // Marca un jugador. Optimista en local + persistencia por el camino que toca:
+  //  · capitán/club → upsert directo (o borrado si «sin marcar»),
+  //  · el propio jugador → RPC set_player_self_availability.
+  // Todo pasa por `guardedWrite`: con las escrituras apagadas no toca la BD.
+  async function mark(rowId: string, v: Av) {
+    const next: Av = state[rowId] === v ? "unset" : v;
+    setState((s) => ({ ...s, [rowId]: next }));
+    const res = await guardedWrite("guardar la disponibilidad", async () => {
+      if (isCaptain) {
+        if (next === "unset") await clearPlayerAvailability(id, rowId);
+        else await setPlayerAvailability(id, rowId, next === "yes");
+      } else if (next !== "unset") {
+        // El RPC del propio jugador no admite «sin marcar».
+        await setSelfAvailability(rowId, next === "yes");
+      }
+    });
+    if (!res.ok) setToast(res.reason);
   }
 
-  function markAll() {
+  // «Marcar todo» (solo capitán): pone disponibles a los que no son baja.
+  async function markAll() {
     setSaving(true);
     setState((s) =>
       Object.fromEntries(
         Object.entries(s).map(([k, v]) => [
           k,
           players.find((p) => p.id === k)?.out ? v : "yes",
-        ])
-      )
+        ]),
+      ),
     );
-    setTimeout(() => setSaving(false), 600);
+    const targets = active.filter((p) => state[p.id] !== "yes");
+    const res = await guardedWrite("marcar disponibles", async () => {
+      for (const p of targets) await setPlayerAvailability(id, p.id, true);
+    });
+    setSaving(false);
+    setToast(res.ok ? "Disponibilidad guardada" : res.reason);
   }
 
   return (
@@ -396,6 +422,22 @@ export function AvailabilityView({ id }: { id: string }) {
           <IconCheck size={14} /> MARCANDO…
         </p>
       )}
+
+      {!WRITES_ENABLED && (
+        <p
+          className="mono"
+          style={{
+            marginTop: 18,
+            fontSize: 10.5,
+            letterSpacing: "0.12em",
+            color: "var(--text-faint)",
+          }}
+        >
+          MODO SOLO LECTURA · LOS CAMBIOS AÚN NO SE GUARDAN
+        </p>
+      )}
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
