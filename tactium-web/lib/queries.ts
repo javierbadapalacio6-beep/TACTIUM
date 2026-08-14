@@ -685,6 +685,28 @@ export interface DbSubscription {
   billingPeriod: string | null;
 }
 
+/* ── Notificaciones in-app (campanita) ──────────────────────────────
+   Espejo de TACTIUM/src/core/services/notifications.ts. Las filas SOLO las
+   escriben triggers/edge; el cliente solo LEE (la RLS acota a las tuyas). */
+export interface DbNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export async function fetchNotifications(): Promise<DbNotification[]> {
+  const { data, error } = await supabaseBrowser()
+    .from("notifications")
+    .select("id, type, title, body, read_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  return (data ?? []) as DbNotification[];
+}
+
 export async function fetchSubscription(): Promise<DbSubscription | null> {
   const { data, error } = await supabaseBrowser()
     .from("subscriptions")

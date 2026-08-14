@@ -28,6 +28,7 @@ import {
 } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
+import { fetchNotifications } from "@/lib/queries";
 
 /**
  * Shell persistente (Tanda 1 · `Marco TACTIUM.dc.html`).
@@ -86,12 +87,43 @@ function SignedOut() {
   );
 }
 
-const NOTICES = [
-  { icon: "userPlus", text: "Marco se ha unido a Halcones A", time: "hace 2 h", unread: true, tone: "accent" },
-  { icon: "calendar", text: "El capitán ha publicado la alineación de la J14", time: "hace 5 h", unread: true, tone: "accent" },
-  { icon: "clock", text: "Quedan 3 días para crear la alineación", time: "hace 1 d", unread: true, tone: "warning" },
-  { icon: "users", text: "Sara ha empezado a seguirte", time: "hace 3 d", unread: false, tone: "muted" },
-] as const;
+/* ── Avisos (campanita) ── datos reales de la tabla `notifications` ──── */
+type NoticeTone = "accent" | "warning" | "muted";
+interface Notice {
+  icon: keyof typeof ICONS;
+  text: string;
+  time: string;
+  unread: boolean;
+  tone: NoticeTone;
+}
+
+// Icono por tipo de notificación (mismos que la app; ver notifications.ts).
+function iconForNotif(type: string): keyof typeof ICONS {
+  if (["member_joined", "joined_team", "player_claimed"].includes(type))
+    return "userPlus";
+  if (["matchday_created", "lineup_published"].includes(type)) return "calendar";
+  if (type.includes("reminder")) return "clock";
+  if (type.includes("follow")) return "users";
+  return "calendar";
+}
+
+// Tiempo relativo en español ("hace 2 h", "hace 3 d").
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const s = Math.max(0, (Date.now() - then) / 1000);
+  if (s < 60) return "ahora";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `hace ${d} d`;
+  const w = Math.floor(d / 7);
+  if (w < 5) return `hace ${w} sem`;
+  const mo = Math.floor(d / 30);
+  return `hace ${mo} ${mo === 1 ? "mes" : "meses"}`;
+}
 
 function Avatar({ initials, size = 32 }: { initials: string; size?: number }) {
   return (
@@ -169,6 +201,41 @@ export function AppShell({ children }: { children: ReactNode }) {
     setRoleOpen(false);
   }, [pathname]);
 
+  // Avisos reales (campanita): la RLS acota a los del usuario. Antes esto era un
+  // array de maqueta ("Marco se ha unido a Halcones A"…) que se colaba en una
+  // vista autenticada real. Solo lectura; marcar leídas es una escritura aparte.
+  const [notices, setNotices] = useState<Notice[]>([]);
+  useEffect(() => {
+    if (!user) {
+      setNotices([]);
+      return;
+    }
+    let alive = true;
+    fetchNotifications()
+      .then((rows) => {
+        if (!alive) return;
+        setNotices(
+          rows.map((n) => ({
+            icon: iconForNotif(n.type),
+            text: n.title,
+            time: timeAgo(n.created_at),
+            unread: n.read_at == null,
+            tone: n.type.includes("reminder")
+              ? "warning"
+              : n.read_at == null
+                ? "accent"
+                : "muted",
+          })),
+        );
+      })
+      .catch(() => {
+        if (alive) setNotices([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
   if (BARE_ROUTES.some((r) => pathname.startsWith(r))) {
     return <>{children}</>;
   }
@@ -203,7 +270,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const nav = NAV_BY_ROLE[role];
   const tabs = TABS_BY_ROLE[role];
   const meta = routeMeta(pathname, role);
-  const unread = NOTICES.filter((n) => n.unread).length;
+  const unread = notices.filter((n) => n.unread).length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -578,7 +645,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                     {unread} sin leer
                   </span>
                 </div>
-                {NOTICES.map((n, i) => {
+                {notices.length === 0 && (
+                  <div
+                    style={{
+                      padding: "22px 16px",
+                      textAlign: "center",
+                      fontSize: 13,
+                      color: "var(--text-faint)",
+                    }}
+                  >
+                    No tienes avisos.
+                  </div>
+                )}
+                {notices.map((n, i) => {
                   const Icon = ICONS[n.icon as keyof typeof ICONS];
                   const color =
                     n.tone === "accent"
@@ -592,7 +671,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       className="tw-bell-row"
                       style={{
                         borderBottom:
-                          i === NOTICES.length - 1
+                          i === notices.length - 1
                             ? "none"
                             : "1px solid var(--hair)",
                       }}
