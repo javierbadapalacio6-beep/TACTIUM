@@ -29,7 +29,8 @@ import {
 } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
-import { fetchNotifications } from "@/lib/queries";
+import { fetchNotifications, markNotificationsRead } from "@/lib/queries";
+import { WRITES_ENABLED } from "@/lib/writes";
 
 /**
  * Shell persistente (Tanda 1 · `Marco TACTIUM.dc.html`).
@@ -275,6 +276,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tabs = TABS_BY_ROLE[role];
   const meta = routeMeta(pathname, role);
   const unread = notices.filter((n) => n.unread).length;
+
+  // Abrir la campana marca los avisos como vistos: el badge se limpia en local
+  // siempre; solo se PERSISTE en la BD si las escrituras están activas (la web
+  // es solo-lectura por defecto, así que no toca producción sin querer).
+  function toggleBell() {
+    setBellOpen((v) => {
+      const next = !v;
+      if (next && unread > 0) {
+        setNotices((ns) => ns.map((n) => ({ ...n, unread: false })));
+        if (WRITES_ENABLED) markNotificationsRead().catch(() => {});
+      }
+      return next;
+    });
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -607,7 +622,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <button
               type="button"
-              onClick={() => setBellOpen((v) => !v)}
+              onClick={toggleBell}
               aria-expanded={bellOpen}
               aria-label={`Avisos${unread ? ` · ${unread} sin leer` : ""}`}
               className="tw-iconbtn"

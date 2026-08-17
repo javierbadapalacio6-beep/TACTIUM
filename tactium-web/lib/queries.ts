@@ -707,6 +707,23 @@ export async function fetchNotifications(): Promise<DbNotification[]> {
   return (data ?? []) as DbNotification[];
 }
 
+/** Marca como leídos todos los avisos del usuario (RLS acota a los suyos). Es
+ *  una ESCRITURA: el llamador decide si la ejecuta (la web es solo-lectura por
+ *  defecto; el badge se limpia igual en local aunque no se persista). */
+export async function markNotificationsRead(): Promise<void> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return;
+  const { error } = await sb
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .is("read_at", null);
+  if (error) throw error;
+}
+
 export async function fetchSubscription(): Promise<DbSubscription | null> {
   const { data, error } = await supabaseBrowser()
     .from("subscriptions")
