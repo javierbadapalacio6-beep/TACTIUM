@@ -51,10 +51,15 @@ export async function guardedWrite<T>(
   try {
     return { ok: true, data: await run() };
   } catch (e) {
-    return {
-      ok: false,
-      blocked: false,
-      reason: e instanceof Error ? e.message : `No se pudo ${what}`,
-    };
+    // Los errores de Supabase/PostgREST NO son instancias de Error pero traen un
+    // `message` (p.ej. reglas de negocio: "Solo puedes tener 1 equipo…"). Se
+    // extrae para mostrar la causa real en vez de un genérico "No se pudo".
+    const msg =
+      e instanceof Error
+        ? e.message
+        : e && typeof e === "object" && "message" in e
+          ? String((e as { message: unknown }).message)
+          : `No se pudo ${what}`;
+    return { ok: false, blocked: false, reason: msg };
   }
 }

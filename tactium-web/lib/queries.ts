@@ -115,6 +115,9 @@ export async function createTeam(input: {
   name: string;
   gender?: string;
   federation?: string | null;
+  league?: string | null;
+  category?: string | null;
+  group?: string | null;
   clubId?: string | null;
 }): Promise<string> {
   const sb = supabaseBrowser();
@@ -128,7 +131,10 @@ export async function createTeam(input: {
       owner_id: user.id,
       name: input.name,
       gender: input.gender ?? "masculino",
-      federation: input.federation ?? null,
+      federation: input.federation || null,
+      league: input.league || null,
+      category: input.category || null,
+      group_name: input.group || null,
       club_id: input.clubId ?? null,
     })
     .select("id")
