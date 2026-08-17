@@ -32,8 +32,10 @@ export const TOURNAMENT_FREE_PAIRS = 16;
 // se crean como hasta ahora. Encender SOLO cuando la web tenga las claves.
 export const TOURNAMENT_BILLING_ENABLED = false;
 
-// Base de la web de TACTIUM (checkout). TODO: mover a config/env por entorno.
-export const TACTIUM_WEB_BASE_URL = 'https://tactium.io';
+// Base de la web de TACTIUM (checkout). La web app está desplegada en el
+// subdominio app.tactium.io (el apex tactium.io es la landing). Aquí llegan las
+// llamadas de pago de torneo (/api/tournaments/:id/checkout con deliver:email).
+export const TACTIUM_WEB_BASE_URL = 'https://app.tactium.io';
 
 /** Precio del tramo para un club SIN suscripción, según las plazas. */
 export function perTournamentPriceEur(maxPairs: number): number {
