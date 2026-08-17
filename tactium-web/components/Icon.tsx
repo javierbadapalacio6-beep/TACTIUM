@@ -69,6 +69,22 @@ export const IconMail = (p: Props) => (
   </Svg>
 );
 
+export const IconEye = (p: Props) => (
+  <Svg {...p}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Svg>
+);
+
+export const IconEyeOff = (p: Props) => (
+  <Svg {...p}>
+    <path d="m2 2 20 20" />
+    <path d="M6.7 6.7C4 8.4 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.4 4.9-1.1" />
+    <path d="M9.9 4.2A9.8 9.8 0 0 1 12 4c6.5 0 10 7 10 7a17.9 17.9 0 0 1-2.6 3.4" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+  </Svg>
+);
+
 export const IconBrowser = (p: Props) => (
   <Svg {...p}>
     <rect x="2" y="4" width="20" height="16" rx="2" />

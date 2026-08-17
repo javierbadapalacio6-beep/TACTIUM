@@ -7,7 +7,7 @@ import { EntryFrame, Field, Input } from "./EntryFrame";
 import { Modal } from "@/components/ui";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { WRITES_ENABLED } from "@/lib/writes";
-import { IconCheckCircle } from "@/components/Icon";
+import { IconCheckCircle, IconEye, IconEyeOff } from "@/components/Icon";
 
 type Mode = "login" | "signup";
 
@@ -30,6 +30,7 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -204,14 +205,44 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
             ) : undefined
           }
         >
-          <Input
-            type="password"
-            autoComplete={signup ? "new-password" : "current-password"}
-            placeholder="••••••••"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            style={passBad ? { borderColor: "var(--error)" } : undefined}
-          />
+          <div style={{ position: "relative" }}>
+            <Input
+              type={showPass ? "text" : "password"}
+              autoComplete={signup ? "new-password" : "current-password"}
+              placeholder="••••••••"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              style={{
+                paddingRight: 44,
+                ...(passBad ? { borderColor: "var(--error)" } : null),
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPass((s) => !s)}
+              aria-label={showPass ? "Ocultar contraseña" : "Ver contraseña"}
+              aria-pressed={showPass}
+              tabIndex={-1}
+              style={{
+                position: "absolute",
+                right: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                border: "none",
+                background: "transparent",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              {showPass ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+            </button>
+          </div>
         </Field>
 
         {serverError && (
