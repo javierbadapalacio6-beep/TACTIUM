@@ -295,7 +295,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
       {/* ══ Barra lateral ══════════════════════════════════════════ */}
       <aside className="tw-sidebar">
-        <div className="tw-side-brand">
+        <Link
+          href="/"
+          className="tw-side-brand"
+          aria-label="TACTIUM · Inicio"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <Wordmark />
           {/* Barra lateral colapsada (tablet): sólo la tesela con el isotipo. */}
           <span className="tw-side-brand-mini">
@@ -313,7 +318,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <LogoMark size={19} color="var(--accent)" />
             </span>
           </span>
-        </div>
+        </Link>
 
         <nav className="tw-side-nav" aria-label="Navegación principal">
           <div className="eyebrow tw-side-eyebrow">{(user?.roleLabel ?? "INVITADO")}</div>
@@ -602,9 +607,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="tw-topbar-brand">
+          <Link
+            href="/"
+            className="tw-topbar-brand"
+            aria-label="TACTIUM · Inicio"
+            style={{ textDecoration: "none", color: "inherit" }}
+          >
             <Wordmark size={14} />
-          </div>
+          </Link>
 
           <div className="tw-search">
             <Link href="/comunidad" className="tw-searchbox">
