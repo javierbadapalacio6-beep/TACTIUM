@@ -33,6 +33,7 @@ import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
 import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import { IconAlert, IconCopy, IconTrophy, IconZap } from "@/components/Icon";
+import { PayTournamentButton } from "@/components/tournaments/PayTournamentButton";
 
 /* ── Formas de los datos reales (RPC públicas, espejo de la app) ──────
    Ver TACTIUM/src/core/services/tournaments.ts: publicGetTournament /
@@ -1387,6 +1388,7 @@ export function TournamentDetail({
                 </>
               ) : (
                 <>
+                  <PayTournamentButton tournamentId={t.id} />
                   <Link
                     href={`/torneos/${t.id}/inscripcion`}
                     className="btn btn-ghost"
