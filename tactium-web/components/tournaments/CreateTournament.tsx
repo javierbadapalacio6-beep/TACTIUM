@@ -294,11 +294,80 @@ export function CreateTournament() {
     <div style={{ maxWidth: 1080, margin: "0 auto" }}>
       <div style={{ marginBottom: 22 }}>
         <Eyebrow>CLUB · TORNEOS</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Crear torneo</h1>
+        <h1 style={{ marginTop: 10, fontSize: 30 }}>Mis torneos</h1>
         <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-          Asistente de cuatro pasos.
+          Gestiona los torneos de tu club o crea uno nuevo.
         </p>
       </div>
+
+      {/* Torneos del club — arriba del todo: es lo primero que necesita el club
+          (encontrar, pagar y gestionar los suyos), antes del asistente. */}
+      <section style={{ marginBottom: 32 }}>
+        <Eyebrow style={{ marginBottom: 12 }}>TORNEOS DEL CLUB</Eyebrow>
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          {tournaments.length === 0 ? (
+            <div
+              style={{
+                padding: "22px 20px",
+                fontSize: 13,
+                color: "var(--text-faint)",
+                textAlign: "center",
+              }}
+            >
+              Aún no has creado ningún torneo. Crea el primero abajo.
+            </div>
+          ) : (
+            tournaments.map((t, i) => (
+              <Link
+                key={t.id}
+                href={`/torneos/${t.id}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: "14px 20px",
+                  borderBottom:
+                    i === tournaments.length - 1 ? "none" : "1px solid var(--hair)",
+                  flexWrap: "wrap",
+                  color: "inherit",
+                  textDecoration: "none",
+                }}
+              >
+                <span style={{ flex: 1, minWidth: 160, fontSize: 13.5, fontWeight: 700 }}>
+                  {t.name}
+                </span>
+                <span
+                  className="mono"
+                  style={{ fontSize: 11, color: "var(--text-faint)" }}
+                >
+                  {shortDate(t.starts_on)}
+                </span>
+                <span className="chip chip-mute">
+                  {TOURNAMENT_STATUS_LABEL[t.status] ?? t.status}
+                </span>
+              </Link>
+            ))
+          )}
+        </Card>
+        {drafts.length > 0 && (
+          <p
+            className="mono"
+            style={{
+              marginTop: 12,
+              fontSize: 10,
+              letterSpacing: "0.14em",
+              color: "var(--text-faint)",
+            }}
+          >
+            {drafts.length} BORRADOR{drafts.length > 1 ? "ES" : ""} SIN PUBLICAR ·
+            ÁBRELO PARA PAGAR Y PUBLICAR
+          </p>
+        )}
+      </section>
+
+      <Eyebrow style={{ display: "block", marginBottom: 14 }}>
+        CREAR NUEVO TORNEO
+      </Eyebrow>
 
       {/* Indicador de progreso */}
       <div className="tw-steps" style={{ marginBottom: 22 }}>
@@ -692,68 +761,6 @@ export function CreateTournament() {
         )}
       </Card>
 
-      {/* Torneos del club */}
-      <section style={{ marginTop: 28 }}>
-        <Eyebrow style={{ marginBottom: 12 }}>TORNEOS DEL CLUB</Eyebrow>
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          {tournaments.length === 0 ? (
-            <div
-              style={{
-                padding: "22px 20px",
-                fontSize: 13,
-                color: "var(--text-faint)",
-                textAlign: "center",
-              }}
-            >
-              Aún no has creado ningún torneo.
-            </div>
-          ) : (
-            tournaments.map((t, i) => (
-              <Link
-                key={t.id}
-                href={`/torneos/${t.id}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: "14px 20px",
-                  borderBottom:
-                    i === tournaments.length - 1 ? "none" : "1px solid var(--hair)",
-                  flexWrap: "wrap",
-                  color: "inherit",
-                  textDecoration: "none",
-                }}
-              >
-                <span style={{ flex: 1, minWidth: 160, fontSize: 13.5, fontWeight: 700 }}>
-                  {t.name}
-                </span>
-                <span
-                  className="mono"
-                  style={{ fontSize: 11, color: "var(--text-faint)" }}
-                >
-                  {shortDate(t.starts_on)}
-                </span>
-                <span className="chip chip-mute">
-                  {TOURNAMENT_STATUS_LABEL[t.status] ?? t.status}
-                </span>
-              </Link>
-            ))
-          )}
-        </Card>
-        {drafts.length > 0 && (
-          <p
-            className="mono"
-            style={{
-              marginTop: 12,
-              fontSize: 10,
-              letterSpacing: "0.14em",
-              color: "var(--text-faint)",
-            }}
-          >
-            {drafts.length} BORRADOR{drafts.length > 1 ? "ES" : ""} SIN PUBLICAR
-          </p>
-        )}
-      </section>
     </div>
   );
 }

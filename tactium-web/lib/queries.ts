@@ -960,13 +960,27 @@ export async function fetchTournament(id: string) {
   const { data, error } = await sb.rpc("public_get_tournament", { p_id: id });
   if (error) throw error;
   const row = Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
-  if (row) return row;
+  if (row) {
+    // La RPC pública no trae billing_status; el organizador lo necesita para
+    // saber si el torneo ya está pagado/publicado. Lectura directa best-effort
+    // (RLS: solo la devuelve al dueño; el espectador recibe null y no la usa).
+    const { data: b } = await sb
+      .from("tournaments")
+      .select("billing_status")
+      .eq("id", id)
+      .maybeSingle();
+    return {
+      ...row,
+      billing_status:
+        (b as { billing_status?: string } | null)?.billing_status ?? null,
+    };
+  }
   // Borrador / no publicado: la RPC pública lo oculta. Lectura directa — la RLS
   // devuelve el torneo solo si el usuario puede verlo (el organizador, el suyo).
   const { data: direct } = await sb
     .from("tournaments")
     .select(
-      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats",
+      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status",
     )
     .eq("id", id)
     .maybeSingle();

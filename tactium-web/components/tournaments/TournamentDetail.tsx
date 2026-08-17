@@ -58,6 +58,7 @@ interface RealTournament {
   phase_formats: Record<string, string> | null;
   // No siempre lo devuelve la RPC pública; se usa si viene.
   club_name?: string | null;
+  billing_status?: string | null;
 }
 
 /* ── Formato de partido (espejo de formatConfig/resolveMatchFormat de la app) ─ */
@@ -1388,7 +1389,25 @@ export function TournamentDetail({
                 </>
               ) : (
                 <>
-                  <PayTournamentButton tournamentId={t.id} />
+                  {["paid", "included", "free"].includes(
+                    t.billing_status ?? "",
+                  ) ? (
+                    <span
+                      className="chip"
+                      style={{
+                        background: "var(--accent-10)",
+                        color: "var(--accent)",
+                        padding: "10px 16px",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        textAlign: "center",
+                      }}
+                    >
+                      ✓ Publicado · pagado
+                    </span>
+                  ) : (
+                    <PayTournamentButton tournamentId={t.id} />
+                  )}
                   <Link
                     href={`/torneos/${t.id}/inscripcion`}
                     className="btn btn-ghost"
