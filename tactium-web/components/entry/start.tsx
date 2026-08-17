@@ -339,7 +339,7 @@ export function Start() {
 
 /** Selector de federación (botón + modal con las 19 federaciones). Reutilizado
  *  en el alta de equipo y de club. */
-function FederationSelect({
+export function FederationSelect({
   value,
   onChange,
 }: {

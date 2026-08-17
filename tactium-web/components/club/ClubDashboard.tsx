@@ -15,8 +15,10 @@ import {
   IconClock,
   IconFlag,
   IconPlus,
+  IconSettings,
   IconShield,
 } from "@/components/Icon";
+import { EditClubModal } from "@/components/club/EditClubModal";
 
 interface ClubData {
   club: { id: string; name: string; federation: string | null } | null;
@@ -26,6 +28,7 @@ interface ClubData {
 export function ClubDashboard() {
   const { clubId } = useSession();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [typed, setTyped] = useState("");
 
   const { data, loading, error } = useAsync<ClubData>(
@@ -76,21 +79,43 @@ export function ClubDashboard() {
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Eyebrow>CLUB · ADMIN</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 32 }}>{club?.name ?? "Club"}</h1>
-        {club?.federation && (
-          <p
-            className="mono"
-            style={{
-              margin: "8px 0 0",
-              fontSize: 11,
-              letterSpacing: "0.14em",
-              color: "var(--text-faint)",
-            }}
+      <div
+        style={{
+          marginBottom: 24,
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <Eyebrow>CLUB · ADMIN</Eyebrow>
+          <h1 style={{ marginTop: 10, fontSize: 32 }}>{club?.name ?? "Club"}</h1>
+          {club?.federation && (
+            <p
+              className="mono"
+              style={{
+                margin: "8px 0 0",
+                fontSize: 11,
+                letterSpacing: "0.14em",
+                color: "var(--text-faint)",
+              }}
+            >
+              {club.federation.toUpperCase()}
+            </p>
+          )}
+        </div>
+        {club && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setEditOpen(true)}
+            style={{ padding: "10px 16px", fontSize: 13 }}
           >
-            {club.federation.toUpperCase()}
-          </p>
+            <IconSettings size={14} />
+            Editar club
+          </button>
         )}
       </div>
 
@@ -128,7 +153,7 @@ export function ClubDashboard() {
         >
           <Eyebrow>EQUIPOS</Eyebrow>
           <Link
-            href="/empezar/equipo"
+            href="/club/equipos/nuevo"
             className="btn btn-accent"
             style={{ padding: "11px 18px", fontSize: 13 }}
           >
@@ -358,6 +383,16 @@ export function ClubDashboard() {
           </button>
         </div>
       </Modal>
+
+      {club && (
+        <EditClubModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          clubId={club.id}
+          initialName={club.name}
+          initialFederation={club.federation}
+        />
+      )}
     </div>
   );
 }

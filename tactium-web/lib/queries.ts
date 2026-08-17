@@ -143,6 +143,56 @@ export async function createTeam(input: {
   return data.id as string;
 }
 
+/** Lee la configuración editable de un equipo (para el formulario de edición). */
+export async function fetchTeam(id: string): Promise<{
+  id: string;
+  name: string;
+  category: string | null;
+  group_name: string | null;
+  gender: string | null;
+  federation: string | null;
+  league: string | null;
+} | null> {
+  const { data, error } = await supabaseBrowser()
+    .from("teams")
+    .select("id, name, category, group_name, gender, federation, league")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as {
+    id: string;
+    name: string;
+    category: string | null;
+    group_name: string | null;
+    gender: string | null;
+    federation: string | null;
+    league: string | null;
+  } | null) ?? null;
+}
+
+/** Actualiza campos de un equipo (edición: categoría/grupo/nombre…). */
+export async function updateTeam(
+  id: string,
+  patch: {
+    name?: string;
+    category?: string | null;
+    group_name?: string | null;
+    gender?: string;
+  },
+): Promise<void> {
+  const { error } = await supabaseBrowser().from("teams").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+/** Actualiza campos de un club (edición: nombre/federación). */
+export async function updateClub(
+  id: string,
+  patch: { name?: string; federation?: string | null },
+): Promise<void> {
+  const { error } = await supabaseBrowser().from("clubs").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
 /* ── Temporadas ────────────────────────────────────────────────── */
 export interface DbSeason {
   id: string;

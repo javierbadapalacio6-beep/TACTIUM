@@ -21,10 +21,12 @@ import {
   IconCopy,
   IconFlag,
   IconSearch,
+  IconSettings,
   IconUpload,
   IconUserPlus,
   IconUsers,
 } from "@/components/Icon";
+import { EditTeamModal } from "@/components/team/EditTeamModal";
 
 type SortKey = "name" | "pts" | "pos";
 
@@ -55,6 +57,7 @@ export function Roster() {
   const [sort, setSort] = useState<SortKey>("pts");
   const [asc, setAsc] = useState(false);
   const [editing, setEditing] = useState<DbPlayer | null>(null);
+  const [editTeamOpen, setEditTeamOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -144,9 +147,33 @@ export function Roster() {
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>EQUIPO</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>{activeTeam?.name ?? "Equipo"}</h1>
+      <div
+        style={{
+          marginBottom: 22,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <Eyebrow>EQUIPO</Eyebrow>
+          <h1 style={{ marginTop: 10, fontSize: 30 }}>
+            {activeTeam?.name ?? "Equipo"}
+          </h1>
+        </div>
+        {teamId && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setEditTeamOpen(true)}
+            style={{ padding: "10px 16px", fontSize: 13 }}
+          >
+            <IconSettings size={14} />
+            Editar equipo
+          </button>
+        )}
       </div>
 
       {/* Indicadores */}
@@ -830,6 +857,16 @@ export function Roster() {
           </button>
         </div>
       </Modal>
+
+      {teamId && (
+        <EditTeamModal
+          open={editTeamOpen}
+          onClose={() => setEditTeamOpen(false)}
+          teamId={teamId}
+          teamName={activeTeam?.name ?? "Equipo"}
+          initialCategory={activeTeam?.category ?? null}
+        />
+      )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
