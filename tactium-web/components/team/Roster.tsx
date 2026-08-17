@@ -478,14 +478,22 @@ export function Roster() {
                 gap: 16,
               }}
             >
-              {[
-                { label: "NOMBRE", value: editing.name, ph: "Nombre y apellidos" },
-                {
-                  label: "ALIAS (OPCIONAL)",
-                  value: editing.alias ?? "",
-                  ph: "Cómo le llaman en el equipo",
-                },
-              ].map((f) => (
+              {(
+                [
+                  {
+                    label: "NOMBRE",
+                    value: editing.name,
+                    ph: "Nombre y apellidos",
+                    set: (v: string) => setEditing({ ...editing, name: v }),
+                  },
+                  {
+                    label: "ALIAS (OPCIONAL)",
+                    value: editing.alias ?? "",
+                    ph: "Cómo le llaman en el equipo",
+                    set: (v: string) => setEditing({ ...editing, alias: v }),
+                  },
+                ] as const
+              ).map((f) => (
                 <label key={f.label}>
                   <span
                     className="mono"
@@ -501,7 +509,8 @@ export function Roster() {
                   </span>
                   <input
                     type="text"
-                    defaultValue={f.value}
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
                     placeholder={f.ph}
                     style={{
                       width: "100%",
@@ -586,7 +595,13 @@ export function Roster() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  defaultValue={editing.pts || ""}
+                  value={editing.pts || ""}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      pts: parseInt(e.target.value.replace(/\D/g, ""), 10) || 0,
+                    })
+                  }
                   className="mono"
                   style={{
                     width: "100%",
