@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import {
   CATEGORIES,
@@ -8,12 +8,55 @@ import {
   MAX_BLOCKED_HOURS,
   SIGNUP_DAYS,
   SIGNUP_HOURS,
-  tournamentById,
 } from "@/lib/tournament-data";
-import { tournamentSignup } from "@/lib/queries";
+import { fetchTournament, tournamentSignup } from "@/lib/queries";
+import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
+import { SkeletonCard } from "@/components/states";
 import { IconCheck, IconSearch } from "@/components/Icon";
+
+/* Torneo real (RPC pública) y su forma normalizada para el formulario. */
+interface RealTournament {
+  name: string;
+  club_name?: string | null;
+  location: string | null;
+  starts_on: string | null;
+  ends_on: string | null;
+  entry_fee: number | null;
+  fee_currency: string | null;
+  signup_code: string | null;
+  category: string | null;
+  categories: string[] | null;
+  gender: string | null;
+  genders: string[] | null;
+}
+interface NormTournament {
+  name: string;
+  club: string | null;
+  place: string | null;
+  dates: string | null;
+  fee: string | null;
+  code: string;
+  categories: string[];
+  genders: string[];
+}
+
+const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+function fmtDates(a: string | null, b: string | null): string | null {
+  const f = (iso: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso + "T00:00:00");
+    return Number.isNaN(d.getTime())
+      ? ""
+      : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+  };
+  const da = f(a);
+  const db = f(b);
+  if (da && db && da !== db) return `${da} – ${db}`;
+  return da || db || null;
+}
 
 const SIGNUP_GENDER_DB: Record<string, string> = {
   Masculino: "masculino",
@@ -73,12 +116,60 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export function SignupForm({ id }: { id: string }) {
-  const t = tournamentById(id);
+  // Torneo REAL por id (RPC pública), no la maqueta. Si el id es válido se salta
+  // la pantalla de "mete el código": el torneo ya se conoce por el enlace.
+  const { data: real, loading } = useAsync(
+    () => fetchTournament(id) as Promise<RealTournament | null>,
+    [id],
+  );
+  const t: NormTournament | null = real
+    ? {
+        name: real.name,
+        club: real.club_name ?? null,
+        place: real.location ?? null,
+        dates: fmtDates(real.starts_on, real.ends_on),
+        fee:
+          real.entry_fee != null
+            ? `${real.entry_fee} ${real.fee_currency ?? "€"}`
+            : null,
+        code: real.signup_code ?? "",
+        categories: real.categories?.length
+          ? real.categories
+          : real.category
+            ? [real.category]
+            : [],
+        genders: (real.genders?.length
+          ? real.genders
+          : real.gender
+            ? [real.gender]
+            : []
+        ).map(capitalize),
+      }
+    : null;
 
-  const [code, setCode] = useState(t?.code ?? "");
-  const [found, setFound] = useState(!!t);
-  const [category, setCategory] = useState<string>(t?.categories[0] ?? "1ª");
-  const [gender, setGender] = useState<string>(t?.genders[0] ?? "Masculino");
+  const [code, setCode] = useState("");
+  const [found, setFound] = useState(false);
+  const [category, setCategory] = useState<string>("1ª");
+  const [gender, setGender] = useState<string>("Masculino");
+
+  // Al cargar el torneo real, sembramos código/categoría/género una sola vez.
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (!real || seeded) return;
+    const cats = real.categories?.length
+      ? real.categories
+      : real.category
+        ? [real.category]
+        : [];
+    const gens = (
+      real.genders?.length ? real.genders : real.gender ? [real.gender] : []
+    ).map(capitalize);
+    if (real.signup_code) setCode(real.signup_code);
+    if (cats.length) setCategory(cats[0]);
+    if (gens.length) setGender(gens[0]);
+    setFound(true);
+    setSeeded(true);
+  }, [real, seeded]);
 
   const [name, setName] = useState("");
   const [pts, setPts] = useState("");
@@ -135,6 +226,15 @@ export function SignupForm({ id }: { id: string }) {
       else if (next.size < MAX_BLOCKED_HOURS) next.add(key);
       return next;
     });
+  }
+
+  // Mientras se resuelve el torneo real, no se pinta la pantalla del código.
+  if (loading && !real) {
+    return (
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        <SkeletonCard />
+      </div>
+    );
   }
 
   if (done) {

@@ -17,6 +17,7 @@ import {
   IconUsers,
 } from "@/components/Icon";
 import { createClub, createTeam, redeemInvitation } from "@/lib/queries";
+import { useSession } from "@/lib/session";
 import { guardedWrite } from "@/lib/writes";
 
 const GENDER_DB: Record<string, string> = {
@@ -68,6 +69,7 @@ const PATHS = [
 
 export function Start() {
   const router = useRouter();
+  const { user } = useSession();
   const [picked, setPicked] = useState<string>("equipo");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -251,20 +253,24 @@ export function Start() {
             Empezar
           </button>
         )}
-        <Link
-          href="/entrar"
-          className="btn"
-          style={{
-            padding: "14px 20px",
-            fontSize: 13.5,
-            fontWeight: 500,
-            background: "transparent",
-            border: "none",
-            color: "var(--text-muted)",
-          }}
-        >
-          Cerrar sesión
-        </Link>
+        {/* Sólo tiene sentido si HAY sesión (a /empezar se llega logueado para
+            montar equipo/club). Para un visitante anónimo no se muestra. */}
+        {user && (
+          <Link
+            href="/entrar"
+            className="btn"
+            style={{
+              padding: "14px 20px",
+              fontSize: 13.5,
+              fontWeight: 500,
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+            }}
+          >
+            Cerrar sesión
+          </Link>
+        )}
       </div>
     </EntryFrame>
   );

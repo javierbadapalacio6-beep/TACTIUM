@@ -1700,13 +1700,11 @@ select.tw-cell-input {
 }
 
 .tw-pub-nav {
-  display: flex;
+  /* En móvil la navegación va en el menú (hamburguesa); el nav inline se oculta
+     y reaparece a partir de tablet. */
+  display: none;
   align-items: center;
   gap: 2px;
-  /* En móvil la fila de enlaces baja entera bajo la marca. */
-  order: 3;
-  width: 100%;
-  overflow-x: auto;
   scrollbar-width: none;
 }
 .tw-pub-nav::-webkit-scrollbar {
@@ -1763,6 +1761,59 @@ select.tw-cell-input {
   white-space: nowrap;
 }
 
+/* Hamburguesa (sólo móvil). */
+.tw-pub-burger {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  cursor: pointer;
+  flex: none;
+}
+.tw-pub-burger span {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+}
+.tw-pub-burger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+/* Panel desplegable del menú móvil: baja a lo ancho bajo la barra. */
+.tw-pub-menu {
+  order: 3;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--hair);
+}
+.tw-pub-menu .tw-pub-link {
+  padding: 11px 12px;
+}
+.tw-pub-menu-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.tw-pub-menu-actions > * {
+  flex: 1;
+  text-align: center;
+}
+/* Ocultas en móvil (van al menú); visibles a partir de tablet. */
+.tw-pub-deskonly {
+  display: none;
+}
+
 .tw-pub-content {
   flex: 1;
   padding: 24px 16px 64px;
@@ -1805,9 +1856,17 @@ select.tw-cell-input {
     flex-wrap: nowrap;
   }
   .tw-pub-nav {
+    display: flex;
     order: 0;
     width: auto;
     overflow: visible;
+  }
+  .tw-pub-burger,
+  .tw-pub-menu {
+    display: none;
+  }
+  .tw-pub-deskonly {
+    display: inline-flex;
   }
   .tw-pub-content {
     padding: 32px 24px 80px;

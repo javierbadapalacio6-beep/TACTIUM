@@ -97,6 +97,37 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
 }
 
+/** Prefijos de TODAS las rutas reales (públicas + de app + entrada). Sirve para
+ *  distinguir una ruta protegida de una que NO existe: la desconocida es un 404,
+ *  no un "necesitas sesión". Mantener alineado con las carpetas de `app/`. */
+const KNOWN_ROUTE_PREFIXES = [
+  "/torneos",
+  "/federacion",
+  "/comunidad",
+  "/u/",
+  "/pro",
+  "/entrar",
+  "/empezar",
+  "/bienvenida",
+  "/auth",
+  "/ajustes",
+  "/amistosos",
+  "/club",
+  "/equipo",
+  "/jornada",
+  "/novedades",
+  "/stats",
+  "/suscripcion",
+  "/temporadas",
+];
+
+export function isKnownRoute(pathname: string): boolean {
+  if (pathname === "/") return true;
+  return KNOWN_ROUTE_PREFIXES.some(
+    (r) => pathname === r || pathname.startsWith(r + "/") || pathname.startsWith(r),
+  );
+}
+
 /** El jugador suelto no pertenece a ninguna plantilla: sin selector. */
 export function hasTeamSwitcher(role: Role): boolean {
   return role !== "suelto";

@@ -194,6 +194,7 @@ export function Feed() {
 
 /* ═══ BUSCAR EN LA COMUNIDAD ══════════════════════════════════════ */
 export function Community() {
+  const { user } = useSession();
   const [query, setQuery] = useState("");
   const { data, loading, error } = useAsync(
     () => searchCommunity(query),
@@ -212,6 +213,12 @@ export function Community() {
 
   async function toggleFollow(h: CommunityHit) {
     if (busy) return;
+    // Un anónimo no puede seguir: en vez de un no-op confuso, se le invita a
+    // entrar (vuelve a la comunidad tras el login).
+    if (!user) {
+      window.location.href = "/entrar?next=/comunidad";
+      return;
+    }
     const now = follow[h.id] ?? h.is_following;
     setBusy(h.id);
     setFollow((f) => ({ ...f, [h.id]: !now })); // optimista

@@ -23,6 +23,7 @@ import {
   NAV_BY_ROLE,
   TABS_BY_ROLE,
   hasTeamSwitcher,
+  isKnownRoute,
   isPublicPath,
   routeMeta,
 } from "@/lib/nav";
@@ -263,8 +264,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   // el MARCO PÚBLICO. Antes se servían con este mismo shell y el visitante veía
   // una barra lateral de rol "INVITADO" llena de destinos que no podía abrir.
   if (!user) {
-    if (!isPublicPath(pathname)) return <SignedOut />;
-    return <PublicShell>{children}</PublicShell>;
+    // Ruta pública → marco público. Ruta protegida CONOCIDA → aviso de sesión.
+    // Ruta desconocida → 404 (children) en el marco público, no el aviso.
+    if (isPublicPath(pathname)) return <PublicShell>{children}</PublicShell>;
+    if (!isKnownRoute(pathname)) return <PublicShell>{children}</PublicShell>;
+    return <SignedOut />;
   }
 
   const nav = NAV_BY_ROLE[role];
