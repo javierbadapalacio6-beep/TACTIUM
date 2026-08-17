@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { type Position } from "@/lib/team-data";
 import {
@@ -9,7 +9,11 @@ import {
   deletePlayer,
   fetchPlayers,
   updatePlayer,
+  fetchTeamInvitations,
+  createInvitation,
+  invitationActive,
   type DbPlayer,
+  type DbInvitation,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -143,7 +147,37 @@ export function Roster() {
     }
   }
 
-  const INVITE = "HLC-4X2";
+  // Invitaciones reales del equipo (se cargan al abrir el modal).
+  const [invites, setInvites] = useState<DbInvitation[] | null>(null);
+  const [invRole, setInvRole] = useState<"player" | "captain">("player");
+  const [invBusy, setInvBusy] = useState(false);
+
+  useEffect(() => {
+    if (!inviteOpen || !teamId) return;
+    let alive = true;
+    setInvites(null);
+    fetchTeamInvitations(teamId)
+      .then((r) => alive && setInvites(r))
+      .catch(() => alive && setInvites([]));
+    return () => {
+      alive = false;
+    };
+  }, [inviteOpen, teamId]);
+
+  const activeInvite = (invites ?? []).find(invitationActive) ?? null;
+
+  async function generateInvite() {
+    if (invBusy || !teamId) return;
+    setInvBusy(true);
+    const res = await guardedWrite("crear la invitación", () =>
+      createInvitation(teamId, invRole),
+    );
+    setInvBusy(false);
+    if (res.ok) {
+      setInvites((prev) => [res.data, ...(prev ?? [])]);
+      setToast(`Código creado: ${res.data.code}`);
+    } else setToast(res.reason);
+  }
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
@@ -724,7 +758,7 @@ export function Roster() {
       >
         <Eyebrow>INVITACIÓN</Eyebrow>
         <h2 id="invitar" style={{ margin: "14px 0 6px", fontSize: 23 }}>
-          Invitar jugadores
+          Invitar a {activeTeam?.name ?? "tu equipo"}
         </h2>
         <p
           style={{
@@ -733,68 +767,167 @@ export function Roster() {
             color: "var(--text-muted)",
           }}
         >
-          Comparte el código para que se unan desde la app.
+          Comparte el código para que se unan desde la app o la web.
         </p>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            padding: "18px 20px",
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-          }}
-        >
+        {invites === null ? (
+          <div
+            style={{
+              padding: "18px 20px",
+              borderRadius: 12,
+              background: "var(--bg-card-2)",
+              color: "var(--text-muted)",
+              fontSize: 13,
+            }}
+          >
+            Cargando códigos…
+          </div>
+        ) : activeInvite ? (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "18px 20px",
+                borderRadius: 12,
+                background: "var(--bg-card-2)",
+              }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span
+                  className="mono"
+                  style={{
+                    display: "block",
+                    fontSize: 26,
+                    fontWeight: 700,
+                    letterSpacing: "0.2em",
+                    color: "var(--accent)",
+                  }}
+                >
+                  {activeInvite.code}
+                </span>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 9.5,
+                    letterSpacing: "0.14em",
+                    color: "var(--text-faint)",
+                  }}
+                >
+                  {activeInvite.role === "captain" ? "CAPITÁN" : "JUGADOR"}
+                </span>
+              </span>
+              <button
+                type="button"
+                aria-label="Copiar código"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(activeInvite.code);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1800);
+                  } catch {
+                    /* el código se ve y se puede copiar a mano */
+                  }
+                }}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: copied ? "var(--accent)" : "var(--text-faint)",
+                  cursor: "pointer",
+                  display: "flex",
+                  padding: 4,
+                }}
+              >
+                <IconCopy size={17} />
+              </button>
+            </div>
+            <p
+              className="mono"
+              aria-live="polite"
+              style={{
+                marginTop: 10,
+                fontSize: 9.5,
+                letterSpacing: "0.16em",
+                color: copied ? "var(--accent)" : "transparent",
+              }}
+            >
+              {copied ? "COPIADO" : "·"}
+            </p>
+          </>
+        ) : (
+          <div
+            style={{
+              padding: "18px 20px",
+              borderRadius: 12,
+              background: "var(--bg-card-2)",
+              color: "var(--text-muted)",
+              fontSize: 13,
+            }}
+          >
+            Aún no hay códigos activos. Genera uno abajo.
+          </div>
+        )}
+
+        {/* Generar un código nuevo con el rol elegido. */}
+        <div style={{ marginTop: 18 }}>
           <span
             className="mono"
             style={{
-              fontSize: 26,
-              fontWeight: 700,
+              display: "block",
+              fontSize: 10,
               letterSpacing: "0.2em",
-              color: "var(--accent)",
+              color: "var(--text-faint)",
+              marginBottom: 8,
             }}
           >
-            {INVITE}
+            NUEVO CÓDIGO
           </span>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            {(
+              [
+                { id: "player", label: "Jugador" },
+                { id: "captain", label: "Capitán" },
+              ] as const
+            ).map((r) => {
+              const on = invRole === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setInvRole(r.id)}
+                  style={{
+                    flex: 1,
+                    padding: "9px 10px",
+                    borderRadius: 9,
+                    cursor: "pointer",
+                    fontFamily: "'Satoshi', sans-serif",
+                    fontSize: 12.5,
+                    fontWeight: on ? 700 : 500,
+                    color: on ? "var(--accent)" : "var(--text-muted)",
+                    background: on ? "var(--accent-10)" : "var(--bg-card-2)",
+                    border: on
+                      ? "1.5px solid var(--accent)"
+                      : "1px solid var(--hair-strong)",
+                  }}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
-            aria-label="Copiar código"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(INVITE);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1800);
-              } catch {
-                /* el código se ve y se puede copiar a mano */
-              }
-            }}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: copied ? "var(--accent)" : "var(--text-faint)",
-              cursor: "pointer",
-              display: "flex",
-              padding: 4,
-            }}
+            className="btn btn-accent"
+            onClick={generateInvite}
+            disabled={invBusy}
+            style={{ width: "100%", padding: "12px 16px", fontSize: 13 }}
           >
-            <IconCopy size={17} />
+            <IconUserPlus size={15} />
+            {invBusy ? "Generando…" : "Generar código"}
           </button>
         </div>
-
-        <p
-          className="mono"
-          style={{
-            marginTop: 14,
-            fontSize: 11,
-            letterSpacing: "0.06em",
-            color: "var(--text-faint)",
-            wordBreak: "break-all",
-          }}
-        >
-          tactium.app/unirse/{INVITE}
-        </p>
 
         <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <button
