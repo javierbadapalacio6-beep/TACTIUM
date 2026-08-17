@@ -1024,6 +1024,9 @@ export async function createTournament(input: {
       seeding_mode: input.seedingMode ?? "points",
       signup_code: code,
       pair_based: !social,
+      // Nace como BORRADOR: hay que publicarlo (pagar la cuota) antes de que
+      // nadie se inscriba. El boton "Pagar / publicar" lo pasa a 'open'.
+      status: "draft",
     })
     .select("id")
     .single();

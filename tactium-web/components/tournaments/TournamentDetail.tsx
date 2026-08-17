@@ -1387,27 +1387,38 @@ export function TournamentDetail({
                     Apuntarme a este torneo
                   </Link>
                 </>
+              ) : t.status === "draft" ? (
+                // Borrador: no publicado. Hasta pagar/publicar, NADIE se inscribe
+                // ni se puede añadir a nadie (la BD lo bloquea; aquí la UX).
+                <>
+                  <PayTournamentButton tournamentId={t.id} />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                      textWrap: "pretty",
+                      maxWidth: 240,
+                    }}
+                  >
+                    Publica el torneo para abrir las inscripciones. Hasta
+                    entonces nadie puede unirse ni añadirse.
+                  </span>
+                </>
               ) : (
                 <>
-                  {["paid", "included", "free"].includes(
-                    t.billing_status ?? "",
-                  ) ? (
-                    <span
-                      className="chip"
-                      style={{
-                        background: "var(--accent-10)",
-                        color: "var(--accent)",
-                        padding: "10px 16px",
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        textAlign: "center",
-                      }}
-                    >
-                      ✓ Publicado · pagado
-                    </span>
-                  ) : (
-                    <PayTournamentButton tournamentId={t.id} />
-                  )}
+                  <span
+                    className="chip"
+                    style={{
+                      background: "var(--accent-10)",
+                      color: "var(--accent)",
+                      padding: "10px 16px",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      textAlign: "center",
+                    }}
+                  >
+                    ✓ Publicado{t.billing_status === "paid" ? " · pagado" : ""}
+                  </span>
                   <Link
                     href={`/torneos/${t.id}/inscripcion`}
                     className="btn btn-ghost"
