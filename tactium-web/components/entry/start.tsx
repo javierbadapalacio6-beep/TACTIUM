@@ -18,6 +18,7 @@ import {
 } from "@/components/Icon";
 import {
   createClub,
+  createPlayer,
   createTeam,
   fetchClub,
   redeemInvitation,
@@ -1257,28 +1258,49 @@ interface DraftPlayer {
   pos: (typeof POSITIONS)[number];
 }
 
-const SEED: DraftPlayer[] = [
-  { id: 1, name: "Diego Ruiz", pts: "4600", pos: "Drive" },
-  { id: 2, name: "Marco Bilbao", pts: "4180", pos: "Revés" },
-  { id: 3, name: "Iván Sáez", pts: "3950", pos: "Ambos" },
-  { id: 4, name: "Álvaro Peña", pts: "3720", pos: "Drive" },
-  { id: 5, name: "Nacho Vega", pts: "3480", pos: "Revés" },
-  { id: 6, name: "Jorge Lastra", pts: "3200", pos: "Drive" },
-  { id: 7, name: "Luis Cano", pts: "2980", pos: "Ambos" },
-  { id: 8, name: "Pablo Herrán", pts: "2740", pos: "Revés" },
-];
-
 export function AddPlayers() {
-  const router = useRouter();
-  const [players, setPlayers] = useState<DraftPlayer[]>(SEED);
-  const [nextId, setNextId] = useState(9);
+  const { activeTeam } = useSession();
+  const [players, setPlayers] = useState<DraftPlayer[]>([
+    { id: 1, name: "", pts: "", pos: "Ambos" },
+  ]);
+  const [nextId, setNextId] = useState(2);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const patch = (id: number, p: Partial<DraftPlayer>) =>
     setPlayers((ps) => ps.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
+  const validPlayers = players.filter((p) => p.name.trim().length > 1);
+
+  // Crea de verdad los jugadores en el equipo activo (antes solo navegaba). Con
+  // 0 jugadores válidos, simplemente continúa (la plantilla se llena luego).
+  async function saveAll() {
+    if (busy) return;
+    const teamId = activeTeam?.id;
+    if (!teamId || validPlayers.length === 0) {
+      window.location.href = "/equipo";
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("añadir los jugadores", async () => {
+      for (const p of validPlayers)
+        await createPlayer(teamId, {
+          name: p.name.trim(),
+          pts: parseInt(p.pts, 10) || 0,
+          position: p.pos,
+        });
+    });
+    setBusy(false);
+    if (res.ok) window.location.href = "/equipo";
+    else setErr(res.reason);
+  }
+
   return (
     <EntryFrame wide>
-      <Eyebrow>PLANTILLA · HALCONES A</Eyebrow>
+      <Eyebrow>
+        PLANTILLA{activeTeam ? ` · ${activeTeam.name.toUpperCase()}` : ""}
+      </Eyebrow>
       <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>Añade tus jugadores</h1>
       <p style={{ margin: "0 0 28px", fontSize: 14, color: "var(--text-muted)" }}>
         Añade jugadores a mano o escanea el ranking FEP.
@@ -1321,20 +1343,33 @@ export function AddPlayers() {
                     }
                     className="tw-cell-input mono"
                   />
-                  <select
-                    value={p.pos}
-                    aria-label="Posición"
-                    onChange={(e) =>
-                      patch(p.id, {
-                        pos: e.target.value as (typeof POSITIONS)[number],
-                      })
-                    }
-                    className="tw-cell-input"
-                  >
-                    {POSITIONS.map((o) => (
-                      <option key={o}>{o}</option>
-                    ))}
-                  </select>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {POSITIONS.map((o) => {
+                      const on = p.pos === o;
+                      return (
+                        <button
+                          key={o}
+                          type="button"
+                          onClick={() => patch(p.id, { pos: o })}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: "8px 4px",
+                            borderRadius: 8,
+                            border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                            background: on ? "var(--accent-10)" : "transparent",
+                            color: on ? "var(--accent)" : "var(--text-muted)",
+                            fontSize: 12,
+                            fontWeight: on ? 700 : 500,
+                            cursor: "pointer",
+                            fontFamily: "'Satoshi', sans-serif",
+                          }}
+                        >
+                          {o}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <button
                     type="button"
                     onClick={() =>
@@ -1432,19 +1467,27 @@ export function AddPlayers() {
                 color: "var(--text-muted)",
               }}
             >
-              {players.length} JUGADORES
+              {validPlayers.length} {validPlayers.length === 1 ? "JUGADOR" : "JUGADORES"}
             </span>
           </div>
         </div>
       </div>
 
+      {err && (
+        <p style={{ marginTop: 16, color: "var(--error)", fontSize: 13 }}>{err}</p>
+      )}
       <button
         type="button"
         className="btn btn-accent"
-        onClick={() => router.push("/")}
+        disabled={busy}
+        onClick={saveAll}
         style={{ marginTop: 28, width: "100%", padding: 15, fontSize: 15 }}
       >
-        Continuar
+        {busy
+          ? "Guardando…"
+          : validPlayers.length > 0
+            ? `Añadir ${validPlayers.length} y continuar`
+            : "Continuar sin jugadores"}
       </button>
     </EntryFrame>
   );
