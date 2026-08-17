@@ -1,21 +1,39 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import {
   CATEGORIES,
   GENDERS,
   MATCH_FORMATS,
-  TOURNAMENTS,
   TYPE_NOTE,
-  STATE_LABEL,
   type TournamentType,
 } from "@/lib/tournament-data";
-import { createTournament } from "@/lib/queries";
+import { createTournament, fetchClubTournaments } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Toggle } from "@/components/ui";
 import { IconCheck, IconCopy, IconUpload } from "@/components/Icon";
+
+/** Estado del torneo → etiqueta (torneos reales, no la maqueta). */
+const TOURNAMENT_STATUS_LABEL: Record<string, string> = {
+  draft: "Borrador",
+  open: "Inscripción abierta",
+  in_progress: "En juego",
+  finished: "Finalizado",
+  canceled: "Cancelado",
+};
+
+/** Fecha corta es-ES para la lista. */
+function shortDate(iso: string | null): string {
+  if (!iso) return "Sin fechas";
+  const d = new Date(iso + "T00:00:00");
+  return Number.isNaN(d.getTime())
+    ? "Sin fechas"
+    : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+}
 
 // Mapeo del asistente (labels legibles) al modelo de la BD.
 const TYPE_TO_FORMAT: Record<TournamentType, string> = {
@@ -134,10 +152,19 @@ export function CreateTournament() {
   const [seeded, setSeeded] = useState(true);
   const [format, setFormat] = useState<string>(MATCH_FORMATS[1]);
   const [created, setCreated] = useState(false);
+  const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
   const { clubId } = useSession();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Torneos reales del club (incluye borradores; se recarga al crear uno).
+  const { data: clubTournaments } = useAsync(
+    () => (clubId ? fetchClubTournaments(clubId) : Promise.resolve([])),
+    [clubId, created],
+  );
+  const tournaments = clubTournaments ?? [];
+  const drafts = tournaments.filter((t) => t.status === "draft");
 
   async function submit() {
     if (busy) return;
@@ -161,15 +188,16 @@ export function CreateTournament() {
       }),
     );
     setBusy(false);
-    if (res.ok) setCreated(true);
-    else setErr(res.reason);
+    if (res.ok) {
+      setCreatedCode(res.data.code);
+      setCreated(true);
+    } else setErr(res.reason);
   }
 
-  const drafts = TOURNAMENTS.filter((t) => t.state === "borrador");
   const canNext = step !== 1 || name.trim().length > 2;
 
   if (created) {
-    const code = "OTN7QP";
+    const code = createdCode;
     return (
       <div style={{ maxWidth: 620, margin: "0 auto" }}>
         <Card style={{ textAlign: "center", padding: 40 }}>
@@ -668,31 +696,49 @@ export function CreateTournament() {
       <section style={{ marginTop: 28 }}>
         <Eyebrow style={{ marginBottom: 12 }}>TORNEOS DEL CLUB</Eyebrow>
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          {TOURNAMENTS.map((t, i) => (
+          {tournaments.length === 0 ? (
             <div
-              key={t.id}
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                padding: "14px 20px",
-                borderBottom:
-                  i === TOURNAMENTS.length - 1 ? "none" : "1px solid var(--hair)",
-                flexWrap: "wrap",
+                padding: "22px 20px",
+                fontSize: 13,
+                color: "var(--text-faint)",
+                textAlign: "center",
               }}
             >
-              <span style={{ flex: 1, minWidth: 160, fontSize: 13.5, fontWeight: 700 }}>
-                {t.name}
-              </span>
-              <span
-                className="mono"
-                style={{ fontSize: 11, color: "var(--text-faint)" }}
-              >
-                {t.dates ?? "Sin fechas"}
-              </span>
-              <span className="chip chip-mute">{STATE_LABEL[t.state]}</span>
+              Aún no has creado ningún torneo.
             </div>
-          ))}
+          ) : (
+            tournaments.map((t, i) => (
+              <Link
+                key={t.id}
+                href={`/torneos/${t.id}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: "14px 20px",
+                  borderBottom:
+                    i === tournaments.length - 1 ? "none" : "1px solid var(--hair)",
+                  flexWrap: "wrap",
+                  color: "inherit",
+                  textDecoration: "none",
+                }}
+              >
+                <span style={{ flex: 1, minWidth: 160, fontSize: 13.5, fontWeight: 700 }}>
+                  {t.name}
+                </span>
+                <span
+                  className="mono"
+                  style={{ fontSize: 11, color: "var(--text-faint)" }}
+                >
+                  {shortDate(t.starts_on)}
+                </span>
+                <span className="chip chip-mute">
+                  {TOURNAMENT_STATUS_LABEL[t.status] ?? t.status}
+                </span>
+              </Link>
+            ))
+          )}
         </Card>
         {drafts.length > 0 && (
           <p

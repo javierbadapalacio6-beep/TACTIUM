@@ -779,15 +779,36 @@ export async function exploreTournaments(
 }
 
 export async function fetchTournament(id: string) {
-  const { data, error } = await supabaseBrowser().rpc("public_get_tournament", {
-    p_id: id,
-  });
+  const sb = supabaseBrowser();
+  const { data, error } = await sb.rpc("public_get_tournament", { p_id: id });
   if (error) throw error;
-  return Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
+  const row = Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
+  if (row) return row;
+  // Borrador / no publicado: la RPC pública lo oculta. Lectura directa — la RLS
+  // devuelve el torneo solo si el usuario puede verlo (el organizador, el suyo).
+  const { data: direct } = await sb
+    .from("tournaments")
+    .select(
+      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats",
+    )
+    .eq("id", id)
+    .maybeSingle();
+  return direct ?? null;
+}
+
+/** Código de inscripción de 6 caracteres (mismo alfabeto que la app: sin
+ *  caracteres confundibles I/L/O/0/1). Espejo de `genCode` en tournaments.ts. */
+function genTournamentCode(): string {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i++)
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
 }
 
 /** Crea un torneo (insert en tournaments). Espejo de los campos que siempre
- *  pone la app; el cobro por torneo (draft + enlace) es un flujo aparte. */
+ *  pone la app: incluye `signup_code` (antes quedaba null y nadie podía
+ *  apuntarse) y `pair_based`. Devuelve id + el código real generado. */
 export async function createTournament(input: {
   clubId: string;
   name: string;
@@ -796,7 +817,9 @@ export async function createTournament(input: {
   genders?: string[];
   categories?: string[];
   seedingMode?: string;
-}): Promise<string> {
+}): Promise<{ id: string; code: string }> {
+  const code = genTournamentCode();
+  const social = input.format === "americano" || input.format === "mexicano";
   const { data, error } = await supabaseBrowser()
     .from("tournaments")
     .insert({
@@ -808,28 +831,69 @@ export async function createTournament(input: {
       genders: input.genders ?? [],
       categories: input.categories ?? [],
       seeding_mode: input.seedingMode ?? "points",
+      signup_code: code,
+      pair_based: !social,
     })
     .select("id")
     .single();
   if (error) throw error;
-  return data.id as string;
+  return { id: data.id as string, code };
+}
+
+/** Torneos de un club (lectura directa, RLS: el club ve los SUYOS, incluidos
+ *  los borradores — al contrario que la RPC pública, que oculta los draft). */
+export interface DbClubTournament {
+  id: string;
+  name: string;
+  format: string;
+  status: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  categories: string[] | null;
+  genders: string[] | null;
+}
+export async function fetchClubTournaments(
+  clubId: string,
+): Promise<DbClubTournament[]> {
+  const { data, error } = await supabaseBrowser()
+    .from("tournaments")
+    .select("id, name, format, status, starts_on, ends_on, categories, genders")
+    .eq("club_id", clubId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as DbClubTournament[];
 }
 
 export async function fetchTournamentMatches(id: string) {
-  const { data, error } = await supabaseBrowser().rpc(
-    "public_tournament_matches",
-    { p_id: id }
-  );
+  const sb = supabaseBrowser();
+  const { data, error } = await sb.rpc("public_tournament_matches", { p_id: id });
   if (error) throw error;
-  return (data ?? []) as Record<string, unknown>[];
+  const rows = (data ?? []) as Record<string, unknown>[];
+  if (rows.length) return rows;
+  // Borrador / recién generado: fallback directo (RLS) para el organizador.
+  const { data: direct } = await sb
+    .from("tournament_matches")
+    .select(
+      "id, gender, category, group_no, bracket, round, slot, home_reg, away_reg, home_reg2, away_reg2, home_score, away_score, winner_reg, status, sets",
+    )
+    .eq("tournament_id", id);
+  return (direct ?? []) as Record<string, unknown>[];
 }
 
 export async function fetchTournamentRegs(id: string) {
-  const { data, error } = await supabaseBrowser().rpc("public_tournament_regs", {
-    p_id: id,
-  });
+  const sb = supabaseBrowser();
+  const { data, error } = await sb.rpc("public_tournament_regs", { p_id: id });
   if (error) throw error;
-  return (data ?? []) as Record<string, unknown>[];
+  const rows = (data ?? []) as Record<string, unknown>[];
+  if (rows.length) return rows;
+  // Borrador: fallback directo (RLS) para el organizador (incluye contacto).
+  const { data: direct } = await sb
+    .from("tournament_registrations")
+    .select(
+      "id, gender, category, group_no, pair_label, p1_name, p2_name, p1_phone, p1_email, seed, seed_points, status",
+    )
+    .eq("tournament_id", id);
+  return (direct ?? []) as Record<string, unknown>[];
 }
 
 /** Inscripción pública a un torneo por código (el que llama es el jugador 1).
