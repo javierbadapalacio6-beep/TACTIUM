@@ -6,7 +6,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { EntryFrame, Field, Input, Segmented } from "./EntryFrame";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState } from "@/components/states";
+import { EmptyState, SkeletonCard } from "@/components/states";
 import {
   IconBuilding,
   IconCheck,
@@ -16,7 +16,13 @@ import {
   IconUserPlus,
   IconUsers,
 } from "@/components/Icon";
-import { createClub, createTeam, redeemInvitation } from "@/lib/queries";
+import {
+  createClub,
+  createTeam,
+  fetchClub,
+  redeemInvitation,
+} from "@/lib/queries";
+import { useAsync } from "@/lib/use-async";
 import {
   COMPETITION_PRESETS,
   FCP_FEDERATION_CODE,
@@ -330,6 +336,124 @@ export function Start() {
 
 /* ═══ 04 · CREAR EQUIPO ═══════════════════════════════════════════ */
 
+/** Selector de federación (botón + modal con las 19 federaciones). Reutilizado
+ *  en el alta de equipo y de club. */
+function FederationSelect({
+  value,
+  onChange,
+}: {
+  value: Federation | null;
+  onChange: (f: Federation) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          minHeight: 52,
+          padding: "12px 14px",
+          borderRadius: 12,
+          borderWidth: 1,
+          borderStyle: "solid",
+          borderColor: "var(--hair-strong)",
+          background: "var(--bg-card)",
+          color: "var(--text)",
+          cursor: "pointer",
+          fontFamily: "'Satoshi', sans-serif",
+          textAlign: "left",
+        }}
+      >
+        {value ? (
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
+              {value.name}
+            </span>
+            <span
+              className="mono"
+              style={{ fontSize: 11, color: "var(--text-faint)" }}
+            >
+              {value.region} · {value.shortName}
+            </span>
+          </span>
+        ) : (
+          <span style={{ color: "var(--text-faint)", fontSize: 14 }}>
+            Selecciona federación
+          </span>
+        )}
+        <span style={{ color: "var(--text-faint)", fontSize: 18 }}>›</span>
+      </button>
+
+      {open && (
+        <Modal open onClose={() => setOpen(false)} labelledBy="tw-fed-title">
+          <h3 id="tw-fed-title" style={{ margin: "0 0 14px", fontSize: 18 }}>
+            Selecciona federación
+          </h3>
+          <div style={{ display: "grid", gap: 6, maxHeight: 440, overflowY: "auto" }}>
+            {FEDERATIONS.map((f) => {
+              const sel = value?.code === f.code;
+              return (
+                <button
+                  key={f.code}
+                  type="button"
+                  onClick={() => {
+                    onChange(f);
+                    setOpen(false);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "11px 12px",
+                    borderRadius: 12,
+                    border: `1px solid ${sel ? "var(--accent)" : "var(--hair)"}`,
+                    background: sel ? "var(--accent-10)" : "var(--bg-card)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "'Satoshi', sans-serif",
+                  }}
+                >
+                  <span
+                    className="mono"
+                    style={{
+                      minWidth: 56,
+                      textAlign: "center",
+                      fontSize: 11,
+                      color: "var(--accent)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {f.shortName}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
+                      {f.name}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                      {f.region}
+                    </span>
+                  </span>
+                  {sel && (
+                    <span style={{ marginLeft: "auto", color: "var(--accent)" }}>
+                      <IconCheck size={16} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 // Géneros (etiqueta legible) para el alta múltiple de equipos de club.
 const GENDERS = ["Masculino", "Femenino", "Mixto"] as const;
 
@@ -338,7 +462,6 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
   const [name, setName] = useState("");
   const [comp, setComp] = useState("federada");
   const [federation, setFederation] = useState<Federation | null>(null);
-  const [fedOpen, setFedOpen] = useState(false);
   const [league, setLeague] = useState("");
   const [cat, setCat] = useState("2ª");
   const [gender, setGender] = useState("masculino");
@@ -470,47 +593,7 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
 
         {isFederada && (
           <Field label="Federación">
-            <button
-              type="button"
-              onClick={() => setFedOpen(true)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                minHeight: 52,
-                padding: "12px 14px",
-                borderRadius: 12,
-                borderWidth: 1,
-                borderStyle: "solid",
-                borderColor: "var(--hair-strong)",
-                background: "var(--bg-card)",
-                color: "var(--text)",
-                cursor: "pointer",
-                fontFamily: "'Satoshi', sans-serif",
-                textAlign: "left",
-              }}
-            >
-              {federation ? (
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
-                    {federation.name}
-                  </span>
-                  <span
-                    className="mono"
-                    style={{ fontSize: 11, color: "var(--text-faint)" }}
-                  >
-                    {federation.region} · {federation.shortName}
-                  </span>
-                </span>
-              ) : (
-                <span style={{ color: "var(--text-faint)", fontSize: 14 }}>
-                  Selecciona federación
-                </span>
-              )}
-              <span style={{ color: "var(--text-faint)", fontSize: 18 }}>›</span>
-            </button>
+            <FederationSelect value={federation} onChange={setFederation} />
           </Field>
         )}
 
@@ -639,67 +722,6 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
         {busy ? "Creando…" : "Crear equipo"}
       </button>
 
-      {fedOpen && (
-        <Modal open onClose={() => setFedOpen(false)} labelledBy="tw-fed-title">
-          <h3 id="tw-fed-title" style={{ margin: "0 0 14px", fontSize: 18 }}>
-            Selecciona federación
-          </h3>
-          <div style={{ display: "grid", gap: 6, maxHeight: 440, overflowY: "auto" }}>
-            {FEDERATIONS.map((f) => {
-              const sel = federation?.code === f.code;
-              return (
-                <button
-                  key={f.code}
-                  type="button"
-                  onClick={() => {
-                    setFederation(f);
-                    setFedOpen(false);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "11px 12px",
-                    borderRadius: 12,
-                    border: `1px solid ${sel ? "var(--accent)" : "var(--hair)"}`,
-                    background: sel ? "var(--accent-10)" : "var(--bg-card)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontFamily: "'Satoshi', sans-serif",
-                  }}
-                >
-                  <span
-                    className="mono"
-                    style={{
-                      minWidth: 56,
-                      textAlign: "center",
-                      fontSize: 11,
-                      color: "var(--accent)",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {f.shortName}
-                  </span>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
-                      {f.name}
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                      {f.region}
-                    </span>
-                  </span>
-                  {sel && (
-                    <span style={{ marginLeft: "auto", color: "var(--accent)" }}>
-                      <IconCheck size={16} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </Modal>
-      )}
-
       {importOpen && (
         <Modal open onClose={() => setImportOpen(false)} labelledBy="tw-fcp-title">
           <h3 id="tw-fcp-title" style={{ margin: "0 0 4px", fontSize: 18 }}>
@@ -791,6 +813,7 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
 
 export function CreateClub() {
   const [name, setName] = useState("");
+  const [federation, setFederation] = useState<Federation | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -799,7 +822,7 @@ export function CreateClub() {
     setBusy(true);
     setErr(null);
     const res = await guardedWrite("crear el club", () =>
-      createClub(name.trim()),
+      createClub(name.trim(), federation?.code ?? null),
     );
     setBusy(false);
     // Recarga completa para que la sesión detecte el club nuevo y aterrice en
@@ -826,54 +849,11 @@ export function CreateClub() {
           />
         </Field>
 
-        <Field label="Ciudad">
-          <Input type="text" placeholder="Santander" />
-        </Field>
-
-        <Field label="Escudo · PNG o JPG">
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              padding: 16,
-              borderRadius: 12,
-              border: "1px dashed var(--hair-strong)",
-              cursor: "pointer",
-            }}
-          >
-            <span
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 999,
-                background: "var(--bg-card-2)",
-                color: "var(--text-faint)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flex: "none",
-              }}
-            >
-              <IconUpload size={20} />
-            </span>
-            <span style={{ flex: 1 }}>
-              <span style={{ display: "block", fontSize: 13.5, fontWeight: 700 }}>
-                Añadir foto
-              </span>
-              <span
-                style={{
-                  display: "block",
-                  marginTop: 4,
-                  fontSize: 12,
-                  color: "var(--text-faint)",
-                }}
-              >
-                Arrastra el escudo o elige un archivo
-              </span>
-            </span>
-            <input type="file" accept="image/*" hidden />
-          </label>
+        <Field
+          label="Federación · opcional"
+          hint="Sus equipos la heredan; si es la Cántabra, podrás importarlos de la Federación."
+        >
+          <FederationSelect value={federation} onChange={setFederation} />
         </Field>
       </div>
 
@@ -902,19 +882,244 @@ interface DraftTeam {
   category: string;
 }
 
+/** Alta de equipos del club. Si el club es de la Federación Cántabra ofrece el
+ *  IMPORT (todos sus equipos de la federación de una vez); si no, alta manual. */
 export function CreateClubTeams() {
+  const { clubId } = useSession();
+  const { data: club, loading } = useAsync(
+    () => (clubId ? fetchClub(clubId) : Promise.resolve(null)),
+    [clubId],
+  );
+
+  if (!clubId) {
+    return (
+      <EntryFrame wide>
+        <Card>
+          <EmptyState
+            icon={<IconBuilding size={30} />}
+            title="Crea primero tu club"
+            body="Los equipos cuelgan de un club."
+          />
+        </Card>
+      </EntryFrame>
+    );
+  }
+  if (loading) {
+    return (
+      <EntryFrame wide>
+        <SkeletonCard />
+      </EntryFrame>
+    );
+  }
+
+  return club?.federation === FCP_FEDERATION_CODE ? (
+    <ClubFcpImport clubId={clubId} clubName={club?.name ?? "tu club"} />
+  ) : (
+    <ClubManualTeams clubId={clubId} />
+  );
+}
+
+/** Import de club: busca en la Federación Cántabra y crea TODOS los equipos
+ *  elegidos con su plantilla y sus puntos (multi-selección). */
+function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: string }) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<FcpClubGroup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Record<number, FcpTeamOption>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    const h = setTimeout(() => {
+      searchFcpClubs(query)
+        .then((r) => alive && setResults(r))
+        .catch(() => alive && setResults([]))
+        .finally(() => alive && setLoading(false));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(h);
+    };
+  }, [query]);
+
+  const selCount = Object.keys(selected).length;
+  const toggle = (t: FcpTeamOption) =>
+    setSelected((s) => {
+      const n = { ...s };
+      if (n[t.id_equipo]) delete n[t.id_equipo];
+      else n[t.id_equipo] = t;
+      return n;
+    });
+
+  async function importSelected() {
+    if (busy || selCount === 0) return;
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("importar los equipos", () =>
+      importFcpTeams(clubId, Object.values(selected)),
+    );
+    setBusy(false);
+    if (res.ok) window.location.href = "/club";
+    else setErr(res.reason);
+  }
+
+  return (
+    <EntryFrame wide>
+      <Eyebrow>CLUB · IMPORTAR DE LA FEDERACIÓN</Eyebrow>
+      <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>
+        Importa los equipos de {clubName}
+      </h1>
+      <p style={{ margin: "0 0 20px", fontSize: 14, color: "var(--text-muted)" }}>
+        Busca tu club en la Federación Cántabra y crea todos sus equipos con su
+        plantilla y sus puntos oficiales.
+      </p>
+
+      <Input
+        type="text"
+        placeholder="Busca tu club o equipo"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {err && (
+        <p style={{ marginTop: 12, color: "var(--error)", fontSize: 13 }}>{err}</p>
+      )}
+
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+        {loading && (
+          <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Buscando…</p>
+        )}
+        {!loading && results.length === 0 && query.trim().length > 0 && (
+          <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+            Sin resultados para «{query.trim()}».
+          </p>
+        )}
+        {results.map((cg) => (
+          <Card key={cg.club} style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--hair)" }}>
+              <Eyebrow>{cg.club}</Eyebrow>
+            </div>
+            {cg.teams.map((t, i) => {
+              const on = !!selected[t.id_equipo];
+              return (
+                <button
+                  key={t.id_equipo}
+                  type="button"
+                  onClick={() => toggle(t)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "13px 18px",
+                    border: "none",
+                    borderTop: i === 0 ? "none" : "1px solid var(--hair)",
+                    background: on ? "var(--accent-10)" : "transparent",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "'Satoshi', sans-serif",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      border: `1.5px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                      background: on ? "var(--accent)" : "transparent",
+                      color: "#001810",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flex: "none",
+                    }}
+                  >
+                    {on && <IconCheck size={14} />}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>
+                    {t.equipo}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 11, color: "var(--text-faint)" }}
+                  >
+                    {[t.category, t.gender].filter(Boolean).join(" · ")}
+                  </span>
+                </button>
+              );
+            })}
+          </Card>
+        ))}
+      </div>
+
+      <div
+        style={{
+          marginTop: 20,
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          className="btn btn-accent"
+          disabled={selCount === 0 || busy}
+          onClick={importSelected}
+          style={{ padding: "14px 26px", fontSize: 14.5 }}
+        >
+          {busy
+            ? "Importando…"
+            : `Importar ${selCount} ${selCount === 1 ? "equipo" : "equipos"}`}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => router.push("/club")}
+          style={{ padding: "14px 22px", fontSize: 13.5 }}
+        >
+          Omitir · lo hago luego
+        </button>
+      </div>
+    </EntryFrame>
+  );
+}
+
+/** Alta manual de los equipos del club (clubes no cántabros). Ahora crea de
+ *  verdad (antes solo navegaba a /club sin crear nada). */
+function ClubManualTeams({ clubId }: { clubId: string }) {
   const router = useRouter();
   const [teams, setTeams] = useState<DraftTeam[]>([
-    { id: 1, name: "Halcones A", gender: "Masculino", category: "1ª" },
-    { id: 2, name: "Halcones B", gender: "Masculino", category: "2ª" },
-    { id: 3, name: "Halcones Femenino", gender: "Femenino", category: "1ª" },
+    { id: 1, name: "", gender: "Masculino", category: "1ª" },
   ]);
-  const [nextId, setNextId] = useState(4);
+  const [nextId, setNextId] = useState(2);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const patch = (id: number, p: Partial<DraftTeam>) =>
     setTeams((ts) => ts.map((t) => (t.id === id ? { ...t, ...p } : t)));
 
-  const valid = teams.filter((t) => t.name.trim().length > 1).length;
+  const validTeams = teams.filter((t) => t.name.trim().length > 1);
+
+  async function createAll() {
+    if (busy || validTeams.length === 0) return;
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("crear los equipos", async () => {
+      for (const t of validTeams)
+        await createTeam({
+          name: t.name.trim(),
+          gender: GENDER_DB[t.gender] ?? "masculino",
+          category: t.category || null,
+          clubId,
+        });
+    });
+    setBusy(false);
+    if (res.ok) window.location.href = "/club";
+    else setErr(res.reason);
+  }
 
   return (
     <EntryFrame wide>
@@ -956,12 +1161,16 @@ export function CreateClubTeams() {
                 />
               </Field>
               <Field label="Categoría">
-                <Input
-                  type="text"
-                  placeholder="1ª"
-                  value={t.category}
-                  onChange={(e) => patch(t.id, { category: e.target.value })}
-                />
+                <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
+                  {TEAM_CATEGORIES.map((cv) => (
+                    <CellButton
+                      key={cv}
+                      label={cv}
+                      selected={t.category === cv}
+                      onClick={() => patch(t.id, { category: cv })}
+                    />
+                  ))}
+                </div>
               </Field>
               <button
                 type="button"
@@ -984,6 +1193,10 @@ export function CreateClubTeams() {
         ))}
       </div>
 
+      {err && (
+        <p style={{ marginTop: 14, color: "var(--error)", fontSize: 13 }}>{err}</p>
+      )}
+
       <div
         style={{
           marginTop: 16,
@@ -999,7 +1212,7 @@ export function CreateClubTeams() {
           onClick={() => {
             setTeams((ts) => [
               ...ts,
-              { id: nextId, name: "", gender: "Masculino", category: "" },
+              { id: nextId, name: "", gender: "Masculino", category: "1ª" },
             ]);
             setNextId((n) => n + 1);
           }}
@@ -1016,17 +1229,17 @@ export function CreateClubTeams() {
             color: "var(--text-faint)",
           }}
         >
-          {valid} {valid === 1 ? "EQUIPO" : "EQUIPOS"}
+          {validTeams.length} {validTeams.length === 1 ? "EQUIPO" : "EQUIPOS"}
         </span>
         <div style={{ flex: 1 }} />
         <button
           type="button"
           className="btn btn-accent"
-          disabled={valid === 0}
-          onClick={() => router.push("/club")}
+          disabled={validTeams.length === 0 || busy}
+          onClick={createAll}
           style={{ padding: "14px 26px", fontSize: 14.5 }}
         >
-          Crear equipos
+          {busy ? "Creando…" : "Crear equipos"}
         </button>
       </div>
     </EntryFrame>
