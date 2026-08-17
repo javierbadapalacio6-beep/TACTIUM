@@ -53,7 +53,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
   return (
     <div className="tw-pub">
       <header className="tw-pub-bar">
-        <Link href="/torneos" className="tw-pub-brand" aria-label="TACTIUM">
+        <Link href="/" className="tw-pub-brand" aria-label="TACTIUM · Inicio">
           <Wordmark />
         </Link>
 
