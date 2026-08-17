@@ -458,8 +458,10 @@ function FederationSelect({
 // Géneros (etiqueta legible) para el alta múltiple de equipos de club.
 const GENDERS = ["Masculino", "Femenino", "Mixto"] as const;
 
-export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
-  const router = useRouter();
+export function CreateTeam({ clubId }: { clubId?: string }) {
+  // Alta desde el panel de un club (con id) vs. alta independiente.
+  const fromClub = !!clubId;
+  const backHref = fromClub ? "/club/equipos" : "/equipo";
   const [name, setName] = useState("");
   const [comp, setComp] = useState("federada");
   const [federation, setFederation] = useState<Federation | null>(null);
@@ -504,12 +506,11 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
     if (fcpBusy) return;
     setFcpBusy(true);
     setFcpErr(null);
-    // Alta independiente (clubId=null); el volcado de un club va desde su panel.
     const res = await guardedWrite("importar el equipo", () =>
-      importFcpTeams(null, [t]),
+      importFcpTeams(clubId ?? null, [t]),
     );
     setFcpBusy(false);
-    if (res.ok) window.location.href = "/equipo";
+    if (res.ok) window.location.href = backHref;
     else setFcpErr(res.reason);
   }
 
@@ -527,12 +528,6 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
 
   async function submit() {
     if (busy || !valid) return;
-    // El alta de equipo DENTRO de un club necesita el id del club, que aún no
-    // fluye entre pasos en la web → ese caso se hace desde el panel del club.
-    if (fromClub) {
-      router.push("/empezar/jugadores");
-      return;
-    }
     setBusy(true);
     setErr(null);
     const res = await guardedWrite("crear el equipo", () =>
@@ -543,11 +538,12 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
         league: effectiveLeague || null,
         category: cat,
         group: hasGroup ? group : null,
+        clubId: clubId ?? undefined,
       }),
     );
     setBusy(false);
-    // Recarga completa: la sesión detecta el equipo y aterriza en su plantilla.
-    if (res.ok) window.location.href = "/equipo";
+    // Recarga completa: la sesión detecta el equipo y aterriza donde toca.
+    if (res.ok) window.location.href = backHref;
     else setErr(res.reason);
   }
 
@@ -807,7 +803,13 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
     </>
   );
 
-  return fromClub ? <Card>{body}</Card> : <EntryFrame wide>{body}</EntryFrame>;
+  return fromClub ? (
+    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      <Card style={{ padding: 24 }}>{body}</Card>
+    </div>
+  ) : (
+    <EntryFrame wide>{body}</EntryFrame>
+  );
 }
 
 /* ═══ 05 · CREAR CLUB ═════════════════════════════════════════════ */

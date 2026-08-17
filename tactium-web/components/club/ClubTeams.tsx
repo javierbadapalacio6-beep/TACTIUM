@@ -47,7 +47,7 @@ export function ClubTeams() {
           <h1 style={{ marginTop: 10, fontSize: 30 }}>Equipos</h1>
         </div>
         <Link
-          href="/empezar/equipo"
+          href="/club/equipos/nuevo"
           className="btn btn-accent"
           style={{ padding: "12px 20px", fontSize: 13.5 }}
         >
