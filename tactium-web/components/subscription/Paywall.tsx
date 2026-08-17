@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { CLUB_PLANS, formatEur } from "@/lib/plans";
+import { CAPTAIN_PLAN, CLUB_PLANS, formatEur } from "@/lib/plans";
 import {
   TOURNAMENT_TIERS,
   TOURNAMENT_EXTRA_PAIR_EUR,
@@ -40,7 +40,10 @@ export function Paywall() {
       window.location.href = "/entrar";
       return;
     }
-    if (!clubId) {
+    // El plan Capitán es personal (subject = usuario): no requiere club. Los
+    // planes de club sí necesitan un club del que seas owner/admin.
+    const isCaptain = tier === "captain";
+    if (!isCaptain && !clubId) {
       setToast("Primero crea tu club para contratar un plan de club.");
       return;
     }
@@ -49,12 +52,11 @@ export function Paywall() {
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          tier,
-          cycle,
-          subjectType: "club",
-          subjectId: clubId,
-        }),
+        body: JSON.stringify(
+          isCaptain
+            ? { tier, cycle, subjectType: "user" }
+            : { tier, cycle, subjectType: "club", subjectId: clubId },
+        ),
       });
       const data = (await res.json().catch(() => ({}))) as {
         url?: string;
@@ -322,6 +324,68 @@ export function Paywall() {
             </Card>
           ))}
         </div>
+
+        {/* ── Carril Capitán ─────────────────────────────────────────
+            Quien sólo gestiona UN equipo (capitán independiente) no necesita un
+            plan de club. Antes no había opción y quedaba sin salida. */}
+        <Card
+          style={{
+            marginTop: 20,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 20,
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ minWidth: 220, flex: 1 }}>
+            <Eyebrow>SOLO UN EQUIPO</Eyebrow>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
+              {CAPTAIN_PLAN.displayName}
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "var(--text-muted)",
+                marginTop: 6,
+                textWrap: "pretty",
+              }}
+            >
+              {CAPTAIN_PLAN.audience} · gestiónalo sin crear un club.
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span
+              className="mono"
+              style={{ fontSize: 32, fontWeight: 700, lineHeight: 1 }}
+            >
+              {formatEur(
+                yearly
+                  ? CAPTAIN_PLAN.priceYearlyEur
+                  : CAPTAIN_PLAN.priceMonthlyEur,
+              )}
+            </span>
+            <span
+              className="mono"
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.14em",
+                color: "var(--text-faint)",
+              }}
+            >
+              {yearly ? "/AÑO" : "/MES"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => subscribe("captain")}
+            disabled={busy !== null}
+            className="btn btn-ghost"
+            style={{ padding: "12px 22px", fontSize: 13.5, flex: "none" }}
+          >
+            {busy === "captain" ? "Abriendo pago…" : "Empezar prueba 14 días"}
+          </button>
+        </Card>
 
         {/* ── Cómo va la prueba ──────────────────────────────────── */}
         <Card style={{ marginTop: 32 }}>

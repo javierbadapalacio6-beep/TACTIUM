@@ -38,10 +38,16 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
   const [recoverEmail, setRecoverEmail] = useState("");
 
   const signup = mode === "signup";
-  const emailBad = touched && email.length > 0 && !EMAIL_RE.test(email);
-  const passBad = touched && signup && pass.length > 0 && pass.length < 6;
+  // Tras un intento de envío (touched) se marcan también los campos VACÍOS, para
+  // que enviar en blanco dé feedback (antes se ignoraba sin avisar de nada).
+  const emailBad = touched && !EMAIL_RE.test(email);
+  const passBad = touched && (signup ? pass.length < 6 : pass.length === 0);
+  const nameBad = touched && signup && name.trim().length <= 1;
   const canSubmit =
-    EMAIL_RE.test(email) && pass.length >= 6 && (!signup || name.trim().length > 1);
+    EMAIL_RE.test(email) &&
+    // En login basta con que haya contraseña; el mínimo de 6 es regla de alta.
+    (signup ? pass.length >= 6 : pass.length >= 1) &&
+    (!signup || name.trim().length > 1);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -132,18 +138,28 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
         }}
       >
         {signup && (
-          <Field label="Nombre">
+          <Field label="Nombre" error={nameBad ? "Escribe tu nombre" : undefined}>
             <Input
               type="text"
               autoComplete="name"
               placeholder="Carlos Pérez"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              style={nameBad ? { borderColor: "var(--error)" } : undefined}
             />
           </Field>
         )}
 
-        <Field label="Email" error={emailBad ? "Email inválido" : undefined}>
+        <Field
+          label="Email"
+          error={
+            emailBad
+              ? email.length === 0
+                ? "Introduce tu email"
+                : "Email inválido"
+              : undefined
+          }
+        >
           <Input
             type="email"
             autoComplete="email"
@@ -157,7 +173,13 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
         <Field
           label="Contraseña"
           hint={signup ? "Mínimo 6 caracteres" : undefined}
-          error={passBad ? "Mínimo 6 caracteres" : undefined}
+          error={
+            passBad
+              ? signup
+                ? "Mínimo 6 caracteres"
+                : "Introduce tu contraseña"
+              : undefined
+          }
           action={
             !signup ? (
               <button

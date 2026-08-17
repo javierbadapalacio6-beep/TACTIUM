@@ -204,7 +204,12 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
         width: "100%",
         padding: "13px 15px",
         borderRadius: 12,
-        border: "1px solid var(--hair-strong)",
+        // Longhand (no el shorthand `border`) para que un override de
+        // `borderColor` desde `style` no mezcle shorthand+longhand en el mismo
+        // objeto (React avisa de eso y puede dejar estilos obsoletos).
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "var(--hair-strong)",
         background: "var(--bg-card)",
         color: "var(--text)",
         fontFamily: "'Satoshi', sans-serif",
