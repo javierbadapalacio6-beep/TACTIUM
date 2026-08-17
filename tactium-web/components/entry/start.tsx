@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import { EntryFrame, Field, Input, Segmented } from "./EntryFrame";
 import { Card, Eyebrow, Modal } from "@/components/ui";
@@ -26,6 +26,12 @@ import {
   TEAM_GROUPS,
   type Federation,
 } from "@/lib/federations";
+import {
+  searchFcpClubs,
+  importFcpTeams,
+  type FcpClubGroup,
+  type FcpTeamOption,
+} from "@/lib/fcp-import";
 import { useSession } from "@/lib/session";
 import { guardedWrite } from "@/lib/writes";
 
@@ -341,9 +347,47 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Importar de la Federación Cántabra (volcado de plantilla + puntos).
+  const [importOpen, setImportOpen] = useState(false);
+  const [fcpQuery, setFcpQuery] = useState("");
+  const [fcpResults, setFcpResults] = useState<FcpClubGroup[]>([]);
+  const [fcpLoading, setFcpLoading] = useState(false);
+  const [fcpBusy, setFcpBusy] = useState(false);
+  const [fcpErr, setFcpErr] = useState<string | null>(null);
+
   const preset = COMPETITION_PRESETS.find((p) => p.id === comp) ?? COMPETITION_PRESETS[0];
   const isFederada = comp === "federada";
   const isFcp = isFederada && federation?.code === FCP_FEDERATION_CODE;
+
+  // Búsqueda federativa con debounce mientras el buscador está abierto.
+  useEffect(() => {
+    if (!importOpen) return;
+    let alive = true;
+    setFcpLoading(true);
+    const h = setTimeout(() => {
+      searchFcpClubs(fcpQuery)
+        .then((r) => alive && setFcpResults(r))
+        .catch(() => alive && setFcpResults([]))
+        .finally(() => alive && setFcpLoading(false));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(h);
+    };
+  }, [fcpQuery, importOpen]);
+
+  async function importFcpTeam(t: FcpTeamOption) {
+    if (fcpBusy) return;
+    setFcpBusy(true);
+    setFcpErr(null);
+    // Alta independiente (clubId=null); el volcado de un club va desde su panel.
+    const res = await guardedWrite("importar el equipo", () =>
+      importFcpTeams(null, [t]),
+    );
+    setFcpBusy(false);
+    if (res.ok) window.location.href = "/equipo";
+    else setFcpErr(res.reason);
+  }
 
   // Valor efectivo de team.league según el tipo de competición (espejo de la app).
   const effectiveLeague = isFederada
@@ -468,6 +512,46 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
               <span style={{ color: "var(--text-faint)", fontSize: 18 }}>›</span>
             </button>
           </Field>
+        )}
+
+        {isFcp && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              flexWrap: "wrap",
+              padding: 16,
+              borderRadius: 12,
+              background: "var(--accent-10)",
+              border: "1px solid var(--accent-25)",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>
+                Importar de la Federación Cántabra
+              </div>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: "var(--text-muted)",
+                  marginTop: 4,
+                  textWrap: "pretty",
+                }}
+              >
+                Busca tu equipo y créalo con su plantilla y sus puntos
+                automáticamente. No hace falta rellenar lo de abajo.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-accent"
+              onClick={() => setImportOpen(true)}
+              style={{ padding: "11px 18px", fontSize: 13.5, flex: "none" }}
+            >
+              Buscar mi equipo
+            </button>
+          </div>
         )}
 
         {(comp === "personalizada" || (isFederada && !isFcp)) && (
@@ -613,6 +697,88 @@ export function CreateTeam({ fromClub }: { fromClub?: boolean }) {
               );
             })}
           </div>
+        </Modal>
+      )}
+
+      {importOpen && (
+        <Modal open onClose={() => setImportOpen(false)} labelledBy="tw-fcp-title">
+          <h3 id="tw-fcp-title" style={{ margin: "0 0 4px", fontSize: 18 }}>
+            Importar de la Federación
+          </h3>
+          <p
+            style={{
+              margin: "0 0 14px",
+              fontSize: 13,
+              color: "var(--text-muted)",
+            }}
+          >
+            Busca tu club o equipo y créalo con su plantilla y sus puntos.
+          </p>
+          <Input
+            type="text"
+            placeholder="Busca tu club o equipo"
+            value={fcpQuery}
+            onChange={(e) => setFcpQuery(e.target.value)}
+          />
+          {fcpErr && (
+            <p style={{ marginTop: 10, color: "var(--error)", fontSize: 13 }}>
+              {fcpErr}
+            </p>
+          )}
+          <div style={{ marginTop: 12, maxHeight: 380, overflowY: "auto" }}>
+            {fcpLoading && (
+              <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Buscando…</p>
+            )}
+            {!fcpLoading &&
+              fcpResults.length === 0 &&
+              fcpQuery.trim().length > 0 && (
+                <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+                  Sin resultados para «{fcpQuery.trim()}».
+                </p>
+              )}
+            {fcpResults.map((club) => (
+              <div key={club.club} style={{ marginBottom: 14 }}>
+                <Eyebrow>{club.club}</Eyebrow>
+                <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                  {club.teams.map((t) => (
+                    <button
+                      key={t.id_equipo}
+                      type="button"
+                      disabled={fcpBusy}
+                      onClick={() => importFcpTeam(t)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "11px 12px",
+                        borderRadius: 12,
+                        border: "1px solid var(--hair)",
+                        background: "var(--bg-card)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        fontFamily: "'Satoshi', sans-serif",
+                      }}
+                    >
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
+                        {t.equipo}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{ fontSize: 11, color: "var(--text-faint)" }}
+                      >
+                        {[t.category, t.gender].filter(Boolean).join(" · ")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {fcpBusy && (
+            <p style={{ marginTop: 10, fontSize: 13, color: "var(--accent)" }}>
+              Importando…
+            </p>
+          )}
         </Modal>
       )}
     </>
