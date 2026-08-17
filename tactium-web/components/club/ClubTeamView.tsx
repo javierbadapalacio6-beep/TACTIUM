@@ -8,6 +8,7 @@ import {
   fetchClubTeams,
   fetchMatchdays,
   fetchPlayers,
+  fetchTeamFcpGroup,
   type DbMatchday,
   type DbPlayer,
   type DbSeason,
@@ -35,6 +36,7 @@ interface TeamData {
   season: DbSeason | null;
   matchdays: DbMatchday[];
   players: DbPlayer[];
+  fcpGroup: { fed: string; idGrupo: string } | null;
 }
 
 function formatDate(iso: string | null): string {
@@ -57,11 +59,12 @@ export function ClubTeamView({ id }: { id: string }) {
       const teams = await fetchClubTeams(clubId!);
       const team = teams.find((t) => t.id === id) ?? null;
       const season = await fetchActiveSeason(id);
-      const [matchdays, players] = await Promise.all([
+      const [matchdays, players, fcpGroup] = await Promise.all([
         season ? fetchMatchdays(season.id) : Promise.resolve([]),
         fetchPlayers(id),
+        fetchTeamFcpGroup(id).catch(() => null),
       ]);
-      return { team, season, matchdays, players };
+      return { team, season, matchdays, players, fcpGroup };
     },
     [id, clubId],
     !!clubId
@@ -90,6 +93,10 @@ export function ClubTeamView({ id }: { id: string }) {
   const team = data?.team;
   const season = data?.season ?? null;
   const players = data?.players ?? [];
+  const fcpGroup = data?.fcpGroup ?? null;
+  const grupoHref = fcpGroup
+    ? `/federacion/${fcpGroup.fed}/grupo/${encodeURIComponent(fcpGroup.idGrupo)}`
+    : "/federacion";
   const finished = (data?.matchdays ?? []).filter((m) => m.status === "finished");
   const next = (data?.matchdays ?? []).find((m) => m.status !== "finished") ?? null;
 
@@ -299,7 +306,7 @@ export function ClubTeamView({ id }: { id: string }) {
           ))}
       </Card>
 
-      <Link href="/federacion" style={{ color: "inherit" }}>
+      <Link href={grupoHref} style={{ color: "inherit" }}>
         <Card
           style={{
             padding: "16px 20px",
@@ -312,7 +319,9 @@ export function ClubTeamView({ id }: { id: string }) {
             <IconFlag size={17} />
           </span>
           <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>
-            Mi grupo · clasificación y jornadas
+            {fcpGroup
+              ? "Mi grupo · clasificación y jornadas"
+              : "Explorar la Federación"}
           </span>
           <IconChevronRight size={16} />
         </Card>

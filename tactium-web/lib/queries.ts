@@ -2,6 +2,7 @@
 
 import { supabaseBrowser } from "./supabase/client";
 import type { Position } from "./team-data";
+import { FCP_FEDERATION_CODE } from "./federations";
 
 /**
  * Capa de datos.
@@ -779,6 +780,36 @@ export async function fetchClubTeams(clubId: string): Promise<DbClubTeam[]> {
     gender: t.gender,
     covered: !!t.covered,
   }));
+}
+
+/**
+ * Resuelve el grupo federativo (FCP) de un equipo, para enlazar «Mi grupo» a su
+ * clasificación concreta en vez de al explorador general. Devuelve null si el
+ * equipo no está vinculado a la Federación Cántabra.
+ */
+export async function fetchTeamFcpGroup(
+  teamId: string,
+): Promise<{ fed: string; idGrupo: string } | null> {
+  const sb = supabaseBrowser();
+  const { data: link } = await sb
+    .from("fcp_team_links")
+    .select("fcp_id_equipo")
+    .eq("team_id", teamId)
+    .maybeSingle();
+  const fcpId = (link as { fcp_id_equipo: number } | null)?.fcp_id_equipo ?? null;
+  if (fcpId == null) return null;
+
+  // La temporada actual (mayor id_liga), su liga regular (no playoff/fase).
+  const { data: rows } = await sb
+    .from("fcp_clasificacion")
+    .select("id_grupo, id_liga")
+    .eq("id_equipo", fcpId)
+    .order("id_liga", { ascending: false });
+  const row = ((rows ?? []) as { id_grupo: string | null }[]).find(
+    (r) => r.id_grupo && !/^fase/i.test(r.id_grupo),
+  );
+  if (!row?.id_grupo) return null;
+  return { fed: FCP_FEDERATION_CODE, idGrupo: row.id_grupo };
 }
 
 export async function fetchClub(clubId: string) {

@@ -255,7 +255,7 @@ export function ClubDashboard() {
       <div className="tw-shortcuts">
         {[
           { href: "/club/horarios", title: "Horarios de local", Icon: IconClock },
-          { href: "/federacion", title: "Importar de la Federación", Icon: IconFlag },
+          { href: "/club/importar", title: "Importar de la Federación", Icon: IconFlag },
           { href: "/club/facturacion", title: "Facturación del club", Icon: IconBuilding },
         ].map((s) => (
           <Link key={s.href} href={s.href} style={{ color: "inherit" }}>

@@ -924,7 +924,7 @@ export function CreateClubTeams() {
 
 /** Import de club: busca en la Federación Cántabra y crea TODOS los equipos
  *  elegidos con su plantilla y sus puntos (multi-selección). */
-function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: string }) {
+export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: string }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FcpClubGroup[]>([]);

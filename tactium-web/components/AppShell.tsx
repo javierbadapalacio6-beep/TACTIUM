@@ -150,9 +150,24 @@ function Avatar({ initials, size = 32 }: { initials: string; size?: number }) {
   );
 }
 
-function isActive(pathname: string, href: string) {
+function matchesHref(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(href + "/");
+}
+
+/**
+ * Href activo entre una lista: el prefijo MÁS específico que casa. Sin esto,
+ * `/club` marcaría activo en `/club/equipos/xxx` a la vez que `/club/equipos`
+ * (dos secciones resaltadas). Gana el href más largo que coincide.
+ */
+function activeHref(pathname: string, hrefs: string[]): string | null {
+  let best: string | null = null;
+  for (const href of hrefs) {
+    if (matchesHref(pathname, href) && (best === null || href.length > best.length)) {
+      best = href;
+    }
+  }
+  return best;
 }
 
 /** Cierra el popover al pulsar fuera o con Escape. */
@@ -274,6 +289,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const nav = NAV_BY_ROLE[role];
   const tabs = TABS_BY_ROLE[role];
+  const navActiveHref = activeHref(pathname, nav.map((i) => i.href));
+  const tabsActiveHref = activeHref(pathname, tabs.map((t) => t.href));
   const meta = routeMeta(pathname, role);
   const unread = notices.filter((n) => n.unread).length;
 
@@ -323,7 +340,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="tw-side-nav" aria-label="Navegación principal">
           <div className="eyebrow tw-side-eyebrow">{(user?.roleLabel ?? "INVITADO")}</div>
           {nav.map((item) => {
-            const active = isActive(pathname, item.href);
+            const active = item.href === navActiveHref;
             const Icon = ICONS[item.icon];
             return (
               <Link
@@ -775,7 +792,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ══ Tab bar · móvil ════════════════════════════════════════ */}
       <nav className="tw-tabbar" aria-label="Navegación principal">
         {tabs.map((t) => {
-          const active = isActive(pathname, t.href);
+          const active = t.href === tabsActiveHref;
           const Icon = ICONS[t.icon];
           return (
             <Link
