@@ -248,6 +248,27 @@
 const LOG = [
   {
     date: "2026-08-17",
+    title: "🏆 ORGANIZADOR DE TORNEO OPERABLE DE PUNTA A PUNTA (web): verificado en vivo con cuenta club-admin (crear → generar cuadro → meter resultados) y arreglados 3 huecos que impedían llegar al motor. Más pulidos: logo→home, ver contraseña, marcar avisos leídos.",
+    changes: [
+      { type: "chore", text: "<strong>🎾 Motor de organizador de torneo verificado EN VIVO</strong> con <code>apple.review</code> (club-admin, escrituras activadas un rato y limpiado después). De punta a punta: <code>createTournament</code> (asistente de 4 pasos) ✅, <code>generateKoBracket</code> («Generar cuadro» → cuadro de 8 con <strong>siembra correcta</strong>, cabeza de serie con BYE) ✅, y <code>setMatchResult</code> (clic en partido → modal → guardar) ✅ — <strong>persiste y avanza al ganador</strong> a semifinales. Era el último bloque grande sin ejercitar con datos reales." },
+
+      { type: "fix", text: "<strong>📋 La lista de torneos del club era de MAQUETA</strong>. <code>/club/torneos</code> mostraba torneos falsos hardcodeados (<code>TOURNAMENTS</code> de <code>tournament-data</code>) y sin enlaces → el organizador no podía volver a su torneo. Ahora <code>fetchClubTournaments(clubId)</code> (lectura directa con RLS, incluye borradores) y cada fila enlaza a <code>/torneos/:id</code>, con estado vacío real («Aún no has creado ningún torneo»)." },
+
+      { type: "fix", text: "<strong>👁️ Los borradores no se veían</strong>. <code>fetchTournament/Matches/Regs</code> usaban solo las RPC públicas, que ocultan los <code>draft</code> → tras crear un torneo (nace draft) el organizador veía «Torneo no disponible». Ahora, si la RPC pública devuelve vacío, caen a <strong>lectura directa</strong> (la RLS deja al organizador ver lo suyo); el anónimo/espectador sigue sin ver borradores." },
+
+      { type: "fix", text: "<strong>🎟️ <code>createTournament</code> no guardaba el código de inscripción</strong>. La UI mostraba un código FIJO hardcodeado («OTN7QP») pero en BD quedaba <code>null</code> → nadie podía apuntarse con él. Ahora genera y persiste el código real (<code>genCode</code>, mismo alfabeto sin caracteres confundibles que la app) + <code>pair_based</code>, y la pantalla de éxito muestra el código de verdad (verificado: YGY4YV persistido)." },
+
+      { type: "fix", text: "<strong>🔗 El logo lleva a Inicio en las tres superficies</strong>. En el marco público iba a <code>/torneos</code>; ahora a <code>/</code>. Y estando logueado el logo (barra lateral + barra superior móvil) era un <code>&lt;div&gt;</code> no clicable → ahora <code>&lt;Link href=/&gt;</code> (misma clase, reset de estilos de enlace)." },
+
+      { type: "feat", text: "<strong>👁️ Botón de ver/ocultar contraseña</strong> en login y registro (iconos <code>IconEye/IconEyeOff</code> estilo Lucide; alterna <code>type</code> password↔text, <code>tabIndex=-1</code> para no romper la tabulación)." },
+
+      { type: "feat", text: "<strong>🔔 Marcar avisos como leídos al abrir la campana</strong>. Completa la campanita: el badge de no-leídos se limpia en local siempre, y solo se PERSISTE (<code>markNotificationsRead</code>, RLS por usuario) si las escrituras están activas — la web no escribe en producción por defecto." },
+
+      { type: "chore", text: "<strong>🔑 Corregidas las credenciales demo en memoria</strong>. <code>smash.club@tactium.io</code> (que la memoria daba como club-admin) <strong>ya no existe</strong> — se borró desde el montaje de julio. Verificado contra la BD (52 usuarios): las 5 cuentas reales son <code>apple.review</code> (única club-admin hoy, dueña de «CD Pádel Las Rozas») + <code>smash.{capitan,capitan2,jugador,suelto}</code>. Contraseña común <code>TactiumDemo2026!</code>. Memoria actualizada." },
+    ],
+  },
+  {
+    date: "2026-08-17",
     title: "🧪 TESTEO DE LA WEB CON NAVEGADOR (estilo Playwright) Y CIERRE DE HALLAZGOS: pasada de arriba a abajo por toda la superficie pública y —con escrituras temporales— el flujo de capitán de punta a punta, más 8 arreglos de bugs y UX.",
     changes: [
       { type: "chore", text: "<strong>🔎 Pasada completa por la web con el navegador integrado</strong> (no hizo falta instalar <code>playwright-mcp</code>). Verificadas SIN sesión: home, <code>/pro</code>, <code>/torneos</code> + detalle (cuadro real con la consolación bien alimentada), <code>/federacion</code> + FCP (133 grupos reales), búsqueda de <code>/comunidad</code>, login y <code>/empezar</code> — <strong>cero errores de consola</strong>, rutas privadas protegidas, tema claro/oscuro y el cuadro del torneo responsive. Con sesión (capitán MEDIO CUDEYO A): equipo (15 jugadores), stats (26 partidos), amistosos, suscripción, novedades, ajustes." },
