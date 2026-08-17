@@ -111,6 +111,96 @@ export async function redeemInvitation(code: string): Promise<void> {
   if (error) throw error;
 }
 
+export interface DbInvitation {
+  id: string;
+  code: string;
+  role: string;
+  used_at: string | null;
+  expires_at: string;
+}
+
+/** Invitaciones de un equipo (RLS: solo admin del equipo las ve). */
+export async function fetchTeamInvitations(
+  teamId: string,
+): Promise<DbInvitation[]> {
+  const { data, error } = await supabaseBrowser()
+    .from("team_invitations")
+    .select("id, code, role, used_at, expires_at")
+    .eq("team_id", teamId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as DbInvitation[]) ?? [];
+}
+
+/** Crea una invitación; la BD genera el código y valida is_team_admin. */
+export async function createInvitation(
+  teamId: string,
+  role: "captain" | "player" = "player",
+): Promise<DbInvitation> {
+  const { data, error } = await supabaseBrowser().rpc("create_team_invitation", {
+    target_team: teamId,
+    target_role: role,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("No se pudo crear la invitación");
+  return data as DbInvitation;
+}
+
+export function invitationActive(inv: DbInvitation): boolean {
+  return inv.used_at === null && new Date(inv.expires_at) > new Date();
+}
+
+/* ── Vinculación usuario ↔ jugador de plantilla (claim) ──────────── */
+export interface DbClaimablePlayer {
+  id: string;
+  name: string;
+  pts: number | null;
+  position: string | null;
+  user_id: string | null;
+}
+
+/** El jugador de la plantilla vinculado al usuario, o null. */
+export async function fetchMyPlayer(
+  teamId: string,
+  userId: string,
+): Promise<DbClaimablePlayer | null> {
+  const { data, error } = await supabaseBrowser()
+    .from("players")
+    .select("id, name, pts, position, user_id")
+    .eq("team_id", teamId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as DbClaimablePlayer | null) ?? null;
+}
+
+/** Jugadores de la plantilla aún sin usuario asociado (para "¿cuál eres tú?"). */
+export async function listUnclaimedPlayers(
+  teamId: string,
+): Promise<DbClaimablePlayer[]> {
+  const { data, error } = await supabaseBrowser().rpc("list_unclaimed_players", {
+    p_team_id: teamId,
+  });
+  if (error) throw error;
+  return (data as DbClaimablePlayer[]) ?? [];
+}
+
+/** Vincula al usuario autenticado con la ficha de jugador indicada. */
+export async function claimPlayer(playerId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("claim_player", {
+    p_player_id: playerId,
+  });
+  if (error) throw error;
+}
+
+/** Desvincula al usuario de su ficha de jugador actual. */
+export async function unclaimPlayer(playerId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("unclaim_player", {
+    p_player_id: playerId,
+  });
+  if (error) throw error;
+}
+
 export async function createTeam(input: {
   name: string;
   gender?: string;

@@ -3,18 +3,29 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import {
-  FREE_PLAYERS,
-  initials,
-  ACCOUNT_EMAIL,
-} from "@/lib/account-data";
+import { initials, ACCOUNT_EMAIL } from "@/lib/account-data";
 import { ALL_PLANS, formatEur } from "@/lib/plans";
-import { fetchSubscription } from "@/lib/queries";
+import {
+  fetchSubscription,
+  fetchActiveSeason,
+  fetchMyPlayer,
+  listUnclaimedPlayers,
+  claimPlayer,
+  unclaimPlayer,
+  fetchTeamInvitations,
+  createInvitation,
+  redeemInvitation,
+  invitationActive,
+  type DbClaimablePlayer,
+  type DbInvitation,
+} from "@/lib/queries";
+import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import {
   IconCalendar,
-  IconChevronDown,
   IconChevronRight,
   IconCopy,
   IconFile,
@@ -24,17 +35,79 @@ import {
   IconShield,
   IconTicket,
   IconTrophy,
+  IconUsers,
 } from "@/components/Icon";
 
 /* ═══ MI JUGADOR ══════════════════════════════════════════════════ */
 export function MiJugador() {
-  const [linked, setLinked] = useState<string | null>(null);
+  const { activeTeam, user } = useSession();
+  const teamId = activeTeam?.id ?? null;
+  const userId = user?.id ?? null;
+
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const { data, loading } = useAsync(
+    async () => {
+      const [mine, unclaimed] = await Promise.all([
+        fetchMyPlayer(teamId!, userId!),
+        listUnclaimedPlayers(teamId!),
+      ]);
+      return { mine, unclaimed };
+    },
+    [teamId, userId, reloadKey],
+    !!teamId && !!userId,
+  );
+
+  async function claim(p: DbClaimablePlayer) {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("vincularte al jugador", () =>
+      claimPlayer(p.id),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(`Vinculado a ${p.name}`);
+    } else setToast(res.reason);
+  }
+
+  async function unclaim(p: DbClaimablePlayer) {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("desvincularte", () => unclaimPlayer(p.id));
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Desvinculado");
+    } else setToast(res.reason);
+  }
+
+  if (!teamId || !userId) {
+    return (
+      <Card>
+        <Eyebrow>MI JUGADOR</Eyebrow>
+        <div style={{ marginTop: 16 }}>
+          <EmptyState
+            icon={<IconUsers size={30} />}
+            title="Aún no estás en un equipo"
+            body="Únete a un equipo con un código de invitación para poder vincularte a tu ficha de la plantilla."
+          />
+        </div>
+      </Card>
+    );
+  }
+  if (loading) return <SkeletonCard />;
+
+  const mine = data?.mine ?? null;
+  const unclaimed = data?.unclaimed ?? [];
 
   return (
     <Card>
       <Eyebrow>MI JUGADOR</Eyebrow>
       <h2 style={{ margin: "14px 0 6px", fontSize: 24 }}>
-        {linked ? "Ya estás vinculado" : "Aún no estás vinculado"}
+        {mine ? "Ya estás vinculado" : "Aún no estás vinculado"}
       </h2>
       <p
         style={{
@@ -45,166 +118,225 @@ export function MiJugador() {
           textWrap: "pretty",
         }}
       >
-        {linked
-          ? `Eres ${linked} en la plantilla. Tus partidos ya cuentan en tus estadísticas.`
+        {mine
+          ? `Eres ${mine.name} en la plantilla. Tus partidos cuentan en tus estadísticas.`
           : "Vincúlate a un jugador de la plantilla para marcar tu disponibilidad y que tus partidos cuenten en tus estadísticas."}
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {FREE_PLAYERS.map((p) => {
-          const active = linked === p.name;
-          return (
-            <button
-              key={p.name}
-              type="button"
-              onClick={() => setLinked(active ? null : p.name)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "13px 15px",
-                borderRadius: 12,
-                background: "var(--bg-card-2)",
-                color: "var(--text)",
-                cursor: "pointer",
-                textAlign: "left",
-                border: `1.5px solid ${
-                  active ? "var(--accent)" : "transparent"
-                }`,
-                transition: "all var(--dur-fast) var(--ease)",
-              }}
-            >
-              <span
-                className="mono"
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 999,
-                  background: "var(--primary-dim)",
-                  color: "var(--accent)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  flex: "none",
-                }}
-              >
-                {initials(p.name)}
-              </span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span
-                  style={{ display: "block", fontSize: 14, fontWeight: 700 }}
-                >
-                  {p.name}
-                </span>
-                <span
-                  className="mono"
-                  style={{
-                    display: "block",
-                    marginTop: 3,
-                    fontSize: 10.5,
-                    letterSpacing: "0.1em",
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  {p.meta}
-                </span>
-              </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 9.5,
-                  letterSpacing: "0.16em",
-                  color: "var(--accent)",
-                }}
-              >
-                {active ? "VINCULADO" : "VINCULAR"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {mine ? (
+        <PlayerRow
+          player={mine}
+          state="linked"
+          disabled={busy}
+          onClick={() => unclaim(mine)}
+        />
+      ) : unclaimed.length === 0 ? (
+        <EmptyState
+          icon={<IconUsers size={30} />}
+          title="No hay fichas libres"
+          body="Todas las fichas de la plantilla ya están vinculadas. Pídele al capitán que añada la tuya."
+        />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {unclaimed.map((p) => (
+            <PlayerRow
+              key={p.id}
+              player={p}
+              state="free"
+              disabled={busy}
+              onClick={() => claim(p)}
+            />
+          ))}
+        </div>
+      )}
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </Card>
+  );
+}
+
+/** Fila de jugador reutilizable para el vínculo (libre / vinculado). */
+function PlayerRow({
+  player,
+  state,
+  disabled,
+  onClick,
+}: {
+  player: DbClaimablePlayer;
+  state: "free" | "linked";
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const linked = state === "linked";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "13px 15px",
+        borderRadius: 12,
+        background: "var(--bg-card-2)",
+        color: "var(--text)",
+        cursor: disabled ? "default" : "pointer",
+        textAlign: "left",
+        opacity: disabled ? 0.6 : 1,
+        border: `1.5px solid ${linked ? "var(--accent)" : "transparent"}`,
+        transition: "all var(--dur-fast) var(--ease)",
+      }}
+    >
+      <span
+        className="mono"
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 999,
+          background: "var(--primary-dim)",
+          color: "var(--accent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          fontWeight: 700,
+          flex: "none",
+        }}
+      >
+        {initials(player.name)}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
+          {player.name}
+        </span>
+        <span
+          className="mono"
+          style={{
+            display: "block",
+            marginTop: 3,
+            fontSize: 10.5,
+            letterSpacing: "0.1em",
+            color: "var(--text-faint)",
+          }}
+        >
+          {[player.pts != null ? `${player.pts} PTS` : null, player.position]
+            .filter(Boolean)
+            .join(" · ") || "SIN DATOS"}
+        </span>
+      </span>
+      <span
+        className="mono"
+        style={{
+          fontSize: 9.5,
+          letterSpacing: "0.16em",
+          color: "var(--accent)",
+        }}
+      >
+        {linked ? "DESVINCULAR" : "SOY YO"}
+      </span>
+    </button>
   );
 }
 
 /* ═══ EQUIPO ACTUAL ═══════════════════════════════════════════════ */
 export function EquipoActual() {
+  const { activeTeam } = useSession();
+  const teamId = activeTeam?.id ?? null;
+
+  const { data: season, loading } = useAsync(
+    () => fetchActiveSeason(teamId!),
+    [teamId],
+    !!teamId,
+  );
+
+  const meta =
+    [activeTeam?.category, activeTeam?.gender]
+      .filter(Boolean)
+      .join(" · ")
+      .toUpperCase() || "EQUIPO";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <Card>
-        <Eyebrow>EQUIPO ACTUAL</Eyebrow>
-        <button
-          type="button"
-          style={{
-            marginTop: 20,
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: 16,
-            borderRadius: 12,
-            border: "1px solid var(--hair-strong)",
-            background: "var(--bg-card-2)",
-            color: "var(--text)",
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <span
+      {activeTeam && (
+        <Card>
+          <Eyebrow>EQUIPO ACTUAL</Eyebrow>
+          <Link
+            href="/equipo"
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: "var(--primary-dim)",
-              color: "var(--accent)",
+              marginTop: 20,
+              width: "100%",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              flex: "none",
+              gap: 14,
+              padding: 16,
+              borderRadius: 12,
+              border: "1px solid var(--hair-strong)",
+              background: "var(--bg-card-2)",
+              color: "var(--text)",
+              textAlign: "left",
             }}
           >
-            <IconShield size={19} />
-          </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
-              Halcones A
-            </span>
             <span
-              className="mono"
               style={{
-                display: "block",
-                marginTop: 4,
-                fontSize: 10.5,
-                letterSpacing: "0.14em",
-                color: "var(--text-faint)",
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                background: "var(--primary-dim)",
+                color: "var(--accent)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flex: "none",
               }}
             >
-              1ª MASCULINA · CLUB HALCONES
+              <IconShield size={19} />
             </span>
-          </span>
-          <span style={{ color: "var(--text-faint)", display: "flex" }}>
-            <IconChevronDown size={16} />
-          </span>
-        </button>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
+                {activeTeam.name}
+              </span>
+              <span
+                className="mono"
+                style={{
+                  display: "block",
+                  marginTop: 4,
+                  fontSize: 10.5,
+                  letterSpacing: "0.14em",
+                  color: "var(--text-faint)",
+                }}
+              >
+                {meta}
+              </span>
+            </span>
+            <span style={{ color: "var(--text-faint)", display: "flex" }}>
+              <IconChevronRight size={16} />
+            </span>
+          </Link>
 
-        <div
-          style={{
-            marginTop: 14,
-            display: "flex",
-            alignItems: "center",
-            gap: 11,
-            padding: "14px 16px",
-            borderRadius: 12,
-            border: "1px solid var(--hair-strong)",
-            color: "var(--text-muted)",
-          }}
-        >
-          <IconCalendar size={16} />
-          <span style={{ fontSize: 13 }}>Sin temporada activa</span>
-        </div>
-      </Card>
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: "1px solid var(--hair-strong)",
+              color: "var(--text-muted)",
+            }}
+          >
+            <IconCalendar size={16} />
+            <span style={{ fontSize: 13 }}>
+              {loading
+                ? "Cargando temporada…"
+                : season
+                  ? `Temporada: ${season.name}`
+                  : "Sin temporada activa"}
+            </span>
+          </div>
+        </Card>
+      )}
 
       <Card
         style={{
@@ -219,7 +351,7 @@ export function EquipoActual() {
           <div
             style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}
           >
-            Crear un equipo o club
+            {activeTeam ? "Crear otro equipo o club" : "Crear un equipo o club"}
           </div>
           <div
             style={{
@@ -229,16 +361,18 @@ export function EquipoActual() {
               textWrap: "pretty",
             }}
           >
-            ¿Todavía no gestionas ninguno? Empieza aquí.
+            {activeTeam
+              ? "Monta otro equipo o gestiona un club."
+              : "¿Todavía no gestionas ninguno? Empieza aquí."}
           </div>
         </div>
-        <button
-          type="button"
+        <Link
+          href="/empezar"
           className="btn btn-accent"
           style={{ padding: "12px 20px", fontSize: 13.5 }}
         >
           Crear
-        </button>
+        </Link>
       </Card>
     </div>
   );
@@ -246,18 +380,58 @@ export function EquipoActual() {
 
 /* ═══ INVITACIONES ════════════════════════════════════════════════ */
 export function Invitaciones() {
-  const [copied, setCopied] = useState(false);
-  const [code, setCode] = useState("");
-  const INVITE = "HLC-4X2";
+  const { activeTeam } = useSession();
+  const teamId = activeTeam?.id ?? null;
 
-  async function copy() {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [role, setRole] = useState<"player" | "captain">("player");
+  const [busy, setBusy] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const { data: invites } = useAsync(
+    () => fetchTeamInvitations(teamId!),
+    [teamId, reloadKey],
+    !!teamId,
+  );
+  const active = (invites ?? []).filter(invitationActive);
+
+  async function generate() {
+    if (busy || !teamId) return;
+    setBusy(true);
+    const res = await guardedWrite("crear la invitación", () =>
+      createInvitation(teamId, role),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(`Código creado: ${res.data.code}`);
+    } else setToast(res.reason);
+  }
+
+  async function copy(value: string) {
     try {
-      await navigator.clipboard.writeText(INVITE);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      await navigator.clipboard.writeText(value);
+      setCopiedCode(value);
+      setTimeout(() => setCopiedCode(null), 1800);
     } catch {
-      /* Sin permiso de portapapeles: el código se ve y se puede copiar a mano. */
+      /* Sin permiso de portapapeles: el código se ve y se copia a mano. */
     }
+  }
+
+  async function join() {
+    if (joining || code.trim().length < 3) return;
+    setJoining(true);
+    const res = await guardedWrite("unirte con el código", () =>
+      redeemInvitation(code),
+    );
+    setJoining(false);
+    if (res.ok) {
+      setToast("¡Te has unido! Recargando…");
+      setTimeout(() => window.location.reload(), 900);
+    } else setToast(res.reason);
   }
 
   return (
@@ -271,76 +445,179 @@ export function Invitaciones() {
           gap: 20,
         }}
       >
-        <div
-          style={{
-            padding: 22,
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-          }}
-        >
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Invitar jugadores</div>
+        {/* Generar (solo si gestionas un equipo). */}
+        {teamId ? (
           <div
             style={{
-              marginTop: 6,
-              fontSize: 12.5,
-              color: "var(--text-muted)",
-            }}
-          >
-            Genera un código para que se unan a Halcones A.
-          </div>
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              padding: "14px 16px",
+              padding: 22,
               borderRadius: 12,
-              background: "var(--bg-card)",
+              background: "var(--bg-card-2)",
             }}
           >
-            <span
-              className="mono"
+            <div style={{ fontSize: 15, fontWeight: 700 }}>
+              Invitar a {activeTeam?.name ?? "tu equipo"}
+            </div>
+            <div
               style={{
-                fontSize: 22,
-                fontWeight: 700,
-                letterSpacing: "0.2em",
-                color: "var(--accent)",
+                marginTop: 6,
+                fontSize: 12.5,
+                color: "var(--text-muted)",
               }}
             >
-              {INVITE}
-            </span>
+              Genera un código para que se unan a la plantilla.
+            </div>
+
+            {/* Rol del invitado */}
+            <div style={{ marginTop: 14, display: "flex", gap: 6 }}>
+              {(
+                [
+                  { id: "player", label: "Jugador" },
+                  { id: "captain", label: "Capitán" },
+                ] as const
+              ).map((r) => {
+                const on = role === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setRole(r.id)}
+                    style={{
+                      flex: 1,
+                      padding: "9px 10px",
+                      borderRadius: 9,
+                      cursor: "pointer",
+                      fontFamily: "'Satoshi', sans-serif",
+                      fontSize: 12.5,
+                      fontWeight: on ? 700 : 500,
+                      color: on ? "var(--accent)" : "var(--text-muted)",
+                      background: on ? "var(--accent-10)" : "var(--bg-card)",
+                      border: on
+                        ? "1.5px solid var(--accent)"
+                        : "1px solid var(--hair-strong)",
+                    }}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+
             <button
               type="button"
-              onClick={copy}
-              aria-label="Copiar código de invitación"
+              className="btn btn-accent"
+              onClick={generate}
+              disabled={busy}
               style={{
-                border: "none",
-                background: "transparent",
-                color: copied ? "var(--accent)" : "var(--text-faint)",
-                cursor: "pointer",
-                display: "flex",
-                padding: 4,
+                marginTop: 12,
+                width: "100%",
+                padding: "12px 16px",
+                fontSize: 13,
               }}
             >
-              <IconCopy size={16} />
+              <IconPlus size={15} />
+              {busy ? "Generando…" : "Generar código"}
             </button>
+
+            {/* Códigos activos */}
+            <div
+              style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}
+            >
+              {active.length === 0 ? (
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 10.5,
+                    letterSpacing: "0.1em",
+                    color: "var(--text-faint)",
+                  }}
+                >
+                  SIN CÓDIGOS ACTIVOS
+                </div>
+              ) : (
+                active.map((inv) => (
+                  <div
+                    key={inv.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      background: "var(--bg-card)",
+                    }}
+                  >
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        className="mono"
+                        style={{
+                          display: "block",
+                          fontSize: 18,
+                          fontWeight: 700,
+                          letterSpacing: "0.18em",
+                          color: "var(--accent)",
+                        }}
+                      >
+                        {inv.code}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: "0.14em",
+                          color: "var(--text-faint)",
+                        }}
+                      >
+                        {inv.role === "captain" ? "CAPITÁN" : "JUGADOR"}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copy(inv.code)}
+                      aria-label={`Copiar ${inv.code}`}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color:
+                          copiedCode === inv.code
+                            ? "var(--accent)"
+                            : "var(--text-faint)",
+                        cursor: "pointer",
+                        display: "flex",
+                        padding: 4,
+                      }}
+                    >
+                      <IconCopy size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
+        ) : (
           <div
-            className="mono"
-            aria-live="polite"
             style={{
-              marginTop: 10,
-              fontSize: 9.5,
-              letterSpacing: "0.16em",
-              color: copied ? "var(--accent)" : "transparent",
+              padding: 22,
+              borderRadius: 12,
+              background: "var(--bg-card-2)",
             }}
           >
-            {copied ? "COPIADO" : "·"}
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Invitar jugadores</div>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12.5,
+                color: "var(--text-muted)",
+                textWrap: "pretty",
+              }}
+            >
+              Necesitas gestionar un equipo para generar códigos. Crea uno desde
+              «Equipo actual».
+            </div>
           </div>
-        </div>
+        )}
 
+        {/* Unirme con código (universal). */}
         <div
           style={{
             padding: 22,
@@ -382,18 +659,21 @@ export function Invitaciones() {
             <button
               type="button"
               className="btn btn-accent"
-              disabled={code.trim().length < 3}
+              onClick={join}
+              disabled={code.trim().length < 3 || joining}
               style={{
                 padding: "13px 20px",
                 fontSize: 13.5,
                 borderRadius: 12,
               }}
             >
-              Unirme
+              {joining ? "…" : "Unirme"}
             </button>
           </div>
         </div>
       </div>
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </Card>
   );
 }
