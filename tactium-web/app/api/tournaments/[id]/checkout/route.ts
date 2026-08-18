@@ -185,7 +185,11 @@ export async function POST(
       isTopUp,
       url,
     });
-    return NextResponse.json({ emailed: sent, to });
+    return NextResponse.json({
+      emailed: sent.ok,
+      to,
+      ...(sent.ok ? {} : { emailError: sent.error }),
+    });
   };
 
   // ── Idempotencia ──────────────────────────────────────────────────────────

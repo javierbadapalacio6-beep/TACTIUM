@@ -208,9 +208,12 @@ export function renderTournamentPaymentEmail(input: TournamentPaymentEmail): {
 
 export async function sendTournamentPaymentEmail(
   input: TournamentPaymentEmail & { to: string },
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false;
+  if (!apiKey) {
+    console.error("[email] RESEND_API_KEY ausente en el entorno");
+    return { ok: false, error: "RESEND_API_KEY ausente" };
+  }
   const from = process.env.EMAIL_FROM ?? "TACTIUM <onboarding@resend.dev>";
   const { subject, html, text } = renderTournamentPaymentEmail(input);
 
@@ -230,8 +233,14 @@ export async function sendTournamentPaymentEmail(
         tags: [{ name: "template", value: "tournament-payment" }],
       }),
     });
-    return r.ok;
-  } catch {
-    return false;
+    if (r.ok) return { ok: true };
+    const body = (await r.json().catch(() => null)) as { message?: string } | null;
+    const error = `Resend ${r.status}: ${body?.message ?? "sin detalle"} (from=${from})`;
+    console.error("[email] fallo al enviar:", error);
+    return { ok: false, error };
+  } catch (e) {
+    const error = `excepción: ${(e as Error).message}`;
+    console.error("[email] excepción al enviar:", error);
+    return { ok: false, error };
   }
 }
