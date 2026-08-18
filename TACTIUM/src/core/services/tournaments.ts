@@ -260,6 +260,10 @@ export interface TournamentRegistration {
   seed_points: number | null;
   league_sum: number | null; // suma de nivel de liga de la pareja (para categorías por nivel)
   status: string;
+  // Cobro de inscripción: 'not_required' (torneo gratis) | 'paid' (pagada,
+  // online o en el club) | 'pending_club' (pendiente de pago en el club).
+  payment_status?: string | null;
+  payment_method?: string | null; // 'stripe' | 'offline' | null
   created_at: string;
   partner_code?: string | null; // código para vincular al compañero (jugador 2)
   // Enriquecidos en listRegistrations desde profiles (foto del jugador si la puso).
@@ -624,6 +628,18 @@ export async function addRegistration(input: {
 
 export async function deleteRegistration(id: string): Promise<void> {
   const { error } = await from()('tournament_registrations').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/** Marca el cobro de una inscripción: pagada (al cobrar el efectivo) o de nuevo
+ *  pendiente. Solo el organizador (RLS). No toca el método de pago. */
+export async function setRegistrationPayment(
+  id: string,
+  status: 'paid' | 'pending_club',
+): Promise<void> {
+  const { error } = await from()('tournament_registrations')
+    .update({ payment_status: status })
+    .eq('id', id);
   if (error) throw new Error(error.message);
 }
 

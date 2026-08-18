@@ -39,6 +39,7 @@ import {
   listMatches,
   addRegistration,
   deleteRegistration,
+  setRegistrationPayment,
   generateKoBracket,
   generateRoundRobin,
   generateGroups,
@@ -1970,9 +1971,10 @@ const PlayerInfoSheet: React.FC<{
   reg: TournamentRegistration | null;
   social: boolean;
   onClose: () => void;
+  onSetPayment?: (status: 'paid' | 'pending_club') => void;
   styles: Styles;
   c: Palette;
-}> = ({ reg, social, onClose, styles, c }) => {
+}> = ({ reg, social, onClose, onSetPayment, styles, c }) => {
   const Person: React.FC<{ name: string | null; email: string | null; phone: string | null; avatar: string | null }> = ({ name, email, phone, avatar }) => {
     if (!name) return null;
     return (
@@ -2016,6 +2018,86 @@ const PlayerInfoSheet: React.FC<{
           ) : (
             <Text style={styles.infoBlockText}>Puede a cualquier hora.</Text>
           )}
+
+          {reg.payment_status && reg.payment_status !== 'not_required' ? (
+            <>
+              <Text style={[styles.label, { marginTop: 14 }]}>PAGO</Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <View
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderRadius: 999,
+                    backgroundColor: c.bgCard2,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: reg.payment_status === 'paid' ? c.accent : c.warning,
+                    }}
+                  >
+                    {reg.payment_status === 'paid'
+                      ? reg.payment_method === 'stripe'
+                        ? 'Pagada · online'
+                        : 'Pagada · en el club'
+                      : 'Pendiente · en el club'}
+                  </Text>
+                </View>
+
+                {onSetPayment && reg.payment_status === 'pending_club' ? (
+                  <Pressable
+                    onPress={() => onSetPayment('paid')}
+                    style={({ pressed }) => [
+                      {
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        borderRadius: 10,
+                        backgroundColor: c.accent,
+                      },
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text
+                      style={{ color: c.textInverse, fontWeight: '700', fontSize: 13 }}
+                    >
+                      Marcar como pagada
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                {onSetPayment &&
+                reg.payment_status === 'paid' &&
+                reg.payment_method !== 'stripe' ? (
+                  <Pressable
+                    onPress={() => onSetPayment('pending_club')}
+                    style={({ pressed }) => [
+                      {
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: c.hairStrong,
+                      },
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={{ color: c.textMuted, fontWeight: '600', fontSize: 13 }}>
+                      Marcar pendiente
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          ) : null}
         </View>
       ) : null}
     </BottomSheet>
@@ -3152,6 +3234,19 @@ export const TournamentDetailScreen = ({
         reg={selectedReg}
         social={isSocial}
         onClose={() => setSelectedReg(null)}
+        onSetPayment={async (status) => {
+          if (!selectedReg) return;
+          try {
+            await setRegistrationPayment(selectedReg.id, status);
+            await load();
+            setSelectedReg(null);
+            toast.success(
+              status === 'paid' ? 'Inscripción marcada como pagada' : 'Marcada como pendiente',
+            );
+          } catch (e: any) {
+            toast.error('No se pudo actualizar el pago', e?.message ?? '');
+          }
+        }}
         styles={styles}
         c={c}
       />
