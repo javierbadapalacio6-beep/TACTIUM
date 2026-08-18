@@ -9,7 +9,11 @@ import {
   SIGNUP_DAYS,
   SIGNUP_HOURS,
 } from "@/lib/tournament-data";
-import { fetchTournament, tournamentSignup } from "@/lib/queries";
+import {
+  fetchTournament,
+  tournamentSignup,
+  tournamentSignupOffline,
+} from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow } from "@/components/ui";
@@ -183,7 +187,7 @@ export function SignupForm({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [signErr, setSignErr] = useState<string | null>(null);
 
-  async function submitSignup() {
+  async function submitSignup(offline = false) {
     if (busy) return;
     if (!name.trim() || !mateName.trim()) {
       setSignErr("Faltan los nombres de la pareja.");
@@ -210,6 +214,18 @@ export function SignupForm({ id }: { id: string }) {
       leagueSum: league || null,
       availability: [...blocked],
     };
+
+    // "Pagar en el club": inscribe como PENDIENTE de pago en el club (sin
+    // Stripe). El club la confirma al cobrar el efectivo.
+    if (offline) {
+      const res = await guardedWrite("inscribir (pago en el club)", () =>
+        tournamentSignupOffline(signupInput),
+      );
+      setBusy(false);
+      if (res.ok) setDone(true);
+      else setSignErr(res.reason);
+      return;
+    }
 
     // Si el torneo tiene cuota, se intenta el COBRO online (Connect): la pareja
     // paga → destination charge al club (−3% TACTIUM) → el webhook crea la
@@ -734,7 +750,7 @@ export function SignupForm({ id }: { id: string }) {
           <button
             className="btn btn-accent"
             disabled={busy || name.trim().length < 3}
-            onClick={submitSignup}
+            onClick={() => submitSignup(false)}
             style={{ width: "100%", padding: 16, fontSize: 15 }}
           >
             {busy
@@ -743,6 +759,19 @@ export function SignupForm({ id }: { id: string }) {
                 ? `Pagar inscripción · ${real?.entry_fee} ${real?.fee_currency ?? "€"}`
                 : "Apuntarme al torneo"}
           </button>
+
+          {/* Alternativa: pagar en persona en el club (efectivo/TPV). Queda
+              pendiente hasta que el club confirme el cobro. */}
+          {(real?.entry_fee ?? 0) > 0 && (
+            <button
+              className="btn btn-ghost"
+              disabled={busy || name.trim().length < 3}
+              onClick={() => submitSignup(true)}
+              style={{ width: "100%", padding: 14, fontSize: 14, marginTop: 10 }}
+            >
+              Pagar en el club (efectivo)
+            </button>
+          )}
         </>
       )}
     </div>

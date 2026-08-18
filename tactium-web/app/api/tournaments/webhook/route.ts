@@ -85,7 +85,7 @@ export async function POST(req: Request) {
         if (registrationId) {
           await admin
             .from("tournament_registrations")
-            .update({ payment_status: "paid" })
+            .update({ payment_status: "paid", payment_method: "stripe" })
             .eq("id", registrationId);
         }
         await admin
