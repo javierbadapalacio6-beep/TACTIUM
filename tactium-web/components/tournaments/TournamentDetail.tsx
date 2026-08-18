@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useState, type CSSProperties } from "react";
 
 import {
   SCHEDULED,
@@ -979,6 +979,24 @@ export function TournamentDetail({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [entry, setEntry] = useState<EntryTarget | null>(null);
+
+  // Vuelta del pago de inscripción (?inscripcion=ok): confirma y refresca la
+  // lista. La inscripción la crea el WEBHOOK en segundo plano, así que se
+  // reintenta un par de veces para que aparezca la pareja recién pagada.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("inscripcion") !== "ok") return;
+    setTab("inscripciones");
+    setToast("¡Pago recibido! Tu inscripción se está confirmando…");
+    window.history.replaceState({}, "", window.location.pathname);
+    const t1 = setTimeout(() => setReloadKey((k) => k + 1), 2500);
+    const t2 = setTimeout(() => setReloadKey((k) => k + 1), 6000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
 
   // Torneo, partidos e inscripciones en paralelo: son independientes bajo las
   // RPC públicas (funcionan también sin sesión, igual que en la app).
