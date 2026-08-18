@@ -542,20 +542,23 @@ const CreateTournamentSheet: React.FC<{
       // Si el torneo hay que pagarlo, nace RETENIDO ('draft'): sin inscripción
       // abierta ni código que compartir. Solo el webhook de Stripe lo publica.
       // El precio definitivo lo calcula el servidor; esto solo decide si retener.
-      const needsPayment = (() => {
-        if (!TOURNAMENT_BILLING_ENABLED) return false;
+      const billingKind = (() => {
+        if (!TOURNAMENT_BILLING_ENABLED) return 'off' as const;
         const subs = useSubscriptionStore.getState().subscriptions;
         const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subs);
-        return (
-          computeTournamentBilling({
-            maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
-            planPairCap: pairCap,
-            hasActiveSub,
-          }).kind === 'payable'
-        );
+        return computeTournamentBilling({
+          maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
+          planPairCap: pairCap,
+          hasActiveSub,
+        }).kind;
       })();
+      // Retener en BORRADOR si el torneo requiere pago O si aún no tiene plazas:
+      // sin plazas no se conoce el precio y NO puede publicarse (si no, se colaría
+      // creándolo sin plazas y ampliándolo luego sin pasar por caja).
+      const retainAsDraft =
+        billingKind === 'payable' || billingKind === 'needs_size';
       const created = await createTournament({
-        ...(needsPayment ? { status: 'draft' as const } : {}),
+        ...(retainAsDraft ? { status: 'draft' as const } : {}),
         clubId,
         name: name.trim(),
         format,
@@ -581,14 +584,25 @@ const CreateTournamentSheet: React.FC<{
       // El torneo ya existe pero está retenido. El enlace de pago se envía por
       // correo (la app no puede enlazar a un pago que no sea IAP; ver
       // tournamentCheckout.ts). Al confirmar el webhook pasa a 'open'.
-      if (needsPayment) {
-        const r = await requestTournamentPayment(created.id).catch(() => null);
-        toast.info(
-          'Torneo pendiente de pago',
-          r?.emailed
-            ? `Te hemos enviado el enlace de pago a ${r.to}. Se publicará en cuanto se confirme.`
-            : 'Te enviaremos el enlace de pago por correo. Se publicará en cuanto se confirme.',
-        );
+      if (retainAsDraft) {
+        if (billingKind === 'payable') {
+          // Hay precio → se envía el enlace de pago por correo (la app no puede
+          // enlazar a un pago que no sea IAP; ver tournamentCheckout.ts).
+          const r = await requestTournamentPayment(created.id).catch(() => null);
+          toast.info(
+            'Torneo pendiente de pago',
+            r?.emailed
+              ? `Te hemos enviado el enlace de pago a ${r.to}. Se publicará en cuanto se confirme.`
+              : 'Te enviaremos el enlace de pago por correo. Se publicará en cuanto se confirme.',
+          );
+        } else {
+          // needs_size: aún no hay precio. Queda retenido hasta fijar las plazas
+          // y publicarlo (pagar o, si son ≤16, gratis).
+          toast.info(
+            'Torneo en borrador',
+            'Fija las plazas y publícalo para abrir las inscripciones.',
+          );
+        }
         reset();
         onCreated();
         onClose();
