@@ -1044,7 +1044,9 @@ export function TournamentDetail({
     fmt === "groups_ko" ||
     matches.some((m) => !["grp", "rr", "amer", "mex"].includes(m.bracket));
   const visibleTabs = TABS.filter(([k]) => {
-    if (spectator && (k === "inscripciones" || k === "config")) return false;
+    // Las parejas inscritas son públicas (la RPC no expone contacto a anónimos).
+    // Solo la configuración del torneo queda para el organizador.
+    if (spectator && k === "config") return false;
     if (k === "grupos") return showGrupos;
     if (k === "clasificacion") return showClasificacion;
     if (k === "cuadro") return showCuadro;
