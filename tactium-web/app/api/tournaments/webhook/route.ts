@@ -65,7 +65,9 @@ export async function POST(req: Request) {
           availability: string[];
         };
         let registrationId: string | null = null;
-        const { data: regId } = await admin.rpc("tournament_signup", {
+        // Wrapper con flag de pago: pasa el guardia que bloquea inscribirse
+        // gratis en torneos con cuota + club conectado.
+        const { data: regId } = await admin.rpc("tournament_signup_paid", {
           p_code: p.code,
           p1_name: p.p1Name,
           p1_email: null,
