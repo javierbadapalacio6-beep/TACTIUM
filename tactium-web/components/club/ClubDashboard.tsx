@@ -13,6 +13,7 @@ import {
   IconBuilding,
   IconChevronRight,
   IconClock,
+  IconCreditCard,
   IconFlag,
   IconPlus,
   IconSettings,
@@ -256,6 +257,7 @@ export function ClubDashboard() {
         {[
           { href: "/club/horarios", title: "Horarios de local", Icon: IconClock },
           { href: "/club/importar", title: "Importar de la Federación", Icon: IconFlag },
+          { href: "/club/cobros", title: "Cobrar inscripciones", Icon: IconCreditCard },
           { href: "/club/facturacion", title: "Facturación del club", Icon: IconBuilding },
         ].map((s) => (
           <Link key={s.href} href={s.href} style={{ color: "inherit" }}>
