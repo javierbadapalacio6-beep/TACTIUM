@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -417,6 +418,17 @@ export const TournamentSignupScreen = ({
   const save = async () => {
     if (!found) {
       toast.error('Busca primero el torneo con su código');
+      return;
+    }
+    // Torneo con CUOTA → el pago es web-first (Apple 3.1.3: la app no puede
+    // cobrar servicios del mundo real por métodos ajenos a IAP dentro de la app,
+    // pero sí comunicarlos fuera). Se abre la ficha de pago en el navegador; allí
+    // la pareja rellena, paga y queda inscrita. La BD además bloquea la
+    // inscripción gratuita en estos torneos.
+    if ((found.entry_fee ?? 0) > 0) {
+      Linking.openURL(
+        `https://app.tactium.io/torneos/${found.id}/inscripcion`,
+      ).catch(() => toast.error('No se pudo abrir la ficha de pago'));
       return;
     }
     if (needsGender && !gender) {
@@ -1077,14 +1089,22 @@ export const TournamentSignupScreen = ({
           disabled={saving}
           style={({ pressed }) => [
             styles.saveBtn,
-            (!valid || saving) && { opacity: 0.5 },
+            // En torneos con cuota el botón va a la web (no valida el formulario
+            // local), así que no se atenúa por `valid`.
+            ((!valid && !((found?.entry_fee ?? 0) > 0)) || saving) && {
+              opacity: 0.5,
+            },
             pressed && { opacity: 0.85 },
           ]}
         >
           {saving ? (
             <ActivityIndicator size="small" color={c.textInverse} />
           ) : (
-            <Text style={styles.saveLabel}>Apuntarme al torneo</Text>
+            <Text style={styles.saveLabel}>
+              {(found?.entry_fee ?? 0) > 0
+                ? `Pagar inscripción · ${found?.entry_fee} ${found?.fee_currency ?? '€'}`
+                : 'Apuntarme al torneo'}
+            </Text>
           )}
         </Pressable>
       </View>
