@@ -27,10 +27,13 @@ export const TOURNAMENT_TIERS: TournamentTier[] = [
 export const TOURNAMENT_EXTRA_PAIR_EUR = 2; // recargo por pareja por encima del tramo/tope
 export const TOURNAMENT_FREE_PAIRS = 16;
 
-// Interruptor del cobro por torneo. DORMIDO hasta que el checkout de Stripe
-// esté configurado y probado (Fase 2). En `false` no cambia nada: los torneos
-// se crean como hasta ahora. Encender SOLO cuando la web tenga las claves.
-export const TOURNAMENT_BILLING_ENABLED = false;
+// Interruptor del cobro por torneo. ACTIVO: la web (app.tactium.io) tiene las
+// claves de Stripe y el webhook, y la BD aplica el gate (un torneo nace 'draft'
+// y nadie se inscribe hasta pagar/publicar). Con `true`, crear un torneo que
+// requiere pago lo deja en borrador y pide el pago por email antes de publicar.
+// PROBAR en dev/TestFlight (crear → pagar por email → publicar → volver a la
+// app) antes del OTA a producción.
+export const TOURNAMENT_BILLING_ENABLED = true;
 
 // Base de la web de TACTIUM (checkout). La web app está desplegada en el
 // subdominio app.tactium.io (el apex tactium.io es la landing). Aquí llegan las
