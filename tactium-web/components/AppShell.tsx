@@ -28,6 +28,7 @@ import {
   routeMeta,
 } from "@/lib/nav";
 import { useSession } from "@/lib/session";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { useTheme } from "@/lib/theme";
 import { fetchNotifications, markNotificationsRead } from "@/lib/queries";
 import { WRITES_ENABLED } from "@/lib/writes";
@@ -50,7 +51,38 @@ const BARE_ROUTES = ["/entrar", "/alta", "/recuperar", "/empezar", "/bienvenida"
 // donde está también el menú del marco público.
 
 /** Pantalla para rutas privadas sin sesión. */
+const REHEAL_KEY = "tw_session_reheal";
+
 function SignedOut() {
+  // Auto-cura del "salto a login" al volver de un sitio externo (p. ej. el alta
+  // de Stripe Connect): el token puede haber caducado durante el rodeo y
+  // `getUser()` devolver null aunque las cookies de sesión sigan siendo válidas.
+  // Si getSession ve una sesión en cookies, se refresca y se recarga UNA vez
+  // (bandera en sessionStorage para no entrar en bucle). Si de verdad no hay
+  // sesión, getSession devuelve null y se muestra el aviso normal.
+  useEffect(() => {
+    let done = false;
+    try {
+      if (sessionStorage.getItem(REHEAL_KEY)) return;
+    } catch {
+      return;
+    }
+    const sb = supabaseBrowser();
+    sb.auth.getSession().then(({ data }) => {
+      if (done || !data.session) return;
+      try {
+        sessionStorage.setItem(REHEAL_KEY, "1");
+      } catch {
+        /* sin storage: no auto-curamos para no arriesgar un bucle */
+        return;
+      }
+      sb.auth.refreshSession().finally(() => window.location.reload());
+    });
+    return () => {
+      done = true;
+    };
+  }, []);
+
   return (
     <div
       className="amb"
@@ -217,6 +249,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     setBellOpen(false);
     setRoleOpen(false);
   }, [pathname]);
+
+  // Con sesión válida, limpiar la bandera de auto-cura para que pueda volver a
+  // actuar si el token caduca en otro rodeo externo más adelante.
+  useEffect(() => {
+    if (user) {
+      try {
+        sessionStorage.removeItem(REHEAL_KEY);
+      } catch {
+        /* sin storage */
+      }
+    }
+  }, [user]);
 
   // Avisos reales (campanita): la RLS acota a los del usuario. Antes esto era un
   // array de maqueta ("Marco se ha unido a Halcones A"…) que se colaba en una
