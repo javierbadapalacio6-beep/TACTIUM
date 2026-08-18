@@ -74,12 +74,12 @@ function shell(preheader: string, body: string): string {
         <tr><td style="padding:0 0 28px">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td style="padding-right:12px" valign="middle">
-                <img src="${esc(LOGO_URL)}" width="36" height="36" alt="TACTIUM"
-                     style="display:block;width:36px;height:36px;border:0;border-radius:9px">
+              <td style="padding-right:14px" valign="middle">
+                <img src="${esc(LOGO_URL)}" width="48" height="48" alt="TACTIUM"
+                     style="display:block;width:48px;height:48px;border:0;border-radius:11px">
               </td>
               <td valign="middle">
-                <span style="font-family:${SANS};font-size:17px;font-weight:700;letter-spacing:3px;color:${BRAND.text}">TACTIUM</span>
+                <span style="font-family:${SANS};font-size:19px;font-weight:700;letter-spacing:3px;color:${BRAND.text}">TACTIUM</span>
               </td>
             </tr>
           </table>
