@@ -44,6 +44,61 @@ export async function POST(req: Request) {
         ? session.payment_intent
         : (session.payment_intent?.id ?? null);
 
+    // ── Pago de INSCRIPCIÓN (Connect) ──────────────────────────────────────
+    // Al confirmarse, se crea la inscripción con la ficha guardada (la RPC
+    // valida elegibilidad). No se creaba antes para no dejar filas a medias.
+    if (session.metadata?.kind === "signup") {
+      const { data: sp } = await admin
+        .from("tournament_signup_payments")
+        .select("id, signup_payload, status")
+        .eq("stripe_session_id", session.id)
+        .maybeSingle();
+      if (sp && sp.status !== "paid") {
+        const p = sp.signup_payload as {
+          code: string;
+          p1Name: string;
+          p2Name: string;
+          category: string | null;
+          gender: string | null;
+          seedPoints: number | null;
+          leagueSum: number | null;
+          availability: string[];
+        };
+        let registrationId: string | null = null;
+        const { data: regId } = await admin.rpc("tournament_signup", {
+          p_code: p.code,
+          p1_name: p.p1Name,
+          p1_email: null,
+          p1_phone: null,
+          p2_name: p.p2Name,
+          p2_email: null,
+          p2_phone: null,
+          p_availability: p.availability ?? [],
+          p_category: p.category ?? null,
+          p_gender: p.gender ?? null,
+          p_seed_points: p.seedPoints ?? null,
+          p_league_sum: p.leagueSum ?? null,
+        });
+        registrationId = typeof regId === "string" ? regId : null;
+        if (registrationId) {
+          await admin
+            .from("tournament_registrations")
+            .update({ payment_status: "paid" })
+            .eq("id", registrationId);
+        }
+        await admin
+          .from("tournament_signup_payments")
+          .update({
+            status: "paid",
+            paid_at: new Date().toISOString(),
+            stripe_payment_intent: paymentIntent,
+            registration_id: registrationId,
+          })
+          .eq("id", sp.id);
+      }
+      return NextResponse.json({ received: true });
+    }
+
     // Marca el pago como pagado y recupera qué tamaño cubre.
     const { data: payment } = await admin
       .from("tournament_payments")

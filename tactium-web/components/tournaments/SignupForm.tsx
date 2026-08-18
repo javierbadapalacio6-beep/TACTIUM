@@ -199,17 +199,53 @@ export function SignupForm({ id }: { id: string }) {
       (parseInt(level || "0", 10) || 0) + (parseInt(mateLevel || "0", 10) || 0);
     setBusy(true);
     setSignErr(null);
+
+    const signupInput = {
+      code,
+      category,
+      gender: SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase(),
+      p1Name: name,
+      p2Name: mateName,
+      seedPoints: seed || null,
+      leagueSum: league || null,
+      availability: [...blocked],
+    };
+
+    // Si el torneo tiene cuota, se intenta el COBRO online (Connect): la pareja
+    // paga → destination charge al club (−3% TACTIUM) → el webhook crea la
+    // inscripción. Si el club NO está conectado, se cae a la inscripción
+    // gratuita (el club cobra por su cuenta, como hasta ahora).
+    if ((real?.entry_fee ?? 0) > 0) {
+      try {
+        const r = await fetch("/api/tournaments/signup-checkout", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(signupInput),
+        });
+        const d = (await r.json().catch(() => ({}))) as {
+          url?: string;
+          error?: string;
+          reason?: string;
+        };
+        if (r.ok && d.url) {
+          window.location.href = d.url; // → Stripe Checkout
+          return;
+        }
+        if (d.reason !== "not_connected") {
+          setBusy(false);
+          setSignErr(d.error ?? "No se pudo iniciar el pago de la inscripción.");
+          return;
+        }
+        // Club sin conectar → sigue con la inscripción gratuita de abajo.
+      } catch {
+        setBusy(false);
+        setSignErr("No se pudo conectar con la pasarela de pago.");
+        return;
+      }
+    }
+
     const res = await guardedWrite("inscribir la pareja", () =>
-      tournamentSignup({
-        code,
-        category,
-        gender: SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase(),
-        p1Name: name,
-        p2Name: mateName,
-        seedPoints: seed || null,
-        leagueSum: league || null,
-        availability: [...blocked],
-      }),
+      tournamentSignup(signupInput),
     );
     setBusy(false);
     if (res.ok) setDone(true);
@@ -701,7 +737,11 @@ export function SignupForm({ id }: { id: string }) {
             onClick={submitSignup}
             style={{ width: "100%", padding: 16, fontSize: 15 }}
           >
-            {busy ? "Inscribiendo…" : "Apuntarme al torneo"}
+            {busy
+              ? "Inscribiendo…"
+              : (real?.entry_fee ?? 0) > 0
+                ? `Pagar inscripción · ${real?.entry_fee} ${real?.fee_currency ?? "€"}`
+                : "Apuntarme al torneo"}
           </button>
         </>
       )}
