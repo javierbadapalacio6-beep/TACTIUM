@@ -151,6 +151,9 @@ export function CreateTournament() {
   const [genders, setGenders] = useState<string[]>(["Masculino"]);
   const [seeded, setSeeded] = useState(true);
   const [format, setFormat] = useState<string>(MATCH_FORMATS[1]);
+  const [fee, setFee] = useState("");
+  const [fee2, setFee2] = useState("");
+  const [deadlineDays, setDeadlineDays] = useState("3");
   const [created, setCreated] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -185,6 +188,12 @@ export function CreateTournament() {
           .filter((g): g is string => !!g),
         categories: cats,
         seedingMode: seeded ? "points" : "federative",
+        entryFee: fee ? parseFloat(fee) : null,
+        entryFee2: fee2 ? parseFloat(fee2) : null,
+        paymentDeadlineDays:
+          fee && parseFloat(fee) > 0 && deadlineDays
+            ? parseInt(deadlineDays, 10)
+            : null,
       }),
     );
     setBusy(false);
@@ -646,13 +655,58 @@ export function CreateTournament() {
               <div className="tw-form-grid">
                 <div>
                   <Label>CUOTA · 1 CATEGORÍA (€)</Label>
-                  <Input type="text" inputMode="decimal" placeholder="15" className="mono" />
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0 = gratis"
+                    className="mono"
+                    value={fee}
+                    onChange={(e) =>
+                      setFee(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))
+                    }
+                  />
                 </div>
                 <div>
                   <Label>CUOTA · 2 CATEGORÍAS (€)</Label>
-                  <Input type="text" inputMode="decimal" placeholder="25" className="mono" />
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="25"
+                    className="mono"
+                    value={fee2}
+                    onChange={(e) =>
+                      setFee2(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))
+                    }
+                  />
                 </div>
               </div>
+              {parseFloat(fee || "0") > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <Label>DÍAS LÍMITE PARA PAGAR EN EL CLUB</Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="3"
+                    className="mono"
+                    value={deadlineDays}
+                    onChange={(e) =>
+                      setDeadlineDays(e.target.value.replace(/[^0-9]/g, ""))
+                    }
+                  />
+                  <p
+                    style={{
+                      margin: "8px 0 0",
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                      textWrap: "pretty",
+                    }}
+                  >
+                    La pareja paga online o en el club. Si elige pagar en el club y
+                    no paga hasta {deadlineDays || "3"} día(s) antes, su inscripción
+                    se elimina para liberar la plaza.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>
