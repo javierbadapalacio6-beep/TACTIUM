@@ -377,6 +377,9 @@ export async function createTournament(input: {
   seedingMode?: SeedingMode;
   entryFee?: number | null;
   entryFee2?: number | null;
+  // Días antes del torneo como límite para pagar en el club (offline). Si no se
+  // paga, la inscripción pendiente se elimina para liberar la plaza.
+  paymentDeadlineDays?: number | null;
   categoryRules?: CategoryRules | null;
   endTime?: string | null;
   maxRemovableHours?: number | null;
@@ -397,6 +400,9 @@ export async function createTournament(input: {
     seeding_mode: input.seedingMode ?? 'points',
     entry_fee: input.entryFee ?? null,
     entry_fee_2: input.entryFee2 ?? null,
+    ...(input.paymentDeadlineDays != null
+      ? { payment_deadline_days: input.paymentDeadlineDays }
+      : {}),
     category_rules: cleanCategoryRules(input.categoryRules),
     ...(input.endTime ? { end_time: input.endTime } : {}),
     max_removable_hours: input.maxRemovableHours ?? null,

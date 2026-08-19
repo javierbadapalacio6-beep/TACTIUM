@@ -332,6 +332,8 @@ const CreateTournamentSheet: React.FC<{
   const [fee, setFee] = useState('');
   // Cuota total si el jugador se apunta a 2 categorías (solo si hay ≥2 cats).
   const [fee2, setFee2] = useState('');
+  // Días antes del torneo como límite para pagar en el club (offline).
+  const [deadlineDays, setDeadlineDays] = useState('3');
   // Formato de partido por CUADRO (main | consol | groups). Cada uno por defecto
   // 'bo3_stb'; el club puede fijar la consolación más corta, etc.
   const [phaseFmt, setPhaseFmt] = useState<Record<string, MatchFormat>>({});
@@ -443,6 +445,7 @@ const CreateTournamentSheet: React.FC<{
     setMinPairs('');
     setFee('');
     setFee2('');
+    setDeadlineDays('3');
     setPhaseFmt({});
     setSeedingMode('points');
     setRuleMode('both');
@@ -572,6 +575,10 @@ const CreateTournamentSheet: React.FC<{
         minPairs: minPairs ? parseInt(minPairs, 10) : null,
         entryFee: fee ? parseFloat(fee) : null,
         entryFee2: fee2 ? parseFloat(fee2) : null,
+        paymentDeadlineDays:
+          fee && parseFloat(fee) > 0 && deadlineDays
+            ? parseInt(deadlineDays, 10)
+            : null,
         seedingMode,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
@@ -1222,9 +1229,33 @@ const CreateTournamentSheet: React.FC<{
           )}
           <Text style={styles.planHint}>
             {cats.length >= 2
-              ? 'El jugador podrá apuntarse a 1 o 2 categorías; el precio de 2 es el TOTAL (p. ej. 1 cat 22€ · 2 cats 35€). Se muestra como información y se paga en el club.'
-              : 'Por ahora la cuota se muestra como información y se paga en el club. El pago online llegará más adelante.'}
+              ? 'El jugador podrá apuntarse a 1 o 2 categorías; el precio de 2 es el TOTAL (p. ej. 1 cat 22€ · 2 cats 35€). La pareja paga online o en el club.'
+              : 'La pareja podrá pagar online (tarjeta) o en el club (efectivo).'}
           </Text>
+
+          {parseFloat(fee || '0') > 0 ? (
+            <>
+              <Text style={[styles.label, { marginTop: 14 }]}>
+                DÍAS LÍMITE PARA PAGAR EN EL CLUB
+              </Text>
+              <View style={styles.input}>
+                <TextInput
+                  value={deadlineDays}
+                  onChangeText={(t) => setDeadlineDays(t.replace(/[^0-9]/g, ''))}
+                  placeholder="3"
+                  placeholderTextColor={c.textFaint}
+                  style={styles.inputField}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+              </View>
+              <Text style={styles.planHint}>
+                Si eligen "pagar en el club" y no pagan hasta {deadlineDays || '3'}{' '}
+                día(s) antes del torneo, la inscripción se elimina para liberar la
+                plaza.
+              </Text>
+            </>
+          ) : null}
         </>
       ) : null}
 
