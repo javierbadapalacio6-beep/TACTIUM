@@ -15,6 +15,8 @@ import {
   fetchTournament,
   fetchTournamentMatches,
   fetchTournamentRegs,
+  fetchRegsPayments,
+  setRegistrationPayment,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import {
@@ -97,6 +99,8 @@ interface RealReg {
   seed: number | null;
   seed_points: number | null;
   status: string;
+  payment_status?: string | null;
+  payment_method?: string | null;
 }
 
 interface RealMatch {
@@ -1007,10 +1011,23 @@ export function TournamentDetail({
         fetchTournamentMatches(id),
         fetchTournamentRegs(id),
       ]);
+      let regsTyped = regs as unknown as RealReg[];
+      // El organizador ve el estado de cobro (la RPC pública no lo expone).
+      if (!spectator) {
+        const pays: Record<
+          string,
+          { paymentStatus: string | null; paymentMethod: string | null }
+        > = await fetchRegsPayments(id).catch(() => ({}));
+        regsTyped = regsTyped.map((r) => ({
+          ...r,
+          payment_status: pays[r.id]?.paymentStatus ?? r.payment_status ?? null,
+          payment_method: pays[r.id]?.paymentMethod ?? null,
+        }));
+      }
       return {
         tour: (tour as RealTournament | null) ?? null,
         matches: matches as unknown as RealMatch[],
-        regs: regs as unknown as RealReg[],
+        regs: regsTyped,
       };
     },
     [id, reloadKey],
@@ -1154,6 +1171,20 @@ export function TournamentDetail({
     } else {
       setToast(res.reason);
     }
+  }
+
+  // Marca el cobro de una inscripción (organizador): pagada / pendiente.
+  async function markRegPayment(regId: string, status: "paid" | "pending_club") {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("actualizar el pago", () =>
+      setRegistrationPayment(regId, status),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(status === "paid" ? "Marcada como pagada" : "Marcada como pendiente");
+    } else setToast(res.reason);
   }
 
   const genKo = () =>
@@ -1570,11 +1601,36 @@ export function TournamentDetail({
                   <span className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
                     {r.seed_points ?? "—"}
                   </span>
-                  <span
-                    className="mono"
-                    style={{ fontSize: 11, color: "var(--text-faint)" }}
-                  >
-                    —
+                  <span className="mono" style={{ fontSize: 11 }}>
+                    {r.payment_status === "paid" ? (
+                      <span style={{ color: "var(--accent)", fontWeight: 700 }}>
+                        {r.payment_method === "stripe" ? "Online ✓" : "Club ✓"}
+                      </span>
+                    ) : r.payment_status === "pending_club" ? (
+                      !spectator ? (
+                        <button
+                          type="button"
+                          onClick={() => markRegPayment(r.id, "paid")}
+                          disabled={busy}
+                          title="Marcar como pagada"
+                          style={{
+                            border: "1px solid var(--warning)",
+                            background: "transparent",
+                            color: "var(--warning)",
+                            borderRadius: 8,
+                            padding: "3px 8px",
+                            fontSize: 10.5,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Pendiente · cobrar
+                        </button>
+                      ) : (
+                        <span style={{ color: "var(--warning)" }}>Pendiente</span>
+                      )
+                    ) : (
+                      <span style={{ color: "var(--text-faint)" }}>—</span>
+                    )}
                   </span>
                   <span
                     className="mono"

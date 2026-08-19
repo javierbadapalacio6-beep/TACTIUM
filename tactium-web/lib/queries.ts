@@ -1090,6 +1090,38 @@ export async function fetchTournamentRegs(id: string) {
   return (direct ?? []) as Record<string, unknown>[];
 }
 
+/** Estado de cobro de las inscripciones (para el organizador). La RPC pública no
+ *  lo expone; el organizador lo lee directo (RLS). Devuelve mapa id → estado. */
+export async function fetchRegsPayments(
+  tournamentId: string,
+): Promise<Record<string, { paymentStatus: string | null; paymentMethod: string | null }>> {
+  const { data } = await supabaseBrowser()
+    .from("tournament_registrations")
+    .select("id, payment_status, payment_method")
+    .eq("tournament_id", tournamentId);
+  const map: Record<string, { paymentStatus: string | null; paymentMethod: string | null }> = {};
+  for (const r of (data ?? []) as {
+    id: string;
+    payment_status: string | null;
+    payment_method: string | null;
+  }[]) {
+    map[r.id] = { paymentStatus: r.payment_status, paymentMethod: r.payment_method };
+  }
+  return map;
+}
+
+/** Marca el cobro de una inscripción (organizador): pagada / pendiente. */
+export async function setRegistrationPayment(
+  id: string,
+  status: "paid" | "pending_club",
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("tournament_registrations")
+    .update({ payment_status: status })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /** Inscripción pública a un torneo por código (el que llama es el jugador 1).
  *  RPC tournament_signup: valida elegibilidad y crea la inscripción en servidor. */
 export async function tournamentSignup(input: {
