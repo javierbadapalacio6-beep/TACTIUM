@@ -2016,12 +2016,15 @@ select.tw-cell-input {
 .tw-fcp-filter-chips {
   display: flex;
   gap: 6px;
-  /* flex:1 + min-width:0 son imprescindibles: sin ellos, en un flex row el
-     contenedor NO encoge por debajo de su contenido (min-width:auto por
-     defecto) y crece mas alla de la pantalla en vez de scrollear -> los chips
-     se cortan y no hay scroll horizontal. */
+  /* Scroll horizontal de los chips cuando hay mas de los que caben.
+     flex:1 + min-width:0 no bastan aqui: el flex-grow tiraba del contenedor
+     hasta el ancho del contenido (miles de px) en vez de encoger. La clave es
+     max-width:100%, que lo tapa a la caja del padre; ahi overflow-x:auto ya
+     genera el scroll (verificado en vivo: sin el, 9445px sin scroll; con el,
+     287px scrollable). */
   flex: 1 1 0;
   min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
