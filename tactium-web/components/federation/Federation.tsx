@@ -360,30 +360,9 @@ export function FederationExplore({ slug }: { slug: string }) {
           />
         </div>
 
-        {/* Pestañas */}
-        <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {TABS.map(([k, label]) => {
-            const on = tab === k;
-            return (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setTab(k)}
-                aria-pressed={on}
-                className="btn"
-                style={{
-                  padding: "9px 16px",
-                  fontSize: 12.5,
-                  fontWeight: on ? 700 : 500,
-                  background: on ? "var(--accent-10)" : "transparent",
-                  color: on ? "var(--accent)" : "var(--text-muted)",
-                  border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+        {/* Pestañas — mismo control segmentado (píldora mint) que la app. */}
+        <div style={{ marginTop: 14 }}>
+          <TabBar items={TABS} value={tab} onChange={setTab} />
         </div>
 
         {/* Filtros en línea. En Rankings el grupo no pinta nada: la lista es
@@ -770,7 +749,13 @@ function ListHeader({
   );
 }
 
-/** Botones de pestaña con el mismo estilo en todas las vistas de federación. */
+/**
+ * Control segmentado tipo "scoreboard" (píldora conectada). Espejo del
+ * `Segmented` de la app (fcpUi.tsx): contenedor bgCard radio 999, y la pestaña
+ * activa es MINT SÓLIDO con texto invertido — no un botón con borde. Es el
+ * elemento de nav de todas las vistas de federación, así que iguala mucho el
+ * aspecto respecto a la app.
+ */
 function TabBar<T extends string>({
   items,
   value,
@@ -781,7 +766,16 @@ function TabBar<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div
+      style={{
+        display: "flex",
+        gap: 2,
+        background: "var(--bg-card)",
+        border: "1px solid var(--hair)",
+        borderRadius: 999,
+        padding: 4,
+      }}
+    >
       {items.map(([k, label]) => {
         const on = value === k;
         return (
@@ -789,14 +783,22 @@ function TabBar<T extends string>({
             key={k}
             type="button"
             onClick={() => onChange(k)}
-            className="btn"
             style={{
-              padding: "10px 18px",
-              fontSize: 13,
-              fontWeight: on ? 700 : 500,
-              background: on ? "var(--accent-10)" : "transparent",
-              color: on ? "var(--accent)" : "var(--text-muted)",
-              border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+              flex: 1,
+              minWidth: 0,
+              padding: "10px 8px",
+              borderRadius: 999,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 12.5,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              background: on ? "var(--accent)" : "transparent",
+              color: on ? "var(--text-inverse)" : "var(--text-muted)",
+              boxShadow: on ? "0 0 10px rgba(0, 223, 130, 0.28)" : "none",
+              transition: "background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease)",
             }}
           >
             {label}
