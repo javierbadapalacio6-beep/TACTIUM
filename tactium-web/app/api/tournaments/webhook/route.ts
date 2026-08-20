@@ -122,6 +122,28 @@ export async function POST(req: Request) {
         .select("status, covered_pairs")
         .eq("id", tournamentId)
         .maybeSingle();
+
+      // Si estaba retenido en borrador por el pago, al publicar hay que darle el
+      // estado REAL: un torneo puede pagarse DESPUES de haberse jugado (o estando
+      // en curso). Si ya tiene partidos y ninguno queda pendiente -> 'finished';
+      // si tiene partidos pero aun hay pendientes -> 'in_progress'; si no tiene
+      // partidos aun (lo normal al crearlo) -> 'open' (inscripcion abierta).
+      let publishStatus: string | null = null;
+      if (t?.status === "draft") {
+        const { data: ms } = await admin
+          .from("tournament_matches")
+          .select("status")
+          .eq("tournament_id", tournamentId);
+        const matches = ms ?? [];
+        if (matches.length === 0) {
+          publishStatus = "open";
+        } else if (matches.every((m) => m.status !== "pending")) {
+          publishStatus = "finished";
+        } else {
+          publishStatus = "in_progress";
+        }
+      }
+
       await admin
         .from("tournaments")
         .update({
@@ -130,7 +152,7 @@ export async function POST(req: Request) {
             payment?.covers_pairs ?? 0,
             t?.covered_pairs ?? 0,
           ),
-          ...(t?.status === "draft" ? { status: "open" } : {}),
+          ...(publishStatus ? { status: publishStatus } : {}),
         })
         .eq("id", tournamentId);
     }

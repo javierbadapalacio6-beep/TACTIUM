@@ -1365,8 +1365,8 @@ const makeStyles = (c: Palette) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 9,
-      marginTop: -2,
-      marginBottom: 12,
+      marginTop: 10,
+      marginBottom: 14,
     },
     fedBox: {
       width: 20,
