@@ -1999,14 +1999,18 @@ select.tw-cell-input {
   border-top: 1px solid var(--hair);
 }
 .tw-fcp-filter {
-  display: flex;
+  /* GRID en vez de flex: `minmax(0, 1fr)` en la 2a columna garantiza que la
+     pista de chips NO exceda el ancho disponible y pueda scrollear. El flex
+     con min-width:0 fallaba en Safari iOS (bug conocido: los flex items no
+     respetan min-width para overflow), por eso en movil los chips se seguian
+     cortando aunque en Chrome funcionara. Grid es fiable cross-browser. */
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   min-width: 0;
 }
 .tw-fcp-filter-label {
-  flex: none;
-  width: 84px;
   font-family: var(--font-mono), monospace;
   font-size: 9.5px;
   letter-spacing: 0.16em;
@@ -2016,13 +2020,7 @@ select.tw-cell-input {
 .tw-fcp-filter-chips {
   display: flex;
   gap: 6px;
-  /* Scroll horizontal de los chips cuando hay mas de los que caben.
-     flex:1 + min-width:0 no bastan aqui: el flex-grow tiraba del contenedor
-     hasta el ancho del contenido (miles de px) en vez de encoger. La clave es
-     max-width:100%, que lo tapa a la caja del padre; ahi overflow-x:auto ya
-     genera el scroll (verificado en vivo: sin el, 9445px sin scroll; con el,
-     287px scrollable). */
-  flex: 1 1 0;
+  /* La columna grid minmax(0,1fr) ya acota el ancho; aqui solo el scroll. */
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
