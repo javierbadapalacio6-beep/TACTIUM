@@ -300,7 +300,13 @@ export const TournamentFollowScreen = ({
                       { text: 'Ahora no', style: 'cancel' },
                       {
                         text: 'Iniciar sesión',
-                        onPress: () => navigation.getParent()?.navigate('AuthFlow'),
+                        // TournamentFollow es una pantalla de nivel RAÍZ, así que
+                        // getParent() es null y el navigate no hacía nada. Se
+                        // navega directo al AuthFlow, pantalla Login.
+                        onPress: () =>
+                          (navigation as any).navigate('AuthFlow', {
+                            screen: 'Login',
+                          }),
                       },
                     ],
                   );
