@@ -278,7 +278,11 @@ const buildPlannerPhases = (
       for (const m of ko) maxByB[m.bracket] = Math.max(maxByB[m.bracket] ?? 0, m.round);
       fromEnds = Array.from(new Set(ko.map((m) => maxByB[m.bracket] - m.round)));
     } else {
-      fromEnds = [3, 2, 1, 0];
+      // Sin cuadro generado todavia = las parejas no estan determinadas. NO
+      // inventamos fases KO (antes salian Octavos/Cuartos/Semis/Final fantasma
+      // y se podia poner horario sin saber quien juega). Hay que determinar las
+      // parejas y generar el cuadro primero.
+      fromEnds = [];
     }
     fromEnds.sort((a, b) => b - a);
     for (const fe of fromEnds) out.push({ bracket: 'ko', round: fe, label: koRoundNameFromEnd(fe) });
@@ -2384,6 +2388,16 @@ const EditTournamentSheet: React.FC<{
           <Text style={[styles.genHint, { textAlign: 'left', marginTop: 6 }]}>
             Cambiar el formato solo afecta a los partidos aún sin resultado; los ya
             puntuados se quedan como están.
+          </Text>
+        </>
+      ) : null}
+
+      {planDays.length > 1 && planPhases.length === 0 ? (
+        <>
+          <Text style={styles.label}>DÍAS DE CADA FASE</Text>
+          <Text style={[styles.genHint, { textAlign: 'left', marginTop: -2 }]}>
+            Primero determina las parejas y genera el cuadro. Cuando existan las
+            rondas podrás elegir en qué día se juega cada fase.
           </Text>
         </>
       ) : null}
