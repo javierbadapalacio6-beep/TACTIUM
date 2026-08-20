@@ -1475,11 +1475,36 @@ export async function fetchFcpRanking(opts: {
   limit?: number;
 }): Promise<FcpRankingRow[]> {
   const { genero, categoria, query = "", limit = 150 } = opts;
+  const q = query.replace(/[%,()]/g, " ").trim();
+
+  // "Ambos": la FCP no tiene una lista combinada de ambos géneros (antes esto
+  // caía al ranking masculino y "Ambos" mostraba solo hombres). Traemos las dos
+  // listas (M y F) y las fusionamos reordenando por puntos — la `posicion`
+  // oficial es por lista, así que al unir hay que recalcularla.
+  if (genero === "all") {
+    let sel = supabaseBrowser()
+      .from("fcp_rankings")
+      .select("posicion, nombre, puntos")
+      .in("categoria", [
+        rankingCategoria("M", categoria),
+        rankingCategoria("F", categoria),
+      ]);
+    if (q.length >= 2) sel = sel.ilike("nombre", `%${q}%`);
+    const { data, error } = await sel
+      .order("puntos", { ascending: false, nullsFirst: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? []).map((r, i) => ({
+      posicion: i + 1,
+      name: r.nombre ?? "—",
+      puntos: r.puntos == null ? null : Number(r.puntos),
+    }));
+  }
+
   let sel = supabaseBrowser()
     .from("fcp_rankings")
     .select("posicion, nombre, puntos")
     .eq("categoria", rankingCategoria(genero, categoria));
-  const q = query.replace(/[%,()]/g, " ").trim();
   if (q.length >= 2) sel = sel.ilike("nombre", `%${q}%`);
   const { data, error } = await sel
     .order("posicion", { ascending: true })
