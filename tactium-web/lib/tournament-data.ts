@@ -142,8 +142,8 @@ export const MATCH_FORMATS = [
 export const CATEGORIES = ["1ª", "2ª", "3ª", "4ª", "Libre"] as const;
 export const GENDERS = ["Masculino", "Femenino", "Mixto", "Libre"] as const;
 
-/** Franjas de 1 h para la disponibilidad del inscrito. */
-export const SIGNUP_DAYS = ["Vie 15", "Sáb 16", "Dom 17"] as const;
+/** Franjas de 1 h para la disponibilidad del inscrito. Los DÍAS ya no son
+ *  fijos: se derivan de las fechas reales del torneo (ver buildSignupDays). */
 export const SIGNUP_HOURS = ["18:00", "19:00", "20:00", "21:00"] as const;
 export const MAX_BLOCKED_HOURS = 8;
 

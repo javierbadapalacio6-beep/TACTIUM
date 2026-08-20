@@ -154,6 +154,8 @@ export function CreateTournament() {
   const [fee, setFee] = useState("");
   const [fee2, setFee2] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("3");
+  const [startsOn, setStartsOn] = useState("");
+  const [endsOn, setEndsOn] = useState("");
   const [created, setCreated] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -194,6 +196,8 @@ export function CreateTournament() {
           fee && parseFloat(fee) > 0 && deadlineDays
             ? parseInt(deadlineDays, 10)
             : null,
+        startsOn: startsOn || null,
+        endsOn: endsOn || null,
       }),
     );
     setBusy(false);
@@ -590,11 +594,20 @@ export function CreateTournament() {
             <div className="tw-form-grid">
               <div>
                 <Label>FECHA INICIO · OPCIONAL</Label>
-                <Input type="date" />
+                <Input
+                  type="date"
+                  value={startsOn}
+                  onChange={(e) => setStartsOn(e.target.value)}
+                />
               </div>
               <div>
                 <Label>FECHA FIN · OPCIONAL</Label>
-                <Input type="date" />
+                <Input
+                  type="date"
+                  value={endsOn}
+                  min={startsOn || undefined}
+                  onChange={(e) => setEndsOn(e.target.value)}
+                />
                 <p
                   style={{
                     margin: "8px 0 0",
@@ -607,44 +620,17 @@ export function CreateTournament() {
               </div>
             </div>
 
-            <div>
-              <Label>DÍAS DE CADA FASE · OPCIONAL</Label>
-              <p
-                style={{
-                  margin: "0 0 12px",
-                  fontSize: 12.5,
-                  color: "var(--text-muted)",
-                }}
-              >
-                Una fase puede repartirse en varios días.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {["Grupos", "Octavos", "Cuartos", "Semis", "Final"].map((phase) => (
-                  <div key={phase} className="tw-phase-row">
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{phase}</span>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {["Vie 15", "Sáb 16", "Dom 17"].map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          className="btn"
-                          style={{
-                            padding: "7px 13px",
-                            fontSize: 11.5,
-                            fontWeight: 500,
-                            background: "transparent",
-                            color: "var(--text-muted)",
-                            border: "1px solid var(--hair-strong)",
-                          }}
-                        >
-                          {d}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 12.5,
+                color: "var(--text-muted)",
+                lineHeight: 1.5,
+              }}
+            >
+              Los días de cada fase (octavos, cuartos, semis, final…) se asignan
+              desde la app una vez determinadas las parejas y generado el cuadro.
+            </p>
           </div>
         )}
 

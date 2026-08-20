@@ -1,16 +1,16 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
   CATEGORIES,
   GENDERS,
   MAX_BLOCKED_HOURS,
-  SIGNUP_DAYS,
   SIGNUP_HOURS,
 } from "@/lib/tournament-data";
 import {
   fetchTournament,
+  searchFcpPlayers,
   tournamentSignup,
   tournamentSignupOffline,
 } from "@/lib/queries";
@@ -48,6 +48,29 @@ interface NormTournament {
 
 const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+const DOW_ABBR = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+/** Días REALES del torneo (de starts_on a ends_on) para el grid de
+ *  disponibilidad. Sin fechas -> [] (no se pinta un horario inventado). */
+function buildSignupDays(startsOn: string | null, endsOn: string | null): string[] {
+  if (!startsOn) return [];
+  const parse = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const start = parse(startsOn);
+  const end = endsOn ? parse(endsOn) : start;
+  const out: string[] = [];
+  const d = new Date(start);
+  let g = 0;
+  while (d.getTime() <= end.getTime() && g < 21) {
+    out.push(`${DOW_ABBR[d.getDay()]} ${d.getDate()}`);
+    d.setDate(d.getDate() + 1);
+    g++;
+  }
+  return out;
+}
+
 function fmtDates(a: string | null, b: string | null): string | null {
   const f = (iso: string | null) => {
     if (!iso) return "";
@@ -75,11 +98,43 @@ const SIGNUP_GENDER_DB: Record<string, string> = {
  * "DETECTADO EN LA FEDERACIÓN" que rellena puntos y nivel de una pasada. Se
  * puede editar después — es una sugerencia, no un dato bloqueado.
  */
-const FCP_HINTS: Record<string, { pts: number; level: string }> = {
-  "diego ruiz": { pts: 4600, level: "1ª" },
-  "marco bilbao": { pts: 4180, level: "1ª" },
-  "sara león": { pts: 3900, level: "2ª" },
-};
+// Sugerencia de la Federación (dato REAL de fcp_jugadores, no mock). Igual que
+// el chip FcpSuggest de la app: al escribir el nombre buscamos en la FCP y
+// proponemos puntos + categoría de la mejor coincidencia.
+type FcpHint = { pts: number; level: string; matched: string };
+
+/** Hook: busca en la FCP el nombre escrito (debounced) y devuelve la mejor
+ *  coincidencia como pista de puntos/nivel. */
+function useFcpHint(query: string): FcpHint | null {
+  const [hint, setHint] = useState<FcpHint | null>(null);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) {
+      setHint(null);
+      return;
+    }
+    let alive = true;
+    const t = setTimeout(async () => {
+      try {
+        const rows = await searchFcpPlayers(q, 1);
+        if (!alive) return;
+        const top = rows[0];
+        setHint(
+          top
+            ? { pts: top.puntos ?? 0, level: top.categoria ?? "", matched: top.nombre }
+            : null,
+        );
+      } catch {
+        if (alive) setHint(null);
+      }
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [query]);
+  return hint;
+}
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -125,6 +180,11 @@ export function SignupForm({ id }: { id: string }) {
   const { data: real, loading } = useAsync(
     () => fetchTournament(id) as Promise<RealTournament | null>,
     [id],
+  );
+  // Días reales del torneo para el grid de disponibilidad (no mock).
+  const availDays = useMemo(
+    () => buildSignupDays(real?.starts_on ?? null, real?.ends_on ?? null),
+    [real?.starts_on, real?.ends_on],
   );
   const t: NormTournament | null = real
     ? {
@@ -268,8 +328,8 @@ export function SignupForm({ id }: { id: string }) {
     else setSignErr(res.reason);
   }
 
-  const hint = FCP_HINTS[name.trim().toLowerCase()];
-  const mateHint = FCP_HINTS[mateName.trim().toLowerCase()];
+  const hint = useFcpHint(name);
+  const mateHint = useFcpHint(mateName);
 
   function toggleSlot(key: string) {
     setBlocked((s) => {
@@ -516,7 +576,7 @@ export function SignupForm({ id }: { id: string }) {
                         color: "var(--text-faint)",
                       }}
                     >
-                      Toca para rellenar puntos y nivel. Puedes editarlos.
+                      {hint.matched} · toca para rellenar puntos y nivel. Puedes editarlos.
                     </p>
                   )}
                 </div>
@@ -643,7 +703,8 @@ export function SignupForm({ id }: { id: string }) {
             </Card>
           </div>
 
-          {/* Disponibilidad */}
+          {/* Disponibilidad — solo si el torneo tiene fechas reales. */}
+          {availDays.length > 0 && (
           <Card style={{ marginBottom: 20 }}>
             <div
               style={{
@@ -699,7 +760,7 @@ export function SignupForm({ id }: { id: string }) {
                 </span>
               ))}
 
-              {SIGNUP_DAYS.map((d) => (
+              {availDays.map((d) => (
                 <Fragment key={d}>
                   <span
                     className="mono"
@@ -741,6 +802,7 @@ export function SignupForm({ id }: { id: string }) {
               ))}
             </div>
           </Card>
+          )}
 
           {signErr && (
             <p style={{ margin: "0 0 12px", color: "var(--error)", fontSize: 13 }}>

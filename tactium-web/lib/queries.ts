@@ -1011,6 +1011,8 @@ export async function createTournament(input: {
   entryFee?: number | null;
   entryFee2?: number | null;
   paymentDeadlineDays?: number | null;
+  startsOn?: string | null;
+  endsOn?: string | null;
 }): Promise<{ id: string; code: string }> {
   const code = genTournamentCode();
   const social = input.format === "americano" || input.format === "mexicano";
@@ -1032,6 +1034,8 @@ export async function createTournament(input: {
       ...(input.paymentDeadlineDays != null
         ? { payment_deadline_days: input.paymentDeadlineDays }
         : {}),
+      ...(input.startsOn ? { starts_on: input.startsOn } : {}),
+      ...(input.endsOn ? { ends_on: input.endsOn } : {}),
       // Nace como BORRADOR: hay que publicarlo (pagar la cuota) antes de que
       // nadie se inscriba. El boton "Pagar / publicar" lo pasa a 'open'.
       status: "draft",
