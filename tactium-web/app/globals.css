@@ -2016,7 +2016,14 @@ select.tw-cell-input {
 .tw-fcp-filter-chips {
   display: flex;
   gap: 6px;
+  /* flex:1 + min-width:0 son imprescindibles: sin ellos, en un flex row el
+     contenedor NO encoge por debajo de su contenido (min-width:auto por
+     defecto) y crece mas alla de la pantalla en vez de scrollear -> los chips
+     se cortan y no hay scroll horizontal. */
+  flex: 1 1 0;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   padding-bottom: 2px;
 }
