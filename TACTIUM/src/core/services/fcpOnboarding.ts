@@ -3,7 +3,7 @@
 // externo) y crea equipos TACTIUM con su plantilla real y sus vínculos.
 // Ver TACTIUM-plan-federacion-cantabra.html (F1) y [[tactium_fcp_federation_integration]].
 import { supabase } from '@core/supabase/client';
-import { createTeam } from './teams';
+import { createTeam, updateTeam } from './teams';
 import { importFcpSeason } from './fcpSeason';
 import type { TeamGender } from '@core/data/federations';
 
@@ -120,40 +120,111 @@ export interface FcpImportResult {
   players: number;
 }
 
-/** Crea un equipo TACTIUM por cada equipo federativo elegido, con su vínculo y
- * su plantilla real volcada (nombre + puntos). */
+/** Equipo del club (o independiente) que AÚN NO está vinculado a la Federación:
+ *  candidato a ser "sustituido" por un equipo federado al importar, en vez de
+ *  duplicarlo. */
+export interface UnlinkedTeam {
+  id: string;
+  name: string;
+  gender: string | null;
+  category: string | null;
+}
+
+/** Equipos del usuario (del club, o independientes si clubId=null) que todavía
+ *  NO tienen vínculo con la Federación. Se usan para ofrecer "sustituir" al
+ *  importar y no duplicar lo creado a mano. */
+export async function fetchUnlinkedClubTeams(
+  clubId: string | null,
+): Promise<UnlinkedTeam[]> {
+  let q = rawFrom('teams').select('id, name, gender, category, club_id');
+  q = clubId ? q.eq('club_id', clubId) : q.is('club_id', null);
+  const { data: teams, error } = await q;
+  if (error) throw new Error(error.message);
+  const list = (teams ?? []) as UnlinkedTeam[];
+  if (!list.length) return [];
+  const { data: links } = await rawFrom('fcp_team_links')
+    .select('team_id')
+    .in('team_id', list.map((t) => t.id));
+  const linked = new Set(((links ?? []) as { team_id: string }[]).map((l) => l.team_id));
+  return list
+    .filter((t) => !linked.has(t.id))
+    .map((t) => ({ id: t.id, name: t.name, gender: t.gender, category: t.category }));
+}
+
+/** Crea (o REUTILIZA) un equipo TACTIUM por cada equipo federativo elegido, con
+ * su vínculo y su plantilla real volcada (nombre + puntos).
+ *
+ * `reuse` mapea `fcp_id_equipo → id de un equipo YA creado a mano` que el usuario
+ * ha decidido sustituir: en vez de crear otro, se vincula ese equipo, se
+ * actualizan sus datos a los oficiales y se le vuelca la plantilla. Además hay
+ * idempotencia: si un equipo federado YA está vinculado, se reutiliza (no
+ * duplica al reimportar). */
 export async function importFcpTeams(
   clubId: string | null,
   selected: FcpTeamOption[],
+  reuse: Record<number, string> = {},
 ): Promise<FcpImportResult[]> {
   const out: FcpImportResult[] = [];
   for (const t of selected) {
-    const team = await createTeam({
+    const canonical = {
       name: t.equipo,
       federation: FCP_FEDERATION_CODE,
       league: FCP_LEAGUE,
-      category: t.category ?? undefined,
+      category: t.category ?? null,
       gender: t.gender,
-      clubId: clubId ?? undefined,
-    });
-    await rawFrom('fcp_team_links').insert({
-      fcp_id_equipo: t.id_equipo,
-      team_id: team.id,
-      club_id: clubId,
-    });
+    };
+
+    // 1) ¿Ya hay un equipo vinculado a este id_equipo federado? → reutilízalo
+    //    (idempotencia: reimportar no duplica). Refresca sus datos oficiales.
+    const { data: existingLink } = await rawFrom('fcp_team_links')
+      .select('team_id')
+      .eq('fcp_id_equipo', t.id_equipo)
+      .maybeSingle();
+
+    let teamId: string;
+    if (existingLink?.team_id) {
+      teamId = existingLink.team_id as string;
+      await updateTeam(teamId, canonical);
+    } else if (reuse[t.id_equipo]) {
+      // 2) El usuario decidió sustituir un equipo suyo creado a mano.
+      teamId = reuse[t.id_equipo];
+      await updateTeam(teamId, { ...canonical, club_id: clubId ?? null });
+      await rawFrom('fcp_team_links').insert({
+        fcp_id_equipo: t.id_equipo,
+        team_id: teamId,
+        club_id: clubId,
+      });
+    } else {
+      // 3) Sin coincidencia: crea uno nuevo.
+      const team = await createTeam({
+        name: t.equipo,
+        federation: FCP_FEDERATION_CODE,
+        league: FCP_LEAGUE,
+        category: t.category ?? undefined,
+        gender: t.gender,
+        clubId: clubId ?? undefined,
+      });
+      teamId = team.id;
+      await rawFrom('fcp_team_links').insert({
+        fcp_id_equipo: t.id_equipo,
+        team_id: teamId,
+        club_id: clubId,
+      });
+    }
+
     const { data: added, error } = await rawRpc('import_fcp_roster', {
-      p_team_id: team.id,
+      p_team_id: teamId,
       p_fcp_id_equipo: t.id_equipo,
     });
     if (error) throw new Error(error.message);
     // Vuelca también la temporada (calendario + resultados). No bloquea el
     // onboarding si falla; siempre se puede rehacer desde "🏆 Mi grupo".
     try {
-      await importFcpSeason(team.id, t.id_equipo, FCP_LEAGUE);
+      await importFcpSeason(teamId, t.id_equipo, FCP_LEAGUE);
     } catch {
       /* no bloqueante */
     }
-    out.push({ teamId: team.id, equipo: t.equipo, players: (added as number) ?? 0 });
+    out.push({ teamId, equipo: t.equipo, players: (added as number) ?? 0 });
   }
   return out;
 }

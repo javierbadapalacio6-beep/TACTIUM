@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
@@ -10,8 +10,10 @@ import { useTeamStore } from '@store/teamStore';
 import {
   searchFcpClubs,
   importFcpTeams,
+  fetchUnlinkedClubTeams,
   type FcpClubGroup,
   type FcpTeamOption,
+  type UnlinkedTeam,
 } from '@core/services/fcpOnboarding';
 
 /**
@@ -82,7 +84,43 @@ export const FcpImportSheet: React.FC<{
     if (!selectedOptions.length) return;
     setImporting(true);
     try {
-      const res = await importFcpTeams(clubId, selectedOptions);
+      // Anti-duplicados: si el usuario ya creó equipos a mano, para cada equipo
+      // federado con un candidato SIN vincular (mismo género + categoría) le
+      // preguntamos si es el mismo → sustituir (vincular + volcar) o crear nuevo.
+      const reuse: Record<number, string> = {};
+      let candidates: UnlinkedTeam[] = [];
+      try {
+        candidates = await fetchUnlinkedClubTeams(clubId);
+      } catch {
+        candidates = [];
+      }
+      const used = new Set<string>();
+      for (const opt of selectedOptions) {
+        const match = candidates.find(
+          (t) =>
+            !used.has(t.id) &&
+            (t.gender ?? '') === opt.gender &&
+            (t.category ?? '') === (opt.category ?? ''),
+        );
+        if (!match) continue;
+        const decision = await new Promise<'reuse' | 'new'>((resolve) => {
+          Alert.alert(
+            'Ya tienes un equipo parecido',
+            `Creaste "${match.name}" a mano. ¿Es tu equipo "${opt.equipo}" de la Federación?\n\n· Sustituir: le vuelco la plantilla y los resultados oficiales (no se duplica).\n· Crear nuevo: lo dejo como está y creo otro equipo.`,
+            [
+              { text: 'Crear nuevo', style: 'cancel', onPress: () => resolve('new') },
+              { text: 'Sustituir', onPress: () => resolve('reuse') },
+            ],
+            { cancelable: false },
+          );
+        });
+        if (decision === 'reuse') {
+          reuse[opt.id_equipo] = match.id;
+          used.add(match.id);
+        }
+      }
+
+      const res = await importFcpTeams(clubId, selectedOptions, reuse);
       const players = res.reduce((n, r) => n + r.players, 0);
       await loadForUser();
       toast.success(
