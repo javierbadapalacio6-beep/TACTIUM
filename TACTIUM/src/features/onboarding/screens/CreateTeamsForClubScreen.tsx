@@ -156,8 +156,10 @@ export const CreateTeamsForClubScreen = ({
   const [newCustomCourts, setNewCustomCourts] = useState(3);
   const [newCustomOrder, setNewCustomOrder] = useState(false);
   const [newLeague, setNewLeague] = useState('');
-  const [newGender, setNewGender] = useState<TeamGender>('masculino');
-  const [newCat, setNewCat] = useState('2ª');
+  // Sin género ni categoría preseleccionados: el usuario elige a propósito
+  // (antes salía "masculino" y "2ª" por defecto y se colaban sin querer).
+  const [newGender, setNewGender] = useState<TeamGender | ''>('');
+  const [newCat, setNewCat] = useState('');
   const [newHasGroup, setNewHasGroup] = useState(false);
   const [newGroup, setNewGroup] = useState('A');
 
@@ -169,10 +171,17 @@ export const CreateTeamsForClubScreen = ({
         composeCustomLeague(newLeague, newCustomCourts, newCustomOrder);
   const effFederation =
     newComp === 'federada' ? club?.federation ?? undefined : undefined;
-  const formatHint = describeCompetitionFormat(effFederation, effLeague, newGender);
+  const formatHint = describeCompetitionFormat(effFederation, effLeague, newGender || 'masculino');
   const canAdd =
     newName.trim().length > 0 &&
-    (newComp !== 'federada' || newLeague.trim().length > 0);
+    !!newCat &&
+    !!newGender &&
+    // Liga: obligatoria si el usuario elige 'federada' a mano; pero si el club
+    // ya tiene federación (FCP), la liga se HEREDA y no se teclea, así que no
+    // la exigimos (si no, el botón quedaba bloqueado en el alta manual FCP).
+    (newComp !== 'federada' ||
+      club?.federation != null ||
+      newLeague.trim().length > 0);
 
   const onAdd = async () => {
     if (!canAdd || submitting || !club) return;
@@ -192,7 +201,7 @@ export const CreateTeamsForClubScreen = ({
         league: effLeague || undefined,
         category: newCat,
         group: newHasGroup ? newGroup : undefined,
-        gender: newGender,
+        gender: newGender as TeamGender, // canAdd garantiza que hay género elegido
         clubId: club.id,
       });
       setNewName('');

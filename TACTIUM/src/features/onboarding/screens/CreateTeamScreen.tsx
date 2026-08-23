@@ -109,8 +109,10 @@ export const CreateTeamScreen = ({
   // Plantilla personalizada ("Otra liga"): formato definido por el capitán.
   const [customCourts, setCustomCourts] = useState(3);
   const [customOrder, setCustomOrder] = useState(false);
-  const [cat, setCat] = useState('2ª');
-  const [gender, setGender] = useState<TeamGender>('masculino');
+  // Sin categoría ni género preseleccionados: el usuario debe elegir a
+  // propósito (antes salía "2ª" y "masculino" por defecto y se colaban sin querer).
+  const [cat, setCat] = useState('');
+  const [gender, setGender] = useState<TeamGender | ''>('');
   const [group, setGroup] = useState<string>('A');
   const [hasGroup, setHasGroup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -133,12 +135,12 @@ export const CreateTeamScreen = ({
   const effectiveFederation = isFederada ? federation?.code : undefined;
 
   const courts = useMemo(
-    () => getCourtsForCompetition(effectiveFederation, effectiveLeague, gender),
+    () => getCourtsForCompetition(effectiveFederation, effectiveLeague, gender || 'masculino'),
     [effectiveFederation, effectiveLeague, gender],
   );
 
   const formatBlurb = useMemo(
-    () => describeCompetitionFormat(effectiveFederation, effectiveLeague, gender),
+    () => describeCompetitionFormat(effectiveFederation, effectiveLeague, gender || 'masculino'),
     [effectiveFederation, effectiveLeague, gender],
   );
 
@@ -148,9 +150,10 @@ export const CreateTeamScreen = ({
         name.trim() &&
           (!isFederada || federation) &&
           cat &&
+          gender &&
           (!hasGroup || group),
       ),
-    [name, isFederada, federation, cat, group, hasGroup],
+    [name, isFederada, federation, cat, gender, group, hasGroup],
   );
 
   const handleNext = () => {
@@ -162,7 +165,7 @@ export const CreateTeamScreen = ({
       league: effectiveLeague || undefined,
       category: cat,
       group: hasGroup ? group : undefined,
-      gender,
+      gender: gender as TeamGender, // `valid` garantiza que hay género elegido
     };
 
     // Reverse trial: el 1er equipo (independiente o de club existente) es
