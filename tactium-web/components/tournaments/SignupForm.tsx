@@ -10,7 +10,7 @@ import {
 } from "@/lib/tournament-data";
 import {
   fetchTournament,
-  searchFcpPlayers,
+  resolveFcpPlayer,
   tournamentSignup,
   tournamentSignupOffline,
 } from "@/lib/queries";
@@ -116,12 +116,17 @@ function useFcpHint(query: string): FcpHint | null {
     let alive = true;
     const t = setTimeout(async () => {
       try {
-        const rows = await searchFcpPlayers(q, 1);
+        const rows = await resolveFcpPlayer(q);
         if (!alive) return;
         const top = rows[0];
         setHint(
           top
-            ? { pts: top.puntos ?? 0, level: top.categoria ?? "", matched: top.nombre }
+            ? {
+                pts: top.puntos ?? 0,
+                // La LIGA en la que juega (division real), no "ABS".
+                level: top.categoriaDiv ?? "",
+                matched: top.name,
+              }
             : null,
         );
       } catch {

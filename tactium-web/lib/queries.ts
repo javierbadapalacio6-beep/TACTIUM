@@ -1629,27 +1629,168 @@ function fullName(r: {
   return [r.nombre, r.apellido1, r.apellido2].filter(Boolean).join(" ").trim();
 }
 
+/** Sanea un término para los filtros ilike/.or de PostgREST (%,() rompen). */
+const cleanFcpTerm = (s: string) =>
+  s.replace(/[%,()]/g, " ").replace(/\s+/g, " ").trim();
+
+// `fcpDisplayName` (orden natural "Nombre Apellido1 Apellido2") ya está definido
+// más abajo en este mismo archivo; se reutiliza aquí (declaración hoisted).
+
 export async function searchFcpPlayers(
   q: string,
   limit = 40
 ): Promise<FcpPlayerRow[]> {
-  if (q.trim().length < 3) return [];
-  const term = `%${q.trim()}%`;
-  const { data, error } = await supabaseBrowser()
+  const cleaned = cleanFcpTerm(q);
+  if (cleaned.length < 3) return [];
+  // TOKENIZAR: el nombre se guarda como "APELLIDOS, NOMBRE"; buscar la cadena
+  // entera falla si el usuario escribe en orden natural ("Javier Bada Palacio").
+  // Encadenar .or() por token los combina con AND -> todos deben aparecer, en
+  // cualquier orden y columna (nombre/apellido1/apellido2/nombre_pila).
+  const tokens = cleaned.split(/\s+/).filter((t) => t.length >= 2);
+  if (!tokens.length) return [];
+  let sel = supabaseBrowser()
     .from("fcp_jugadores")
-    .select("id_jugador, nombre, apellido1, apellido2, categoria, puntos, id_equipo, nombre_equipo")
-    .or(`nombre.ilike.${term},apellido1.ilike.${term},apellido2.ilike.${term}`)
+    .select(
+      "id_jugador, nombre, apellido1, apellido2, nombre_pila, categoria, puntos, id_equipo, nombre_equipo"
+    );
+  for (const tok of tokens) {
+    sel = sel.or(
+      `nombre.ilike.%${tok}%,apellido1.ilike.%${tok}%,apellido2.ilike.%${tok}%,nombre_pila.ilike.%${tok}%`
+    );
+  }
+  const { data, error } = await sel
     .order("puntos", { ascending: false })
     .limit(limit);
   if (error) throw error;
   return (data ?? []).map((r) => ({
     idJugador: r.id_jugador,
-    nombre: fullName(r) || "Jugador",
+    nombre: fcpDisplayName(r),
     categoria: r.categoria,
     puntos: r.puntos ?? 0,
     idEquipo: r.id_equipo,
     nombreEquipo: r.nombre_equipo,
   }));
+}
+
+export interface FcpPlayerCandidate {
+  idJugador: string;
+  name: string;
+  puntos: number | null;
+  nivel: number | null; // nº de división (1, 2, …)
+  categoriaDiv: string | null; // "2ª" — la LIGA en la que juega (no "ABS")
+  equipo: string | null;
+  genero: "M" | "F" | null;
+}
+
+/** Candidatos de la Federación por nombre, con puntos + DIVISIÓN de liga
+ *  resuelta desde el grupo de su equipo (no la `categoria`="ABS"). Espejo de
+ *  `resolveFcpPlayer` de la app. Ordenados por puntos desc. */
+export async function resolveFcpPlayer(name: string): Promise<FcpPlayerCandidate[]> {
+  const q = cleanFcpTerm(name);
+  const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
+  if (q.length < 3 || tokens.length === 0) return [];
+
+  let sel = supabaseBrowser()
+    .from("fcp_jugadores")
+    .select(
+      "id_jugador, nombre, apellido1, apellido2, nombre_pila, puntos, id_equipo, nombre_equipo"
+    );
+  for (const tok of tokens) {
+    sel = sel.or(
+      `nombre.ilike.%${tok}%,apellido1.ilike.%${tok}%,apellido2.ilike.%${tok}%,nombre_pila.ilike.%${tok}%`
+    );
+  }
+  const { data } = await sel.order("puntos", { ascending: false }).limit(80);
+  const rows = (data ?? []) as {
+    id_jugador: string;
+    nombre: string | null;
+    apellido1: string | null;
+    apellido2: string | null;
+    nombre_pila: string | null;
+    puntos: number | null;
+    id_equipo: number | null;
+    nombre_equipo: string | null;
+  }[];
+  if (!rows.length) return [];
+
+  // Dedup por persona (la licencia cambia por temporada). 1ª fila = más puntos.
+  type Person = { rep: (typeof rows)[number]; equipos: Set<number> };
+  const byPerson = new Map<string, Person>();
+  for (const r of rows) {
+    const key = String(r.id_jugador).replace(/^fcp_\d+_/, "");
+    let e = byPerson.get(key);
+    if (!e) {
+      e = { rep: r, equipos: new Set() };
+      byPerson.set(key, e);
+    }
+    if (r.id_equipo != null) e.equipos.add(r.id_equipo);
+  }
+  const people = [...byPerson.values()].slice(0, 6);
+
+  // División por id_equipo → nivel + género + temporada (id_liga) del grupo.
+  const allEquipos = [...new Set(people.flatMap((p) => [...p.equipos]))];
+  const divByEquipo = new Map<
+    number,
+    { nivel: number; cat: string; genero: string; idLiga: number }
+  >();
+  if (allEquipos.length) {
+    const { data: cl } = await supabaseBrowser()
+      .from("fcp_clasificacion")
+      .select("id_equipo, id_grupo")
+      .in("id_equipo", allEquipos);
+    const clRows = ((cl ?? []) as { id_equipo: number; id_grupo: string }[]).filter(
+      (r) => !/^fase/i.test(r.id_grupo)
+    );
+    const grupoIds = [...new Set(clRows.map((r) => r.id_grupo))];
+    const gMap = new Map<string, { nombre: string; genero: string; idLiga: number }>();
+    if (grupoIds.length) {
+      const { data: gr } = await supabaseBrowser()
+        .from("fcp_grupos")
+        .select("id_grupo, nombre, genero, id_liga")
+        .in("id_grupo", grupoIds);
+      for (const g of (gr ?? []) as {
+        id_grupo: string;
+        nombre: string;
+        genero: string;
+        id_liga: number | null;
+      }[]) {
+        gMap.set(g.id_grupo, { nombre: g.nombre, genero: g.genero, idLiga: g.id_liga ?? 0 });
+      }
+    }
+    for (const r of clRows) {
+      const g = gMap.get(r.id_grupo);
+      if (!g) continue;
+      const cat = catShort(g.nombre);
+      const nivel = cat ? parseInt(cat, 10) : NaN;
+      if (!Number.isFinite(nivel)) continue;
+      const prev = divByEquipo.get(r.id_equipo);
+      if (!prev || g.idLiga > prev.idLiga)
+        divByEquipo.set(r.id_equipo, { nivel, cat: cat!, genero: g.genero, idLiga: g.idLiga });
+    }
+  }
+
+  return people.map((p) => {
+    let best: { nivel: number; cat: string; genero: string; idLiga: number } | null = null;
+    for (const eq of p.equipos) {
+      const d = divByEquipo.get(eq);
+      if (!d) continue;
+      if (
+        !best ||
+        d.idLiga > best.idLiga ||
+        (d.idLiga === best.idLiga && d.nivel < best.nivel)
+      )
+        best = d;
+    }
+    return {
+      idJugador: String(p.rep.id_jugador),
+      name: fcpDisplayName(p.rep),
+      puntos: p.rep.puntos,
+      nivel: best ? best.nivel : null,
+      categoriaDiv: best ? best.cat : null,
+      equipo: p.rep.nombre_equipo,
+      genero: best ? (best.genero === "F" ? "F" : "M") : null,
+    };
+  });
 }
 
 export async function fetchFcpTeamPlayers(
