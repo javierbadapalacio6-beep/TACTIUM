@@ -52,7 +52,7 @@ export const COMPETITION_PRESETS: CompetitionPreset[] = [
 export const TEAM_CATEGORIES = [
   "1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª",
 ];
-export const TEAM_GROUPS = ["A", "B", "C", "D"];
+export const TEAM_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
 export const TEAM_GENDERS: { id: string; label: string }[] = [
   { id: "masculino", label: "Masculino" },
   { id: "femenino", label: "Femenino" },

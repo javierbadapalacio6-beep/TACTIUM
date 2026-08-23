@@ -36,7 +36,7 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 import type { ClubStackScreenProps } from '@navigation/types';
 
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª', '9ª', '10ª'];
-const GROUPS = ['A', 'B', 'C', 'D'];
+const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 const GENDERS: { id: TeamGender; label: string }[] = [
   { id: 'masculino', label: 'Masculino' },
   { id: 'femenino', label: 'Femenino' },
