@@ -588,6 +588,91 @@ export const TournamentSignupScreen = ({
     );
   }
 
+  // Torneo con CUOTA → inscripción y pago WEB-FIRST. No pedimos el formulario en
+  // la app: se perdía al saltar al navegador y no se puede pasar el nombre/
+  // teléfono por la URL (privacidad). Se rellena y paga UNA vez en la web, donde
+  // además se autodetectan los puntos por nombre (Federación). Solo mostramos la
+  // ficha del torneo + botón para ir a la inscripción.
+  if (found && (found.entry_fee ?? 0) > 0) {
+    return (
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={10}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+          >
+            <IconBack size={20} color={c.text} />
+          </Pressable>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.eyebrow}>TORNEO</Text>
+            <Text style={styles.title}>Apuntarme</Text>
+          </View>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: insets.bottom + 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.foundCard}>
+            <Text style={styles.foundName} numberOfLines={2}>{found.name}</Text>
+            <View style={styles.infoBox}>
+              {datesLabel ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>FECHAS</Text>
+                  <Text style={styles.infoValue}>{datesLabel}</Text>
+                </View>
+              ) : null}
+              {found.genders.length ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>GÉNEROS</Text>
+                  <Text style={styles.infoValue}>
+                    {found.genders.map((g) => GENDER_LABEL[g] ?? g).join(' · ')}
+                  </Text>
+                </View>
+              ) : null}
+              {found.categories.length ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>CATEGORÍAS</Text>
+                  <Text style={styles.infoValue}>{found.categories.join(' · ')}</Text>
+                </View>
+              ) : null}
+              <View style={[styles.infoRow, styles.infoRowLast]}>
+                <Text style={styles.infoLabel}>CUOTA</Text>
+                <Text style={[styles.infoValue, { color: c.accent, fontWeight: '800' }]}>
+                  {feeInfo}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={{
+                color: c.textMuted,
+                fontSize: 13.5,
+                lineHeight: 20,
+                marginTop: 4,
+              }}
+            >
+              La inscripción y el pago de este torneo se hacen en la web. Al
+              escribir tu nombre se detectan tus puntos de la Federación
+              automáticamente; ahí rellenáis la pareja y pagáis.
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable
+            onPress={save}
+            style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.saveLabel}>
+              Ir a la inscripción · {found.entry_fee} {found.fee_currency ?? '€'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
