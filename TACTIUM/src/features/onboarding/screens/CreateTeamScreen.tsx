@@ -113,7 +113,7 @@ export const CreateTeamScreen = ({
   // propósito (antes salía "2ª" y "masculino" por defecto y se colaban sin querer).
   const [cat, setCat] = useState('');
   const [gender, setGender] = useState<TeamGender | ''>('');
-  const [group, setGroup] = useState<string>('A');
+  const [group, setGroup] = useState<string>('');
   const [hasGroup, setHasGroup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 

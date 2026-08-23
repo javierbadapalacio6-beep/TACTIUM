@@ -161,7 +161,7 @@ export const CreateTeamsForClubScreen = ({
   const [newGender, setNewGender] = useState<TeamGender | ''>('');
   const [newCat, setNewCat] = useState('');
   const [newHasGroup, setNewHasGroup] = useState(false);
-  const [newGroup, setNewGroup] = useState('A');
+  const [newGroup, setNewGroup] = useState('');
 
   const newPreset = getCompetitionPreset(newComp);
   const effLeague =
@@ -176,6 +176,7 @@ export const CreateTeamsForClubScreen = ({
     newName.trim().length > 0 &&
     !!newCat &&
     !!newGender &&
+    (!newHasGroup || !!newGroup) &&
     // Liga: obligatoria si el usuario elige 'federada' a mano; pero si el club
     // ya tiene federación (FCP), la liga se HEREDA y no se teclea, así que no
     // la exigimos (si no, el botón quedaba bloqueado en el alta manual FCP).
@@ -206,10 +207,10 @@ export const CreateTeamsForClubScreen = ({
       });
       setNewName('');
       setNewLeague('');
-      setNewGender('masculino');
-      setNewCat('2ª');
+      setNewGender('');
+      setNewCat('');
       setNewHasGroup(false);
-      setNewGroup('A');
+      setNewGroup('');
     } catch (e: any) {
       Alert.alert('Error al crear equipo', e?.message ?? '');
     } finally {
