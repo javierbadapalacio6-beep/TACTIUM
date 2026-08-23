@@ -128,6 +128,7 @@ export interface UnlinkedTeam {
   name: string;
   gender: string | null;
   category: string | null;
+  group: string | null;
 }
 
 /** Equipos del usuario (del club, o independientes si clubId=null) que todavía
@@ -136,11 +137,17 @@ export interface UnlinkedTeam {
 export async function fetchUnlinkedClubTeams(
   clubId: string | null,
 ): Promise<UnlinkedTeam[]> {
-  let q = rawFrom('teams').select('id, name, gender, category, club_id');
+  let q = rawFrom('teams').select('id, name, gender, category, group_name, club_id');
   q = clubId ? q.eq('club_id', clubId) : q.is('club_id', null);
   const { data: teams, error } = await q;
   if (error) throw new Error(error.message);
-  const list = (teams ?? []) as UnlinkedTeam[];
+  const list = (teams ?? []) as {
+    id: string;
+    name: string;
+    gender: string | null;
+    category: string | null;
+    group_name: string | null;
+  }[];
   if (!list.length) return [];
   const { data: links } = await rawFrom('fcp_team_links')
     .select('team_id')
@@ -148,7 +155,13 @@ export async function fetchUnlinkedClubTeams(
   const linked = new Set(((links ?? []) as { team_id: string }[]).map((l) => l.team_id));
   return list
     .filter((t) => !linked.has(t.id))
-    .map((t) => ({ id: t.id, name: t.name, gender: t.gender, category: t.category }));
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      gender: t.gender,
+      category: t.category,
+      group: t.group_name,
+    }));
 }
 
 /** Crea (o REUTILIZA) un equipo TACTIUM por cada equipo federativo elegido, con

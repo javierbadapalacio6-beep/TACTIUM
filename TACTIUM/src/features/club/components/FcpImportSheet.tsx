@@ -96,17 +96,26 @@ export const FcpImportSheet: React.FC<{
       }
       const used = new Set<string>();
       for (const opt of selectedOptions) {
-        const match = candidates.find(
+        // Candidatos por género + categoría (sin vincular y no usados ya).
+        const pool = candidates.filter(
           (t) =>
             !used.has(t.id) &&
             (t.gender ?? '') === opt.gender &&
             (t.category ?? '') === (opt.category ?? ''),
         );
-        if (!match) continue;
+        if (!pool.length) continue;
+        // Si varios coinciden, prefiere aquel cuyo grupo (letra) aparezca en el
+        // nombre del grupo federativo — desambigua "A" vs "B" del mismo nivel.
+        const fedGroup = (opt.grupo ?? '').toUpperCase();
+        const match =
+          pool.find((t) => t.group && fedGroup.includes(t.group.toUpperCase())) ??
+          pool[0];
+        const yourGroup = match.group ? ` · Grupo ${match.group}` : '';
+        const fedInfo = [opt.category, opt.grupo].filter(Boolean).join(' · ');
         const decision = await new Promise<'reuse' | 'new'>((resolve) => {
           Alert.alert(
             'Ya tienes un equipo parecido',
-            `Creaste "${match.name}" a mano. ¿Es tu equipo "${opt.equipo}" de la Federación?\n\n· Sustituir: le vuelco la plantilla y los resultados oficiales (no se duplica).\n· Crear nuevo: lo dejo como está y creo otro equipo.`,
+            `Tu equipo (a mano):\n"${match.name}"${yourGroup}\n\nEquipo federado:\n"${opt.equipo}"${fedInfo ? `\n${fedInfo}` : ''}\n\n¿Es el mismo?\n· Sustituir: le vuelco la plantilla y los resultados oficiales (no se duplica).\n· Crear nuevo: lo dejo como está y creo otro equipo.`,
             [
               { text: 'Crear nuevo', style: 'cancel', onPress: () => resolve('new') },
               { text: 'Sustituir', onPress: () => resolve('reuse') },
