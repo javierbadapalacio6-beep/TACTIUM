@@ -21,7 +21,7 @@ import { NotificationBell } from '@features/notifications/components/Notificatio
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { FcpImportSheet } from '../components/FcpImportSheet';
-import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { FCP_FEDERATION_CODE, hasFcpLinkedTeams } from '@core/services/fcpOnboarding';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
 import { DeleteClubSheet } from '@features/club/components/DeleteClubSheet';
 import { toast } from '@store/toastStore';
@@ -84,9 +84,25 @@ export const ClubDashboardScreen = ({
     () => (club ? teams.filter((t) => t.club_id === club.id) : []),
     [teams, club],
   );
-  // ¿Ya se importó de la Federación? Si el club tiene algún equipo FCP, la
-  // importación ya está hecha → ocultamos el botón de importar.
-  const hasFcpTeams = clubTeams.some((t) => t.federation === FCP_FEDERATION_CODE);
+  // ¿Ya se importó de la Federación? Se mira por VÍNCULOS reales
+  // (fcp_team_links), no por el campo `federation`: un equipo creado a mano en
+  // un club FCP hereda federation='FCantP' pero NO está importado, y antes eso
+  // ocultaba el banner de importar por error.
+  const [hasFcpTeams, setHasFcpTeams] = useState(false);
+  useEffect(() => {
+    if (!isFcpClub || !club) {
+      setHasFcpTeams(false);
+      return;
+    }
+    let alive = true;
+    hasFcpLinkedTeams(club.id)
+      .then((v) => alive && setHasFcpTeams(v))
+      .catch(() => alive && setHasFcpTeams(false));
+    return () => {
+      alive = false;
+    };
+    // Recalcula al cambiar los equipos (p.ej. tras importar → banner se oculta).
+  }, [isFcpClub, club?.id, teams]);
 
   // Cobertura dura: cuántos equipos cubre el plan y cuántos van usados.
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);

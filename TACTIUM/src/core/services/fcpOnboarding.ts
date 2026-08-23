@@ -164,6 +164,17 @@ export async function fetchUnlinkedClubTeams(
     }));
 }
 
+/** ¿El club (o el usuario independiente) tiene ALGÚN equipo REALMENTE vinculado
+ *  a la Federación? Se mira por `fcp_team_links`, NO por el campo `federation`:
+ *  un equipo creado a mano en un club federado hereda federation='FCantP' pero
+ *  no está importado, y no debe contar como "ya importado". */
+export async function hasFcpLinkedTeams(clubId: string | null): Promise<boolean> {
+  let q = rawFrom('fcp_team_links').select('team_id');
+  q = clubId ? q.eq('club_id', clubId) : q.is('club_id', null);
+  const { data } = await q;
+  return ((data ?? []) as unknown[]).length > 0;
+}
+
 /** Crea (o REUTILIZA) un equipo TACTIUM por cada equipo federativo elegido, con
  * su vínculo y su plantilla real volcada (nombre + puntos).
  *
