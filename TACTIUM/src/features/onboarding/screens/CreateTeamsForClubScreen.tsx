@@ -99,6 +99,11 @@ export const CreateTeamsForClubScreen = ({
   // Federación Cántabra: onboarding AUTOMÁTICO por importación (no manual).
   const isFcp = club?.federation === FCP_FEDERATION_CODE;
   const [fcpOpen, setFcpOpen] = useState(false);
+  // Club FCP que decide crear los equipos A MANO (sin el volcado premium). Sin
+  // esto, para un club FCP no se renderizaba NINGÚN alta manual y el usuario
+  // quedaba atascado: "A mano" cerraba el aviso y no había forma de crear
+  // equipos ni de avanzar (el CTA exige ≥1 equipo).
+  const [manualMode, setManualMode] = useState(false);
   const fcpAutoOpened = useRef(false);
   // El volcado desde la Federación es premium. Con sub: se auto-abre (conveniencia
   // para clubes FCP). Sin sub: NO auto-abrimos ni soltamos un Alert sorpresa —
@@ -119,7 +124,15 @@ export const CreateTeamsForClubScreen = ({
       'Volcado automático',
       'Crea todos los equipos del club con la plantilla y los puntos oficiales de la Federación — es una función premium. Empieza tu prueba gratis para usarlo, o crea los equipos a mano ahora.',
       [
-        { text: 'A mano', style: 'cancel' },
+        {
+          text: 'A mano',
+          style: 'cancel',
+          // Revela el alta manual (para FCP estaba oculta) y abre el formulario.
+          onPress: () => {
+            setManualMode(true);
+            setAdding(true);
+          },
+        },
         {
           text: 'Empezar prueba',
           onPress: () =>
@@ -307,7 +320,7 @@ export const CreateTeamsForClubScreen = ({
             </View>
           ))}
 
-          {!isFcp && (adding ? (
+          {(!isFcp || manualMode) && (adding ? (
             <View style={styles.addInline}>
               <View style={styles.addRow}>
                 <TextInput
