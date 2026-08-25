@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { CATEGORIES, GENDERS } from "@/lib/tournament-data";
+import { priceSignup } from "@/lib/tournament-signup-pricing";
 import {
   fetchTournament,
   fetchTournamentSignupWindow,
@@ -277,6 +278,18 @@ export function SignupForm({ id }: { id: string }) {
   const [fedName, setFedName] = useState<string | null>(null);
   const [mateFedName, setMateFedName] = useState<string | null>(null);
 
+  // 2ª categoría OPCIONAL (como en la app): el mismo jugador se apunta a otra
+  // categoría, posiblemente con OTRO compañero. Su precio pasa a la cuota de 2
+  // categorías. Solo se ofrece si el torneo tiene ≥2 categorías.
+  const [category2, setCategory2] = useState<string | null>(null);
+  const [mate2Name, setMate2Name] = useState("");
+  const [mate2Pts, setMate2Pts] = useState("");
+  const [mate2Level, setMate2Level] = useState("");
+  const [mate2Email, setMate2Email] = useState("");
+  const [mate2FedName, setMate2FedName] = useState<string | null>(null);
+  // Cuota de 2 categorías del torneo (para el desglose). Llega con la ventana.
+  const [entryFee2, setEntryFee2] = useState<number | null>(null);
+
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -305,6 +318,7 @@ export function SignupForm({ id }: { id: string }) {
         if (!alive || !w) return;
         setSignupHours(buildSignupHours(w.start_time, w.end_time));
         setRemoveCap(w.max_removable_hours);
+        setEntryFee2(w.entry_fee_2);
       })
       .catch(() => {});
     return () => {
@@ -357,26 +371,72 @@ export function SignupForm({ id }: { id: string }) {
       setSignErr("Falta el código del torneo.");
       return;
     }
-    const seed =
-      (parseInt(pts || "0", 10) || 0) + (parseInt(matePts || "0", 10) || 0);
-    const league =
-      (parseInt(level || "0", 10) || 0) + (parseInt(mateLevel || "0", 10) || 0);
+
+    // 2ª categoría (opcional): compañero — puede ser otro — y categoría distinta.
+    const p2bFull = (mate2FedName ?? mate2Name).trim();
+    if (category2) {
+      if (category2 === category) {
+        setSignErr("La 2ª categoría debe ser distinta de la primera.");
+        return;
+      }
+      if (!p2bFull) {
+        setSignErr("Falta el compañero de la 2ª categoría.");
+        return;
+      }
+      if (!mate2FedName && !isFullName(mate2Name)) {
+        setSignErr(
+          "Escribe el nombre y apellidos del compañero de la 2ª categoría.",
+        );
+        return;
+      }
+    }
+
     setBusy(true);
     setSignErr(null);
 
-    const signupInput = {
-      code,
-      category,
-      gender: SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase(),
-      p1Name: p1Full,
-      p2Name: p2Full,
-      p1Email: email.trim() || null,
-      p1Phone: phone.trim() || null,
-      p2Email: mateEmail.trim() || null,
-      seedPoints: seed || null,
-      leagueSum: league || null,
-      availability: [...blocked],
-    };
+    const genderDb = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
+    const avail = [...blocked];
+    const aPts = parseInt(pts || "0", 10) || 0;
+    const aLvl = parseInt(level || "0", 10) || 0;
+    const p1Email = email.trim() || null;
+    const p1Phone = phone.trim() || null;
+
+    // Inscripciones a crear: una por categoría. La 2ª comparte jugador 1 (A) y
+    // lleva su propio compañero (B2).
+    const regs = [
+      {
+        code,
+        category,
+        gender: genderDb,
+        p1Name: p1Full,
+        p2Name: p2Full,
+        p1Email,
+        p1Phone,
+        p2Email: mateEmail.trim() || null,
+        seedPoints:
+          aPts + (parseInt(matePts || "0", 10) || 0) || null,
+        leagueSum:
+          aLvl + (parseInt(mateLevel || "0", 10) || 0) || null,
+        availability: avail,
+      },
+    ];
+    if (category2) {
+      regs.push({
+        code,
+        category: category2,
+        gender: genderDb,
+        p1Name: p1Full,
+        p2Name: p2bFull,
+        p1Email,
+        p1Phone,
+        p2Email: mate2Email.trim() || null,
+        seedPoints:
+          aPts + (parseInt(mate2Pts || "0", 10) || 0) || null,
+        leagueSum:
+          aLvl + (parseInt(mate2Level || "0", 10) || 0) || null,
+        availability: avail,
+      });
+    }
 
     // Confirmación por email (gratis / pago en el club). Fire-and-forget: el
     // correo NO bloquea ni revierte la inscripción. El pago online la envía
@@ -386,42 +446,48 @@ export function SignupForm({ id }: { id: string }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          code: signupInput.code,
-          p1Name: signupInput.p1Name,
-          p2Name: signupInput.p2Name,
-          p1Email: signupInput.p1Email,
-          p2Email: signupInput.p2Email,
-          category: signupInput.category,
-          gender: signupInput.gender,
+          code,
           method,
+          regs: regs.map((r) => ({
+            p1Name: r.p1Name,
+            p2Name: r.p2Name,
+            p1Email: r.p1Email,
+            p2Email: r.p2Email,
+            category: r.category,
+            gender: r.gender,
+          })),
         }),
       }).catch(() => {});
     };
 
-    // "Pagar en el club": inscribe como PENDIENTE de pago en el club (sin
-    // Stripe). El club la confirma al cobrar el efectivo.
+    // "Pagar en el club": crea las inscripciones como PENDIENTES de pago en el
+    // club (sin Stripe). El club las confirma al cobrar.
     if (offline) {
-      const res = await guardedWrite("inscribir (pago en el club)", () =>
-        tournamentSignupOffline(signupInput),
-      );
+      for (const r of regs) {
+        const res = await guardedWrite("inscribir (pago en el club)", () =>
+          tournamentSignupOffline(r),
+        );
+        if (!res.ok) {
+          setBusy(false);
+          setSignErr(res.reason);
+          return;
+        }
+      }
       setBusy(false);
-      if (res.ok) {
-        notifyConfirm("club");
-        setDone(true);
-      } else setSignErr(res.reason);
+      notifyConfirm("club");
+      setDone(true);
       return;
     }
 
-    // Si el torneo tiene cuota, se intenta el COBRO online (Connect): la pareja
-    // paga → destination charge al club (−3% TACTIUM) → el webhook crea la
-    // inscripción. Si el club NO está conectado, se cae a la inscripción
-    // gratuita (el club cobra por su cuenta, como hasta ahora).
+    // Con cuota → COBRO online (Connect): un solo pago cubre TODAS las
+    // categorías; el webhook crea las inscripciones al confirmarse. Si el club
+    // no está conectado, se cae a "pagar en el club".
     if ((real?.entry_fee ?? 0) > 0) {
       try {
         const r = await fetch("/api/tournaments/signup-checkout", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(signupInput),
+          body: JSON.stringify({ code, regs }),
         });
         const d = (await r.json().catch(() => ({}))) as {
           url?: string;
@@ -432,9 +498,6 @@ export function SignupForm({ id }: { id: string }) {
           window.location.href = d.url; // → Stripe Checkout
           return;
         }
-        // Club sin pago online (o pasarela inactiva): NO se inscribe como
-        // "pagada". Se cambia a modo "pagar en el club" y se avisa; el usuario
-        // usa el botón de pago en el club (inscripción pendiente de cobro).
         setBusy(false);
         if (d.reason === "not_connected") {
           setPayOnline(false);
@@ -452,24 +515,57 @@ export function SignupForm({ id }: { id: string }) {
       }
     }
 
-    const res = await guardedWrite("inscribir la pareja", () =>
-      tournamentSignup(signupInput),
-    );
+    // Torneo gratis: crea las inscripciones directamente.
+    for (const r of regs) {
+      const res = await guardedWrite("inscribir la pareja", () =>
+        tournamentSignup(r),
+      );
+      if (!res.ok) {
+        setBusy(false);
+        setSignErr(res.reason);
+        return;
+      }
+    }
     setBusy(false);
-    if (res.ok) {
-      notifyConfirm("free");
-      setDone(true);
-    } else setSignErr(res.reason);
+    notifyConfirm("free");
+    setDone(true);
   }
 
   const hint = useFcpHint(name);
   const mateHint = useFcpHint(mateName);
+  const mate2Hint = useFcpHint(mate2Name);
 
-  // Precio POR PERSONA: el que se inscribe paga por los DOS (él + compañero),
-  // así que el total es el doble de la cuota. Se muestra el desglose.
+  // Precio POR PERSONA: cada jugador paga según cuántas categorías juega (1 →
+  // entry_fee, 2 → entry_fee_2). El que se inscribe paga por todos. El helper
+  // agrupa por nombre y calcula el total (mismo cálculo que el servidor).
   const feePer = real?.entry_fee ?? 0;
   const feeCur = real?.fee_currency ?? "€";
-  const feeTotal = feePer * 2;
+  const hasTwoCats = (t?.categories.length ?? 0) >= 2;
+  const regsPreview = useMemo(() => {
+    const p1 = fedName ?? name;
+    const list = [{ category, p1Name: p1, p2Name: mateFedName ?? mateName }];
+    if (category2)
+      list.push({
+        category: category2,
+        p1Name: p1,
+        p2Name: mate2FedName ?? mate2Name,
+      });
+    return list;
+  }, [
+    category,
+    category2,
+    name,
+    fedName,
+    mateName,
+    mateFedName,
+    mate2Name,
+    mate2FedName,
+  ]);
+  const pricing = useMemo(
+    () => priceSignup(regsPreview, feePer, entryFee2),
+    [regsPreview, feePer, entryFee2],
+  );
+  const feeTotal = pricing.totalCents / 100;
 
   function toggleSlot(key: string) {
     setBlocked((s) => {
@@ -916,6 +1012,210 @@ export function SignupForm({ id }: { id: string }) {
             </Card>
           </div>
 
+          {/* 2ª categoría OPCIONAL (como en la app). Solo si el torneo tiene ≥2
+              categorías. El compañero puede ser distinto. */}
+          {hasTwoCats && (
+            <Card style={{ marginBottom: 20 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <Eyebrow>2ª CATEGORÍA · OPCIONAL</Eyebrow>
+                  <p
+                    style={{
+                      margin: "8px 0 0",
+                      fontSize: 12.5,
+                      color: "var(--text-muted)",
+                      textWrap: "pretty",
+                    }}
+                  >
+                    Puedes jugar una segunda categoría, con otro compañero si
+                    hace falta. Pagas la cuota de 2 categorías (no el doble).
+                  </p>
+                </div>
+                {!category2 ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() =>
+                      setCategory2(
+                        (t?.categories ?? []).find((c) => c !== category) ??
+                          null,
+                      )
+                    }
+                    style={{
+                      padding: "9px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--accent)",
+                      border: "1px solid var(--accent)",
+                      background: "var(--accent-10)",
+                    }}
+                  >
+                    + Añadir
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setCategory2(null);
+                      setMate2Name("");
+                      setMate2Pts("");
+                      setMate2Level("");
+                      setMate2Email("");
+                      setMate2FedName(null);
+                    }}
+                    style={{
+                      padding: "9px 16px",
+                      fontSize: 13,
+                      color: "var(--text-muted)",
+                      border: "1px solid var(--hair-strong)",
+                    }}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+
+              {category2 && (
+                <div style={{ marginTop: 18 }}>
+                  <Label>ELIGE LA 2ª CATEGORÍA</Label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {(t?.categories ?? [])
+                      .filter((c) => c !== category)
+                      .map((c) => {
+                        const on = category2 === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setCategory2(c)}
+                            className="btn"
+                            style={{
+                              padding: "9px 16px",
+                              fontSize: 13,
+                              fontWeight: on ? 700 : 500,
+                              background: on ? "var(--accent-10)" : "transparent",
+                              color: on ? "var(--accent)" : "var(--text-muted)",
+                              border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                            }}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  <div style={{ marginTop: 18 }}>
+                    <Label>NOMBRE Y APELLIDOS DEL COMPAÑERO (2ª CATEGORÍA)</Label>
+                    <Input
+                      type="text"
+                      value={mate2Name}
+                      onChange={(e) => {
+                        setMate2Name(e.target.value);
+                        setMate2FedName(null);
+                      }}
+                      placeholder="Nombre y apellidos"
+                    />
+                    {mate2Hint && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMate2Name(mate2Hint.matched);
+                          setMate2FedName(mate2Hint.matched);
+                          setMate2Pts(String(mate2Hint.pts));
+                          setMate2Level(mate2Hint.level);
+                        }}
+                        style={{
+                          marginTop: 10,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          background: "var(--accent-10)",
+                          border: "1px solid var(--accent-25)",
+                          color: "var(--accent)",
+                          cursor: "pointer",
+                          width: "100%",
+                          textAlign: "left",
+                        }}
+                      >
+                        <span
+                          className="mono"
+                          style={{ fontSize: 9, letterSpacing: "0.16em" }}
+                        >
+                          DETECTADO EN LA FEDERACIÓN
+                        </span>
+                        <span
+                          className="mono"
+                          style={{ fontSize: 12, marginLeft: "auto" }}
+                        >
+                          {mate2Hint.pts} · {mate2Hint.level}
+                        </span>
+                      </button>
+                    )}
+                    {mate2Hint && (
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          fontSize: 11.5,
+                          color: mate2FedName
+                            ? "var(--accent)"
+                            : "var(--text-faint)",
+                        }}
+                      >
+                        {mate2FedName
+                          ? `✓ ${mate2FedName} · nombre confirmado en la Federación.`
+                          : `${mate2Hint.matched} · toca para poner su nombre completo, puntos y nivel.`}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="tw-form-grid" style={{ marginTop: 16 }}>
+                    <div>
+                      <Label>SUS PUNTOS</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={mate2Pts}
+                        onChange={(e) =>
+                          setMate2Pts(e.target.value.replace(/\D/g, ""))
+                        }
+                        className="mono"
+                      />
+                    </div>
+                    <div>
+                      <Label>SU NIVEL DE LIGA</Label>
+                      <Input
+                        type="text"
+                        value={mate2Level}
+                        onChange={(e) => setMate2Level(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 16 }}>
+                    <Label>EMAIL DEL COMPAÑERO (2ª) · OPCIONAL</Label>
+                    <Input
+                      type="email"
+                      value={mate2Email}
+                      onChange={(e) => setMate2Email(e.target.value)}
+                      placeholder="pareja2@email.com"
+                    />
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* Disponibilidad — solo si el torneo tiene fechas reales. */}
           {availDays.length > 0 && (
           <Card style={{ marginBottom: 20 }}>
@@ -1032,14 +1332,11 @@ export function SignupForm({ id }: { id: string }) {
             </p>
           )}
 
-          {/* Desglose: la cuota es POR PERSONA y tú pagas por los dos. */}
+          {/* Desglose: la cuota es POR PERSONA (según cuántas categorías juega
+              cada uno) y tú pagas por todos. */}
           {feePer > 0 && (
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
                 padding: "12px 16px",
                 marginBottom: 12,
                 borderRadius: 12,
@@ -1047,21 +1344,71 @@ export function SignupForm({ id }: { id: string }) {
                 background: "var(--bg-card-2)",
               }}
             >
-              <div>
+              {pricing.persons.length > 0 ? (
+                <>
+                  {pricing.persons.map((p, i) => (
+                    <div
+                      key={`${p.name}-${i}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        padding: "3px 0",
+                      }}
+                    >
+                      <span style={{ fontSize: 13, color: "var(--text)" }}>
+                        {p.name}
+                        <span style={{ color: "var(--text-faint)" }}>
+                          {" · "}
+                          {p.categories >= 2 ? "2 categorías" : "1 categoría"}
+                        </span>
+                      </span>
+                      <span className="mono" style={{ fontSize: 13 }}>
+                        {p.feeCents / 100} {feeCur}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginTop: 8,
+                      paddingTop: 8,
+                      borderTop: "1px solid var(--hair-strong)",
+                    }}
+                  >
+                    <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                      Total · {pricing.persons.length} jugadores
+                    </span>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 700,
+                        color: "var(--accent)",
+                      }}
+                    >
+                      {feeTotal} {feeCur}
+                    </span>
+                  </div>
+                </>
+              ) : (
                 <div style={{ fontSize: 13, color: "var(--text)" }}>
-                  2 jugadores × {feePer} {feeCur}/persona
+                  Cuota por persona: {feePer} {feeCur} (1 categoría)
+                  {entryFee2 ? ` · ${entryFee2} ${feeCur} (2 categorías)` : ""}
                 </div>
-                <div
-                  style={{ marginTop: 2, fontSize: 11.5, color: "var(--text-faint)" }}
-                >
-                  Al inscribirte pagas por ti y por tu pareja.
-                </div>
-              </div>
+              )}
               <div
-                className="mono"
-                style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}
+                style={{
+                  marginTop: 8,
+                  fontSize: 11.5,
+                  color: "var(--text-faint)",
+                }}
               >
-                {feeTotal} {feeCur}
+                Al inscribirte pagas por todos los jugadores.
               </div>
             </div>
           )}
@@ -1095,7 +1442,7 @@ export function SignupForm({ id }: { id: string }) {
               >
                 {busy
                   ? "Inscribiendo…"
-                  : `Pagar inscripción · ${feeTotal} ${feeCur} (2 jugadores)`}
+                  : `Pagar inscripción · ${feeTotal} ${feeCur}`}
               </button>
               <button
                 className="btn btn-ghost"
@@ -1117,7 +1464,7 @@ export function SignupForm({ id }: { id: string }) {
               >
                 {busy
                   ? "Inscribiendo…"
-                  : `Inscribirme · pago en el club (${feeTotal} ${feeCur} · 2 jugadores)`}
+                  : `Inscribirme · pago en el club (${feeTotal} ${feeCur})`}
               </button>
               <p
                 style={{

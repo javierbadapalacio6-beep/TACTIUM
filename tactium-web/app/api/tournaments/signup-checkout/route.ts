@@ -2,12 +2,27 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
 import { inscriptionFeeCents, webAppOrigin } from "@/lib/connect";
+import { priceSignup } from "@/lib/tournament-signup-pricing";
+
+interface SignupReg {
+  category: string | null;
+  gender: string | null;
+  p1Name: string;
+  p2Name: string;
+  p1Email?: string | null;
+  p1Phone?: string | null;
+  p2Email?: string | null;
+  seedPoints?: number | null;
+  leagueSum?: number | null;
+  availability?: string[];
+}
 
 // POST /api/tournaments/signup-checkout
-// Cobro de la cuota de inscripción de una pareja. Público (inscripción por
-// código, como el signup gratuito). Guarda la ficha en un pago PENDIENTE y crea
-// un Checkout con destination charge a la cuenta del club (− 3% TACTIUM). La
-// inscripción se CREA al confirmarse el pago (webhook), no antes.
+// Cobro de la inscripción (1 o 2 categorías). Público (por código). El precio es
+// POR PERSONA (1 cat → entry_fee, 2 → entry_fee_2), calculado SIEMPRE aquí con
+// el helper compartido (nunca se confía en el cliente). Guarda las
+// inscripciones en un pago PENDIENTE y crea un Checkout con destination charge
+// al club (− 3% TACTIUM). Las inscripciones se CREAN al confirmarse (webhook).
 export async function POST(req: Request) {
   if (!stripeConfigured()) {
     return NextResponse.json(
@@ -18,29 +33,23 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as {
     code?: string;
-    p1Name?: string;
-    p2Name?: string;
-    p1Email?: string | null;
-    p1Phone?: string | null;
-    p2Email?: string | null;
-    category?: string | null;
-    gender?: string | null;
-    seedPoints?: number | null;
-    leagueSum?: number | null;
-    availability?: string[];
+    regs?: SignupReg[];
   };
 
   const code = (body.code ?? "").trim().toUpperCase();
-  if (!code || !body.p1Name?.trim() || !body.p2Name?.trim()) {
+  const regs = (body.regs ?? []).filter(
+    (r) => r && r.p1Name?.trim() && r.p2Name?.trim(),
+  );
+  if (!code || regs.length === 0) {
     return NextResponse.json({ error: "Faltan datos de la inscripción." }, { status: 400 });
   }
 
   const admin = supabaseAdmin();
 
-  // Torneo por código (+ su club y precio).
+  // Torneo por código (+ su club y precios).
   const { data: t } = await admin
     .from("tournaments")
-    .select("id, name, club_id, status, entry_fee")
+    .select("id, name, club_id, status, entry_fee, entry_fee_2")
     .eq("signup_code", code)
     .maybeSingle();
   if (!t || !t.club_id) {
@@ -77,24 +86,40 @@ export async function POST(req: Request) {
     );
   }
 
-  // La cuota es POR PERSONA: el que se inscribe paga por los DOS jugadores.
-  const perPersonCents = Math.round(entryFee * 100);
-  const amountCents = perPersonCents * 2;
+  // Precio POR PERSONA (1 cat → entry_fee, 2 → entry_fee_2), calculado aquí.
+  const pricing = priceSignup(
+    regs.map((r) => ({
+      category: r.category ?? null,
+      p1Name: r.p1Name,
+      p2Name: r.p2Name,
+    })),
+    entryFee,
+    t.entry_fee_2 != null ? Number(t.entry_fee_2) : null,
+  );
+  const amountCents = pricing.totalCents;
+  if (!(amountCents > 0)) {
+    return NextResponse.json({ error: "Importe inválido." }, { status: 400 });
+  }
   const feeCents = inscriptionFeeCents(amountCents);
 
+  // Ficha de cada inscripción, para crearlas en el webhook al confirmar el pago.
+  const payloadRegs = regs.map((r) => ({
+    category: r.category ?? null,
+    gender: r.gender ?? null,
+    p1Name: r.p1Name.trim(),
+    p2Name: r.p2Name.trim(),
+    p1Email: r.p1Email?.trim() || null,
+    p1Phone: r.p1Phone?.trim() || null,
+    p2Email: r.p2Email?.trim() || null,
+    seedPoints: r.seedPoints ?? null,
+    leagueSum: r.leagueSum ?? null,
+    availability: r.availability ?? [],
+  }));
+  const payerEmail = payloadRegs[0]?.p1Email ?? null;
   const payload = {
     code,
     tournamentName: t.name ?? null,
-    p1Name: body.p1Name.trim(),
-    p2Name: body.p2Name.trim(),
-    p1Email: body.p1Email?.trim() || null,
-    p1Phone: body.p1Phone?.trim() || null,
-    p2Email: body.p2Email?.trim() || null,
-    category: body.category ?? null,
-    gender: body.gender ?? null,
-    seedPoints: body.seedPoints ?? null,
-    leagueSum: body.leagueSum ?? null,
-    availability: body.availability ?? [],
+    regs: payloadRegs,
   };
 
   // Pago pendiente con la ficha guardada.
@@ -121,21 +146,19 @@ export async function POST(req: Request) {
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    // 2 jugadores × cuota por persona → Stripe muestra "2 × …" en el desglose.
-    line_items: [
-      {
-        quantity: 2,
-        price_data: {
-          currency: "eur",
-          unit_amount: perPersonCents,
-          product_data: {
-            name: `Inscripción (por jugador) · ${t.name ?? "Torneo"}`,
-            description: `${payload.p1Name} y ${payload.p2Name}`,
-          },
+    // Una línea POR PERSONA: cada jugador con su cuota (1 o 2 categorías).
+    line_items: pricing.persons.map((p) => ({
+      quantity: 1,
+      price_data: {
+        currency: "eur",
+        unit_amount: p.feeCents,
+        product_data: {
+          name: `Inscripción · ${p.name}`,
+          description: `${p.categories >= 2 ? "2 categorías" : "1 categoría"} · ${t.name ?? "Torneo"}`,
         },
       },
-    ],
-    ...(payload.p1Email ? { customer_email: payload.p1Email } : {}),
+    })),
+    ...(payerEmail ? { customer_email: payerEmail } : {}),
     payment_intent_data: {
       application_fee_amount: feeCents,
       transfer_data: { destination: acct },

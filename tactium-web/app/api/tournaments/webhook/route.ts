@@ -55,75 +55,111 @@ export async function POST(req: Request) {
         .eq("stripe_session_id", session.id)
         .maybeSingle();
       if (sp && sp.status !== "paid") {
-        const p = sp.signup_payload as {
-          code: string;
-          tournamentName?: string | null;
+        interface PayReg {
+          category: string | null;
+          gender: string | null;
           p1Name: string;
           p2Name: string;
           p1Email?: string | null;
           p1Phone?: string | null;
           p2Email?: string | null;
-          category: string | null;
-          gender: string | null;
           seedPoints: number | null;
           leagueSum: number | null;
           availability: string[];
-        };
-        let registrationId: string | null = null;
-        // Wrapper con flag de pago: pasa el guardia que bloquea inscribirse
-        // gratis en torneos con cuota + club conectado.
-        const { data: regId } = await admin.rpc("tournament_signup_paid", {
-          p_code: p.code,
-          p1_name: p.p1Name,
-          p1_email: p.p1Email ?? null,
-          p1_phone: p.p1Phone ?? null,
-          p2_name: p.p2Name,
-          p2_email: p.p2Email ?? null,
-          p2_phone: null,
-          p_availability: p.availability ?? [],
-          p_category: p.category ?? null,
-          p_gender: p.gender ?? null,
-          p_seed_points: p.seedPoints ?? null,
-          p_league_sum: p.leagueSum ?? null,
-        });
-        registrationId = typeof regId === "string" ? regId : null;
-        if (registrationId) {
-          await admin
-            .from("tournament_registrations")
-            .update({ payment_status: "paid", payment_method: "stripe" })
-            .eq("id", registrationId);
         }
+        const p = sp.signup_payload as {
+          code: string;
+          tournamentName?: string | null;
+          regs?: PayReg[];
+          // Formato antiguo (una sola categoría):
+          p1Name?: string;
+          p2Name?: string;
+          p1Email?: string | null;
+          p1Phone?: string | null;
+          p2Email?: string | null;
+          category?: string | null;
+          gender?: string | null;
+          seedPoints?: number | null;
+          leagueSum?: number | null;
+          availability?: string[];
+        };
+
+        // Normaliza a lista de inscripciones (compat con el payload antiguo).
+        const regs: PayReg[] =
+          Array.isArray(p.regs) && p.regs.length > 0
+            ? p.regs
+            : [
+                {
+                  category: p.category ?? null,
+                  gender: p.gender ?? null,
+                  p1Name: p.p1Name ?? "",
+                  p2Name: p.p2Name ?? "",
+                  p1Email: p.p1Email ?? null,
+                  p1Phone: p.p1Phone ?? null,
+                  p2Email: p.p2Email ?? null,
+                  seedPoints: p.seedPoints ?? null,
+                  leagueSum: p.leagueSum ?? null,
+                  availability: p.availability ?? [],
+                },
+              ];
+
+        // Crea una inscripción por categoría (la RPC valida elegibilidad).
+        const regIds: string[] = [];
+        for (const r of regs) {
+          if (!r.p1Name || !r.p2Name) continue;
+          const { data: regId } = await admin.rpc("tournament_signup_paid", {
+            p_code: p.code,
+            p1_name: r.p1Name,
+            p1_email: r.p1Email ?? null,
+            p1_phone: r.p1Phone ?? null,
+            p2_name: r.p2Name,
+            p2_email: r.p2Email ?? null,
+            p2_phone: null,
+            p_availability: r.availability ?? [],
+            p_category: r.category ?? null,
+            p_gender: r.gender ?? null,
+            p_seed_points: r.seedPoints ?? null,
+            p_league_sum: r.leagueSum ?? null,
+          });
+          const rid = typeof regId === "string" ? regId : null;
+          if (rid) {
+            regIds.push(rid);
+            await admin
+              .from("tournament_registrations")
+              .update({ payment_status: "paid", payment_method: "stripe" })
+              .eq("id", rid);
+          }
+        }
+
         await admin
           .from("tournament_signup_payments")
           .update({
             status: "paid",
             paid_at: new Date().toISOString(),
             stripe_payment_intent: paymentIntent,
-            registration_id: registrationId,
+            registration_id: regIds[0] ?? null,
           })
           .eq("id", sp.id);
 
-        // Confirmación por email a ambos jugadores (best-effort: si falla el
-        // correo NO se revierte la inscripción, que ya está pagada y creada).
-        const amountEur =
-          typeof session.amount_total === "number"
-            ? session.amount_total / 100
-            : null;
-        const confirm = {
-          tournamentName: p.tournamentName ?? "el torneo",
-          p1Name: p.p1Name,
-          p2Name: p.p2Name,
-          category: p.category,
-          gender: p.gender,
-          method: "stripe" as const,
-          amountEur,
-        };
-        const recipients = [p.p1Email, p.p2Email].filter(
-          (e): e is string => !!e,
-        );
+        // Confirmación por email por inscripción (best-effort: si falla el
+        // correo NO se revierte la inscripción, ya pagada y creada).
+        const tName = p.tournamentName ?? "el torneo";
         await Promise.all(
-          recipients.map((to) =>
-            sendSignupConfirmationEmail({ ...confirm, to }).catch(() => null),
+          regs.flatMap((r) =>
+            [r.p1Email, r.p2Email]
+              .filter((e): e is string => !!e)
+              .map((to) =>
+                sendSignupConfirmationEmail({
+                  to,
+                  tournamentName: tName,
+                  p1Name: r.p1Name,
+                  p2Name: r.p2Name,
+                  category: r.category,
+                  gender: r.gender,
+                  method: "stripe",
+                  amountEur: null,
+                }).catch(() => null),
+              ),
           ),
         );
       }

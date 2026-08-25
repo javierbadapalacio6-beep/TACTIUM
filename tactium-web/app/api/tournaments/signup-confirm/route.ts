@@ -5,6 +5,7 @@ import {
   sendSignupConfirmationEmail,
   type SignupPaymentMethod,
 } from "@/lib/email";
+import { priceSignup } from "@/lib/tournament-signup-pricing";
 
 // POST /api/tournaments/signup-confirm
 // Envía el email de confirmación de inscripción para los caminos que NO pasan
@@ -18,30 +19,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ sent: 0, reason: "email_off" });
   }
 
-  const body = (await req.json().catch(() => ({}))) as {
-    code?: string;
+  interface ConfirmReg {
     p1Name?: string;
     p2Name?: string;
     p1Email?: string | null;
     p2Email?: string | null;
     category?: string | null;
     gender?: string | null;
+  }
+  const body = (await req.json().catch(() => ({}))) as {
+    code?: string;
     method?: SignupPaymentMethod;
+    regs?: ConfirmReg[];
   };
 
   const code = (body.code ?? "").trim().toUpperCase();
-  const p1Name = (body.p1Name ?? "").trim();
-  const p2Name = (body.p2Name ?? "").trim();
   const method: SignupPaymentMethod = body.method === "club" ? "club" : "free";
-  if (!code || !p1Name || !p2Name) {
+  const regs = (body.regs ?? []).filter(
+    (r) => r && (r.p1Name ?? "").trim() && (r.p2Name ?? "").trim(),
+  );
+  if (!code || regs.length === 0) {
     return NextResponse.json({ error: "Faltan datos." }, { status: 400 });
-  }
-
-  const recipients = [body.p1Email, body.p2Email]
-    .map((e) => (e ?? "").trim())
-    .filter((e) => /.+@.+\..+/.test(e));
-  if (recipients.length === 0) {
-    return NextResponse.json({ sent: 0, reason: "no_recipients" });
   }
 
   // Nombre y cuota REALES del torneo por código (acota el uso a torneos que
@@ -49,32 +47,51 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const { data: t } = await admin
     .from("tournaments")
-    .select("name, entry_fee")
+    .select("name, entry_fee, entry_fee_2")
     .eq("signup_code", code)
     .maybeSingle();
   if (!t) {
     return NextResponse.json({ error: "Código no válido." }, { status: 404 });
   }
 
+  // Importe total (solo relevante en "pagar en el club"): mismo cálculo por
+  // persona que el cobro online.
   const entryFee = Number(t.entry_fee ?? 0);
-  // Cuota por persona → total = 2×. Solo relevante en "pagar en el club".
-  const amountEur = method === "club" && entryFee > 0 ? entryFee * 2 : null;
+  const amountEur =
+    method === "club" && entryFee > 0
+      ? priceSignup(
+          regs.map((r) => ({
+            category: r.category ?? null,
+            p1Name: (r.p1Name ?? "").trim(),
+            p2Name: (r.p2Name ?? "").trim(),
+          })),
+          entryFee,
+          t.entry_fee_2 != null ? Number(t.entry_fee_2) : null,
+        ).totalCents / 100
+      : null;
 
-  const base = {
-    tournamentName: t.name ?? "el torneo",
-    p1Name,
-    p2Name,
-    category: body.category ?? null,
-    gender: body.gender ?? null,
-    method,
-    amountEur,
-  };
-
-  const results = await Promise.all(
-    recipients.map((to) =>
-      sendSignupConfirmationEmail({ ...base, to }).catch(() => ({ ok: false })),
-    ),
+  const tName = t.name ?? "el torneo";
+  const jobs = regs.flatMap((r) =>
+    [r.p1Email, r.p2Email]
+      .map((e) => (e ?? "").trim())
+      .filter((e) => /.+@.+\..+/.test(e))
+      .map((to) =>
+        sendSignupConfirmationEmail({
+          to,
+          tournamentName: tName,
+          p1Name: (r.p1Name ?? "").trim(),
+          p2Name: (r.p2Name ?? "").trim(),
+          category: r.category ?? null,
+          gender: r.gender ?? null,
+          method,
+          amountEur,
+        }).catch(() => ({ ok: false })),
+      ),
   );
+  if (jobs.length === 0) {
+    return NextResponse.json({ sent: 0, reason: "no_recipients" });
+  }
+  const results = await Promise.all(jobs);
   const sent = results.filter((r) => r.ok).length;
   return NextResponse.json({ sent });
 }
