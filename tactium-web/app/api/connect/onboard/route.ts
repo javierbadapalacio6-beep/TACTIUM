@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
-import { isClubAdmin, userIdFromRequest, mapAccountStatus } from "@/lib/connect";
+import {
+  isClubAdmin,
+  userIdFromRequest,
+  mapAccountStatus,
+  webAppOrigin,
+} from "@/lib/connect";
 
 // POST /api/connect/onboard  { clubId }
 // Crea (si no existe) la cuenta Express del club y devuelve un Account Link para
@@ -67,16 +72,25 @@ export async function POST(req: Request) {
       .eq("id", clubId);
   }
 
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    req.headers.get("origin") ??
-    "https://app.tactium.io";
+  const origin = webAppOrigin(req);
+
+  // Si el alta la inició la APP (token Bearer), al terminar Stripe no debe
+  // devolver a una página web (el navegador no tiene sesión → login): la
+  // mandamos a /connect/return, que rebota de vuelta a la app por deep link.
+  // Desde la web (cookie) sí volvemos a la consola de Cobros del club.
+  const fromApp = (req.headers.get("authorization") ?? "").startsWith("Bearer ");
+  const returnUrl = fromApp
+    ? `${origin}/connect/return`
+    : `${origin}/club/cobros?connect=done`;
+  const refreshUrl = fromApp
+    ? `${origin}/connect/return?retry=1`
+    : `${origin}/club/cobros?connect=refresh`;
 
   const link = await stripe.accountLinks.create({
     account: accountId,
     // Si el alta caduca o falta algo, Stripe manda a refresh_url para reintentar.
-    refresh_url: `${origin}/club/cobros?connect=refresh`,
-    return_url: `${origin}/club/cobros?connect=done`,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
     type: "account_onboarding",
   });
 

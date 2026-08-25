@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
-import { inscriptionFeeCents } from "@/lib/connect";
+import { inscriptionFeeCents, webAppOrigin } from "@/lib/connect";
 
 // POST /api/tournaments/signup-checkout
 // Cobro de la cuota de inscripción de una pareja. Público (inscripción por
@@ -107,10 +107,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No se pudo iniciar el pago." }, { status: 500 });
   }
 
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    req.headers.get("origin") ??
-    "https://app.tactium.io";
+  const origin = webAppOrigin(req);
 
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({

@@ -7,6 +7,7 @@ import {
   PLAN_TOURNAMENT_PAIR_CAP,
 } from "@/lib/tournament-billing";
 import { sendTournamentPaymentEmail } from "@/lib/email";
+import { webAppOrigin } from "@/lib/connect";
 
 // POST /api/tournaments/:id/checkout
 // Crea la sesión de Stripe Checkout del fee del torneo (cobro POR ADELANTADO
@@ -157,10 +158,7 @@ export async function POST(
 
   const amountCents = dueCents;
   const isTopUp = paidCents > 0; // ampliación de plazas, no primer pago
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    req.headers.get("origin") ??
-    "https://tactium.io";
+  const origin = webAppOrigin(req);
 
   const stripe = getStripe();
 
