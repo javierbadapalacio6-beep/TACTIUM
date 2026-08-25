@@ -2,14 +2,10 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 
-import {
-  CATEGORIES,
-  GENDERS,
-  MAX_BLOCKED_HOURS,
-  SIGNUP_HOURS,
-} from "@/lib/tournament-data";
+import { CATEGORIES, GENDERS, MAX_BLOCKED_HOURS } from "@/lib/tournament-data";
 import {
   fetchTournament,
+  fetchTournamentSignupWindow,
   resolveFcpPlayer,
   tournamentSignup,
   tournamentSignupOffline,
@@ -69,6 +65,24 @@ function buildSignupDays(startsOn: string | null, endsOn: string | null): string
     g++;
   }
   return out;
+}
+
+/** Franjas de 1 h de la ventana horaria del torneo (start_time..end_time), como
+ *  `hourlyFranjas` en la app: la última franja EMPIEZA en (fin − 1 h). Sin datos
+ *  → 09:00–22:00. Devuelve las horas de inicio ("09:00" … "21:00"). */
+function buildSignupHours(
+  start?: string | null,
+  end?: string | null,
+): string[] {
+  const sh = parseInt((start || "09:00").slice(0, 2), 10);
+  const eh = parseInt((end || "22:00").slice(0, 2), 10);
+  const s = Number.isFinite(sh) ? sh : 9;
+  const e = Number.isFinite(eh) ? eh : 22;
+  const out: string[] = [];
+  for (let h = s; h + 1 <= e && out.length < 18; h++) {
+    out.push(`${String(h).padStart(2, "0")}:00`);
+  }
+  return out.length ? out : [`${String(s).padStart(2, "0")}:00`];
 }
 
 function fmtDates(a: string | null, b: string | null): string | null {
@@ -258,6 +272,27 @@ export function SignupForm({ id }: { id: string }) {
   //  false = solo "pagar en el club" (club sin Connect o torneo gratis)
   // Evita el bug de "parece que pagué" cuando el club no está dado de alta.
   const [payOnline, setPayOnline] = useState<boolean | null>(null);
+  // Rejilla de disponibilidad: horas y tope REALES del torneo (los fija el club
+  // al crearlo). Por defecto 09:00–22:00 hasta que llega el dato de la FCP.
+  const [signupHours, setSignupHours] = useState<string[]>(() =>
+    buildSignupHours(null, null),
+  );
+  const [removeCap, setRemoveCap] = useState<number>(MAX_BLOCKED_HOURS);
+  useEffect(() => {
+    const code = real?.signup_code;
+    if (!code) return;
+    let alive = true;
+    fetchTournamentSignupWindow(code)
+      .then((w) => {
+        if (!alive || !w) return;
+        setSignupHours(buildSignupHours(w.start_time, w.end_time));
+        if (w.max_removable_hours != null) setRemoveCap(w.max_removable_hours);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [real?.signup_code]);
   useEffect(() => {
     if (!real || (real.entry_fee ?? 0) <= 0) {
       setPayOnline(false);
@@ -373,7 +408,7 @@ export function SignupForm({ id }: { id: string }) {
     setBlocked((s) => {
       const next = new Set(s);
       if (next.has(key)) next.delete(key);
-      else if (next.size < MAX_BLOCKED_HOURS) next.add(key);
+      else if (next.size < removeCap) next.add(key);
       return next;
     });
   }
@@ -784,12 +819,12 @@ export function SignupForm({ id }: { id: string }) {
                   fontSize: 10.5,
                   letterSpacing: "0.12em",
                   color:
-                    blocked.size >= MAX_BLOCKED_HOURS
+                    blocked.size >= removeCap
                       ? "var(--warning)"
                       : "var(--text-faint)",
                 }}
               >
-                {blocked.size} h marcadas · máx. {MAX_BLOCKED_HOURS} h
+                {blocked.size} h marcadas · máx. {removeCap} h
               </span>
             </div>
 
@@ -805,9 +840,16 @@ export function SignupForm({ id }: { id: string }) {
               cuenta al montar el horario.
             </p>
 
-            <div className="tw-avail-slots">
+            <div style={{ overflowX: "auto", margin: "0 -4px", padding: "0 4px 4px" }}>
+            <div
+              className="tw-avail-slots"
+              style={{
+                gridTemplateColumns: `56px repeat(${signupHours.length}, minmax(38px, 1fr))`,
+                minWidth: signupHours.length > 6 ? "max-content" : undefined,
+              }}
+            >
               <span />
-              {SIGNUP_HOURS.map((h) => (
+              {signupHours.map((h) => (
                 <span
                   key={h}
                   className="mono"
@@ -835,7 +877,7 @@ export function SignupForm({ id }: { id: string }) {
                   >
                     {d.toUpperCase()}
                   </span>
-                  {SIGNUP_HOURS.map((h) => {
+                  {signupHours.map((h) => {
                     const key = `${d} ${h}`;
                     const on = blocked.has(key);
                     return (
@@ -862,6 +904,7 @@ export function SignupForm({ id }: { id: string }) {
                   })}
                 </Fragment>
               ))}
+            </div>
             </div>
           </Card>
           )}

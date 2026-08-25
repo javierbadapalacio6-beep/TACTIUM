@@ -156,6 +156,10 @@ export function CreateTournament() {
   const [deadlineDays, setDeadlineDays] = useState("3");
   const [startsOn, setStartsOn] = useState("");
   const [endsOn, setEndsOn] = useState("");
+  // Ventana horaria de juego: fija desde qué hora empieza y hasta cuándo se
+  // juega. Alimenta el horario y la rejilla de disponibilidad de la inscripción.
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("22:00");
   const [created, setCreated] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -198,6 +202,8 @@ export function CreateTournament() {
             : null,
         startsOn: startsOn || null,
         endsOn: endsOn || null,
+        startTime: startTime || null,
+        endTime: endTime || null,
       }),
     );
     setBusy(false);
@@ -616,6 +622,38 @@ export function CreateTournament() {
                   }}
                 >
                   Fin (si dura varios días)
+                </p>
+              </div>
+            </div>
+
+            <div className="tw-form-grid">
+              <div>
+                <Label>HORA INICIO DE JUEGO</Label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  step={3600}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>HORA FIN DE JUEGO</Label>
+                <Input
+                  type="time"
+                  value={endTime}
+                  step={3600}
+                  min={startTime || undefined}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    fontSize: 12,
+                    color: "var(--text-faint)",
+                  }}
+                >
+                  Desde/hasta qué hora se juega. Define las franjas de la
+                  inscripción y del horario.
                 </p>
               </div>
             </div>

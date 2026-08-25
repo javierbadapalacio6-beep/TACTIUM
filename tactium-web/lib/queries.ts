@@ -987,6 +987,34 @@ export async function fetchTournament(id: string) {
   return direct ?? null;
 }
 
+/** Ventana horaria de juego del torneo (para pintar la rejilla de
+ *  disponibilidad de la inscripción). Sale de la RPC pública `tournament_lookup`
+ *  (SECURITY DEFINER, accesible por anon) por código: es la MISMA fuente que la
+ *  app. `null` si el torneo no está abierto o no se encuentra. */
+export interface TournamentSignupWindow {
+  start_time: string | null;
+  end_time: string | null;
+  max_removable_hours: number | null;
+}
+export async function fetchTournamentSignupWindow(
+  code: string,
+): Promise<TournamentSignupWindow | null> {
+  if (!code) return null;
+  const { data, error } = await supabaseBrowser().rpc("tournament_lookup", {
+    p_code: code,
+  });
+  if (error) return null;
+  const row = (Array.isArray(data) ? (data[0] ?? null) : (data ?? null)) as
+    | Partial<TournamentSignupWindow>
+    | null;
+  if (!row) return null;
+  return {
+    start_time: row.start_time ?? null,
+    end_time: row.end_time ?? null,
+    max_removable_hours: row.max_removable_hours ?? null,
+  };
+}
+
 /** Código de inscripción de 6 caracteres (mismo alfabeto que la app: sin
  *  caracteres confundibles I/L/O/0/1). Espejo de `genCode` en tournaments.ts. */
 function genTournamentCode(): string {
@@ -1013,6 +1041,11 @@ export async function createTournament(input: {
   paymentDeadlineDays?: number | null;
   startsOn?: string | null;
   endsOn?: string | null;
+  // Ventana horaria de juego (para el horario y la disponibilidad de la
+  // inscripción). "HH:MM". Igual que en la app.
+  startTime?: string | null;
+  endTime?: string | null;
+  maxRemovableHours?: number | null;
 }): Promise<{ id: string; code: string }> {
   const code = genTournamentCode();
   const social = input.format === "americano" || input.format === "mexicano";
@@ -1036,6 +1069,11 @@ export async function createTournament(input: {
         : {}),
       ...(input.startsOn ? { starts_on: input.startsOn } : {}),
       ...(input.endsOn ? { ends_on: input.endsOn } : {}),
+      ...(input.startTime ? { start_time: input.startTime } : {}),
+      ...(input.endTime ? { end_time: input.endTime } : {}),
+      ...(input.maxRemovableHours != null
+        ? { max_removable_hours: input.maxRemovableHours }
+        : {}),
       // Nace como BORRADOR: hay que publicarlo (pagar la cuota) antes de que
       // nadie se inscriba. El boton "Pagar / publicar" lo pasa a 'open'.
       status: "draft",
