@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 
-import { CATEGORIES, GENDERS, MAX_BLOCKED_HOURS } from "@/lib/tournament-data";
+import { CATEGORIES, GENDERS } from "@/lib/tournament-data";
 import {
   fetchTournament,
   fetchTournamentSignupWindow,
@@ -293,7 +293,9 @@ export function SignupForm({ id }: { id: string }) {
   const [signupHours, setSignupHours] = useState<string[]>(() =>
     buildSignupHours(null, null),
   );
-  const [removeCap, setRemoveCap] = useState<number>(MAX_BLOCKED_HOURS);
+  // Tope de horas marcables = el REAL del torneo (max_removable_hours). null =
+  // sin límite, igual que la app (no un 8 inventado).
+  const [removeCap, setRemoveCap] = useState<number | null>(null);
   useEffect(() => {
     const code = real?.signup_code;
     if (!code) return;
@@ -302,7 +304,7 @@ export function SignupForm({ id }: { id: string }) {
       .then((w) => {
         if (!alive || !w) return;
         setSignupHours(buildSignupHours(w.start_time, w.end_time));
-        if (w.max_removable_hours != null) setRemoveCap(w.max_removable_hours);
+        setRemoveCap(w.max_removable_hours);
       })
       .catch(() => {});
     return () => {
@@ -473,7 +475,7 @@ export function SignupForm({ id }: { id: string }) {
     setBlocked((s) => {
       const next = new Set(s);
       if (next.has(key)) next.delete(key);
-      else if (next.size < removeCap) next.add(key);
+      else if (removeCap == null || next.size < removeCap) next.add(key);
       return next;
     });
   }
@@ -933,12 +935,13 @@ export function SignupForm({ id }: { id: string }) {
                   fontSize: 10.5,
                   letterSpacing: "0.12em",
                   color:
-                    blocked.size >= removeCap
+                    removeCap != null && blocked.size >= removeCap
                       ? "var(--warning)"
                       : "var(--text-faint)",
                 }}
               >
-                {blocked.size} h marcadas · máx. {removeCap} h
+                {blocked.size} h marcadas
+                {removeCap != null ? ` · máx. ${removeCap} h` : ""}
               </span>
             </div>
 
