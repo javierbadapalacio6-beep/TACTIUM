@@ -104,6 +104,18 @@ export const ClubBillingScreen = ({
     );
   };
 
+  // Alta de cobros online (Stripe Connect) del club. Es onboarding de
+  // COMERCIANTE (recibir dinero), no una compra dentro de la app → se gestiona
+  // en la web hospedada por Stripe. Abrimos el navegador externo.
+  const openTournamentPayouts = () => {
+    Linking.openURL('https://app.tactium.io/club/cobros').catch(() =>
+      toast.error(
+        'No se pudo abrir',
+        'Entra a tactium.io → Club → Cobros desde el navegador.',
+      ),
+    );
+  };
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -357,6 +369,26 @@ export const ClubBillingScreen = ({
 
         {/* === ACCIONES SECUNDARIAS === */}
         <View style={styles.actionsBlock}>
+          {/* Cobros online de torneos (Stripe Connect). El alta la hospeda
+              Stripe en la web: abrimos el navegador. */}
+          <Pressable
+            onPress={openTournamentPayouts}
+            style={({ pressed }) => [
+              styles.actionRow,
+              styles.actionRowDivider,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionLabel}>Cobros online de torneos</Text>
+              <Text style={styles.actionSub}>
+                Da de alta el club en Stripe para cobrar inscripciones online
+                (se abre en el navegador)
+              </Text>
+            </View>
+            <IconArrowRight size={14} color={c.textFaint} />
+          </Pressable>
+
           <Pressable
             onPress={openStoreSubscriptions}
             style={({ pressed }) => [
@@ -676,6 +708,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  actionRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: c.hair,
   },
   actionLabel: {
     color: c.text,
