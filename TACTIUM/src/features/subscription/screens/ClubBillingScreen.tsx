@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
+import { requestConnectOnboarding } from '@core/services/connectOnboarding';
 import {
   PLAN_BY_TIER,
   CLUB_PLANS,
@@ -105,15 +106,31 @@ export const ClubBillingScreen = ({
   };
 
   // Alta de cobros online (Stripe Connect) del club. Es onboarding de
-  // COMERCIANTE (recibir dinero), no una compra dentro de la app → se gestiona
-  // en la web hospedada por Stripe. Abrimos el navegador externo.
-  const openTournamentPayouts = () => {
-    Linking.openURL('https://app.tactium.io/club/cobros').catch(() =>
+  // COMERCIANTE (recibir dinero), no una compra dentro de la app → fuera de IAP.
+  // La app ya tiene la sesión: pedimos el enlace de alta con el token y abrimos
+  // DIRECTAMENTE la página hospedada por Stripe (sin re-login ni buscar el botón
+  // en la web). Si falla, caemos a abrir la consola web del club.
+  const [payoutBusy, setPayoutBusy] = useState(false);
+  const openTournamentPayouts = async () => {
+    if (payoutBusy) return;
+    if (!club) {
+      toast.error('Sin club', 'Selecciona un club primero.');
+      return;
+    }
+    setPayoutBusy(true);
+    try {
+      const url = await requestConnectOnboarding(club.id);
+      await Linking.openURL(url);
+    } catch (e) {
+      // Fallback: la consola web del club (ahí también está el alta).
+      Linking.openURL('https://app.tactium.io/club/cobros').catch(() => {});
       toast.error(
-        'No se pudo abrir',
-        'Entra a tactium.io → Club → Cobros desde el navegador.',
-      ),
-    );
+        'No se pudo abrir el alta',
+        e instanceof Error ? e.message : 'Inténtalo desde la web (Club → Cobros).',
+      );
+    } finally {
+      setPayoutBusy(false);
+    }
   };
 
   return (
@@ -373,14 +390,17 @@ export const ClubBillingScreen = ({
               Stripe en la web: abrimos el navegador. */}
           <Pressable
             onPress={openTournamentPayouts}
+            disabled={payoutBusy}
             style={({ pressed }) => [
               styles.actionRow,
               styles.actionRowDivider,
-              pressed && { opacity: 0.85 },
+              (pressed || payoutBusy) && { opacity: 0.85 },
             ]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.actionLabel}>Cobros online de torneos</Text>
+              <Text style={styles.actionLabel}>
+                {payoutBusy ? 'Abriendo el alta…' : 'Cobros online de torneos'}
+              </Text>
               <Text style={styles.actionSub}>
                 Da de alta el club en Stripe para cobrar inscripciones online
                 (se abre en el navegador)
