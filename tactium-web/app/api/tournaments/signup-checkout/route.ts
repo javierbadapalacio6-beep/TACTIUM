@@ -20,6 +20,9 @@ export async function POST(req: Request) {
     code?: string;
     p1Name?: string;
     p2Name?: string;
+    p1Email?: string | null;
+    p1Phone?: string | null;
+    p2Email?: string | null;
     category?: string | null;
     gender?: string | null;
     seedPoints?: number | null;
@@ -74,13 +77,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const amountCents = Math.round(entryFee * 100);
+  // La cuota es POR PERSONA: el que se inscribe paga por los DOS jugadores.
+  const perPersonCents = Math.round(entryFee * 100);
+  const amountCents = perPersonCents * 2;
   const feeCents = inscriptionFeeCents(amountCents);
 
   const payload = {
     code,
+    tournamentName: t.name ?? null,
     p1Name: body.p1Name.trim(),
     p2Name: body.p2Name.trim(),
+    p1Email: body.p1Email?.trim() || null,
+    p1Phone: body.p1Phone?.trim() || null,
+    p2Email: body.p2Email?.trim() || null,
     category: body.category ?? null,
     gender: body.gender ?? null,
     seedPoints: body.seedPoints ?? null,
@@ -112,19 +121,21 @@ export async function POST(req: Request) {
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    // 2 jugadores × cuota por persona → Stripe muestra "2 × …" en el desglose.
     line_items: [
       {
-        quantity: 1,
+        quantity: 2,
         price_data: {
           currency: "eur",
-          unit_amount: amountCents,
+          unit_amount: perPersonCents,
           product_data: {
-            name: `Inscripción · ${t.name ?? "Torneo"}`,
-            description: `${payload.p1Name} / ${payload.p2Name}`,
+            name: `Inscripción (por jugador) · ${t.name ?? "Torneo"}`,
+            description: `${payload.p1Name} y ${payload.p2Name}`,
           },
         },
       },
     ],
+    ...(payload.p1Email ? { customer_email: payload.p1Email } : {}),
     payment_intent_data: {
       application_fee_amount: feeCents,
       transfer_data: { destination: acct },

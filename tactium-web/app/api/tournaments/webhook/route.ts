@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { sendSignupConfirmationEmail } from "@/lib/email";
 
 // POST /api/tournaments/webhook
 // Webhook de Stripe. Al confirmarse el pago (checkout.session.completed) marca
@@ -56,8 +57,12 @@ export async function POST(req: Request) {
       if (sp && sp.status !== "paid") {
         const p = sp.signup_payload as {
           code: string;
+          tournamentName?: string | null;
           p1Name: string;
           p2Name: string;
+          p1Email?: string | null;
+          p1Phone?: string | null;
+          p2Email?: string | null;
           category: string | null;
           gender: string | null;
           seedPoints: number | null;
@@ -70,10 +75,10 @@ export async function POST(req: Request) {
         const { data: regId } = await admin.rpc("tournament_signup_paid", {
           p_code: p.code,
           p1_name: p.p1Name,
-          p1_email: null,
-          p1_phone: null,
+          p1_email: p.p1Email ?? null,
+          p1_phone: p.p1Phone ?? null,
           p2_name: p.p2Name,
-          p2_email: null,
+          p2_email: p.p2Email ?? null,
           p2_phone: null,
           p_availability: p.availability ?? [],
           p_category: p.category ?? null,
@@ -97,6 +102,30 @@ export async function POST(req: Request) {
             registration_id: registrationId,
           })
           .eq("id", sp.id);
+
+        // Confirmación por email a ambos jugadores (best-effort: si falla el
+        // correo NO se revierte la inscripción, que ya está pagada y creada).
+        const amountEur =
+          typeof session.amount_total === "number"
+            ? session.amount_total / 100
+            : null;
+        const confirm = {
+          tournamentName: p.tournamentName ?? "el torneo",
+          p1Name: p.p1Name,
+          p2Name: p.p2Name,
+          category: p.category,
+          gender: p.gender,
+          method: "stripe" as const,
+          amountEur,
+        };
+        const recipients = [p.p1Email, p.p2Email].filter(
+          (e): e is string => !!e,
+        );
+        await Promise.all(
+          recipients.map((to) =>
+            sendSignupConfirmationEmail({ ...confirm, to }).catch(() => null),
+          ),
+        );
       }
       return NextResponse.json({ received: true });
     }

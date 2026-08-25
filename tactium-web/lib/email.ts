@@ -244,3 +244,154 @@ export async function sendTournamentPaymentEmail(
     return { ok: false, error };
   }
 }
+
+/* ── Confirmación de INSCRIPCIÓN a un torneo ──────────────────────── */
+
+export type SignupPaymentMethod = "stripe" | "club" | "free";
+
+export interface SignupConfirmationEmail {
+  tournamentName: string;
+  p1Name: string;
+  p2Name: string;
+  category?: string | null;
+  gender?: string | null;
+  method: SignupPaymentMethod;
+  /** Total (2 jugadores) pagado o por pagar. Null = sin cuota. */
+  amountEur?: number | null;
+}
+
+export function renderSignupConfirmationEmail(input: SignupConfirmationEmail): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const tName = input.tournamentName || "el torneo";
+  const amount =
+    input.amountEur != null
+      ? input.amountEur.toLocaleString("es-ES", {
+          style: "currency",
+          currency: "EUR",
+        })
+      : null;
+
+  const estado =
+    input.method === "stripe"
+      ? "Pago confirmado"
+      : input.method === "club"
+        ? "Pendiente de pago en el club"
+        : "Inscripción registrada";
+  const estadoDetalle =
+    input.method === "stripe"
+      ? `Hemos recibido el pago${amount ? ` de ${amount}` : ""}. ¡Todo listo!`
+      : input.method === "club"
+        ? `Queda pendiente pagar la cuota${amount ? ` de ${amount}` : ""} en el club (2 jugadores).`
+        : "Tu plaza queda registrada.";
+
+  const meta = [
+    input.category ? `Categoría ${input.category}` : null,
+    input.gender ? capitalizeEs(input.gender) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const subject = `Inscripción confirmada · ${tName}`;
+  const preheader = `${input.p1Name} y ${input.p2Name} · ${estado}.`;
+
+  const body = `
+    <tr><td style="padding:0 0 8px">
+      <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.accent};text-transform:uppercase">Inscripción confirmada</div>
+    </td></tr>
+
+    <tr><td style="padding:0 0 14px">
+      <h1 style="margin:0;font-family:${SANS};font-size:26px;line-height:32px;font-weight:700;color:${BRAND.text}">
+        ${esc(tName)}
+      </h1>
+    </td></tr>
+
+    <tr><td style="padding:0 0 22px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:16px">
+        <tr><td style="padding:22px 24px">
+          <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.faint};text-transform:uppercase">Pareja</div>
+          <div style="font-family:${SANS};font-size:18px;font-weight:700;color:${BRAND.text};padding:4px 0 14px">${esc(input.p1Name)} &nbsp;·&nbsp; ${esc(input.p2Name)}</div>
+          ${
+            meta
+              ? `<div style="font-family:${SANS};font-size:14px;color:${BRAND.muted}">${esc(meta)}</div>`
+              : ""
+          }
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid ${BRAND.border}">
+            <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.accent};text-transform:uppercase">${esc(estado)}</div>
+            <div style="font-family:${SANS};font-size:14px;line-height:21px;color:${BRAND.muted};padding-top:4px">${esc(estadoDetalle)}</div>
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+
+    <tr><td style="padding:0">
+      <p style="margin:0;font-family:${SANS};font-size:14px;line-height:21px;color:${BRAND.muted}">
+        Te avisaremos en cuanto el club publique el cuadro y tu horario. Si has
+        recibido este correo por error, ignóralo.
+      </p>
+    </td></tr>`;
+
+  const text = [
+    `TACTIUM · Inscripción confirmada`,
+    ``,
+    `${tName}`,
+    `Pareja: ${input.p1Name} · ${input.p2Name}`,
+    meta ? meta : ``,
+    `${estado}. ${estadoDetalle}`,
+    ``,
+    `Te avisaremos cuando el club publique el cuadro y tu horario.`,
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+
+  return { subject, html: shell(preheader, body), text };
+}
+
+/** Mayúscula inicial (para género "masculino" → "Masculino"). */
+function capitalizeEs(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/** Envía la confirmación a una dirección. Degrada con elegancia si no hay
+ *  proveedor o la dirección no es válida (no rompe la inscripción). */
+export async function sendSignupConfirmationEmail(
+  input: SignupConfirmationEmail & { to: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return { ok: false, error: "RESEND_API_KEY ausente" };
+  const to = input.to.trim();
+  if (!/.+@.+\..+/.test(to)) return { ok: false, error: "email inválido" };
+
+  const from = process.env.EMAIL_FROM ?? "TACTIUM <onboarding@resend.dev>";
+  const { subject, html, text } = renderSignupConfirmationEmail(input);
+
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to,
+        subject,
+        html,
+        text,
+        tags: [{ name: "template", value: "signup-confirmation" }],
+      }),
+    });
+    if (r.ok) return { ok: true };
+    const b = (await r.json().catch(() => null)) as { message?: string } | null;
+    const error = `Resend ${r.status}: ${b?.message ?? "sin detalle"}`;
+    console.error("[email] fallo confirmación inscripción:", error);
+    return { ok: false, error };
+  } catch (e) {
+    const error = `excepción: ${(e as Error).message}`;
+    console.error("[email] excepción confirmación inscripción:", error);
+    return { ok: false, error };
+  }
+}

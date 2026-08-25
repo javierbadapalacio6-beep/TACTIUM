@@ -44,6 +44,14 @@ interface NormTournament {
 
 const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+/** Nombre + al menos un apellido (2 palabras). Se exige cuando NO hay respaldo
+ *  de la Federación (si lo hay, el nombre canónico ya viene completo). */
+const isFullName = (s: string) =>
+  s.trim().split(/\s+/).filter((w) => w.length > 1).length >= 2;
+
+/** Email con pinta razonable (validación suave, el server no depende de esto). */
+const looksLikeEmail = (s: string) => /.+@.+\..+/.test(s.trim());
+
 const DOW_ABBR = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 /** Días REALES del torneo (de starts_on a ends_on) para el grid de
@@ -257,9 +265,17 @@ export function SignupForm({ id }: { id: string }) {
   const [name, setName] = useState("");
   const [pts, setPts] = useState("");
   const [level, setLevel] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [mateName, setMateName] = useState("");
   const [matePts, setMatePts] = useState("");
   const [mateLevel, setMateLevel] = useState("");
+  const [mateEmail, setMateEmail] = useState("");
+  // Nombre COMPLETO tal cual figura en la Federación, fijado SOLO cuando el
+  // usuario confirma la coincidencia (toca el chip). Si lo hay, es el que se
+  // guarda (nombre canónico); si no, se exige nombre y apellidos escritos.
+  const [fedName, setFedName] = useState<string | null>(null);
+  const [mateFedName, setMateFedName] = useState<string | null>(null);
 
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [done, setDone] = useState(false);
@@ -315,8 +331,24 @@ export function SignupForm({ id }: { id: string }) {
 
   async function submitSignup(offline = false) {
     if (busy) return;
-    if (!name.trim() || !mateName.trim()) {
+    // Nombre CANÓNICO: el de la Federación si se confirmó (chip), si no el
+    // escrito. Sin respaldo federativo se exige nombre + apellidos.
+    const p1Full = (fedName ?? name).trim();
+    const p2Full = (mateFedName ?? mateName).trim();
+    if (!p1Full || !p2Full) {
       setSignErr("Faltan los nombres de la pareja.");
+      return;
+    }
+    if (!fedName && !isFullName(name)) {
+      setSignErr("Escribe tu nombre y apellidos completos.");
+      return;
+    }
+    if (!mateFedName && !isFullName(mateName)) {
+      setSignErr("Escribe el nombre y apellidos completos de tu pareja.");
+      return;
+    }
+    if (!looksLikeEmail(email)) {
+      setSignErr("Necesitamos tu email para enviarte la confirmación.");
       return;
     }
     if (code.trim().length < 4) {
@@ -334,11 +366,34 @@ export function SignupForm({ id }: { id: string }) {
       code,
       category,
       gender: SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase(),
-      p1Name: name,
-      p2Name: mateName,
+      p1Name: p1Full,
+      p2Name: p2Full,
+      p1Email: email.trim() || null,
+      p1Phone: phone.trim() || null,
+      p2Email: mateEmail.trim() || null,
       seedPoints: seed || null,
       leagueSum: league || null,
       availability: [...blocked],
+    };
+
+    // Confirmación por email (gratis / pago en el club). Fire-and-forget: el
+    // correo NO bloquea ni revierte la inscripción. El pago online la envía
+    // desde el webhook de Stripe, no aquí.
+    const notifyConfirm = (method: "club" | "free") => {
+      fetch("/api/tournaments/signup-confirm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: signupInput.code,
+          p1Name: signupInput.p1Name,
+          p2Name: signupInput.p2Name,
+          p1Email: signupInput.p1Email,
+          p2Email: signupInput.p2Email,
+          category: signupInput.category,
+          gender: signupInput.gender,
+          method,
+        }),
+      }).catch(() => {});
     };
 
     // "Pagar en el club": inscribe como PENDIENTE de pago en el club (sin
@@ -348,8 +403,10 @@ export function SignupForm({ id }: { id: string }) {
         tournamentSignupOffline(signupInput),
       );
       setBusy(false);
-      if (res.ok) setDone(true);
-      else setSignErr(res.reason);
+      if (res.ok) {
+        notifyConfirm("club");
+        setDone(true);
+      } else setSignErr(res.reason);
       return;
     }
 
@@ -397,12 +454,20 @@ export function SignupForm({ id }: { id: string }) {
       tournamentSignup(signupInput),
     );
     setBusy(false);
-    if (res.ok) setDone(true);
-    else setSignErr(res.reason);
+    if (res.ok) {
+      notifyConfirm("free");
+      setDone(true);
+    } else setSignErr(res.reason);
   }
 
   const hint = useFcpHint(name);
   const mateHint = useFcpHint(mateName);
+
+  // Precio POR PERSONA: el que se inscribe paga por los DOS (él + compañero),
+  // así que el total es el doble de la cuota. Se muestra el desglose.
+  const feePer = real?.entry_fee ?? 0;
+  const feeCur = real?.fee_currency ?? "€";
+  const feeTotal = feePer * 2;
 
   function toggleSlot(key: string) {
     setBlocked((s) => {
@@ -613,17 +678,24 @@ export function SignupForm({ id }: { id: string }) {
               <Eyebrow>TU FICHA</Eyebrow>
               <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
                 <div>
-                  <Label>TU NOMBRE</Label>
+                  <Label>TU NOMBRE Y APELLIDOS</Label>
                   <Input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Tu nombre"
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setFedName(null); // editar a mano descarta el nombre FCP
+                    }}
+                    placeholder="Nombre y apellidos"
                   />
                   {hint && (
                     <button
                       type="button"
                       onClick={() => {
+                        // Confirma la coincidencia: fija el nombre COMPLETO de la
+                        // Federación + puntos + nivel.
+                        setName(hint.matched);
+                        setFedName(hint.matched);
                         setPts(String(hint.pts));
                         setLevel(hint.level);
                       }}
@@ -658,10 +730,12 @@ export function SignupForm({ id }: { id: string }) {
                       style={{
                         margin: "8px 0 0",
                         fontSize: 11.5,
-                        color: "var(--text-faint)",
+                        color: fedName ? "var(--accent)" : "var(--text-faint)",
                       }}
                     >
-                      {hint.matched} · toca para rellenar puntos y nivel. Puedes editarlos.
+                      {fedName
+                        ? `✓ ${fedName} · nombre confirmado en la Federación.`
+                        : `${hint.matched} · toca para poner tu nombre completo, puntos y nivel.`}
                     </p>
                   )}
                 </div>
@@ -689,11 +763,31 @@ export function SignupForm({ id }: { id: string }) {
 
                 <div>
                   <Label>TU EMAIL</Label>
-                  <Input type="email" placeholder="tu@email.com" />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu@email.com"
+                  />
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 11,
+                      color: "var(--text-faint)",
+                    }}
+                  >
+                    Te enviaremos la confirmación de la inscripción aquí.
+                  </p>
                 </div>
                 <div>
-                  <Label>TU TELÉFONO</Label>
-                  <Input type="tel" placeholder="600 000 000" className="mono" />
+                  <Label>TU TELÉFONO · OPCIONAL</Label>
+                  <Input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="600 000 000"
+                    className="mono"
+                  />
                 </div>
               </div>
             </Card>
@@ -703,17 +797,22 @@ export function SignupForm({ id }: { id: string }) {
               <Eyebrow>TU COMPAÑERO/A</Eyebrow>
               <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
                 <div>
-                  <Label>NOMBRE DE TU PAREJA</Label>
+                  <Label>NOMBRE Y APELLIDOS DE TU PAREJA</Label>
                   <Input
                     type="text"
                     value={mateName}
-                    onChange={(e) => setMateName(e.target.value)}
-                    placeholder="Nombre de tu pareja"
+                    onChange={(e) => {
+                      setMateName(e.target.value);
+                      setMateFedName(null);
+                    }}
+                    placeholder="Nombre y apellidos de tu pareja"
                   />
                   {mateHint && (
                     <button
                       type="button"
                       onClick={() => {
+                        setMateName(mateHint.matched);
+                        setMateFedName(mateHint.matched);
                         setMatePts(String(mateHint.pts));
                         setMateLevel(mateHint.level);
                       }}
@@ -748,11 +847,12 @@ export function SignupForm({ id }: { id: string }) {
                       style={{
                         margin: "8px 0 0",
                         fontSize: 11.5,
-                        color: "var(--text-faint)",
+                        color: mateFedName ? "var(--accent)" : "var(--text-faint)",
                       }}
                     >
-                      {mateHint.matched} · confirma que es tu pareja. Toca el chip
-                      para rellenar puntos y nivel.
+                      {mateFedName
+                        ? `✓ ${mateFedName} · nombre confirmado en la Federación.`
+                        : `${mateHint.matched} · toca para poner su nombre completo, puntos y nivel.`}
                     </p>
                   )}
                 </div>
@@ -780,7 +880,21 @@ export function SignupForm({ id }: { id: string }) {
 
                 <div>
                   <Label>EMAIL DE TU COMPAÑERO/A · OPCIONAL</Label>
-                  <Input type="email" placeholder="pareja@email.com" />
+                  <Input
+                    type="email"
+                    value={mateEmail}
+                    onChange={(e) => setMateEmail(e.target.value)}
+                    placeholder="pareja@email.com"
+                  />
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 11,
+                      color: "var(--text-faint)",
+                    }}
+                  >
+                    Si lo pones, le llega también la confirmación.
+                  </p>
                 </div>
 
                 <div
@@ -914,6 +1028,40 @@ export function SignupForm({ id }: { id: string }) {
               {signErr}
             </p>
           )}
+
+          {/* Desglose: la cuota es POR PERSONA y tú pagas por los dos. */}
+          {feePer > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "12px 16px",
+                marginBottom: 12,
+                borderRadius: 12,
+                border: "1px solid var(--hair-strong)",
+                background: "var(--bg-card-2)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, color: "var(--text)" }}>
+                  2 jugadores × {feePer} {feeCur}/persona
+                </div>
+                <div
+                  style={{ marginTop: 2, fontSize: 11.5, color: "var(--text-faint)" }}
+                >
+                  Al inscribirte pagas por ti y por tu pareja.
+                </div>
+              </div>
+              <div
+                className="mono"
+                style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}
+              >
+                {feeTotal} {feeCur}
+              </div>
+            </div>
+          )}
           {(real?.entry_fee ?? 0) <= 0 ? (
             /* Torneo gratis: un único botón de inscripción. */
             <button
@@ -944,7 +1092,7 @@ export function SignupForm({ id }: { id: string }) {
               >
                 {busy
                   ? "Inscribiendo…"
-                  : `Pagar inscripción · ${real?.entry_fee} ${real?.fee_currency ?? "€"}`}
+                  : `Pagar inscripción · ${feeTotal} ${feeCur} (2 jugadores)`}
               </button>
               <button
                 className="btn btn-ghost"
@@ -966,7 +1114,7 @@ export function SignupForm({ id }: { id: string }) {
               >
                 {busy
                   ? "Inscribiendo…"
-                  : `Inscribirme · pago en el club (${real?.entry_fee} ${real?.fee_currency ?? "€"})`}
+                  : `Inscribirme · pago en el club (${feeTotal} ${feeCur} · 2 jugadores)`}
               </button>
               <p
                 style={{

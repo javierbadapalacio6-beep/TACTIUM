@@ -1180,6 +1180,9 @@ export async function tournamentSignup(input: {
   gender?: string | null;
   p1Name: string;
   p2Name: string;
+  p1Email?: string | null;
+  p1Phone?: string | null;
+  p2Email?: string | null;
   seedPoints?: number | null;
   leagueSum?: number | null;
   availability?: string[];
@@ -1187,10 +1190,10 @@ export async function tournamentSignup(input: {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup", {
     p_code: input.code.trim().toUpperCase(),
     p1_name: input.p1Name.trim(),
-    p1_email: null,
-    p1_phone: null,
+    p1_email: input.p1Email ?? null,
+    p1_phone: input.p1Phone ?? null,
     p2_name: input.p2Name.trim(),
-    p2_email: null,
+    p2_email: input.p2Email ?? null,
     p2_phone: null,
     p_availability: input.availability ?? [],
     p_category: input.category ?? null,
@@ -1210,6 +1213,9 @@ export async function tournamentSignupOffline(input: {
   gender?: string | null;
   p1Name: string;
   p2Name: string;
+  p1Email?: string | null;
+  p1Phone?: string | null;
+  p2Email?: string | null;
   seedPoints?: number | null;
   leagueSum?: number | null;
   availability?: string[];
@@ -1217,10 +1223,10 @@ export async function tournamentSignupOffline(input: {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup_offline", {
     p_code: input.code.trim().toUpperCase(),
     p1_name: input.p1Name.trim(),
-    p1_email: null,
-    p1_phone: null,
+    p1_email: input.p1Email ?? null,
+    p1_phone: input.p1Phone ?? null,
     p2_name: input.p2Name.trim(),
-    p2_email: null,
+    p2_email: input.p2Email ?? null,
     p2_phone: null,
     p_availability: input.availability ?? [],
     p_category: input.category ?? null,
