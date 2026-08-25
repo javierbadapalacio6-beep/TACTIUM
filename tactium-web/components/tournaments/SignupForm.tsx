@@ -252,6 +252,32 @@ export function SignupForm({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [signErr, setSignErr] = useState<string | null>(null);
 
+  // ¿Puede el club cobrar la inscripción online (Stripe Connect activo)?
+  //  null  = aún comprobando
+  //  true  = pago online disponible → botón de Stripe
+  //  false = solo "pagar en el club" (club sin Connect o torneo gratis)
+  // Evita el bug de "parece que pagué" cuando el club no está dado de alta.
+  const [payOnline, setPayOnline] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!real || (real.entry_fee ?? 0) <= 0) {
+      setPayOnline(false);
+      return;
+    }
+    setPayOnline(null);
+    let alive = true;
+    fetch(`/api/tournaments/${id}/signup-connect`)
+      .then((r) => r.json())
+      .then((d: { online?: boolean }) => {
+        if (alive) setPayOnline(!!d.online);
+      })
+      .catch(() => {
+        if (alive) setPayOnline(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [real, id]);
+
   async function submitSignup(offline = false) {
     if (busy) return;
     if (!name.trim() || !mateName.trim()) {
@@ -312,12 +338,19 @@ export function SignupForm({ id }: { id: string }) {
           window.location.href = d.url; // → Stripe Checkout
           return;
         }
-        if (d.reason !== "not_connected") {
-          setBusy(false);
+        // Club sin pago online (o pasarela inactiva): NO se inscribe como
+        // "pagada". Se cambia a modo "pagar en el club" y se avisa; el usuario
+        // usa el botón de pago en el club (inscripción pendiente de cobro).
+        setBusy(false);
+        if (d.reason === "not_connected") {
+          setPayOnline(false);
+          setSignErr(
+            "Este club no tiene el pago online activado. Inscríbete y paga la cuota en el club.",
+          );
+        } else {
           setSignErr(d.error ?? "No se pudo iniciar el pago de la inscripción.");
-          return;
         }
-        // Club sin conectar → sigue con la inscripción gratuita de abajo.
+        return;
       } catch {
         setBusy(false);
         setSignErr("No se pudo conectar con la pasarela de pago.");
@@ -384,6 +417,18 @@ export function SignupForm({ id }: { id: string }) {
           >
             Te avisaremos cuando salga el cuadro y tu horario.
           </p>
+          <a
+            href="tactium://"
+            className="btn btn-accent"
+            style={{
+              display: "inline-flex",
+              marginTop: 24,
+              padding: "13px 24px",
+              fontSize: 14,
+            }}
+          >
+            Volver a la app
+          </a>
         </Card>
       </div>
     );
@@ -663,6 +708,18 @@ export function SignupForm({ id }: { id: string }) {
                       </span>
                     </button>
                   )}
+                  {mateHint && (
+                    <p
+                      style={{
+                        margin: "8px 0 0",
+                        fontSize: 11.5,
+                        color: "var(--text-faint)",
+                      }}
+                    >
+                      {mateHint.matched} · confirma que es tu pareja. Toca el chip
+                      para rellenar puntos y nivel.
+                    </p>
+                  )}
                 </div>
 
                 <div className="tw-form-grid">
@@ -814,30 +871,73 @@ export function SignupForm({ id }: { id: string }) {
               {signErr}
             </p>
           )}
-          <button
-            className="btn btn-accent"
-            disabled={busy || name.trim().length < 3}
-            onClick={() => submitSignup(false)}
-            style={{ width: "100%", padding: 16, fontSize: 15 }}
-          >
-            {busy
-              ? "Inscribiendo…"
-              : (real?.entry_fee ?? 0) > 0
-                ? `Pagar inscripción · ${real?.entry_fee} ${real?.fee_currency ?? "€"}`
-                : "Apuntarme al torneo"}
-          </button>
-
-          {/* Alternativa: pagar en persona en el club (efectivo/TPV). Queda
-              pendiente hasta que el club confirme el cobro. */}
-          {(real?.entry_fee ?? 0) > 0 && (
+          {(real?.entry_fee ?? 0) <= 0 ? (
+            /* Torneo gratis: un único botón de inscripción. */
             <button
-              className="btn btn-ghost"
+              className="btn btn-accent"
               disabled={busy || name.trim().length < 3}
-              onClick={() => submitSignup(true)}
-              style={{ width: "100%", padding: 14, fontSize: 14, marginTop: 10 }}
+              onClick={() => submitSignup(false)}
+              style={{ width: "100%", padding: 16, fontSize: 15 }}
             >
-              Pagar en el club (efectivo)
+              {busy ? "Inscribiendo…" : "Apuntarme al torneo"}
             </button>
+          ) : payOnline === null ? (
+            /* Comprobando si el club cobra online. */
+            <button
+              className="btn btn-accent"
+              disabled
+              style={{ width: "100%", padding: 16, fontSize: 15, opacity: 0.7 }}
+            >
+              Comprobando forma de pago…
+            </button>
+          ) : payOnline ? (
+            /* Club con pago online: Stripe (principal) + pagar en el club. */
+            <>
+              <button
+                className="btn btn-accent"
+                disabled={busy || name.trim().length < 3}
+                onClick={() => submitSignup(false)}
+                style={{ width: "100%", padding: 16, fontSize: 15 }}
+              >
+                {busy
+                  ? "Inscribiendo…"
+                  : `Pagar inscripción · ${real?.entry_fee} ${real?.fee_currency ?? "€"}`}
+              </button>
+              <button
+                className="btn btn-ghost"
+                disabled={busy || name.trim().length < 3}
+                onClick={() => submitSignup(true)}
+                style={{ width: "100%", padding: 14, fontSize: 14, marginTop: 10 }}
+              >
+                Pagar en el club (efectivo)
+              </button>
+            </>
+          ) : (
+            /* Club SIN pago online: solo se puede pagar en el club. */
+            <>
+              <button
+                className="btn btn-accent"
+                disabled={busy || name.trim().length < 3}
+                onClick={() => submitSignup(true)}
+                style={{ width: "100%", padding: 16, fontSize: 15 }}
+              >
+                {busy
+                  ? "Inscribiendo…"
+                  : `Inscribirme · pago en el club (${real?.entry_fee} ${real?.fee_currency ?? "€"})`}
+              </button>
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  textAlign: "center",
+                  textWrap: "pretty",
+                }}
+              >
+                Este club cobra la inscripción en persona. Te apuntas ahora y
+                pagas la cuota directamente en el club.
+              </p>
+            </>
           )}
         </>
       )}
