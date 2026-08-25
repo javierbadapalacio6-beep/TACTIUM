@@ -6,10 +6,23 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconChevron, IconStar, IconStarFilled } from '@components/ui';
+import { StatCell, FormChips, ListHeader } from '../components/fcpUi';
 import { useFavoritesStore } from '@store/favoritesStore';
 import { toggleFavorite } from '@core/services/favorites';
 import { fetchFcpTeamProfile, type FcpTeamProfile } from '@core/services/fcpProfiles';
 import type { SeasonsStackScreenProps } from '@navigation/types';
+
+const fmtN = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+// Iniciales de un nombre ("Central Padel A" → "CP", "Nuria Hernández" → "NH").
+const initials = (name: string): string => {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+};
+
+type Sort = 'puntos' | 'nombre';
 
 export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'FcpTeam'>) => {
   const c = useColors();
@@ -22,6 +35,7 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FcpTeamProfile | null>(null);
+  const [sort, setSort] = useState<Sort>('puntos');
 
   useEffect(() => {
     let alive = true;
@@ -37,7 +51,14 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
 
   const sd = data ? data.setsFavor - data.setsContra : 0;
   const winRate = data && data.pj > 0 ? Math.round((data.pg / data.pj) * 100) : null;
-  const ptsPerMatch = data && data.pj > 0 ? (data.puntos / data.pj).toFixed(1) : null;
+
+  const roster = useMemo(() => {
+    if (!data) return [];
+    const r = [...data.roster];
+    if (sort === 'nombre') r.sort((a, b) => a.name.localeCompare(b.name));
+    else r.sort((a, b) => b.puntos - a.puntos);
+    return r;
+  }, [data, sort]);
 
   return (
     <View style={styles.root}>
@@ -46,29 +67,18 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
           onPress={() => navigation.goBack()}
           style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
         >
-          <IconBack size={16} color={c.text} />
+          <IconBack size={16} color={c.textMuted} />
           <Text style={styles.navBtnLabel}>Clasificación</Text>
         </Pressable>
 
-        {/* Favorito: funciona sin cuenta y sube al registrarse. */}
         <Pressable
-          onPress={() =>
-            toggleFavorite({
-              kind: 'team',
-              refId: String(idEquipo),
-              label: name ?? 'Equipo',
-            })
-          }
-          hitSlop={12}
+          onPress={() => toggleFavorite({ kind: 'team', refId: String(idEquipo), label: name ?? 'Equipo' })}
+          hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-          style={({ pressed }) => [{ marginLeft: 'auto' }, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [styles.favBtn, isFav && styles.favBtnOn, pressed && { opacity: 0.7 }]}
         >
-          {isFav ? (
-            <IconStarFilled size={19} color={c.accent} />
-          ) : (
-            <IconStar size={19} color={c.textFaint} />
-          )}
+          {isFav ? <IconStarFilled size={16} color={c.accent} /> : <IconStar size={16} color={c.textFaint} />}
         </Pressable>
       </View>
 
@@ -81,61 +91,88 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title} numberOfLines={2}>
-                {data.equipo || name || 'Equipo'}
-              </Text>
-              {data.posicion != null ? (
-                <View style={styles.posPill}>
-                  <Text style={styles.posPillNum}>{data.posicion}º</Text>
-                </View>
-              ) : null}
+          {/* Hero */}
+          <View style={styles.hero}>
+            <View style={styles.heroTile}>
+              <Text style={styles.heroTileText}>{initials(data.equipo || name || '?')}</Text>
             </View>
-            {data.grupo ? <Text style={styles.subtitle}>{data.grupo}</Text> : null}
+            <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+              <Text style={styles.heroName} numberOfLines={2}>{data.equipo || name || 'Equipo'}</Text>
+              {data.grupo ? <Text style={styles.heroMeta} numberOfLines={1}>{data.grupo.toUpperCase()}</Text> : null}
+            </View>
+            {data.posicion != null ? (
+              <View style={styles.posBadge}>
+                <Text style={styles.posBadgeNum}>{data.posicion}º</Text>
+                <Text style={styles.posBadgeLabel}>GRUPO</Text>
+              </View>
+            ) : null}
           </View>
 
-          {/* Stats */}
-          <View style={[styles.statStrip, { marginBottom: 10 }]}>
-            <StatCell c={c} label="PUNTOS" value={String(data.puntos)} highlight />
-            <View style={styles.statDivider} />
-            <StatCell c={c} label="PJ" value={String(data.pj)} />
-            <StatCell c={c} label="PG" value={String(data.pg)} color={c.accent} />
-            <StatCell c={c} label="PP" value={String(data.pp)} color={c.error} />
-            <View style={styles.statDivider} />
-            <StatCell c={c} label="% VIC" value={winRate != null ? `${winRate}%` : '—'} color={c.warning} />
+          {/* Bloque de estadística */}
+          <View style={styles.statBlock}>
+            <View style={styles.ptsCol}>
+              <Text style={styles.ptsBig}>{data.puntos}</Text>
+              <Text style={styles.ptsLabel}>PUNTOS</Text>
+            </View>
+            <View style={styles.statGrid}>
+              {([
+                { k: 'PJ', v: String(data.pj) },
+                { k: 'PG', v: String(data.pg), color: c.accent },
+                { k: 'PP', v: String(data.pp), color: c.error },
+                { k: 'SETS', v: `${data.setsFavor}·${data.setsContra}` },
+                { k: 'DIF', v: sd >= 0 ? `+${sd}` : String(sd), color: sd > 0 ? c.accent : sd < 0 ? c.error : undefined },
+                { k: '% VIC', v: winRate != null ? String(winRate) : '—' },
+              ] as { k: string; v: string; color?: string }[]).map((s) => (
+                <View key={s.k} style={styles.gridCell}>
+                  <StatCell label={s.k} value={s.v} color={s.color} align="flex-start" />
+                </View>
+              ))}
+            </View>
           </View>
-          <View style={styles.statStrip}>
-            <StatCell c={c} label="SETS +" value={String(data.setsFavor)} color={c.accent} />
-            <StatCell c={c} label="SETS −" value={String(data.setsContra)} color={c.error} />
-            <StatCell
-              c={c}
-              label="DIF"
-              value={sd >= 0 ? `+${sd}` : String(sd)}
-              color={sd > 0 ? c.accent : sd < 0 ? c.error : undefined}
-            />
-            <StatCell c={c} label="PTS/PART" value={ptsPerMatch ?? '—'} />
-          </View>
+
+          {/* Racha de temporada · scroll horizontal (una temporada puede tener
+              10-14 partidos y no caben en una línea) */}
+          {data.form.length > 0 ? (
+            <View style={styles.formCard}>
+              <Text style={styles.formLabel}>TEMPORADA</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end', alignItems: 'center' }}
+              >
+                <FormChips form={data.form} box={16} />
+              </ScrollView>
+            </View>
+          ) : null}
 
           {/* Plantilla */}
-          <Text style={styles.sectionEyebrow}>PLANTILLA · {data.roster.length}</Text>
-          <Text style={styles.sectionHint}>Toca un jugador para ver sus estadísticas</Text>
-          <View style={{ gap: 6 }}>
-            {data.roster.map((p, i) => (
+          <View style={{ marginTop: 26 }}>
+            <ListHeader
+              title={`PLANTILLA · ${data.roster.length}`}
+              action={sort === 'puntos' ? 'POR PUNTOS ▾' : 'POR NOMBRE ▾'}
+              onAction={() => setSort((s) => (s === 'puntos' ? 'nombre' : 'puntos'))}
+            />
+          </View>
+          <View style={{ gap: 6, marginTop: 10 }}>
+            {roster.map((p, i) => (
               <Pressable
                 key={p.idJugador}
-                onPress={() =>
-                  navigation.navigate('FcpPlayer', { idJugador: p.idJugador, name: p.name })
-                }
+                onPress={() => navigation.navigate('FcpPlayer', { idJugador: p.idJugador, name: p.name })}
                 style={({ pressed }) => [styles.playerRow, pressed && { opacity: 0.85 }]}
               >
                 <Text style={styles.rank}>{i + 1}</Text>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initials(p.name)}</Text>
+                </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.playerName} numberOfLines={1}>{p.name}</Text>
-                  {p.categoria ? <Text style={styles.playerCat}>{p.categoria}</Text> : null}
+                  {p.categoria ? <Text style={styles.playerMeta} numberOfLines={1}>{p.categoria.toUpperCase()}</Text> : null}
                 </View>
-                <Text style={styles.playerPts}>{p.puntos} pts</Text>
+                <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                  <Text style={styles.playerPts}>{fmtN(p.puntos)}</Text>
+                  <Text style={styles.playerPtsLabel}>PTS FCP</Text>
+                </View>
                 <IconChevron size={14} color={c.textFaint} />
               </Pressable>
             ))}
@@ -146,98 +183,123 @@ export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'Fc
   );
 };
 
-const StatCell: React.FC<{
-  c: Palette;
-  label: string;
-  value: string;
-  highlight?: boolean;
-  color?: string;
-}> = ({ c, label, value, highlight, color }) => (
-  <View style={{ flex: 1, alignItems: 'center' }}>
-    <Text
-      style={{
-        fontFamily: Fonts.mono,
-        fontSize: 18,
-        fontWeight: '800',
-        color: color ?? (highlight ? c.accent : c.text),
-      }}
-    >
-      {value}
-    </Text>
-    <Text
-      style={{
-        fontFamily: Fonts.mono,
-        fontSize: 9,
-        letterSpacing: 1.2,
-        color: c.textFaint,
-        marginTop: 3,
-        fontWeight: '500',
-      }}
-    >
-      {label}
-    </Text>
-  </View>
-);
-
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
-    nav: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10 },
-    navBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    navBtnLabel: { color: c.text, fontSize: 15, fontWeight: '600' },
-    empty: { color: c.textMuted, textAlign: 'center', marginTop: 40, fontSize: 14 },
-    header: { marginTop: 8, marginBottom: 20, gap: 6 },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    posPill: {
-      backgroundColor: c.accent15,
-      borderWidth: 1,
-      borderColor: c.accent40,
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 5,
-    },
-    posPillNum: { fontFamily: Fonts.mono, color: c.accent, fontSize: 15, fontWeight: '800' },
-    title: { flex: 1, minWidth: 0, color: c.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.6 },
-    subtitle: { color: c.textMuted, fontSize: 13.5 },
-    statStrip: {
+    nav: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+    },
+    navBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    navBtnLabel: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
+    favBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    favBtnOn: { borderColor: c.accent40, backgroundColor: c.accent10 },
+    empty: { color: c.textMuted, textAlign: 'center', marginTop: 40, fontSize: 14 },
+
+    // Hero
+    hero: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
+    heroTile: {
+      width: 56,
+      height: 56,
+      borderRadius: 16,
+      backgroundColor: c.bgCard2,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    heroTileText: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '700', color: c.accent },
+    heroName: { color: c.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5, lineHeight: 27 },
+    heroMeta: { fontFamily: Fonts.mono, fontSize: 10.5, letterSpacing: 1.4, color: c.textFaint },
+    posBadge: {
+      width: 52,
+      height: 52,
+      borderRadius: 14,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    posBadgeNum: { fontFamily: Fonts.mono, fontSize: 18, fontWeight: '700', color: c.accent, lineHeight: 20 },
+    posBadgeLabel: { fontFamily: Fonts.mono, fontSize: 8, letterSpacing: 1.2, color: c.accent, marginTop: 2 },
+
+    // Bloque de estadística
+    statBlock: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 12,
+      marginTop: 18,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    ptsCol: { justifyContent: 'center', paddingRight: 14, borderRightWidth: 1, borderRightColor: c.hair, gap: 4 },
+    ptsBig: { fontFamily: Fonts.mono, fontSize: 38, fontWeight: '800', color: c.accent, lineHeight: 38 },
+    ptsLabel: { fontFamily: Fonts.mono, fontSize: 9.5, letterSpacing: 1.8, color: c.textFaint },
+    statGrid: {
+      flex: 1,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignContent: 'center',
+    },
+    gridCell: { width: '33.33%', paddingVertical: 6 },
+
+    // Racha temporada
+    formCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: Radius.md,
       backgroundColor: c.bgCard,
       borderWidth: 1,
       borderColor: c.hair,
-      borderRadius: Radius.lg,
-      paddingVertical: 16,
-      marginBottom: 26,
     },
-    statDivider: { width: 1, height: 30, backgroundColor: c.hair },
-    sectionEyebrow: {
-      fontFamily: Fonts.mono,
-      fontSize: 11,
-      letterSpacing: 2.5,
-      color: c.accent,
-      fontWeight: '500',
-    },
-    sectionHint: { color: c.textFaint, fontSize: 11.5, marginTop: 4, marginBottom: 12 },
+    formLabel: { fontFamily: Fonts.mono, fontSize: 9.5, letterSpacing: 1.6, color: c.textFaint },
+
+    // Plantilla
     playerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
       backgroundColor: c.bgCard,
       borderWidth: 1,
-      borderColor: c.hairStrong,
+      borderColor: c.hair,
       borderRadius: Radius.md,
       paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingVertical: 11,
     },
-    rank: {
-      fontFamily: Fonts.mono,
-      color: c.textFaint,
-      fontSize: 13,
-      fontWeight: '800',
-      width: 18,
-      textAlign: 'center',
+    rank: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 12, fontWeight: '700', width: 16, textAlign: 'center' },
+    avatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 999,
+      backgroundColor: c.bgCard2,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    playerName: { color: c.text, fontSize: 15, fontWeight: '700' },
-    playerCat: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10.5, marginTop: 2, letterSpacing: 0.5 },
-    playerPts: { fontFamily: Fonts.mono, color: c.accent, fontSize: 13.5, fontWeight: '800' },
+    avatarText: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 12, fontWeight: '700' },
+    playerName: { color: c.text, fontSize: 14, fontWeight: '600' },
+    playerMeta: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 9.5, letterSpacing: 1, marginTop: 2 },
+    playerPts: { fontFamily: Fonts.mono, color: c.accent, fontSize: 14, fontWeight: '700' },
+    playerPtsLabel: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 8.5, letterSpacing: 1 },
   });

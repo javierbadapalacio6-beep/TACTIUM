@@ -62,6 +62,8 @@ export interface FcpTeamProfile {
   pp: number;
   setsFavor: number;
   setsContra: number;
+  /** Racha de la temporada (cronológica, del más antiguo al más nuevo). */
+  form: ('V' | 'D')[];
   roster: FcpRosterPlayer[];
 }
 
@@ -78,16 +80,19 @@ export async function fetchFcpTeamProfile(idEquipo: number): Promise<FcpTeamProf
     .maybeSingle();
 
   const { data: partidos } = await rawFrom('fcp_partidos')
-    .select('equipo_local, equipo_visit, ganador, estado')
-    .eq('id_grupo', grupoId);
+    .select('equipo_local, equipo_visit, ganador, estado, jornada')
+    .eq('id_grupo', grupoId)
+    .order('jornada', { ascending: true });
   let pj = 0,
     pg = 0,
     pp = 0;
+  const form: ('V' | 'D')[] = [];
   for (const p of (partidos ?? []) as {
     equipo_local: string | null;
     equipo_visit: string | null;
     ganador: string | null;
     estado: string | null;
+    jornada: number | null;
   }[]) {
     if (p.estado !== 'jugado') continue;
     const isLocal = p.equipo_local === equipo;
@@ -96,8 +101,10 @@ export async function fetchFcpTeamProfile(idEquipo: number): Promise<FcpTeamProf
     pj += 1;
     const won =
       (p.ganador === 'local' && isLocal) || (p.ganador === 'visitante' && isVisit);
+    const decided = p.ganador === 'local' || p.ganador === 'visitante';
     if (won) pg += 1;
-    else if (p.ganador === 'local' || p.ganador === 'visitante') pp += 1;
+    else if (decided) pp += 1;
+    if (decided) form.push(won ? 'V' : 'D');
   }
 
   const { data: g } = await rawFrom('fcp_grupos')
@@ -130,8 +137,25 @@ export async function fetchFcpTeamProfile(idEquipo: number): Promise<FcpTeamProf
     pp,
     setsFavor: c?.sets_favor ?? 0,
     setsContra: c?.sets_contra ?? 0,
+    form,
     roster,
   };
+}
+
+/** Puesto del jugador dentro de su plantilla por puntos FEP (para "Nº X en el equipo"). */
+export async function fetchFcpPlayerTeamRank(
+  idEquipo: number,
+  idJugador: string,
+): Promise<{ rank: number; total: number } | null> {
+  const { data } = await rawFrom('fcp_jugadores')
+    .select('id_jugador, puntos')
+    .eq('id_equipo', idEquipo)
+    .order('puntos', { ascending: false, nullsFirst: false });
+  const rows = (data ?? []) as { id_jugador: string; puntos: number | null }[];
+  const total = rows.length;
+  const idx = rows.findIndex((r) => r.id_jugador === idJugador);
+  if (idx < 0) return total ? { rank: 0, total } : null;
+  return { rank: idx + 1, total };
 }
 
 // ─── JUGADOR ──────────────────────────────────────────────────────────────────
@@ -144,6 +168,7 @@ export interface FcpPlayerMatch {
   sets: string; // "2-0" en mi perspectiva
   won: boolean;
   jornada: number | null; // para ordenar cronológicamente (null en playoff)
+  fecha: string | null; // fecha del enfrentamiento (para agrupar por jornada)
   esPlayoff: boolean;
 }
 export interface FcpPlayerProfile {
@@ -216,6 +241,7 @@ export async function fetchFcpPlayerProfile(idJugador: string): Promise<FcpPlaye
         sets: `${mine}-${other}`,
         won,
         jornada: null,
+        fecha: null,
         esPlayoff: false,
       });
     }
@@ -410,6 +436,7 @@ export async function fetchFcpPlayerHistory(idJugador: string): Promise<FcpPlaye
 export interface FcpPlayerYearTeam {
   anio: string; // "2026"
   idLiga: number;
+  idEquipo: number | null;
   equipo: string | null;
   categoria: string | null; // "2ª Masc"
   puntos: number;
@@ -483,6 +510,7 @@ export async function fetchFcpPlayerYears(idJugador: string): Promise<FcpPlayerY
     const cand: FcpPlayerYearTeam = {
       anio,
       idLiga: r.id_liga,
+      idEquipo: r.id_equipo ?? null,
       equipo: r.nombre_equipo ?? null,
       categoria: r.id_equipo != null ? catByEquipo.get(r.id_equipo) ?? null : null,
       puntos: r.puntos ?? 0,
@@ -591,19 +619,26 @@ export async function fetchFcpPlayerYearMatches(
       sets: `${mine}-${other}`,
       won,
       jornada: null,
+      fecha: null,
       esPlayoff: /^fcp_playoff_/.test(a.id_partido),
     });
   }
 
-  // Jornada de cada partido (desde fcp_partidos) para ordenar cronológicamente.
+  // Jornada + fecha de cada partido (desde fcp_partidos) para ordenar y agrupar.
   const uniqIds = [...new Set(baseIds)];
   if (uniqIds.length) {
-    const { data: parts } = await rawFrom('fcp_partidos').select('id_partido, jornada').in('id_partido', uniqIds);
-    const jByPartido = new Map<string, number | null>(
-      ((parts ?? []) as { id_partido: string; jornada: number | null }[]).map((p) => [p.id_partido, p.jornada]),
+    const { data: parts } = await rawFrom('fcp_partidos')
+      .select('id_partido, jornada, fecha')
+      .in('id_partido', uniqIds);
+    const byPartido = new Map<string, { jornada: number | null; fecha: string | null }>(
+      ((parts ?? []) as { id_partido: string; jornada: number | null; fecha: string | null }[]).map(
+        (p) => [p.id_partido, { jornada: p.jornada, fecha: p.fecha }],
+      ),
     );
     matches.forEach((m, i) => {
-      m.jornada = jByPartido.get(baseIds[i]) ?? null;
+      const info = byPartido.get(baseIds[i]);
+      m.jornada = info?.jornada ?? null;
+      m.fecha = info?.fecha ?? null;
     });
   }
   // Liga regular por jornada asc; el playoff (sin jornada) al final.

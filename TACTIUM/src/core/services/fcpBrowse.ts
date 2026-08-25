@@ -61,6 +61,8 @@ export interface FcpBrowseStanding {
   setsContra: number | null;
   pj: number;
   pg: number;
+  /** Racha reciente (hasta 5 resultados, del más antiguo al más nuevo). */
+  form: ('V' | 'D')[];
 }
 
 /** Clasificación de un grupo (PJ/PG derivados de fcp_partidos). */
@@ -73,14 +75,18 @@ export async function fetchGroupStandings(
     .order('posicion', { ascending: true });
 
   const { data: partidos } = await rawFrom('fcp_partidos')
-    .select('equipo_local, equipo_visit, ganador, estado')
-    .eq('id_grupo', idGrupo);
+    .select('equipo_local, equipo_visit, ganador, estado, jornada')
+    .eq('id_grupo', idGrupo)
+    .order('jornada', { ascending: true });
   const stats = new Map<string, { pj: number; pg: number }>();
+  // Resultados por equipo en orden cronológico → racha (últimos 5).
+  const streak = new Map<string, ('V' | 'D')[]>();
   for (const p of (partidos ?? []) as {
     equipo_local: string | null;
     equipo_visit: string | null;
     ganador: string | null;
     estado: string | null;
+    jornada: number | null;
   }[]) {
     if (p.estado !== 'jugado') continue;
     const sides: [string | null, boolean][] = [
@@ -91,8 +97,15 @@ export async function fetchGroupStandings(
       if (!name) continue;
       const s = stats.get(name) ?? { pj: 0, pg: 0 };
       s.pj += 1;
-      if ((p.ganador === 'local' && isLocal) || (p.ganador === 'visitante' && !isLocal)) s.pg += 1;
+      const won = (p.ganador === 'local' && isLocal) || (p.ganador === 'visitante' && !isLocal);
+      const decided = p.ganador === 'local' || p.ganador === 'visitante';
+      if (won) s.pg += 1;
       stats.set(name, s);
+      if (decided) {
+        const f = streak.get(name) ?? [];
+        f.push(won ? 'V' : 'D');
+        streak.set(name, f);
+      }
     }
   }
 
@@ -116,6 +129,7 @@ export async function fetchGroupStandings(
       setsContra: r.sets_contra,
       pj: s.pj,
       pg: s.pg,
+      form: (streak.get(r.equipo) ?? []).slice(-5),
     };
   });
 
@@ -162,4 +176,80 @@ export async function fetchGroupSchedule(idGrupo: string): Promise<FcpBrowseMatc
     fecha: r.fecha,
     hora: r.hora,
   }));
+}
+
+// ─── META DE GRUPOS (para la lista de "Explorar") ──────────────────────────────
+// Enriquece cada grupo con nº de equipos, progreso de jornadas y estado, en dos
+// consultas por lote (no N+1). `live` (EN JUEGO) sólo se marca si el grupo tiene
+// un partido HOY sin resultado — señal honesta, no un "en curso" genérico.
+
+export type FcpGroupState = 'finalizada' | 'en_curso' | 'sin_datos';
+
+export interface FcpGroupMeta {
+  equiposCount: number;
+  jornadaActual: number; // última jornada con algún partido jugado
+  jornadaTotal: number; // jornadas programadas
+  estado: FcpGroupState;
+  live: boolean;
+}
+
+const todayISO = (): string => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+/** Meta de varios grupos a la vez. Devuelve un mapa idGrupo → meta. */
+export async function fetchFcpGroupMetas(
+  idGrupos: string[],
+): Promise<Map<string, FcpGroupMeta>> {
+  const out = new Map<string, FcpGroupMeta>();
+  if (idGrupos.length === 0) return out;
+
+  const [{ data: cls }, { data: parts }] = await Promise.all([
+    rawFrom('fcp_clasificacion').select('id_grupo').in('id_grupo', idGrupos),
+    rawFrom('fcp_partidos')
+      .select('id_grupo, jornada, estado, fecha')
+      .in('id_grupo', idGrupos),
+  ]);
+
+  const counts = new Map<string, number>();
+  for (const r of (cls ?? []) as { id_grupo: string }[]) {
+    counts.set(r.id_grupo, (counts.get(r.id_grupo) ?? 0) + 1);
+  }
+
+  const today = todayISO();
+  type Agg = { total: number; actual: number; live: boolean };
+  const agg = new Map<string, Agg>();
+  for (const p of (parts ?? []) as {
+    id_grupo: string;
+    jornada: number | null;
+    estado: string | null;
+    fecha: string | null;
+  }[]) {
+    const a = agg.get(p.id_grupo) ?? { total: 0, actual: 0, live: false };
+    const j = p.jornada ?? 0;
+    if (j > a.total) a.total = j;
+    if (p.estado === 'jugado' && j > a.actual) a.actual = j;
+    if (p.estado !== 'jugado' && (p.fecha ?? '').slice(0, 10) === today) a.live = true;
+    agg.set(p.id_grupo, a);
+  }
+
+  for (const id of idGrupos) {
+    const a = agg.get(id) ?? { total: 0, actual: 0, live: false };
+    const estado: FcpGroupState =
+      a.total > 0 && a.actual >= a.total
+        ? 'finalizada'
+        : a.actual > 0
+        ? 'en_curso'
+        : 'sin_datos';
+    out.set(id, {
+      equiposCount: counts.get(id) ?? 0,
+      jornadaActual: a.actual,
+      jornadaTotal: a.total,
+      estado,
+      live: a.live,
+    });
+  }
+  return out;
 }
