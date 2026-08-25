@@ -5,6 +5,10 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { CATEGORIES, GENDERS } from "@/lib/tournament-data";
 import { priceSignup } from "@/lib/tournament-signup-pricing";
 import {
+  checkCategoryEligibility,
+  type CategoryRules,
+} from "@/lib/tournament-eligibility";
+import {
   fetchTournament,
   fetchTournamentSignupWindow,
   resolveFcpPlayer,
@@ -289,6 +293,8 @@ export function SignupForm({ id }: { id: string }) {
   const [mate2FedName, setMate2FedName] = useState<string | null>(null);
   // Cuota de 2 categorías del torneo (para el desglose). Llega con la ventana.
   const [entryFee2, setEntryFee2] = useState<number | null>(null);
+  // Reglas de elegibilidad por categoría (nivel/puntos). Del torneo (FCP).
+  const [categoryRules, setCategoryRules] = useState<CategoryRules | null>(null);
 
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [done, setDone] = useState(false);
@@ -319,6 +325,7 @@ export function SignupForm({ id }: { id: string }) {
         setSignupHours(buildSignupHours(w.start_time, w.end_time));
         setRemoveCap(w.max_removable_hours);
         setEntryFee2(w.entry_fee_2);
+        setCategoryRules((w.category_rules as CategoryRules | null) ?? null);
       })
       .catch(() => {});
     return () => {
@@ -391,10 +398,21 @@ export function SignupForm({ id }: { id: string }) {
       }
     }
 
+    // Elegibilidad por categoría (nivel/puntos). Es CRÍTICO bloquear aquí: el
+    // pago online crea la inscripción tras cobrar, así que un rechazo del
+    // servidor dejaría al usuario pagado y sin inscribir.
+    if (elig1) {
+      setSignErr(elig1);
+      return;
+    }
+    if (category2 && elig2) {
+      setSignErr(elig2);
+      return;
+    }
+
     setBusy(true);
     setSignErr(null);
 
-    const genderDb = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
     const avail = [...blocked];
     const aPts = parseInt(pts || "0", 10) || 0;
     const aLvl = parseInt(level || "0", 10) || 0;
@@ -566,6 +584,37 @@ export function SignupForm({ id }: { id: string }) {
     [regsPreview, feePer, entryFee2],
   );
   const feeTotal = pricing.totalCents / 100;
+
+  // Elegibilidad por categoría (nivel/puntos), igual que la app y que la RPC del
+  // servidor. Se calcula con los puntos/nivel SUMADOS de cada pareja.
+  const genderDb = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
+  const aPtsNum = parseInt(pts || "0", 10) || 0;
+  const aLvlNum = parseInt(level || "0", 10) || 0;
+  const elig1 = useMemo(
+    () =>
+      checkCategoryEligibility(
+        categoryRules,
+        category,
+        genderDb,
+        aPtsNum + (parseInt(matePts || "0", 10) || 0),
+        aLvlNum + (parseInt(mateLevel || "0", 10) || 0),
+      ),
+    [categoryRules, category, genderDb, aPtsNum, aLvlNum, matePts, mateLevel],
+  );
+  const elig2 = useMemo(
+    () =>
+      category2
+        ? checkCategoryEligibility(
+            categoryRules,
+            category2,
+            genderDb,
+            aPtsNum + (parseInt(mate2Pts || "0", 10) || 0),
+            aLvlNum + (parseInt(mate2Level || "0", 10) || 0),
+          )
+        : null,
+    [categoryRules, category2, genderDb, aPtsNum, aLvlNum, mate2Pts, mate2Level],
+  );
+  const eligBlocked = !!elig1 || (!!category2 && !!elig2);
 
   function toggleSlot(key: string) {
     setBlocked((s) => {
@@ -1326,6 +1375,36 @@ export function SignupForm({ id }: { id: string }) {
           </Card>
           )}
 
+          {/* Elegibilidad por categoría: aviso persistente (no cumplís nivel/
+              puntos), como en la app. Bloquea el botón. */}
+          {(elig1 || (category2 && elig2)) && (
+            <div
+              style={{
+                margin: "0 0 12px",
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid var(--warning)",
+                background: "rgba(242,201,76,0.10)",
+              }}
+            >
+              {elig1 && (
+                <div style={{ fontSize: 12.5, color: "var(--warning)" }}>
+                  1ª categoría · {elig1}
+                </div>
+              )}
+              {category2 && elig2 && (
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    color: "var(--warning)",
+                    marginTop: elig1 ? 4 : 0,
+                  }}
+                >
+                  2ª categoría · {elig2}
+                </div>
+              )}
+            </div>
+          )}
           {signErr && (
             <p style={{ margin: "0 0 12px", color: "var(--error)", fontSize: 13 }}>
               {signErr}
@@ -1416,7 +1495,7 @@ export function SignupForm({ id }: { id: string }) {
             /* Torneo gratis: un único botón de inscripción. */
             <button
               className="btn btn-accent"
-              disabled={busy || name.trim().length < 3}
+              disabled={busy || name.trim().length < 3 || eligBlocked}
               onClick={() => submitSignup(false)}
               style={{ width: "100%", padding: 16, fontSize: 15 }}
             >
@@ -1436,7 +1515,7 @@ export function SignupForm({ id }: { id: string }) {
             <>
               <button
                 className="btn btn-accent"
-                disabled={busy || name.trim().length < 3}
+                disabled={busy || name.trim().length < 3 || eligBlocked}
                 onClick={() => submitSignup(false)}
                 style={{ width: "100%", padding: 16, fontSize: 15 }}
               >
@@ -1446,7 +1525,7 @@ export function SignupForm({ id }: { id: string }) {
               </button>
               <button
                 className="btn btn-ghost"
-                disabled={busy || name.trim().length < 3}
+                disabled={busy || name.trim().length < 3 || eligBlocked}
                 onClick={() => submitSignup(true)}
                 style={{ width: "100%", padding: 14, fontSize: 14, marginTop: 10 }}
               >
@@ -1458,7 +1537,7 @@ export function SignupForm({ id }: { id: string }) {
             <>
               <button
                 className="btn btn-accent"
-                disabled={busy || name.trim().length < 3}
+                disabled={busy || name.trim().length < 3 || eligBlocked}
                 onClick={() => submitSignup(true)}
                 style={{ width: "100%", padding: 16, fontSize: 15 }}
               >

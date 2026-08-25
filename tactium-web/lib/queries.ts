@@ -997,6 +997,7 @@ export interface TournamentSignupWindow {
   max_removable_hours: number | null;
   entry_fee: number | null;
   entry_fee_2: number | null;
+  category_rules: unknown | null;
 }
 export async function fetchTournamentSignupWindow(
   code: string,
@@ -1016,6 +1017,7 @@ export async function fetchTournamentSignupWindow(
     max_removable_hours: row.max_removable_hours ?? null,
     entry_fee: row.entry_fee ?? null,
     entry_fee_2: row.entry_fee_2 ?? null,
+    category_rules: row.category_rules ?? null,
   };
 }
 
