@@ -51,8 +51,13 @@ export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
-/** Envoltorio de marca: cabecera con logo, cuerpo y pie. */
-function shell(preheader: string, body: string): string {
+/** Pie por defecto (correos al organizador del club). */
+const FOOTER_CLUB =
+  "Este correo se ha enviado automáticamente desde TACTIUM porque gestionas un club. Si no esperabas recibirlo, puedes ignorarlo.";
+
+/** Envoltorio de marca: cabecera con logo, cuerpo y pie. El pie se puede
+ *  personalizar por tipo de correo (p.ej. inscripción de un jugador). */
+function shell(preheader: string, body: string, footer: string = FOOTER_CLUB): string {
   return `<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8">
@@ -90,8 +95,7 @@ function shell(preheader: string, body: string): string {
         <!-- Pie -->
         <tr><td style="padding:34px 0 0;border-top:1px solid ${BRAND.surface}">
           <p style="margin:18px 0 0;font-family:${SANS};font-size:12px;line-height:18px;color:${BRAND.faint}">
-            Este correo se ha enviado automáticamente desde TACTIUM porque
-            gestionas un club. Si no esperabas recibirlo, puedes ignorarlo.
+            ${esc(footer)}
           </p>
         </td></tr>
 
@@ -347,7 +351,9 @@ export function renderSignupConfirmationEmail(input: SignupConfirmationEmail): {
     .filter((l) => l !== "")
     .join("\n");
 
-  return { subject, html: shell(preheader, body), text };
+  const footer =
+    "Recibes este correo porque te has inscrito a un torneo en TACTIUM. Si no has sido tú, puedes ignorarlo.";
+  return { subject, html: shell(preheader, body, footer), text };
 }
 
 /** Mayúscula inicial (para género "masculino" → "Masculino"). */
