@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import { DATA_ROWS } from "@/lib/account-data";
+import { useSession } from "@/lib/session";
 import { Card, Eyebrow } from "@/components/ui";
 import { IconChevronRight, IconDownload } from "@/components/Icon";
 
@@ -13,7 +13,31 @@ import { IconChevronRight, IconDownload } from "@/components/Icon";
  * Cuando haya backend, esto pasa a pedir el volcado completo al servidor.
  */
 export function MisDatos() {
+  const { user, role, teams, clubId } = useSession();
   const [downloading, setDownloading] = useState(false);
+
+  // Datos REALES de la sesión (no maqueta). Un usuario nuevo ve lo suyo (o
+  // vacío), nunca los de una cuenta demo.
+  const rows = useMemo(
+    () =>
+      [
+        { label: "Nombre", value: user?.name || "—", mono: false },
+        { label: "Email", value: user?.email || "—", mono: false },
+        { label: "Rol", value: user?.roleLabel || role, mono: false },
+        {
+          label: "Equipos a los que perteneces",
+          value: String(teams.length),
+          mono: true,
+        },
+        {
+          label: "Club",
+          value: clubId ? "Sí" : "No",
+          mono: true,
+        },
+        { label: "ID interno", value: user?.id || "—", mono: true },
+      ] as { label: string; value: string; mono: boolean }[],
+    [user, role, teams, clubId],
+  );
 
   function exportJson() {
     setDownloading(true);
@@ -21,7 +45,7 @@ export function MisDatos() {
       const payload = {
         exportadoEl: new Date().toISOString(),
         origen: "TACTIUM web",
-        datos: Object.fromEntries(DATA_ROWS.map((d) => [d.label, d.value])),
+        datos: Object.fromEntries(rows.map((d) => [d.label, d.value])),
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], {
         type: "application/json",
@@ -53,7 +77,7 @@ export function MisDatos() {
             overflow: "hidden",
           }}
         >
-          {DATA_ROWS.map((d, i) => (
+          {rows.map((d, i) => (
             <div
               key={d.label}
               style={{
@@ -62,7 +86,7 @@ export function MisDatos() {
                 gap: 20,
                 padding: "12px 18px",
                 borderBottom:
-                  i === DATA_ROWS.length - 1
+                  i === rows.length - 1
                     ? "none"
                     : "1px solid var(--hair)",
               }}

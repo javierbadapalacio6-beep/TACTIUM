@@ -66,29 +66,9 @@ export function initials(name: string): string {
     .toUpperCase();
 }
 
-// ── Mis datos (RGPD) ───────────────────────────────────────────────
-export interface DataRow {
-  label: string;
-  value: string;
-  /** Se pinta en mono con tabular-nums (ids, fechas, contadores). */
-  mono: boolean;
-}
-
-export const ACCOUNT_EMAIL = "diego@halcones.es";
-
-export const DATA_ROWS: DataRow[] = [
-  { label: "Nombre", value: "Diego Ruiz", mono: false },
-  { label: "Email", value: ACCOUNT_EMAIL, mono: false },
-  { label: "ID interno", value: "usr_9F3K2M8QX1", mono: true },
-  { label: "Registro", value: "12/03/2024", mono: true },
-  { label: "Equipos que diriges", value: "1", mono: true },
-  { label: "Equipos a los que perteneces", value: "2", mono: true },
-  { label: "Clubes que diriges", value: "0", mono: true },
-  { label: "Clubes a los que perteneces", value: "1", mono: true },
-  { label: "Jugadores vinculados a ti", value: "1", mono: true },
-  { label: "Invitaciones creadas", value: "6", mono: true },
-  { label: "Suscripciones", value: "1 activa · Stripe", mono: false },
-];
+// Los datos de "Mis datos" (RGPD) salen ahora de la sesión REAL del usuario
+// (ver components/settings/MisDatos.tsx). Se eliminó la maqueta ACCOUNT_EMAIL /
+// DATA_ROWS que mostraba una cuenta demo (diego@halcones.es) a cualquiera.
 
 // ── Facturación del club ───────────────────────────────────────────
 export interface ClubTeam {

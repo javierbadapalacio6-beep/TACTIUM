@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { initials, ACCOUNT_EMAIL } from "@/lib/account-data";
+import { initials } from "@/lib/account-data";
 import { ALL_PLANS, formatEur } from "@/lib/plans";
 import {
   fetchSubscription,
@@ -804,6 +804,7 @@ export function Torneos() {
 
 /* ═══ SOPORTE ═════════════════════════════════════════════════════ */
 export function Soporte() {
+  const { user } = useSession();
   return (
     <Card>
       <Eyebrow>SOPORTE</Eyebrow>
@@ -823,7 +824,7 @@ export function Soporte() {
           <span style={{ flex: 1, fontSize: 14 }}>Escríbenos</span>
           <a
             href={`mailto:hola@tactium.io?subject=Soporte%20TACTIUM&body=%0A%0A---%0ACuenta%3A%20${encodeURIComponent(
-              ACCOUNT_EMAIL
+              user?.email ?? ""
             )}`}
             className="mono"
             style={{ fontSize: 12, letterSpacing: "0.06em" }}

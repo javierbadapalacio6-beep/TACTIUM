@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { ACCOUNT_EMAIL } from "@/lib/account-data";
 import { useSession } from "@/lib/session";
 import { Card, Eyebrow, Modal } from "@/components/ui";
 import { IconAlert } from "@/components/Icon";
@@ -13,12 +12,15 @@ import { IconAlert } from "@/components/Icon";
  * final no se habilita hasta que el texto coincide exactamente.
  */
 export function ZonaPeligro() {
-  const { signOut } = useSession();
+  const { signOut, user } = useSession();
+  const accountEmail = user?.email ?? "";
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [typed, setTyped] = useState("");
 
-  const emailOk = typed.trim().toLowerCase() === ACCOUNT_EMAIL.toLowerCase();
+  const emailOk =
+    !!accountEmail &&
+    typed.trim().toLowerCase() === accountEmail.toLowerCase();
   const canAdvance = step === 1 || emailOk;
 
   function openDialog() {
@@ -187,7 +189,7 @@ export function ZonaPeligro() {
               autoComplete="off"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
-              placeholder={ACCOUNT_EMAIL}
+              placeholder={accountEmail}
               style={{
                 width: "100%",
                 padding: "13px 15px",
