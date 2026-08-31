@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
 
@@ -128,7 +127,7 @@ const PATHS = [
 
 export function Start() {
   const router = useRouter();
-  const { user } = useSession();
+  const { user, signOut } = useSession();
   const [picked, setPicked] = useState<string>("equipo");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -315,8 +314,9 @@ export function Start() {
         {/* Sólo tiene sentido si HAY sesión (a /empezar se llega logueado para
             montar equipo/club). Para un visitante anónimo no se muestra. */}
         {user && (
-          <Link
-            href="/entrar"
+          <button
+            type="button"
+            onClick={() => void signOut()}
             className="btn"
             style={{
               padding: "14px 20px",
@@ -328,7 +328,7 @@ export function Start() {
             }}
           >
             Cerrar sesión
-          </Link>
+          </button>
         )}
       </div>
     </EntryFrame>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ACCOUNT_EMAIL } from "@/lib/account-data";
+import { useSession } from "@/lib/session";
 import { Card, Eyebrow, Modal } from "@/components/ui";
 import { IconAlert } from "@/components/Icon";
 
@@ -12,6 +13,7 @@ import { IconAlert } from "@/components/Icon";
  * final no se habilita hasta que el texto coincide exactamente.
  */
 export function ZonaPeligro() {
+  const { signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [typed, setTyped] = useState("");
@@ -76,6 +78,7 @@ export function ZonaPeligro() {
             type="button"
             className="btn btn-ghost"
             style={{ padding: "11px 20px", fontSize: 13.5 }}
+            onClick={() => void signOut()}
           >
             Cerrar sesión
           </button>
