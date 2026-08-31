@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sendSignupConfirmationEmail } from "@/lib/email";
+import { webAppOrigin } from "@/lib/connect";
 
 // POST /api/tournaments/webhook
 // Webhook de Stripe. Al confirmarse el pago (checkout.session.completed) marca
@@ -104,8 +105,10 @@ export async function POST(req: Request) {
                 },
               ];
 
-        // Crea una inscripción por categoría (la RPC valida elegibilidad).
+        // Crea una inscripción por categoría (la RPC valida elegibilidad) y
+        // recupera el código de compañero de cada una (para el email de P2).
         const regIds: string[] = [];
+        const enriched: { reg: PayReg; partnerCode: string | null }[] = [];
         for (const r of regs) {
           if (!r.p1Name || !r.p2Name) continue;
           const { data: regId } = await admin.rpc("tournament_signup_paid", {
@@ -134,6 +137,17 @@ export async function POST(req: Request) {
                 ...(p.p1UserId ? { p1_user_id: p.p1UserId } : {}),
               })
               .eq("id", rid);
+            const { data: rc } = await admin
+              .from("tournament_registrations")
+              .select("partner_code")
+              .eq("id", rid)
+              .maybeSingle();
+            enriched.push({
+              reg: r,
+              partnerCode:
+                (rc as { partner_code?: string | null } | null)?.partner_code ??
+                null,
+            });
           }
         }
 
@@ -147,26 +161,43 @@ export async function POST(req: Request) {
           })
           .eq("id", sp.id);
 
-        // Confirmación por email por inscripción (best-effort: si falla el
-        // correo NO se revierte la inscripción, ya pagada y creada).
+        // Confirmación por email por inscripción (best-effort). A P1 se le manda
+        // el código para COMPARTIR; a P2, el código para VINCULARSE + enlace a
+        // Mis torneos.
         const tName = p.tournamentName ?? "el torneo";
+        const claimUrl = `${webAppOrigin(req)}/torneos/mios`;
         await Promise.all(
-          regs.flatMap((r) =>
-            [r.p1Email, r.p2Email]
-              .filter((e): e is string => !!e)
-              .map((to) =>
+          enriched.flatMap(({ reg: r, partnerCode }) => {
+            const base = {
+              tournamentName: tName,
+              p1Name: r.p1Name,
+              p2Name: r.p2Name,
+              category: r.category,
+              gender: r.gender,
+              method: "stripe" as const,
+              amountEur: null,
+              partnerCode,
+              claimUrl,
+            };
+            const jobs: Promise<unknown>[] = [];
+            if (r.p1Email)
+              jobs.push(
                 sendSignupConfirmationEmail({
-                  to,
-                  tournamentName: tName,
-                  p1Name: r.p1Name,
-                  p2Name: r.p2Name,
-                  category: r.category,
-                  gender: r.gender,
-                  method: "stripe",
-                  amountEur: null,
+                  ...base,
+                  to: r.p1Email,
+                  recipientRole: "p1",
                 }).catch(() => null),
-              ),
-          ),
+              );
+            if (r.p2Email)
+              jobs.push(
+                sendSignupConfirmationEmail({
+                  ...base,
+                  to: r.p2Email,
+                  recipientRole: "p2",
+                }).catch(() => null),
+              );
+            return jobs;
+          }),
         );
       }
       return NextResponse.json({ received: true });

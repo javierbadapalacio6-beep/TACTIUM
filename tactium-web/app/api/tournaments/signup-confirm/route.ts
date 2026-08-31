@@ -6,6 +6,7 @@ import {
   type SignupPaymentMethod,
 } from "@/lib/email";
 import { priceSignup } from "@/lib/tournament-signup-pricing";
+import { webAppOrigin } from "@/lib/connect";
 
 // POST /api/tournaments/signup-confirm
 // Envía el email de confirmación de inscripción para los caminos que NO pasan
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
     p2Email?: string | null;
     category?: string | null;
     gender?: string | null;
+    partnerCode?: string | null;
   }
   const body = (await req.json().catch(() => ({}))) as {
     code?: string;
@@ -71,23 +73,41 @@ export async function POST(req: Request) {
       : null;
 
   const tName = t.name ?? "el torneo";
-  const jobs = regs.flatMap((r) =>
-    [r.p1Email, r.p2Email]
-      .map((e) => (e ?? "").trim())
-      .filter((e) => /.+@.+\..+/.test(e))
-      .map((to) =>
+  const claimUrl = `${webAppOrigin(req)}/torneos/mios`;
+  const jobs = regs.flatMap((r) => {
+    const base = {
+      tournamentName: tName,
+      p1Name: (r.p1Name ?? "").trim(),
+      p2Name: (r.p2Name ?? "").trim(),
+      category: r.category ?? null,
+      gender: r.gender ?? null,
+      method,
+      amountEur,
+      partnerCode: r.partnerCode ?? null,
+      claimUrl,
+    };
+    const out: Promise<{ ok: boolean }>[] = [];
+    const p1 = (r.p1Email ?? "").trim();
+    const p2 = (r.p2Email ?? "").trim();
+    // A P1 el código para COMPARTIR; a P2 el código para VINCULARSE.
+    if (/.+@.+\..+/.test(p1))
+      out.push(
         sendSignupConfirmationEmail({
-          to,
-          tournamentName: tName,
-          p1Name: (r.p1Name ?? "").trim(),
-          p2Name: (r.p2Name ?? "").trim(),
-          category: r.category ?? null,
-          gender: r.gender ?? null,
-          method,
-          amountEur,
+          ...base,
+          to: p1,
+          recipientRole: "p1",
         }).catch(() => ({ ok: false })),
-      ),
-  );
+      );
+    if (/.+@.+\..+/.test(p2))
+      out.push(
+        sendSignupConfirmationEmail({
+          ...base,
+          to: p2,
+          recipientRole: "p2",
+        }).catch(() => ({ ok: false })),
+      );
+    return out;
+  });
   if (jobs.length === 0) {
     return NextResponse.json({ sent: 0, reason: "no_recipients" });
   }

@@ -262,6 +262,13 @@ export interface SignupConfirmationEmail {
   method: SignupPaymentMethod;
   /** Total (2 jugadores) pagado o por pagar. Null = sin cuota. */
   amountEur?: number | null;
+  /** Código para vincular la cuenta del compañero (jugador 2). */
+  partnerCode?: string | null;
+  /** A quién va el correo: 'p1' (quien inscribe) o 'p2' (compañero). Cambia el
+   *  mensaje del código: P1 lo COMPARTE, P2 lo USA para vincularse. */
+  recipientRole?: "p1" | "p2";
+  /** URL de "Mis torneos" (donde el compañero mete el código). */
+  claimUrl?: string;
 }
 
 export function renderSignupConfirmationEmail(input: SignupConfirmationEmail): {
@@ -301,6 +308,31 @@ export function renderSignupConfirmationEmail(input: SignupConfirmationEmail): {
   const subject = `Inscripción confirmada · ${tName}`;
   const preheader = `${input.p1Name} y ${input.p2Name} · ${estado}.`;
 
+  // Bloque del código de compañero: P1 lo COMPARTE, P2 lo USA para vincularse.
+  const isP2 = input.recipientRole === "p2";
+  const codeBlock = input.partnerCode
+    ? `
+    <tr><td style="padding:0 0 22px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:${BRAND.surface};border:1px dashed ${BRAND.border};border-radius:16px">
+        <tr><td align="center" style="padding:22px 24px">
+          <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.accent};text-transform:uppercase">${
+            isP2 ? "Vincula tu cuenta" : "Código de tu compañero"
+          }</div>
+          <div style="font-family:${MONO};font-size:30px;line-height:40px;font-weight:700;letter-spacing:6px;color:${BRAND.text};padding:6px 0 8px">${esc(
+            input.partnerCode,
+          )}</div>
+          <div style="font-family:${SANS};font-size:13px;line-height:20px;color:${BRAND.muted}">${
+            isP2
+              ? "Entra en TACTIUM → Mis torneos y mete este código para ver el torneo en tu cuenta."
+              : "Pásaselo a tu compañero: al meterlo en Mis torneos, el torneo aparecerá también en su cuenta."
+          }</div>
+          ${isP2 && input.claimUrl ? `<div style="padding-top:16px">${button(input.claimUrl, "Ir a Mis torneos")}</div>` : ""}
+        </td></tr>
+      </table>
+    </td></tr>`
+    : "";
+
   const body = `
     <tr><td style="padding:0 0 8px">
       <div style="font-family:${MONO};font-size:11px;letter-spacing:2px;color:${BRAND.accent};text-transform:uppercase">Inscripción confirmada</div>
@@ -331,6 +363,8 @@ export function renderSignupConfirmationEmail(input: SignupConfirmationEmail): {
       </table>
     </td></tr>
 
+    ${codeBlock}
+
     <tr><td style="padding:0">
       <p style="margin:0;font-family:${SANS};font-size:14px;line-height:21px;color:${BRAND.muted}">
         Te avisaremos en cuanto el club publique el cuadro y tu horario. Si has
@@ -345,6 +379,11 @@ export function renderSignupConfirmationEmail(input: SignupConfirmationEmail): {
     `Pareja: ${input.p1Name} · ${input.p2Name}`,
     meta ? meta : ``,
     `${estado}. ${estadoDetalle}`,
+    input.partnerCode
+      ? `\n${isP2 ? "Vincula tu cuenta con este código" : "Código para tu compañero"}: ${input.partnerCode}${
+          isP2 && input.claimUrl ? `\nMis torneos: ${input.claimUrl}` : ""
+        }`
+      : ``,
     ``,
     `Te avisaremos cuando el club publique el cuadro y tu horario.`,
   ]

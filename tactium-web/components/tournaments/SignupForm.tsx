@@ -14,6 +14,7 @@ import {
   resolveFcpPlayer,
   tournamentSignup,
   tournamentSignupOffline,
+  getRegistrationPartnerCode,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -301,6 +302,11 @@ export function SignupForm({ id }: { id: string }) {
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signErr, setSignErr] = useState<string | null>(null);
+  // Códigos de compañero de las inscripciones creadas (gratis/club), para
+  // mostrarlos en la pantalla de éxito y que P1 se los pase a su pareja.
+  const [doneCodes, setDoneCodes] = useState<
+    { partner: string; category: string | null; code: string }[]
+  >([]);
 
   // Login OBLIGATORIO para inscribirse: así la inscripción queda ligada a la
   // cuenta del que se apunta (p1_user_id) y aparece en sus torneos/stats. El
@@ -509,29 +515,59 @@ export function SignupForm({ id }: { id: string }) {
 
     // Confirmación por email (gratis / pago en el club). Fire-and-forget: el
     // correo NO bloquea ni revierte la inscripción. El pago online la envía
-    // desde el webhook de Stripe, no aquí.
-    const notifyConfirm = (method: "club" | "free") => {
+    // desde el webhook de Stripe, no aquí. Incluye el código de compañero.
+    const notifyConfirm = (method: "club" | "free", codes: (string | null)[]) => {
       fetch("/api/tournaments/signup-confirm", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           code,
           method,
-          regs: regs.map((r) => ({
+          regs: regs.map((r, i) => ({
             p1Name: r.p1Name,
             p2Name: r.p2Name,
             p1Email: r.p1Email,
             p2Email: r.p2Email,
             category: r.category,
             gender: r.gender,
+            partnerCode: codes[i] ?? null,
           })),
         }),
       }).catch(() => {});
     };
 
+    // Tras crear las inscripciones (gratis/club): recupera el código de
+    // compañero de cada una, lo muestra en la pantalla de éxito y lo envía.
+    const afterCreate = async (
+      method: "club" | "free",
+      regIds: (string | null)[],
+    ) => {
+      const codes = await Promise.all(
+        regIds.map((rid) =>
+          rid
+            ? getRegistrationPartnerCode(rid).catch(() => null)
+            : Promise.resolve(null),
+        ),
+      );
+      const rows = regs
+        .map((r, i) => ({
+          partner: r.p2Name,
+          category: (r.category ?? null) as string | null,
+          code: codes[i],
+        }))
+        .filter((x) => !!x.code) as {
+        partner: string;
+        category: string | null;
+        code: string;
+      }[];
+      setDoneCodes(rows);
+      notifyConfirm(method, codes);
+    };
+
     // "Pagar en el club": crea las inscripciones como PENDIENTES de pago en el
     // club (sin Stripe). El club las confirma al cobrar.
     if (offline) {
+      const regIds: (string | null)[] = [];
       for (const r of regs) {
         const res = await guardedWrite("inscribir (pago en el club)", () =>
           tournamentSignupOffline(r),
@@ -541,9 +577,10 @@ export function SignupForm({ id }: { id: string }) {
           setSignErr(res.reason);
           return;
         }
+        regIds.push(typeof res.data === "string" ? res.data : null);
       }
+      await afterCreate("club", regIds);
       setBusy(false);
-      notifyConfirm("club");
       setDone(true);
       return;
     }
@@ -585,6 +622,7 @@ export function SignupForm({ id }: { id: string }) {
     }
 
     // Torneo gratis: crea las inscripciones directamente.
+    const regIds: (string | null)[] = [];
     for (const r of regs) {
       const res = await guardedWrite("inscribir la pareja", () =>
         tournamentSignup(r),
@@ -594,9 +632,10 @@ export function SignupForm({ id }: { id: string }) {
         setSignErr(res.reason);
         return;
       }
+      regIds.push(typeof res.data === "string" ? res.data : null);
     }
+    await afterCreate("free", regIds);
     setBusy(false);
-    notifyConfirm("free");
     setDone(true);
   }
 
@@ -715,13 +754,96 @@ export function SignupForm({ id }: { id: string }) {
           >
             Te avisaremos cuando salga el cuadro y tu horario.
           </p>
+
+          {doneCodes.length > 0 && (
+            <div
+              style={{
+                marginTop: 22,
+                padding: "16px 16px 14px",
+                borderRadius: 14,
+                border: "1px dashed var(--hair-strong)",
+                background: "var(--bg-card-2)",
+                textAlign: "left",
+              }}
+            >
+              <div
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.16em",
+                  color: "var(--accent)",
+                }}
+              >
+                CÓDIGO PARA TU COMPAÑERO
+              </div>
+              <p
+                style={{
+                  margin: "8px 0 12px",
+                  fontSize: 12.5,
+                  color: "var(--text-muted)",
+                  textWrap: "pretty",
+                }}
+              >
+                Pásale este código a tu compañero. Cuando lo meta en{" "}
+                <b>Mis torneos</b>, el torneo aparecerá también en su cuenta.
+              </p>
+              {doneCodes.map((d, i) => (
+                <div
+                  key={`${d.code}-${i}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    padding: "8px 0",
+                    borderTop:
+                      i > 0 ? "1px solid var(--hair-strong)" : "none",
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>
+                    {d.partner}
+                    {d.category ? (
+                      <span style={{ color: "var(--text-faint)" }}>
+                        {" · "}
+                        {d.category}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: "0.14em",
+                      color: "var(--accent)",
+                    }}
+                  >
+                    {d.code}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <a
-            href="tactium://"
+            href="/torneos/mios"
             className="btn btn-accent"
             style={{
               display: "inline-flex",
-              marginTop: 24,
+              marginTop: 22,
               padding: "13px 24px",
+              fontSize: 14,
+            }}
+          >
+            Ver mis torneos
+          </a>
+          <a
+            href="tactium://"
+            className="btn btn-ghost"
+            style={{
+              display: "inline-flex",
+              marginTop: 10,
+              padding: "12px 24px",
               fontSize: 14,
             }}
           >

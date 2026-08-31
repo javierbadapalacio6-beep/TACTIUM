@@ -1274,6 +1274,22 @@ export async function fetchMyTournaments(): Promise<MyTournament[]> {
   }));
 }
 
+/** Código de compañero de una inscripción (solo lo ve el jugador 1 / vinculado).
+ *  RPC `registration_partner_code`. Sirve para que P1 se lo pase a su pareja. */
+export async function getRegistrationPartnerCode(
+  regId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseBrowser().rpc(
+    "registration_partner_code",
+    { p_reg_id: regId },
+  );
+  if (error) return null;
+  const v = data as unknown;
+  if (typeof v === "string") return v;
+  const rows = (v ?? []) as { registration_partner_code?: string }[];
+  return rows[0]?.registration_partner_code ?? null;
+}
+
 /** El compañero mete su código y vincula su cuenta como jugador 2. Devuelve el
  *  id del torneo. RPC `claim_partner_by_code`. Espejo de la app. */
 export async function claimTournamentPartner(code: string): Promise<string> {
