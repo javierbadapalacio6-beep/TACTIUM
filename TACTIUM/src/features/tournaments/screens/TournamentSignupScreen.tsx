@@ -1247,7 +1247,10 @@ const FcpSuggest: React.FC<{
           </Pressable>
         ))}
       </View>
-      <Text style={styles.suggestHint}>Toca para autorrellenar.</Text>
+      <Text style={styles.suggestHint}>
+        Toca al tuyo para autorrellenar. ¿No eres ninguno? Marca «no federado» o
+        pon tus puntos a mano.
+      </Text>
     </View>
   );
 };
