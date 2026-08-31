@@ -105,12 +105,16 @@ export default function MisTorneosPage() {
   }
 
   const login = () => {
-    const next = "/torneos/mios";
+    // redirectTo al dominio CANÓNICO (app.tactium.io), no window.location.origin
+    // (una URL …vercel.app no está en la allowlist → cae al Site URL). Destino
+    // por cookie.
+    const appBase = (
+      process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+    ).replace(/\/$/, "");
+    document.cookie = `tactium_next=${encodeURIComponent("/torneos/mios")}; path=/; max-age=600; samesite=lax`;
     supabaseBrowser().auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
+      options: { redirectTo: `${appBase}/auth/callback` },
     });
   };
 
