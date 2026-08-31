@@ -447,6 +447,17 @@ export const TournamentSignupScreen = ({
       toast.error('Rellena nombres y puntos (o marca "no federado")');
       return;
     }
+    // Nombre y apellidos OBLIGATORIOS (al menos 2 palabras de 2+ letras).
+    const isFullName = (s: string) =>
+      s.trim().split(/\s+/).filter((w) => w.length > 1).length >= 2;
+    if (!isFullName(p1)) {
+      toast.error('Escribe tu nombre y apellidos');
+      return;
+    }
+    if (isPair && !isFullName(p2)) {
+      toast.error('Escribe el nombre y apellidos de tu pareja');
+      return;
+    }
     if (!p1Phone.trim()) {
       toast.error('El teléfono es obligatorio');
       return;
@@ -458,6 +469,12 @@ export const TournamentSignupScreen = ({
     if (category2) {
       if (!p2b.trim() || (!p2bNoFed && !p2bPts.trim())) {
         toast.error('Rellena el compañero y sus puntos de la 2ª categoría');
+        return;
+      }
+      if (!isFullName(p2b)) {
+        toast.error(
+          'Escribe el nombre y apellidos del compañero de la 2ª categoría',
+        );
         return;
       }
       if (eligibilityErrorB) {
