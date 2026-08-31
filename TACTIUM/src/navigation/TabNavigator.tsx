@@ -403,8 +403,10 @@ export const TabNavigator = () => {
           {/* Stats personales: pieza de retención del JUGADOR (F5a). No se
               muestra a club_admin (cuenta de organización) ni al capitán (su
               barra es de gestión; sigue teniendo sus stats en Perfil → "Mis
-              estadísticas"). Solo tab para el jugador. */}
-          {activeRole === 'player' ? (
+              estadísticas"). Tab para el jugador de equipo Y para el jugador
+              SUELTO (activeRole null, sin equipo): sus stats son los amistosos.
+              Antes el suelto no veía la pestaña y el "Ver mis stats" fallaba. */}
+          {activeRole === 'player' || activeRole === null ? (
             <Tab.Screen
               name="Stats"
               component={MyStatsScreen}
