@@ -22,6 +22,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { Card, Eyebrow } from "@/components/ui";
 import { SkeletonCard } from "@/components/states";
 import { IconCheck, IconSearch } from "@/components/Icon";
+import { GoogleLogo } from "@/components/GoogleLogo";
 
 /* Torneo real (RPC pública) y su forma normalizada para el formulario. */
 interface RealTournament {
@@ -961,16 +962,18 @@ export function SignupForm({ id }: { id: string }) {
           <button
             className="btn btn-accent"
             onClick={() => loginToSignup("google")}
-            style={{ width: "100%", padding: 14, fontSize: 15 }}
+            style={{
+              width: "100%",
+              padding: 14,
+              fontSize: 15,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+            }}
           >
+            <GoogleLogo />
             Continuar con Google
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={() => loginToSignup("apple")}
-            style={{ width: "100%", padding: 12, fontSize: 14, marginTop: 10 }}
-          >
-            Continuar con Apple
           </button>
           <p
             style={{

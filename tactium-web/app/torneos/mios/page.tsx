@@ -11,6 +11,7 @@ import {
 } from "@/lib/queries";
 import { Card, Eyebrow } from "@/components/ui";
 import { SkeletonCard } from "@/components/states";
+import { GoogleLogo } from "@/components/GoogleLogo";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "Fecha por confirmar";
@@ -146,8 +147,17 @@ export default function MisTorneosPage() {
           <button
             className="btn btn-accent"
             onClick={login}
-            style={{ width: "100%", padding: 14, fontSize: 15 }}
+            style={{
+              width: "100%",
+              padding: 14,
+              fontSize: 15,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+            }}
           >
+            <GoogleLogo />
             Continuar con Google
           </button>
           <p

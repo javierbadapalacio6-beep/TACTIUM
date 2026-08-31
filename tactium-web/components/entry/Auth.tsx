@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { WRITES_ENABLED } from "@/lib/writes";
 import { IconCheckCircle, IconEye, IconEyeOff } from "@/components/Icon";
+import { GoogleLogo } from "@/components/GoogleLogo";
 
 type Mode = "login" | "signup";
 
@@ -295,17 +296,24 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {(["google", "apple"] as const).map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => void oauth(p)}
-            className="btn btn-ghost"
-            style={{ flex: 1, minWidth: 130, padding: "13px 18px", fontSize: 13.5 }}
-          >
-            Continuar con {p === "google" ? "Google" : "Apple"}
-          </button>
-        ))}
+        <button
+          type="button"
+          onClick={() => void oauth("google")}
+          className="btn btn-ghost"
+          style={{
+            flex: 1,
+            minWidth: 130,
+            padding: "13px 18px",
+            fontSize: 13.5,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+          }}
+        >
+          <GoogleLogo />
+          Continuar con Google
+        </button>
       </div>
 
       <p
