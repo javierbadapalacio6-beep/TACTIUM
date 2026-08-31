@@ -4,6 +4,7 @@ import { JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme";
 import { SessionProvider } from "@/lib/session";
 import { AppShell } from "@/components/AppShell";
+import { SignedOutToast } from "@/components/SignedOutToast";
 import "./globals.css";
 
 // JetBrains Mono sí está en Google Fonts → next/font (auto-preload, sin CLS).
@@ -57,6 +58,7 @@ export default function RootLayout({
         <ThemeProvider>
           <SessionProvider>
             <AppShell>{children}</AppShell>
+            <SignedOutToast />
           </SessionProvider>
         </ThemeProvider>
       </body>

@@ -231,9 +231,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       /* aunque falle, forzamos el estado deslogueado con la recarga */
     }
-    // Recarga completa a la portada: da feedback claro y limpia el estado del
-    // servidor (cookies de sesión). Sin esto, el botón "no hacía nada" visible.
-    if (typeof window !== "undefined") window.location.href = "/";
+    // Recarga completa a la portada con el flag ?signedout=1: limpia el estado
+    // del servidor (cookies) y dispara el aviso "Sesión cerrada" en el destino.
+    if (typeof window !== "undefined") window.location.href = "/?signedout=1";
   }, []);
 
   const activeTeam = useMemo(
