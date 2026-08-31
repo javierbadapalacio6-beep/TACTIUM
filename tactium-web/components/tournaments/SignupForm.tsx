@@ -17,6 +17,7 @@ import {
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { Card, Eyebrow } from "@/components/ui";
 import { SkeletonCard } from "@/components/states";
 import { IconCheck, IconSearch } from "@/components/Icon";
@@ -300,6 +301,56 @@ export function SignupForm({ id }: { id: string }) {
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signErr, setSignErr] = useState<string | null>(null);
+
+  // Login OBLIGATORIO para inscribirse: así la inscripción queda ligada a la
+  // cuenta del que se apunta (p1_user_id) y aparece en sus torneos/stats. El
+  // compañero se vincula luego con su código (claim_partner_by_code, en la app).
+  const [authUser, setAuthUser] = useState<{
+    id: string;
+    email: string | null;
+  } | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const sb = supabaseBrowser();
+    sb.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!alive) return;
+        const u = data.user;
+        setAuthUser(u ? { id: u.id, email: u.email ?? null } : null);
+        setCheckingAuth(false);
+        if (u?.email) setEmail((e) => e || u.email!);
+      })
+      .catch(() => {
+        if (alive) {
+          setAuthUser(null);
+          setCheckingAuth(false);
+        }
+      });
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => {
+      const u = session?.user ?? null;
+      setAuthUser(u ? { id: u.id, email: u.email ?? null } : null);
+      if (u?.email) setEmail((e) => e || u.email!);
+    });
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const loginToSignup = (provider: "google" | "apple") => {
+    const next =
+      typeof window !== "undefined"
+        ? window.location.pathname + window.location.search
+        : `/torneos/${id}/inscripcion`;
+    supabaseBrowser().auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    });
+  };
 
   // ¿Puede el club cobrar la inscripción online (Stripe Connect activo)?
   //  null  = aún comprobando
@@ -760,7 +811,57 @@ export function SignupForm({ id }: { id: string }) {
         </Card>
       )}
 
-      {(found || t) && (
+      {/* Gate de login: para inscribirse hay que iniciar sesión. */}
+      {(found || t) && !checkingAuth && !authUser && (
+        <Card style={{ marginBottom: 20 }}>
+          <Eyebrow>INICIA SESIÓN PARA INSCRIBIRTE</Eyebrow>
+          <p
+            style={{
+              margin: "14px 0 20px",
+              fontSize: 14,
+              lineHeight: 1.5,
+              color: "var(--text-muted)",
+              textWrap: "pretty",
+            }}
+          >
+            Entra con tu cuenta para apuntarte. Así tu inscripción queda en tu
+            perfil, con tus torneos y estadísticas. Tu compañero podrá vincularse
+            luego con su código, tenga o no club.
+          </p>
+          <button
+            className="btn btn-accent"
+            onClick={() => loginToSignup("google")}
+            style={{ width: "100%", padding: 14, fontSize: 15 }}
+          >
+            Continuar con Google
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={() => loginToSignup("apple")}
+            style={{ width: "100%", padding: 12, fontSize: 14, marginTop: 10 }}
+          >
+            Continuar con Apple
+          </button>
+          <p
+            style={{
+              margin: "16px 0 0",
+              fontSize: 12,
+              color: "var(--text-faint)",
+              textAlign: "center",
+            }}
+          >
+            ¿Prefieres email?{" "}
+            <a
+              href={`/entrar?next=${encodeURIComponent(`/torneos/${id}/inscripcion`)}`}
+              style={{ color: "var(--accent)" }}
+            >
+              Inicia sesión aquí
+            </a>
+          </p>
+        </Card>
+      )}
+
+      {(found || t) && authUser && (
         <>
           <Card style={{ marginBottom: 20 }}>
             <div className="tw-form-grid">

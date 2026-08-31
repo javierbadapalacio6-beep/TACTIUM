@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
-import { inscriptionFeeCents, webAppOrigin } from "@/lib/connect";
+import { inscriptionFeeCents, webAppOrigin, userIdFromRequest } from "@/lib/connect";
+import { supabaseServer } from "@/lib/supabase/server";
 import { priceSignup } from "@/lib/tournament-signup-pricing";
 
 interface SignupReg {
@@ -116,9 +117,14 @@ export async function POST(req: Request) {
     availability: r.availability ?? [],
   }));
   const payerEmail = payloadRegs[0]?.p1Email ?? null;
+  // Usuario que paga (login obligatorio en la web): la inscripción se atará a su
+  // cuenta. El webhook usa service-role (auth.uid()=null), así que guardamos su
+  // id aquí y lo escribimos en las inscripciones al confirmar el pago.
+  const payerUserId = await userIdFromRequest(req, admin, supabaseServer);
   const payload = {
     code,
     tournamentName: t.name ?? null,
+    p1UserId: payerUserId,
     regs: payloadRegs,
   };
 

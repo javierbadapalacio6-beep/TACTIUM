@@ -70,6 +70,7 @@ export async function POST(req: Request) {
         const p = sp.signup_payload as {
           code: string;
           tournamentName?: string | null;
+          p1UserId?: string | null;
           regs?: PayReg[];
           // Formato antiguo (una sola categoría):
           p1Name?: string;
@@ -126,7 +127,12 @@ export async function POST(req: Request) {
             regIds.push(rid);
             await admin
               .from("tournament_registrations")
-              .update({ payment_status: "paid", payment_method: "stripe" })
+              .update({
+                payment_status: "paid",
+                payment_method: "stripe",
+                // Liga la inscripción a la cuenta del que pagó (login web).
+                ...(p.p1UserId ? { p1_user_id: p.p1UserId } : {}),
+              })
               .eq("id", rid);
           }
         }
