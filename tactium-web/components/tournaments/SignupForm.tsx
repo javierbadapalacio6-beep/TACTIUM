@@ -60,6 +60,21 @@ const isFullName = (s: string) =>
 /** Email con pinta razonable (validación suave, el server no depende de esto). */
 const looksLikeEmail = (s: string) => /.+@.+\..+/.test(s.trim());
 
+/** Valida el género REAL (FCP) contra la división del torneo. Solo bloquea
+ *  cuando se conoce el género (jugador confirmado en la Federación); sin dato
+ *  no se puede saber, así que no bloquea. */
+function genderMismatch(
+  divisionDb: string,
+  players: ("M" | "F" | null)[],
+): string | null {
+  const known = players.filter((g): g is "M" | "F" => g === "M" || g === "F");
+  if (divisionDb === "masculino" && known.some((g) => g === "F"))
+    return "Este torneo es masculino: la pareja debe ser de hombres.";
+  if (divisionDb === "femenino" && known.some((g) => g === "M"))
+    return "Este torneo es femenino: la pareja debe ser de mujeres.";
+  return null;
+}
+
 const DOW_ABBR = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 /** Días REALES del torneo (de starts_on a ends_on) para el grid de
@@ -131,7 +146,12 @@ const SIGNUP_GENDER_DB: Record<string, string> = {
 // Sugerencia de la Federación (dato REAL de fcp_jugadores, no mock). Igual que
 // el chip FcpSuggest de la app: al escribir el nombre buscamos en la FCP y
 // proponemos puntos + categoría de la mejor coincidencia.
-type FcpHint = { pts: number; level: string; matched: string };
+type FcpHint = {
+  pts: number;
+  level: string;
+  matched: string;
+  genero: "M" | "F" | null;
+};
 
 /** Hook: busca en la FCP el nombre escrito (debounced) y devuelve la mejor
  *  coincidencia como pista de puntos/nivel. */
@@ -156,6 +176,7 @@ function useFcpHint(query: string): FcpHint | null {
                 // La LIGA en la que juega (division real), no "ABS".
                 level: top.categoriaDiv ?? "",
                 matched: top.name,
+                genero: top.genero ?? null,
               }
             : null,
         );
@@ -284,6 +305,10 @@ export function SignupForm({ id }: { id: string }) {
   // guarda (nombre canónico); si no, se exige nombre y apellidos escritos.
   const [fedName, setFedName] = useState<string | null>(null);
   const [mateFedName, setMateFedName] = useState<string | null>(null);
+  // Género REAL (FCP) de cada jugador confirmado, para validar la división del
+  // torneo (evita mujer en torneo masculino y viceversa).
+  const [fedGender, setFedGender] = useState<"M" | "F" | null>(null);
+  const [mateFedGender, setMateFedGender] = useState<"M" | "F" | null>(null);
 
   // 2ª categoría OPCIONAL (como en la app): el mismo jugador se apunta a otra
   // categoría, posiblemente con OTRO compañero. Su precio pasa a la cuota de 2
@@ -294,6 +319,7 @@ export function SignupForm({ id }: { id: string }) {
   const [mate2Level, setMate2Level] = useState("");
   const [mate2Email, setMate2Email] = useState("");
   const [mate2FedName, setMate2FedName] = useState<string | null>(null);
+  const [mate2FedGender, setMate2FedGender] = useState<"M" | "F" | null>(null);
   // Cuota de 2 categorías del torneo (para el desglose). Llega con la ventana.
   const [entryFee2, setEntryFee2] = useState<number | null>(null);
   // Reglas de elegibilidad por categoría (nivel/puntos). Del torneo (FCP).
@@ -467,6 +493,10 @@ export function SignupForm({ id }: { id: string }) {
     // Elegibilidad por categoría (nivel/puntos). Es CRÍTICO bloquear aquí: el
     // pago online crea la inscripción tras cobrar, así que un rechazo del
     // servidor dejaría al usuario pagado y sin inscribir.
+    if (genderErr) {
+      setSignErr(genderErr);
+      return;
+    }
     if (elig1) {
       setSignErr(elig1);
       return;
@@ -713,7 +743,16 @@ export function SignupForm({ id }: { id: string }) {
         : null,
     [categoryRules, category2, genderDb, aPtsNum, aLvlNum, mate2Pts, mate2Level],
   );
-  const eligBlocked = !!elig1 || (!!category2 && !!elig2);
+  // Género real (FCP) vs división del torneo. La misma división aplica a las 2
+  // categorías (hay una sola selección de género en la ficha).
+  const genderErr = useMemo(() => {
+    const div = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
+    const players: ("M" | "F" | null)[] = [fedGender, mateFedGender];
+    if (category2) players.push(mate2FedGender);
+    return genderMismatch(div, players);
+  }, [gender, fedGender, mateFedGender, mate2FedGender, category2]);
+  const eligBlocked =
+    !!elig1 || (!!category2 && !!elig2) || !!genderErr;
 
   function toggleSlot(key: string) {
     setBlocked((s) => {
@@ -1066,6 +1105,7 @@ export function SignupForm({ id }: { id: string }) {
                     onChange={(e) => {
                       setName(e.target.value);
                       setFedName(null); // editar a mano descarta el nombre FCP
+                      setFedGender(null);
                     }}
                     placeholder="Nombre y apellidos"
                   />
@@ -1077,6 +1117,7 @@ export function SignupForm({ id }: { id: string }) {
                         // Federación + puntos + nivel.
                         setName(hint.matched);
                         setFedName(hint.matched);
+                        setFedGender(hint.genero);
                         setPts(String(hint.pts));
                         setLevel(hint.level);
                       }}
@@ -1185,6 +1226,7 @@ export function SignupForm({ id }: { id: string }) {
                     onChange={(e) => {
                       setMateName(e.target.value);
                       setMateFedName(null);
+                      setMateFedGender(null);
                     }}
                     placeholder="Nombre y apellidos de tu pareja"
                   />
@@ -1194,6 +1236,7 @@ export function SignupForm({ id }: { id: string }) {
                       onClick={() => {
                         setMateName(mateHint.matched);
                         setMateFedName(mateHint.matched);
+                        setMateFedGender(mateHint.genero);
                         setMatePts(String(mateHint.pts));
                         setMateLevel(mateHint.level);
                       }}
@@ -1404,6 +1447,7 @@ export function SignupForm({ id }: { id: string }) {
                       onChange={(e) => {
                         setMate2Name(e.target.value);
                         setMate2FedName(null);
+                        setMate2FedGender(null);
                       }}
                       placeholder="Nombre y apellidos"
                     />
@@ -1413,6 +1457,7 @@ export function SignupForm({ id }: { id: string }) {
                         onClick={() => {
                           setMate2Name(mate2Hint.matched);
                           setMate2FedName(mate2Hint.matched);
+                          setMate2FedGender(mate2Hint.genero);
                           setMate2Pts(String(mate2Hint.pts));
                           setMate2Level(mate2Hint.level);
                         }}
@@ -1609,9 +1654,9 @@ export function SignupForm({ id }: { id: string }) {
           </Card>
           )}
 
-          {/* Elegibilidad por categoría: aviso persistente (no cumplís nivel/
-              puntos), como en la app. Bloquea el botón. */}
-          {(elig1 || (category2 && elig2)) && (
+          {/* Género (división) + elegibilidad por categoría: avisos persistentes.
+              Bloquean el botón. */}
+          {(genderErr || elig1 || (category2 && elig2)) && (
             <div
               style={{
                 margin: "0 0 12px",
@@ -1621,6 +1666,17 @@ export function SignupForm({ id }: { id: string }) {
                 background: "rgba(242,201,76,0.10)",
               }}
             >
+              {genderErr && (
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    color: "var(--warning)",
+                    marginBottom: elig1 || (category2 && elig2) ? 4 : 0,
+                  }}
+                >
+                  {genderErr}
+                </div>
+              )}
               {elig1 && (
                 <div style={{ fontSize: 12.5, color: "var(--warning)" }}>
                   1ª categoría · {elig1}
