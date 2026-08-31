@@ -192,6 +192,38 @@ function useFcpHint(query: string): FcpHint | null {
   return hint;
 }
 
+/** Checkbox "No está federado": el jugador no tiene ficha FCP → puntos y nivel
+ *  cuentan como 0 y no se piden. */
+function NoFedToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        cursor: "pointer",
+        fontSize: 12.5,
+        color: "var(--text-muted)",
+        marginTop: 4,
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
+      />
+      No está federado (sin puntos ni nivel de la FCP)
+    </label>
+  );
+}
+
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <span
@@ -309,6 +341,10 @@ export function SignupForm({ id }: { id: string }) {
   // torneo (evita mujer en torneo masculino y viceversa).
   const [fedGender, setFedGender] = useState<"M" | "F" | null>(null);
   const [mateFedGender, setMateFedGender] = useState<"M" | "F" | null>(null);
+  // "No está federado": sin ficha FCP → puntos y nivel cuentan como 0 y no se
+  // piden. Igual que en la app.
+  const [noFed, setNoFed] = useState(false);
+  const [mateNoFed, setMateNoFed] = useState(false);
 
   // 2ª categoría OPCIONAL (como en la app): el mismo jugador se apunta a otra
   // categoría, posiblemente con OTRO compañero. Su precio pasa a la cuota de 2
@@ -320,6 +356,7 @@ export function SignupForm({ id }: { id: string }) {
   const [mate2Email, setMate2Email] = useState("");
   const [mate2FedName, setMate2FedName] = useState<string | null>(null);
   const [mate2FedGender, setMate2FedGender] = useState<"M" | "F" | null>(null);
+  const [mate2NoFed, setMate2NoFed] = useState(false);
   // Cuota de 2 categorías del torneo (para el desglose). Llega con la ventana.
   const [entryFee2, setEntryFee2] = useState<number | null>(null);
   // Reglas de elegibilidad por categoría (nivel/puntos). Del torneo (FCP).
@@ -510,8 +547,13 @@ export function SignupForm({ id }: { id: string }) {
     setSignErr(null);
 
     const avail = [...blocked];
-    const aPts = parseInt(pts || "0", 10) || 0;
-    const aLvl = parseInt(level || "0", 10) || 0;
+    // 0 si el jugador no está federado (sin ficha FCP).
+    const aPts = noFed ? 0 : parseInt(pts || "0", 10) || 0;
+    const aLvl = noFed ? 0 : parseInt(level || "0", 10) || 0;
+    const matePtsV = mateNoFed ? 0 : parseInt(matePts || "0", 10) || 0;
+    const mateLvlV = mateNoFed ? 0 : parseInt(mateLevel || "0", 10) || 0;
+    const mate2PtsV = mate2NoFed ? 0 : parseInt(mate2Pts || "0", 10) || 0;
+    const mate2LvlV = mate2NoFed ? 0 : parseInt(mate2Level || "0", 10) || 0;
     const p1Email = email.trim() || null;
     const p1Phone = phone.trim() || null;
 
@@ -527,10 +569,8 @@ export function SignupForm({ id }: { id: string }) {
         p1Email,
         p1Phone,
         p2Email: mateEmail.trim() || null,
-        seedPoints:
-          aPts + (parseInt(matePts || "0", 10) || 0) || null,
-        leagueSum:
-          aLvl + (parseInt(mateLevel || "0", 10) || 0) || null,
+        seedPoints: aPts + matePtsV || null,
+        leagueSum: aLvl + mateLvlV || null,
         availability: avail,
       },
     ];
@@ -544,10 +584,8 @@ export function SignupForm({ id }: { id: string }) {
         p1Email,
         p1Phone,
         p2Email: mate2Email.trim() || null,
-        seedPoints:
-          aPts + (parseInt(mate2Pts || "0", 10) || 0) || null,
-        leagueSum:
-          aLvl + (parseInt(mate2Level || "0", 10) || 0) || null,
+        seedPoints: aPts + mate2PtsV || null,
+        leagueSum: aLvl + mate2LvlV || null,
         availability: avail,
       });
     }
@@ -717,18 +755,23 @@ export function SignupForm({ id }: { id: string }) {
   // Elegibilidad por categoría (nivel/puntos), igual que la app y que la RPC del
   // servidor. Se calcula con los puntos/nivel SUMADOS de cada pareja.
   const genderDb = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
-  const aPtsNum = parseInt(pts || "0", 10) || 0;
-  const aLvlNum = parseInt(level || "0", 10) || 0;
+  // Puntos/nivel EFECTIVOS: 0 si el jugador NO está federado (sin ficha FCP).
+  const p1PtsN = noFed ? 0 : parseInt(pts || "0", 10) || 0;
+  const p1LvlN = noFed ? 0 : parseInt(level || "0", 10) || 0;
+  const matePtsN = mateNoFed ? 0 : parseInt(matePts || "0", 10) || 0;
+  const mateLvlN = mateNoFed ? 0 : parseInt(mateLevel || "0", 10) || 0;
+  const mate2PtsN = mate2NoFed ? 0 : parseInt(mate2Pts || "0", 10) || 0;
+  const mate2LvlN = mate2NoFed ? 0 : parseInt(mate2Level || "0", 10) || 0;
   const elig1 = useMemo(
     () =>
       checkCategoryEligibility(
         categoryRules,
         category,
         genderDb,
-        aPtsNum + (parseInt(matePts || "0", 10) || 0),
-        aLvlNum + (parseInt(mateLevel || "0", 10) || 0),
+        p1PtsN + matePtsN,
+        p1LvlN + mateLvlN,
       ),
-    [categoryRules, category, genderDb, aPtsNum, aLvlNum, matePts, mateLevel],
+    [categoryRules, category, genderDb, p1PtsN, p1LvlN, matePtsN, mateLvlN],
   );
   const elig2 = useMemo(
     () =>
@@ -737,11 +780,11 @@ export function SignupForm({ id }: { id: string }) {
             categoryRules,
             category2,
             genderDb,
-            aPtsNum + (parseInt(mate2Pts || "0", 10) || 0),
-            aLvlNum + (parseInt(mate2Level || "0", 10) || 0),
+            p1PtsN + mate2PtsN,
+            p1LvlN + mate2LvlN,
           )
         : null,
-    [categoryRules, category2, genderDb, aPtsNum, aLvlNum, mate2Pts, mate2Level],
+    [categoryRules, category2, genderDb, p1PtsN, p1LvlN, mate2PtsN, mate2LvlN],
   );
   // Género real (FCP) vs división del torneo. La misma división aplica a las 2
   // categorías (hay una sola selección de género en la ficha).
@@ -1162,26 +1205,42 @@ export function SignupForm({ id }: { id: string }) {
                   )}
                 </div>
 
-                <div className="tw-form-grid">
-                  <div>
-                    <Label>TUS PUNTOS</Label>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={pts}
-                      onChange={(e) => setPts(e.target.value.replace(/\D/g, ""))}
-                      className="mono"
-                    />
+                <NoFedToggle
+                  checked={noFed}
+                  onChange={(v) => {
+                    setNoFed(v);
+                    if (v) {
+                      setPts("");
+                      setLevel("");
+                      setFedName(null);
+                      setFedGender(null);
+                    }
+                  }}
+                />
+                {!noFed && (
+                  <div className="tw-form-grid">
+                    <div>
+                      <Label>TUS PUNTOS</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={pts}
+                        onChange={(e) =>
+                          setPts(e.target.value.replace(/\D/g, ""))
+                        }
+                        className="mono"
+                      />
+                    </div>
+                    <div>
+                      <Label>TU NIVEL DE LIGA</Label>
+                      <Input
+                        type="text"
+                        value={level}
+                        onChange={(e) => setLevel(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>TU NIVEL DE LIGA</Label>
-                    <Input
-                      type="text"
-                      value={level}
-                      onChange={(e) => setLevel(e.target.value)}
-                    />
-                  </div>
-                </div>
+                )}
 
                 <div>
                   <Label>TU EMAIL</Label>
@@ -1281,26 +1340,42 @@ export function SignupForm({ id }: { id: string }) {
                   )}
                 </div>
 
-                <div className="tw-form-grid">
-                  <div>
-                    <Label>SUS PUNTOS</Label>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={matePts}
-                      onChange={(e) => setMatePts(e.target.value.replace(/\D/g, ""))}
-                      className="mono"
-                    />
+                <NoFedToggle
+                  checked={mateNoFed}
+                  onChange={(v) => {
+                    setMateNoFed(v);
+                    if (v) {
+                      setMatePts("");
+                      setMateLevel("");
+                      setMateFedName(null);
+                      setMateFedGender(null);
+                    }
+                  }}
+                />
+                {!mateNoFed && (
+                  <div className="tw-form-grid">
+                    <div>
+                      <Label>SUS PUNTOS</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={matePts}
+                        onChange={(e) =>
+                          setMatePts(e.target.value.replace(/\D/g, ""))
+                        }
+                        className="mono"
+                      />
+                    </div>
+                    <div>
+                      <Label>SU NIVEL DE LIGA</Label>
+                      <Input
+                        type="text"
+                        value={mateLevel}
+                        onChange={(e) => setMateLevel(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>SU NIVEL DE LIGA</Label>
-                    <Input
-                      type="text"
-                      value={mateLevel}
-                      onChange={(e) => setMateLevel(e.target.value)}
-                    />
-                  </div>
-                </div>
+                )}
 
                 <div>
                   <Label>EMAIL DE TU COMPAÑERO/A · OPCIONAL</Label>
@@ -1507,28 +1582,44 @@ export function SignupForm({ id }: { id: string }) {
                     )}
                   </div>
 
-                  <div className="tw-form-grid" style={{ marginTop: 16 }}>
-                    <div>
-                      <Label>SUS PUNTOS</Label>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        value={mate2Pts}
-                        onChange={(e) =>
-                          setMate2Pts(e.target.value.replace(/\D/g, ""))
+                  <div style={{ marginTop: 16 }}>
+                    <NoFedToggle
+                      checked={mate2NoFed}
+                      onChange={(v) => {
+                        setMate2NoFed(v);
+                        if (v) {
+                          setMate2Pts("");
+                          setMate2Level("");
+                          setMate2FedName(null);
+                          setMate2FedGender(null);
                         }
-                        className="mono"
-                      />
-                    </div>
-                    <div>
-                      <Label>SU NIVEL DE LIGA</Label>
-                      <Input
-                        type="text"
-                        value={mate2Level}
-                        onChange={(e) => setMate2Level(e.target.value)}
-                      />
-                    </div>
+                      }}
+                    />
                   </div>
+                  {!mate2NoFed && (
+                    <div className="tw-form-grid" style={{ marginTop: 16 }}>
+                      <div>
+                        <Label>SUS PUNTOS</Label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          value={mate2Pts}
+                          onChange={(e) =>
+                            setMate2Pts(e.target.value.replace(/\D/g, ""))
+                          }
+                          className="mono"
+                        />
+                      </div>
+                      <div>
+                        <Label>SU NIVEL DE LIGA</Label>
+                        <Input
+                          type="text"
+                          value={mate2Level}
+                          onChange={(e) => setMate2Level(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ marginTop: 16 }}>
                     <Label>EMAIL DEL COMPAÑERO (2ª) · OPCIONAL</Label>
