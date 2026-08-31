@@ -226,7 +226,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await supabaseBrowser().auth.signOut();
+    try {
+      await supabaseBrowser().auth.signOut();
+    } catch {
+      /* aunque falle, forzamos el estado deslogueado con la recarga */
+    }
+    // Recarga completa a la portada: da feedback claro y limpia el estado del
+    // servidor (cookies de sesión). Sin esto, el botón "no hacía nada" visible.
+    if (typeof window !== "undefined") window.location.href = "/";
   }, []);
 
   const activeTeam = useMemo(
