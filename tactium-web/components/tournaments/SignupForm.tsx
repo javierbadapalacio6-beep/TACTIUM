@@ -151,16 +151,17 @@ type FcpHint = {
   level: string;
   matched: string;
   genero: "M" | "F" | null;
+  equipo: string | null;
 };
 
-/** Hook: busca en la FCP el nombre escrito (debounced) y devuelve la mejor
- *  coincidencia como pista de puntos/nivel. */
-function useFcpHint(query: string): FcpHint | null {
-  const [hint, setHint] = useState<FcpHint | null>(null);
+/** Hook: busca en la FCP el nombre escrito (debounced) y devuelve HASTA 4
+ *  candidatos (para poder distinguir homónimos por club/puntos). */
+function useFcpHints(query: string): FcpHint[] {
+  const [hints, setHints] = useState<FcpHint[]>([]);
   useEffect(() => {
     const q = query.trim();
     if (q.length < 3) {
-      setHint(null);
+      setHints([]);
       return;
     }
     let alive = true;
@@ -168,20 +169,18 @@ function useFcpHint(query: string): FcpHint | null {
       try {
         const rows = await resolveFcpPlayer(q);
         if (!alive) return;
-        const top = rows[0];
-        setHint(
-          top
-            ? {
-                pts: top.puntos ?? 0,
-                // La LIGA en la que juega (division real), no "ABS".
-                level: top.categoriaDiv ?? "",
-                matched: top.name,
-                genero: top.genero ?? null,
-              }
-            : null,
+        setHints(
+          rows.slice(0, 4).map((r) => ({
+            pts: r.puntos ?? 0,
+            // La LIGA en la que juega (division real), no "ABS".
+            level: r.categoriaDiv ?? "",
+            matched: r.name,
+            genero: r.genero ?? null,
+            equipo: r.equipo ?? null,
+          })),
         );
       } catch {
-        if (alive) setHint(null);
+        if (alive) setHints([]);
       }
     }, 300);
     return () => {
@@ -189,7 +188,7 @@ function useFcpHint(query: string): FcpHint | null {
       clearTimeout(t);
     };
   }, [query]);
-  return hint;
+  return hints;
 }
 
 /** Checkbox "No está federado": el jugador no tiene ficha FCP → puntos y nivel
@@ -221,6 +220,90 @@ function NoFedToggle({
       />
       No está federado (sin puntos ni nivel de la FCP)
     </label>
+  );
+}
+
+/** Selector de coincidencias FCP. Si hay varias personas con el mismo nombre,
+ *  el usuario elige la suya por CLUB y PUNTOS (evita atribuir los datos de un
+ *  homónimo). Si no es ninguna (otra federación no gestionada), no elige y usa
+ *  "No está federado" o escribe los puntos a mano. */
+function FcpPicker({
+  hints,
+  confirmed,
+  onPick,
+}: {
+  hints: FcpHint[];
+  confirmed: string | null;
+  onPick: (h: FcpHint) => void;
+}) {
+  if (!hints.length) return null;
+  if (confirmed) {
+    return (
+      <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--accent)" }}>
+        ✓ {confirmed} · confirmado en la Federación.
+      </p>
+    );
+  }
+  const many = hints.length > 1;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div
+        className="mono"
+        style={{
+          fontSize: 9,
+          letterSpacing: "0.16em",
+          color: "var(--text-faint)",
+          marginBottom: 8,
+        }}
+      >
+        {many ? "VARIOS EN LA FEDERACIÓN · ¿CUÁL ERES?" : "DETECTADO EN LA FEDERACIÓN"}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {hints.map((h, i) => (
+          <button
+            key={`${h.matched}-${i}`}
+            type="button"
+            onClick={() => onPick(h)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "var(--accent-10)",
+              border: "1px solid var(--accent-25)",
+              color: "var(--accent)",
+              cursor: "pointer",
+              width: "100%",
+              textAlign: "left",
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{h.matched}</span>
+            <span
+              className="mono"
+              style={{
+                fontSize: 11,
+                marginLeft: "auto",
+                color: "var(--text-muted)",
+              }}
+            >
+              {h.pts} pts{h.level ? ` · ${h.level}` : ""}
+              {h.equipo ? ` · ${h.equipo}` : ""}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p
+        style={{
+          margin: "8px 0 0",
+          fontSize: 11,
+          color: "var(--text-faint)",
+          textWrap: "pretty",
+        }}
+      >
+        ¿No eres ninguno? Marca «No está federado» o escribe tus puntos a mano.
+      </p>
+    </div>
   );
 }
 
@@ -716,9 +799,9 @@ export function SignupForm({ id }: { id: string }) {
     setDone(true);
   }
 
-  const hint = useFcpHint(name);
-  const mateHint = useFcpHint(mateName);
-  const mate2Hint = useFcpHint(mate2Name);
+  const hints = useFcpHints(name);
+  const mateHints = useFcpHints(mateName);
+  const mate2Hints = useFcpHints(mate2Name);
 
   // Precio POR PERSONA: cada jugador paga según cuántas categorías juega (1 →
   // entry_fee, 2 → entry_fee_2). El que se inscribe paga por todos. El helper
@@ -1152,56 +1235,18 @@ export function SignupForm({ id }: { id: string }) {
                     }}
                     placeholder="Nombre y apellidos"
                   />
-                  {hint && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Confirma la coincidencia: fija el nombre COMPLETO de la
-                        // Federación + puntos + nivel.
-                        setName(hint.matched);
-                        setFedName(hint.matched);
-                        setFedGender(hint.genero);
-                        setPts(String(hint.pts));
-                        setLevel(hint.level);
+                  {!noFed && (
+                    <FcpPicker
+                      hints={hints}
+                      confirmed={fedName}
+                      onPick={(h) => {
+                        setName(h.matched);
+                        setFedName(h.matched);
+                        setFedGender(h.genero);
+                        setPts(String(h.pts));
+                        setLevel(h.level);
                       }}
-                      style={{
-                        marginTop: 10,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        background: "var(--accent-10)",
-                        border: "1px solid var(--accent-25)",
-                        color: "var(--accent)",
-                        cursor: "pointer",
-                        width: "100%",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span
-                        className="mono"
-                        style={{ fontSize: 9, letterSpacing: "0.16em" }}
-                      >
-                        DETECTADO EN LA FEDERACIÓN
-                      </span>
-                      <span className="mono" style={{ fontSize: 12, marginLeft: "auto" }}>
-                        {hint.pts} · {hint.level}
-                      </span>
-                    </button>
-                  )}
-                  {hint && (
-                    <p
-                      style={{
-                        margin: "8px 0 0",
-                        fontSize: 11.5,
-                        color: fedName ? "var(--accent)" : "var(--text-faint)",
-                      }}
-                    >
-                      {fedName
-                        ? `✓ ${fedName} · nombre confirmado en la Federación.`
-                        : `${hint.matched} · toca para poner tu nombre completo, puntos y nivel.`}
-                    </p>
+                    />
                   )}
                 </div>
 
@@ -1289,54 +1334,18 @@ export function SignupForm({ id }: { id: string }) {
                     }}
                     placeholder="Nombre y apellidos de tu pareja"
                   />
-                  {mateHint && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMateName(mateHint.matched);
-                        setMateFedName(mateHint.matched);
-                        setMateFedGender(mateHint.genero);
-                        setMatePts(String(mateHint.pts));
-                        setMateLevel(mateHint.level);
+                  {!mateNoFed && (
+                    <FcpPicker
+                      hints={mateHints}
+                      confirmed={mateFedName}
+                      onPick={(h) => {
+                        setMateName(h.matched);
+                        setMateFedName(h.matched);
+                        setMateFedGender(h.genero);
+                        setMatePts(String(h.pts));
+                        setMateLevel(h.level);
                       }}
-                      style={{
-                        marginTop: 10,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        background: "var(--accent-10)",
-                        border: "1px solid var(--accent-25)",
-                        color: "var(--accent)",
-                        cursor: "pointer",
-                        width: "100%",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span
-                        className="mono"
-                        style={{ fontSize: 9, letterSpacing: "0.16em" }}
-                      >
-                        DETECTADO EN LA FEDERACIÓN
-                      </span>
-                      <span className="mono" style={{ fontSize: 12, marginLeft: "auto" }}>
-                        {mateHint.pts} · {mateHint.level}
-                      </span>
-                    </button>
-                  )}
-                  {mateHint && (
-                    <p
-                      style={{
-                        margin: "8px 0 0",
-                        fontSize: 11.5,
-                        color: mateFedName ? "var(--accent)" : "var(--text-faint)",
-                      }}
-                    >
-                      {mateFedName
-                        ? `✓ ${mateFedName} · nombre confirmado en la Federación.`
-                        : `${mateHint.matched} · toca para poner su nombre completo, puntos y nivel.`}
-                    </p>
+                    />
                   )}
                 </div>
 
@@ -1526,59 +1535,18 @@ export function SignupForm({ id }: { id: string }) {
                       }}
                       placeholder="Nombre y apellidos"
                     />
-                    {mate2Hint && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMate2Name(mate2Hint.matched);
-                          setMate2FedName(mate2Hint.matched);
-                          setMate2FedGender(mate2Hint.genero);
-                          setMate2Pts(String(mate2Hint.pts));
-                          setMate2Level(mate2Hint.level);
+                    {!mate2NoFed && (
+                      <FcpPicker
+                        hints={mate2Hints}
+                        confirmed={mate2FedName}
+                        onPick={(h) => {
+                          setMate2Name(h.matched);
+                          setMate2FedName(h.matched);
+                          setMate2FedGender(h.genero);
+                          setMate2Pts(String(h.pts));
+                          setMate2Level(h.level);
                         }}
-                        style={{
-                          marginTop: 10,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "10px 12px",
-                          borderRadius: 10,
-                          background: "var(--accent-10)",
-                          border: "1px solid var(--accent-25)",
-                          color: "var(--accent)",
-                          cursor: "pointer",
-                          width: "100%",
-                          textAlign: "left",
-                        }}
-                      >
-                        <span
-                          className="mono"
-                          style={{ fontSize: 9, letterSpacing: "0.16em" }}
-                        >
-                          DETECTADO EN LA FEDERACIÓN
-                        </span>
-                        <span
-                          className="mono"
-                          style={{ fontSize: 12, marginLeft: "auto" }}
-                        >
-                          {mate2Hint.pts} · {mate2Hint.level}
-                        </span>
-                      </button>
-                    )}
-                    {mate2Hint && (
-                      <p
-                        style={{
-                          margin: "8px 0 0",
-                          fontSize: 11.5,
-                          color: mate2FedName
-                            ? "var(--accent)"
-                            : "var(--text-faint)",
-                        }}
-                      >
-                        {mate2FedName
-                          ? `✓ ${mate2FedName} · nombre confirmado en la Federación.`
-                          : `${mate2Hint.matched} · toca para poner su nombre completo, puntos y nivel.`}
-                      </p>
+                      />
                     )}
                   </div>
 
