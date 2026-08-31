@@ -425,14 +425,48 @@ export const SeasonDetailScreen = ({
         ) : null}
 
         {isFcp && tab === 'clasif' && team ? (
-          <View style={{ marginHorizontal: 20, marginTop: 16 }}>
-            <FcpStandings
-              teamId={team.id}
-              onTeamPress={(idEquipo, teamName) =>
-                navigation.navigate('FcpTeam', { idEquipo, name: teamName })
-              }
-            />
-          </View>
+          matchdays.length > 0 ? (
+            <View style={{ marginHorizontal: 20, marginTop: 16 }}>
+              <FcpStandings
+                teamId={team.id}
+                onTeamPress={(idEquipo, teamName) =>
+                  navigation.navigate('FcpTeam', { idEquipo, name: teamName })
+                }
+              />
+            </View>
+          ) : (
+            // Temporada recién creada (sin jornadas) → NO heredar la
+            // clasificación de la federación (que va ligada al equipo). Vacía
+            // hasta vincular la liga (volcado de la Federación / añadir jornadas).
+            <View
+              style={{
+                marginHorizontal: 20,
+                marginTop: 16,
+                padding: 22,
+                borderRadius: Radius.lg,
+                borderWidth: 1,
+                borderColor: c.hairStrong,
+                backgroundColor: c.bgCard,
+              }}
+            >
+              <Text
+                style={{ color: c.text, fontSize: 15, fontWeight: '700' }}
+              >
+                Aún no hay clasificación
+              </Text>
+              <Text
+                style={{
+                  color: c.textMuted,
+                  fontSize: 13,
+                  lineHeight: 19,
+                  marginTop: 6,
+                }}
+              >
+                Esta temporada está vacía. La clasificación aparecerá al vincular
+                la liga de la Federación (volcado) o al añadir jornadas.
+              </Text>
+            </View>
+          )
         ) : isFcp && tab === 'cuadro' && playoff ? (
           <View style={{ marginHorizontal: 20, marginTop: 16 }}>
             {playoff.groups.length > 1 ? (
