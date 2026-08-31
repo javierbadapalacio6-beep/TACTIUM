@@ -31,10 +31,11 @@ export function webAppOrigin(req: Request): string {
     "https://app.tactium.io";
   try {
     const u = new URL(raw);
-    if (u.hostname === "tactium.io" || u.hostname === "www.tactium.io") {
-      u.hostname = "app.tactium.io";
-    }
-    return u.origin;
+    // Local: se respeta. Todo lo demás (apex tactium.io, *.vercel.app, previews)
+    // se fuerza al dominio canónico app.tactium.io — es el único que está en la
+    // allowlist de Supabase y donde vive la web app.
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return u.origin;
+    return "https://app.tactium.io";
   } catch {
     return "https://app.tactium.io";
   }

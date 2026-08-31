@@ -350,13 +350,15 @@ export function SignupForm({ id }: { id: string }) {
       typeof window !== "undefined"
         ? window.location.pathname + window.location.search
         : `/torneos/${id}/inscripcion`;
-    // El destino va por cookie (no por ?next= en el redirectTo). El redirectTo
-    // usa el dominio CANÓNICO (app.tactium.io), no window.location.origin: si la
-    // página se sirve por una URL de Vercel (…vercel.app), esa URL NO está en la
-    // allowlist de Supabase y el login cae al Site URL (tactium.io).
-    const appBase = (
-      process.env.NEXT_PUBLIC_APP_URL || window.location.origin
-    ).replace(/\/$/, "");
+    // El redirectTo se FIJA al dominio canónico app.tactium.io (salvo en local):
+    // ni window.location.origin ni NEXT_PUBLIC_APP_URL son fiables (pueden ser
+    // una URL …vercel.app, que NO está en la allowlist de Supabase → el login
+    // cae al Site URL, tactium.io). El destino va por cookie.
+    const h = window.location.hostname;
+    const appBase =
+      h === "localhost" || h === "127.0.0.1"
+        ? window.location.origin
+        : "https://app.tactium.io";
     document.cookie = `tactium_next=${encodeURIComponent(next)}; path=/; max-age=600; samesite=lax`;
     supabaseBrowser().auth.signInWithOAuth({
       provider,
