@@ -1244,6 +1244,46 @@ export async function tournamentSignupOffline(input: {
   return data as string;
 }
 
+/* ── Mis torneos (jugador) ─────────────────────────────────────── */
+export interface MyTournament {
+  id: string;
+  name: string;
+  club_name: string | null;
+  cover_url: string | null;
+  location: string | null;
+  starts_on: string | null;
+  status: string;
+  format: string;
+  genders: string[];
+  categories: string[];
+  signup_code: string | null;
+  players: number;
+  entry_fee: number | null;
+  fee_currency: string | null;
+}
+
+/** Torneos en los que el usuario está inscrito (p1 o p2). RPC `my_tournaments`
+ *  (SECURITY DEFINER, usa auth.uid()); requiere sesión. Espejo de la app. */
+export async function fetchMyTournaments(): Promise<MyTournament[]> {
+  const { data, error } = await supabaseBrowser().rpc("my_tournaments", {});
+  if (error) throw error;
+  return ((data ?? []) as MyTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
+  }));
+}
+
+/** El compañero mete su código y vincula su cuenta como jugador 2. Devuelve el
+ *  id del torneo. RPC `claim_partner_by_code`. Espejo de la app. */
+export async function claimTournamentPartner(code: string): Promise<string> {
+  const { data, error } = await supabaseBrowser().rpc("claim_partner_by_code", {
+    p_code: code.trim().toUpperCase(),
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 /* ── Comunidad · RPC ───────────────────────────────────────────── */
 export interface CommunityHit {
   type: "user" | "club";
