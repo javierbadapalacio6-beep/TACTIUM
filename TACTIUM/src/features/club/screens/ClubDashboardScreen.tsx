@@ -21,6 +21,7 @@ import { NotificationBell } from '@features/notifications/components/Notificatio
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { FcpImportSheet } from '../components/FcpImportSheet';
+import { fcpSeasonStatus } from '@core/services/fcpSeason';
 import { FCP_FEDERATION_CODE, hasFcpLinkedTeams } from '@core/services/fcpOnboarding';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
 import { DeleteClubSheet } from '@features/club/components/DeleteClubSheet';
@@ -84,11 +85,32 @@ export const ClubDashboardScreen = ({
     () => (club ? teams.filter((t) => t.club_id === club.id) : []),
     [teams, club],
   );
+  useEffect(() => {
+    const probe = clubTeams.find((t) => t.federation === FCP_FEDERATION_CODE);
+    if (!isFcpClub || !probe) {
+      setNewSeason(false);
+      return;
+    }
+    let cancelled = false;
+    fcpSeasonStatus(probe.id)
+      .then((st) => {
+        if (!cancelled) setNewSeason(st.newSeasonPublished);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isFcpClub, clubTeams]);
   // ¿Ya se importó de la Federación? Se mira por VÍNCULOS reales
   // (fcp_team_links), no por el campo `federation`: un equipo creado a mano en
   // un club FCP hereda federation='FCantP' pero NO está importado, y antes eso
   // ocultaba el banner de importar por error.
   const [hasFcpTeams, setHasFcpTeams] = useState(false);
+  // ¿La Federación ha publicado ya una temporada más nueva que la que tienen
+  // vinculada los equipos del club? El vínculo caduca cada año (los ids de la
+  // FCP cambian por temporada), así que toca re-volcar. Basta con preguntar por
+  // un equipo: todos van en la misma liga.
+  const [newSeason, setNewSeason] = useState(false);
   useEffect(() => {
     if (!isFcpClub || !club) {
       setHasFcpTeams(false);
@@ -369,6 +391,19 @@ export const ClubDashboardScreen = ({
               onAdd={() => navigation.navigate('CreateTeamFromClub')}
               addLabel="Crear nuevo equipo"
             />
+            {isFcpClub && club && hasFcpTeams && newSeason ? (
+              <Pressable
+                onPress={openFcpImport}
+                style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.fcpBannerTitle}>Temporada nueva publicada</Text>
+                <Text style={styles.fcpBannerText}>
+                  La Federación ya tiene la liga nueva. Revisa tus equipos y vuelve a
+                  volcarlos: cada temporada cambian los identificadores, y también los
+                  nombres y las categorías (el equipo I puede ser ahora el C).
+                </Text>
+              </Pressable>
+            ) : null}
             {isFcpClub && club && !hasFcpTeams ? (
               <Pressable
                 onPress={openFcpImport}

@@ -35,7 +35,9 @@ import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
 import { FcpSeasonUpdateSheet } from '@features/club/components/FcpSeasonUpdateSheet';
 import { FcpGroupSheet } from '@features/club/components/FcpGroupSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
-import { seasonUpdateAvailable } from '@core/services/fcpSeason';
+import { seasonUpdateAvailable, fcpSeasonStatus } from '@core/services/fcpSeason';
+import { resyncFcpRoster } from '@core/services/fcpOnboarding';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FCP_ENABLED } from '@core/config/featureFlags';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
 import { toast } from '@store/toastStore';
@@ -66,6 +68,7 @@ export const TeamScreen = () => {
   const removePlayer = useTeamStore((s) => s.removePlayer);
 
   const team = useTeamStore((s) => s.team);
+  const loadForUser = useTeamStore((s) => s.loadForUser);
   const isFcpTeam = team?.federation === FCP_FEDERATION_CODE;
   const [canPrepareSeason, setCanPrepareSeason] = useState(false);
   useEffect(() => {
@@ -83,6 +86,80 @@ export const TeamScreen = () => {
       cancelled = true;
     };
   }, [team?.id, isFcpTeam]);
+  // Estado respecto a la temporada de la Federación: si han publicado una liga
+  // nueva hay que RE-VOLCAR (el vínculo caduca cada año), y mientras la ventana
+  // de fichajes está abierta conviene re-sincronizar la plantilla.
+  const [fcpStatus, setFcpStatus] = useState<{
+    newSeason: boolean;
+    signing: boolean;
+  }>({ newSeason: false, signing: false });
+  const [noticeHidden, setNoticeHidden] = useState<Record<string, boolean>>({});
+  const [resyncing, setResyncing] = useState(false);
+  useEffect(() => {
+    if (!team?.id || !isFcpTeam) {
+      setFcpStatus({ newSeason: false, signing: false });
+      return;
+    }
+    let cancelled = false;
+    fcpSeasonStatus(team.id)
+      .then(async (st) => {
+        if (cancelled) return;
+        setFcpStatus({
+          newSeason: st.newSeasonPublished,
+          signing: st.signingWindowOpen && !st.newSeasonPublished,
+        });
+        // Los avisos se pueden ocultar; el de temporada vuelve si publican otra,
+        // el de fichajes vuelve cada mes.
+        const now = new Date();
+        const keys = {
+          season: `fcpNotice:season:${team.id}:${st.latestLiga ?? '?'}`,
+          signing: `fcpNotice:signing:${team.id}:${now.getFullYear()}-${now.getMonth()}`,
+        };
+        const [sv, gv] = await Promise.all([
+          AsyncStorage.getItem(keys.season),
+          AsyncStorage.getItem(keys.signing),
+        ]);
+        if (!cancelled) setNoticeHidden({ season: sv === '1', signing: gv === '1' });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [team?.id, isFcpTeam]);
+
+  const hideNotice = async (kind: 'season' | 'signing') => {
+    setNoticeHidden((p) => ({ ...p, [kind]: true }));
+    if (!team?.id) return;
+    const now = new Date();
+    const key =
+      kind === 'season'
+        ? `fcpNotice:season:${team.id}:latest`
+        : `fcpNotice:signing:${team.id}:${now.getFullYear()}-${now.getMonth()}`;
+    try {
+      await AsyncStorage.setItem(key, '1');
+    } catch {
+      /* si no se puede guardar, el aviso volverá: no es grave */
+    }
+  };
+
+  const doResync = async () => {
+    if (!team?.id || resyncing) return;
+    setResyncing(true);
+    try {
+      const added = await resyncFcpRoster(team.id);
+      await loadForUser();
+      toast.success(
+        added > 0 ? `${added} ${added === 1 ? 'fichaje' : 'fichajes'}` : 'Plantilla al día',
+        added > 0 ? 'Añadidos a la plantilla.' : 'No hay jugadores nuevos en la Federación.',
+      );
+      void hideNotice('signing');
+    } catch (e: any) {
+      toast.error('No se pudo revisar', e?.message ?? '');
+    } finally {
+      setResyncing(false);
+    }
+  };
+
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Player | null>(null);
   const [adding, setAdding] = useState(false);
@@ -285,6 +362,58 @@ export const TeamScreen = () => {
           <Kpi label="Media" value={String(avg)} />
         </View>
       </View>
+
+      {isFcpTeam && fcpStatus.newSeason && !noticeHidden.season ? (
+        <View style={styles.fcpNotice}>
+          <Text style={styles.fcpNoticeTitle}>Temporada nueva en la Federación</Text>
+          <Text style={styles.fcpNoticeText}>
+            Ya han publicado la liga nueva. Vuelve a volcar tu equipo: los
+            identificadores cambian cada temporada, así que los datos del año
+            pasado no valen para esta.
+          </Text>
+          <View style={styles.fcpNoticeRow}>
+            <Pressable
+              onPress={() => setSeasonOpen(true)}
+              style={({ pressed }) => [styles.fcpNoticeBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.fcpNoticeBtnText}>Preparar temporada</Text>
+            </Pressable>
+            <Pressable onPress={() => hideNotice('season')} hitSlop={8}>
+              <Text style={styles.fcpNoticeSkip}>Ahora no</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {isFcpTeam && fcpStatus.signing && !noticeHidden.signing ? (
+        <View style={styles.fcpNotice}>
+          <Text style={styles.fcpNoticeTitle}>Ventana de fichajes abierta</Text>
+          <Text style={styles.fcpNoticeText}>
+            Hasta que acabe la primera vuelta se pueden inscribir jugadores
+            nuevos. Revisa si hay fichajes que aún no estén en tu plantilla.
+          </Text>
+          <View style={styles.fcpNoticeRow}>
+            <Pressable
+              onPress={doResync}
+              disabled={resyncing}
+              style={({ pressed }) => [
+                styles.fcpNoticeBtn,
+                resyncing && { opacity: 0.5 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              {resyncing ? (
+                <ActivityIndicator size="small" color={c.textInverse} />
+              ) : (
+                <Text style={styles.fcpNoticeBtnText}>Revisar plantilla</Text>
+              )}
+            </Pressable>
+            <Pressable onPress={() => hideNotice('signing')} hitSlop={8}>
+              <Text style={styles.fcpNoticeSkip}>Ahora no</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.searchWrap}>
         <View style={styles.search}>
@@ -1072,6 +1201,28 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: 6,
     textTransform: 'uppercase',
   },
+  fcpNotice: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    padding: 14,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
+  },
+  fcpNoticeTitle: { color: c.text, fontSize: 14, fontWeight: '800' },
+  fcpNoticeText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 5 },
+  fcpNoticeRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12 },
+  fcpNoticeBtn: {
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: c.accent,
+    minWidth: 150,
+    alignItems: 'center',
+  },
+  fcpNoticeBtnText: { color: c.textInverse, fontSize: 13, fontWeight: '800' },
+  fcpNoticeSkip: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
   searchWrap: {
     paddingHorizontal: 20,
     paddingTop: 16,

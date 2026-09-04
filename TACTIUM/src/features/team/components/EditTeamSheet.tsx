@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
@@ -15,6 +16,11 @@ import { BottomSheet, Toggle } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import { PreferredSlotsEditor } from '@features/team/components/PreferredSlotsEditor';
+import {
+  teamVenueClubId,
+  fetchClubName,
+  clearTeamVenue,
+} from '@core/services/teams';
 
 // Mismas opciones que el formulario de creación (CreateTeamScreen) para que la
 // edición sea coherente con el alta.
@@ -38,6 +44,48 @@ export const EditTeamSheet: React.FC<{
   const [hasGroup, setHasGroup] = useState(!!team?.group_name);
   const [group, setGroup] = useState(team?.group_name ?? 'A');
   const [saving, setSaving] = useState(false);
+  // Club SEDE: pone los horarios de local de este equipo sin ser su club. El
+  // capitán puede echarlo cuando quiera (así se pactó: vínculo directo y
+  // revocable, en vez de pedir permiso previo a alguien que aún no existe).
+  const venueId = teamVenueClubId(team);
+  const [venueName, setVenueName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open || !venueId) {
+      setVenueName(null);
+      return;
+    }
+    let alive = true;
+    fetchClubName(venueId)
+      .then((n) => alive && setVenueName(n))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [open, venueId]);
+
+  const removeVenue = () => {
+    if (!team || !venueId) return;
+    Alert.alert(
+      'Quitar la gestión de horarios',
+      `${venueName ?? 'El club'} dejará de poder poner la hora de tus partidos de local. Los horarios ya puestos se quedan como están.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Quitar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearTeamVenue(team.id);
+              toast.success('Hecho', 'Los horarios los pones tú.');
+              onClose();
+            } catch (e: any) {
+              toast.error('No se pudo quitar', e?.message ?? '');
+            }
+          },
+        },
+      ],
+    );
+  };
 
   // Rehidrata al abrir (o si cambia el team activo) para no arrastrar un
   // estado viejo entre aperturas.
@@ -162,6 +210,21 @@ export const EditTeamSheet: React.FC<{
         </Text>
       )}
 
+      {/* Club sede: quién pone los horarios de local, si no es el propio equipo. */}
+      {team && venueId ? (
+        <View style={styles.venueBlock}>
+          <Text style={styles.venueTitle}>HORARIOS DE LOCAL</Text>
+          <Text style={styles.venueText}>
+            Los pone {venueName ?? 'el club donde juegas'}, que es donde juegas de
+            local. Te avisa cada vez que fija uno. Solo puede tocar día, hora y
+            pista.
+          </Text>
+          <Pressable onPress={removeVenue} hitSlop={6} style={{ marginTop: 10 }}>
+            <Text style={styles.venueRemove}>Prefiero ponerlos yo</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* Franjas favoritas de local (las usa el club para poner los horarios). */}
       {team ? (
         <View style={styles.slotsBlock}>
@@ -177,6 +240,23 @@ export const EditTeamSheet: React.FC<{
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
+    venueBlock: {
+      marginTop: 22,
+      padding: 14,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgRaised,
+    },
+    venueTitle: {
+      color: c.textFaint,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      marginBottom: 6,
+    },
+    venueText: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
+    venueRemove: { color: c.error, fontSize: 13, fontWeight: '700' },
     eyebrow: {
       fontFamily: Fonts.mono,
       color: c.accent,

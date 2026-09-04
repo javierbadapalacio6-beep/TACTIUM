@@ -49,6 +49,7 @@ const iconFor = (type: string, color: string) => {
     case 'tournament_bracket':
     case 'tournament_schedule':
     case 'tournament_signup':
+    case 'tournament_moved':
       return <IconTrophy size={16} color={color} />;
     case 'availability_reminder':
     case 'lineup_reminder':
@@ -76,6 +77,9 @@ function targetOf(n: AppNotification): NavTarget | null {
   if (n.type === 'tournament_schedule') return { kind: 'follow', tournamentId: id, initialTab: 'schedule' };
   if (n.type === 'tournament_bracket') return { kind: 'follow', tournamentId: id, initialTab: 'main' };
   if (n.type === 'tournament_signup') return { kind: 'clubDetail', tournamentId: id };
+  // Al jugador movido de categoría: su vista de seguimiento del torneo.
+  if (n.type === 'tournament_moved')
+    return { kind: 'follow', tournamentId: id, initialTab: 'main' };
   return null;
 }
 

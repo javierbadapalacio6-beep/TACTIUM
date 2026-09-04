@@ -309,6 +309,81 @@ export async function seasonUpdateAvailable(teamId: string): Promise<boolean> {
   }
 }
 
+// ── Estado de temporada respecto a la Federación ────────────────────────────
+// El vínculo con la FCP CADUCA cada temporada: un mismo equipo cambia de
+// `id_equipo` cada año (y hasta dos veces, porque los grupos de playoff usan
+// otro id). Comprobado sobre los datos reales: 10 ids distintos para el mismo
+// nombre en 5 temporadas. Por eso no se puede arrastrar el vínculo del año
+// pasado: hay que volver a volcar cuando la Federación publica la liga nueva.
+export interface FcpSeasonStatus {
+  /** Temporada (id_liga) a la que está vinculado el equipo. */
+  linkedLiga: number | null;
+  /** Última temporada con datos publicados en la Federación. */
+  latestLiga: number | null;
+  /** Hay temporada nueva publicada y este equipo sigue en la anterior. */
+  newSeasonPublished: boolean;
+  /** Ventana de fichajes abierta. La normativa (IV.5) no la fija por fechas:
+   *  «cada equipo podrá ir ampliando su plantilla hasta finalizada la PRIMERA
+   *  VUELTA». Así que se calcula por jornadas jugadas, no por el calendario. */
+  signingWindowOpen: boolean;
+}
+
+/** ¿Está el equipo en la temporada vigente de la Federación? */
+export async function fcpSeasonStatus(teamId: string): Promise<FcpSeasonStatus> {
+  const out: FcpSeasonStatus = {
+    linkedLiga: null,
+    latestLiga: null,
+    newSeasonPublished: false,
+    signingWindowOpen: false,
+  };
+
+  // Fichajes: abiertos mientras no se haya cerrado la primera vuelta.
+  try {
+    const season = await SeasonsApi.fetchActiveSeason(teamId);
+    if (season) {
+      const mds = await MatchdaysApi.fetchMatchdays(season.id);
+      const played = mds.filter((m) => m.outcome != null).length;
+      out.signingWindowOpen = mds.length > 0 && played < Math.ceil(mds.length / 2);
+    }
+  } catch {
+    /* sin temporada activa: no molestamos con el aviso */
+  }
+
+  const { data: maxRow } = await rawFrom('fcp_clasificacion')
+    .select('id_liga')
+    .order('id_liga', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  out.latestLiga = maxRow ? ((maxRow as { id_liga: number }).id_liga ?? null) : null;
+
+  const idEquipo = await getFcpIdEquipo(teamId);
+  if (idEquipo == null || out.latestLiga == null) return out;
+
+  // Temporada del equipo vinculado: la de su grupo en la clasificación.
+  const { data: clRows } = await rawFrom('fcp_clasificacion')
+    .select('id_grupo')
+    .eq('id_equipo', idEquipo);
+  const grupoIds = [
+    ...new Set(
+      ((clRows ?? []) as { id_grupo: string | null }[])
+        .map((r) => r.id_grupo)
+        .filter((x): x is string => !!x),
+    ),
+  ];
+  if (grupoIds.length) {
+    const { data: gr } = await rawFrom('fcp_grupos')
+      .select('id_liga')
+      .in('id_grupo', grupoIds);
+    for (const g of (gr ?? []) as { id_liga: number | null }[]) {
+      if (g.id_liga != null && (out.linkedLiga == null || g.id_liga > out.linkedLiga))
+        out.linkedLiga = g.id_liga;
+    }
+  }
+  out.newSeasonPublished =
+    out.linkedLiga != null && out.latestLiga != null && out.latestLiga > out.linkedLiga;
+  return out;
+}
+
 export interface NewRosterPlayer {
   fcpId: string;
   name: string;

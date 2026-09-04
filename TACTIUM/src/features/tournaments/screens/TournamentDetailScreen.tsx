@@ -54,8 +54,13 @@ import {
   updateTournamentSchedule,
   clearSchedule,
   clearMatchSlot,
+  fetchDefaultTerms,
+  mergeDivision,
+  moveRegistration,
   matchScheduleConflict,
   matchAvailableAtDate,
+  matchPairClashes,
+  matchDurationMin,
   setMatchSlot,
   getPhaseDays,
   togglePhaseDay,
@@ -847,6 +852,9 @@ export const ScheduleView: React.FC<{
     [tournament.starts_on, tournament.ends_on],
   );
   const multiDay = days.length > 1;
+  // TODOS los partidos del torneo: una pareja puede jugar en dos divisiones, y
+  // el choque de horas hay que verlo sobre el conjunto, no sobre la lista visible.
+  const everyMatch = allMatches ?? matches;
   // ¿El torneo tiene más de una DIVISIÓN (género × categoría)? El horario junta
   // todos los cuadros, así que si hay varias categorías/géneros hay que
   // diferenciarlas o "Cuartos" mezclaría Masculino 1ª con Masculino 2ª.
@@ -1106,11 +1114,23 @@ export const ScheduleView: React.FC<{
                         </Text>
                         <View style={{ gap: 8 }}>
                           {g.items.map((m) => {
-                            const conf = !readOnly && matchScheduleConflict(m, regs, tournament);
+                            const noPuede =
+                              !readOnly && matchScheduleConflict(m, regs, tournament);
+                            const clash = readOnly
+                              ? []
+                              : matchPairClashes(m, everyMatch, tournament);
+                            const dobles = clash.some((x) => x.kind === 'overlap');
+                            const conf = noPuede || clash.length > 0;
                             return (
                               <View key={m.id}>
                                 {conf ? (
-                                  <Text style={styles.conflictTag}>⚠️ Conflicto de horario</Text>
+                                  <Text style={styles.conflictTag}>
+                                    {noPuede
+                                      ? '⚠️ Conflicto de horario'
+                                      : dobles
+                                        ? '⚠️ Una pareja juega otro partido a esta hora'
+                                        : '⚠️ Una pareja no descansa lo mínimo'}
+                                  </Text>
                                 ) : null}
                                 <MatchCard
                                   m={m}
@@ -1146,6 +1166,7 @@ export const ScheduleView: React.FC<{
       <ManualSlotSheet
         match={manualMatch}
         tournament={tournament}
+        allMatches={everyMatch}
         regs={regs}
         info={info}
         days={days}
@@ -1161,7 +1182,7 @@ export const ScheduleView: React.FC<{
       <SlotGridSheet
         open={gridOpen}
         tournament={tournament}
-        matches={allMatches ?? matches}
+        matches={everyMatch}
         regs={regs}
         info={info}
         days={days}
@@ -1181,6 +1202,9 @@ export const ScheduleView: React.FC<{
 const ManualSlotSheet: React.FC<{
   match: TournamentMatch | null;
   tournament: Tournament;
+  // Todos los partidos del torneo: para no pisar pista ni poner a una pareja
+  // dos partidos a la vez.
+  allMatches: TournamentMatch[];
   regs: TournamentRegistration[];
   info: (id: string | null) => RegInfo;
   days: { iso: string; label: string }[];
@@ -1188,7 +1212,7 @@ const ManualSlotSheet: React.FC<{
   onSaved: () => void;
   styles: Styles;
   c: Palette;
-}> = ({ match, tournament, regs, info, days, onClose, onSaved, styles, c }) => {
+}> = ({ match, tournament, allMatches, regs, info, days, onClose, onSaved, styles, c }) => {
   const [dayIso, setDayIso] = useState<string | null>(null);
   const [minute, setMinute] = useState<number | null>(null);
   const [court, setCourt] = useState(1);
@@ -1204,6 +1228,33 @@ const ManualSlotSheet: React.FC<{
   const times: number[] = [];
   for (let t = startMin; t <= endMin; t += step) times.push(t);
   const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const dur = matchDurationMin(tournament);
+  // Un día pasado no se puede elegir (igual que en la rejilla).
+  const todayIso = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const isPastDay = (iso: string | null) => !!iso && iso < todayIso;
+
+  // Pistas ya ocupadas por otro partido a ese día/hora.
+  const busyCourtsAt = (min: number): Set<number> => {
+    const out = new Set<number>();
+    if (!dayIso) return out;
+    for (const o of allMatches) {
+      if (!o.scheduled_at || o.id === match?.id || o.status === 'bye') continue;
+      const dt = new Date(o.scheduled_at as string);
+      const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      if (iso !== dayIso) continue;
+      if (dt.getHours() * 60 + dt.getMinutes() !== min) continue;
+      out.add(parseInt((o.court ?? '').replace(/\D/g, ''), 10) || 1);
+    }
+    return out;
+  };
+  // ¿Alguna de las parejas ya juega (o no descansa) si lo pongo a esa hora?
+  const clashesAt = (min: number) =>
+    match && dayIso
+      ? matchPairClashes(match, allMatches, tournament, { iso: dayIso, minute: min })
+      : [];
 
   useEffect(() => {
     if (match) {
@@ -1214,11 +1265,8 @@ const ManualSlotSheet: React.FC<{
     }
   }, [match]);
 
-  const save = async () => {
-    if (!match || !dayIso || minute == null) {
-      toast.error('Elige día y hora');
-      return;
-    }
+  const doSave = async () => {
+    if (!match || !dayIso || minute == null) return;
     setSaving(true);
     try {
       const [y, mo, d] = dayIso.split('-').map(Number);
@@ -1236,6 +1284,41 @@ const ManualSlotSheet: React.FC<{
   const h = match ? info(match.home_reg) : null;
   const a = match ? info(match.away_reg) : null;
   const nm = (x: RegInfo | null) => (x ? `${x.name}${x.partner ? ` / ${x.partner}` : ''}` : '');
+  const pairOf = (id: string) => nm(info(id));
+
+  // Guardar avisando de lo que rompe: pista ocupada (no se deja), la pareja no
+  // puede a esa hora, o ya juega otro partido a esa hora / sin descanso.
+  const save = () => {
+    if (!match || !dayIso || minute == null) {
+      toast.error('Elige día y hora');
+      return;
+    }
+    if (isPastDay(dayIso)) {
+      toast.error('Ese día ya ha pasado', 'Elige un día que esté por jugarse.');
+      return;
+    }
+    if (busyCourtsAt(minute).has(court)) {
+      toast.error('Esa pista está ocupada', 'Elige otra pista u otra hora.');
+      return;
+    }
+    const avisos: string[] = [];
+    if (!matchAvailableAtDate(match, regs, dayIso, minute, dur))
+      avisos.push(`Alguna pareja marcó que NO puede jugar a las ${hhmm(minute)}.`);
+    for (const x of clashesAt(minute))
+      avisos.push(
+        x.kind === 'overlap'
+          ? `${pairOf(x.regId)} ya juega otro partido a esa hora.`
+          : `${pairOf(x.regId)} juega otro partido sin el descanso mínimo (${tournament.rest_minutes} min).`,
+      );
+    if (avisos.length === 0) {
+      void doSave();
+      return;
+    }
+    Alert.alert('Revisa este hueco', avisos.join('\n\n'), [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Ponerlo igualmente', style: 'destructive', onPress: () => void doSave() },
+    ]);
+  };
 
   // Disponibilidad de cada pareja para el día elegido (para colocarlo a mano).
   const dayLabel = days.find((x) => x.iso === dayIso)?.label ?? null;
@@ -1254,6 +1337,7 @@ const ManualSlotSheet: React.FC<{
       .map((s) => s.slice(dayLabel.length + 1));
     return fr.length ? fr.join(' · ') : 'Puede a cualquier hora';
   };
+  const busyCourts = minute != null ? busyCourtsAt(minute) : new Set<number>();
 
   return (
     <BottomSheet
@@ -1280,8 +1364,9 @@ const ManualSlotSheet: React.FC<{
       <Text style={styles.sheetEyebrow}>PONER A MANO</Text>
       <Text style={styles.sheetTitle} numberOfLines={2}>{nm(h)} vs {nm(a)}</Text>
       <Text style={[styles.playerMeta, { marginTop: 4 }]}>
-        Las horas donde ✓ pueden los dos van marcadas. Puedes elegir otra, pero
-        avísales.
+        ✓ = pueden las dos parejas y ninguna juega otro partido a esa hora.
+        ⇄ = alguna ya tiene partido (o no descansa). Puedes elegirla igualmente,
+        pero avísales.
       </Text>
 
       {days.length > 1 ? (
@@ -1290,11 +1375,17 @@ const ManualSlotSheet: React.FC<{
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {days.map((day) => {
               const on = dayIso === day.iso;
+              const past = isPastDay(day.iso);
               return (
                 <Pressable
                   key={day.iso}
                   onPress={() => setDayIso(day.iso)}
-                  style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                  disabled={past}
+                  style={[
+                    styles.phaseDayChip,
+                    past && { opacity: 0.4 },
+                    on && { backgroundColor: c.accent, borderColor: c.accent },
+                  ]}
                 >
                   <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
                     {day.label}
@@ -1329,7 +1420,10 @@ const ManualSlotSheet: React.FC<{
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {times.map((t) => {
           const on = minute === t;
-          const ok = match && dayIso ? matchAvailableAtDate(match, regs, dayIso, t) : false;
+          const puede =
+            match && dayIso ? matchAvailableAtDate(match, regs, dayIso, t, dur) : false;
+          const choca = clashesAt(t).length > 0;
+          const ok = puede && !choca;
           return (
             <Pressable
               key={t}
@@ -1337,11 +1431,17 @@ const ManualSlotSheet: React.FC<{
               style={[
                 styles.timeChip,
                 ok && { borderColor: c.accent40 },
+                choca && !on && { borderColor: c.error + '55' },
                 on && { backgroundColor: c.accent, borderColor: c.accent },
               ]}
             >
-              <Text style={[styles.timeChipText, { color: on ? c.textInverse : ok ? c.accent : c.textMuted }]}>
-                {ok ? '✓ ' : ''}{hhmm(t)}
+              <Text
+                style={[
+                  styles.timeChipText,
+                  { color: on ? c.textInverse : ok ? c.accent : choca ? c.error : c.textMuted },
+                ]}
+              >
+                {ok ? '✓ ' : choca ? '⇄ ' : ''}{hhmm(t)}
               </Text>
             </Pressable>
           );
@@ -1352,14 +1452,21 @@ const ManualSlotSheet: React.FC<{
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {Array.from({ length: Math.max(1, tournament.courts) }, (_, i) => i + 1).map((ct) => {
           const on = court === ct;
+          // Pista ya ocupada a esa hora: no se deja doblar (como en la rejilla).
+          const ocupada = busyCourts.has(ct);
           return (
             <Pressable
               key={ct}
               onPress={() => setCourt(ct)}
-              style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+              disabled={ocupada}
+              style={[
+                styles.phaseDayChip,
+                ocupada && { opacity: 0.45 },
+                on && { backgroundColor: c.accent, borderColor: c.accent },
+              ]}
             >
               <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
-                Pista {ct}
+                Pista {ct}{ocupada ? ' · ocupada' : ''}
               </Text>
             </Pressable>
           );
@@ -1412,7 +1519,10 @@ const SlotGridSheet: React.FC<{
 
   useEffect(() => {
     if (open) {
-      setDayIso(days[0]?.iso ?? tournament.starts_on ?? null);
+      // Arranca en el primer día que aún se puede tocar (si todos han pasado,
+      // en el primero: se verá en modo consulta).
+      const usable = days.find((d) => !isPastDay(d.iso)) ?? days[0];
+      setDayIso(usable?.iso ?? tournament.starts_on ?? null);
       setCarried(null);
       // Al abrir desde una división concreta, pre-filtramos por ella.
       setCatFilter(
@@ -1424,6 +1534,15 @@ const SlotGridSheet: React.FC<{
       setConflictOnly(false);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Un día que ya ha pasado no se toca: no tiene sentido mandar los cuartos al
+  // lunes pasado. Se puede MIRAR (para consultar lo jugado) pero no colocar.
+  const todayIso = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const isPastDay = (iso: string | null) => !!iso && iso < todayIso;
+  const dayLocked = isPastDay(dayIso);
 
   const [sh, sm] = (tournament.start_time ?? '09:00').split(':').map(Number);
   const startMin = (sh || 9) * 60 + (sm || 0);
@@ -1448,8 +1567,26 @@ const SlotGridSheet: React.FC<{
     new Set(matches.map((m) => `${m.gender ?? ''}|${m.category ?? ''}`)).size > 1;
   // ¿El partido que llevo en la mano puede jugarse a este minuto? (disponibilidad
   // de sus jugadores). Sirve para teñir los huecos libres al colocar.
-  const carriedOkAt = (min: number) =>
-    carried && dayIso ? matchAvailableAtDate(carried, regs, dayIso, min) : true;
+  const carriedPuedeAt = (min: number) =>
+    carried && dayIso ? matchAvailableAtDate(carried, regs, dayIso, min, step) : true;
+  const carriedClashesAt = (min: number) =>
+    carried && dayIso
+      ? matchPairClashes(carried, matches, tournament, { iso: dayIso, minute: min })
+      : [];
+  // null = hueco limpio; 'avail' = no pueden; 'clash' = ya juegan / sin descanso.
+  const carriedIssueAt = (min: number): null | 'avail' | 'clash' => {
+    if (!carried || !dayIso) return null;
+    if (!carriedPuedeAt(min)) return 'avail';
+    return carriedClashesAt(min).length > 0 ? 'clash' : null;
+  };
+  const clashText = (x: { match: TournamentMatch; regId: string; kind: 'overlap' | 'rest' }) => {
+    const dt = x.match.scheduled_at ? new Date(x.match.scheduled_at as string) : null;
+    const when = dt ? hhmm(dt.getHours() * 60 + dt.getMinutes()) : '';
+    const where = x.match.court ? ` (${x.match.court})` : '';
+    return x.kind === 'overlap'
+      ? `${fullPair(x.regId)} ya juega a las ${when}${where}.`
+      : `${fullPair(x.regId)} juega a las ${when}${where}: no le da el descanso mínimo (${tournament.rest_minutes} min).`;
+  };
 
   // ── Fase (cuartos/semis/…) y filtros de foco (categoría + fase) ──────────
   const maxRoundByBracket = useMemo(() => {
@@ -1505,14 +1642,23 @@ const SlotGridSheet: React.FC<{
       .sort((a, b) => rank(a.key) - rank(b.key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matches, maxRoundByBracket]);
-  // ¿Este partido colocado tiene conflicto? (alguna pareja no puede a su hora).
-  const hasConflict = (m: TournamentMatch) =>
-    !!m.scheduled_at && matchScheduleConflict(m, regs, tournament);
-  const conflictCount = useMemo(
-    () => matches.filter(hasConflict).length,
+  // ¿Este partido colocado tiene conflicto? Alguna pareja no puede a su hora, o
+  // esa misma pareja tiene otro partido a la vez / sin el descanso mínimo.
+  const conflictIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of matches) {
+      if (!m.scheduled_at) continue;
+      if (
+        matchScheduleConflict(m, regs, tournament) ||
+        matchPairClashes(m, matches, tournament).length > 0
+      )
+        set.add(m.id);
+    }
+    return set;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [matches, regs],
-  );
+  }, [matches, regs, tournament]);
+  const hasConflict = (m: TournamentMatch) => conflictIds.has(m.id);
+  const conflictCount = conflictIds.size;
   const matchInFilter = (m: TournamentMatch) =>
     (catFilter === 'all' || catKeyOf(m) === catFilter) &&
     (phaseFilter === 'all' || phaseKeyOf(m) === phaseFilter) &&
@@ -1550,16 +1696,24 @@ const SlotGridSheet: React.FC<{
   };
   const place = (min: number, court: number) => {
     if (!carried || !dayIso) return;
+    if (dayLocked) {
+      toast.error('Ese día ya ha pasado', 'Elige un día que esté por jugarse.');
+      return;
+    }
     if (occ[`${min}:${court}`]) {
       toast.error('Ese hueco está ocupado', 'Libéralo primero o elige otro.');
       return;
     }
-    // Hueco "no del todo bloqueado": si a la pareja no le vale esa hora por su
-    // disponibilidad, se puede colocar igual, pero pidiendo confirmación.
-    if (!carriedOkAt(min)) {
+    // Hueco "no del todo bloqueado": si no les vale la hora (disponibilidad) o
+    // alguna pareja ya juega entonces, se puede colocar igual, pero avisando.
+    const avisos: string[] = [];
+    if (!carriedPuedeAt(min))
+      avisos.push(`${cardLabel(carried)} marcó que NO puede jugar a las ${hhmm(min)}.`);
+    avisos.push(...carriedClashesAt(min).map(clashText));
+    if (avisos.length > 0) {
       Alert.alert(
-        'La pareja no puede a esa hora',
-        `${cardLabel(carried)} marcó que NO puede jugar a las ${hhmm(min)}. ¿Colocarlo igualmente?`,
+        'Revisa este hueco',
+        `${avisos.join('\n\n')}\n\n¿Colocarlo igualmente?`,
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -1594,8 +1748,9 @@ const SlotGridSheet: React.FC<{
       <Text style={styles.sheetEyebrow}>REJILLA DE HORARIO</Text>
       <Text style={styles.sheetTitle}>Todos los huecos</Text>
       <Text style={[styles.playerMeta, { marginTop: 4 }]}>
-        Toca un partido para cogerlo y luego un hueco libre para soltarlo. Al moverlo,
-        los huecos en verde = sus jugadores pueden a esa hora; en rojo = no.
+        Toca un partido para cogerlo y luego un hueco libre para soltarlo. Al moverlo:
+        ＋ = las dos parejas pueden y ninguna juega a esa hora · ✕ = alguna no puede ·
+        ⇄ = alguna ya juega otro partido (o no descansa).
       </Text>
 
       {/* Filtros de foco: conflictos, categoría y fase (atenúan lo que no cuadra) */}
@@ -1703,19 +1858,34 @@ const SlotGridSheet: React.FC<{
         >
           {days.map((day) => {
             const on = dayIso === day.iso;
+            const past = isPastDay(day.iso);
             return (
               <Pressable
                 key={day.iso}
                 onPress={() => setDayIso(day.iso)}
-                style={[styles.phaseDayChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+                style={[
+                  styles.phaseDayChip,
+                  past && { opacity: 0.5 },
+                  on && { backgroundColor: c.accent, borderColor: c.accent },
+                ]}
               >
                 <Text style={[styles.phaseDayChipText, { color: on ? c.textInverse : c.textMuted }]}>
                   {day.label}
+                  {past ? ' ·' : ''}
                 </Text>
               </Pressable>
             );
           })}
         </ScrollView>
+      ) : null}
+
+      {dayLocked ? (
+        <View style={styles.conflictBanner}>
+          <Text style={styles.conflictBannerText}>
+            Este día ya ha pasado: puedes consultarlo, pero no colocar ni mover
+            partidos en él.
+          </Text>
+        </View>
       ) : null}
 
       {carried ? (
@@ -1751,13 +1921,25 @@ const SlotGridSheet: React.FC<{
                 {courts.map((ct) => {
                   const m = occ[`${min}:${ct}`];
                   const isCarried = !!m && !!carried && m.id === carried.id;
-                  // Hueco libre + partido en mano: ¿pueden sus jugadores a esta hora?
-                  const okHere = !m && !!carried ? carriedOkAt(min) : true;
+                  // Hueco libre + partido en mano: ¿pueden sus jugadores a esta
+                  // hora y no tienen ya otro partido entonces?
+                  const issue = !m && !!carried && !dayLocked ? carriedIssueAt(min) : null;
+                  const okHere = !m && !!carried && !dayLocked ? issue === null : true;
                   const conflict = !!m && hasConflict(m);
                   return (
                     <Pressable
                       key={ct}
-                      onPress={() => (m ? setCarried(isCarried ? null : m) : place(min, ct))}
+                      onPress={() => {
+                        if (m) {
+                          if (m.status === 'finished') {
+                            toast.error('Ese partido ya se ha jugado');
+                            return;
+                          }
+                          setCarried(isCarried ? null : m);
+                        } else {
+                          place(min, ct);
+                        }
+                      }}
                       disabled={busy}
                       style={[
                         styles.gridCell,
@@ -1792,7 +1974,7 @@ const SlotGridSheet: React.FC<{
                             !!carried && !okHere && { color: c.error },
                           ]}
                         >
-                          {carried ? (okHere ? '＋' : '✕') : ''}
+                          {carried && !dayLocked ? (okHere ? '＋' : issue === 'clash' ? '⇄' : '✕') : ''}
                         </Text>
                       )}
                     </Pressable>
@@ -1974,11 +2156,16 @@ const ScheduleConfigSheet: React.FC<{
 const PlayerInfoSheet: React.FC<{
   reg: TournamentRegistration | null;
   social: boolean;
+  // Divisiones del torneo, para poder REUBICAR a la pareja (el club se reserva
+  // ese derecho en las condiciones).
+  genders?: string[];
+  categories?: string[];
   onClose: () => void;
   onSetPayment?: (status: 'paid' | 'pending_club') => void;
+  onMove?: (gender: string | null, category: string | null) => void;
   styles: Styles;
   c: Palette;
-}> = ({ reg, social, onClose, onSetPayment, styles, c }) => {
+}> = ({ reg, social, genders, categories, onClose, onSetPayment, onMove, styles, c }) => {
   const Person: React.FC<{ name: string | null; email: string | null; phone: string | null; avatar: string | null }> = ({ name, email, phone, avatar }) => {
     if (!name) return null;
     return (
@@ -2102,7 +2289,111 @@ const PlayerInfoSheet: React.FC<{
               </View>
             </>
           ) : null}
+
+          {onMove && ((categories?.length ?? 0) > 1 || (genders?.length ?? 0) > 1) ? (
+            <>
+              <Text style={[styles.label, { marginTop: 16 }]}>MOVER DE CATEGORÍA</Text>
+              <Text style={styles.playerMeta}>
+                Conserva sus puntos, disponibilidad, pago y código de compañero, y
+                avisa a la pareja. No se puede si ya está en un cuadro.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {(genders?.length ? genders : [reg.gender]).map((g) =>
+                  (categories?.length ? categories : [reg.category]).map((cat) => {
+                    const here = reg.gender === g && reg.category === cat;
+                    return (
+                      <Pressable
+                        key={`${g}|${cat}`}
+                        onPress={() => (here ? null : onMove(g ?? null, cat ?? null))}
+                        disabled={here}
+                        style={({ pressed }) => [
+                          styles.phaseDayChip,
+                          here && { backgroundColor: c.accent, borderColor: c.accent },
+                          pressed && { opacity: 0.85 },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.phaseDayChipText,
+                            { color: here ? c.textInverse : c.textMuted },
+                          ]}
+                        >
+                          {divLabel({ gender: g ?? null, category: cat ?? null })}
+                        </Text>
+                      </Pressable>
+                    );
+                  }),
+                )}
+              </View>
+            </>
+          ) : null}
         </View>
+      ) : null}
+    </BottomSheet>
+  );
+};
+
+// Sheet para AGRUPAR una división en otra: el caso de la categoría que se
+// queda con tres parejas. Mueve todas de golpe (mover una a una con 40
+// inscripciones no es viable) y deja de admitir inscripciones en la vaciada.
+const MergeDivisionSheet: React.FC<{
+  open: boolean;
+  from: Division | null;
+  divisions: Division[];
+  pairs: number;
+  social: boolean;
+  onClose: () => void;
+  onMerge: (to: Division) => void;
+  styles: Styles;
+  c: Palette;
+}> = ({ open, from, divisions, pairs, social, onClose, onMerge, styles, c }) => {
+  const targets = from ? divisions.filter((d) => !sameDiv(d, from)) : [];
+  const unit = social
+    ? pairs === 1
+      ? 'jugador'
+      : 'jugadores'
+    : pairs === 1
+      ? 'pareja'
+      : 'parejas';
+  const confirm = (to: Division) => {
+    Alert.alert(
+      'Agrupar categorías',
+      `Se mueven ${pairs} ${unit} de ${from ? divLabel(from) : ''} a ${divLabel(to)}, ` +
+        'avisando a los jugadores. Si la categoría de origen se queda vacía, deja ' +
+        'de admitir inscripciones.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Agrupar', onPress: () => onMerge(to) },
+      ],
+    );
+  };
+  return (
+    <BottomSheet open={open} onClose={onClose}>
+      <Text style={styles.sheetEyebrow}>AGRUPAR CATEGORÍAS</Text>
+      <Text style={styles.sheetTitle}>
+        {from ? divLabel(from) : ''} · {pairs} {unit}
+      </Text>
+      <Text style={[styles.playerMeta, { marginTop: 6 }]}>
+        Para cuando una categoría se queda corta. Las parejas conservan sus
+        puntos, disponibilidad y pago, y se les avisa del cambio. No se puede si
+        alguna de las dos ya tiene cuadro generado.
+      </Text>
+      <Text style={[styles.label, { marginTop: 16 }]}>MOVERLAS A</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {targets.map((d) => (
+          <Pressable
+            key={`${d.gender}|${d.category}`}
+            onPress={() => confirm(d)}
+            style={({ pressed }) => [styles.phaseDayChip, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={[styles.phaseDayChipText, { color: c.text }]}>
+              {divLabel(d)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {targets.length === 0 ? (
+        <Text style={styles.emptyText}>No hay otra categoría a la que moverlas.</Text>
       ) : null}
     </BottomSheet>
   );
@@ -2133,6 +2424,8 @@ const EditTournamentSheet: React.FC<{
   const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
   const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
   const [observations, setObservations] = useState('');
+  // Condiciones de participación (vacío = las estándar de TACTIUM).
+  const [terms, setTerms] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [seedingMode, setSeedingMode] = useState<SeedingMode>('points');
@@ -2161,6 +2454,7 @@ const EditTournamentSheet: React.FC<{
           (tournament.extra_info ? [{ label: 'Info', value: tournament.extra_info }] : []),
       );
       setObservations(tournament.observations ?? '');
+      setTerms(tournament.terms ?? '');
       setCoverUrl(tournament.cover_url ?? null);
       setCoverUri(null);
       const base = (tournament.match_format ?? 'bo3_stb') as MatchFormat;
@@ -2221,6 +2515,7 @@ const EditTournamentSheet: React.FC<{
         prizesJson,
         infoRows,
         observations,
+        terms,
         // Migrado a estructurado: se limpia el texto libre antiguo.
         prizes: null,
         extraInfo: null,
@@ -2472,6 +2767,35 @@ const EditTournamentSheet: React.FC<{
         />
       </View>
 
+      <Text style={styles.label}>CONDICIONES DE PARTICIPACIÓN</Text>
+      <Text style={[styles.playerMeta, { marginBottom: 8 }]}>
+        Se muestran al inscribirse y hay que aceptarlas para poder apuntarse. Son
+        las que te amparan para reubicar parejas o agrupar categorías. Déjalo
+        vacío y se usan las estándar de TACTIUM.
+      </Text>
+      <View style={[styles.input, { height: 150, alignItems: 'flex-start' }]}>
+        <TextInput
+          value={terms}
+          onChangeText={setTerms}
+          placeholder="Vacío = condiciones estándar"
+          placeholderTextColor={c.textFaint}
+          style={[styles.inputField, { height: 140, textAlignVertical: 'top' }]}
+          multiline
+          maxLength={4000}
+        />
+      </View>
+      <Pressable
+        onPress={() => {
+          void fetchDefaultTerms()
+            .then((t) => setTerms(t))
+            .catch(() => toast.error('No se pudieron cargar las estándar'));
+        }}
+        hitSlop={8}
+        style={{ marginTop: 8 }}
+      >
+        <Text style={styles.addLink}>Partir de las condiciones estándar</Text>
+      </Pressable>
+
       <Pressable onPress={confirmDelete} hitSlop={8} style={{ marginTop: 22, alignItems: 'center' }}>
         <Text style={{ color: c.error, fontSize: 14, fontWeight: '700' }}>Borrar torneo</Text>
       </Pressable>
@@ -2498,6 +2822,8 @@ export const TournamentDetailScreen = ({
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
   const [tab, setTab] = useState<TabKey>('main');
   const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
+  // Agrupar la división activa con otra (la que se queda con 3 parejas).
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedReg, setSelectedReg] = useState<TournamentRegistration | null>(null);
   const [phaseDays, setPhaseDays] = useState<Record<string, string[]>>({});
@@ -3096,6 +3422,17 @@ export const TournamentDetailScreen = ({
                   {activeDiv && divisions.length > 1 ? ` en ${divLabel(activeDiv)}` : ''}.
                 </Text>
               ) : null}
+              {divisions.length > 1 && activeDiv && !hasBracket ? (
+                <Pressable
+                  onPress={() => setMergeOpen(true)}
+                  hitSlop={8}
+                  style={{ marginTop: 14, alignItems: 'center' }}
+                >
+                  <Text style={styles.addLink}>
+                    Agrupar {divLabel(activeDiv)} con otra categoría
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : isSocial ? (
             <SocialView
@@ -3247,6 +3584,19 @@ export const TournamentDetailScreen = ({
       <PlayerInfoSheet
         reg={selectedReg}
         social={isSocial}
+        genders={t?.genders ?? []}
+        categories={t?.categories ?? []}
+        onMove={async (gender, category) => {
+          if (!selectedReg) return;
+          try {
+            await moveRegistration(selectedReg.id, gender, category);
+            await load();
+            setSelectedReg(null);
+            toast.success('Pareja movida', 'Se les ha avisado del cambio.');
+          } catch (e: any) {
+            toast.error('No se pudo mover', e?.message ?? '');
+          }
+        }}
         onClose={() => setSelectedReg(null)}
         onSetPayment={async (status) => {
           if (!selectedReg) return;
@@ -3259,6 +3609,36 @@ export const TournamentDetailScreen = ({
             );
           } catch (e: any) {
             toast.error('No se pudo actualizar el pago', e?.message ?? '');
+          }
+        }}
+        styles={styles}
+        c={c}
+      />
+
+      <MergeDivisionSheet
+        open={mergeOpen}
+        from={activeDiv}
+        divisions={divisions}
+        pairs={regsCat.length}
+        social={isSocial}
+        onClose={() => setMergeOpen(false)}
+        onMerge={async (to) => {
+          if (!t || !activeDiv) return;
+          try {
+            const moved = await mergeDivision({
+              tournamentId: t.id,
+              from: activeDiv,
+              to,
+            });
+            setMergeOpen(false);
+            setActiveDiv(to);
+            await load();
+            toast.success(
+              'Categorías agrupadas',
+              `${moved} ${moved === 1 ? 'pareja movida' : 'parejas movidas'} a ${divLabel(to)}.`,
+            );
+          } catch (e: any) {
+            toast.error('No se pudo agrupar', e?.message ?? '');
           }
         }}
         styles={styles}

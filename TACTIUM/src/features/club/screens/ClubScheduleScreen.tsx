@@ -20,6 +20,8 @@ import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
   getClubHomeSchedule,
+  getVenueHomeSchedule,
+  setVenueMatchdaySlot,
   currentRoundMatches,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
@@ -94,7 +96,13 @@ export const ClubScheduleScreen = ({
   const load = useCallback(async () => {
     if (!club) return;
     try {
-      const data = await getClubHomeSchedule(club.id);
+      // Propios + INVITADOS (equipos que juegan aquí sin ser del club). Van en
+      // dos RPCs distintos; si el de invitados falla, no tumbamos la pantalla.
+      const [own, guests] = await Promise.all([
+        getClubHomeSchedule(club.id),
+        getVenueHomeSchedule(club.id).catch(() => [] as ClubHomeMatch[]),
+      ]);
+      const data = [...own, ...guests];
       setMatches(data);
       setSlotsByTeam((prev) => {
         const next = { ...prev };
@@ -259,6 +267,7 @@ export const ClubScheduleScreen = ({
                         <Text style={styles.rowSub} numberOfLines={1}>
                           {m.jornada_number ? `J${m.jornada_number}` : 'Jornada'}
                           {m.opponent ? ` · vs ${m.opponent}` : ''}
+                          {m.is_guest ? ' · invitado' : ''}
                         </Text>
                       </View>
                       <View style={styles.rowTimeWrap}>
@@ -394,9 +403,22 @@ const EditScheduleSheet: React.FC<{
           patch.match_date = d.toISOString().slice(0, 10);
         }
       }
-      await updateMatchday(match.matchday_id, patch);
-      notifyPush('schedule_set', match.matchday_id);
-      toast.success('Horario enviado al equipo');
+      if (match.is_guest) {
+        // Equipo invitado: el club no es su admin, así que la RLS no le deja
+        // tocar la jornada. El RPC abre solo día/hora/pista y avisa al capitán
+        // por la campana (la push la autoriza la edge por club del equipo).
+        await setVenueMatchdaySlot({
+          matchdayId: match.matchday_id,
+          matchDate: patch.match_date ?? null,
+          matchTime: patch.match_time,
+          location: patch.location,
+        });
+        toast.success('Horario enviado al capitán');
+      } else {
+        await updateMatchday(match.matchday_id, patch);
+        notifyPush('schedule_set', match.matchday_id);
+        toast.success('Horario enviado al equipo');
+      }
       onSaved();
       onClose();
     } catch (e: any) {

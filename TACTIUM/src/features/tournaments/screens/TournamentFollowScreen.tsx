@@ -24,6 +24,8 @@ import {
   computeStandings,
   isSocialFormat,
   tournamentStatusLabel,
+  bracketLabel,
+  bracketRank,
   type Tournament,
   type TournamentRegistration,
   type TournamentMatch,
@@ -69,6 +71,9 @@ export const TournamentFollowScreen = ({
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
   const [tab, setTab] = useState<TabKey>(route.params?.initialTab ?? 'main');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  // Cuadro visible en formatos KO: el jugador tiene que poder ver TODOS
+  // (principal, consolación, por posición…), no solo el principal.
+  const [activeBracket, setActiveBracket] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -144,6 +149,19 @@ export const TournamentFollowScreen = ({
   const isMexicano = t?.format === 'mexicano';
   const hasBracket = matchesCat.length > 0;
   const mainTabLabel = isRR ? 'Clasificación' : isGroups ? 'Grupos' : isSocial ? 'Rondas' : 'Cuadro';
+  // Cuadros que existen de verdad en esta división (los grupos van por su vista).
+  const koBrackets = useMemo(
+    () =>
+      Array.from(
+        new Set(matchesCat.filter((m) => m.bracket !== 'grp').map((m) => m.bracket)),
+      ).sort((a, b) => bracketRank(a) - bracketRank(b)),
+    [matchesCat],
+  );
+  useEffect(() => {
+    if (koBrackets.length && (!activeBracket || !koBrackets.includes(activeBracket))) {
+      setActiveBracket(koBrackets[0]);
+    }
+  }, [koBrackets, activeBracket]);
 
   const regInfo = useCallback(
     (id: string | null): RegInfo => {
@@ -448,9 +466,43 @@ export const TournamentFollowScreen = ({
             />
           ) : (
             <View>
-              <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>CUADRO</Text>
+              {koBrackets.length > 1 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.catTabs}
+                >
+                  {koBrackets.map((b) => {
+                    const sel = activeBracket === b;
+                    return (
+                      <Pressable
+                        key={b}
+                        onPress={() => setActiveBracket(b)}
+                        style={[
+                          styles.catTab,
+                          sel && { backgroundColor: c.accent, borderColor: c.accent },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.catTabText,
+                            { color: sel ? c.textInverse : c.textMuted },
+                          ]}
+                        >
+                          {bracketLabel(b)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
+              <Text style={[styles.sectionLabel, { paddingHorizontal: 22, marginTop: 8 }]}>
+                {(activeBracket ? bracketLabel(activeBracket) : 'CUADRO').toUpperCase()}
+              </Text>
               <BracketView
-                matches={matchesCat.filter((m) => m.bracket === 'main')}
+                matches={matchesCat.filter(
+                  (m) => m.bracket === (activeBracket ?? 'main'),
+                )}
                 regName={regName}
                 onEdit={noop}
                 collapsed={collapsed}

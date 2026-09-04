@@ -998,6 +998,9 @@ export interface TournamentSignupWindow {
   entry_fee: number | null;
   entry_fee_2: number | null;
   category_rules: unknown | null;
+  // Condiciones de participación ya resueltas por el servidor (las del club o
+  // las estándar). Es el texto exacto que se guarda al aceptarlas.
+  terms: string | null;
 }
 export async function fetchTournamentSignupWindow(
   code: string,
@@ -1018,6 +1021,7 @@ export async function fetchTournamentSignupWindow(
     entry_fee: row.entry_fee ?? null,
     entry_fee_2: row.entry_fee_2 ?? null,
     category_rules: row.category_rules ?? null,
+    terms: row.terms ?? null,
   };
 }
 
@@ -1192,6 +1196,8 @@ export async function tournamentSignup(input: {
   seedPoints?: number | null;
   leagueSum?: number | null;
   availability?: string[];
+  // Casilla de condiciones: el servidor la exige.
+  termsAccepted: boolean;
 }): Promise<string> {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup", {
     p_code: input.code.trim().toUpperCase(),
@@ -1206,6 +1212,7 @@ export async function tournamentSignup(input: {
     p_gender: input.gender ?? null,
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
+    p_terms_accepted: input.termsAccepted,
   });
   if (error) throw error;
   return data as string;
@@ -1225,6 +1232,8 @@ export async function tournamentSignupOffline(input: {
   seedPoints?: number | null;
   leagueSum?: number | null;
   availability?: string[];
+  // Casilla de condiciones: el servidor la exige.
+  termsAccepted: boolean;
 }): Promise<string> {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup_offline", {
     p_code: input.code.trim().toUpperCase(),
@@ -1239,6 +1248,7 @@ export async function tournamentSignupOffline(input: {
     p_gender: input.gender ?? null,
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
+    p_terms_accepted: input.termsAccepted,
   });
   if (error) throw error;
   return data as string;
@@ -1781,11 +1791,90 @@ export async function searchFcpPlayers(
 export interface FcpPlayerCandidate {
   idJugador: string;
   name: string;
-  puntos: number | null;
-  nivel: number | null; // nº de división (1, 2, …)
-  categoriaDiv: string | null; // "2ª" — la LIGA en la que juega (no "ABS")
+  puntos: number | null; // puntos de LIGA
+  // El nivel que cuenta = la MEJOR categoría del jugador (nº menor) entre la de
+  // LIGA (división de su equipo) y la de CIRCUITO (rankings "2ª CATEGORIA…").
+  nivel: number | null;
+  categoriaDiv: string | null; // "2ª" — la del nivel que manda
+  nivelLiga: number | null;
+  nivelCircuito: number | null;
+  origenNivel: "liga" | "circuito" | "ambos" | null;
   equipo: string | null;
   genero: "M" | "F" | null;
+}
+
+// Categoría de CIRCUITO (espejo de fcpSearch.ts en la app). Se cruza por nombre
+// porque `fcp_jugadores` no guarda el `id_fcp` estable del ranking.
+const CIRCUITO_CAT_RE = /(\d+)\s*ª\s*CATEGORIA\s*(MASCULINA|FEMENINA)?/i;
+
+const fcpNameTokens = (s: string): string[] =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .filter((t) => t.length >= 3);
+
+const fcpSameName = (a: string[], b: string[]): boolean => {
+  if (a.length === 0 || b.length === 0) return false;
+  const overlap = a.filter((t) => b.includes(t)).length;
+  return overlap >= 2 && overlap >= Math.min(3, Math.min(a.length, b.length));
+};
+
+interface FcpCircuitRow {
+  idJugador: string;
+  name: string;
+  tokens: string[];
+  nivel: number;
+  genero: "M" | "F" | null;
+}
+
+/** "GONZALEZ PEREZ, Ana" → "Ana Gonzalez Perez" (el ranking invierte el orden). */
+const prettyRankingName = (raw: string): string => {
+  const s = raw.trim().replace(/\s+/g, " ");
+  const i = s.indexOf(",");
+  const full = i >= 0 ? `${s.slice(i + 1).trim()} ${s.slice(0, i).trim()}` : s;
+  return full
+    .toLowerCase()
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ")
+    .trim();
+};
+
+async function fetchFcpCircuitRows(tokens: string[]): Promise<FcpCircuitRow[]> {
+  if (tokens.length === 0) return [];
+  let sel = supabaseBrowser()
+    .from("fcp_rankings")
+    .select("id_jugador, nombre, categoria")
+    .ilike("categoria", "%CATEGORIA%");
+  for (const tok of tokens) sel = sel.ilike("nombre", `%${tok}%`);
+  const { data } = await sel.limit(120);
+  const byPerson = new Map<string, FcpCircuitRow>();
+  for (const r of (data ?? []) as {
+    id_jugador: string;
+    nombre: string | null;
+    categoria: string | null;
+  }[]) {
+    const m = (r.categoria ?? "").match(CIRCUITO_CAT_RE);
+    if (!m) continue;
+    const nivel = parseInt(m[1], 10);
+    if (!Number.isFinite(nivel)) continue;
+    const toks = fcpNameTokens(r.nombre ?? "");
+    if (toks.length === 0) continue;
+    const key = [...toks].sort().join(" ");
+    const prev = byPerson.get(key);
+    if (prev && prev.nivel <= nivel) continue;
+    byPerson.set(key, {
+      idJugador: String(r.id_jugador),
+      name: prettyRankingName(r.nombre ?? ""),
+      tokens: toks,
+      nivel,
+      genero: m[2] ? (m[2].toUpperCase().startsWith("F") ? "F" : "M") : null,
+    });
+  }
+  return [...byPerson.values()];
 }
 
 /** Candidatos de la Federación por nombre, con puntos + DIVISIÓN de liga
@@ -1806,7 +1895,10 @@ export async function resolveFcpPlayer(name: string): Promise<FcpPlayerCandidate
       `nombre.ilike.%${tok}%,apellido1.ilike.%${tok}%,apellido2.ilike.%${tok}%,nombre_pila.ilike.%${tok}%`
     );
   }
-  const { data } = await sel.order("puntos", { ascending: false }).limit(80);
+  const [{ data }, circuitRows] = await Promise.all([
+    sel.order("puntos", { ascending: false }).limit(80),
+    fetchFcpCircuitRows(tokens),
+  ]);
   const rows = (data ?? []) as {
     id_jugador: string;
     nombre: string | null;
@@ -1875,7 +1967,10 @@ export async function resolveFcpPlayer(name: string): Promise<FcpPlayerCandidate
     }
   }
 
-  return people.map((p) => {
+  // Filas de circuito ya fundidas con un jugador de liga (no duplicar persona).
+  const usedCircuit = new Set<string>();
+
+  const out: FcpPlayerCandidate[] = people.map((p) => {
     let best: { nivel: number; cat: string; genero: string; idLiga: number } | null = null;
     for (const eq of p.equipos) {
       const d = divByEquipo.get(eq);
@@ -1887,16 +1982,65 @@ export async function resolveFcpPlayer(name: string): Promise<FcpPlayerCandidate
       )
         best = d;
     }
+    const name = fcpDisplayName(p.rep);
+    const genero: "M" | "F" | null = best ? (best.genero === "F" ? "F" : "M") : null;
+    const nivelLiga = best ? best.nivel : null;
+    const myTokens = fcpNameTokens(name);
+    let nivelCircuito: number | null = null;
+    for (const cr of circuitRows) {
+      if (genero && cr.genero && cr.genero !== genero) continue;
+      if (!fcpSameName(myTokens, cr.tokens)) continue;
+      usedCircuit.add(cr.idJugador);
+      if (nivelCircuito == null || cr.nivel < nivelCircuito) nivelCircuito = cr.nivel;
+    }
+    const nivel =
+      nivelLiga == null
+        ? nivelCircuito
+        : nivelCircuito == null
+          ? nivelLiga
+          : Math.min(nivelLiga, nivelCircuito);
+    const origenNivel: FcpPlayerCandidate["origenNivel"] =
+      nivel == null
+        ? null
+        : nivelLiga === nivelCircuito
+          ? "ambos"
+          : nivel === nivelCircuito
+            ? "circuito"
+            : "liga";
     return {
       idJugador: String(p.rep.id_jugador),
-      name: fcpDisplayName(p.rep),
+      name,
       puntos: p.rep.puntos,
-      nivel: best ? best.nivel : null,
-      categoriaDiv: best ? best.cat : null,
+      nivel,
+      categoriaDiv: nivel != null ? `${nivel}ª` : null,
+      nivelLiga,
+      nivelCircuito,
+      origenNivel,
       equipo: p.rep.nombre_equipo,
-      genero: best ? (best.genero === "F" ? "F" : "M") : null,
+      genero,
     };
   });
+
+  // Quien SOLO juega circuito no está en `fcp_jugadores` (plantillas de liga):
+  // lo añadimos desde el ranking. Sin puntos de LIGA (los que cuentan) → 0.
+  for (const cr of circuitRows) {
+    if (usedCircuit.has(cr.idJugador)) continue;
+    if (out.length >= 8) break;
+    out.push({
+      idJugador: cr.idJugador,
+      name: cr.name,
+      puntos: 0,
+      nivel: cr.nivel,
+      categoriaDiv: `${cr.nivel}ª`,
+      nivelLiga: null,
+      nivelCircuito: cr.nivel,
+      origenNivel: "circuito",
+      equipo: null,
+      genero: cr.genero,
+    });
+  }
+
+  return out;
 }
 
 export async function fetchFcpTeamPlayers(

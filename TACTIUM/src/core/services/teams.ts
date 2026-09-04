@@ -87,6 +87,32 @@ export async function createTeam(input: {
   return data;
 }
 
+/** Club en cuyas pistas juega de local (permiso SOLO de horario). La columna no
+ *  está aún en los tipos generados → acceso sin tipar, como preferred_home_slots. */
+export function teamVenueClubId(team: unknown): string | null {
+  return (team as { venue_club_id?: string | null })?.venue_club_id ?? null;
+}
+
+/** Nombre del club sede. Si la RLS no deja leerlo, devuelve null y la UI usa
+ *  una etiqueta genérica (no es información crítica). */
+export async function fetchClubName(clubId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('clubs')
+    .select('name')
+    .eq('id', clubId)
+    .maybeSingle();
+  return (data as { name?: string } | null)?.name ?? null;
+}
+
+/** El capitán echa al club sede: deja de poder ponerle horarios. */
+export async function clearTeamVenue(teamId: string): Promise<void> {
+  const raw = supabase.from.bind(supabase) as unknown as (t: string) => any;
+  const { error } = await raw('teams')
+    .update({ venue_club_id: null })
+    .eq('id', teamId);
+  if (error) throw new Error(error.message);
+}
+
 export async function updateTeam(id: string, patch: TeamUpdate): Promise<Team> {
   const { data, error } = await supabase
     .from('teams')

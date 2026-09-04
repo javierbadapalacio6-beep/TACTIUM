@@ -149,6 +149,10 @@ const SIGNUP_GENDER_DB: Record<string, string> = {
 type FcpHint = {
   pts: number;
   level: string;
+  // De dónde sale la categoría: liga, circuito o ambas (cuenta la mejor).
+  origen: "liga" | "circuito" | "ambos" | null;
+  // Solo juega circuito: no tiene puntos de liga (los que cuentan) → 0.
+  soloCircuito: boolean;
   matched: string;
   genero: "M" | "F" | null;
   equipo: string | null;
@@ -172,8 +176,10 @@ function useFcpHints(query: string): FcpHint[] {
         setHints(
           rows.slice(0, 4).map((r) => ({
             pts: r.puntos ?? 0,
-            // La LIGA en la que juega (division real), no "ABS".
+            soloCircuito: r.nivelLiga == null,
+            // La MEJOR categoría del jugador: liga o circuito (no "ABS").
             level: r.categoriaDiv ?? "",
+            origen: r.origenNivel,
             matched: r.name,
             genero: r.genero ?? null,
             equipo: r.equipo ?? null,
@@ -287,7 +293,9 @@ function FcpPicker({
                 color: "var(--text-muted)",
               }}
             >
-              {h.pts} pts{h.level ? ` · ${h.level}` : ""}
+              {h.soloCircuito ? "sin puntos de liga" : `${h.pts} pts`}
+              {h.level ? ` · ${h.level}` : ""}
+              {h.level && h.origen && h.origen !== "ambos" ? ` (${h.origen})` : ""}
               {h.equipo ? ` · ${h.equipo}` : ""}
             </span>
           </button>
@@ -449,6 +457,10 @@ export function SignupForm({ id }: { id: string }) {
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signErr, setSignErr] = useState<string | null>(null);
+  // Condiciones del torneo: casilla OBLIGATORIA (el servidor también la exige).
+  const [terms, setTerms] = useState<string | null>(null);
+  const [termsOk, setTermsOk] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   // Códigos de compañero de las inscripciones creadas (gratis/club), para
   // mostrarlos en la pantalla de éxito y que P1 se los pase a su pareja.
   const [doneCodes, setDoneCodes] = useState<
@@ -538,6 +550,7 @@ export function SignupForm({ id }: { id: string }) {
         setRemoveCap(w.max_removable_hours);
         setEntryFee2(w.entry_fee_2);
         setCategoryRules((w.category_rules as CategoryRules | null) ?? null);
+        setTerms(w.terms);
       })
       .catch(() => {});
     return () => {
@@ -625,6 +638,10 @@ export function SignupForm({ id }: { id: string }) {
       setSignErr(elig2);
       return;
     }
+    if (!termsOk) {
+      setSignErr("Acepta las condiciones del torneo para inscribirte.");
+      return;
+    }
 
     setBusy(true);
     setSignErr(null);
@@ -655,6 +672,7 @@ export function SignupForm({ id }: { id: string }) {
         seedPoints: aPts + matePtsV || null,
         leagueSum: aLvl + mateLvlV || null,
         availability: avail,
+        termsAccepted: true, // la casilla bloquea el envío si no está marcada
       },
     ];
     if (category2) {
@@ -670,6 +688,7 @@ export function SignupForm({ id }: { id: string }) {
         seedPoints: aPts + mate2PtsV || null,
         leagueSum: aLvl + mate2LvlV || null,
         availability: avail,
+        termsAccepted: true,
       });
     }
 
@@ -1277,7 +1296,7 @@ export function SignupForm({ id }: { id: string }) {
                       />
                     </div>
                     <div>
-                      <Label>TU NIVEL DE LIGA</Label>
+                      <Label>TU NIVEL</Label>
                       <Input
                         type="text"
                         value={level}
@@ -1376,7 +1395,7 @@ export function SignupForm({ id }: { id: string }) {
                       />
                     </div>
                     <div>
-                      <Label>SU NIVEL DE LIGA</Label>
+                      <Label>SU NIVEL</Label>
                       <Input
                         type="text"
                         value={mateLevel}
@@ -1579,7 +1598,7 @@ export function SignupForm({ id }: { id: string }) {
                         />
                       </div>
                       <div>
-                        <Label>SU NIVEL DE LIGA</Label>
+                        <Label>SU NIVEL</Label>
                         <Input
                           type="text"
                           value={mate2Level}
@@ -1752,6 +1771,75 @@ export function SignupForm({ id }: { id: string }) {
                   2ª categoría · {elig2}
                 </div>
               )}
+            </div>
+          )}
+          {terms && (
+            <div
+              style={{
+                padding: "14px 16px",
+                marginBottom: 12,
+                borderRadius: 12,
+                border: "1px solid var(--hair-strong)",
+                background: "var(--bg-card-2)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: "0.06em",
+                  color: "var(--text-faint)",
+                  marginBottom: 8,
+                }}
+              >
+                CONDICIONES DEL TORNEO
+              </div>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  lineHeight: 1.55,
+                  color: "var(--text-muted)",
+                  whiteSpace: "pre-line",
+                  maxHeight: termsOpen ? "none" : 78,
+                  overflow: "hidden",
+                }}
+              >
+                {terms}
+              </div>
+              <button
+                type="button"
+                onClick={() => setTermsOpen((v) => !v)}
+                style={{
+                  marginTop: 8,
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "var(--accent)",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                }}
+              >
+                {termsOpen ? "Ocultar" : "Leer todas las condiciones"}
+              </button>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 9,
+                  marginTop: 14,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={termsOk}
+                  onChange={(e) => setTermsOk(e.target.checked)}
+                />
+                He leído y acepto las condiciones
+              </label>
             </div>
           )}
           {signErr && (

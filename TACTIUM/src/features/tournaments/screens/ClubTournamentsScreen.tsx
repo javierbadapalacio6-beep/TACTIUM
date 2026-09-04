@@ -946,8 +946,10 @@ const CreateTournamentSheet: React.FC<{
             <>
               <Text style={styles.label}>LÍMITES POR CATEGORÍA · OPCIONAL</Text>
               <Text style={styles.catHint}>
-                Restringe quién puede inscribirse. NIVEL = suma del nivel de liga de la
-                pareja (mín. ≥). PUNTOS = suma de puntos (máx. ≤). Deja un campo en
+                Restringe quién puede inscribirse. NIVEL = suma de la categoría de la
+                pareja (mín. ≥), y de cada jugador cuenta la MEJOR entre su categoría
+                de liga y la de circuito. PUNTOS = suma de puntos de liga (máx. ≤).
+                Deja un campo en
                 «Libre» para no limitarlo (p. ej. nivel libre pero con tope de puntos);
                 una categoría con los dos en «Libre» es totalmente abierta.
               </Text>

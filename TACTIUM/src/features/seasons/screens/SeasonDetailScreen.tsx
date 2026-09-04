@@ -43,7 +43,11 @@ import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import type { SeasonsStackScreenProps } from '@navigation/types';
 import { FcpStandings } from '../components/FcpStandings';
 import { FcpBracketView } from '../components/FcpBracketView';
-import { fetchTeamPlayoff, type FcpTeamPlayoff } from '@core/services/fcpBracket';
+import {
+  fetchTeamPlayoff,
+  playoffFamilyKey,
+  type FcpTeamPlayoff,
+} from '@core/services/fcpBracket';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type FilterKey = 'all' | 'pending' | 'played';
@@ -72,6 +76,20 @@ export const SeasonDetailScreen = ({
   // Cuadro(s) de playoff del equipo (si la fase eliminatoria ya existe en la FCP).
   const [playoff, setPlayoff] = useState<FcpTeamPlayoff | null>(null);
   const [selPlayoffGroup, setSelPlayoffGroup] = useState<string | null>(null);
+  // La Federación parte el playoff de una categoría en varios grupos (el cuadro
+  // grande y las eliminatorias de puestos). El equipo suele aparecer en más de
+  // uno, y antes salía un selector con esos trozos. Ahora la vista los junta
+  // sola, así que aquí solo quedan las FAMILIAS distintas — normalmente una, y
+  // entonces no hay selector que valga.
+  const playoffFamilies = useMemo(() => {
+    const seen = new Set<string>();
+    return (playoff?.groups ?? []).filter((g) => {
+      const k = playoffFamilyKey(g.idGrupo, g.nombre);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [playoff]);
   const [adding, setAdding] = useState(false);
   // OJO: no inicializar a `autoOpen==='scan'` directamente — abriría el escaneo
   // (premium) sin pasar por el gate. Se abre vía `openScan()` en un efecto.
@@ -469,13 +487,13 @@ export const SeasonDetailScreen = ({
           )
         ) : isFcp && tab === 'cuadro' && playoff ? (
           <View style={{ marginHorizontal: 20, marginTop: 16 }}>
-            {playoff.groups.length > 1 ? (
+            {playoffFamilies.length > 1 ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 6, paddingBottom: 12 }}
               >
-                {playoff.groups.map((g) => {
+                {playoffFamilies.map((g) => {
                   const on = g.idGrupo === selPlayoffGroup;
                   return (
                     <Pressable
@@ -492,7 +510,7 @@ export const SeasonDetailScreen = ({
               </ScrollView>
             ) : null}
             <FcpBracketView
-              idGrupo={selPlayoffGroup ?? playoff.groups[0].idGrupo}
+              idGrupo={selPlayoffGroup ?? playoffFamilies[0].idGrupo}
               highlightTeam={playoff.teamName}
             />
           </View>

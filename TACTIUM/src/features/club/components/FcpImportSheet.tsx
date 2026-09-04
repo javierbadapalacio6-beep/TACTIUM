@@ -14,6 +14,7 @@ import {
   type FcpClubGroup,
   type FcpTeamOption,
   type UnlinkedTeam,
+  type FcpImportMode,
 } from '@core/services/fcpOnboarding';
 
 /**
@@ -40,6 +41,11 @@ export const FcpImportSheet: React.FC<{
   // Sin club (capitán independiente) = gestiona UN solo equipo → selección
   // única (radio). Con club, multi-selección para volcar todos sus equipos.
   const single = clubId === null;
+  // Equipos DEL club vs equipos INVITADOS (juegan en sus pistas con otro
+  // nombre): de estos solo se gestiona el horario, no consumen cuota del plan y
+  // no se les vuelca la plantilla.
+  const [mode, setMode] = useState<FcpImportMode>('owned');
+  const guest = mode === 'venue';
 
   // Carga todo el catálogo una vez al abrir; el filtro es local.
   useEffect(() => {
@@ -47,6 +53,7 @@ export const FcpImportSheet: React.FC<{
     setQuery('');
     setActiveClub(null);
     setSelected(new Set());
+    setMode('owned');
     setLoading(true);
     searchFcpClubs('')
       .then(setAllGroups)
@@ -129,12 +136,14 @@ export const FcpImportSheet: React.FC<{
         }
       }
 
-      const res = await importFcpTeams(clubId, selectedOptions, reuse);
+      const res = await importFcpTeams(clubId, selectedOptions, reuse, mode);
       const players = res.reduce((n, r) => n + r.players, 0);
       await loadForUser();
       toast.success(
-        '¡Equipos importados!',
-        `${res.length} ${res.length === 1 ? 'equipo' : 'equipos'} · ${players} jugadores.`,
+        guest ? '¡Equipos invitados añadidos!' : '¡Equipos importados!',
+        guest
+          ? `${res.length} ${res.length === 1 ? 'equipo' : 'equipos'} · ya puedes ponerles horario.`
+          : `${res.length} ${res.length === 1 ? 'equipo' : 'equipos'} · ${players} jugadores.`,
       );
       onImported?.(res.length, players);
       onClose();
@@ -177,16 +186,50 @@ export const FcpImportSheet: React.FC<{
             : 'Importa tu club'}
       </Text>
 
+      {!single ? (
+        <View style={styles.modeRow}>
+          {(
+            [
+              { id: 'owned', label: 'Equipos de mi club' },
+              { id: 'venue', label: 'Invitados · solo horarios' },
+            ] as { id: FcpImportMode; label: string }[]
+          ).map((m) => {
+            const on = mode === m.id;
+            return (
+              <Pressable
+                key={m.id}
+                onPress={() => {
+                  setMode(m.id);
+                  setSelected(new Set());
+                }}
+                style={[styles.modeChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
+              >
+                <Text style={[styles.modeChipText, { color: on ? c.textInverse : c.textMuted }]}>
+                  {m.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
       {activeClub ? (
         <>
           <Text style={styles.sub}>
-            {single
-              ? 'Elige tu equipo. Se volcará su plantilla real con los puntos oficiales.'
-              : 'Marca los equipos a crear. Se volcará la plantilla real de cada uno con sus puntos.'}
+            {guest
+              ? 'Equipos que juegan en tus pistas sin ser de tu club. Solo les pondrás día, hora y pista: ni plantilla, ni alineaciones. No gastan plaza de tu plan.'
+              : single
+                ? 'Elige tu equipo. Se volcará su plantilla real con los puntos oficiales.'
+                : 'Marca los equipos a crear. Se volcará la plantilla real de cada uno con sus puntos.'}
           </Text>
           <Pressable onPress={() => setActiveClub(null)} hitSlop={6} style={{ marginTop: 8 }}>
             <Text style={styles.back}>‹ Elegir otro club</Text>
           </Pressable>
+          <Text style={styles.hint}>
+            ¿Falta algún equipo tuyo? La Federación a veces registra el mismo club
+            con nombres distintos. Vuelve atrás, elige el otro nombre e impórtalos
+            también: se suman a los que ya tienes, no se duplican.
+          </Text>
           <View style={{ gap: 8, marginTop: 12 }}>
             {activeClub.teams.map((t) => {
               const on = selected.has(t.id_equipo);
@@ -274,6 +317,18 @@ const makeStyles = (c: Palette) =>
     title: { color: c.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.4, marginTop: 2 },
     sub: { color: c.textMuted, fontSize: 13.5, lineHeight: 19, marginTop: 8 },
     back: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
+    hint: { color: c.textFaint, fontSize: 12, lineHeight: 17, marginTop: 10 },
+    modeRow: { flexDirection: 'row', gap: 6, marginTop: 12 },
+    modeChip: {
+      flex: 1,
+      paddingVertical: 9,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+    },
+    modeChipText: { fontSize: 12.5, fontWeight: '700' },
     searchBox: {
       marginTop: 14,
       backgroundColor: c.bgRaised,

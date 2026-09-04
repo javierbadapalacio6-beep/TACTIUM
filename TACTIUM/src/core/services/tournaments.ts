@@ -137,7 +137,9 @@ export interface InfoRow {
 export type CategoryRuleMode = 'points' | 'nivel' | 'both';
 export interface CategoryThreshold {
   puntos: number | null; // máximo de puntos de la pareja (suma) — null = sin tope
-  nivel: number | null; // mínimo de nivel de liga de la pareja (suma) — null = sin mínimo
+  // Mínimo de nivel de la pareja (suma) — null = sin mínimo. De cada jugador
+  // cuenta la MEJOR categoría entre la de liga y la del circuito FCP.
+  nivel: number | null;
 }
 export interface CategoryRules {
   mode: CategoryRuleMode;
@@ -183,9 +185,9 @@ export function checkCategoryEligibility(
   }
   if (checkNiv && t.nivel != null) {
     if (pairNivel == null)
-      return `Indica el nivel de liga de cada jugador para la categoría ${category}.`;
+      return `Indica el nivel (liga o circuito) de cada jugador para la categoría ${category}.`;
     if (pairNivel < t.nivel)
-      return `Necesitáis nivel de liga ≥ ${t.nivel} en ${category} (sumáis ${pairNivel}).`;
+      return `Necesitáis nivel ≥ ${t.nivel} en ${category} (sumáis ${pairNivel}).`;
   }
   return null;
 }
@@ -204,6 +206,8 @@ export interface Tournament {
   prizes_json: PrizeEntry[] | null;
   info_rows: InfoRow[] | null;
   observations: string | null;
+  // Condiciones de participación del club (null = las estándar de TACTIUM).
+  terms: string | null;
   cover_url: string | null;
   entry_fee: number | null;
   // Cuota total si el jugador se inscribe en 2 categorías (null = sin precio especial).
@@ -258,7 +262,8 @@ export interface TournamentRegistration {
   availability: string[];
   seed: number | null;
   seed_points: number | null;
-  league_sum: number | null; // suma de nivel de liga de la pareja (para categorías por nivel)
+  // Suma del nivel de la pareja (la mejor categoría de cada uno: liga o circuito).
+  league_sum: number | null;
   status: string;
   // Cobro de inscripción: 'not_required' (torneo gratis) | 'paid' (pagada,
   // online o en el club) | 'pending_club' (pendiente de pago en el club).
@@ -472,6 +477,8 @@ export async function updateTournament(
     entryFee?: number | null;
     matchFormat?: MatchFormat;
     phaseFormats?: Record<string, MatchFormat> | null;
+    // Condiciones de participación. Vacío = se usan las estándar.
+    terms?: string | null;
   },
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
@@ -490,6 +497,7 @@ export async function updateTournament(
   if (fields.infoRows !== undefined) payload.info_rows = cleanInfoRows(fields.infoRows);
   if (fields.observations !== undefined) payload.observations = fields.observations?.trim() || null;
   if (fields.coverUrl !== undefined) payload.cover_url = fields.coverUrl;
+  if (fields.terms !== undefined) payload.terms = fields.terms?.trim() || null;
   if (Object.keys(payload).length === 0) return;
   const { error } = await from()('tournaments').update(payload).eq('id', id);
   if (error) throw new Error(error.message);
@@ -1527,10 +1535,11 @@ export async function setSocialResult(
  * disponibilidad en cuanto conoce a los jugadores, sin dejarlo en conflicto. */
 async function clearSlotIfUnavailable(matchId: string): Promise<void> {
   const { data } = await from()('tournament_matches')
-    .select('scheduled_at, home_reg, home_reg2, away_reg, away_reg2')
+    .select('tournament_id, scheduled_at, home_reg, home_reg2, away_reg, away_reg2')
     .eq('id', matchId)
     .maybeSingle();
   const m = data as {
+    tournament_id: string;
     scheduled_at: string | null;
     home_reg: string | null;
     home_reg2: string | null;
@@ -1545,11 +1554,18 @@ async function clearSlotIfUnavailable(matchId: string): Promise<void> {
   const { data: regsRaw } = await from()('tournament_registrations')
     .select('id, availability')
     .in('id', ids);
+  // Duración real del partido: la franja no disponible cuenta aunque el hueco
+  // empiece antes de ella (mismo criterio que la rejilla y el motor).
+  const { data: tRow } = await from()('tournaments')
+    .select('slot_minutes')
+    .eq('id', m.tournament_id)
+    .maybeSingle();
+  const dur = matchDurationMin({ slot_minutes: (tRow as { slot_minutes: number } | null)?.slot_minutes ?? 60 });
   const dt = new Date(m.scheduled_at);
   const weekday = dt.getDay();
   const minute = dt.getHours() * 60 + dt.getMinutes();
   const anyUnavailable = ((regsRaw ?? []) as { availability: string[] | null }[]).some(
-    (r) => !regAvailableAt(r as TournamentRegistration, weekday, minute),
+    (r) => !regAvailableAt(r as TournamentRegistration, weekday, minute, dur),
   );
   if (anyUnavailable) {
     await from()('tournament_matches')
@@ -1855,11 +1871,23 @@ function regAvailableAt(
   reg: TournamentRegistration,
   weekday: number,
   minute: number,
+  durationMin = 1,
 ): boolean {
+  const dur = Math.max(1, durationMin);
   const ranges = (reg.availability ?? []).flatMap(parseAvailabilityEntry);
   const applicable = ranges.filter((r) => r.dow == null || r.dow === weekday);
-  return !applicable.some((r) => minute >= r.from && minute < r.to);
+  // El partido ocupa [minute, minute+dur): choca si PISA la franja, aunque
+  // empiece antes (ej. no puede 10:00-11:00 y el partido sale a las 09:45).
+  return !applicable.some((r) => minute < r.to && minute + dur > r.from);
 }
+
+/** Minutos que ocupa un partido (la duración del hueco del torneo). */
+export const matchDurationMin = (t: Pick<Tournament, 'slot_minutes'>): number =>
+  Math.max(15, t.slot_minutes);
+
+/** Día local (YYYY-MM-DD) de una fecha. */
+const isoDayOf = (dt: Date): string =>
+  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 
 /** Inscripciones que participan en un partido (2 parejas, o 4 en social). */
 function matchRegIds(m: TournamentMatch): string[] {
@@ -2039,7 +2067,7 @@ export async function autoScheduleTournament(
   const availableAt = (m: TournamentMatch, weekday: number, min: number): boolean =>
     matchRegIds(m).every((id) => {
       const r = regById.get(id);
-      return r ? regAvailableAt(r, weekday, min) : true;
+      return r ? regAvailableAt(r, weekday, min, step) : true;
     });
 
   // Cuántos huecos-hora le valen a un partido en un día (para ordenar por restricción).
@@ -2102,9 +2130,20 @@ export async function autoScheduleTournament(
     },
   );
 
+  // Días ya pasados: no se programa nada nuevo en ellos (sí se conservan las
+  // reservas de lo ya jugado, que siguen en dayState). Si TODOS los días del
+  // torneo han pasado —un torneo viejo que se reprograma, o una demo— se deja
+  // como estaba: mejor colocarlo en el pasado que dejarlo sin hora.
+  const nowIso = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+
   for (const pk of phaseKeysOrdered) {
     const phaseMatches = pending.filter((m) => matchPhaseKey(m) === pk);
-    const days = allowedDaysFor(phaseMatches[0], phaseDays, allDays, maxRoundByBracket);
+    const allowed = allowedDaysFor(phaseMatches[0], phaseDays, allDays, maxRoundByBracket);
+    const future = allowed.filter((iso) => iso >= nowIso);
+    const days = future.length ? future : allowed;
     // Más restringidos primero (menos huecos disponibles en total).
     phaseMatches.sort(
       (a, b) =>
@@ -2144,17 +2183,63 @@ export async function autoScheduleTournament(
 export function matchScheduleConflict(
   match: TournamentMatch,
   regs: TournamentRegistration[],
-  _tournament: Tournament,
+  tournament: Tournament,
 ): boolean {
   if (!match.scheduled_at) return false;
   const dt = new Date(match.scheduled_at);
   const weekday = dt.getDay();
   const minute = dt.getHours() * 60 + dt.getMinutes();
+  const dur = matchDurationMin(tournament);
   const byId = new Map(regs.map((r) => [r.id, r]));
   return matchRegIds(match).some((id) => {
     const r = byId.get(id);
-    return r ? !regAvailableAt(r, weekday, minute) : false;
+    return r ? !regAvailableAt(r, weekday, minute, dur) : false;
   });
+}
+
+/** Choque de PAREJA: otro partido del torneo en el que juega alguna de las
+ * inscripciones de éste (las dos parejas, o las cuatro en social) a la vez
+ * ('overlap') o sin el descanso mínimo entre medias ('rest'). El motor
+ * automático ya lo evita; esto es para lo que se coloca A MANO.
+ * `at` permite preguntar por un hueco distinto al que tiene (al mover). */
+export interface PairClash {
+  match: TournamentMatch;
+  regId: string;
+  kind: 'overlap' | 'rest';
+}
+export function matchPairClashes(
+  match: TournamentMatch,
+  all: TournamentMatch[],
+  tournament: Tournament,
+  at?: { iso: string; minute: number },
+): PairClash[] {
+  let iso: string;
+  let minute: number;
+  if (at) {
+    iso = at.iso;
+    minute = at.minute;
+  } else {
+    if (!match.scheduled_at) return [];
+    const dt = new Date(match.scheduled_at as string);
+    iso = isoDayOf(dt);
+    minute = dt.getHours() * 60 + dt.getMinutes();
+  }
+  const dur = matchDurationMin(tournament);
+  const rest = Math.max(0, tournament.rest_minutes ?? 0);
+  const ids = new Set(matchRegIds(match));
+  if (ids.size === 0) return [];
+  const out: PairClash[] = [];
+  for (const o of all) {
+    if (o.id === match.id || o.status === 'bye' || !o.scheduled_at) continue;
+    const dt = new Date(o.scheduled_at as string);
+    if (isoDayOf(dt) !== iso) continue;
+    const gap = Math.abs(dt.getHours() * 60 + dt.getMinutes() - minute);
+    if (gap >= dur + rest) continue;
+    const shared = matchRegIds(o).find((id) => ids.has(id));
+    if (!shared) continue;
+    out.push({ match: o, regId: shared, kind: gap < dur ? 'overlap' : 'rest' });
+  }
+  return out;
 }
 
 /** ¿Están TODAS las parejas del partido disponibles en esa fecha+minuto? (cliente) */
@@ -2163,13 +2248,14 @@ export function matchAvailableAtDate(
   regs: TournamentRegistration[],
   dateIso: string,
   minute: number,
+  durationMin = 1,
 ): boolean {
   const [y, mo, d] = dateIso.split('-').map(Number);
   const weekday = new Date(y, mo - 1, d).getDay();
   const byId = new Map(regs.map((r) => [r.id, r]));
   return matchRegIds(match).every((id) => {
     const r = byId.get(id);
-    return r ? regAvailableAt(r, weekday, minute) : true;
+    return r ? regAvailableAt(r, weekday, minute, durationMin) : true;
   });
 }
 
@@ -2216,6 +2302,9 @@ export interface TournamentLookup {
   start_time: string;
   end_time: string;
   max_removable_hours: number | null;
+  // Condiciones de participación YA resueltas por el servidor (las del club o
+  // las estándar). Es el texto exacto que se guarda al aceptarlas.
+  terms: string;
 }
 
 // Fila pública para explorar torneos (cualquier jugador, sin ser del club).
@@ -2293,6 +2382,8 @@ export async function signupByCode(input: {
   availability?: string[];
   seedPoints?: number | null;
   leagueSum?: number | null;
+  // Casilla de condiciones. El servidor la exige: sin ella no hay inscripción.
+  termsAccepted: boolean;
 }): Promise<string> {
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
@@ -2311,9 +2402,55 @@ export async function signupByCode(input: {
     p_gender: input.gender ?? null,
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
+    p_terms_accepted: input.termsAccepted,
   });
   if (error) throw new Error(error.message);
   return data as string;
+}
+
+/** Condiciones estándar de TACTIUM (viven en el servidor: son las que se
+ *  guardan como prueba en cada inscripción). Para que el club las use de base. */
+export async function fetchDefaultTerms(): Promise<string> {
+  const { data, error } = await rpcCall('tournament_default_terms', {});
+  if (error) throw new Error(error.message);
+  return typeof data === 'string' ? data : '';
+}
+
+/** Agrupa una división en otra: mueve TODAS sus parejas de golpe y, si la de
+ *  origen queda vacía y sin cuadro, la quita de las categorías del torneo (deja
+ *  de admitir inscripciones). Devuelve cuántas parejas se han movido. */
+export async function mergeDivision(input: {
+  tournamentId: string;
+  from: { gender: string | null; category: string | null };
+  to: { gender: string | null; category: string | null };
+  closeSource?: boolean;
+}): Promise<number> {
+  const { data, error } = await rpcCall('tournament_merge_division', {
+    p_tournament_id: input.tournamentId,
+    p_from_gender: input.from.gender,
+    p_from_category: input.from.category,
+    p_to_gender: input.to.gender,
+    p_to_category: input.to.category,
+    p_close_source: input.closeSource ?? true,
+  });
+  if (error) throw new Error(error.message);
+  return typeof data === 'number' ? data : 0;
+}
+
+/** Mueve una inscripción a otra categoría/género conservándolo todo
+ *  (disponibilidad, puntos, pago, código de compañero) y avisando a la pareja.
+ *  Solo el organizador; falla si la pareja ya está colocada en un cuadro. */
+export async function moveRegistration(
+  regId: string,
+  gender: string | null,
+  category: string | null,
+): Promise<void> {
+  const { error } = await rpcCall('tournament_move_registration', {
+    p_reg_id: regId,
+    p_gender: gender,
+    p_category: category,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /** Código de compañero de una inscripción (solo lo ve el jugador 1 / vinculado). */

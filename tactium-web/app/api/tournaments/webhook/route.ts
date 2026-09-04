@@ -67,6 +67,8 @@ export async function POST(req: Request) {
           seedPoints: number | null;
           leagueSum: number | null;
           availability: string[];
+          // Aceptó las condiciones en el formulario, antes de pagar.
+          termsAccepted?: boolean;
         }
         const p = sp.signup_payload as {
           code: string;
@@ -124,6 +126,9 @@ export async function POST(req: Request) {
             p_gender: r.gender ?? null,
             p_seed_points: r.seedPoints ?? null,
             p_league_sum: r.leagueSum ?? null,
+            // Pagos creados ANTES de esta versión no traen el flag: la
+            // aceptación se dio igualmente en el formulario, no se les bloquea.
+            p_terms_accepted: r.termsAccepted !== false,
           });
           const rid = typeof regId === "string" ? regId : null;
           if (rid) {

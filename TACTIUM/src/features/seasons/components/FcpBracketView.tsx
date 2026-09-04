@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Modal } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
@@ -6,7 +6,8 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconCheck, IconX } from '@components/ui';
 import {
-  fetchFcpBracket,
+  fetchPlayoffFamily,
+  fetchFcpBracketFamily,
   fetchFcpBracketTieActa,
   isSameTeam,
   type FcpBracket,
@@ -20,8 +21,10 @@ interface Props {
   highlightTeam?: string | null;
 }
 
-/** Cuadro de playoff en formato columnas-por-ronda (scroll horizontal), con
- *  cuadro principal + consolación y tap en cada cruce para ver su acta. */
+/** Cuadro de playoff en formato columnas-por-ronda (scroll horizontal). Reúne
+ *  TODOS los trozos que la Federación publica por separado para una misma
+ *  categoría —el cuadro grande y las eliminatorias de puestos (5º-8º, 3º-4º…)—
+ *  en una sola vista con pestañas, en vez de obligar a saltar entre grupos. */
 export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -30,11 +33,13 @@ export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
   const [bracket, setBracket] = useState<FcpBracket | null>(null);
   const [selCuadro, setSelCuadro] = useState(0);
   const [openTie, setOpenTie] = useState<FcpBracketTie | null>(null);
+  const hScroll = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchFcpBracket(idGrupo)
+    fetchPlayoffFamily(idGrupo)
+      .then((parts) => fetchFcpBracketFamily(parts))
       .then((b) => {
         if (!alive) return;
         setBracket(b);
@@ -53,11 +58,29 @@ export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
 
   const cuadro = bracket.cuadros[selCuadro] ?? bracket.cuadros[0];
 
+  // Recorrido del equipo: sus cruces ronda a ronda. Es lo que de verdad se
+  // quiere saber de un cuadro ("de dónde vengo y contra quién voy"), y en un
+  // móvil eso no se ve: caben dos columnas y el resto queda fuera de pantalla.
+  const myPath = highlightTeam
+    ? cuadro.rounds
+        .map((r) => ({
+          round: r,
+          tie: r.ties.find(
+            (t) => isSameTeam(t.local, highlightTeam) || isSameTeam(t.visit, highlightTeam),
+          ),
+        }))
+        .filter((x): x is { round: (typeof cuadro.rounds)[number]; tie: FcpBracketTie } => !!x.tie)
+    : [];
+
   return (
     <View>
       {/* Selector de cuadro (principal / consolación) */}
       {bracket.cuadros.length > 1 ? (
-        <View style={styles.seg}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.seg}
+        >
           {bracket.cuadros.map((q, i) => {
             const on = i === selCuadro;
             return (
@@ -66,24 +89,73 @@ export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       ) : (
         <Text style={styles.cuadroTitle}>{cuadro.label}</Text>
       )}
 
-      {highlightTeam ? (
-        <View style={styles.legend}>
-          <View style={styles.legendDot} />
-          <Text style={styles.legendText} numberOfLines={1}>
-            Recorrido de {highlightTeam}
+      {highlightTeam && myPath.length > 0 ? (
+        <View style={styles.pathBox}>
+          <Text style={styles.pathTitle} numberOfLines={1}>
+            RECORRIDO DE {highlightTeam.toUpperCase()}
+          </Text>
+          {myPath.map(({ round, tie }) => {
+            const rival = isSameTeam(tie.local, highlightTeam) ? tie.visit : tie.local;
+            const iAmLocal = isSameTeam(tie.local, highlightTeam);
+            const won =
+              (iAmLocal && tie.ganador === 'local') ||
+              (!iAmLocal && tie.ganador === 'visitante');
+            const lost = !!tie.ganador && tie.ganador !== 'empate' && !won;
+            return (
+              <Pressable
+                key={`path-${tie.idPartido}`}
+                onPress={() =>
+                  tie.estado === 'jugado' || tie.estado === 'jugado_ida'
+                    ? setOpenTie(tie)
+                    : undefined
+                }
+                style={styles.pathRow}
+              >
+                <Text style={styles.pathRound} numberOfLines={1}>
+                  {round.label}
+                </Text>
+                <Text style={styles.pathRival} numberOfLines={1}>
+                  {rival || 'Por determinar'}
+                </Text>
+                <Text
+                  style={[
+                    styles.pathResult,
+                    won && { color: c.accent },
+                    lost && { color: c.textFaint },
+                  ]}
+                >
+                  {tie.marcador
+                    ? `${won ? 'Ganó' : lost ? 'Perdió' : ''} ${tie.marcador.replace('-', '–')}`.trim()
+                    : 'pendiente'}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Text style={styles.pathHint}>
+            El marcador es de partidos ganados en la eliminatoria, sumando ida y
+            vuelta. Toca un cruce para ver el acta.
           </Text>
         </View>
       ) : null}
 
       <ScrollView
+        ref={hScroll}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingVertical: 4, paddingRight: 12 }}
+        onLayout={() => {
+          // Arranca en la ronda que se está jugando, no en la primera: con el
+          // torneo avanzado, lo de la izquierda ya es historia.
+          const i = cuadro.rounds.findIndex((r) =>
+            r.ties.some((t) => t.estado !== 'jugado'),
+          );
+          if (i > 0) hScroll.current?.scrollTo({ x: i * (182 + 14), animated: false });
+        }}
       >
         {cuadro.rounds.map((r) => (
           <View key={`${cuadro.key}-${r.avance}`} style={styles.col}>
@@ -153,6 +225,16 @@ const TieCard: React.FC<{
         </Text>
         {hasActa ? <Text style={styles.tieActaHint}>ver acta</Text> : null}
       </View>
+      {tie.resultadoIda || tie.resultadoVuelta ? (
+        <Text style={styles.tieLegs} numberOfLines={1}>
+          {[
+            tie.resultadoIda ? `ida ${tie.resultadoIda}` : null,
+            tie.resultadoVuelta ? `vuelta ${tie.resultadoVuelta}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </Text>
+      ) : null}
     </Pressable>
   );
 };
@@ -281,6 +363,7 @@ const makeStyles = (c: Palette) =>
     seg: {
       flexDirection: 'row',
       gap: 6,
+      alignSelf: 'flex-start',
       backgroundColor: c.bgCard,
       borderRadius: 12,
       padding: 4,
@@ -288,13 +371,35 @@ const makeStyles = (c: Palette) =>
       borderColor: c.hair,
       marginBottom: 14,
     },
-    segBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
+    segBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 9, alignItems: 'center' },
     segBtnOn: { backgroundColor: c.accent },
     segText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
     segTextOn: { color: c.textInverse },
     cuadroTitle: { color: c.text, fontSize: 15, fontWeight: '800', marginBottom: 12 },
     legend: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
     legendDot: { width: 10, height: 10, borderRadius: 3, backgroundColor: c.accent },
+    pathBox: {
+      marginTop: 10,
+      marginBottom: 6,
+      padding: 12,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgRaised,
+    },
+    pathTitle: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 10.5,
+      letterSpacing: 1.4,
+      marginBottom: 8,
+    },
+    pathRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+    pathRound: { color: c.textFaint, fontSize: 11.5, fontWeight: '700', width: 74 },
+    pathRival: { color: c.text, fontSize: 13, fontWeight: '600', flex: 1, minWidth: 0 },
+    pathResult: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
+    pathHint: { color: c.textFaint, fontSize: 11, lineHeight: 15, marginTop: 8 },
+    tieLegs: { color: c.textFaint, fontSize: 10.5, marginTop: 3 },
     legendText: { color: c.textMuted, fontSize: 11.5, fontWeight: '600', flex: 1, minWidth: 0 },
     col: { width: 182, marginRight: 14 },
     colHead: {

@@ -195,11 +195,101 @@ export async function searchFcpPlayers(
 export interface FcpPlayerMatch {
   idJugador: string;
   name: string;
-  puntos: number | null;
-  nivel: number | null; // nº de división (2ª→2). null si no se pudo derivar.
-  categoriaDiv: string | null; // "2ª"
+  puntos: number | null; // puntos de LIGA (fcp_jugadores.puntos)
+  // Nivel que cuenta para las reglas de torneo: el MEJOR de liga y circuito
+  // (número menor = categoría más alta). null si no se pudo derivar ninguno.
+  nivel: number | null;
+  categoriaDiv: string | null; // "2ª" — la del nivel que manda
+  nivelLiga: number | null; // división de liga en la que juega
+  nivelCircuito: number | null; // categoría del ranking de circuito FCP
+  origenNivel: 'liga' | 'circuito' | 'ambos' | null;
   equipo: string | null;
   genero: 'M' | 'F' | null;
+}
+
+// ── Categoría de CIRCUITO ───────────────────────────────────────────────────
+// Un jugador tiene DOS categorías en la FCP: la de liga (la división de su
+// equipo) y la del circuito (las listas "2ª CATEGORIA MASCULINA" de
+// `fcp_rankings`). Para las reglas de un torneo vale LA MEJOR de las dos.
+// El cruce va por NOMBRE porque `fcp_jugadores` no guarda el `id_fcp` estable
+// del ranking. Solo cuentan las listas numeradas (las de veteranos/menores no
+// casan con el patrón "Nª CATEGORIA").
+const CIRCUITO_CAT_RE = /(\d+)\s*ª\s*CATEGORIA\s*(MASCULINA|FEMENINA)?/i;
+
+/** Nombre a tokens comparables (sin acentos, mayúsculas, sin comas). */
+const nameTokens = (s: string): string[] =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .split(' ')
+    .filter((t) => t.length >= 3);
+
+/** ¿Dos nombres son la misma persona? Pide 2-3 tokens comunes (nombre y
+ *  apellidos vienen en orden distinto según la tabla). */
+const sameName = (a: string[], b: string[]): boolean => {
+  if (a.length === 0 || b.length === 0) return false;
+  const overlap = a.filter((t) => b.includes(t)).length;
+  return overlap >= 2 && overlap >= Math.min(3, Math.min(a.length, b.length));
+};
+
+interface CircuitRow {
+  idJugador: string;
+  name: string;
+  tokens: string[];
+  nivel: number;
+  genero: 'M' | 'F' | null;
+}
+
+/** "GONZALEZ PEREZ, Ana Maria" → "Ana Maria Gonzalez Perez". El ranking trae el
+ *  nombre en un solo campo y con el orden invertido. */
+const prettyRankingName = (raw: string): string => {
+  const s = raw.trim().replace(/\s+/g, ' ');
+  const i = s.indexOf(',');
+  const full = i >= 0 ? `${s.slice(i + 1).trim()} ${s.slice(0, i).trim()}` : s;
+  return full
+    .toLowerCase()
+    .split(' ')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ')
+    .trim();
+};
+
+/** Personas del ranking de circuito que casan con los tokens buscados, ya
+ *  agrupadas por persona y con su MEJOR categoría (nº menor). */
+async function fetchCircuitRows(tokens: string[]): Promise<CircuitRow[]> {
+  if (tokens.length === 0) return [];
+  let sel = rawFrom('fcp_rankings')
+    .select('id_jugador, nombre, categoria')
+    .ilike('categoria', '%CATEGORIA%');
+  for (const tok of tokens) sel = sel.ilike('nombre', `%${tok}%`);
+  const { data } = await sel.limit(120);
+  const byPerson = new Map<string, CircuitRow>();
+  for (const r of (data ?? []) as {
+    id_jugador: string;
+    nombre: string | null;
+    categoria: string | null;
+  }[]) {
+    const m = (r.categoria ?? '').match(CIRCUITO_CAT_RE);
+    if (!m) continue;
+    const nivel = parseInt(m[1], 10);
+    if (!Number.isFinite(nivel)) continue;
+    const toks = nameTokens(r.nombre ?? '');
+    if (toks.length === 0) continue;
+    const key = [...toks].sort().join(' ');
+    const prev = byPerson.get(key);
+    // Un jugador puede estar en varias listas: nos quedamos con la mejor.
+    if (prev && prev.nivel <= nivel) continue;
+    byPerson.set(key, {
+      idJugador: String(r.id_jugador),
+      name: prettyRankingName(r.nombre ?? ''),
+      tokens: toks,
+      nivel,
+      genero: m[2] ? (m[2].toUpperCase().startsWith('F') ? 'F' : 'M') : null,
+    });
+  }
+  return [...byPerson.values()];
 }
 
 /** Candidatos de la Federación que casan con un nombre, con puntos + nivel
@@ -221,7 +311,11 @@ export async function resolveFcpPlayer(
       `nombre.ilike.%${tok}%,apellido1.ilike.%${tok}%,apellido2.ilike.%${tok}%,nombre_pila.ilike.%${tok}%`,
     );
   }
-  const { data } = await sel.order('puntos', { ascending: false }).limit(80);
+  // La liga y el circuito se piden a la vez (tablas distintas, sin dependencia).
+  const [{ data }, circuitRows] = await Promise.all([
+    sel.order('puntos', { ascending: false }).limit(80),
+    fetchCircuitRows(tokens),
+  ]);
   const rows = (data ?? []) as {
     id_jugador: string;
     nombre: string | null;
@@ -232,7 +326,8 @@ export async function resolveFcpPlayer(
     id_equipo: number | null;
     nombre_equipo: string | null;
   }[];
-  if (rows.length === 0) return [];
+  // Ojo: `rows` vacío NO es "sin resultados" — puede ser alguien que solo juega
+  // el circuito. Seguimos: los candidatos de circuito se añaden más abajo.
 
   // Dedup por persona (la licencia del id cambia por temporada). La 1ª fila de
   // cada persona = la de más puntos (vienen ordenadas). Acumulamos TODOS sus
@@ -292,6 +387,10 @@ export async function resolveFcpPlayer(
     }
   }
 
+  // Filas del circuito que ya se han fundido con un jugador de liga (para no
+  // ofrecer a la misma persona dos veces).
+  const usedCircuit = new Set<string>();
+
   const out: FcpPlayerMatch[] = people.map((p) => {
     // nivel = división de su ÚLTIMA temporada (id_liga más alto); a igualdad de
     // temporada, la mejor división (número menor).
@@ -306,16 +405,66 @@ export async function resolveFcpPlayer(
       )
         best = d;
     }
+    const name = displayName(p.rep);
+    const genero: 'M' | 'F' | null = best ? (best.genero === 'F' ? 'F' : 'M') : null;
+    const nivelLiga = best ? best.nivel : null;
+    // Circuito: mejor categoría (nº menor) entre las listas donde aparece.
+    const myTokens = nameTokens(name);
+    let nivelCircuito: number | null = null;
+    for (const cr of circuitRows) {
+      if (genero && cr.genero && cr.genero !== genero) continue;
+      if (!sameName(myTokens, cr.tokens)) continue;
+      usedCircuit.add(cr.idJugador);
+      if (nivelCircuito == null || cr.nivel < nivelCircuito) nivelCircuito = cr.nivel;
+    }
+    // Manda la MEJOR de las dos categorías (número menor).
+    const nivel =
+      nivelLiga == null
+        ? nivelCircuito
+        : nivelCircuito == null
+          ? nivelLiga
+          : Math.min(nivelLiga, nivelCircuito);
+    const origenNivel: FcpPlayerMatch['origenNivel'] =
+      nivel == null
+        ? null
+        : nivelLiga === nivelCircuito
+          ? 'ambos'
+          : nivel === nivelCircuito
+            ? 'circuito'
+            : 'liga';
     return {
       idJugador: String(p.rep.id_jugador),
-      name: displayName(p.rep),
+      name,
       puntos: p.rep.puntos,
-      nivel: best ? best.nivel : null,
-      categoriaDiv: best ? best.cat : null,
+      nivel,
+      categoriaDiv: nivel != null ? `${nivel}ª` : null,
+      nivelLiga,
+      nivelCircuito,
+      origenNivel,
       equipo: p.rep.nombre_equipo,
-      genero: best ? (best.genero === 'F' ? 'F' : 'M') : null,
+      genero,
     };
   });
+
+  // Quien SOLO juega circuito no está en `fcp_jugadores` (esa tabla son las
+  // plantillas de los equipos de liga): lo añadimos desde el ranking. No tiene
+  // puntos de LIGA, que son los que cuentan → 0, pero sí categoría.
+  for (const cr of circuitRows) {
+    if (usedCircuit.has(cr.idJugador)) continue;
+    if (out.length >= 8) break;
+    out.push({
+      idJugador: cr.idJugador,
+      name: cr.name,
+      puntos: 0,
+      nivel: cr.nivel,
+      categoriaDiv: `${cr.nivel}ª`,
+      nivelLiga: null,
+      nivelCircuito: cr.nivel,
+      origenNivel: 'circuito',
+      equipo: null,
+      genero: cr.genero,
+    });
+  }
 
   const gf = opts.genero;
   return gf ? out.filter((m) => m.genero == null || m.genero === gf) : out;

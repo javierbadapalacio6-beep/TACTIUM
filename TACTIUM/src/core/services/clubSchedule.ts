@@ -15,9 +15,55 @@ export interface ClubHomeMatch {
   opponent: string | null;
   status: string;
   preferred_home_slots: string[]; // franjas favoritas del equipo ('HH:MM')
+  // Equipo INVITADO: juega en las pistas del club pero no es suyo. El club solo
+  // le pone día/hora/pista; ni plantilla ni alineaciones. Ver `venue_club_id`.
+  is_guest?: boolean;
 }
 
 type RpcResult = { data: unknown; error: { message: string } | null };
+
+/** Partidos de local de los equipos INVITADOS (los que juegan aquí sin ser del
+ *  club). Va en un RPC aparte para no tocar `get_club_home_schedule`, que está
+ *  en producción y no en este repositorio. */
+export async function getVenueHomeSchedule(
+  clubId: string,
+): Promise<ClubHomeMatch[]> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { data, error } = await rpc('get_venue_home_schedule', {
+    target_club: clubId,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ClubHomeMatch[]).map((m) => ({
+    ...m,
+    preferred_home_slots: m.preferred_home_slots ?? [],
+    is_guest: true,
+  }));
+}
+
+/** Día/hora/pista de un partido de un equipo INVITADO. El club no es admin de
+ *  ese equipo, así que va por un RPC de puerta estrecha que además avisa a su
+ *  capitán por la campana. */
+export async function setVenueMatchdaySlot(input: {
+  matchdayId: string;
+  matchDate: string | null; // 'YYYY-MM-DD'
+  matchTime: string | null; // 'HH:MM:SS'
+  location: string | null;
+}): Promise<void> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { error } = await rpc('set_venue_matchday_slot', {
+    p_matchday_id: input.matchdayId,
+    p_match_date: input.matchDate,
+    p_match_time: input.matchTime,
+    p_location: input.location,
+  });
+  if (error) throw new Error(error.message);
+}
 
 /** Partidos de LOCAL (no cerrados) de todos los equipos del club. */
 export async function getClubHomeSchedule(

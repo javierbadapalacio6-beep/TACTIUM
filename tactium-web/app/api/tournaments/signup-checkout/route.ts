@@ -16,6 +16,9 @@ interface SignupReg {
   seedPoints?: number | null;
   leagueSum?: number | null;
   availability?: string[];
+  // Aceptación de las condiciones: la marcó en el formulario ANTES de pagar y
+  // hay que arrastrarla, porque la inscripción se crea en el webhook.
+  termsAccepted?: boolean;
 }
 
 // POST /api/tournaments/signup-checkout
@@ -115,6 +118,7 @@ export async function POST(req: Request) {
     seedPoints: r.seedPoints ?? null,
     leagueSum: r.leagueSum ?? null,
     availability: r.availability ?? [],
+    termsAccepted: r.termsAccepted === true,
   }));
   const payerEmail = payloadRegs[0]?.p1Email ?? null;
   // Usuario que paga (login obligatorio en la web): la inscripción se atará a su

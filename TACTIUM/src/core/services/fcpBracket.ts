@@ -150,6 +150,100 @@ export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
   return { cuadros };
 }
 
+// ── Familia de playoff: los TROZOS de un mismo cuadro ───────────────────────
+// La Federación parte el playoff de una categoría en varios grupos: el cuadro
+// grande ("LIGA ORO · 2ª CATEGORIA MASCULINA", 21 cruces) y varias
+// eliminatorias de puestos ("… 5º al 8º", "… 3º - 4º", "… 11º al 12º"). No son
+// cuadros distintos: son partes del mismo. Aquí se reagrupan para enseñarlos
+// juntos en vez de obligar a saltar de uno a otro.
+//
+// La clave de la familia es el prefijo del id (`fase2`=ORO, `fase3`=PLATA,
+// `fase4`=BRONCE, `fase5`=DESCENSO) + género + nº de categoría. Comprobado
+// contra los datos reales de la FCP: el prefijo es consistente en toda la liga.
+
+/** "… 5º al 8º" → "Puestos 5º-8º". null si el grupo es el cuadro grande. */
+export function placementLabel(nombre: string): string | null {
+  const rest = (nombre ?? '').replace(/\d+\s*ª?\s*CATEGORIA/i, ' ');
+  const m = rest.match(/(\d+)\s*[ºª°]?\s*(?:al|a|-|–)\s*(\d+)\s*[ºª°]?/i);
+  return m ? `Puestos ${m[1]}º-${m[2]}º` : null;
+}
+
+/** Nº de categoría del nombre de un grupo ("… 2ª CATEGORIA …" → 2). */
+function categoryNo(nombre: string): number | null {
+  const m = (nombre ?? '').match(/(\d+)\s*ª\s*CATEGORIA/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Clave de familia de un grupo de playoff: mismo tipo de liga + categoría.
+ *  Dos grupos con la misma clave son trozos del MISMO cuadro. */
+export function playoffFamilyKey(idGrupo: string, nombre: string): string {
+  return `${idGrupo.split('_')[0]}:${categoryNo(nombre) ?? '?'}`;
+}
+
+export interface FcpPlayoffPart {
+  idGrupo: string;
+  nombre: string;
+  placement: string | null; // null = cuadro grande
+}
+
+/** Todos los grupos de playoff hermanos del que se pasa: mismo tipo de liga
+ *  (oro/plata/bronce/descenso), mismo género y misma categoría. El cuadro
+ *  grande va primero y luego las eliminatorias de puestos. */
+export async function fetchPlayoffFamily(idGrupo: string): Promise<FcpPlayoffPart[]> {
+  const { data: me } = await rawFrom('fcp_grupos')
+    .select('id_grupo, nombre, genero, id_liga')
+    .eq('id_grupo', idGrupo)
+    .maybeSingle();
+  const self = me as
+    | { id_grupo: string; nombre: string | null; genero: string | null; id_liga: number | null }
+    | null;
+  if (!self) return [{ idGrupo, nombre: '', placement: null }];
+
+  const prefix = idGrupo.split('_')[0]; // fase2 | fase3 | fase4 | fase5
+  const cat = categoryNo(self.nombre ?? '');
+  let q = rawFrom('fcp_grupos')
+    .select('id_grupo, nombre, genero, id_liga')
+    .like('id_grupo', `${prefix}_%`);
+  if (self.id_liga != null) q = q.eq('id_liga', self.id_liga);
+  if (self.genero) q = q.eq('genero', self.genero);
+  const { data } = await q;
+
+  const rows = ((data ?? []) as { id_grupo: string; nombre: string | null }[]).filter(
+    (g) => cat == null || categoryNo(g.nombre ?? '') === cat,
+  );
+  const parts: FcpPlayoffPart[] = (rows.length ? rows : [{ id_grupo: idGrupo, nombre: self.nombre }]).map(
+    (g) => ({
+      idGrupo: g.id_grupo,
+      nombre: g.nombre ?? g.id_grupo,
+      placement: placementLabel(g.nombre ?? ''),
+    }),
+  );
+  // Cuadro grande primero; luego los puestos, de mejor a peor.
+  const firstPos = (p: FcpPlayoffPart) => {
+    const m = p.placement?.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  return parts.sort((a, b) => firstPos(a) - firstPos(b));
+}
+
+/** Cuadro de varios grupos a la vez (una familia): las eliminatorias de puestos
+ *  entran como cuadros extra, detrás del principal y su consolación. */
+export async function fetchFcpBracketFamily(parts: FcpPlayoffPart[]): Promise<FcpBracket> {
+  const cuadros: FcpBracketCuadro[] = [];
+  for (const part of parts) {
+    const b = await fetchFcpBracket(part.idGrupo);
+    for (const q of b.cuadros) {
+      if (q.rounds.length === 0) continue;
+      cuadros.push(
+        part.placement
+          ? { ...q, key: `${part.idGrupo}:${q.key}`, label: part.placement }
+          : { ...q, key: `${part.idGrupo}:${q.key}`, label: q.label },
+      );
+    }
+  }
+  return { cuadros };
+}
+
 export interface FcpBracketTieActa {
   ida: FcpActaPartido[];
   vuelta: FcpActaPartido[];

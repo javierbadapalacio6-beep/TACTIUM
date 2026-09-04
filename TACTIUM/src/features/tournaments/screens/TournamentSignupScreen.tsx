@@ -116,6 +116,9 @@ export const TournamentSignupScreen = ({
   const [p1NoFed, setP1NoFed] = useState(false);
   const [p2NoFed, setP2NoFed] = useState(false);
   const [p2bNoFed, setP2bNoFed] = useState(false);
+  // Condiciones del torneo: casilla OBLIGATORIA (el servidor también la exige).
+  const [termsOk, setTermsOk] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   // Franjas de 1h que el jugador marca que NO puede (por día). Por defecto vacío
   // = disponible a cualquier hora.
   const [removed, setRemoved] = useState<Set<string>>(new Set());
@@ -412,6 +415,7 @@ export const TournamentSignupScreen = ({
     (!needsGender || !!gender) &&
     (!needsCategory || !!category) &&
     !eligibilityError &&
+    termsOk &&
     // Si eligió 2ª categoría, su compañero y puntos + elegibilidad OK.
     (!category2 || (!!p2b.trim() && (p2bNoFed || !!p2bPts.trim()) && !eligibilityErrorB));
 
@@ -466,6 +470,10 @@ export const TournamentSignupScreen = ({
       toast.error('No cumplís los requisitos de la categoría', eligibilityError);
       return;
     }
+    if (!termsOk) {
+      toast.error('Acepta las condiciones del torneo');
+      return;
+    }
     if (category2) {
       if (!p2b.trim() || (!p2bNoFed && !p2bPts.trim())) {
         toast.error('Rellena el compañero y sus puntos de la 2ª categoría');
@@ -505,6 +513,7 @@ export const TournamentSignupScreen = ({
           seedPoints: seed,
           leagueSum: league,
           availability,
+          termsAccepted: termsOk,
         });
         if (!isPair) return null;
         const partnerCode = await getRegistrationPartnerCode(regId).catch(() => null);
@@ -954,7 +963,7 @@ export const TournamentSignupScreen = ({
           <>
             <View style={styles.two}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>TU NIVEL DE LIGA</Text>
+                <Text style={styles.label}>TU NIVEL</Text>
                 <View style={[styles.input, p1NoFed && { opacity: 0.5 }]}>
                   <TextInput
                     value={p1NoFed ? '0' : p1Lvl}
@@ -987,7 +996,8 @@ export const TournamentSignupScreen = ({
               ) : null}
             </View>
             <Text style={styles.availHint}>
-              Su división de liga (2ª → 2, 4ª → 4…).
+              Vuestra categoría (2ª → 2, 4ª → 4…): la MEJOR entre la de liga y la
+              de circuito.
               {isPair ? ` Suma: ${leagueSum ?? '—'}.` : ''}
             </Text>
           </>
@@ -1079,7 +1089,7 @@ export const TournamentSignupScreen = ({
                 {usesNivel ? (
                   <View style={styles.two}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>SU NIVEL DE LIGA</Text>
+                      <Text style={styles.label}>SU NIVEL</Text>
                       <View style={[styles.input, p2bNoFed && { opacity: 0.5 }]}>
                         <TextInput
                           value={p2bNoFed ? '0' : p2bLvl}
@@ -1177,6 +1187,40 @@ export const TournamentSignupScreen = ({
             ))}
           </>
         )}
+
+        {found ? (
+          <View style={styles.termsBox}>
+            <Text style={styles.termsTitle}>CONDICIONES DEL TORNEO</Text>
+            <Text
+              style={styles.termsText}
+              numberOfLines={termsOpen ? undefined : 4}
+            >
+              {found.terms}
+            </Text>
+            <Pressable onPress={() => setTermsOpen((v) => !v)} hitSlop={6}>
+              <Text style={styles.termsLink}>
+                {termsOpen ? 'Ocultar' : 'Leer todas las condiciones'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setTermsOk((v) => !v)}
+              hitSlop={6}
+              style={styles.termsRow}
+            >
+              <View
+                style={[
+                  styles.fedBox,
+                  termsOk && { backgroundColor: c.accent, borderColor: c.accent },
+                ]}
+              >
+                {termsOk ? <Text style={styles.fedCheck}>✓</Text> : null}
+              </View>
+              <Text style={styles.termsAccept}>
+                He leído y acepto las condiciones
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
@@ -1254,9 +1298,21 @@ const FcpSuggest: React.FC<{
             <Text style={styles.suggestName} numberOfLines={1}>{m.name}</Text>
             <Text style={styles.suggestMeta} numberOfLines={1}>
               {[
-                m.equipo,
-                m.puntos != null ? `${m.puntos} pts` : null,
-                m.categoriaDiv ? `nivel ${m.nivel} (${m.categoriaDiv})` : null,
+                m.equipo ?? (m.nivelLiga == null ? 'solo circuito' : null),
+                m.nivelLiga == null
+                  ? 'sin puntos de liga'
+                  : m.puntos != null
+                    ? `${m.puntos} pts`
+                    : null,
+                m.nivel != null
+                  ? `nivel ${m.nivel}${
+                      m.origenNivel === 'circuito'
+                        ? ' · circuito'
+                        : m.origenNivel === 'liga'
+                          ? ' · liga'
+                          : ''
+                    }`
+                  : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -1483,6 +1539,25 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     fedCheck: { color: c.textInverse, fontSize: 12, fontWeight: '900' },
+    termsBox: {
+      marginTop: 22,
+      padding: 14,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.surface,
+    },
+    termsTitle: {
+      color: c.textFaint,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      marginBottom: 8,
+    },
+    termsText: { color: c.textMuted, fontSize: 12.5, lineHeight: 19 },
+    termsLink: { color: c.accent, fontSize: 12.5, fontWeight: '700', marginTop: 8 },
+    termsRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14 },
+    termsAccept: { color: c.text, fontSize: 13, fontWeight: '700', flex: 1 },
     fedLabel: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
     detectHint: {
       color: c.accent,
