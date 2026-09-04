@@ -10,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -619,7 +620,18 @@ export const SettingsScreen = () => {
             },
             {
               label: 'Versión',
-              detail: Constants.expoConfig?.version ?? '1.2.0',
+              // Versión nativa + build, y qué bundle corre: el embebido en el
+              // build o una actualización OTA (id corto + fecha). Sirve para
+              // saber al instante si el móvil ha aplicado la última OTA.
+              detail: `${Constants.expoConfig?.version ?? '1.2.0'} (${Constants.nativeBuildVersion ?? '?'}) · ${
+                Updates.isEmbeddedLaunch || !Updates.updateId
+                  ? 'sin OTA'
+                  : `OTA ${Updates.updateId.slice(-6)}${
+                      Updates.createdAt
+                        ? ` ${Updates.createdAt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`
+                        : ''
+                    }`
+              }`,
               trailing: 'static',
             },
           ]}
