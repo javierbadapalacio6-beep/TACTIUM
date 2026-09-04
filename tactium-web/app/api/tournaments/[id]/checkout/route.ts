@@ -10,15 +10,16 @@ import { sendTournamentPaymentEmail } from "@/lib/email";
 import { webAppOrigin } from "@/lib/connect";
 
 // POST /api/tournaments/:id/checkout
-// Crea la sesión de Stripe Checkout del fee del torneo (cobro POR ADELANTADO
-// según max_pairs). El importe se calcula SIEMPRE aquí, nunca se confía en el
-// cliente. Requiere que el usuario sea admin/owner del club dueño del torneo.
+// Crea la sesión de Stripe Checkout del fee del torneo. Se cobra AL CERRAR LA
+// INSCRIPCIÓN, por las parejas REALMENTE INSCRITAS (antes era por adelantado
+// según las plazas fijadas al crearlo). El importe se calcula SIEMPRE aquí,
+// nunca se confía en el cliente. Requiere admin/owner del club del torneo.
 //
 // MODELO DE COBERTURA: el importe a cobrar es
-//     (precio del tamaño ACTUAL) − (lo ya pagado por este torneo)
+//     (precio de las parejas ACTUALES) − (lo ya pagado por este torneo)
 // De ahí salen gratis dos comportamientos:
 //   · Nunca se cobra dos veces: si ya está cubierto, `due <= 0` → {paid:true}.
-//   · Ampliar plazas cobra solo la DIFERENCIA (32→64 = 55 − 25 = 30 €).
+//   · Si entran más parejas después de pagar, se cobra solo la DIFERENCIA.
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -99,18 +100,21 @@ export async function POST(
     .maybeSingle();
   const planPairCap = sub ? PLAN_TOURNAMENT_PAIR_CAP[sub.plan_tier] ?? null : null;
 
+  // Parejas REALMENTE inscritas: es lo que se cobra. Una pareja apuntada a dos
+  // categorías son dos inscripciones y cuenta dos veces — ocupa dos huecos de
+  // cuadro, que es justo lo que se está pagando.
+  const { count: regCount } = await admin
+    .from("tournament_registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", t.id)
+    .neq("status", "withdrawn");
+  const pairs = regCount ?? 0;
+
   const billing = computeTournamentBilling({
-    maxPairs: t.max_pairs,
+    pairs,
     planPairCap,
     hasActiveSub: Boolean(sub),
   });
-
-  if (billing.kind === "needs_size") {
-    return NextResponse.json(
-      { error: "Fija las plazas (parejas) del torneo para poder cobrarlo." },
-      { status: 400 },
-    );
-  }
 
   // Lo YA pagado por este torneo (la suma de todos los cobros confirmados).
   const { data: paidRows } = await admin
@@ -141,12 +145,13 @@ export async function POST(
       .from("tournaments")
       .update({
         billing_status: covered,
-        covered_pairs: t.max_pairs,
-        // Un torneo que estaba retenido por el pago se publica al quedar cubierto.
+        covered_pairs: pairs,
+        // Torneos del modelo viejo que quedaron retenidos en borrador: al
+        // quedar cubiertos se publican (los nuevos ya nacen publicados).
         ...(t.status === "draft" ? { status: "open" } : {}),
       })
       .eq("id", t.id);
-    return NextResponse.json({ paid: true, reason: covered });
+    return NextResponse.json({ paid: true, reason: covered, pairs });
   }
 
   // A partir de aquí hay algo que cobrar. (Inalcanzable con kind != 'payable':
@@ -178,7 +183,7 @@ export async function POST(
     const sent = await sendTournamentPaymentEmail({
       to,
       tournamentName: t.name ?? "",
-      maxPairs: t.max_pairs,
+      maxPairs: pairs,
       amountEur: amountCents / 100,
       isTopUp,
       url,
@@ -230,10 +235,10 @@ export async function POST(
           product_data: {
             name: `Torneo: ${t.name ?? "TACTIUM"}`,
             description: isTopUp
-              ? `Ampliación a ${t.max_pairs} plazas (diferencia sobre lo ya pagado)`
+              ? `Parejas nuevas hasta ${pairs} (diferencia sobre lo ya pagado)`
               : billing.reason === "overage"
-                ? `Exceso de parejas sobre tu plan (${t.max_pairs} plazas)`
-                : `Cuota de organización (${t.max_pairs} plazas)`,
+                ? `Exceso sobre tu plan (${pairs} parejas inscritas)`
+                : `Cuota de organización (${pairs} parejas inscritas)`,
           },
         },
       },
@@ -254,7 +259,7 @@ export async function POST(
     tournament_id: t.id,
     club_id: t.club_id,
     max_pairs: t.max_pairs,
-    covers_pairs: t.max_pairs,
+    covers_pairs: pairs,
     reason: billing.reason,
     amount_cents: amountCents,
     status: "pending",

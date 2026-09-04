@@ -11,6 +11,8 @@ import {
   resolveMainGroup,
   type FcpActaPartido,
 } from './fcpSeason';
+import * as SeasonsApi from './seasons';
+import * as MatchdaysApi from './matchdays';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -242,6 +244,147 @@ export async function fetchFcpBracketFamily(parts: FcpPlayoffPart[]): Promise<Fc
     }
   }
   return { cuadros };
+}
+
+// ── Los playoff, al HORARIO ─────────────────────────────────────────────────
+// Las eliminatorias solo vivían en la vista del cuadro, así que el club no
+// podía cuadrar sus pistas para ellas (no existían como jornadas). Esto las
+// vuelca a la temporada del equipo.
+//
+// La SEDE sale de la normativa, no de la Federación —que no la publica de forma
+// fiable—: «Todos los enfrentamientos del Play Off se disputarán a ida y vuelta,
+// jugando el primero en casa del equipo PEOR clasificado». O sea: ida en casa
+// del peor, vuelta en casa del mejor. Y como hay excepciones escritas (finales
+// de ORO y PLATA a sede única; 5ª y 6ª masculina a partido único en casa del
+// mejor), lo que se guarda es una PROPUESTA: `home_unconfirmed = true`. La
+// confirma el club o el capitán.
+
+export interface PlayoffImportResult {
+  created: number;
+  skipped: number; // ya estaban
+}
+
+/** Posición en la fase REGULAR de cada equipo de la liga (por nombre). */
+async function regularPositions(idLiga: number): Promise<Map<string, number>> {
+  const { data } = await rawFrom('fcp_clasificacion')
+    .select('equipo, posicion, id_grupo')
+    .eq('id_liga', idLiga);
+  const out = new Map<string, number>();
+  for (const r of (data ?? []) as {
+    equipo: string | null;
+    posicion: number | null;
+    id_grupo: string | null;
+  }[]) {
+    // Solo la liga regular: en los grupos de fase la posición no significa lo
+    // mismo (y es la que estamos intentando resolver).
+    if (!r.equipo || r.posicion == null) continue;
+    if (r.id_grupo && /^fase/i.test(r.id_grupo)) continue;
+    const k = normTeam(r.equipo);
+    if (!out.has(k)) out.set(k, r.posicion);
+  }
+  return out;
+}
+
+/**
+ * Vuelca al calendario del equipo sus eliminatorias de playoff: dos jornadas
+ * por cruce (ida y vuelta) o una sola en las rondas a sede única. Sin fecha —
+ * la pone el club— y con la sede como propuesta. Idempotente: los cruces que ya
+ * estén (por `fcp_id_partido`) no se duplican.
+ */
+export async function importPlayoffMatchdays(
+  teamId: string,
+): Promise<PlayoffImportResult> {
+  const fcpId = await getFcpIdEquipo(teamId);
+  if (!fcpId) throw new Error('Este equipo no está vinculado a la Federación.');
+  const main = await resolveMainGroup(fcpId);
+  if (!main) throw new Error('No encuentro tu equipo en la Federación.');
+
+  const { data: g } = await rawFrom('fcp_grupos')
+    .select('id_liga, genero')
+    .eq('id_grupo', main.id_grupo)
+    .maybeSingle();
+  const idLiga = g ? ((g as { id_liga: number | null }).id_liga ?? null) : null;
+  const genero = g ? ((g as { genero: string | null }).genero ?? null) : null;
+  if (idLiga == null) throw new Error('No encuentro la temporada de tu equipo.');
+
+  const groups = await fetchTeamPlayoffGroups(idLiga, main.equipo, genero);
+  if (groups.length === 0) return { created: 0, skipped: 0 };
+
+  const { data: rows } = await rawFrom('fcp_partidos')
+    .select('id_partido, id_grupo, equipo_local, equipo_visit, avance, ronda, cuadro')
+    .in('id_grupo', groups.map((x) => x.idGrupo))
+    .like('id_partido', 'fcp_playoff_%');
+
+  const me = normTeam(main.equipo);
+  const ties = ((rows ?? []) as {
+    id_partido: string;
+    equipo_local: string | null;
+    equipo_visit: string | null;
+    avance: number | null;
+    ronda: string | null;
+    cuadro: string | null;
+  }[]).filter(
+    (r) => normTeam(r.equipo_local) === me || normTeam(r.equipo_visit) === me,
+  );
+  if (ties.length === 0) return { created: 0, skipped: 0 };
+
+  const season = await SeasonsApi.fetchActiveSeason(teamId);
+  if (!season) throw new Error('El equipo no tiene temporada activa.');
+  const existing = await MatchdaysApi.fetchMatchdays(season.id);
+  const already = new Set(
+    existing
+      .map((m) => (m as { fcp_id_partido?: string | null }).fcp_id_partido)
+      .filter((x): x is string => !!x),
+  );
+  let jornada = existing.reduce((mx, m) => Math.max(mx, m.jornada_number ?? 0), 0);
+
+  const pos = await regularPositions(idLiga);
+  let created = 0;
+  let skipped = 0;
+
+  for (const t of ties) {
+    const rivalName =
+      normTeam(t.equipo_local) === me ? t.equipo_visit : t.equipo_local;
+    if (!rivalName) continue; // cruce aún sin rival (ronda futura)
+    const myPos = pos.get(me);
+    const rivalPos = pos.get(normTeam(rivalName));
+    // Peor clasificado = número MAYOR. La ida se juega en su casa.
+    const iAmWorse =
+      myPos != null && rivalPos != null ? myPos > rivalPos : null;
+
+    // Final (avance 1) → SEDE ÚNICA según la normativa: una sola jornada.
+    const legs: { suffix: string; isHome: boolean }[] =
+      t.avance === 1
+        ? [{ suffix: 'unica', isHome: true }]
+        : [
+            { suffix: 'ida', isHome: iAmWorse ?? true },
+            { suffix: 'vuelta', isHome: iAmWorse == null ? true : !iAmWorse },
+          ];
+
+    for (const leg of legs) {
+      const fcpPartido = `${t.id_partido}_${leg.suffix}`;
+      if (already.has(fcpPartido)) {
+        skipped++;
+        continue;
+      }
+      jornada += 1;
+      const label = [t.ronda?.trim() || 'Playoff', leg.suffix === 'unica' ? null : leg.suffix]
+        .filter(Boolean)
+        .join(' · ');
+      const md = await MatchdaysApi.createMatchday(season.id, {
+        jornada_number: jornada,
+        opponent: `${rivalName} (${label})`,
+        is_home: leg.isHome,
+      });
+      // Columnas que `createMatchday` no conoce (el vínculo con la FCP y la
+      // marca de sede sin confirmar).
+      await rawFrom('matchdays')
+        .update({ fcp_id_partido: fcpPartido, home_unconfirmed: true })
+        .eq('id', md.id);
+      created++;
+    }
+  }
+  return { created, skipped };
 }
 
 export interface FcpBracketTieActa {

@@ -24,6 +24,7 @@ import {
   getClubHomeSchedule,
   getVenueHomeSchedule,
   setVenueMatchdaySlot,
+  fetchUnconfirmedVenues,
   currentRoundMatches,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
@@ -133,7 +134,15 @@ export const ClubScheduleScreen = ({
         getClubHomeSchedule(club.id),
         getVenueHomeSchedule(club.id).catch(() => [] as ClubHomeMatch[]),
       ]);
-      const data = [...own, ...guests];
+      // Playoff: sede propuesta, no confirmada. La marca vive en `matchdays` y
+      // el RPC de los equipos propios no la devuelve, así que se consulta aparte.
+      const pending = await fetchUnconfirmedVenues(
+        [...own, ...guests].map((m) => m.matchday_id),
+      ).catch(() => new Set<string>());
+      const data = [...own, ...guests].map((m) => ({
+        ...m,
+        home_unconfirmed: pending.has(m.matchday_id),
+      }));
       setMatches(data);
       setSlotsByTeam((prev) => {
         const next = { ...prev };
@@ -335,6 +344,7 @@ export const ClubScheduleScreen = ({
                           {m.jornada_number ? `J${m.jornada_number}` : 'Jornada'}
                           {m.opponent ? ` · vs ${m.opponent}` : ''}
                           {m.is_guest ? ' · invitado' : ''}
+                          {m.home_unconfirmed ? ' · sede por confirmar' : ''}
                         </Text>
                       </View>
                       <View style={styles.rowTimeWrap}>
@@ -482,7 +492,11 @@ const EditScheduleSheet: React.FC<{
         });
         toast.success('Horario enviado al capitán');
       } else {
-        await updateMatchday(match.matchday_id, patch);
+        await updateMatchday(match.matchday_id, {
+          ...patch,
+          // Ponerle día, hora y pista ES confirmar que se juega aquí.
+          ...(match.home_unconfirmed ? { home_unconfirmed: false } : {}),
+        });
         notifyPush('schedule_set', match.matchday_id);
         toast.success('Horario enviado al equipo');
       }

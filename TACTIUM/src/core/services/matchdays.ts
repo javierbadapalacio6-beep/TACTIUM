@@ -129,11 +129,16 @@ export async function updateMatchday(
     // jornada. Formato "N-N-N" (ej. "1-1-1" para 3 parejas en 3 tandas).
     // Opcional — null si la liga no usa tandas.
     tandas?: string | null;
+    // Playoff: la sede era una propuesta y alguien la confirma. La columna no
+    // está aún en los tipos generados.
+    home_unconfirmed?: boolean;
   },
 ): Promise<Matchday> {
+  // `home_unconfirmed` aún no está en los tipos generados de Supabase → cast
+  // puntual, como en clubSchedule.ts con `preferred_home_slots`.
   const { data, error } = await supabase
     .from('matchdays')
-    .update(patch)
+    .update(patch as never)
     .eq('id', id)
     .select()
     .single();

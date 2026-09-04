@@ -25,40 +25,39 @@ export const PLAN_TOURNAMENT_PAIR_CAP: Record<string, number | null> = {
   club_elite: 128,
 };
 
-export function perTournamentPriceEur(maxPairs: number): number {
+// Precio por PAREJAS INSCRITAS (antes eran las plazas fijadas al crear el
+// torneo). Espejo de TACTIUM/src/core/entitlements/tournamentBilling.ts.
+export function perTournamentPriceEur(pairs: number): number {
   for (const t of TOURNAMENT_TIERS) {
-    if (maxPairs <= t.pairs) return t.priceEur;
+    if (pairs <= t.pairs) return t.priceEur;
   }
   const top = TOURNAMENT_TIERS[TOURNAMENT_TIERS.length - 1];
-  return top.priceEur + (maxPairs - top.pairs) * TOURNAMENT_EXTRA_PAIR_EUR;
+  return top.priceEur + (pairs - top.pairs) * TOURNAMENT_EXTRA_PAIR_EUR;
 }
 
 export type TournamentBilling =
   | { kind: "included" }
   | { kind: "free" }
-  | { kind: "payable"; amountEur: number; reason: "overage" | "per_tournament" }
-  | { kind: "needs_size" };
+  | { kind: "payable"; amountEur: number; reason: "overage" | "per_tournament" };
 
 export function computeTournamentBilling(input: {
-  maxPairs: number | null;
+  pairs: number;
   planPairCap: number | null;
   hasActiveSub: boolean;
 }): TournamentBilling {
-  const { maxPairs, planPairCap, hasActiveSub } = input;
+  const { pairs, planPairCap, hasActiveSub } = input;
   if (hasActiveSub && planPairCap != null) {
-    if (maxPairs == null) return { kind: "needs_size" };
-    if (maxPairs <= planPairCap) return { kind: "included" };
+    if (pairs <= planPairCap) return { kind: "included" };
     return {
       kind: "payable",
-      amountEur: (maxPairs - planPairCap) * TOURNAMENT_EXTRA_PAIR_EUR,
+      amountEur: (pairs - planPairCap) * TOURNAMENT_EXTRA_PAIR_EUR,
       reason: "overage",
     };
   }
-  if (maxPairs == null) return { kind: "needs_size" };
-  if (maxPairs <= TOURNAMENT_FREE_PAIRS) return { kind: "free" };
+  if (pairs <= TOURNAMENT_FREE_PAIRS) return { kind: "free" };
   return {
     kind: "payable",
-    amountEur: perTournamentPriceEur(maxPairs),
+    amountEur: perTournamentPriceEur(pairs),
     reason: "per_tournament",
   };
 }

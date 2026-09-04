@@ -18,6 +18,26 @@ export interface ClubHomeMatch {
   // Equipo INVITADO: juega en las pistas del club pero no es suyo. El club solo
   // le pone día/hora/pista; ni plantilla ni alineaciones. Ver `venue_club_id`.
   is_guest?: boolean;
+  // Playoff: la sede es una PROPUESTA (la Federación no la publica de forma
+  // fiable). Se confirma al asignarle hueco.
+  home_unconfirmed?: boolean;
+}
+
+/** Marca de "sede sin confirmar" de un puñado de jornadas. Va aparte porque
+ *  `get_club_home_schedule` vive en producción y no en este repositorio: antes
+ *  que reescribirla a ciegas, se consulta la columna directamente. */
+export async function fetchUnconfirmedVenues(
+  matchdayIds: string[],
+): Promise<Set<string>> {
+  if (matchdayIds.length === 0) return new Set();
+  const raw = supabase.from.bind(supabase) as unknown as (t: string) => any;
+  const { data } = await raw('matchdays')
+    .select('id, home_unconfirmed')
+    .in('id', matchdayIds);
+  const out = new Set<string>();
+  for (const r of (data ?? []) as { id: string; home_unconfirmed: boolean | null }[])
+    if (r.home_unconfirmed) out.add(r.id);
+  return out;
 }
 
 type RpcResult = { data: unknown; error: { message: string } | null };

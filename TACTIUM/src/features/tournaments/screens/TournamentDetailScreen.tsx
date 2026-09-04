@@ -89,6 +89,12 @@ import {
   type MatchFormat,
 } from '@core/services/tournaments';
 import { requestTournamentPayment } from '@core/services/tournamentCheckout';
+import {
+  TOURNAMENT_BILLING_ENABLED,
+  computeTournamentBilling,
+  clubTournamentCap,
+} from '@core/entitlements/tournamentBilling';
+import { useSubscriptionStore } from '@store/subscriptionStore';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
 
 import type { TournamentsStackScreenProps } from '@navigation/types';
@@ -2822,6 +2828,11 @@ export const TournamentDetailScreen = ({
   const [activeDiv, setActiveDiv] = useState<Division | null>(null);
   const [tab, setTab] = useState<TabKey>('main');
   const [scheduleCfgOpen, setScheduleCfgOpen] = useState(false);
+  // Coste EN VIVO del torneo mientras entran inscripciones. El club paga al
+  // generar los cuadros, así que tiene que ver a dónde va el importe ANTES,
+  // no llevarse la sorpresa el día del sorteo. Cuenta TODAS las divisiones:
+  // una pareja apuntada a dos categorías ocupa dos huecos y cuenta dos veces.
+  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
   // Agrupar la división activa con otra (la que se queda con 3 parejas).
   const [mergeOpen, setMergeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -2947,6 +2958,22 @@ export const TournamentDetailScreen = ({
     [matches, dg, dc],
   );
 
+  const liveCost = useMemo(() => {
+    if (!TOURNAMENT_BILLING_ENABLED || !t) return null;
+    const pairs = regs.filter((r) => r.status !== 'withdrawn').length;
+    if (pairs === 0) return null;
+    const { hasActiveSub, pairCap } = clubTournamentCap(t.club_id, subscriptions);
+    const b = computeTournamentBilling({
+      pairs,
+      planPairCap: pairCap,
+      hasActiveSub,
+    });
+    const unit = pairs === 1 ? 'pareja' : 'parejas';
+    if (b.kind === 'included') return `${pairs} ${unit} · incluido en tu plan`;
+    if (b.kind === 'free') return `${pairs} ${unit} · sin coste`;
+    return `${pairs} ${unit} · al generar los cuadros pagarás ${b.amountEur} €`;
+  }, [t, regs, subscriptions]);
+
   const isRR = t?.format === 'round_robin';
   const isGroups = t?.format === 'groups_ko';
   const isSocial = isSocialFormat(t?.format ?? '');
@@ -3003,8 +3030,29 @@ export const TournamentDetailScreen = ({
   };
 
   // Genera y, si va bien, avisa a los inscritos (in-app + push).
+  //
+  // EL PEAJE DEL TORNEO ESTÁ AQUÍ. El modelo es "parejas ilimitadas, se paga al
+  // cerrar la inscripción": el club no adelanta nada, pero para generar los
+  // cuadros hay que cerrar el pago por las parejas que hayan entrado. Se pide al
+  // servidor, que calcula el importe (y responde `paid` cuando no hay nada que
+  // cobrar: gratis hasta 16, o incluido en el plan). El enlace de pago va por
+  // CORREO, nunca abrimos el navegador — Apple 3.1.1a. La BD lo respalda: el
+  // guardia impide pasar a 'in_progress' con parejas sin cubrir.
   const runGenerateBracket = (fn: () => Promise<void>) =>
     runGenerate(async () => {
+      if (TOURNAMENT_BILLING_ENABLED && t) {
+        const r = await requestTournamentPayment(t.id);
+        if (!r.paid) {
+          toast.info(
+            'Falta cerrar el pago del torneo',
+            r.emailed
+              ? `Te hemos enviado a ${r.to} el enlace para pagarlo. En cuanto se confirme podrás generar los cuadros.`
+              : 'Te enviaremos por correo el enlace para pagarlo.',
+          );
+          await load();
+          return;
+        }
+      }
       await fn();
       if (t) notifyTournamentPush('tournament_bracket', t.id);
     });
@@ -3383,6 +3431,7 @@ export const TournamentDetailScreen = ({
                     : 'parejas inscritas'}
                 {t?.max_pairs ? ` · máx ${t.max_pairs}` : ''}
               </Text>
+              {liveCost ? <Text style={styles.liveCost}>{liveCost}</Text> : null}
               <Text style={[styles.emptyText, { marginTop: 6 }]}>
                 Gestiona los inscritos en la pestaña <Text style={{ color: c.accent, fontWeight: '700' }}>Jugadores</Text>. Cuando estén todos, genera{' '}
                 {isRR ? 'la liga' : isGroups ? 'los grupos' : isSocial ? 'las rondas' : 'el cuadro'}.
@@ -4778,6 +4827,12 @@ export const makeStyles = (c: Palette) =>
     },
     availName: { width: 96, color: c.text, fontSize: 13, fontWeight: '700' },
     availFranjas: { flex: 1, color: c.accent, fontSize: 12.5, fontWeight: '600' },
+    liveCost: {
+      color: c.textMuted,
+      fontSize: 12.5,
+      fontWeight: '600',
+      marginTop: 4,
+    },
     conflictBanner: {
       backgroundColor: withAlpha(c.error, 0.12),
       borderRadius: Radius.md,

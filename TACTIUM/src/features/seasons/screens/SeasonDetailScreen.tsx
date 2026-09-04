@@ -36,6 +36,7 @@ import { tandasOptions } from '@core/utils/tandas';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { notifyPush } from '@core/push';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
+import { toast } from '@store/toastStore';
 import type { ScannedMatchday } from '@core/services/imageRecognition';
 
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
@@ -46,6 +47,7 @@ import { FcpBracketView } from '../components/FcpBracketView';
 import {
   fetchTeamPlayoff,
   playoffFamilyKey,
+  importPlayoffMatchdays,
   type FcpTeamPlayoff,
 } from '@core/services/fcpBracket';
 
@@ -76,6 +78,32 @@ export const SeasonDetailScreen = ({
   // Cuadro(s) de playoff del equipo (si la fase eliminatoria ya existe en la FCP).
   const [playoff, setPlayoff] = useState<FcpTeamPlayoff | null>(null);
   const [selPlayoffGroup, setSelPlayoffGroup] = useState<string | null>(null);
+  const [importingPlayoff, setImportingPlayoff] = useState(false);
+  // Trae los cruces del playoff al calendario del equipo: dos jornadas por
+  // eliminatoria (ida y vuelta), sin fecha y con la SEDE como propuesta según
+  // la normativa (ida en casa del peor clasificado). Repetirlo no duplica nada.
+  const importPlayoff = async () => {
+    if (!team?.id || importingPlayoff) return;
+    setImportingPlayoff(true);
+    try {
+      const r = await importPlayoffMatchdays(team.id);
+      if (r.created === 0) {
+        toast.info(
+          'Ya estaban',
+          'Tus eliminatorias ya figuran en el calendario.',
+        );
+      } else {
+        toast.success(
+          `${r.created} ${r.created === 1 ? 'jornada añadida' : 'jornadas añadidas'}`,
+          'Sin fecha y con la sede por confirmar: la fija tu club.',
+        );
+      }
+    } catch (e: any) {
+      toast.error('No se pudieron traer', e?.message ?? '');
+    } finally {
+      setImportingPlayoff(false);
+    }
+  };
   // La Federación parte el playoff de una categoría en varios grupos (el cuadro
   // grande y las eliminatorias de puestos). El equipo suele aparecer en más de
   // uno, y antes salía un selector con esos trozos. Ahora la vista los junta
@@ -487,6 +515,27 @@ export const SeasonDetailScreen = ({
           )
         ) : isFcp && tab === 'cuadro' && playoff ? (
           <View style={{ marginHorizontal: 20, marginTop: 16 }}>
+            {/* Los cruces del playoff no existían como jornadas: solo se veían
+                aquí. Sin ellas el club no puede cuadrar sus pistas. */}
+            {isCaptain ? (
+            <Pressable
+              onPress={importPlayoff}
+              disabled={importingPlayoff}
+              style={({ pressed }) => [
+                styles.playoffImportBtn,
+                importingPlayoff && { opacity: 0.5 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              {importingPlayoff ? (
+                <ActivityIndicator size="small" color={c.accent} />
+              ) : (
+                <Text style={styles.playoffImportText}>
+                  Llevar mis eliminatorias al calendario
+                </Text>
+              )}
+            </Pressable>
+            ) : null}
             {playoffFamilies.length > 1 ? (
               <ScrollView
                 horizontal
@@ -1345,6 +1394,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   sectionTabOn: { backgroundColor: c.accent },
   sectionTabText: { color: c.textMuted, fontSize: 14, fontWeight: '700' },
   sectionTabTextOn: { color: c.textInverse },
+  playoffImportBtn: {
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  playoffImportText: { color: c.accent, fontSize: 13, fontWeight: '800' },
   cuadroChip: {
     maxWidth: 220,
     borderWidth: 1,

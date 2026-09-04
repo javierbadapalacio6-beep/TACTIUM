@@ -352,38 +352,19 @@ const CreateTournamentSheet: React.FC<{
   const [phasePlan, setPhasePlan] = useState<Record<string, string[]>>({});
   const [location, setLocation] = useState('');
 
-  // ── Coste en vivo del torneo ──────────────────────────────────────────────
-  // Según el tamaño (max_pairs) y el plan del club: se recalcula al teclear las
-  // plazas y alimenta tanto el chip informativo como el texto del botón final.
-  // DORMIDO tras TOURNAMENT_BILLING_ENABLED: con el flag en false no se cobra,
-  // así que no anunciamos importes que no se van a aplicar (billing = null).
+  // ── Qué se va a pagar por este torneo ─────────────────────────────────────
+  // Ya NO se paga por adelantado según las plazas: se paga al cerrar la
+  // inscripción, por las parejas que hayan entrado. Así que al crearlo no hay
+  // importe que enseñar todavía — solo la regla, para que el club sepa a qué
+  // atenerse. DORMIDO tras TOURNAMENT_BILLING_ENABLED.
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
-  const billing = useMemo(() => {
-    if (!TOURNAMENT_BILLING_ENABLED) return null;
-    const mp = maxPairs ? parseInt(maxPairs, 10) : null;
-    const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subscriptions);
-    return computeTournamentBilling({
-      maxPairs: mp,
-      planPairCap: pairCap,
-      hasActiveSub,
-    });
-  }, [maxPairs, clubId, subscriptions]);
   const billingLabel = useMemo(() => {
-    if (!billing) return null;
-    switch (billing.kind) {
-      case 'free':
-        return 'Gratis · hasta 16 parejas';
-      case 'included':
-        return 'Incluido en tu plan';
-      case 'needs_size':
-        return 'Fija las plazas para ver el precio';
-      case 'payable':
-        return billing.reason === 'overage'
-          ? `+${billing.amountEur} € · exceso sobre tu plan`
-          : `${billing.amountEur} € · pago del torneo`;
-    }
-  }, [billing]);
-  const payAmount = billing?.kind === 'payable' ? billing.amountEur : null;
+    if (!TOURNAMENT_BILLING_ENABLED) return null;
+    const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subscriptions);
+    if (hasActiveSub && pairCap != null)
+      return `Incluido hasta ${pairCap} parejas con tu plan`;
+    return 'Gratis hasta 16 parejas · después, según las inscritas';
+  }, [clubId, subscriptions]);
 
   // Días del torneo (para el planificador de fases del formulario).
   const ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -541,27 +522,10 @@ const CreateTournamentSheet: React.FC<{
         phaseFormats[cu.key] = fmtOf(cu.key);
       });
       const defaultFmt = fmtOf(phaseFormats.main ? 'main' : cuadros[0]?.key ?? 'main');
-      // ── Cobro por torneo (Fase 2) · DORMIDO tras el flag ──────────────────
-      // Si el torneo hay que pagarlo, nace RETENIDO ('draft'): sin inscripción
-      // abierta ni código que compartir. Solo el webhook de Stripe lo publica.
-      // El precio definitivo lo calcula el servidor; esto solo decide si retener.
-      const billingKind = (() => {
-        if (!TOURNAMENT_BILLING_ENABLED) return 'off' as const;
-        const subs = useSubscriptionStore.getState().subscriptions;
-        const { hasActiveSub, pairCap } = clubTournamentCap(clubId, subs);
-        return computeTournamentBilling({
-          maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
-          planPairCap: pairCap,
-          hasActiveSub,
-        }).kind;
-      })();
-      // Retener en BORRADOR si el torneo requiere pago O si aún no tiene plazas:
-      // sin plazas no se conoce el precio y NO puede publicarse (si no, se colaría
-      // creándolo sin plazas y ampliándolo luego sin pasar por caja).
-      const retainAsDraft =
-        billingKind === 'payable' || billingKind === 'needs_size';
+      // Cobro por torneo: ya no se retiene en borrador esperando el pago. El
+      // torneo nace PUBLICADO y la inscripción corre desde el primer día; el
+      // peaje está al generar los cuadros, con las parejas ya contadas.
       const created = await createTournament({
-        ...(retainAsDraft ? { status: 'draft' as const } : {}),
         clubId,
         name: name.trim(),
         format,
@@ -588,34 +552,6 @@ const CreateTournamentSheet: React.FC<{
         observations,
         coverUrl,
       });
-      // El torneo ya existe pero está retenido. El enlace de pago se envía por
-      // correo (la app no puede enlazar a un pago que no sea IAP; ver
-      // tournamentCheckout.ts). Al confirmar el webhook pasa a 'open'.
-      if (retainAsDraft) {
-        if (billingKind === 'payable') {
-          // Hay precio → se envía el enlace de pago por correo (la app no puede
-          // enlazar a un pago que no sea IAP; ver tournamentCheckout.ts).
-          const r = await requestTournamentPayment(created.id).catch(() => null);
-          toast.info(
-            'Torneo pendiente de pago',
-            r?.emailed
-              ? `Te hemos enviado el enlace de pago a ${r.to}. Se publicará en cuanto se confirme.`
-              : 'Te enviaremos el enlace de pago por correo. Se publicará en cuanto se confirme.',
-          );
-        } else {
-          // needs_size: aún no hay precio. Queda retenido hasta fijar las plazas
-          // y publicarlo (pagar o, si son ≤16, gratis).
-          toast.info(
-            'Torneo en borrador',
-            'Fija las plazas y publícalo para abrir las inscripciones.',
-          );
-        }
-        reset();
-        onCreated();
-        onClose();
-        return;
-      }
-
       // Guarda los días asignados a cada fase (si el club los eligió).
       const planEntries = Object.entries(phasePlan).flatMap(([key, isos]) => {
         const [b, r] = key.split(':');
@@ -653,16 +589,11 @@ const CreateTournamentSheet: React.FC<{
       onClose={onClose}
       footer={
         <View>
-          {/* Coste en vivo (dormido tras el flag): el usuario ve el precio
-              formándose mientras configura, sin muro de entrada. */}
+          {/* Cómo se cobra este torneo (dormido tras el flag). No hay importe
+              todavía: se paga al cerrar la inscripción, por parejas reales. */}
           {billingLabel ? (
             <View style={styles.billingChip}>
-              <View
-                style={[
-                  styles.billingDot,
-                  { backgroundColor: payAmount != null ? c.accent : c.textMuted },
-                ]}
-              />
+              <View style={[styles.billingDot, { backgroundColor: c.textMuted }]} />
               <Text style={styles.billingChipText}>{billingLabel}</Text>
             </View>
           ) : null}
@@ -702,11 +633,7 @@ const CreateTournamentSheet: React.FC<{
               {saving ? (
                 <ActivityIndicator size="small" color={c.textInverse} />
               ) : (
-                <Text style={styles.saveLabel}>
-                  {payAmount != null
-                    ? `Crear y pagar · ${payAmount} €`
-                    : 'Crear torneo'}
-                </Text>
+                <Text style={styles.saveLabel}>Crear torneo</Text>
               )}
             </Pressable>
           )}

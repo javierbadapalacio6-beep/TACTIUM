@@ -1,11 +1,18 @@
 import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
 import type { Subscription } from './hasPremiumAccess';
 
-// ── Cobro por torneo (modelo "por adelantado según max_pairs") ──────────────
-// El precio lo manda el TAMAÑO del torneo (plazas / max_pairs) que el club fija
-// al crearlo. Un club CON suscripción tiene torneos incluidos hasta el tope de
-// su plan y solo paga el EXCESO por pareja; un club SIN suscripción paga el
-// tramo por parejas (gratis hasta 16). Sincronizado con la landing (lib/plans).
+// ── Cobro por torneo (modelo "al cerrar la inscripción") ───────────────────
+// El precio lo manda el número de parejas REALMENTE INSCRITAS, no las plazas
+// que el club fijara al crearlo. La inscripción es ilimitada; al ir a generar
+// los cuadros se paga por lo que haya entrado. Un club CON suscripción tiene
+// torneos incluidos hasta el tope de su plan y solo paga el EXCESO por pareja;
+// un club SIN suscripción paga el tramo por parejas (gratis hasta 16).
+// Sincronizado con la landing (lib/plans).
+//
+// Por qué se cambió (reunión Smash, 2026-09-03): al gestor no le sirve limitar
+// plazas, y el modelo viejo además hacía aguas — el tope se aplicaba POR
+// DIVISIÓN, así que un torneo de "40 plazas" con tres categorías admitía 120
+// parejas habiendo pagado 40.
 
 export interface TournamentTier {
   pairs: number; // tope de parejas del tramo
@@ -40,47 +47,46 @@ export const TOURNAMENT_BILLING_ENABLED = true;
 // llamadas de pago de torneo (/api/tournaments/:id/checkout con deliver:email).
 export const TACTIUM_WEB_BASE_URL = 'https://app.tactium.io';
 
-/** Precio del tramo para un club SIN suscripción, según las plazas. */
-export function perTournamentPriceEur(maxPairs: number): number {
+/** Precio del tramo para un club SIN suscripción, según las parejas inscritas. */
+export function perTournamentPriceEur(pairs: number): number {
   for (const t of TOURNAMENT_TIERS) {
-    if (maxPairs <= t.pairs) return t.priceEur;
+    if (pairs <= t.pairs) return t.priceEur;
   }
   // Por encima del último tramo: precio del tramo top + recargo por pareja.
   const top = TOURNAMENT_TIERS[TOURNAMENT_TIERS.length - 1];
-  return top.priceEur + (maxPairs - top.pairs) * TOURNAMENT_EXTRA_PAIR_EUR;
+  return top.priceEur + (pairs - top.pairs) * TOURNAMENT_EXTRA_PAIR_EUR;
 }
 
 export type TournamentBilling =
   | { kind: 'included' } // cubierto por el plan del club
   | { kind: 'free' } // gratis (≤16 parejas, sin suscripción)
-  | { kind: 'payable'; amountEur: number; reason: 'overage' | 'per_tournament' }
-  | { kind: 'needs_size' }; // hay que fijar plazas (max_pairs) para poder facturar
+  | { kind: 'payable'; amountEur: number; reason: 'overage' | 'per_tournament' };
 
 /**
- * Decide qué pasa con un torneo de `maxPairs` plazas dado el plan del club.
- * `planPairCap` = tope de torneo del plan (null si el club no tiene sub de club).
+ * Decide qué se paga por un torneo con `pairs` parejas inscritas, dado el plan
+ * del club. `planPairCap` = tope de torneo del plan (null si no hay sub club).
+ * Una pareja apuntada a DOS categorías cuenta dos veces: ocupa dos huecos de
+ * cuadro, que es lo que se está pagando.
  */
 export function computeTournamentBilling(input: {
-  maxPairs: number | null;
+  pairs: number;
   planPairCap: number | null;
   hasActiveSub: boolean;
 }): TournamentBilling {
-  const { maxPairs, planPairCap, hasActiveSub } = input;
+  const { pairs, planPairCap, hasActiveSub } = input;
 
   // Club con suscripción de club: incluido hasta su tope, exceso por pareja.
   if (hasActiveSub && planPairCap != null) {
-    if (maxPairs == null) return { kind: 'needs_size' };
-    if (maxPairs <= planPairCap) return { kind: 'included' };
-    const amountEur = (maxPairs - planPairCap) * TOURNAMENT_EXTRA_PAIR_EUR;
+    if (pairs <= planPairCap) return { kind: 'included' };
+    const amountEur = (pairs - planPairCap) * TOURNAMENT_EXTRA_PAIR_EUR;
     return { kind: 'payable', amountEur, reason: 'overage' };
   }
 
   // Sin suscripción: gratis hasta 16, luego tramo por parejas.
-  if (maxPairs == null) return { kind: 'needs_size' };
-  if (maxPairs <= TOURNAMENT_FREE_PAIRS) return { kind: 'free' };
+  if (pairs <= TOURNAMENT_FREE_PAIRS) return { kind: 'free' };
   return {
     kind: 'payable',
-    amountEur: perTournamentPriceEur(maxPairs),
+    amountEur: perTournamentPriceEur(pairs),
     reason: 'per_tournament',
   };
 }
