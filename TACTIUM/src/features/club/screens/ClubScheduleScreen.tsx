@@ -7,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { IconBack, IconChevron, IconCheck, IconPencil, BottomSheet } from '@comp
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
+import { createInvitation } from '@core/services/invitations';
 import {
   getClubHomeSchedule,
   getVenueHomeSchedule,
@@ -82,6 +84,7 @@ export const ClubScheduleScreen = ({
   const [matches, setMatches] = useState<ClubHomeMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ClubHomeMatch | null>(null);
+  const [inviting, setInviting] = useState<string | null>(null);
   const [editTeam, setEditTeam] = useState<{ id: string; name: string } | null>(null);
   const [showAll, setShowAll] = useState(false);
   // Franjas favoritas por equipo (override local sobre lo del store).
@@ -92,6 +95,34 @@ export const ClubScheduleScreen = ({
     for (const t of clubTeams) init[t.id] = teamSlotsOf(t);
     setSlotsByTeam(init);
   }, [clubTeams]);
+
+  // Equipos INVITADOS que juegan aquí: salen de sus propios partidos, porque no
+  // están en `clubTeams` (no tienen club_id, por eso no gastan cuota).
+  const guestTeams = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of matches) if (m.is_guest) map.set(m.team_id, m.team_name);
+    return [...map.entries()].map(([id, name]) => ({ id, name }));
+  }, [matches]);
+
+  // Pasarle al capitán de un equipo invitado un código para que entre y se
+  // quede con SU equipo (el club sigue poniéndole los horarios).
+  const inviteGuestCaptain = async (teamId: string, teamName: string) => {
+    if (inviting) return;
+    setInviting(teamId);
+    try {
+      const inv = await createInvitation(teamId, 'captain');
+      await Share.share({
+        message:
+          `Tu equipo "${teamName}" ya está en TACTIUM con su calendario.\n` +
+          `Entra con este código y el equipo pasa a ser tuyo: ${inv.code}\n` +
+          `Los horarios de local en nuestro club los seguimos poniendo nosotros.`,
+      });
+    } catch (e: any) {
+      toast.error('No se pudo crear el código', e?.message ?? '');
+    } finally {
+      setInviting(null);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!club) return;
@@ -204,6 +235,42 @@ export const ClubScheduleScreen = ({
                     </Pressable>
                   );
                 })}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Equipos invitados: juegan aquí sin ser del club */}
+          {guestTeams.length > 0 ? (
+            <View style={{ marginTop: 22 }}>
+              <Text style={styles.sectionLabel}>EQUIPOS INVITADOS</Text>
+              <Text style={styles.emptyText}>
+                Juegan en tus pistas sin ser de tu club: solo les pones el horario.
+                Pásale el código a su capitán y el equipo pasará a ser suyo — tú
+                seguirás poniendo los horarios.
+              </Text>
+              <View style={{ gap: 8, marginTop: 10 }}>
+                {guestTeams.map((t) => (
+                  <View key={t.id} style={styles.favTeamRow}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.favTeamName} numberOfLines={1}>
+                        {t.name}
+                      </Text>
+                      <Text style={styles.favTeamEmpty}>Invitado · solo horarios</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => inviteGuestCaptain(t.id, t.name)}
+                      disabled={inviting === t.id}
+                      hitSlop={8}
+                      style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                    >
+                      {inviting === t.id ? (
+                        <ActivityIndicator size="small" color={c.accent} />
+                      ) : (
+                        <Text style={styles.guestInvite}>Invitar al capitán</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                ))}
               </View>
             </View>
           ) : null}
@@ -628,6 +695,7 @@ const makeStyles = (c: Palette) =>
       marginTop: 2,
     },
     favTeamEmpty: { color: c.textFaint, fontSize: 12, marginTop: 2 },
+    guestInvite: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
     segment: {
       flexDirection: 'row',
       gap: 6,

@@ -37,7 +37,49 @@ export async function fetchMyTeams(): Promise<Team[]> {
     .select('*')
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  const teams = (data ?? []) as Team[];
+
+  // Los equipos INVITADOS no son "mis equipos". El club que les pone el horario
+  // figura como dueño del registro solo porque `owner_id` no admite vacío, pero
+  // NO gestiona ese equipo: ni plantilla, ni alineaciones, ni temporadas. Si
+  // aparecieran aquí, saldrían en el selector de equipos y el gestor podría
+  // entrar a hacer alineaciones de un equipo ajeno. Se ocultan mientras el
+  // equipo siga técnicamente a su nombre; en cuanto entra su capitán de verdad
+  // la propiedad se traspasa (trigger `guest_team_captain_takeover`) y el club
+  // deja de verlo por completo — le queda solo el horario.
+  // Atajo: sin ningún candidato, nos ahorramos las dos consultas de abajo.
+  const anyCandidate = teams.some(
+    (t) => teamVenueClubId(t) != null && t.club_id == null,
+  );
+  if (!anyCandidate) return teams;
+
+  const { data: sess } = await supabase.auth.getSession();
+  const uid = sess.session?.user?.id ?? null;
+  if (!uid) return teams;
+  const mine = new Set(await myAdminClubIds(uid));
+  if (mine.size === 0) return teams;
+
+  return teams.filter((t) => {
+    const venue = teamVenueClubId(t);
+    // Ojo: un capitán normal cuyo equipo juega en un club también tiene
+    // `venue_club_id`. Solo se oculta si quien mira es el CLUB SEDE y además
+    // consta como dueño técnico del registro.
+    const isGuestOfMyClub =
+      venue != null && t.club_id == null && t.owner_id === uid && mine.has(venue);
+    return !isGuestOfMyClub;
+  });
+}
+
+/** Clubes que el usuario posee o administra (para saber si un equipo invitado
+ *  es "de su sede" y por tanto NO es suyo). */
+async function myAdminClubIds(uid: string): Promise<string[]> {
+  const [owned, admin] = await Promise.all([
+    supabase.from('clubs').select('id').eq('owner_id', uid),
+    supabase.from('club_members').select('club_id').eq('user_id', uid).eq('role', 'admin'),
+  ]);
+  const ids = ((owned.data ?? []) as { id: string }[]).map((r) => r.id);
+  for (const r of (admin.data ?? []) as { club_id: string }[]) ids.push(r.club_id);
+  return ids;
 }
 
 /**
