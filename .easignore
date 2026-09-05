@@ -40,3 +40,24 @@ node_modules/
 
 # Logs
 *.log
+
+# tactium-web (proyecto Next.js aparte)
+tactium-web/node_modules
+tactium-web/.next
+
+# ── Añadido 2026-09-05 ────────────────────────────────────────────────────
+# Carpetas de material audiovisual y capturas creadas después del build de
+# agosto. Al no estar versionadas nadie las excluía, y el tarball volvió a
+# 1,2 GB (la subida tardaba ~6 min y llegó a agotar el tiempo del comando).
+/MOTION GRAPICHS TACTIUM/
+/TACTIUM-VIDEO/
+/Calcetines_Imagenes/
+/tactium-web/
+/TACTIUM/assets/capturas/
+/TACTIUM/assets/store-shots/
+*.mp4
+*.mov
+*.MOV
+*.jpeg
+*.pdf
+*.csv
