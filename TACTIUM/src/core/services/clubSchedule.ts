@@ -137,6 +137,24 @@ export function currentRoundMatches(matches: ClubHomeMatch[]): ClubHomeMatch[] {
   );
 }
 
+/** Franjas favoritas de un equipo INVITADO, que el club sede sí puede editar.
+ *  Va por RPC de puerta estrecha: el club no es admin de ese equipo, así que la
+ *  RLS de `teams` no le deja el update directo. Avisa a su capitán. */
+export async function setVenueTeamSlots(
+  teamId: string,
+  slots: string[],
+): Promise<void> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { error } = await rpc('set_venue_team_slots', {
+    p_team_id: teamId,
+    p_slots: slots,
+  });
+  if (error) throw new Error(error.message);
+}
+
 /** Guarda las franjas favoritas de local de un equipo (array de 'HH:MM'). */
 export async function setTeamPreferredSlots(
   teamId: string,

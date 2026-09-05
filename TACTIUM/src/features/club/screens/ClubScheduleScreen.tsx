@@ -86,7 +86,9 @@ export const ClubScheduleScreen = ({
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ClubHomeMatch | null>(null);
   const [inviting, setInviting] = useState<string | null>(null);
-  const [editTeam, setEditTeam] = useState<{ id: string; name: string } | null>(null);
+  const [editTeam, setEditTeam] = useState<
+    { id: string; name: string; guest?: boolean } | null
+  >(null);
   const [showAll, setShowAll] = useState(false);
   // Franjas favoritas por equipo (override local sobre lo del store).
   const [slotsByTeam, setSlotsByTeam] = useState<Record<string, string[]>>({});
@@ -253,19 +255,35 @@ export const ClubScheduleScreen = ({
             <View style={{ marginTop: 22 }}>
               <Text style={styles.sectionLabel}>EQUIPOS INVITADOS</Text>
               <Text style={styles.emptyText}>
-                Juegan en tus pistas sin ser de tu club: solo les pones el horario.
-                Pásale el código a su capitán y el equipo pasará a ser suyo — tú
-                seguirás poniendo los horarios.
+                Juegan en tus pistas sin ser de tu club: les pones el horario y sus
+                franjas favoritas. Pásale el código a su capitán y el equipo pasará
+                a ser suyo — tú seguirás poniendo los horarios.
               </Text>
               <View style={{ gap: 8, marginTop: 10 }}>
-                {guestTeams.map((t) => (
+                {guestTeams.map((t) => {
+                  const gslots = slotsByTeam[t.id] ?? [];
+                  return (
                   <View key={t.id} style={styles.favTeamRow}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
+                    <Pressable
+                      onPress={() => setEditTeam({ id: t.id, name: t.name, guest: true })}
+                      style={({ pressed }) => [
+                        { flex: 1, minWidth: 0 },
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
                       <Text style={styles.favTeamName} numberOfLines={1}>
                         {t.name}
                       </Text>
-                      <Text style={styles.favTeamEmpty}>Invitado · solo horarios</Text>
-                    </View>
+                      {gslots.length > 0 ? (
+                        <Text style={styles.favTeamSlots} numberOfLines={1}>
+                          {gslots.map(fmtSlot).join(' · ')}
+                        </Text>
+                      ) : (
+                        <Text style={styles.favTeamEmpty}>
+                          Invitado · toca para poner franjas
+                        </Text>
+                      )}
+                    </Pressable>
                     <Pressable
                       onPress={() => inviteGuestCaptain(t.id, t.name)}
                       disabled={inviting === t.id}
@@ -279,7 +297,8 @@ export const ClubScheduleScreen = ({
                       )}
                     </Pressable>
                   </View>
-                ))}
+                  );
+                })}
               </View>
             </View>
           ) : null}
@@ -378,6 +397,7 @@ export const ClubScheduleScreen = ({
 
       <TeamSlotsSheet
         team={editTeam}
+        guest={!!editTeam?.guest}
         slots={editTeam ? slotsByTeam[editTeam.id] ?? [] : []}
         onClose={() => setEditTeam(null)}
         onSaved={onSlotsSaved}
@@ -392,7 +412,9 @@ const TeamSlotsSheet: React.FC<{
   slots: string[];
   onClose: () => void;
   onSaved: (teamId: string, slots: string[]) => void;
-}> = ({ team, slots, onClose, onSaved }) => {
+  // Invitado: el guardado va por RPC, no por update directo.
+  guest?: boolean;
+}> = ({ team, slots, onClose, onSaved, guest = false }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   return (
@@ -413,13 +435,16 @@ const TeamSlotsSheet: React.FC<{
         {team?.name ?? ''}
       </Text>
       <Text style={styles.sheetSub}>
-        Se usan al poner la hora de los partidos de local de este equipo.
+        {guest
+          ? 'Este equipo juega en tus pistas sin ser de tu club. Sus franjas te salen como atajo al poner la hora de sus partidos, y avisamos a su capitán del cambio.'
+          : 'Se usan al poner la hora de los partidos de local de este equipo.'}
       </Text>
       <View style={{ marginTop: 16 }}>
         {team ? (
           <PreferredSlotsEditor
             teamId={team.id}
             initialSlots={slots}
+            guest={guest}
             onChanged={(s) => onSaved(team.id, s)}
           />
         ) : null}

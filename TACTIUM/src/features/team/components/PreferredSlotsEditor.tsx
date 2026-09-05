@@ -6,7 +6,7 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconX } from '@components/ui';
 import { toast } from '@store/toastStore';
-import { setTeamPreferredSlots } from '@core/services/clubSchedule';
+import { setTeamPreferredSlots, setVenueTeamSlots } from '@core/services/clubSchedule';
 
 // Franjas favoritas de local de un equipo. Compartido entre la hoja de editar
 // equipo (pestaña Equipo, capitán) y los horarios del club (gestor). La RLS de
@@ -45,7 +45,10 @@ export const PreferredSlotsEditor: React.FC<{
   teamId: string;
   initialSlots: string[];
   onChanged?: (slots: string[]) => void;
-}> = ({ teamId, initialSlots, onChanged }) => {
+  // Equipo INVITADO editado por su club sede: guarda por el RPC de puerta
+  // estrecha en vez del update directo, que la RLS le bloquearía.
+  guest?: boolean;
+}> = ({ teamId, initialSlots, onChanged, guest = false }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [slots, setSlots] = useState<string[]>(initialSlots);
@@ -65,7 +68,8 @@ export const PreferredSlotsEditor: React.FC<{
     setSlots(uniq);
     onChanged?.(uniq);
     try {
-      await setTeamPreferredSlots(teamId, uniq);
+      if (guest) await setVenueTeamSlots(teamId, uniq);
+      else await setTeamPreferredSlots(teamId, uniq);
     } catch (e: any) {
       toast.error('No se pudo guardar la franja', e?.message ?? '');
     }
