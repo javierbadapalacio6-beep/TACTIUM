@@ -39,9 +39,15 @@ export const InvitePlayersSheet: React.FC<{
     setLoading(true);
     (async () => {
       try {
-        const invs = await InvitationsApi.fetchTeamInvitationsWithRedeemers(
+        let invs = await InvitationsApi.fetchTeamInvitationsWithRedeemers(
           teamId,
         );
+        // El equipo siempre tiene UN código de jugador. Si aún no existe (o
+        // viene de la época de un código por jugador), se crea al abrir.
+        if (!invs.some(InvitationsApi.isSharedCode)) {
+          const inv = await InvitationsApi.createInvitation(teamId, 'player');
+          invs = [{ ...inv, redeemer: null }, ...invs];
+        }
         if (!cancelled) setInvitations(invs);
       } catch (e: any) {
         if (!cancelled) {
@@ -60,30 +66,44 @@ export const InvitePlayersSheet: React.FC<{
   //  · Activos = no canjeados y no caducados (acción posible: compartir/revocar)
   //  · Canjeados = used_at != null (informativo: muestra a quién se unió)
   // Los caducados sin canjear se omiten para no ensuciar.
-  const activeCodes = invitations.filter(InvitationsApi.isInvitationActive);
+  // El código del equipo (uno, reutilizable) y, aparte, los sueltos de un solo
+  // uso que quedaran de antes.
+  const shared = invitations.find(InvitationsApi.isSharedCode) ?? null;
+  const legacyCodes = invitations.filter(
+    (i) => !InvitationsApi.isSharedCode(i) && InvitationsApi.isInvitationActive(i),
+  );
   const redeemedCodes = invitations.filter((i) => i.used_at !== null);
 
   const buildShareMessage = (code: string) =>
     `Únete como jugador a "${teamName ?? 'el equipo'}" en TACTIUM con este código: ${code}`;
 
-  const handleCreate = async () => {
+  const handleRotate = () => {
     if (!teamId || generating) return;
-    setGenerating(true);
-    try {
-      const inv = await InvitationsApi.createInvitation(teamId, 'player');
-      setInvitations((list) => [{ ...inv, redeemer: null }, ...list]);
-      // Abrimos share inmediatamente: el caso típico es enviar el código
-      // por WhatsApp al jugador justo después de generarlo.
-      try {
-        await Share.share({ message: buildShareMessage(inv.code) });
-      } catch {
-        /* usuario canceló share, no es error */
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudo generar el código.');
-    } finally {
-      setGenerating(false);
-    }
+    Alert.alert(
+      'Generar código nuevo',
+      'El código actual dejará de funcionar. Úsalo solo si se ha filtrado fuera del equipo.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Generar',
+          style: 'destructive',
+          onPress: async () => {
+            setGenerating(true);
+            try {
+              const inv = await InvitationsApi.rotatePlayerCode(teamId);
+              setInvitations((list) => [
+                { ...inv, redeemer: null },
+                ...list.filter((i) => !InvitationsApi.isSharedCode(i)),
+              ]);
+            } catch (e: any) {
+              Alert.alert('Error', e?.message ?? 'No se pudo generar el código.');
+            } finally {
+              setGenerating(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleShare = async (code: string) => {
@@ -121,32 +141,9 @@ export const InvitePlayersSheet: React.FC<{
       <Text style={styles.eyebrow}>INVITAR JUGADORES</Text>
       <Text style={styles.title}>Códigos de invitación</Text>
       <Text style={styles.lede}>
-        Cada código permite a un jugador unirse al equipo desde la app.
-        Compártelo por WhatsApp, mensaje o como prefieras.
+        Un solo código para toda la plantilla: pégalo en el grupo del equipo y
+        que cada jugador lo meta en la app. No caduca ni se gasta.
       </Text>
-
-      <Pressable
-        onPress={handleCreate}
-        disabled={generating || !teamId}
-        style={({ pressed }) => [
-          styles.generateBtn,
-          (generating || !teamId) && { opacity: 0.5 },
-          pressed && !generating && { opacity: 0.85 },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Generar nuevo código de invitación"
-      >
-        {generating ? (
-          <ActivityIndicator color={c.textInverse} />
-        ) : (
-          <>
-            <IconPlus size={14} color={c.textInverse} />
-            <Text style={styles.generateBtnLabel}>
-              Generar código nuevo
-            </Text>
-          </>
-        )}
-      </Pressable>
 
       {loading ? (
         <View style={styles.loaderRow}>
@@ -154,51 +151,97 @@ export const InvitePlayersSheet: React.FC<{
         </View>
       ) : (
         <>
-          <Text style={styles.groupLabel}>ACTIVOS</Text>
+          <Text style={styles.groupLabel}>CÓDIGO DEL EQUIPO</Text>
           <View style={styles.list}>
-            {activeCodes.length === 0 ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>
-                  No hay códigos activos. Genera uno arriba.
+            <View style={styles.row}>
+              <View style={styles.codeBlock}>
+                <Text style={styles.codeText}>{shared?.code ?? '—'}</Text>
+                <Text style={styles.codeMeta}>
+                  {(shared?.uses ?? 0) === 0
+                    ? 'Aún no lo ha usado nadie'
+                    : `${shared?.uses} jugador${shared?.uses === 1 ? '' : 'es'} se ${shared?.uses === 1 ? 'ha' : 'han'} unido`}
                 </Text>
               </View>
-            ) : (
-              activeCodes.map((inv) => (
-                <View key={inv.id} style={styles.row}>
-                  <View style={styles.codeBlock}>
-                    <Text style={styles.codeText}>{inv.code}</Text>
-                    <Text style={styles.codeMeta}>
-                      Expira {formatExpiry(inv.expires_at)}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => handleShare(inv.code)}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                      styles.iconBtn,
-                      pressed && { opacity: 0.7 },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Compartir código"
-                  >
-                    <IconShare size={14} color={c.accent} />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => handleRevoke(inv)}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                      styles.iconBtn,
-                      pressed && { opacity: 0.7 },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Revocar código"
-                  >
-                    <IconTrash size={14} color={c.error} />
-                  </Pressable>
-                </View>
-              ))
-            )}
+              <Pressable
+                onPress={() => shared && handleShare(shared.code)}
+                hitSlop={8}
+                disabled={!shared}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Compartir código del equipo"
+              >
+                <IconShare size={14} color={c.accent} />
+              </Pressable>
+            </View>
           </View>
+
+          <Pressable
+            onPress={handleRotate}
+            disabled={generating || !teamId}
+            style={({ pressed }) => [
+              styles.generateBtn,
+              (generating || !teamId) && { opacity: 0.5 },
+              pressed && !generating && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Generar un código de equipo nuevo"
+          >
+            {generating ? (
+              <ActivityIndicator color={c.textInverse} />
+            ) : (
+              <>
+                <IconPlus size={14} color={c.textInverse} />
+                <Text style={styles.generateBtnLabel}>Generar código nuevo</Text>
+              </>
+            )}
+          </Pressable>
+
+          {legacyCodes.length > 0 ? (
+            <>
+              <Text style={[styles.groupLabel, { marginTop: 18 }]}>
+                CÓDIGOS SUELTOS (DE UN SOLO USO)
+              </Text>
+              <View style={styles.list}>
+                {legacyCodes.map((inv) => (
+                  <View key={inv.id} style={styles.row}>
+                    <View style={styles.codeBlock}>
+                      <Text style={styles.codeText}>{inv.code}</Text>
+                      <Text style={styles.codeMeta}>
+                        Expira {formatExpiry(inv.expires_at)}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => handleShare(inv.code)}
+                      hitSlop={8}
+                      style={({ pressed }) => [
+                        styles.iconBtn,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Compartir código"
+                    >
+                      <IconShare size={14} color={c.accent} />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleRevoke(inv)}
+                      hitSlop={8}
+                      style={({ pressed }) => [
+                        styles.iconBtn,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Revocar código"
+                    >
+                      <IconTrash size={14} color={c.error} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : null}
 
           {redeemedCodes.length > 0 ? (
             <>

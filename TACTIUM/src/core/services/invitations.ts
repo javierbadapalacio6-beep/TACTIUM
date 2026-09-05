@@ -1,7 +1,13 @@
 import { supabase } from '@core/supabase/client';
 import type { Database } from '@core/supabase/database.types';
 
-export type TeamInvitation = Database['public']['Tables']['team_invitations']['Row'];
+// `multi_use` y `uses` son de la migración 20260905b y aún no están en los
+// tipos generados. Opcionales para no romper con clientes/tipos antiguos.
+export type TeamInvitation =
+  Database['public']['Tables']['team_invitations']['Row'] & {
+    multi_use?: boolean | null;
+    uses?: number | null;
+  };
 export type InvitableRole = Extract<
   Database['public']['Enums']['team_role'],
   'captain' | 'player'
@@ -103,5 +109,30 @@ export async function redeemInvitation(
 }
 
 export function isInvitationActive(inv: TeamInvitation): boolean {
-  return inv.used_at === null && new Date(inv.expires_at) > new Date();
+  if (new Date(inv.expires_at) <= new Date()) return false;
+  // El código compartido del equipo no se consume: sigue activo por muchos
+  // jugadores que lo hayan usado.
+  return isSharedCode(inv) || inv.used_at === null;
+}
+
+/** ¿Es el código de jugador COMPARTIDO del equipo (reutilizable)? */
+export function isSharedCode(inv: TeamInvitation): boolean {
+  return inv.multi_use === true && inv.role === 'player';
+}
+
+/**
+ * Genera un código de jugador NUEVO para el equipo e invalida el anterior.
+ * Para cuando el de siempre se ha filtrado fuera del equipo.
+ */
+export async function rotatePlayerCode(teamId: string): Promise<TeamInvitation> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc('rotate_team_player_code', {
+    target_team: teamId,
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('No se pudo generar el código');
+  return data as TeamInvitation;
 }

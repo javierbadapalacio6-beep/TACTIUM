@@ -450,11 +450,16 @@ export const TeamMembersSheet: React.FC<{
             {invitations.map((inv) => {
               const active = InvitationsApi.isInvitationActive(inv);
               const role = inv.role as InvitationsApi.InvitableRole;
-              const status = inv.used_at
-                ? 'Usado'
-                : new Date(inv.expires_at) < new Date()
-                  ? 'Caducado'
-                  : 'Pendiente';
+              // El código de jugador es único por equipo y reutilizable: no
+              // "caduca" ni se "usa", así que se describe por sus usos.
+              const shared = InvitationsApi.isSharedCode(inv);
+              const status = shared
+                ? `código del equipo · ${inv.uses ?? 0} uso${(inv.uses ?? 0) === 1 ? '' : 's'}`
+                : inv.used_at
+                  ? 'Usado'
+                  : new Date(inv.expires_at) < new Date()
+                    ? 'Caducado'
+                    : 'Pendiente';
               return (
                 <View key={inv.id} style={styles.inviteRow}>
                   <View style={{ flex: 1, minWidth: 0 }}>
