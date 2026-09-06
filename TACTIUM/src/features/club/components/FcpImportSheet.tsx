@@ -36,7 +36,9 @@ export const FcpImportSheet: React.FC<{
   const [allGroups, setAllGroups] = useState<FcpClubGroup[]>([]);
   const [query, setQuery] = useState('');
   const [activeClub, setActiveClub] = useState<FcpClubGroup | null>(null);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Cada equipo marcado lleva SU papel: del club o invitado. Antes el modo era
+  // global y excluyente, así que no se podían dar de alta los dos de una vez.
+  const [selected, setSelected] = useState<Map<number, FcpImportMode>>(new Map());
   const [importing, setImporting] = useState(false);
   // Sin club (capitán independiente) = gestiona UN solo equipo → selección
   // única (radio). Con club, multi-selección para volcar todos sus equipos.
@@ -44,16 +46,17 @@ export const FcpImportSheet: React.FC<{
   // Equipos DEL club vs equipos INVITADOS (juegan en sus pistas con otro
   // nombre): de estos solo se gestiona el horario, no consumen cuota del plan y
   // no se les vuelca la plantilla.
-  const [mode, setMode] = useState<FcpImportMode>('owned');
-  const guest = mode === 'venue';
+  const guestCount = useMemo(
+    () => [...selected.values()].filter((m) => m === 'venue').length,
+    [selected],
+  );
 
   // Carga todo el catálogo una vez al abrir; el filtro es local.
   useEffect(() => {
     if (!open) return;
     setQuery('');
     setActiveClub(null);
-    setSelected(new Set());
-    setMode('owned');
+    setSelected(new Map());
     setLoading(true);
     searchFcpClubs('')
       .then(setAllGroups)
@@ -75,10 +78,19 @@ export const FcpImportSheet: React.FC<{
     setSelected((prev) => {
       if (single) {
         // Selección única: tocar un equipo deja SOLO ese; re-tocarlo lo quita.
-        return prev.has(id) ? new Set() : new Set([id]);
+        return prev.has(id) ? new Map() : new Map([[id, 'owned' as FcpImportMode]]);
       }
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      const n = new Map(prev);
+      if (n.has(id)) n.delete(id);
+      else n.set(id, 'owned');
+      return n;
+    });
+
+  /** Cambia el papel de un equipo ya marcado (del club ↔ invitado). */
+  const setTeamMode = (id: number, m: FcpImportMode) =>
+    setSelected((prev) => {
+      const n = new Map(prev);
+      n.set(id, m);
       return n;
     });
 
@@ -136,15 +148,20 @@ export const FcpImportSheet: React.FC<{
         }
       }
 
-      const res = await importFcpTeams(clubId, selectedOptions, reuse, mode);
+      // Los del club y los invitados van en pasadas distintas: cada uno se da
+      // de alta de una forma (plantilla volcada vs solo sede).
+      const own = selectedOptions.filter((t) => selected.get(t.id_equipo) !== 'venue');
+      const guests = selectedOptions.filter((t) => selected.get(t.id_equipo) === 'venue');
+      const res = [
+        ...(own.length ? await importFcpTeams(clubId, own, reuse, 'owned') : []),
+        ...(guests.length ? await importFcpTeams(clubId, guests, reuse, 'venue') : []),
+      ];
       const players = res.reduce((n, r) => n + r.players, 0);
       await loadForUser();
-      toast.success(
-        guest ? '¡Equipos invitados añadidos!' : '¡Equipos importados!',
-        guest
-          ? `${res.length} ${res.length === 1 ? 'equipo' : 'equipos'} · ya puedes ponerles horario.`
-          : `${res.length} ${res.length === 1 ? 'equipo' : 'equipos'} · ${players} jugadores.`,
-      );
+      const parts: string[] = [];
+      if (own.length) parts.push(`${own.length} de tu club · ${players} jugadores`);
+      if (guests.length) parts.push(`${guests.length} invitado${guests.length === 1 ? '' : 's'} · ya puedes ponerles horario`);
+      toast.success('¡Equipos añadidos!', parts.join(' · '));
       onImported?.(res.length, players);
       onClose();
     } catch (e: any) {
@@ -186,41 +203,12 @@ export const FcpImportSheet: React.FC<{
             : 'Importa tu club'}
       </Text>
 
-      {!single ? (
-        <View style={styles.modeRow}>
-          {(
-            [
-              { id: 'owned', label: 'Equipos de mi club' },
-              { id: 'venue', label: 'Invitados · solo horarios' },
-            ] as { id: FcpImportMode; label: string }[]
-          ).map((m) => {
-            const on = mode === m.id;
-            return (
-              <Pressable
-                key={m.id}
-                onPress={() => {
-                  setMode(m.id);
-                  setSelected(new Set());
-                }}
-                style={[styles.modeChip, on && { backgroundColor: c.accent, borderColor: c.accent }]}
-              >
-                <Text style={[styles.modeChipText, { color: on ? c.textInverse : c.textMuted }]}>
-                  {m.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
       {activeClub ? (
         <>
           <Text style={styles.sub}>
-            {guest
-              ? 'Equipos que juegan en tus pistas sin ser de tu club. Solo les pondrás día, hora y pista: ni plantilla, ni alineaciones. No gastan plaza de tu plan.'
-              : single
-                ? 'Elige tu equipo. Se volcará su plantilla real con los puntos oficiales.'
-                : 'Marca los equipos a crear. Se volcará la plantilla real de cada uno con sus puntos.'}
+            {single
+              ? 'Elige tu equipo. Se volcará su plantilla real con los puntos oficiales.'
+              : 'Marca los equipos y di de cada uno si es de tu club o solo juega en tus pistas. Puedes mezclar los dos.'}
           </Text>
           <Pressable onPress={() => setActiveClub(null)} hitSlop={6} style={{ marginTop: 8 }}>
             <Text style={styles.back}>‹ Elegir otro club</Text>
@@ -232,27 +220,67 @@ export const FcpImportSheet: React.FC<{
           </Text>
           <View style={{ gap: 8, marginTop: 12 }}>
             {activeClub.teams.map((t) => {
-              const on = selected.has(t.id_equipo);
+              const teamMode = selected.get(t.id_equipo);
+              const on = teamMode !== undefined;
               return (
-                <Pressable
-                  key={t.id_equipo}
-                  onPress={() => toggle(t.id_equipo)}
-                  style={[styles.teamRow, on && { borderColor: c.accent, backgroundColor: c.accent10 }]}
-                >
-                  <View style={[styles.check, single && styles.checkRadio, on && { backgroundColor: c.accent, borderColor: c.accent }]}>
-                    {on ? <Text style={styles.checkMark}>✓</Text> : null}
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.teamName} numberOfLines={1}>{t.equipo}</Text>
-                    <Text style={styles.teamMeta} numberOfLines={1}>
-                      {t.gender === 'femenino' ? 'Femenino' : 'Masculino'}
-                      {t.category ? ` · ${t.category}` : ''}
-                      {t.grupo ? ` · ${t.grupo}` : ''}
-                    </Text>
-                  </View>
-                </Pressable>
+                <View key={t.id_equipo}>
+                  <Pressable
+                    onPress={() => toggle(t.id_equipo)}
+                    style={[styles.teamRow, on && { borderColor: c.accent, backgroundColor: c.accent10 }]}
+                  >
+                    <View style={[styles.check, single && styles.checkRadio, on && { backgroundColor: c.accent, borderColor: c.accent }]}>
+                      {on ? <Text style={styles.checkMark}>✓</Text> : null}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.teamName} numberOfLines={1}>{t.equipo}</Text>
+                      <Text style={styles.teamMeta} numberOfLines={1}>
+                        {t.gender === 'femenino' ? 'Femenino' : 'Masculino'}
+                        {t.category ? ` · ${t.category}` : ''}
+                        {t.grupo ? ` · ${t.grupo}` : ''}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {on && !single ? (
+                    <View style={styles.roleRow}>
+                      {(
+                        [
+                          { id: 'owned', label: 'De mi club' },
+                          { id: 'venue', label: 'Solo juega aquí' },
+                        ] as { id: FcpImportMode; label: string }[]
+                      ).map((r) => {
+                        const sel = teamMode === r.id;
+                        return (
+                          <Pressable
+                            key={r.id}
+                            onPress={() => setTeamMode(t.id_equipo, r.id)}
+                            style={[
+                              styles.roleChip,
+                              sel && { backgroundColor: c.accent, borderColor: c.accent },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.roleChipText,
+                                { color: sel ? c.textInverse : c.textMuted },
+                              ]}
+                            >
+                              {r.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
               );
             })}
+            {guestCount > 0 ? (
+              <Text style={styles.hint}>
+                De los marcados como «solo juega aquí» únicamente gestionarás el
+                horario: ni plantilla, ni alineaciones. No gastan plaza de tu plan
+                y su capitán puede quedarse con el equipo cuando entre.
+              </Text>
+            ) : null}
           </View>
         </>
       ) : (
@@ -288,7 +316,13 @@ export const FcpImportSheet: React.FC<{
                       // Club: pre-marca todos sus equipos. Independiente: ninguno,
                       // el capitán elige el suyo (selección única).
                       setSelected(
-                        single ? new Set() : new Set(g.teams.map((t) => t.id_equipo)),
+                        single
+                          ? new Map()
+                          : new Map(
+                              g.teams.map(
+                                (t) => [t.id_equipo, 'owned' as FcpImportMode] as const,
+                              ),
+                            ),
                       );
                     }}
                     style={({ pressed }) => [styles.clubRow, pressed && { opacity: 0.85 }]}
@@ -318,17 +352,15 @@ const makeStyles = (c: Palette) =>
     sub: { color: c.textMuted, fontSize: 13.5, lineHeight: 19, marginTop: 8 },
     back: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
     hint: { color: c.textFaint, fontSize: 12, lineHeight: 17, marginTop: 10 },
-    modeRow: { flexDirection: 'row', gap: 6, marginTop: 12 },
-    modeChip: {
-      flex: 1,
-      paddingVertical: 9,
+    roleRow: { flexDirection: 'row', gap: 6, marginTop: 6, marginLeft: 34 },
+    roleChip: {
       paddingHorizontal: 10,
+      paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: c.hairStrong,
-      alignItems: 'center',
+      borderColor: c.hair,
     },
-    modeChipText: { fontSize: 12.5, fontWeight: '700' },
+    roleChipText: { fontSize: 11.5, fontWeight: '700' },
     searchBox: {
       marginTop: 14,
       backgroundColor: c.bgRaised,
