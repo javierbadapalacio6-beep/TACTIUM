@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,8 @@ import { AmbientBackdrop, NeonDot } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
 import { useTeamStore } from '@store/teamStore';
+import { readStorePurchases, isClubTier } from '@core/services/storeSync';
+import { PLAN_BY_TIER } from '@core/subscriptions/plans';
 
 // Timings de la secuencia de entrada — inspirado en stagger de anime.js
 // aplicado con layout animations de Reanimated. Reglas del UX guide:
@@ -38,6 +40,23 @@ export const OnboardingChoiceScreen = ({
 }: OnboardingStackScreenProps<'OnboardingChoice'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+
+  // La compra vive en la cuenta de la tienda, no en la de TACTIUM: quien
+  // rehace su cuenta llega aquí con un plan ya pagado. Si es de club, este
+  // camino es el que le corresponde y el otro no le aplicaría.
+  const [paidClubPlan, setPaidClubPlan] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    readStorePurchases()
+      .then((ps) => {
+        const club = ps.find((p) => isClubTier(p.tier));
+        if (!cancelled && club) setPaidClubPlan(PLAN_BY_TIER[club.tier].displayName);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const insets = useSafeAreaInsets();
   const signOut = useAuthStore((s) => s.signOut);
   const clubs = useClubStore((s) => s.clubs);
@@ -148,7 +167,9 @@ export const OnboardingChoiceScreen = ({
         >
           <View style={styles.trialPillDot} />
           <Text style={styles.trialPillText}>
-            14 días gratis en cualquier plan · Cancela cuando quieras
+            {paidClubPlan
+              ? `Ya tienes ${paidClubPlan} activo · lo aplicamos al club que crees`
+              : '14 días gratis en cualquier plan · Cancela cuando quieras'}
           </Text>
         </Animated.View>
 
@@ -160,11 +181,37 @@ export const OnboardingChoiceScreen = ({
           >
             <ChoiceCard
               title="Equipo independiente"
-              description="Tú gestionas, tú alineas. Listo en 2 minutos."
-              badge="RÁPIDO"
-              badgeAccent
-              priceLabel="Tras prueba: 4,99 €/mes"
-              onPress={() => navigation.navigate('CreateTeam', {})}
+              description={
+                paidClubPlan
+                  ? 'Tú gestionas un solo equipo. Tu plan de club NO se aplica aquí.'
+                  : 'Tú gestionas, tú alineas. Listo en 2 minutos.'
+              }
+              badge={paidClubPlan ? 'OTRO PLAN' : 'RÁPIDO'}
+              badgeAccent={!paidClubPlan}
+              priceLabel={
+                paidClubPlan
+                  ? 'Necesitaría el plan Capitán (4,99 €/mes)'
+                  : 'Tras prueba: 4,99 €/mes'
+              }
+              onPress={() => {
+                if (!paidClubPlan) {
+                  navigation.navigate('CreateTeam', {});
+                  return;
+                }
+                Alert.alert(
+                  'Tu plan es de club',
+                  `Tienes ${paidClubPlan} activo, que cubre un club con varios equipos. ` +
+                    'Un equipo independiente se cobra aparte con el plan Capitán.',
+                  [
+                    { text: 'Crear el club', onPress: () => navigation.navigate('CreateClub') },
+                    {
+                      text: 'Seguir con equipo suelto',
+                      style: 'destructive',
+                      onPress: () => navigation.navigate('CreateTeam', {}),
+                    },
+                  ],
+                );
+              }}
             />
           </Animated.View>
 
@@ -176,9 +223,13 @@ export const OnboardingChoiceScreen = ({
             <ChoiceCard
               title="Club con varios equipos"
               description="Para clubes con múltiples equipos y capitanes."
-              badge="ESCALABLE"
+              badge={paidClubPlan ? 'TU PLAN' : 'ESCALABLE'}
               badgeAccent
-              priceLabel="Tras prueba: desde 11,99 €/mes"
+              priceLabel={
+                paidClubPlan
+                  ? `Incluido en tu ${paidClubPlan}`
+                  : 'Tras prueba: desde 11,99 €/mes'
+              }
               onPress={() => navigation.navigate('CreateClub')}
             />
           </Animated.View>

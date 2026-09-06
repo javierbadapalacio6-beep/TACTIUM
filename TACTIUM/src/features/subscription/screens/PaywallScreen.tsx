@@ -26,11 +26,17 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import {
+  readStorePurchases,
+  isClubTier,
+  applySubscriptionToClub,
+} from '@core/services/storeSync';
+import {
   CAPTAIN_PLAN,
   CLUB_PLANS,
   PREMIUM_STATUSES,
   TRIAL_DURATION_DAYS,
   formatEur,
+  PLAN_BY_TIER,
   type BillingPeriod,
   type PlanDescriptor,
   type PlanTier,
@@ -174,6 +180,10 @@ export const PaywallScreen = ({
   );
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  // Compra de club que la TIENDA ya da por pagada. Si existe, no tiene sentido
+  // volver a cobrar: se ofrece aplicarla a este club.
+  const [paidClub, setPaidClub] = useState<{ tier: PlanTier } | null>(null);
+  const [applying, setApplying] = useState(false);
   // Offering de RC. `null` significa "no cargado aún o no disponible".
   // En simulator iOS y en sandbox sin Sandbox Tester logueado, RC devuelve
   // null y el CTA muestra toast de error en handleStartTrial.
@@ -297,6 +307,53 @@ export const PaywallScreen = ({
           ? 'te queda 1 día de prueba'
           : `te quedan ${trialDaysLeft} días de prueba`;
 
+  useEffect(() => {
+    let cancelled = false;
+    readStorePurchases()
+      .then((ps) => {
+        const found = ps.find((p) => isClubTier(p.tier));
+        if (!cancelled && found) setPaidClub({ tier: found.tier });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ¿Hay compra de club pagada que TODAVÍA no cubre este club?
+  const clubAlreadyCovered = subscriptions.some(
+    (s) =>
+      s.subject_type === 'club' &&
+      s.subject_id === club?.id &&
+      PREMIUM_STATUSES.includes(s.status),
+  );
+  const canApplyPaidPlan = Boolean(
+    paidClub && showClubPlans && club?.id && !clubAlreadyCovered,
+  );
+
+  /** Aplica a este club el plan ya comprado, en vez de cobrarlo otra vez. */
+  const handleApplyPaidPlan = async () => {
+    if (!club?.id || !userId || applying) return;
+    setApplying(true);
+    try {
+      await applySubscriptionToClub(club.id);
+      await refreshSubs(userId);
+      toast.success(
+        'Plan aplicado',
+        `${PLAN_BY_TIER[paidClub!.tier].displayName} cubre ahora ${club.name}.`,
+      );
+      if (hardGate && nextScreen) {
+        (navigation as any).replace(nextScreen);
+      } else {
+        navigation.goBack();
+      }
+    } catch (e: any) {
+      toast.error('No se pudo aplicar', e?.message ?? '');
+    } finally {
+      setApplying(false);
+    }
+  };
+
   const handleStartTrial = async () => {
     if (!userId) {
       toast.error('No hay sesión activa');
@@ -304,6 +361,11 @@ export const PaywallScreen = ({
     }
     if (showClubPlans && !club?.id) {
       toast.error('Sin club activo', 'Crea un club antes de suscribirte.');
+      return;
+    }
+    // Ya hay una compra de club viva: aplicarla, no cobrarla de nuevo.
+    if (canApplyPaidPlan) {
+      await handleApplyPaidPlan();
       return;
     }
     setPurchasing(true);
@@ -617,7 +679,8 @@ export const PaywallScreen = ({
   // con la línea de tiempo (Hoy → recordatorio → cobro). Un cambio de plan
   // (ya hay sub activa para el subject) va directo a la compra, sin timeline.
   const onCtaPress = () => {
-    if (existingSubForSubject) {
+    // Ya pagado: se aplica, no se cobra ni se enseña la cuenta atrás de prueba.
+    if (canApplyPaidPlan || existingSubForSubject) {
       handleStartTrial();
     } else {
       setShowTimeline(true);
@@ -965,30 +1028,37 @@ export const PaywallScreen = ({
         style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}
       >
         <Pressable
-          disabled={purchasing}
+          disabled={purchasing || applying}
           onPress={onCtaPress}
           style={({ pressed }) => [
             styles.cta,
-            purchasing && { opacity: 0.5 },
-            pressed && !purchasing && { opacity: 0.85 },
+            (purchasing || applying) && { opacity: 0.5 },
+            pressed && !purchasing && !applying && { opacity: 0.85 },
           ]}
         >
-          {purchasing ? (
+          {purchasing || applying ? (
             <ActivityIndicator color={c.textInverse} />
           ) : (
             <Text style={styles.ctaLabel}>
-              {existingSubForSubject
-                ? isInTrial
-                  ? 'Mejorar plan ahora'
-                  : 'Cambiar de plan'
-                : `Probar gratis ${TRIAL_DURATION_DAYS} días`}
+              {canApplyPaidPlan
+                ? 'Aplicar mi plan a este club'
+                : existingSubForSubject
+                  ? isInTrial
+                    ? 'Mejorar plan ahora'
+                    : 'Cambiar de plan'
+                  : `Probar gratis ${TRIAL_DURATION_DAYS} días`}
             </Text>
           )}
         </Pressable>
         {/* Trust line bajo el CTA: lo importante (sin compromiso, sin
             cargo durante el trial) merece estar pegado a la acción, no
             relegado al disclaimer legal de 11px más abajo. */}
-        {!existingSubForSubject ? (
+        {canApplyPaidPlan ? (
+          <Text style={styles.trustLine}>
+            Ya tienes {PLAN_BY_TIER[paidClub!.tier].displayName} pagado · no se
+            te cobra de nuevo
+          </Text>
+        ) : !existingSubForSubject ? (
           <Text style={styles.trustLine}>
             14 días gratis · Sin compromiso · Cancela cuando quieras
           </Text>

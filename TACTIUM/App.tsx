@@ -24,6 +24,7 @@ import { useConnectionStore } from './src/store/connectionStore';
 import { useSubscriptionStore } from './src/store/subscriptionStore';
 import { useNotificationStore } from './src/store/notificationStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
+import { syncStorePurchases } from './src/core/services/storeSync';
 import { maybePromptForPush } from './src/core/push';
 import { ToastHost, OfflineBanner, ResponsiveFrame } from './src/components/ui';
 import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
@@ -137,6 +138,19 @@ export default function App() {
         // Subscriptions: refresh inicial + Realtime para que el cambio
         // de status (webhook → DB) repinte UI sin polling.
         await refreshSubs(userId);
+        if (cancelled) return;
+        // Si la BD no ve ninguna suscripción, preguntamos a la TIENDA antes de
+        // dar por hecho que no hay nada: la compra vive en la cuenta de Apple o
+        // Google, así que sobrevive a borrar la cuenta de TACTIUM. Silencioso
+        // (getCustomerInfo no pide credenciales) y solo cuando hace falta.
+        if (!useSubscriptionStore.getState().hasAnyActiveSub()) {
+          try {
+            const { synced } = await syncStorePurchases();
+            if (!cancelled && synced > 0) await refreshSubs(userId);
+          } catch (e) {
+            console.warn('syncStorePurchases failed', e);
+          }
+        }
         if (cancelled) return;
         subscribeSubsRealtime(userId);
         if (cancelled) return;
