@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
@@ -42,6 +43,20 @@ import type { Database } from '@core/supabase/database.types';
 import type { RootStackParamList } from '@navigation/types';
 
 type TeamRole = Database['public']['Enums']['team_role'];
+
+/** Número de build. `Constants.nativeBuildVersion` llega null en Android, así
+ *  que se cae al valor que EAS inyecta en la config al autoincrementarlo. Sin
+ *  esto no se puede distinguir un build de otro desde el móvil. */
+function buildNumber(): string {
+  const native = Constants.nativeBuildVersion;
+  if (native) return String(native);
+  const cfg = Constants.expoConfig;
+  const fromCfg =
+    Platform.OS === 'android'
+      ? cfg?.android?.versionCode
+      : cfg?.ios?.buildNumber;
+  return fromCfg ? String(fromCfg) : '?';
+}
 
 export const SettingsScreen = () => {
   const c = useColors();
@@ -623,7 +638,7 @@ export const SettingsScreen = () => {
               // Versión nativa + build, y qué bundle corre: el embebido en el
               // build o una actualización OTA (id corto + fecha). Sirve para
               // saber al instante si el móvil ha aplicado la última OTA.
-              detail: `${Constants.expoConfig?.version ?? '1.2.0'} (${Constants.nativeBuildVersion ?? '?'}) · ${
+              detail: `${Constants.expoConfig?.version ?? '1.2.0'} (${buildNumber()}) · ${
                 Updates.isEmbeddedLaunch || !Updates.updateId
                   ? 'sin OTA'
                   : `OTA ${Updates.updateId.slice(-6)}${
