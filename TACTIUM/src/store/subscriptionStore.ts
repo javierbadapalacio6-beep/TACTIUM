@@ -170,8 +170,16 @@ export const useSubscriptionStore = create<State>((set, get) => ({
   },
 
   hasAnyActiveSub: () => {
-    return get().subscriptions.some((s) =>
-      PREMIUM_STATUSES.includes(s.status),
+    // Mirar SOLO el status deja pasar filas zombi: una sub que el webhook dejó
+    // en 'active' con el periodo ya vencido (pasa cuando conviven la fila que
+    // crea el cliente al comprar y la que crea el webhook). La BD ya exige
+    // `current_period_end > now()` en fn_has_premium_access; aquí igual, para
+    // que cliente y servidor digan lo mismo.
+    const now = Date.now();
+    return get().subscriptions.some(
+      (s) =>
+        PREMIUM_STATUSES.includes(s.status) &&
+        new Date(s.current_period_end).getTime() > now,
     );
   },
 }));
