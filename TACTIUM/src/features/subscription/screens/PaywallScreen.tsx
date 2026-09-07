@@ -71,6 +71,13 @@ const VALUE_PROPS = [
 // Default tier highlighted en cada flow.
 const DEFAULT_CLUB_TIER: PlanTier = 'club_pro';
 
+/** dd/mm/aaaa — el usuario lee la fecha en la que le cambia el cobro. */
+const fmtDate = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
 export const PaywallScreen = ({
   navigation,
   route,
@@ -168,9 +175,18 @@ export const PaywallScreen = ({
   const ownsActiveTeamClub = Boolean(
     activeTeam?.club_id && clubs.some((c) => c.id === activeTeam.club_id),
   );
-  const showClubPlans = isOnboarding
-    ? intent === 'club'
-    : activeRole === 'club_admin' || ownsActiveTeamClub;
+  // `intent` 'club'/'captain' fija la FAMILIA de planes de forma explícita: lo
+  // usa el onboarding y también «Cambiar de tipo de plan» desde Mi suscripción,
+  // que es el único sitio desde el que se salta de club a capitán o al revés.
+  // Otros intents ('upgrade', 'change') no eligen familia: manda el rol.
+  const showClubPlans =
+    intent === 'club'
+      ? true
+      : intent === 'captain'
+        ? false
+        : isOnboarding
+          ? false
+          : activeRole === 'club_admin' || ownsActiveTeamClub;
 
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
   // Hoja de confirmación con la línea de tiempo del trial (Apple HIG).
@@ -184,6 +200,19 @@ export const PaywallScreen = ({
   // volver a cobrar: se ofrece aplicarla a este club.
   const [paidClub, setPaidClub] = useState<{ tier: PlanTier } | null>(null);
   const [applying, setApplying] = useState(false);
+
+  // Suscripción viva de la OTRA familia (club ↔ capitán). En ese caso no hay
+  // prueba gratis que ofrecer —la tienda no da dos en el mismo grupo— y el
+  // cambio a un plan más barato se aplica al renovar, no ahora.
+  const otherFamilySub = useMemo(() => {
+    const subjectType = showClubPlans ? 'club' : 'user';
+    return (
+      subscriptions.find(
+        (s) =>
+          s.subject_type !== subjectType && PREMIUM_STATUSES.includes(s.status),
+      ) ?? null
+    );
+  }, [subscriptions, showClubPlans]);
   // Offering de RC. `null` significa "no cargado aún o no disponible".
   // En simulator iOS y en sandbox sin Sandbox Tester logueado, RC devuelve
   // null y el CTA muestra toast de error en handleStartTrial.
@@ -284,6 +313,8 @@ export const PaywallScreen = ({
     );
   }, [subscriptions, showClubPlans, club?.id, userId]);
 
+  // Salto de familia de verdad: pagas una y quieres la otra.
+  const familySwitch = Boolean(otherFamilySub && !existingSubForSubject);
   const isInTrial = existingSubForSubject?.status === 'trialing';
 
   // Días restantes del trial activo (si aplica). Preferimos `trial_end` y
@@ -418,13 +449,17 @@ export const PaywallScreen = ({
           club_pro: 2,
           club_elite: 3,
         };
+        // Al saltar de familia (club ↔ capitán) la sub previa está en OTRO
+        // sujeto, así que `previousSub` no la encuentra. Sin pasarle a Google
+        // qué reemplazar, rechaza la compra o deja DOS suscripciones vivas.
+        const replaceTarget = previousSub ?? otherFamilySub;
         const androidChange =
-          Platform.OS === 'android' && hadExistingPremium && previousSub
+          Platform.OS === 'android' && replaceTarget
             ? {
-                oldProductIdentifier: `${previousSub.product_id}:${previousSub.billing_period}`,
+                oldProductIdentifier: `${replaceTarget.product_id}:${replaceTarget.billing_period}`,
                 isDowngrade:
                   TIER_RANK[selectedPlan.tier] <
-                  TIER_RANK[previousSub.plan_tier],
+                  TIER_RANK[replaceTarget.plan_tier],
               }
             : null;
         const purchase = await purchasePackage(pkg, androidChange).catch(
@@ -680,7 +715,7 @@ export const PaywallScreen = ({
   // (ya hay sub activa para el subject) va directo a la compra, sin timeline.
   const onCtaPress = () => {
     // Ya pagado: se aplica, no se cobra ni se enseña la cuenta atrás de prueba.
-    if (canApplyPaidPlan || existingSubForSubject) {
+    if (canApplyPaidPlan || existingSubForSubject || familySwitch) {
       handleStartTrial();
     } else {
       setShowTimeline(true);
@@ -1046,7 +1081,9 @@ export const PaywallScreen = ({
                   ? isInTrial
                     ? 'Mejorar plan ahora'
                     : 'Cambiar de plan'
-                  : `Probar gratis ${TRIAL_DURATION_DAYS} días`}
+                  : familySwitch
+                    ? `Cambiar a ${selectedPlan.displayName}`
+                    : `Probar gratis ${TRIAL_DURATION_DAYS} días`}
             </Text>
           )}
         </Pressable>
@@ -1057,6 +1094,15 @@ export const PaywallScreen = ({
           <Text style={styles.trustLine}>
             Ya tienes {PLAN_BY_TIER[paidClub!.tier].displayName} pagado · no se
             te cobra de nuevo
+          </Text>
+        ) : familySwitch && otherFamilySub ? (
+          <Text style={styles.trustLine}>
+            Mantienes {PLAN_BY_TIER[otherFamilySub.plan_tier].displayName} hasta
+            el {fmtDate(otherFamilySub.current_period_end)}
+            {'. '}
+            {otherFamilySub.billing_period === 'yearly'
+              ? 'Como es anual y ya está pagado, el cambio se aplica al renovar.'
+              : 'El mes que viene se te cobra ya el plan nuevo.'}
           </Text>
         ) : !existingSubForSubject ? (
           <Text style={styles.trustLine}>

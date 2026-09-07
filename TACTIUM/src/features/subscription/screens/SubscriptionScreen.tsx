@@ -93,6 +93,18 @@ export const SubscriptionScreen = ({
     );
   }, [subscriptions]);
 
+  // La que manda ahora mismo, sea de persona (capitán) o de club.
+  const activeSub = useMemo<Subscription | null>(() => {
+    if (mySub && PREMIUM_STATUSES.includes(mySub.status)) return mySub;
+    return clubCovering;
+  }, [mySub, clubCovering]);
+  // ¿A qué familia se puede saltar? De club a capitán, o al revés.
+  const switchTarget: 'club' | 'captain' | null = activeSub
+    ? activeSub.plan_tier === 'captain'
+      ? 'club'
+      : 'captain'
+    : null;
+
   const plan = mySub ? PLAN_BY_TIER[mySub.plan_tier] : null;
   const status = mySub?.status ?? null;
 
@@ -320,6 +332,48 @@ export const SubscriptionScreen = ({
             <Text style={styles.ctaSecondaryLabel}>Cambiar plan</Text>
           </Pressable>
         )}
+
+        {/* === CAMBIAR DE TIPO DE PLAN ===
+            Club y capitán están en el MISMO grupo de suscripción de la tienda,
+            así que saltar de uno a otro es un cambio de plan, no cancelar y
+            volver a comprar: nadie pierde lo pagado. Bajar de nivel lo difiere
+            la tienda a la renovación. */}
+        {activeSub && switchTarget ? (
+          <View style={styles.switchBlock}>
+            <Text style={styles.switchTitle}>
+              {switchTarget === 'captain'
+                ? '¿Solo gestionas un equipo?'
+                : '¿Gestionas un club con varios equipos?'}
+            </Text>
+            <Text style={styles.switchBody}>
+              {switchTarget === 'captain'
+                ? `Puedes pasarte al plan Capitán, que cubre un único equipo tuyo. Mantienes ${PLAN_BY_TIER[activeSub.plan_tier].displayName} hasta el ${formatDate(activeSub.current_period_end)}`
+                : `Puedes pasarte a un plan de club, que cubre varios equipos y capitanes. Mantienes ${PLAN_BY_TIER[activeSub.plan_tier].displayName} hasta el ${formatDate(activeSub.current_period_end)}`}
+              {activeSub.billing_period === 'yearly'
+                ? ', porque el año ya está pagado, y a partir de esa fecha se te cobra el plan nuevo.'
+                : ', y en el siguiente cobro mensual ya pagas el plan nuevo.'}
+              {switchTarget === 'captain' && activeSub.subject_type === 'club'
+                ? ' Tu club dejará de estar cubierto.'
+                : ''}
+            </Text>
+            <Pressable
+              onPress={() =>
+                navigation.navigate('Paywall', { intent: switchTarget })
+              }
+              style={({ pressed }) => [
+                styles.switchBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.switchBtnLabel}>
+                {switchTarget === 'captain'
+                  ? 'Ver el plan Capitán'
+                  : 'Ver los planes de club'}
+              </Text>
+              <IconArrowRight size={14} color={c.accent} />
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* === ACTIONS === */}
         <View style={styles.actionsBlock}>
@@ -611,6 +665,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
+  switchBlock: {
+    marginTop: 18,
+    padding: 14,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.hair,
+    backgroundColor: c.bgCard,
+    gap: 8,
+  },
+  switchTitle: { fontSize: 14, fontWeight: '700', color: c.text },
+  switchBody: { fontSize: 13, lineHeight: 19, color: c.textMuted },
+  switchBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  switchBtnLabel: { fontSize: 13, fontWeight: '700', color: c.accent },
   ctaSecondaryLabel: {
     color: c.text,
     fontSize: 14,
