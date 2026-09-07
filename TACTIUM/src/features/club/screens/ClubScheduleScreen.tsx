@@ -17,6 +17,7 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconChevron, IconCheck, IconPencil, BottomSheet } from '@components/ui';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
+import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
 import { useTeamStore } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import { createInvitation } from '@core/services/invitations';
@@ -90,6 +91,8 @@ export const ClubScheduleScreen = ({
     { id: string; name: string; guest?: boolean } | null
   >(null);
   const [showAll, setShowAll] = useState(false);
+  // Alta de equipos invitados sin salir de Horarios: es donde se echa en falta.
+  const [importOpen, setImportOpen] = useState(false);
   // Franjas favoritas por equipo (override local sobre lo del store).
   const [slotsByTeam, setSlotsByTeam] = useState<Record<string, string[]>>({});
 
@@ -250,10 +253,35 @@ export const ClubScheduleScreen = ({
             </View>
           ) : null}
 
+          {/* Sin invitados aún: la puerta de entrada para darlos de alta. */}
+          {guestTeams.length === 0 ? (
+            <View style={{ marginTop: 22 }}>
+              <Text style={styles.sectionLabel}>EQUIPOS INVITADOS</Text>
+              <Text style={styles.emptyText}>
+                ¿Hay equipos de otros clubes que juegan en tus pistas? Añádelos y
+                les pondrás día, hora y pista sin que consuman plaza de tu plan.
+              </Text>
+              <Pressable
+                onPress={() => setImportOpen(true)}
+                style={({ pressed }) => [
+                  styles.guestAddBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.guestAddLabel}>Añadir equipos invitados</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {/* Equipos invitados: juegan aquí sin ser del club */}
           {guestTeams.length > 0 ? (
             <View style={{ marginTop: 22 }}>
-              <Text style={styles.sectionLabel}>EQUIPOS INVITADOS</Text>
+              <View style={styles.guestHead}>
+                <Text style={styles.sectionLabel}>EQUIPOS INVITADOS</Text>
+                <Pressable onPress={() => setImportOpen(true)} hitSlop={8}>
+                  <Text style={styles.guestInvite}>Añadir</Text>
+                </Pressable>
+              </View>
               <Text style={styles.emptyText}>
                 Juegan en tus pistas sin ser de tu club: les pones el horario y sus
                 franjas favoritas. Pásale el código a su capitán y el equipo pasará
@@ -394,6 +422,18 @@ export const ClubScheduleScreen = ({
         onClose={() => setEditing(null)}
         onSaved={load}
       />
+
+      {club ? (
+        <FcpImportSheet
+          open={importOpen}
+          clubId={club.id}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            load();
+          }}
+        />
+      ) : null}
 
       <TeamSlotsSheet
         team={editTeam}
@@ -715,6 +755,20 @@ const makeStyles = (c: Palette) =>
       textTransform: 'uppercase',
       fontWeight: '500',
     },
+    guestHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    guestAddBtn: {
+      marginTop: 10,
+      paddingVertical: 10,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.accent,
+      alignItems: 'center',
+    },
+    guestAddLabel: { fontSize: 13, fontWeight: '700', color: c.accent },
     favTeamRow: {
       flexDirection: 'row',
       alignItems: 'center',

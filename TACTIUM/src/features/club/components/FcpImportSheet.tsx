@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
@@ -40,6 +40,9 @@ export const FcpImportSheet: React.FC<{
   // global y excluyente, así que no se podían dar de alta los dos de una vez.
   const [selected, setSelected] = useState<Map<number, FcpImportMode>>(new Map());
   const [importing, setImporting] = useState(false);
+  // Primer club abierto = "el tuyo". Lo que se marque en los siguientes nace
+  // como invitado.
+  const firstClubName = useRef<string | null>(null);
   // Sin club (capitán independiente) = gestiona UN solo equipo → selección
   // única (radio). Con club, multi-selección para volcar todos sus equipos.
   const single = clubId === null;
@@ -57,6 +60,7 @@ export const FcpImportSheet: React.FC<{
     setQuery('');
     setActiveClub(null);
     setSelected(new Map());
+    firstClubName.current = null;
     setLoading(true);
     searchFcpClubs('')
       .then(setAllGroups)
@@ -81,8 +85,16 @@ export const FcpImportSheet: React.FC<{
         return prev.has(id) ? new Map() : new Map([[id, 'owned' as FcpImportMode]]);
       }
       const n = new Map(prev);
-      if (n.has(id)) n.delete(id);
-      else n.set(id, 'owned');
+      if (n.has(id)) {
+        n.delete(id);
+        return n;
+      }
+      // Si el equipo es de un club distinto del primero que se abrió, lo normal
+      // es que sea invitado. Se puede cambiar en su propia fila.
+      const primero = firstClubName.current;
+      const esDeOtroClub =
+        primero !== null && activeClub !== null && activeClub.club !== primero;
+      n.set(id, esDeOtroClub ? 'venue' : 'owned');
       return n;
     });
 
@@ -94,10 +106,23 @@ export const FcpImportSheet: React.FC<{
       return n;
     });
 
+  // Los equipos invitados son, por definición, de OTROS clubes de la lista. Si
+  // la selección viviera dentro del club activo, cambiar de club la perdería y
+  // habría que importar una vez por club. Se busca en todo el catálogo.
   const selectedOptions: FcpTeamOption[] = useMemo(() => {
-    if (!activeClub) return [];
-    return activeClub.teams.filter((t) => selected.has(t.id_equipo));
-  }, [activeClub, selected]);
+    const byId = new Map<number, FcpTeamOption>();
+    for (const g of allGroups) {
+      for (const t of g.teams) {
+        if (selected.has(t.id_equipo)) byId.set(t.id_equipo, t);
+      }
+    }
+    return [...byId.values()];
+  }, [allGroups, selected]);
+
+  const ownCount = selectedOptions.filter(
+    (t) => selected.get(t.id_equipo) !== 'venue',
+  ).length;
+  const guestCount2 = selectedOptions.length - ownCount;
 
   const doImport = async () => {
     if (!selectedOptions.length) return;
@@ -213,10 +238,20 @@ export const FcpImportSheet: React.FC<{
           <Pressable onPress={() => setActiveClub(null)} hitSlop={6} style={{ marginTop: 8 }}>
             <Text style={styles.back}>‹ Elegir otro club</Text>
           </Pressable>
+          {selectedOptions.length > 0 ? (
+            <Text style={styles.selectionSummary}>
+              Llevas {selectedOptions.length} marcado
+              {selectedOptions.length === 1 ? '' : 's'}
+              {ownCount > 0 ? ` · ${ownCount} de tu club` : ''}
+              {guestCount2 > 0
+                ? ` · ${guestCount2} que solo juega${guestCount2 === 1 ? '' : 'n'} aquí`
+                : ''}
+            </Text>
+          ) : null}
           <Text style={styles.hint}>
-            ¿Falta algún equipo tuyo? La Federación a veces registra el mismo club
-            con nombres distintos. Vuelve atrás, elige el otro nombre e impórtalos
-            también: se suman a los que ya tienes, no se duplican.
+            Puedes ir club por club y marcar equipos de varios: lo elegido no se
+            pierde al cambiar. Los equipos de otros clubes entran como «solo
+            juega aquí», y lo cambias en su fila si hace falta.
           </Text>
           <View style={{ gap: 8, marginTop: 12 }}>
             {activeClub.teams.map((t) => {
@@ -315,15 +350,22 @@ export const FcpImportSheet: React.FC<{
                       setActiveClub(g);
                       // Club: pre-marca todos sus equipos. Independiente: ninguno,
                       // el capitán elige el suyo (selección única).
-                      setSelected(
-                        single
-                          ? new Map()
-                          : new Map(
-                              g.teams.map(
-                                (t) => [t.id_equipo, 'owned' as FcpImportMode] as const,
-                              ),
-                            ),
-                      );
+                      if (firstClubName.current === null) {
+                        firstClubName.current = g.club;
+                      }
+                      setSelected((prev) => {
+                        if (single) return new Map();
+                        // Primer club que se abre: se presupone que es el tuyo
+                        // y se premarcan todos. A partir del segundo no se
+                        // toca nada: el usuario elige, y lo que marque nace
+                        // como invitado (otro club, tus pistas).
+                        if (prev.size > 0) return prev;
+                        return new Map(
+                          g.teams.map(
+                            (t) => [t.id_equipo, 'owned' as FcpImportMode] as const,
+                          ),
+                        );
+                      });
                     }}
                     style={({ pressed }) => [styles.clubRow, pressed && { opacity: 0.85 }]}
                   >
@@ -352,6 +394,12 @@ const makeStyles = (c: Palette) =>
     sub: { color: c.textMuted, fontSize: 13.5, lineHeight: 19, marginTop: 8 },
     back: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
     hint: { color: c.textFaint, fontSize: 12, lineHeight: 17, marginTop: 10 },
+    selectionSummary: {
+      marginTop: 10,
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: c.accent,
+    },
     roleRow: { flexDirection: 'row', gap: 6, marginTop: 6, marginLeft: 34 },
     roleChip: {
       paddingHorizontal: 10,
