@@ -8,7 +8,6 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
-  Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
@@ -44,18 +43,22 @@ import type { RootStackParamList } from '@navigation/types';
 
 type TeamRole = Database['public']['Enums']['team_role'];
 
-/** Número de build. `Constants.nativeBuildVersion` llega null en Android, así
- *  que se cae al valor que EAS inyecta en la config al autoincrementarlo. Sin
- *  esto no se puede distinguir un build de otro desde el móvil. */
+/** Número de build REAL del binario. `Constants.nativeBuildVersion` está
+ *  obsoleto y llega vacío (en Android siempre; en iOS bajo una OTA también),
+ *  y entonces caíamos al valor de la config, que es el del repo (1) y no el
+ *  del build. La fuente buena es `expo-application`. Se pide con require +
+ *  try/catch para que, si el módulo nativo no estuviera enlazado, la pantalla
+ *  no se caiga: es solo una etiqueta de diagnóstico. */
 function buildNumber(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const App = require('expo-application') as { nativeBuildVersion?: string | null };
+    if (App?.nativeBuildVersion) return String(App.nativeBuildVersion);
+  } catch {
+    /* módulo no disponible */
+  }
   const native = Constants.nativeBuildVersion;
-  if (native) return String(native);
-  const cfg = Constants.expoConfig;
-  const fromCfg =
-    Platform.OS === 'android'
-      ? cfg?.android?.versionCode
-      : cfg?.ios?.buildNumber;
-  return fromCfg ? String(fromCfg) : '?';
+  return native ? String(native) : '?';
 }
 
 export const SettingsScreen = () => {
