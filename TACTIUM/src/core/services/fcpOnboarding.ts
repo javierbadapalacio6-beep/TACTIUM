@@ -289,6 +289,43 @@ export async function hasFcpLinkedTeams(clubId: string | null): Promise<boolean>
  */
 export type FcpImportMode = 'owned' | 'venue';
 
+/**
+ * Equipo YA vinculado a este id federado que sea MÍO en el sentido que toca:
+ * del club que importa, invitado de su sede, o el equipo suelto del capitán.
+ * Devuelve null si no hay ninguno. La RLS ya limita lo que se puede ver, esto
+ * además evita reutilizar el equipo de otro club.
+ */
+async function findMyLinkedTeam(
+  fcpIdEquipo: number,
+  clubId: string | null,
+  guest: boolean,
+): Promise<string | null> {
+  const { data: links } = await rawFrom('fcp_team_links')
+    .select('team_id')
+    .eq('fcp_id_equipo', fcpIdEquipo)
+    .limit(200);
+  const ids = ((links ?? []) as { team_id: string | null }[])
+    .map((l) => l.team_id)
+    .filter((x): x is string => !!x);
+  if (ids.length === 0) return null;
+
+  const { data: teams } = await rawFrom('teams')
+    .select('id, club_id, venue_club_id')
+    .in('id', ids);
+  const rows = (teams ?? []) as {
+    id: string;
+    club_id: string | null;
+    venue_club_id: string | null;
+  }[];
+
+  const mine = rows.find((t) => {
+    if (guest) return t.venue_club_id === clubId;
+    if (clubId) return t.club_id === clubId;
+    return t.club_id === null && t.venue_club_id === null;
+  });
+  return mine?.id ?? null;
+}
+
 export async function importFcpTeams(
   clubId: string | null,
   selected: FcpTeamOption[],
@@ -306,16 +343,17 @@ export async function importFcpTeams(
       gender: t.gender,
     };
 
-    // 1) ¿Ya hay un equipo vinculado a este id_equipo federado? → reutilízalo
+    // 1) ¿YO ya tengo un equipo vinculado a este id_equipo federado? → reutilízalo
     //    (idempotencia: reimportar no duplica). Refresca sus datos oficiales.
-    const { data: existingLink } = await rawFrom('fcp_team_links')
-      .select('team_id')
-      .eq('fcp_id_equipo', t.id_equipo)
-      .maybeSingle();
+    //    OJO: el mismo equipo federado lo pueden importar VARIOS clubes, así que
+    //    la búsqueda no puede ser global — devolvía varias filas (reventaba con
+    //    «cannot coerce the result to a single JSON object») y, peor, podía
+    //    devolver el equipo de otro club y acabar editándoselo.
+    const mineTeamId = await findMyLinkedTeam(t.id_equipo, clubId, guest);
 
     let teamId: string;
-    if (existingLink?.team_id) {
-      teamId = existingLink.team_id as string;
+    if (mineTeamId) {
+      teamId = mineTeamId;
       await updateTeam(teamId, canonical);
       if (guest) await rawFrom('teams').update({ venue_club_id: clubId }).eq('id', teamId);
     } else if (guest) {
@@ -387,11 +425,12 @@ export async function importFcpTeams(
 /** Re-sincroniza la plantilla de un equipo ya vinculado: añade solo los
  * jugadores federativos que aún no estén (no duplica ni borra). */
 export async function resyncFcpRoster(teamId: string): Promise<number> {
-  const { data: link, error } = await rawFrom('fcp_team_links')
+  const { data: links, error } = await rawFrom('fcp_team_links')
     .select('fcp_id_equipo')
     .eq('team_id', teamId)
-    .maybeSingle();
+    .limit(1);
   if (error) throw new Error(error.message);
+  const link = ((links ?? []) as { fcp_id_equipo: number }[])[0];
   if (!link) throw new Error('Este equipo no está vinculado a la Federación.');
   const { data: added, error: e2 } = await rawRpc('import_fcp_roster', {
     p_team_id: teamId,
@@ -406,6 +445,6 @@ export async function isFcpLinkedTeam(teamId: string): Promise<boolean> {
   const { data } = await rawFrom('fcp_team_links')
     .select('team_id')
     .eq('team_id', teamId)
-    .maybeSingle();
-  return !!data;
+    .limit(1);
+  return ((data ?? []) as unknown[]).length > 0;
 }
