@@ -96,6 +96,24 @@ export const ClubScheduleScreen = ({
   // Alta de equipos invitados sin salir de Horarios: es donde se echa en falta.
   const [importOpen, setImportOpen] = useState(false);
   const [venueTeams, setVenueTeams] = useState<VenueTeam[]>([]);
+
+  // Género y categoría por equipo. Con varios equipos del mismo club el nombre
+  // no distingue: «SMASH PADEL A» puede ser el masculino de 2ª o el femenino
+  // de 3ª. Se saca de los equipos propios y de los invitados (el RPC los trae).
+  const metaByTeam = useMemo(() => {
+    const m: Record<string, string> = {};
+    const label = (gender: string | null, category: string | null) =>
+      [
+        gender === 'femenino' ? 'Femenino' : gender === 'mixto' ? 'Mixto' : 'Masculino',
+        category ?? null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    for (const t of clubTeams) m[t.id] = label(t.gender, t.category);
+    for (const t of venueTeams) m[t.team_id] = label(t.gender, t.category);
+    return m;
+  }, [clubTeams, venueTeams]);
+
   // Franjas favoritas por equipo (override local sobre lo del store).
   const [slotsByTeam, setSlotsByTeam] = useState<Record<string, string[]>>({});
 
@@ -246,6 +264,11 @@ export const ClubScheduleScreen = ({
                         <Text style={styles.favTeamName} numberOfLines={1}>
                           {t.name}
                         </Text>
+                        {metaByTeam[t.id] ? (
+                          <Text style={styles.teamMeta} numberOfLines={1}>
+                            {metaByTeam[t.id]}
+                          </Text>
+                        ) : null}
                         {slots.length > 0 ? (
                           <Text style={styles.favTeamSlots} numberOfLines={1}>
                             {slots.map(fmtSlot).join(' · ')}
@@ -311,6 +334,11 @@ export const ClubScheduleScreen = ({
                       <Text style={styles.favTeamName} numberOfLines={1}>
                         {t.name}
                       </Text>
+                      {metaByTeam[t.id] ? (
+                        <Text style={styles.teamMeta} numberOfLines={1}>
+                          {metaByTeam[t.id]}
+                        </Text>
+                      ) : null}
                       {gslots.length > 0 ? (
                         <Text style={styles.favTeamSlots} numberOfLines={1}>
                           {gslots.map(fmtSlot).join(' · ')}
@@ -396,6 +424,11 @@ export const ClubScheduleScreen = ({
                         <Text style={styles.rowTeam} numberOfLines={1}>
                           {m.team_name}
                         </Text>
+                        {metaByTeam[m.team_id] ? (
+                          <Text style={styles.teamMeta} numberOfLines={1}>
+                            {metaByTeam[m.team_id]}
+                          </Text>
+                        ) : null}
                         <Text style={styles.rowSub} numberOfLines={1}>
                           {m.jornada_number ? `J${m.jornada_number}` : 'Jornada'}
                           {m.opponent ? ` · vs ${m.opponent}` : ''}
@@ -763,6 +796,12 @@ const makeStyles = (c: Palette) =>
       color: c.textFaint,
       textTransform: 'uppercase',
       fontWeight: '500',
+    },
+    teamMeta: {
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: c.textFaint,
+      marginTop: 1,
     },
     guestHead: {
       flexDirection: 'row',
