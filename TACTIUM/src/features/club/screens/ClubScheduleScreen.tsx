@@ -24,6 +24,8 @@ import { createInvitation } from '@core/services/invitations';
 import {
   getClubHomeSchedule,
   getVenueHomeSchedule,
+  getVenueTeams,
+  type VenueTeam,
   setVenueMatchdaySlot,
   fetchUnconfirmedVenues,
   currentRoundMatches,
@@ -93,6 +95,7 @@ export const ClubScheduleScreen = ({
   const [showAll, setShowAll] = useState(false);
   // Alta de equipos invitados sin salir de Horarios: es donde se echa en falta.
   const [importOpen, setImportOpen] = useState(false);
+  const [venueTeams, setVenueTeams] = useState<VenueTeam[]>([]);
   // Franjas favoritas por equipo (override local sobre lo del store).
   const [slotsByTeam, setSlotsByTeam] = useState<Record<string, string[]>>({});
 
@@ -106,9 +109,12 @@ export const ClubScheduleScreen = ({
   // están en `clubTeams` (no tienen club_id, por eso no gastan cuota).
   const guestTeams = useMemo(() => {
     const map = new Map<string, string>();
+    // La lista sale de los EQUIPOS, no de sus partidos: si no, un invitado
+    // recién añadido o con la temporada acabada no aparecía en ningún sitio.
+    for (const t of venueTeams) map.set(t.team_id, t.team_name);
     for (const m of matches) if (m.is_guest) map.set(m.team_id, m.team_name);
     return [...map.entries()].map(([id, name]) => ({ id, name }));
-  }, [matches]);
+  }, [venueTeams, matches]);
 
   // Pasarle al capitán de un equipo invitado un código para que entre y se
   // quede con SU equipo (el club sigue poniéndole los horarios).
@@ -135,10 +141,12 @@ export const ClubScheduleScreen = ({
     try {
       // Propios + INVITADOS (equipos que juegan aquí sin ser del club). Van en
       // dos RPCs distintos; si el de invitados falla, no tumbamos la pantalla.
-      const [own, guests] = await Promise.all([
+      const [own, guests, vTeams] = await Promise.all([
         getClubHomeSchedule(club.id),
         getVenueHomeSchedule(club.id).catch(() => [] as ClubHomeMatch[]),
+        getVenueTeams(club.id).catch(() => [] as VenueTeam[]),
       ]);
+      setVenueTeams(vTeams);
       // Playoff: sede propuesta, no confirmada. La marca vive en `matchdays` y
       // el RPC de los equipos propios no la devuelve, así que se consulta aparte.
       const pending = await fetchUnconfirmedVenues(
@@ -151,6 +159,7 @@ export const ClubScheduleScreen = ({
       setMatches(data);
       setSlotsByTeam((prev) => {
         const next = { ...prev };
+        for (const t of vTeams) next[t.team_id] = t.preferred_home_slots ?? [];
         for (const m of data) next[m.team_id] = m.preferred_home_slots ?? [];
         return next;
       });

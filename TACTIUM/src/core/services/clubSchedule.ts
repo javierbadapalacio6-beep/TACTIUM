@@ -42,6 +42,32 @@ export async function fetchUnconfirmedVenues(
 
 type RpcResult = { data: unknown; error: { message: string } | null };
 
+export interface VenueTeam {
+  team_id: string;
+  team_name: string;
+  gender: string | null;
+  category: string | null;
+  preferred_home_slots: string[];
+  claimed: boolean;
+}
+
+/** Equipos INVITADOS del club, tengan o no partidos pendientes. La pantalla los
+ *  deducía de los partidos, así que un invitado recién dado de alta (o con la
+ *  temporada terminada) no aparecía. Va por RPC porque, en cuanto su capitán
+ *  reclama el equipo, la RLS se lo oculta al club. */
+export async function getVenueTeams(clubId: string): Promise<VenueTeam[]> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { data, error } = await rpc('get_venue_teams', { target_club: clubId });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as VenueTeam[]).map((t) => ({
+    ...t,
+    preferred_home_slots: t.preferred_home_slots ?? [],
+  }));
+}
+
 /** Partidos de local de los equipos INVITADOS (los que juegan aquí sin ser del
  *  club). Va en un RPC aparte para no tocar `get_club_home_schedule`, que está
  *  en producción y no en este repositorio. */
