@@ -25,6 +25,7 @@ import {
   getClubHomeSchedule,
   getVenueHomeSchedule,
   getVenueTeams,
+  getTeamGroups,
   type VenueTeam,
   setVenueMatchdaySlot,
   fetchUnconfirmedVenues,
@@ -96,23 +97,59 @@ export const ClubScheduleScreen = ({
   // Alta de equipos invitados sin salir de Horarios: es donde se echa en falta.
   const [importOpen, setImportOpen] = useState(false);
   const [venueTeams, setVenueTeams] = useState<VenueTeam[]>([]);
+  // Grupo de liga por equipo. No está en `teams`: hay que ir a la Federación.
+  const [groupByTeam, setGroupByTeam] = useState<Record<string, string>>({});
 
-  // Género y categoría por equipo. Con varios equipos del mismo club el nombre
-  // no distingue: «SMASH PADEL A» puede ser el masculino de 2ª o el femenino
-  // de 3ª. Se saca de los equipos propios y de los invitados (el RPC los trae).
+  // Género, categoría y grupo por equipo. Con varios equipos del mismo club el
+  // nombre no distingue: «SMASH PADEL A» puede ser el masculino de 2ª o el
+  // femenino de 3ª, y dentro de una categoría cada grupo lleva su calendario.
+  // Género y categoría salen de los equipos propios y de los invitados (el RPC
+  // los trae); el grupo, de la Federación.
   const metaByTeam = useMemo(() => {
     const m: Record<string, string> = {};
-    const label = (gender: string | null, category: string | null) =>
+    const label = (id: string, gender: string | null, category: string | null) =>
       [
         gender === 'femenino' ? 'Femenino' : gender === 'mixto' ? 'Mixto' : 'Masculino',
         category ?? null,
+        groupByTeam[id] ?? null,
       ]
         .filter(Boolean)
         .join(' · ');
-    for (const t of clubTeams) m[t.id] = label(t.gender, t.category);
-    for (const t of venueTeams) m[t.team_id] = label(t.gender, t.category);
+    for (const t of clubTeams) m[t.id] = label(t.id, t.gender, t.category);
+    for (const t of venueTeams) m[t.team_id] = label(t.team_id, t.gender, t.category);
     return m;
-  }, [clubTeams, venueTeams]);
+  }, [clubTeams, venueTeams, groupByTeam]);
+
+  // Los grupos se piden aparte (ni el store de equipos ni los RPCs de horarios
+  // los traen). Se listan los ids en una cadena para que el efecto no se
+  // relance cada vez que se recarga el horario con los mismos equipos.
+  const teamIdsKey = useMemo(
+    () =>
+      [
+        ...clubTeams.map((t) => t.id),
+        ...venueTeams.map((t) => t.team_id),
+        ...matches.map((m) => m.team_id),
+      ]
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .sort()
+        .join(','),
+    [clubTeams, venueTeams, matches],
+  );
+
+  useEffect(() => {
+    const ids = teamIdsKey ? teamIdsKey.split(',') : [];
+    if (ids.length === 0) {
+      setGroupByTeam({});
+      return;
+    }
+    let alive = true;
+    getTeamGroups(ids).then((g) => {
+      if (alive) setGroupByTeam(g);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [teamIdsKey]);
 
   // Franjas favoritas por equipo (override local sobre lo del store).
   const [slotsByTeam, setSlotsByTeam] = useState<Record<string, string[]>>({});

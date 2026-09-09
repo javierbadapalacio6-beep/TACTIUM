@@ -201,3 +201,67 @@ export async function setTeamPreferredSlots(
     .eq('id', teamId);
   if (error) throw new Error(error.message);
 }
+
+// ─── Grupo de la Federación de cada equipo ───────────────────────────────────
+// En Horarios el nombre no basta para saber a quién le estás poniendo la pista:
+// «MEDIO CUDEYO A» puede ser el masculino de 2ª o el femenino de 3ª, y dentro de
+// una categoría hay varios grupos con calendarios distintos. El grupo sale de la
+// FCP (`fcp_team_links` → `fcp_clasificacion` → `fcp_grupos`), no de `teams`.
+// Las tres tablas son de lectura pública para `authenticated`, así que esto es
+// una consulta normal del cliente, sin RPC.
+
+/** «3ª CATEGORIA MASCULINA - GRUPO D» → «Grupo D». null si no lo trae. */
+const grupoCorto = (nombre: string | null | undefined): string | null => {
+  const m = (nombre ?? '').match(/GRUPO\s+([A-Z0-9]+)/i);
+  return m ? `Grupo ${m[1].toUpperCase()}` : null;
+};
+
+/** Grupo de liga por equipo (propios e invitados). Nunca lanza: si la
+ *  Federación no tiene el dato, ese equipo simplemente no sale en el mapa. */
+export async function getTeamGroups(
+  teamIds: string[],
+): Promise<Record<string, string>> {
+  const ids = [...new Set(teamIds.filter(Boolean))];
+  if (ids.length === 0) return {};
+  const raw = supabase.from.bind(supabase) as unknown as (t: string) => any;
+  try {
+    const { data: links } = await raw('fcp_team_links')
+      .select('team_id, fcp_id_equipo')
+      .in('team_id', ids);
+    const linkRows = (links ?? []) as { team_id: string; fcp_id_equipo: number }[];
+    if (linkRows.length === 0) return {};
+
+    const equipos = [...new Set(linkRows.map((l) => l.fcp_id_equipo))];
+    const { data: cls } = await raw('fcp_clasificacion')
+      .select('id_equipo, id_grupo')
+      .in('id_equipo', equipos);
+    // Las fases de playoff son grupos aparte («fase...»); el que identifica al
+    // equipo es el de la liga regular.
+    const grupoByEquipo = new Map<number, string>();
+    for (const r of (cls ?? []) as { id_equipo: number; id_grupo: string }[]) {
+      if (/^fase/i.test(r.id_grupo)) continue;
+      if (!grupoByEquipo.has(r.id_equipo)) grupoByEquipo.set(r.id_equipo, r.id_grupo);
+    }
+    const grupos = [...new Set([...grupoByEquipo.values()])];
+    if (grupos.length === 0) return {};
+
+    const { data: gr } = await raw('fcp_grupos')
+      .select('id_grupo, nombre')
+      .in('id_grupo', grupos);
+    const nombreByGrupo = new Map<string, string | null>();
+    for (const g of (gr ?? []) as { id_grupo: string; nombre: string | null }[]) {
+      nombreByGrupo.set(g.id_grupo, g.nombre);
+    }
+
+    const out: Record<string, string> = {};
+    for (const l of linkRows) {
+      const idGrupo = grupoByEquipo.get(l.fcp_id_equipo);
+      const corto = idGrupo ? grupoCorto(nombreByGrupo.get(idGrupo)) : null;
+      if (corto) out[l.team_id] = corto;
+    }
+    return out;
+  } catch (e) {
+    console.warn('getTeamGroups failed', e);
+    return {};
+  }
+}
