@@ -144,7 +144,7 @@ export async function searchFcpPlayers(
   // (encadenar .or() los combina con AND).
   const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
   let sel = rawFrom('fcp_jugadores').select(
-    'id_jugador, nombre, apellido1, apellido2, nombre_pila, categoria, puntos, nombre_equipo',
+    'id_jugador, id_liga, nombre, apellido1, apellido2, nombre_pila, categoria, puntos, nombre_equipo',
   );
   for (const tok of tokens) {
     sel = sel.or(
@@ -152,11 +152,21 @@ export async function searchFcpPlayers(
     );
   }
   if (hasScope) sel = sel.in('id_equipo', idEquipos);
-  const { data } = await sel.order('puntos', { ascending: false }).limit(300);
+  // Ordenado por TEMPORADA descendente (`id_liga` crece cada año), no por
+  // puntos: ver el porqué en el dedup de aquí abajo.
+  const { data } = await sel.order('id_liga', { ascending: false }).limit(300);
 
   // La tabla repite al MISMO jugador por temporada/equipo (id_jugador =
   // `fcp_{licencia}_{nombre}`, la licencia cambia cada año). Deduplicamos por
-  // la parte del nombre y nos quedamos con la de más puntos (la más reciente).
+  // la parte del nombre y nos quedamos con la fila de la ÚLTIMA temporada.
+  //
+  // OJO: antes se pedía ordenado por puntos y se cogía la primera fila, dando
+  // por hecho que la de más puntos era la más reciente. Es justo al revés: los
+  // puntos de la FCP bajan al subir de categoría, así que la lista enseñaba el
+  // mejor año histórico de cada jugador (con el equipo de aquella temporada)
+  // mientras su ficha enseñaba el año en curso. Dos números distintos para el
+  // mismo jugador.
+  //
   // La ficha reconstruye todos los años a partir del nombre, así que vale
   // cualquier id representativo.
   const seen = new Set<string>();
@@ -185,6 +195,9 @@ export async function searchFcpPlayers(
     });
     if (out.length >= limit) break;
   }
+  // La lista se enseña ordenada por puntos, pero eso se decide DESPUÉS de haber
+  // elegido la temporada buena de cada jugador.
+  out.sort((a, b) => (b.puntos ?? 0) - (a.puntos ?? 0));
   return out;
 }
 
@@ -304,7 +317,7 @@ export async function resolveFcpPlayer(
   if (q.length < 3 || tokens.length === 0) return [];
 
   let sel = rawFrom('fcp_jugadores').select(
-    'id_jugador, nombre, apellido1, apellido2, nombre_pila, puntos, id_equipo, nombre_equipo',
+    'id_jugador, id_liga, nombre, apellido1, apellido2, nombre_pila, puntos, id_equipo, nombre_equipo',
   );
   for (const tok of tokens) {
     sel = sel.or(
@@ -313,7 +326,7 @@ export async function resolveFcpPlayer(
   }
   // La liga y el circuito se piden a la vez (tablas distintas, sin dependencia).
   const [{ data }, circuitRows] = await Promise.all([
-    sel.order('puntos', { ascending: false }).limit(80),
+    sel.order('id_liga', { ascending: false }).limit(80),
     fetchCircuitRows(tokens),
   ]);
   const rows = (data ?? []) as {
@@ -330,8 +343,10 @@ export async function resolveFcpPlayer(
   // el circuito. Seguimos: los candidatos de circuito se añaden más abajo.
 
   // Dedup por persona (la licencia del id cambia por temporada). La 1ª fila de
-  // cada persona = la de más puntos (vienen ordenadas). Acumulamos TODOS sus
-  // id_equipo para derivar el nivel más alto entre sus divisiones.
+  // cada persona = la de la ÚLTIMA temporada (vienen ordenadas por `id_liga`
+  // desc), que es de donde salen sus PUNTOS: los de la temporada en curso, no
+  // el récord histórico. Acumulamos TODOS sus id_equipo para derivar el nivel
+  // más alto entre sus divisiones.
   type Person = { rep: (typeof rows)[number]; equipos: Set<number> };
   const byPerson = new Map<string, Person>();
   for (const r of rows) {
@@ -467,7 +482,10 @@ export async function resolveFcpPlayer(
   }
 
   const gf = opts.genero;
-  return gf ? out.filter((m) => m.genero == null || m.genero === gf) : out;
+  const res = gf ? out.filter((m) => m.genero == null || m.genero === gf) : out;
+  // Los candidatos se enseñan por puntos desc, pero se ordenan al final: la
+  // consulta viene ordenada por temporada para poder elegir la fila buena.
+  return res.sort((a, b) => (b.puntos ?? 0) - (a.puntos ?? 0));
 }
 
 /** id_equipo de los equipos de un grupo (para acotar jugadores por grupo). */
