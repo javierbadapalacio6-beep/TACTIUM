@@ -1,0 +1,11 @@
+# Salidas de render: se regeneran con `npx remotion render`. 36 MB que además
+# irían a cada tarball de EAS, que se archiva desde la raíz git y NO excluye
+# archivos trackeados.
+renders/
+
+# Metraje. Los brutos que deja Javier y los recortes que se sirven a Remotion:
+# vídeo pesado que no tiene por qué vivir en el repo.
+bruto/
+public/plano/
+public/cobertura/
+public/voz/
