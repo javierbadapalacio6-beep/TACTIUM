@@ -16,6 +16,7 @@ import {
   fetchFcpYears,
   fetchFcpGroups,
   fetchFcpGroupMetas,
+  defaultYear,
   seasonLabel,
   seasonShort,
   type FcpYear,
@@ -96,7 +97,7 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
       .then((ys) => {
         if (!alive) return;
         setYears(ys);
-        setYear(ys[0]?.idLiga ?? null);
+        setYear(defaultYear(ys)?.idLiga ?? null);
       })
       .catch(() => alive && setYears([]))
       .finally(() => alive && setLoadingYears(false));
@@ -282,7 +283,7 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
   const selGrupoObj = grupoOptions.find((g) => g.idGrupo === selGrupo) ?? null;
   const tempYear = years.find((y) => y.idLiga === year);
   const tempLabel = (tempYear?.temporada ? seasonLabel(tempYear.temporada) : tempYear?.nombre) || '—';
-  const tempDefault = years.length > 0 && year === years[0].idLiga;
+  const tempDefault = years.length > 0 && year === defaultYear(years)?.idLiga;
   const grupoValue = (() => {
     if (selGrupo === 'all') return 'TODOS';
     const g = selGrupoObj ?? allGroups.find((x) => x.idGrupo === selGrupo);
@@ -294,7 +295,7 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
     setGenderF('all');
     setCatF('all');
     setSelGrupo('all');
-    setYear(years[0]?.idLiga ?? null);
+    setYear(defaultYear(years)?.idLiga ?? null);
   };
 
   return (

@@ -7,6 +7,7 @@
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from './seasons';
 import * as MatchdaysApi from './matchdays';
+import { fetchCurrentLiga } from './fcpBrowse';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -349,12 +350,15 @@ export async function fcpSeasonStatus(teamId: string): Promise<FcpSeasonStatus> 
     /* sin temporada activa: no molestamos con el aviso */
   }
 
-  const { data: maxRow } = await rawFrom('fcp_clasificacion')
-    .select('id_liga')
-    .order('id_liga', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  out.latestLiga = maxRow ? ((maxRow as { id_liga: number }).id_liga ?? null) : null;
+  // Temporada vigente = la que tiene CALENDARIO, no la más nueva que exista.
+  //
+  // De esto sale el aviso «hay temporada nueva, vuelve a volcar». La Federación
+  // abre las inscripciones de la temporada siguiente meses antes de publicar
+  // ningún partido, así que con el criterio anterior (mayor id en la
+  // clasificación) el aviso habría saltado a todos los clubes federados a mitad
+  // de temporada, mandándoles re-volcar a una liga sin calendario. Ver
+  // `fetchCurrentLiga`.
+  out.latestLiga = await fetchCurrentLiga();
 
   const idEquipo = await getFcpIdEquipo(teamId);
   if (idEquipo == null || out.latestLiga == null) return out;

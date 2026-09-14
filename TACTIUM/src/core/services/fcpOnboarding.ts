@@ -5,6 +5,7 @@
 import { supabase } from '@core/supabase/client';
 import { createTeam, updateTeam } from './teams';
 import { importFcpSeason } from './fcpSeason';
+import { fetchCurrentLiga } from './fcpBrowse';
 import type { TeamGender } from '@core/data/federations';
 
 export const FCP_FEDERATION_CODE = 'FCantP';
@@ -107,13 +108,14 @@ function categoryOf(grupo: string | null): string | null {
  * Solo la temporada ACTUAL (mayor id_liga con datos) y su LIGA REGULAR: así el
  * mismo equipo no aparece repetido por cada año ni por sus fases de playoff. */
 export async function searchFcpClubs(query: string): Promise<FcpClubGroup[]> {
-  // Liga actual = la de mayor id con datos en la clasificación.
-  const { data: maxRow } = await rawFrom('fcp_clasificacion')
-    .select('id_liga')
-    .order('id_liga', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const currentLiga = maxRow ? (maxRow as { id_liga: number }).id_liga ?? null : null;
+  // Liga actual = la que se está jugando, NO la más nueva que exista.
+  //
+  // Antes se cogía la de mayor id en la clasificación, y eso se rompe en cuanto
+  // la Federación abre las inscripciones de la temporada siguiente: esa liga
+  // nace con sus equipos meses antes de tener un solo partido, así que un club
+  // que importase a mitad de temporada se habría traído los equipos del año
+  // que viene, con sus letras y categorías nuevas. Ver `fetchCurrentLiga`.
+  const currentLiga = await fetchCurrentLiga();
   if (currentLiga == null) return [];
 
   const { data: clasif, error } = await rawFrom('fcp_clasificacion')

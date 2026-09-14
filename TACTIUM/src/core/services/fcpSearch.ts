@@ -3,6 +3,7 @@
 // Ver [[tactium_fcp_federation_integration]]. Los grupos se buscan con
 // fetchFcpGroups de [[fcpBrowse]].
 import { supabase } from '@core/supabase/client';
+import { fetchCurrentLiga } from './fcpBrowse';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -152,6 +153,11 @@ export async function searchFcpPlayers(
     );
   }
   if (hasScope) sel = sel.in('id_equipo', idEquipos);
+  // Nada posterior a la temporada que se juega: la liga en periodo de
+  // inscripción ya tiene plantillas cargadas, pero sin puntos ni partidos, y
+  // sería la «más reciente» de todo el mundo.
+  const currentLiga = await fetchCurrentLiga();
+  if (currentLiga != null) sel = sel.lte('id_liga', currentLiga);
   // Ordenado por TEMPORADA descendente (`id_liga` crece cada año), no por
   // puntos: ver el porqué en el dedup de aquí abajo.
   const { data } = await sel.order('id_liga', { ascending: false }).limit(300);
@@ -324,6 +330,10 @@ export async function resolveFcpPlayer(
       `nombre.ilike.%${tok}%,apellido1.ilike.%${tok}%,apellido2.ilike.%${tok}%,nombre_pila.ilike.%${tok}%`,
     );
   }
+  // Igual que en la búsqueda: nada posterior a la temporada que se juega, o los
+  // puntos saldrían de una liga que aún no ha empezado.
+  const currentLiga = await fetchCurrentLiga();
+  if (currentLiga != null) sel = sel.lte('id_liga', currentLiga);
   // La liga y el circuito se piden a la vez (tablas distintas, sin dependencia).
   const [{ data }, circuitRows] = await Promise.all([
     sel.order('id_liga', { ascending: false }).limit(80),

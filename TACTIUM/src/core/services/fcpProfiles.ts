@@ -3,6 +3,7 @@
 // derivados de las actas). Ver [[tactium_fcp_federation_integration]].
 import { supabase } from '@core/supabase/client';
 import { resolveMainGroup } from './fcpSeason';
+import { fetchCurrentLiga } from './fcpBrowse';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -503,8 +504,14 @@ export async function fetchFcpPlayerYears(idJugador: string): Promise<FcpPlayerY
     for (const [eq, grp] of grupoByEq) catByEquipo.set(eq, catByGrupo.get(grp) ?? null);
   }
 
+  // Fuera las temporadas que aún no se juegan: cuando la Federación abre las
+  // inscripciones ya carga las plantillas, así que sin esto la ficha abriría
+  // por defecto en un año con cero puntos y cero partidos.
+  const currentLiga = await fetchCurrentLiga();
+
   const byLiga = new Map<number, FcpPlayerYearTeam>();
   for (const r of rows) {
+    if (currentLiga != null && r.id_liga > currentLiga) continue;
     const anio = yearOf.get(r.id_liga);
     if (!anio) continue;
     const cand: FcpPlayerYearTeam = {

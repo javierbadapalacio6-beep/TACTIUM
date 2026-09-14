@@ -10,22 +10,70 @@ export interface FcpYear {
   idLiga: number;
   temporada: string; // "2026"
   nombre: string;
+  /** Tiene calendario: se está jugando o ya se jugó. Una liga en periodo de
+   *  INSCRIPCIÓN trae equipos y categorías, pero ningún partido todavía. */
+  conCalendario: boolean;
 }
+
+/**
+ * Liga «en juego»: la más nueva que tenga CALENDARIO.
+ *
+ * Antes se cogía la de id más alto con datos, y eso se rompe justo cuando la
+ * Federación abre las inscripciones de la temporada siguiente: la liga nueva
+ * nace con sus equipos y sus categorías meses antes de que exista un solo
+ * partido, así que la app se habría cambiado sola a la temporada que viene a
+ * mitad de la que se está jugando. Un club que importase en enero se habría
+ * traído los equipos del año siguiente.
+ *
+ * El calendario es la frontera: mientras no hay partidos, la liga está en
+ * inscripción y la de verdad sigue siendo la anterior.
+ */
+export async function fetchCurrentLiga(): Promise<number | null> {
+  if (ligaCache && Date.now() - ligaCache.at < LIGA_TTL_MS) return ligaCache.value;
+  const { data } = await rawFrom('fcp_partidos')
+    .select('id_liga')
+    .order('id_liga', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const value = data ? ((data as { id_liga: number }).id_liga ?? null) : null;
+  ligaCache = { at: Date.now(), value };
+  return value;
+}
+
+// Se pregunta en cada búsqueda de jugador, o sea a cada tecleo, y la respuesta
+// solo cambia cuando la Federación publica el calendario de la temporada
+// siguiente: una vez al año. Una caché corta evita el viaje de ida y vuelta sin
+// que el dato pueda quedarse rancio de forma apreciable.
+let ligaCache: { at: number; value: number | null } | null = null;
+const LIGA_TTL_MS = 5 * 60 * 1000;
 
 /** Años/ligas con datos reales (los que tienen grupos scrapeados). */
 export async function fetchFcpYears(): Promise<FcpYear[]> {
-  const { data: grupos } = await rawFrom('fcp_grupos').select('id_liga');
+  const [current, { data: grupos }, { data: ligas }] = await Promise.all([
+    fetchCurrentLiga(),
+    // El limit explícito importa: por defecto PostgREST corta en 1000 filas y
+    // los grupos crecen ~130 por temporada, así que sin esto acabarían
+    // desapareciendo temporadas viejas del selector sin avisar.
+    rawFrom('fcp_grupos').select('id_liga').limit(20000),
+    rawFrom('fcp_ligas').select('id_liga, temporada, nombre'),
+  ]);
   const withData = new Set(((grupos ?? []) as { id_liga: number | null }[]).map((g) => g.id_liga));
-  const { data: ligas } = await rawFrom('fcp_ligas').select('id_liga, temporada, nombre');
   return ((ligas ?? []) as { id_liga: number; temporada: string | null; nombre: string | null }[])
     .filter((l) => withData.has(l.id_liga))
     .map((l) => ({
       idLiga: l.id_liga,
       temporada: l.temporada ?? '',
       nombre: l.nombre ?? `Liga ${l.id_liga}`,
+      // Las ligas van en orden cronológico, así que todo lo anterior o igual a
+      // la que se juega ya tuvo calendario; lo posterior está en inscripción.
+      conCalendario: current != null && l.id_liga <= current,
     }))
     .sort((a, b) => b.temporada.localeCompare(a.temporada));
 }
+
+/** La que debe salir elegida de entrada: la que se juega, no la más nueva. */
+export const defaultYear = (years: FcpYear[]): FcpYear | null =>
+  years.find((y) => y.conCalendario) ?? years[0] ?? null;
 
 export interface FcpGroupItem {
   idGrupo: string;
