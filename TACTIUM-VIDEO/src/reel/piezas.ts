@@ -129,7 +129,7 @@ export const PIEZAS: Pieza[] = [
   {
     id: "A3-dos-minutos",
     titulo: "De una hora a dos minutos",
-    plano: null, // → "plano/A3-dos-minutos.mp4" · dentro del coche
+    plano: null, // → "plano/A3-dos-minutos.mp4" · habitación, palas de fondo
     duracionMs: 12000,
     frases: [
       { texto: "Cada jornada perdía" },
@@ -138,8 +138,8 @@ export const PIEZAS: Pieza[] = [
       { texto: "Grupo de WhatsApp," },
       { texto: "quién puede, quién no," },
       { texto: "y el lío del orden." },
-      { texto: "Ahora lo hago desde el coche" },
-      { texto: "antes de arrancar." },
+      { texto: "Ahora la dejo hecha" },
+      { texto: "antes de coger la pala." },
       { texto: "Dos minutos.", enfasis: "Dos minutos." },
     ],
     cobertura: [

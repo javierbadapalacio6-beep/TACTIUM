@@ -46,11 +46,30 @@ paredes desnudas rebota el sonido y no hay forma de arreglarlo después.
   (una estantería, la pista de pádel al fondo, tus pantallas) pero sin desorden.
 - **Modo avión.** Una llamada en mitad de la toma te tira el reel.
 
-### Dos sitios, no uno
+### El montaje: en casa, con las palas colgadas detrás
 
-Graba **la mitad en casa/despacho** y **la mitad en el club, con la pista detrás**. Alternar
-localización entre reels hace que la cuenta no parezca siempre el mismo vídeo. El R1 (fundador) y
-el R4 (torneo) pídelos en el club; el resto donde quieras.
+Decidido así. Es un buen fondo —dice «pádel» sin decirlo—, pero tiene tres trampas:
+
+1. **No te pongas delante de una pala.** Si una queda justo detrás de tu cabeza, parece que te
+   sale de ella y no se ve otra cosa. Colócate **descentrado**: tú en un tercio del encuadre,
+   las palas en el otro.
+2. **Sepárate de la pared un par de metros.** Pegado, el fondo está tan enfocado como tu cara y
+   compite con ella. A dos metros las palas quedan suavemente desenfocadas y tú destacas.
+3. **Las palas llevan logos de marcas.** Bullpadel, Adidas, Head… En una pieza comercial de
+   TACTIUM eso mete marcas de terceros sin su permiso. Con el desenfoque de la separación basta
+   casi siempre; si alguna canta mucho, gírala de canto.
+
+### Cuatro piezas, un solo fondo: cómo evitar que parezcan el mismo vídeo
+
+Es el riesgo real de grabarlo todo del tirón en el mismo sitio. Cuatro reels idénticos de
+encuadre seguidos leen como un vídeo repetido, y la gente deja de pararse. Sin moverte de la
+habitación:
+
+- **Gira el trípode 90°** y usa dos paredes distintas: las palas para dos piezas, otro fondo
+  para las otras dos.
+- **Cambia de camiseta** entre piezas. Grábalas en **dos días**, no las cuatro seguidas.
+- **Cambia el encuadre**: una de pecho para arriba, otra más abierta; una de pie, otra sentado.
+- El **A2 va sentado** con el móvil en la mesa delante — ese ya es distinto por guion.
 
 ---
 

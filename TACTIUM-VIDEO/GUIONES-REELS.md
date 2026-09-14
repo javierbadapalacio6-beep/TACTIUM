@@ -109,13 +109,20 @@ Si no lo dice con esas palabras, cámbialo por «te lo pueden reclamar» y listo
 ## A3 — «De una hora a dos minutos» → `A3-dos-minutos.mp4` · ~12s
 
 El más convencional de los tres, y por eso hay que tenerlo: es el que convierte cuando ya te conocen.
-Rodado **dentro del coche**, aparcado en el club, sin arrancar, móvil apoyado en el salpicadero.
-Energía de final de semana, algo cansado.
+En tu habitación, **con las palas colgadas detrás**. Energía de final de semana, algo cansado.
 
 > Cada jornada perdía una hora montando la alineación.
 > Grupo de WhatsApp, quién puede, quién no, y el lío del orden.
-> Ahora lo hago desde el coche antes de arrancar.
+> Ahora la dejo hecha antes de coger la pala.
 > Dos minutos.
+
+**El remate se apoya en el fondo.** Al decir «antes de coger la pala», haz un gesto mínimo hacia
+las palas de la pared — una mirada o la barbilla, nada de señalar con el brazo. Lo que antes
+aportaba el coche (lo hago en un hueco, de camino) aquí lo aporta la pared: la alineación queda
+hecha antes de salir a jugar.
+
+**Alternativa si el gesto no te sale natural:** *«Ahora la mando desde aquí, antes de salir por
+la puerta.»*
 
 ---
 
