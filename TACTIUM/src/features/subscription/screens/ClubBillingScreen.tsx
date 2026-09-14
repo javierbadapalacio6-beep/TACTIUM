@@ -26,6 +26,7 @@ import {
   formatEur,
   recommendClubPlanForTeams,
   type SubscriptionStatus,
+  isLiveSub,
 } from '@core/subscriptions/plans';
 import type { Subscription } from '@core/entitlements/hasPremiumAccess';
 
@@ -78,7 +79,7 @@ export const ClubBillingScreen = ({
           (s) =>
             s.subject_type === 'club' &&
             s.subject_id === club.id &&
-            PREMIUM_STATUSES.includes(s.status),
+            isLiveSub(s),
         )
         .sort(
           (a, b) =>

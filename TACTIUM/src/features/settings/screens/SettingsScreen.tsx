@@ -27,7 +27,7 @@ import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { useThemeStore } from '@store/themeStore';
-import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
+import { PLAN_BY_TIER, PREMIUM_STATUSES, isLiveSub } from '@core/subscriptions/plans';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from '@core/services/seasons';
@@ -756,7 +756,7 @@ const SubscriptionCard: React.FC<{
   // Sub activa propia o del club: mostramos lo más relevante.
   const activeSub = React.useMemo(() => {
     const candidates = subscriptions.filter((s) =>
-      PREMIUM_STATUSES.includes(s.status),
+      isLiveSub(s),
     );
     // Preferimos sub de club si el user es club_admin.
     if (activeRole === 'club_admin') {

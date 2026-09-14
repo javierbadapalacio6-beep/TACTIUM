@@ -24,6 +24,7 @@ import {
   formatEur,
   PREMIUM_STATUSES,
   type SubscriptionStatus,
+  isLiveSub,
 } from '@core/subscriptions/plans';
 import type { Subscription } from '@core/entitlements/hasPremiumAccess';
 import { restorePurchases, presentCodeRedemption } from '@core/purchases';
@@ -88,14 +89,14 @@ export const SubscriptionScreen = ({
     return (
       subscriptions.find(
         (s) =>
-          s.subject_type === 'club' && PREMIUM_STATUSES.includes(s.status),
+          s.subject_type === 'club' && isLiveSub(s),
       ) ?? null
     );
   }, [subscriptions]);
 
   // La que manda ahora mismo, sea de persona (capitán) o de club.
   const activeSub = useMemo<Subscription | null>(() => {
-    if (mySub && PREMIUM_STATUSES.includes(mySub.status)) return mySub;
+    if (mySub && isLiveSub(mySub)) return mySub;
     return clubCovering;
   }, [mySub, clubCovering]);
   // ¿A qué familia se puede saltar? De club a capitán, o al revés.

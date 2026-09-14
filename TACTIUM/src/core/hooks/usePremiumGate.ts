@@ -8,7 +8,7 @@ import { useTeamStore } from '@store/teamStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { clubCoverage } from '@core/entitlements/coverage';
-import { PREMIUM_STATUSES } from '@core/subscriptions/plans';
+import { PREMIUM_STATUSES, isLiveSub } from '@core/subscriptions/plans';
 
 import type { RootStackParamList } from '@navigation/types';
 
@@ -153,7 +153,7 @@ export function useTeamGate() {
  */
 export function useHasActiveSub(): boolean {
   return useSubscriptionStore((s) =>
-    s.subscriptions.some((x) => PREMIUM_STATUSES.includes(x.status)),
+    s.subscriptions.some((x) => isLiveSub(x)),
   );
 }
 

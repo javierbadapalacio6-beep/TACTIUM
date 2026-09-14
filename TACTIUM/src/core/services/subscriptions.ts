@@ -1,7 +1,7 @@
 import { supabase } from '@core/supabase/client';
 import type { Database } from '@core/supabase/database.types';
 import type { BillingPeriod, PlanTier, SubjectType } from '@core/subscriptions/plans';
-import { PLAN_BY_TIER, PREMIUM_STATUSES, TRIAL_DURATION_DAYS } from '@core/subscriptions/plans';
+import { PLAN_BY_TIER, PREMIUM_STATUSES, TRIAL_DURATION_DAYS, isLiveSub } from '@core/subscriptions/plans';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 
 export type Subscription = Database['public']['Tables']['subscriptions']['Row'];
@@ -165,7 +165,7 @@ export async function mockPurchasePlan(
       (s) =>
         s.subject_type === subjectType &&
         s.subject_id === subjectId &&
-        PREMIUM_STATUSES.includes(s.status),
+        isLiveSub(s),
     );
 
   // ─── Trial onboarding · RPC real ─────────────────────────────────────────
