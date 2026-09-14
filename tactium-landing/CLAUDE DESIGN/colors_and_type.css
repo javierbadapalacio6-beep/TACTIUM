@@ -1,9 +1,19 @@
 /* =========================================================
    TACTIUM · Design Tokens
-   Dark-only, monochromatic green, "elite lab" aesthetic.
+   Monochromatic green, "elite lab" aesthetic.
+   DUAL THEME: dark (default, la firma de la marca) + light.
+
+   Cómo funciona el tema:
+     - Por defecto, oscuro.
+     - `@media (prefers-color-scheme: light)` adopta el tema del sistema.
+     - `:root[data-theme="light|dark"]` SIEMPRE gana sobre el sistema —
+       es el selector que usa el toggle manual del producto.
+   Las tres capas coinciden con `useThemeStore` de la app móvil
+   (modos 'system' | 'light' | 'dark'), así que web y app se comportan igual.
    ========================================================= */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 
 :root {
   /* ─── Backgrounds ────────────────────────────────────── */
@@ -42,8 +52,10 @@
   --color-accent-55: rgba(0, 223, 130, 0.55);
 
   /* ─── Typography stacks ─────────────────────────────── */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-               Helvetica, Arial, sans-serif;
+  /* Satoshi es la sans oficial de TACTIUM: así está declarada en
+     `TACTIUM/src/core/theme/fonts.ts`. Inter queda sólo como fallback. */
+  --font-sans: "Satoshi", "Inter", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
 
   /* ─── Type scale (fluid mobile-first) ───────────────── */
@@ -106,7 +118,168 @@
   --container:     1152px;
   --container-sm:  720px;
   --pad-section:   clamp(64px, 8vw, 128px);
+
+  color-scheme: dark;
+
+  /* ═══════════════════════════════════════════════════════
+     VALORES DEL TEMA CLARO · fuente única
+     ───────────────────────────────────────────────────────
+     No los uses directamente: los remapean los dos bloques
+     de tema de abajo. Están aquí una sola vez para que no
+     haya dos listas de hex que se desincronicen.
+     Copiados literalmente de `lightColors` en
+     `TACTIUM/src/core/theme/colors.ts`.
+     ═══════════════════════════════════════════════════════ */
+  --lt-bg:           #F4F7F5;
+  --lt-bg-raised:    #FFFFFF;
+  --lt-bg-card:      #FFFFFF;
+  --lt-bg-card-2:    #EEF3F0;
+  --lt-bg-overlay:   rgba(0, 0, 0, 0.35);
+
+  --lt-primary:      #03624C;
+  --lt-primary-dim:  #024A39;
+  --lt-accent:       #00995E;   /* ⚠️ NO #00DF82 — ver nota abajo */
+  --lt-accent-dim:   #007D4D;
+
+  --lt-text:         #0E1A14;
+  --lt-text-muted:   rgba(14, 26, 20, 0.64);
+  --lt-text-faint:   rgba(14, 26, 20, 0.42);
+  --lt-text-inverse: #FFFFFF;
+
+  --lt-hair:         rgba(14, 26, 20, 0.08);
+  --lt-hair-strong:  rgba(14, 26, 20, 0.14);
+
+  --lt-success:      #00995E;
+  --lt-warning:      #B7791F;
+  --lt-error:        #D93B41;
+
+  --lt-accent-10:    rgba(0, 153, 94, 0.10);
+  --lt-accent-15:    rgba(0, 153, 94, 0.15);
+  --lt-accent-25:    rgba(0, 153, 94, 0.22);
+  --lt-accent-40:    rgba(0, 153, 94, 0.38);
+  --lt-accent-55:    rgba(0, 153, 94, 0.50);
 }
+
+/* =========================================================
+   TEMA CLARO
+   ---------------------------------------------------------
+   ⚠️ LAS TRES REGLAS QUE MÁS SE INCUMPLEN — léelas antes de
+   diseñar nada en claro:
+
+   1. El accent en claro es #00995E, NO #00DF82. El verde neón
+      de la marca sobre blanco da 1.6:1 de contraste: no pasa
+      WCAG ni como texto ni como borde. #00995E da 4.6:1 sobre
+      #F4F7F5 y funciona además como relleno con texto blanco.
+
+   2. LOS GLOWS DESAPARECEN. En oscuro el halo verde es la
+      firma visual; en claro es suciedad. `--glow-accent-*`
+      pasan a `none` y la profundidad la dan sombras neutras
+      suaves + hairlines. Un modo claro con halos verdes está
+      mal hecho, sin excepciones.
+
+   3. Las sombras se aclaran y se acortan. Las recetas oscuras
+      (negro al 60-80%) sobre un fondo claro producen manchas
+      grises. En claro: tinte del propio texto, opacidad baja,
+      desenfoque corto.
+   ========================================================= */
+
+/* Tema del sistema — sólo si el usuario no ha forzado uno. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --color-bg:          var(--lt-bg);
+    --color-bg-raised:   var(--lt-bg-raised);
+    --color-bg-card:     var(--lt-bg-card);
+    --color-bg-card-2:   var(--lt-bg-card-2);
+    --color-bg-overlay:  var(--lt-bg-overlay);
+
+    --color-primary:     var(--lt-primary);
+    --color-primary-dim: var(--lt-primary-dim);
+    --color-accent:      var(--lt-accent);
+    --color-accent-dim:  var(--lt-accent-dim);
+
+    --color-text:         var(--lt-text);
+    --color-text-muted:   var(--lt-text-muted);
+    --color-text-faint:   var(--lt-text-faint);
+    --color-text-inverse: var(--lt-text-inverse);
+
+    --color-hair:        var(--lt-hair);
+    --color-hair-strong: var(--lt-hair-strong);
+
+    --color-success: var(--lt-success);
+    --color-warning: var(--lt-warning);
+    --color-error:   var(--lt-error);
+
+    --color-accent-10: var(--lt-accent-10);
+    --color-accent-15: var(--lt-accent-15);
+    --color-accent-25: var(--lt-accent-25);
+    --color-accent-40: var(--lt-accent-40);
+    --color-accent-55: var(--lt-accent-55);
+
+    --shadow-card-soft:
+      0 10px 30px -12px rgba(14, 26, 20, 0.14),
+      inset 0 0 0 1px rgba(14, 26, 20, 0.05);
+    --shadow-card-strong:
+      0 24px 56px -18px rgba(14, 26, 20, 0.20),
+      inset 0 0 0 1px rgba(14, 26, 20, 0.06);
+    --shadow-cta:        0 6px 18px -6px rgba(0, 153, 94, 0.35);
+    --shadow-cta-strong: 0 10px 28px -8px rgba(0, 153, 94, 0.45);
+
+    --glow-accent-soft: none;
+    --glow-accent-hard: none;
+  }
+}
+
+/* Toggle manual — gana siempre sobre el tema del sistema. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg:          var(--lt-bg);
+  --color-bg-raised:   var(--lt-bg-raised);
+  --color-bg-card:     var(--lt-bg-card);
+  --color-bg-card-2:   var(--lt-bg-card-2);
+  --color-bg-overlay:  var(--lt-bg-overlay);
+
+  --color-primary:     var(--lt-primary);
+  --color-primary-dim: var(--lt-primary-dim);
+  --color-accent:      var(--lt-accent);
+  --color-accent-dim:  var(--lt-accent-dim);
+
+  --color-text:         var(--lt-text);
+  --color-text-muted:   var(--lt-text-muted);
+  --color-text-faint:   var(--lt-text-faint);
+  --color-text-inverse: var(--lt-text-inverse);
+
+  --color-hair:        var(--lt-hair);
+  --color-hair-strong: var(--lt-hair-strong);
+
+  --color-success: var(--lt-success);
+  --color-warning: var(--lt-warning);
+  --color-error:   var(--lt-error);
+
+  --color-accent-10: var(--lt-accent-10);
+  --color-accent-15: var(--lt-accent-15);
+  --color-accent-25: var(--lt-accent-25);
+  --color-accent-40: var(--lt-accent-40);
+  --color-accent-55: var(--lt-accent-55);
+
+  --shadow-card-soft:
+    0 10px 30px -12px rgba(14, 26, 20, 0.14),
+    inset 0 0 0 1px rgba(14, 26, 20, 0.05);
+  --shadow-card-strong:
+    0 24px 56px -18px rgba(14, 26, 20, 0.20),
+    inset 0 0 0 1px rgba(14, 26, 20, 0.06);
+  --shadow-cta:        0 6px 18px -6px rgba(0, 153, 94, 0.35);
+  --shadow-cta-strong: 0 10px 28px -8px rgba(0, 153, 94, 0.45);
+
+  --glow-accent-soft: none;
+  --glow-accent-hard: none;
+}
+
+/* Volver al oscuro por toggle aunque el sistema esté en claro:
+   no hace falta redeclarar nada — `[data-theme="dark"]` queda
+   fuera del `:not()` de arriba y hereda los valores base. */
 
 /* =========================================================
    SEMANTIC ELEMENT STYLES
@@ -121,6 +294,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* El cambio de tema se funde, no parpadea. Sólo en el lienzo:
+     no pongas transiciones de color globales con `*`, arrastran. */
+  transition: background var(--dur-base) var(--ease-out-quart),
+              color var(--dur-base) var(--ease-out-quart);
 }
 
 ::selection {
@@ -259,8 +436,19 @@ a:hover { opacity: 0.8; }
   border: 1px solid var(--color-accent-40);
   background: var(--color-accent-10);
 }
-.badge-warn  { color: var(--color-warning); border-color: rgba(242,201,76,0.40); background: rgba(242,201,76,0.10); }
-.badge-error { color: var(--color-error);   border-color: rgba(255,107,107,0.40); background: rgba(255,107,107,0.10); }
+/* Los estados semánticos se derivan del token activo con color-mix, así el
+   chip sigue al tema en vez de quedarse con el amarillo/rojo de la paleta
+   oscura sobre un fondo claro. */
+.badge-warn  {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+  background:   color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+.badge-error {
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 40%, transparent);
+  background:   color-mix(in srgb, var(--color-error) 10%, transparent);
+}
 .badge-mute  { color: var(--color-text-faint); border-color: var(--color-hair-strong); background: transparent; }
 
 .eyebrow {
@@ -270,6 +458,47 @@ a:hover { opacity: 0.8; }
   letter-spacing: 0.25em;
   text-transform: uppercase;
   color: var(--color-accent);
+}
+
+/* =========================================================
+   TOGGLE DE TEMA — cómo cablearlo
+   ---------------------------------------------------------
+   Tres modos, igual que `useThemeStore` en la app móvil:
+   'system' (sin atributo) · 'light' · 'dark'.
+
+   En el <head>, ANTES de pintar nada, para que no haya
+   destello de tema equivocado al cargar:
+
+     <script>
+       (function () {
+         var m = localStorage.getItem('tactium-theme');
+         if (m === 'light' || m === 'dark')
+           document.documentElement.setAttribute('data-theme', m);
+       })();
+     </script>
+
+   Y en el toggle:
+
+     function setTheme(mode) {              // 'system' | 'light' | 'dark'
+       var r = document.documentElement;
+       if (mode === 'system') { r.removeAttribute('data-theme'); }
+       else { r.setAttribute('data-theme', mode); }
+       localStorage.setItem('tactium-theme', mode);
+     }
+
+   Quitar el atributo (no ponerlo a "system") es lo que devuelve
+   el control a `prefers-color-scheme`.
+   ========================================================= */
+
+/* Sólo visible en su tema — útil para pares de iconos sol/luna
+   y para ilustraciones que necesitan dos versiones. */
+:root[data-theme="light"] .only-dark { display: none !important; }
+:root[data-theme="dark"]  .only-light { display: none !important; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .only-dark  { display: none !important; }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .only-light { display: none !important; }
 }
 
 /* Reduced motion */
