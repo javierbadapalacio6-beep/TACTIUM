@@ -31,6 +31,8 @@ import { clubCoverage } from '@core/entitlements/coverage';
 import { useTeamGate } from '@core/hooks/usePremiumGate';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
+import { fetchClubInscripciones } from '@core/services/fcpInscripciones';
+import type { FcpInscripcionesResumen } from '@core/services/fcpInscripciones';
 
 import type { ClubStackScreenProps, RootStackParamList } from '@navigation/types';
 
@@ -85,6 +87,26 @@ export const ClubDashboardScreen = ({
     () => (club ? teams.filter((t) => t.club_id === club.id) : []),
     [teams, club],
   );
+
+  // Inscripciones de la temporada SIGUIENTE (la FCP las publica meses antes de
+  // que haya calendario). Null casi todo el año: solo aparece cuando hay una
+  // liga en inscripción con equipos de este club.
+  const [inscripciones, setInscripciones] = useState<FcpInscripcionesResumen | null>(null);
+  useEffect(() => {
+    if (!isFcpClub || clubTeams.length === 0) {
+      setInscripciones(null);
+      return;
+    }
+    let alive = true;
+    fetchClubInscripciones(
+      clubTeams.map((t) => ({ name: t.name, gender: t.gender, category: t.category })),
+    )
+      .then((r) => alive && setInscripciones(r))
+      .catch(() => alive && setInscripciones(null));
+    return () => {
+      alive = false;
+    };
+  }, [isFcpClub, clubTeams]);
   useEffect(() => {
     const probe = clubTeams.find((t) => t.federation === FCP_FEDERATION_CODE);
     if (!isFcpClub || !probe) {
@@ -403,6 +425,47 @@ export const ClubDashboardScreen = ({
                   nombres y las categorías (el equipo I puede ser ahora el C).
                 </Text>
               </Pressable>
+            ) : null}
+            {inscripciones ? (
+              <View style={styles.inscripCard}>
+                <Text style={styles.fcpBannerTitle}>
+                  Inscripciones · {inscripciones.temporada}
+                </Text>
+                <Text style={styles.fcpBannerText}>
+                  {inscripciones.confirmados === inscripciones.total
+                    ? `Tus ${inscripciones.total} equipos están inscritos y confirmados.`
+                    : `${inscripciones.confirmados} de ${inscripciones.total} confirmados por la Federación.`}
+                </Text>
+                {inscripciones.rows.map((r) => (
+                  <View key={`${r.equipo}-${r.genero}`} style={styles.inscripRow}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.inscripTeam} numberOfLines={1}>
+                        {r.equipo}
+                      </Text>
+                      <Text style={styles.inscripMeta} numberOfLines={1}>
+                        {[
+                          r.genero === 'F' ? 'Femenino' : 'Masculino',
+                          // Cuando cambia de categoría se enseñan las dos: es lo
+                          // primero que mira un club al salir la liga nueva.
+                          r.categoriaActual && r.categoria && r.categoriaActual !== r.categoria
+                            ? `${r.categoriaActual} → ${r.categoria}`
+                            : r.categoria,
+                          r.enTactium ? null : 'nuevo',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    </View>
+                    <Text style={[styles.inscripState, !r.confirmado && styles.inscripPending]}>
+                      {r.confirmado ? 'CONFIRMADO' : 'PENDIENTE'}
+                    </Text>
+                  </View>
+                ))}
+                <Text style={styles.inscripFoot}>
+                  Todavía no hay calendario. Cuando la Federación lo publique, podrás
+                  volcar la temporada.
+                </Text>
+              </View>
             ) : null}
             {isFcpClub && club && !hasFcpTeams ? (
               <Pressable
@@ -1029,6 +1092,47 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
   fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  inscripCard: {
+    marginHorizontal: 22,
+    marginTop: 4,
+    marginBottom: 12,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    borderRadius: Radius.md,
+    padding: 14,
+  },
+  inscripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: c.hair,
+    marginTop: 8,
+  },
+  inscripTeam: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+  inscripMeta: {
+    fontFamily: Fonts.mono,
+    color: c.textFaint,
+    fontSize: 10.5,
+    letterSpacing: 0.4,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  inscripState: {
+    fontFamily: Fonts.mono,
+    color: c.accent,
+    fontSize: 9.5,
+    letterSpacing: 0.6,
+  },
+  inscripPending: { color: c.warning },
+  inscripFoot: {
+    color: c.textFaint,
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 12,
+  },
   uncoveredBadge: {
     fontFamily: Fonts.mono,
     color: c.warning,
