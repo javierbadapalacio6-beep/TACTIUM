@@ -40,6 +40,7 @@ import {
   type BillingPeriod,
   type PlanDescriptor,
   type PlanTier,
+  isLiveSub,
 } from '@core/subscriptions/plans';
 import { pollForRecentSubscription } from '@core/services/subscriptions';
 import { supabase } from '@core/supabase/client';
@@ -209,7 +210,7 @@ export const PaywallScreen = ({
     return (
       subscriptions.find(
         (s) =>
-          s.subject_type !== subjectType && PREMIUM_STATUSES.includes(s.status),
+          s.subject_type !== subjectType && isLiveSub(s),
       ) ?? null
     );
   }, [subscriptions, showClubPlans]);
@@ -303,7 +304,7 @@ export const PaywallScreen = ({
           (s) =>
             s.subject_type === subjectType &&
             s.subject_id === subjectId &&
-            PREMIUM_STATUSES.includes(s.status),
+            isLiveSub(s),
         )
         .sort(
           (a, b) =>
@@ -356,7 +357,7 @@ export const PaywallScreen = ({
     (s) =>
       s.subject_type === 'club' &&
       s.subject_id === club?.id &&
-      PREMIUM_STATUSES.includes(s.status),
+      isLiveSub(s),
   );
   const canApplyPaidPlan = Boolean(
     paidClub && showClubPlans && club?.id && !clubAlreadyCovered,
@@ -410,7 +411,7 @@ export const PaywallScreen = ({
         (s) =>
           s.subject_type === subjectType &&
           s.subject_id === subjectId &&
-          PREMIUM_STATUSES.includes(s.status),
+          isLiveSub(s),
       );
       const hadExistingPremium = Boolean(previousSub);
 

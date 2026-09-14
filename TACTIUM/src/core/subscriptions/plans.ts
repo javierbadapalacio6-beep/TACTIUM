@@ -110,6 +110,27 @@ export const PREMIUM_STATUSES: ReadonlyArray<SubscriptionStatus> = [
   'grace_period',
 ] as const;
 
+/**
+ * ¿Esta suscripción está viva AHORA? Estado premium **y** periodo por vencer.
+ *
+ * Mirar solo el estado deja pasar filas zombi: una suscripción que se quedó en
+ * `active` con la fecha ya pasada. Pasa cuando conviven la fila que crea la app
+ * al comprar y la que crea el webhook, porque cada una lleva un id de
+ * transacción distinto y los eventos de la tienda solo tocan la suya.
+ *
+ * El 2026-09-14 se vio en real: el usuario tenía «Activa» en Mi suscripción
+ * media hora después de que caducara, mientras las funciones de pago le salían
+ * bloqueadas. Las puertas (`fn_has_premium_access`, `hasAnyActiveSub`) sí
+ * miraban la fecha; las pantallas no. Parecía pagada y no funcionaba.
+ */
+export const isLiveSub = (s: {
+  status: SubscriptionStatus;
+  current_period_end: string | null;
+}): boolean =>
+  PREMIUM_STATUSES.includes(s.status) &&
+  !!s.current_period_end &&
+  new Date(s.current_period_end).getTime() > Date.now();
+
 // ── Helpers de cálculo ──────────────────────────────────────────────────────
 
 /**

@@ -28,7 +28,7 @@ import {
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
-import { PLAN_BY_TIER, PREMIUM_STATUSES } from '@core/subscriptions/plans';
+import { PLAN_BY_TIER, PREMIUM_STATUSES, isLiveSub } from '@core/subscriptions/plans';
 import type { TeamGender } from '@core/services/teams';
 import {
   COMPETITION_PRESETS,
@@ -78,7 +78,7 @@ export const CreateTeamsForClubScreen = ({
           (s) =>
             s.subject_type === 'club' &&
             s.subject_id === club.id &&
-            PREMIUM_STATUSES.includes(s.status),
+            isLiveSub(s),
         )
         .sort(
           (a, b) =>
