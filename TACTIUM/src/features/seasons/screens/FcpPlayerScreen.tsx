@@ -7,6 +7,7 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconBack, IconStar, IconStarFilled } from '@components/ui';
 import { StatCell, ListHeader } from '../components/fcpUi';
+import { seasonLabel, seasonShort } from '@core/services/fcpBrowse';
 import { useFavoritesStore } from '@store/favoritesStore';
 import { toggleFavorite } from '@core/services/favorites';
 import {
@@ -227,7 +228,7 @@ export const FcpPlayerScreen = ({ navigation, route }: SeasonsStackScreenProps<'
                 const on = y.idLiga === selLiga;
                 return (
                   <Pressable key={y.idLiga} onPress={() => setSelLiga(y.idLiga)} style={[styles.yChip, on && styles.yChipOn]}>
-                    <Text style={[styles.yChipText, on && styles.yChipTextOn]}>{y.anio}</Text>
+                    <Text style={[styles.yChipText, on && styles.yChipTextOn]}>{seasonShort(y.anio)}</Text>
                   </Pressable>
                 );
               })}
@@ -264,7 +265,7 @@ export const FcpPlayerScreen = ({ navigation, route }: SeasonsStackScreenProps<'
             <ActivityIndicator color={c.accent} style={{ marginTop: 20 }} />
           ) : !yearData || (yearData.matches.length === 0 && !yearData.hasData) ? (
             <Text style={styles.note}>
-              Las actas de {selYear?.anio ?? 'esta temporada'} aún se están sincronizando con la Federación.
+              Las actas de {selYear ? seasonLabel(selYear.anio) : 'esta temporada'} aún se están sincronizando con la Federación.
             </Text>
           ) : yearData.matches.length === 0 ? (
             <Text style={styles.note}>Sin partidos disputados esta temporada.</Text>

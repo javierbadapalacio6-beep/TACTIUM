@@ -16,6 +16,8 @@ import {
   fetchFcpYears,
   fetchFcpGroups,
   fetchFcpGroupMetas,
+  seasonLabel,
+  seasonShort,
   type FcpYear,
   type FcpGroupItem,
   type FcpGroupMeta,
@@ -278,7 +280,8 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
   }, [browseGroups, term]);
 
   const selGrupoObj = grupoOptions.find((g) => g.idGrupo === selGrupo) ?? null;
-  const tempLabel = years.find((y) => y.idLiga === year)?.temporada || years.find((y) => y.idLiga === year)?.nombre || '—';
+  const tempYear = years.find((y) => y.idLiga === year);
+  const tempLabel = (tempYear?.temporada ? seasonLabel(tempYear.temporada) : tempYear?.nombre) || '—';
   const tempDefault = years.length > 0 && year === years[0].idLiga;
   const grupoValue = (() => {
     if (selGrupo === 'all') return 'TODOS';
@@ -490,7 +493,7 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
             key={y.idLiga}
             styles={styles}
             c={c}
-            label={y.temporada || y.nombre}
+            label={y.temporada ? seasonShort(y.temporada) : y.nombre}
             on={year === y.idLiga}
             onPress={() => {
               setYear(y.idLiga);
@@ -660,7 +663,7 @@ const ResultsTeams: React.FC<{
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Text style={styles.groupName} numberOfLines={1}>{t.equipo}</Text>
             <Text style={styles.groupMeta} numberOfLines={1}>
-              {[t.categoria, t.genero === 'F' ? 'FEMENINO' : 'MASCULINO', t.temporada].filter(Boolean).join(' · ').toUpperCase()}
+              {[t.categoria, t.genero === 'F' ? 'FEMENINO' : 'MASCULINO', seasonLabel(t.temporada)].filter(Boolean).join(' · ').toUpperCase()}
             </Text>
           </View>
           <IconChevron size={14} color={c.textFaint} />

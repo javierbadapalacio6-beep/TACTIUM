@@ -253,3 +253,36 @@ export async function fetchFcpGroupMetas(
   }
   return out;
 }
+
+// ─── Nombre de la temporada ──────────────────────────────────────────────────
+// La FCP mezcla dos formas de nombrar sus ligas: las de años anteriores llevan
+// un año suelto («2026») y la nueva un curso («2026/2027»). Pero la liga se
+// juega de otoño a primavera, así que ese año suelto es el año en que ACABA: lo
+// que la Federación llama «2026» es la temporada 2025/2026 — los partidos con
+// fecha de esa liga caen en abril y mayo de 2026.
+//
+// Sin traducir, en la app convivirían «2026» y «2026/2027» como si fueran
+// consecutivas, cuando en realidad significan lo mismo en dos idiomas. Aquí se
+// pasa todo a curso para que se lean igual. Es solo presentación: el valor
+// guardado sigue siendo el de la Federación, que es el que ordena y hace de
+// clave.
+
+/** Temporada como la nombran los clubes: «2026» → «2025/2026». */
+export const seasonLabel = (temporada: string | null | undefined): string => {
+  const t = (temporada ?? '').trim();
+  const rango = t.match(/^(\d{4})\s*[/-]\s*(\d{2,4})$/);
+  if (rango) {
+    const fin = rango[2].length === 2 ? `20${rango[2]}` : rango[2];
+    return `${rango[1]}/${fin}`;
+  }
+  const anio = t.match(/^(\d{4})$/);
+  if (anio) return `${Number(anio[1]) - 1}/${anio[1]}`;
+  return t;
+};
+
+/** La misma, en corto para chips y listas: «2025/2026» → «25/26». */
+export const seasonShort = (temporada: string | null | undefined): string => {
+  const full = seasonLabel(temporada);
+  const m = full.match(/^(\d{4})\/(\d{4})$/);
+  return m ? `${m[1].slice(2)}/${m[2].slice(2)}` : full;
+};
