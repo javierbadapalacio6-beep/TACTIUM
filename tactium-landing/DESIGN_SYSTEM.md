@@ -2,7 +2,9 @@
 
 > **Documento maestro para pasar a Claude Design / banana / DALL-E / Midjourney.**
 > Self-contained. No requiere consultar otros docs.
-> Última actualización: 2026-05-12.
+> Ámbito: **assets de marketing** (carruseles, posts, stories, reels) — siempre en oscuro.
+> Para pantallas de **producto** (app móvil / app web, doble tema) usa `CLAUDE DESIGN/`.
+> Última actualización: 2026-08-10 · Satoshi sustituye a Inter · alcance oscuro/claro acotado.
 
 ---
 
@@ -82,7 +84,15 @@ Glosario obligatorio:
 
 ## 2 · SISTEMA DE COLOR
 
-### Paleta principal
+> ### ⚠️ Alcance de este documento
+>
+> Este documento es para **assets de marketing**: carruseles, posts, stories, reels, portadas. Esa superficie es **oscura y sólo oscura**, a propósito — igual que la landing. Una marca en redes se reconoce por repetirse, y el fondo `#030F0F` con el verde neón es lo que hace que un post de TACTIUM se identifique al vuelo en un feed. **No generes assets de redes en claro.**
+>
+> El **producto** (app móvil + app web) es otra cosa: tiene **modo claro y oscuro reales**, elegibles por el usuario en Ajustes → APARIENCIA. Si estás diseñando pantallas de producto y no un post, la referencia es `CLAUDE DESIGN/README.md` + `CLAUDE DESIGN/colors_and_type.css`, no este archivo.
+>
+> Resumen: **marketing = sólo oscuro · producto = doble tema.** Las dos cosas son correctas y no se contradicen.
+
+### Paleta principal (oscura — la de todos los assets de redes)
 
 Monocromática verde sobre verdoso-negro. **Un solo accent dominante por viewport.** Nunca dos hues compitiendo.
 
@@ -93,6 +103,21 @@ Monocromática verde sobre verdoso-negro. **Un solo accent dominante por viewpor
 | **TACTIUM Deep Green** | `#03624C` | 3 98 76 | Surfaces secundarias · dividers |
 | **TACTIUM Soft White** | `#E8F5EF` | 232 245 239 | Tipografía · iconos · labels |
 | **Inverse text** | `#001810` | 0 24 16 | Texto sobre botón verde |
+
+### Paleta clara (sólo producto — nunca en assets de redes)
+
+Existe para que sepas que existe y no la contradigas si te toca hacer una captura de pantalla de la app en claro dentro de un carrusel. Fuente de verdad: `lightColors` en `TACTIUM/src/core/theme/colors.ts`.
+
+| Token | Hex | Nota |
+|---|---|---|
+| Fondo | `#F4F7F5` | Nunca blanco puro para el lienzo |
+| Superficies | `#FFFFFF` / `#EEF3F0` | Tarjetas y segunda elevación |
+| **Accent** | `#00995E` | **No es `#00DF82`** — el neón da 1,6:1 sobre blanco y no pasa WCAG |
+| Deep Green | `#03624C` | Igual en ambos temas |
+| Texto | `#0E1A14` | 64% muted · 42% faint. Nunca negro puro |
+| Warning / Error | `#B7791F` / `#D93B41` | Los del tema oscuro vibran sobre blanco |
+
+Y la regla que más se incumple: **en claro los glows verdes desaparecen.** En oscuro el halo es la firma; en claro es suciedad. La profundidad la dan sombras neutras suaves y hairlines.
 
 ### Escala neutral (UI completa)
 
@@ -130,15 +155,25 @@ Monocromática verde sobre verdoso-negro. **Un solo accent dominante por viewpor
 
 | Fuente | Pesos | Uso |
 |---|---|---|
-| **Inter** | 400, 500, 600, 700, 800 | UI, body, headlines |
+| **Satoshi** | 400, 500, 700, 900 | UI, body, headlines |
 | **JetBrains Mono** | 400, 500, 600, 700 | Eyebrows, datos tabulares, números, identifiers |
+
+Satoshi es la sans oficial de TACTIUM — así está declarada en `TACTIUM/src/core/theme/fonts.ts`. Se carga desde Fontshare:
+
+```
+https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap
+```
+
+> ⚠️ **Satoshi NO tiene 600 ni 800.** Sus pesos son 300 / 400 / 500 / 700 / 900. Si vienes de la escala antigua con Inter: `800 → 900 (Black)`, `600 → 500 (Medium)`. Pedir un 800 a Satoshi hace que el navegador lo sintetice y el titular sale sucio.
+
+> **Histórico:** hasta 2026-08-10 este documento especificaba **Inter**. Satoshi la sustituye. Inter sobrevive sólo como fallback dentro del stack CSS; no la pidas a propósito. JetBrains Mono no cambia.
 
 ### Escala
 
 | Elemento | Tamaño | Peso | Tracking |
 |---|---|---|---|
-| Hero headline | 40-64px (responsivo) | 800 | -0.04em |
-| H2 sección | 30-48px | 800 | -0.03em |
+| Hero headline | 40-64px (responsivo) | 900 | -0.04em |
+| H2 sección | 30-48px | 900 | -0.03em |
 | H3 card | 18-20px | 700 | -0.02em |
 | Body lg | 18-20px | 400 | 0 |
 | Body | 14-16px | 400 | 0 |
@@ -248,7 +283,7 @@ T monogram con **velocity cuts** — barra horizontal arriba, cuerpo en wings cu
 ### Wordmark TACTIUM
 
 - **Caso**: UPPERCASE
-- **Tipo**: Inter ExtraBold (800)
+- **Tipo**: Satoshi Black (900)
 - **Tracking**: -0.04em (tight)
 - **Color**: `#E8F5EF` sobre dark
 - **Signature detail**: el punto de la **i** (si tuviera) se reemplaza por un **cuadrado verde `#00DF82`**. Este es el único accent dentro del wordmark.
@@ -476,7 +511,10 @@ PALETTE — monochromatic green on greenish-black, no other hues:
 - Inverse text on green: #001810
 
 TYPOGRAPHY:
-- Inter ExtraBold (800) for headlines, letterspacing -0.04em
+- Satoshi Black (900) for headlines, letterspacing -0.04em.
+  Satoshi is a geometric grotesque sans with a tall x-height and
+  closed apertures — if unavailable, match that shape, do NOT
+  fall back to Helvetica or Arial.
 - JetBrains Mono for eyebrows and data, letterspacing 0.25em uppercase
 
 STYLE:
@@ -489,7 +527,8 @@ FORBIDDEN:
 - Emoji, photographic elements, stock images
 - 3D bevel, drop shadows, neon glow halos
 - Rainbow gradients, glassmorphism
-- Light mode, pure black, pure white
+- Light backgrounds, pure black, pure white
+  (the PRODUCT has a light theme; MARKETING assets never do)
 - Decorative flourishes, mascot-style branding
 
 LANGUAGE — text in Spanish (Spain), use "tú" not "usted".
@@ -509,7 +548,7 @@ Layout (top to bottom):
    letterspacing 0.28em, size 26px: "[EYEBROW]"
 2. Below eyebrow, the TACTIUM logo (T monogram with velocity cuts)
    at 140px in #00DF82
-3. Headline below logo, Inter ExtraBold 84px, letterspacing -0.04em,
+3. Headline below logo, Satoshi Black 84px, letterspacing -0.04em,
    line-height 1.04, color #E8F5EF: "[HEADLINE]"
 4. Footer at bottom with pagination dots (5 dots, first one active
    #00DF82 pill 32×10px, rest 10×10px circles at 20% opacity off-white)
@@ -531,9 +570,9 @@ Generate a 1080×1350px vertical Instagram CONTENT slide.
 Layout:
 1. TOP eyebrow JetBrains Mono uppercase 26px #00DF82: "[EYEBROW
    like 'FEATURE · 01' or 'PASO · 02']"
-2. CENTER-LEFT title Inter ExtraBold 72px tracking -0.03em
+2. CENTER-LEFT title Satoshi Black 72px tracking -0.03em
    color #E8F5EF line-height 1.05: "[TITLE]"
-3. Below title, body text Inter Regular 36px color rgba(232,245,239,0.70)
+3. Below title, body text Satoshi Regular 36px color rgba(232,245,239,0.70)
    line-height 1.4: "[BODY]"
 4. Footer same as cover slide.
 
@@ -552,7 +591,7 @@ Layout:
    like 'ANTES', 'AHORA', 'DATO']"
 2. CENTER stat number HUGE — JetBrains Mono ExtraBold 220px
    color #00DF82 line-height 1: "[STAT like '20 MIN' or '30 SEG']"
-3. Below stat, label Inter Medium 36px color rgba(232,245,239,0.70):
+3. Below stat, label Satoshi Medium 36px color rgba(232,245,239,0.70):
    "[LABEL like 'armar alineación en Excel']"
 4. Footer same as cover slide.
 
@@ -569,11 +608,11 @@ Generate a 1080×1350px vertical Instagram CTA slide (last in carousel).
 Layout:
 1. TOP eyebrow JetBrains Mono 26px #00DF82: "[EYEBROW like
    'ÚNETE A LA BETA']"
-2. CENTER title Inter ExtraBold 84px tracking -0.04em #E8F5EF:
+2. CENTER title Satoshi Black 84px tracking -0.04em #E8F5EF:
    "[TITLE]"
 3. Below title, a pill-shaped button:
    - Background #00DF82, padding 22px×44px, border-radius 999px
-   - Text Inter Bold 34px color #001810: "[CTA TEXT like 'Link en bio']"
+   - Text Satoshi Bold 34px color #001810: "[CTA TEXT like 'Link en bio']"
 4. Below button, URL JetBrains Mono 28px uppercase tracking 0.15em
    color rgba(232,245,239,0.50): "[URL like 'TACTIUM.APP']"
 5. Footer with pagination dots (last one active) + logo lockup.
@@ -597,9 +636,9 @@ Layout in safe zone (between y=150 and y=1670):
 1. TACTIUM logo at top-center, 80px
 2. Eyebrow below logo, JetBrains Mono 28px #00DF82 uppercase:
    "[EYEBROW]"
-3. CENTER headline Inter ExtraBold 88px tracking -0.04em #E8F5EF:
+3. CENTER headline Satoshi Black 88px tracking -0.04em #E8F5EF:
    "[HEADLINE]"
-4. Optional body text Inter Regular 36px text-muted: "[BODY]"
+4. Optional body text Satoshi Regular 36px text-muted: "[BODY]"
 5. Bottom-center wordmark TACTIUM mono 22px tracking 0.32em
    color rgba(232,245,239,0.5)
 
@@ -618,7 +657,7 @@ Goal: maximize tap-through. The headline must be readable in a
 small grid preview (Instagram displays Reels at 270×480 in feed).
 
 Layout:
-1. Top 2/3 of frame: HEADLINE Inter ExtraBold 96px tracking -0.04em
+1. Top 2/3 of frame: HEADLINE Satoshi Black 96px tracking -0.04em
    color #E8F5EF, line-height 1.02, centered or left-aligned:
    "[HEADLINE — max 6 words for legibility]"
 2. Bottom 1/3 of frame:
@@ -664,10 +703,11 @@ contrast to stand out in feed.
 
 Cuando recibas un slide/post de una AI, **verifica:**
 
-- [ ] Fondo es `#030F0F` (no `#000`)
+- [ ] Fondo es `#030F0F` (no `#000`, y **no un fondo claro** — los assets de redes son oscuros siempre)
 - [ ] Texto principal es `#E8F5EF` (no `#FFF`)
 - [ ] Solo UN elemento dominante en accent verde
 - [ ] Eyebrow está en MAYÚSCULAS mono con tracking ancho
+- [ ] Headline en Satoshi Black (900), no en una grotesca genérica ni en Inter
 - [ ] Headline tiene tracking negativo (no se ve sueltito)
 - [ ] Hay dot grid sutil en el fondo (4-8% opacity)
 - [ ] Pagination dots presentes (si es carrusel)
@@ -691,6 +731,7 @@ Si algo falla → reenviar al AI con instrucción específica:
 | `public/brand/social/avatars/` | Avatars listos para IG (320), TikTok (200), master (400) |
 | `public/brand/logo-variants/` | Variantes de logo generadas con IA |
 | `BRAND_SYSTEM.md` | Bible de marca completo |
+| `CLAUDE DESIGN/` | Skill de diseño de **producto** (app + web): tokens de los dos temas, UI kits, capturas reales. Úsalo cuando diseñes pantallas, no posts. |
 | `BRAND_SOCIAL.md` | Bios, hashtags, setup de cuentas |
 | `CONTENT_CALENDAR.md` | 12 posts planificados para 4 semanas |
 | `lib/carousel/posts.ts` | Posts como código (genera PNGs en `/dev/carousel`) |

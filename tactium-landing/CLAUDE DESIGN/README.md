@@ -1,13 +1,14 @@
 # TACTIUM Design System
 
-> **Dark, monochromatic, lab-grade.** The visual system behind TACTIUM — a federated-padel team manager (mobile app + pre-launch landing).
+> **Monochromatic, lab-grade, dark-first — with a real light mode.** The visual system behind TACTIUM — a federated-padel team manager (mobile app + landing + web app).
 
 TACTIUM helps **federated padel captains** lock in the official lineup of every match day, respecting FEP points order, and **club admins** manage many teams under one roof. The brand voice is that of a precision instrument: serious, fast, data-forward, never noisy.
 
 The two surfaces live in this system:
 
-1. **Mobile app** — React Native (iOS + Android). Captains and players. Dark, dense, fast.
-2. **Landing (pre-launch)** — Next.js 15 + Tailwind v4. 3D scrollytelling, dark, monochromatic green.
+1. **Mobile app** — React Native (iOS + Android). Captains, club admins and players. Dense, fast, dual-theme (Ajustes → APARIENCIA → Claro / Oscuro / Sistema).
+2. **Landing** — Next.js + Tailwind v4. 3D scrollytelling, dark only — a marketing surface commits to one look on purpose.
+3. **Web app** — the product in the browser. Same tokens, same dual theme as the mobile app, plus wide tool canvases (lineup drag & drop, tournament schedule grid, KO bracket) that don't fit on a phone.
 
 ---
 
@@ -71,41 +72,71 @@ The two surfaces live in this system:
 
 ### Palette
 
-Monochromatic green on greenish-black. **One accent dominates per viewport.** Tints carry depth (`accent-10` → `accent-55`); we never reach for a second hue. Status colors (`warning`, `error`) appear only where semantically required — a yellow `Empate` chip, a red `D` derrota badge.
+Monochromatic green. **One accent dominates per viewport.** Tints carry depth (`accent-10` → `accent-55`); we never reach for a second hue. Status colors (`warning`, `error`) appear only where semantically required — a yellow `Empate` chip, a red `D` derrota badge.
+
+The product ships **two themes** with identical token keys. Component code never branches on theme; it reads `var(--color-*)` and the theme decides.
+
+#### Dark — the signature, and the default
 
 - **Base** `#030F0F` (greenish black, never pure `#000`)
 - **Card surfaces** `#0C2222` / `#0F2A28` (slightly elevated)
 - **Brand accent** `#00DF82` — TACTIUM green. Used for: CTAs, eyebrows, key numbers (4600 PTS), avatar fills, progress bars, focus rings, glows.
 - **Institutional fill** `#03624C` — quieter green for surfaces that want a brand tint (avatar tile bg, validated chip).
 - **Text** `#E8F5EF` body / 70% muted / 50% faint. Never pure `#FFF`.
+- **Status** `#F2C94C` warning · `#FF6B6B` error.
 
 Contrast: `#E8F5EF` on `#030F0F` is WCAG AAA. The accent on dark surfaces is AAA for large text.
 
+#### Light — a peer, not an afterthought
+
+- **Base** `#F4F7F5` · **card surfaces** `#FFFFFF` / `#EEF3F0`
+- **Brand accent** `#00995E` — **not** `#00DF82`
+- **Institutional fill** `#03624C` (unchanged — it works in both)
+- **Text** `#0E1A14` body / 64% muted / 42% faint. Never pure `#000`.
+- **Status** `#B7791F` warning · `#D93B41` error
+
+Neutrals carry a slight green bias so the light theme still reads as TACTIUM and not as a generic white dashboard.
+
+#### The three rules that get broken constantly
+
+1. **The accent changes.** `#00DF82` scores 1.6:1 on white — it fails as text, as a border and as a focus ring. `#00995E` clears 4.6:1 on `#F4F7F5` and still works as a fill with white text on top. Muted text at 64% and faint at 42% are calibrated the same way; don't lower them further.
+2. **Glows disappear in light.** In dark, the green halo is the visual signature. In light it reads as dirt. `--glow-accent-*` resolve to `none` and depth comes from soft neutral shadows plus hairlines. A light mode with green halos is wrong, no exceptions.
+3. **Shadows lighten and shorten.** The dark recipes (black at 60–80%) smear grey across a light background. Light tints the shadow with the text color at low opacity and short blur. Already wired into `--shadow-card-*`.
+
+Two things stay dark in **every** theme, on purpose: the **splash screen** and the **share cards** (lineup card, result card, stats card). They're brand assets that travel outside the product, not UI.
+
 ### Typography
 
-- **Inter** (400–800) — UI, headlines, body. Default to weight 700–800 for headlines (very heavy), 500–600 for chrome, 400 for body.
-- **JetBrains Mono** (400–700) — eyebrows, data (PTS, scores, prices), badges, identifiers like `J·01`, `2ª`.
+- **Satoshi** (400 / 500 / 700 / 900) — UI, headlines, body. Default to 700–900 for headlines (very heavy), 500–600 for chrome, 400 for body. This is the official TACTIUM sans, as declared in `TACTIUM/src/core/theme/fonts.ts`; it loads from Fontshare in `colors_and_type.css`. Inter survives only as a fallback in the stack — never specify it deliberately.
+- **JetBrains Mono** (400–700) — eyebrows, data (PTS, scores, prices), badges, identifiers like `J·01`, `2ª`. Always `tabular-nums`.
 - **Tracking is dramatic on mono**: 0.25em on eyebrows, 0.10–0.16em on inline data.
 - **Headlines hug**: `letter-spacing: -0.02em`, `line-height: 1.05`.
 - **No serifs anywhere.** No decorative display fonts.
 
+Satoshi replaced Inter as the primary typeface on 2026-08-10. `../BRAND_SYSTEM.md` and `../DESIGN_SYSTEM.md` were updated in the same pass, so all four documents agree — if you find a spec naming Inter as primary, it predates that date and is stale.
+
+⚠️ **Satoshi has no 600 or 800.** Its weights are 300 / 400 / 500 / 700 / 900. Migrating from the old Inter scale: `800 → 900 (Black)`, `600 → 500 (Medium)`. Asking for a weight that doesn't exist makes the browser synthesise it and the headline comes out muddy.
+
 ### Backgrounds
 
-- **No imagery, no photography, no stock.** The background is space — pure dark — with subtle atmospheric tint near accent elements only.
-- **Aurora blobs** behind hero/CTA blocks: a radial gradient of `--color-accent` at ~10–20% opacity, blurred 80–120px. Stationary except on hero where they drift slowly.
-- **Subtle grid** on landing-only sections: `rgba(232,245,239,0.04)` lines, 64px cadence, with a radial mask fading toward the section edges.
-- **Vignette** on full-bleed hero: top-of-page radial darker than the base, simulating a stage lit from below.
+- **No imagery, no photography, no stock.** The background is space — with subtle atmospheric tint near accent elements only.
+- **Aurora blobs** behind hero/CTA blocks: a radial gradient of `--color-accent` at ~10–20% opacity, blurred 80–120px. Stationary except on hero where they drift slowly. **In light mode drop them to a quarter intensity or remove them entirely** — the light canvas is flat, and a green wash on near-white looks like a rendering bug.
+- **Ambient backdrop** (the app's `AmbientBackdrop`): two radial gradients over the base — `--color-primary` at 55% centered at `50% 22%` (radius 60%), and `--color-accent` at 18% at `22% 86%` (radius 55%), both fading to transparent. Same treatment in light: quarter intensity or nothing.
+- **Subtle grid** on landing-only sections: `rgba(232,245,239,0.04)` lines, 64px cadence, with a radial mask fading toward the section edges. In light, invert to `rgba(14,26,20,0.05)`.
+- **Vignette** on full-bleed hero: top-of-page radial darker than the base, simulating a stage lit from below. Dark only — don't try to translate it.
 
 ### Borders & dividers
 
-- **Hairlines** are how surfaces are defined. `inset 0 0 0 1px rgba(255,255,255,0.04)` on every card.
-- A **strong hairline** (`rgba(255,255,255,0.10)`) marks interactive borders (input fields, ghost buttons).
+- **Hairlines** are how surfaces are defined. Use the tokens (`--color-hair` / `--color-hair-strong`), not raw rgba — they flip from light-on-dark to dark-on-light with the theme. Dark resolves to `rgba(232,245,239,0.06)`, light to `rgba(14,26,20,0.08)`.
+- A **strong hairline** (`--color-hair-strong`) marks interactive borders (input fields, ghost buttons). Hairlines carry *more* of the load in light mode, where there are no glows to separate surfaces.
 - The **accent hairline** (`accent-40`) marks the _active_ or _hovered_ state (selected pareja card, focused input, "Variante 1" pill).
 - Yellow / red hairlines only on status surfaces (Empate, error).
 
 ### Shadows & elevation
 
-Two main recipes — _never_ hard 1-color drop shadows:
+Two main recipes — _never_ hard 1-color drop shadows. Both are tokenised (`--shadow-card-soft`, `--shadow-card-strong`), so use the token and the theme picks the right one.
+
+**Dark:**
 
 ```css
 /* Soft float, default card */
@@ -120,7 +151,22 @@ inset 0 0 0 1px rgba(255,255,255,0.04);
 0 8px 24px -6px rgba(0,223,130,0.40);
 ```
 
-Phones in stack get an additional **accent ambient glow** behind them: `box-shadow: 0 0 80px rgba(0,223,130,0.18)`.
+**Light** — tinted with the text color, low opacity, short blur. Black-based shadows smear grey on a near-white canvas:
+
+```css
+/* Soft float, default card */
+0 10px 30px -12px rgba(14,26,20,0.14),
+inset 0 0 0 1px rgba(14,26,20,0.05);
+
+/* Strong float */
+0 24px 56px -18px rgba(14,26,20,0.20),
+inset 0 0 0 1px rgba(14,26,20,0.06);
+
+/* CTA lift — tighter, and built on #00995E */
+0 6px 18px -6px rgba(0,153,94,0.35);
+```
+
+Phones in stack get an additional **accent ambient glow** behind them in dark: `box-shadow: 0 0 80px rgba(0,223,130,0.18)`. **In light there is no glow at all** — `--glow-accent-soft` and `--glow-accent-hard` resolve to `none`. Separation comes from the shadow and the hairline.
 
 ### Corner radii
 
@@ -143,10 +189,10 @@ Phones in stack get an additional **accent ambient glow** behind them: `box-shad
 
 ### Hover / press
 
-- **Hover**: lighten background by ~6% (`--color-bg-card` → `--color-bg-card-2`), promote hairline to `accent-40`, raise card 1–2px, halo strengthens.
+- **Hover**: shift background one step (`--color-bg-card` → `--color-bg-card-2`), promote hairline to `accent-40`, raise card 1–2px, halo strengthens. Note the direction flips by theme: in dark the surface gets *lighter*, in light it gets *darker* (`#FFFFFF` → `#EEF3F0`). The tokens already encode this — just swap the token, don't hand-roll a `lighten()`.
 - **Press**: collapse to flat — `transform: translateY(0)`, hairline brightens to `accent-55`, no scale-down (no "tap shrink").
 - **Disabled**: 40% opacity, no cursor change to `pointer`, glow removed.
-- **Focus ring**: 2px solid `--color-accent`, offset 2px from element.
+- **Focus ring**: 2px solid `--color-accent`, offset 2px from element. Mandatory and visible in both themes — much of the web app is driven from the keyboard.
 
 ### Transparency & blur
 
@@ -188,7 +234,7 @@ The **selected** state turns the inset hairline into an _outset_ accent border a
 - **Color rule**: icons are either `--color-accent` (active/CTA) or `--color-text-muted` (chrome). **Never pure white.** Never multi-color.
 - **Loaded from CDN** by default: `https://unpkg.com/lucide-static@latest/icons/<name>.svg` or `lucide-react` in JSX. No icon font, no sprite sheet.
 - **No emoji.** No unicode glyph icons. Decorative dots/separators are `·` (middle dot) — used liberally.
-- **Logo**: provided as raster (`assets/logo.png`). When inline in UI we draw a 28×28 "T-tile" — a `bg-primary` rounded square with an Inter `T` glyph in accent. ⚠️ **Vector source missing** — please send SVG/AI so we can use the real mark at small sizes.
+- **Logo**: provided as raster (`assets/logo.png`). When inline in UI we draw a 28×28 "T-tile" — a `bg-primary` rounded square with a Satoshi `T` glyph in accent. The `bg-primary` fill (`#03624C`) is identical in both themes, so the tile needs no light variant. ⚠️ **Vector source missing** — please send SVG/AI so we can use the real mark at small sizes.
 
 ---
 
@@ -196,11 +242,14 @@ The **selected** state turns the inset hairline into an _outset_ accent border a
 
 | Item | Status | Action |
 |---|---|---|
-| Inter, JetBrains Mono | ✅ Loaded from Google Fonts CDN at top of `colors_and_type.css`. | No substitution. |
+| Satoshi | ✅ Loaded from Fontshare CDN at top of `colors_and_type.css`. | No substitution. Inter stays in the stack as fallback only. |
+| JetBrains Mono | ✅ Loaded from Google Fonts CDN at top of `colors_and_type.css`. | No substitution. |
+| Light-mode palette | ✅ Taken verbatim from `TACTIUM/src/core/theme/colors.ts` (`lightColors`). | Keep in sync with that file — it is the source of truth, not this doc. |
+| App screenshots | ⚠️ All 18 captures in `assets/screens/` are **dark mode**, taken before light mode shipped. | Use for layout and copy reference only. Don't infer light-mode appearance from them; re-capture when convenient. |
 | Logo (vector) | ⚠️ Only raster provided. | Please send SVG. |
-| Codebase / Figma | ❌ Not provided. | Send link if available — we'll cross-check exact radii, animation specs, and any custom icons. |
+| Codebase / Figma | ✅ Codebase available at `TACTIUM/` in this repo. | Cross-check tokens against `src/core/theme/` (`colors.ts`, `typography.ts`, `spacing.ts`, `fonts.ts`) rather than trusting this doc when they disagree. |
 | 3D models (pala, pelota, pista) | ❌ Not provided. | Not needed for static UI kits; needed for landing R3F scene. |
 
 ---
 
-**Last updated**: 2026-05-12 · **Version**: 1.0
+**Last updated**: 2026-08-10 · **Version**: 2.0 — dual theme (light mode added) + Satoshi replaces Inter as the primary sans.
