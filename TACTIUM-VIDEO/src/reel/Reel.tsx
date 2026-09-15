@@ -9,7 +9,7 @@ import {
   useCurrentFrame,
 } from "remotion";
 import { T, ms } from "./tokens";
-import type { Frase, Grafico, Pieza } from "./piezas";
+import type { Cobertura, Frase, Grafico, Pieza } from "./piezas";
 import { Contador, Cortinilla, ListaTicks, NumeroGrande, Resalte } from "./graficos";
 
 /** El cierre de marca. Idéntico en todas las piezas: es la firma. */
@@ -67,7 +67,11 @@ const Linea: React.FC<{ texto: string; enfasis?: string }> = ({ texto, enfasis }
   );
 };
 
-const Subtitulos: React.FC<{ cues: Cue[]; sinEnfasis?: boolean }> = ({ cues, sinEnfasis }) => {
+const Subtitulos: React.FC<{ cues: Cue[]; sinEnfasis?: boolean; baseline?: number }> = ({
+  cues,
+  sinEnfasis,
+  baseline = T.sub.baseline,
+}) => {
   const frame = useCurrentFrame();
   const actual = cues.find((c) => frame >= ms(c.desdeMs) && frame < ms(c.hastaMs));
   if (!actual) return null;
@@ -84,7 +88,7 @@ const Subtitulos: React.FC<{ cues: Cue[]; sinEnfasis?: boolean }> = ({ cues, sin
       style={{
         justifyContent: "flex-start",
         alignItems: "center",
-        paddingTop: T.canvas.h * T.sub.baseline,
+        paddingTop: T.canvas.h * baseline,
         paddingLeft: T.safe.sides,
         paddingRight: T.safe.sides,
       }}
@@ -130,11 +134,18 @@ const SubtitulosDePieza: React.FC<{ cues: Cue[]; pieza: Pieza }> = ({ cues, piez
   const hayGrafico = (pieza.graficos ?? []).some(
     (g) => frame >= ms(g.desdeMs) && frame < ms(g.hastaMs),
   );
-  return <Subtitulos cues={cues} sinEnfasis={hayGrafico} />;
+  const esTutorial = pieza.layout === "tutorial";
+  return (
+    <Subtitulos
+      cues={cues}
+      sinEnfasis={hayGrafico}
+      baseline={esTutorial ? T.tutorial.subBaseline : T.sub.baseline}
+    />
+  );
 };
 
 /** Quién habla. Solo los dos primeros segundos, en una cuenta de marca hace falta. */
-const Cartelito: React.FC = () => {
+const Cartelito: React.FC<{ tutorial?: boolean }> = ({ tutorial }) => {
   const frame = useCurrentFrame();
   const fin = ms(T.cartelito.durMs);
   const t = interpolate(frame, [0, ms(200), fin - ms(200), fin], [0, 1, 1, 0], {
@@ -147,7 +158,9 @@ const Cartelito: React.FC = () => {
       style={{
         justifyContent: "flex-end",
         alignItems: "flex-start",
-        paddingBottom: T.safe.bottom,
+        // En tutorial la banda de abajo es la app: el cartelito se queda
+        // dentro de la banda de la cara o taparia lo que se esta enseñando.
+        paddingBottom: tutorial ? T.canvas.h * (1 - T.tutorial.caraAlto) + T.space[4] : T.safe.bottom,
         paddingLeft: T.safe.sides,
       }}
     >
@@ -224,23 +237,83 @@ const PintaGrafico: React.FC<{ g: Grafico }> = ({ g }) => {
   }
 };
 
+/** Tú a cámara. En `tutorial` se recorta a una banda, de ahí el objectPosition. */
+const Plano: React.FC<{ pieza: Pieza; recortaArriba: boolean }> = ({ pieza, recortaArriba }) =>
+  pieza.plano ? (
+    <OffthreadVideo
+      src={staticFile(pieza.plano)}
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        // Al recortar 1920px a una banda, el centro geométrico cae por el pecho.
+        // Se sube el punto de anclaje para que lo que sobreviva sea la cara.
+        objectPosition: recortaArriba ? "center 32%" : "center",
+      }}
+    />
+  ) : (
+    <Marcador titulo="FALTA EL PLANO" ruta={`plano/${pieza.id}.mp4`} anclaY={recortaArriba ? 0.04 : 0.22} />
+  );
+
+const Pantalla: React.FC<{ c: Cobertura }> = ({ c }) =>
+  c.src === null ? (
+    // Aún sin grabar: se puede montar la pieza entera igualmente.
+    <Marcador titulo="FALTA COBERTURA" ruta={c.nota ?? "cobertura/…"} anclaY={0.1} />
+  ) : esVideo(c.src) ? (
+    <OffthreadVideo
+      src={staticFile(c.src)}
+      startFrom={ms(c.offsetMs ?? 0)}
+      style={{ width: "100%", height: "100%", objectFit: "contain" }}
+    />
+  ) : (
+    // `contain`, no `cover`: una captura de la app recortada pierde justo lo
+    // que se quería enseñar (la cabecera, el total de abajo).
+    <Img src={staticFile(c.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+  );
+
 export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
   const cues = useMemo(() => repartir(pieza.frases, pieza.duracionMs), [pieza]);
   const finCuerpo = ms(pieza.duracionMs);
+  const layout = pieza.layout ?? "alterna";
+  const bandaCara = Math.round(T.canvas.h * T.tutorial.caraAlto);
+
+  // Dónde se dibuja cada cosa según el layout. En `alterna` ambos ocupan el
+  // lienzo entero y la cobertura tapa; en `tutorial` se reparten; en `pip` la
+  // pantalla manda y la cara se encoge a un recuadro.
+  const marcoPlano: React.CSSProperties =
+    layout === "tutorial"
+      ? { position: "absolute", top: 0, left: 0, right: 0, height: bandaCara }
+      : layout === "pip"
+        ? {
+            position: "absolute",
+            top: T.safe.top,
+            left: T.safe.sides,
+            width: T.pip.lado,
+            height: T.pip.lado,
+            borderRadius: T.pip.radio,
+            overflow: "hidden",
+            border: `3px solid ${T.color.accent}`,
+            zIndex: 4,
+          }
+        : { position: "absolute", inset: 0 };
+
+  const marcoPantalla: React.CSSProperties =
+    layout === "tutorial"
+      ? { position: "absolute", top: bandaCara, left: 0, right: 0, bottom: 0, background: T.color.bg }
+      : { position: "absolute", inset: 0, background: T.color.bg };
 
   return (
     <AbsoluteFill style={{ background: T.color.bg }}>
       {/* 1 · El plano: tú a cámara. No se le corrige el color ni se le mete LUT:
               el sistema dice que la marca vive en los bordes, no en el plano. */}
       <Sequence durationInFrames={finCuerpo} name="plano">
-        {pieza.plano ? (
-          <OffthreadVideo src={staticFile(pieza.plano)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <Marcador titulo="FALTA EL PLANO" ruta={`plano/${pieza.id}.mp4`} anclaY={0.22} />
-        )}
+        <div style={marcoPlano}>
+          <Plano pieza={pieza} recortaArriba={layout === "tutorial"} />
+        </div>
       </Sequence>
 
-      {/* 2 · Cobertura: pantallas de la app y pádel real, encima del plano. */}
+      {/* 2 · La pantalla de la app. En `alterna` tapa el plano por tramos; en
+              `tutorial` y `pip` convive con él. */}
       {pieza.cobertura.map((c, i) => (
         <Sequence
           key={i}
@@ -248,22 +321,9 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
           durationInFrames={ms(c.hastaMs - c.desdeMs)}
           name={`cobertura-${i}`}
         >
-          <AbsoluteFill style={{ background: T.color.bg }}>
-            {c.src === null ? (
-              // Aún sin grabar: se puede montar la pieza entera igualmente.
-              <Marcador titulo="FALTA COBERTURA" ruta={c.nota ?? "cobertura/…"} anclaY={0.1} />
-            ) : esVideo(c.src) ? (
-              <OffthreadVideo
-                src={staticFile(c.src)}
-                startFrom={ms(c.offsetMs ?? 0)}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            ) : (
-              // `contain`, no `cover`: una captura de la app recortada pierde
-              // justo lo que se quería enseñar (la cabecera, el total de abajo).
-              <Img src={staticFile(c.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-            )}
-          </AbsoluteFill>
+          <div style={marcoPantalla}>
+            <Pantalla c={c} />
+          </div>
         </Sequence>
       ))}
 
@@ -283,7 +343,7 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
       {/* 4 · Subtítulos y cartelito, siempre por encima de todo. */}
       <Sequence durationInFrames={finCuerpo} name="subtitulos">
         <SubtitulosDePieza cues={cues} pieza={pieza} />
-        <Cartelito />
+        <Cartelito tutorial={layout === "tutorial"} />
       </Sequence>
 
       {/* 5 · El cierre de marca. Un segundo, idéntico en todas las piezas. */}

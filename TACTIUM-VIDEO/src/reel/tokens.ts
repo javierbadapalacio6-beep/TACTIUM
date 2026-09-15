@@ -42,6 +42,17 @@ export const T = {
     baseline: px(video.subtitulo.baseline) / 100, // "62%" → 0.62
   },
 
+  // Formato cara + pantalla a la vez.
+  tutorial: {
+    caraAlto: px(video.tutorial.caraAlto) / 100, // "34%" → 0.34
+    subBaseline: px(video.tutorial.subBaseline) / 100,
+  },
+
+  pip: {
+    lado: px(video.pip.lado),
+    radio: px(video.pip.radio),
+  },
+
   cartelito: {
     texto: video.cartelito.texto,
     size: px(video.cartelito.size),

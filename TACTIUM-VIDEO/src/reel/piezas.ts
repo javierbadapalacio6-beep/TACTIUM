@@ -49,9 +49,22 @@ export type Grafico = { desdeMs: number; hastaMs: number } & (
   | { tipo: "cortinilla"; cifra: string; pie?: string }
 );
 
+/**
+ * Cómo conviven tu plano y la pantalla de la app:
+ *
+ *  - `alterna`  — por defecto. La cobertura TAPA el plano por tramos. Para
+ *                 piezas de mensaje, donde la pantalla es una prueba puntual.
+ *  - `tutorial` — los dos a la vez: tu cara en la banda de arriba y la app
+ *                 debajo. Para enseñar cómo se hace algo mientras lo cuentas.
+ *  - `pip`      — la app a pantalla completa y tu cara en un recuadro. Cuando
+ *                 el detalle de la pantalla manda sobre la cara.
+ */
+export type Layout = "alterna" | "tutorial" | "pip";
+
 export type Pieza = {
   id: string;
   titulo: string;
+  layout?: Layout;
   /** Tú a cámara. `null` mientras no esté rodado: sale el marcador de encuadre. */
   plano: string | null;
   duracionMs: number;
@@ -210,6 +223,52 @@ export const PIEZAS: Pieza[] = [
       // Bisagra entre lo que hace la app y el remate a cámara. Tapa el plano a
       // propósito: es un corte de marca, no una transición de efecto.
       { tipo: "cortinilla", cifra: "32 parejas", pie: "inscritas y cobradas", desdeMs: 23200, hastaMs: 24300 },
+    ],
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // TUTORIALES · gancho a cámara + la app enseñándose a la vez.
+  // `layout: "tutorial"` reparte el lienzo: tu cara arriba, la pantalla debajo.
+  // ───────────────────────────────────────────────────────────────────────────
+  {
+    id: "T1-alineacion",
+    titulo: "Montar una alineación",
+    layout: "tutorial",
+    plano: null, // → "plano/T1-alineacion.mp4" · encuadra la cara CENTRADA: se recorta a una banda
+    duracionMs: 22000,
+    frases: [
+      // 0-3s · el gancho, antes de que empiece el tutorial
+      { texto: "Montar la alineación" },
+      { texto: "de una jornada," },
+      { texto: "en veinte segundos.", enfasis: "veinte segundos." },
+
+      // el tutorial, paso a paso
+      { texto: "Abres la jornada." },
+      { texto: "Aquí ves quién puede" },
+      { texto: "jugar el sábado" },
+      { texto: "y quién no." },
+      { texto: "Le das a auto-orden" },
+      { texto: "y te coloca las parejas" },
+      { texto: "por puntos." },
+      { texto: "Si una queda mal," },
+      { texto: "te lo dice en rojo." },
+      { texto: "Compruebas, y publicas." },
+      { texto: "Se enteran todos a la vez." },
+    ],
+    cobertura: [
+      // En tutorial la pantalla está SIEMPRE: no tapa tu cara, convive con ella.
+      { src: null, nota: "cobertura/A1-alineacion.mp4", desdeMs: 0, hastaMs: 22000 },
+    ],
+    graficos: [
+      // El resalte va en coordenadas del LIENZO, así que en tutorial hay que
+      // contar con que la pantalla ocupa de 34% para abajo.
+      {
+        tipo: "resalte",
+        zona: { x: 12, y: 58, w: 76, h: 10 },
+        etiqueta: "AVISO EN ROJO",
+        desdeMs: 15500,
+        hastaMs: 18000,
+      },
     ],
   },
 ];

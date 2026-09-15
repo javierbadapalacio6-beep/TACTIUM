@@ -42,9 +42,11 @@ Instagram y TikTok van a @tactium, y el material de venta a clubes lo publicas t
 
 Van en **todas** las piezas, son la identidad del nicho:
 
-- **Luz fea de club, no golden hour.** El pádel amateur se juega bajo fluorescente y luz plana.
-  Falsearlo canta y se lee como anuncio.
-- **Móvil en la mano** (A1, A3) o **trípode fijo** (A2). Nunca grúa, nunca steadycam.
+- **Todo se graba en casa, de momento.** Tu habitación, con las palas colgadas de fondo. No hay
+  planos en pista ni en el club hasta nuevo aviso: si un guion los pedía, se ha reescrito.
+- **Luz de casa, no de estudio.** Ventana delante o una lámpara delante y a un lado. Nada de
+  contraluces ni de cinematografía: si sale demasiado bonito, se lee como anuncio.
+- **Trípode fijo siempre.** Nunca en mano, nunca grúa ni steadycam.
 - **Que parezca un vídeo de grupo de WhatsApp, no un anuncio.** Grano, encuadre algo torcido,
   compresión. Si sale demasiado bonito, está mal.
 
@@ -62,7 +64,7 @@ Duración objetivo **10-15s** cada una: gancho 0-2s · desarrollo 2-6s · produc
 **La primera que se publica.** Es el único ángulo que nadie te puede copiar, porque el trabajo
 está hecho y es verdad. No promete: demuestra.
 
-> **[A cámara, junto a una pista, medio serio]**
+> **[A cámara, palas de fondo, medio serio]**
 > Me leí la normativa de alineaciones de las diecisiete federaciones de pádel.
 > Una por comunidad. Y no dicen lo mismo.
 >
@@ -81,8 +83,9 @@ Puedes decirlo mirando a cámara sin que te tiemble la voz.
 
 ## A2 — «El orden de parejas» → `A2-orden.mp4` · ~12s
 
-Formato distinto a propósito: **móvil en la mesa, cámara fija en trípode**, plano de pecho para
-arriba. Mesa del bar del club, con el móvil boca arriba en primer plano.
+Formato distinto a propósito: **sentado a tu mesa, con el móvil boca arriba en primer plano** y
+la cámara fija, plano de pecho para arriba. Que se note que es otro sitio de la casa, no la
+misma pared que el A1.
 
 > **[0-2s, inclinado hacia delante, a cámara]**
 > El orden de parejas de tu equipo probablemente está mal.
@@ -186,7 +189,8 @@ Necesito **el calendario de la liga en papel de verdad** en la mano.
 
 ## R4 — Un torneo en dos minutos → `R4-torneo.mp4` · ~40s
 
-Carril B (club). Este es el que te trae a quien paga.
+Carril B (club). Este es el que te trae a quien paga. También en casa: de pie, encuadre algo
+más abierto que el A1 para que no sean el mismo plano.
 
 > **[GANCHO, a cámara]**
 > Así se monta un torneo de pádel de treinta y dos parejas.
@@ -222,6 +226,72 @@ Carril B (club). Este es el que te trae a quien paga.
 > Nadie se levanta por la mañana con ganas de instalarse otra aplicación más.
 > Lo que quieres es dejar de perseguir a ocho tíos por WhatsApp cada semana.
 > Eso es lo único que hace TACTIUM: que el sábado sepas quién juega.
+
+---
+
+# TANDA 3 — Tutoriales · tu cara y la app a la vez
+
+Formato nuevo: **la pantalla se reparte**. Tu cara en la banda de arriba (un tercio) y la app
+debajo, enseñándose mientras hablas. En Remotion es `layout: "tutorial"`.
+
+**Por qué la cara arriba y no al revés:** si la app va arriba, se lee como un vídeo de alguien
+hablando con algo de fondo. Con la cara arriba y la pantalla ocupando dos tercios, se lee como
+un tutorial. Y el subtítulo sube al 27% para quedarse **dentro de tu banda**: al 62% caería
+encima de la app y taparía justo lo que estás enseñando.
+
+**Al grabarte para un tutorial, encuadra la cara centrada y algo más lejos.** Tu plano vertical
+se recorta a una banda de 652 px: si te pones muy abajo o muy cerca, el recorte te deja fuera.
+
+**Y graba la pantalla del principio al final, de una sola vez**, sin cortes: aquí la app está
+siempre visible, no entra por tramos.
+
+---
+
+## T1 — Montar una alineación → `T1-alineacion.mp4` · ~22s
+
+> **[GANCHO, 0-3s, solo tu cara arriba]**
+> Montar la alineación de una jornada, en veinte segundos.
+>
+> **[TUTORIAL — la app va haciendo lo que cuentas]**
+> Abres la jornada.
+> Aquí ves quién puede jugar el sábado y quién no.
+> Le das a auto-orden y te coloca las parejas por puntos.
+> Si una queda mal, te lo dice en rojo.
+> Compruebas, y publicas. Se enteran todos a la vez.
+
+Graba la pantalla haciendo exactamente esos pasos, **en ese orden y sin dudar**. Si te
+equivocas, repite la toma entera: es más rápido que cuadrarlo después.
+
+---
+
+## T2 — Escanear el calendario → `T2-escaner.mp4` · ~20s
+
+> **[GANCHO]**
+> Esto es el calendario de la liga. En papel.
+>
+> **[TUTORIAL]**
+> Abres el escáner y le haces una foto.
+> Le das un momento.
+> Y ya tienes la temporada entera: cada jornada, contra quién juegas,
+> y si es en casa o fuera.
+> Lo que antes era una tarde copiando fechas.
+
+Necesito el calendario **en papel de verdad** en la mano.
+
+---
+
+## T3 — Inscribirse en un torneo → `T3-inscripcion.mp4` · ~20s
+
+> **[GANCHO]**
+> Apuntarte a un torneo sin llamar a nadie.
+>
+> **[TUTORIAL]**
+> El club te pasa un código.
+> Lo metes aquí.
+> Eliges categoría — y si no puedes jugar esa, te lo dice antes,
+> porque ya sabe tus puntos federados.
+> Pones a tu compañero, confirmas, y pagas por la web.
+> Ya estás en el cuadro.
 
 ---
 

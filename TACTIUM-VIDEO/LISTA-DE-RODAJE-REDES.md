@@ -71,6 +71,15 @@ habitación:
 - **Cambia el encuadre**: una de pecho para arriba, otra más abierta; una de pie, otra sentado.
 - El **A2 va sentado** con el móvil en la mesa delante — ese ya es distinto por guion.
 
+### Si la pieza es un tutorial (T1, T2, T3)
+
+Tu cara comparte pantalla con la app, así que cambian dos cosas:
+
+- **Encuádrate centrado y un poco más lejos.** Tu plano se recorta a la banda de arriba (652 px
+  de 1920). Si te pones bajo o muy cerca, el recorte te corta.
+- **La grabación de pantalla va entera, de un tirón**, haciendo los pasos del guion en orden.
+  Aquí la app está visible todo el rato: no entra y sale por tramos.
+
 ---
 
 # BLOQUE 2 — Cobertura: la app por dentro → `bruto/app/`
