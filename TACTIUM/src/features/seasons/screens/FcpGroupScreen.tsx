@@ -10,6 +10,8 @@ import { Segmented, MetaChip, FormChips } from '../components/fcpUi';
 import {
   fetchGroupStandings,
   fetchGroupSchedule,
+  fetchGroupInscritos,
+  type FcpInscritoEnGrupo,
   type FcpBrowseStanding,
   type FcpBrowseMatch,
 } from '@core/services/fcpBrowse';
@@ -58,15 +60,23 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
   const [actas, setActas] = useState<Record<string, FcpActaPartido[]>>({});
   const stripRef = useRef<ScrollView>(null);
 
+  // Equipos apuntados, cuando esta categoría es de una liga que aún no empieza.
+  const [inscritos, setInscritos] = useState<FcpInscritoEnGrupo[]>([]);
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    Promise.all([fetchGroupStandings(idGrupo), fetchGroupSchedule(idGrupo)])
-      .then(([st, sc]) => {
+    Promise.all([
+      fetchGroupStandings(idGrupo),
+      fetchGroupSchedule(idGrupo),
+      fetchGroupInscritos(idGrupo).catch(() => [] as FcpInscritoEnGrupo[]),
+    ])
+      .then(([st, sc, ins]) => {
         if (!alive) return;
         setGrupo(st.nombre ?? nombre ?? null);
         setRows(st.rows);
         setSchedule(sc);
+        setInscritos(ins);
       })
       .catch(() => {})
       .finally(() => alive && setLoading(false));
@@ -139,7 +149,14 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
   const finalizada = jornadaTotal > 0 && jornadaActual >= jornadaTotal;
 
   const eyebrow = (grupo ?? 'Grupo').toUpperCase();
-  const h1 = tab === 'clasif' ? 'Clasificación' : tab === 'jornadas' ? 'Jornadas' : 'Cuadro';
+  const soloInscripcion = !loading && rows.length === 0 && schedule.length === 0 && inscritos.length > 0;
+  const h1 = soloInscripcion
+    ? 'Equipos inscritos'
+    : tab === 'clasif'
+      ? 'Clasificación'
+      : tab === 'jornadas'
+        ? 'Jornadas'
+        : 'Cuadro';
 
   const tabItems: [Tab, string][] = esPlayoff
     ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas']]
@@ -172,20 +189,64 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
         <Text style={styles.title}>{h1}</Text>
 
         {/* Meta chips (solo fuera del cuadro) */}
-        {tab !== 'cuadro' && !loading ? (
+        {tab !== 'cuadro' && !loading && !soloInscripcion ? (
           <View style={styles.metaRow}>
             {rows.length > 0 ? <MetaChip label={`${rows.length} EQUIPOS`} /> : null}
             {jornadaTotal > 0 ? <MetaChip label={`J·${jornadaActual}/${jornadaTotal}`} /> : null}
             <MetaChip label={finalizada ? 'FINALIZADA' : 'EN CURSO'} tone={finalizada ? 'mint' : 'neutral'} />
           </View>
         ) : null}
+        {soloInscripcion ? (
+          <View style={styles.metaRow}>
+            <MetaChip label={`${inscritos.length} APUNTADOS`} />
+            <MetaChip
+              label={`${inscritos.filter((i) => i.confirmado).length} CONFIRMADOS`}
+              tone="mint"
+            />
+          </View>
+        ) : null}
 
-        <View style={{ marginTop: 16 }}>
-          <Segmented items={tabItems} value={tab} onChange={setTab} />
-        </View>
+        {/* Sin competición todavía no hay pestañas que elegir: solo la lista. */}
+        {!soloInscripcion ? (
+          <View style={{ marginTop: 16 }}>
+            <Segmented items={tabItems} value={tab} onChange={setTab} />
+          </View>
+        ) : null}
 
         {loading ? (
           <ActivityIndicator color={c.accent} style={{ marginTop: 40 }} />
+        ) : soloInscripcion ? (
+          <View style={{ marginTop: 20, gap: 6 }}>
+            <Text style={styles.empty}>
+              El sorteo no está hecho: todavía no hay grupos ni calendario. Estos son
+              los equipos apuntados a la categoría.
+            </Text>
+            {inscritos.map((t, i) => (
+              <Pressable
+                key={t.idEquipo}
+                onPress={() =>
+                  navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
+                }
+                style={({ pressed }) => [styles.inscRow, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.inscNum}>{i + 1}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.inscName} numberOfLines={1}>{t.equipo}</Text>
+                  <Text style={styles.inscMeta} numberOfLines={1}>
+                    {[
+                      t.jugadores > 0 ? `${t.jugadores} jugadores` : 'sin plantilla aún',
+                      t.sede,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                </View>
+                <Text style={[styles.inscState, !t.confirmado && styles.inscPending]}>
+                  {t.confirmado ? 'OK' : 'PEND.'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         ) : tab === 'cuadro' ? (
           <View style={{ marginTop: 18 }}>
             <FcpBracketView idGrupo={idGrupo} />
@@ -353,7 +414,17 @@ const makeStyles = (c: Palette) =>
     eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 2.4, color: c.accent, fontWeight: '500' },
     title: { color: c.text, fontSize: 29, fontWeight: '800', letterSpacing: -0.6, marginTop: 7 },
     metaRow: { flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap' },
-    empty: { color: c.textMuted, fontSize: 13.5, marginTop: 30, textAlign: 'center' },
+    inscRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: Radius.md, borderWidth: 1, borderColor: c.hair, backgroundColor: c.bgCard,
+  },
+  inscNum: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 11, width: 20 },
+  inscName: { color: c.text, fontSize: 14, fontWeight: '700' },
+  inscMeta: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10.5, marginTop: 2, textTransform: 'uppercase' },
+  inscState: { fontFamily: Fonts.mono, color: c.accent, fontSize: 10 },
+  inscPending: { color: c.warning },
+  empty: { color: c.textMuted, fontSize: 13.5, marginTop: 30, textAlign: 'center' },
 
     // Tabla clasificación
     thead: {

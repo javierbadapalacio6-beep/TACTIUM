@@ -366,3 +366,54 @@ export const seasonShort = (temporada: string | null | undefined): string => {
   const m = full.match(/^(\d{4})\/(\d{4})$/);
   return m ? `${m[1].slice(2)}/${m[2].slice(2)}` : full;
 };
+
+// ─── Categoría en periodo de inscripción ─────────────────────────────────────
+
+export interface FcpInscritoEnGrupo {
+  idEquipo: number;
+  equipo: string;
+  confirmado: boolean;
+  sede: string | null;
+  /** Jugadores ya dados de alta. Muchos equipos se apuntan antes de tener
+   *  plantilla, así que el cero es información, no un fallo. */
+  jugadores: number;
+}
+
+/**
+ * Equipos apuntados a una categoría de la liga que aún no ha empezado.
+ *
+ * Esa liga no tiene clasificación ni calendario —el sorteo no está hecho—, así
+ * que la pantalla de grupo no tenía nada que enseñar y salían dos pestañas
+ * vacías. Esto es lo que sí existe.
+ */
+export async function fetchGroupInscritos(idGrupo: string): Promise<FcpInscritoEnGrupo[]> {
+  const { data } = await rawFrom('fcp_inscripciones')
+    .select('id_equipo, equipo, confirmado, sede, num')
+    .eq('id_grupo', idGrupo)
+    .order('num', { ascending: true });
+  const rows = (data ?? []) as {
+    id_equipo: number;
+    equipo: string | null;
+    confirmado: boolean | null;
+    sede: string | null;
+  }[];
+  if (rows.length === 0) return [];
+
+  // Cuántos jugadores tiene ya cada uno. Una sola consulta para toda la lista.
+  const { data: jug } = await rawFrom('fcp_jugadores')
+    .select('id_equipo')
+    .in('id_equipo', rows.map((r) => r.id_equipo))
+    .limit(5000);
+  const cuenta = new Map<number, number>();
+  for (const j of (jug ?? []) as { id_equipo: number }[]) {
+    cuenta.set(j.id_equipo, (cuenta.get(j.id_equipo) ?? 0) + 1);
+  }
+
+  return rows.map((r) => ({
+    idEquipo: r.id_equipo,
+    equipo: r.equipo ?? '—',
+    confirmado: !!r.confirmado,
+    sede: r.sede,
+    jugadores: cuenta.get(r.id_equipo) ?? 0,
+  }));
+}
