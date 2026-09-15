@@ -31,12 +31,13 @@ import { clubCoverage } from '@core/entitlements/coverage';
 import { useTeamGate } from '@core/hooks/usePremiumGate';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
-import { fetchClubInscripciones } from '@core/services/fcpInscripciones';
+import { fetchClubInscripciones, refreshInscripcionRoster } from '@core/services/fcpInscripciones';
 import type { FcpInscripcionesResumen } from '@core/services/fcpInscripciones';
 
 import type { ClubStackScreenProps, RootStackParamList } from '@navigation/types';
 
 const MONTH_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const fmtPts = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const WEEKDAY_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 function formatShortDate(iso: string | null): string {
@@ -92,6 +93,50 @@ export const ClubDashboardScreen = ({
   // que haya calendario). Null casi todo el año: solo aparece cuando hay una
   // liga en inscripción con equipos de este club.
   const [inscripciones, setInscripciones] = useState<FcpInscripcionesResumen | null>(null);
+  // Qué plantilla está desplegada (índice de fila). Solo una a la vez.
+  const [abierta, setAbierta] = useState<number | null>(null);
+  const [refrescando, setRefrescando] = useState(false);
+
+  // Relee la plantilla de ese equipo en la Federación, ahora. Para cuando el
+  // club acaba de dar a alguien de alta y no quiere esperar al volcado
+  // automático, que pasa dos veces por semana.
+  const refrescarPlantilla = async (i: number) => {
+    const fila = inscripciones?.rows[i];
+    if (!fila || refrescando) return;
+    if (!fila.teamId) {
+      toast.error(
+        'Ese equipo no está en TACTIUM',
+        'Impórtalo de la Federación y podrás actualizar su plantilla.',
+      );
+      return;
+    }
+    setRefrescando(true);
+    try {
+      const r = await refreshInscripcionRoster(fila.teamId);
+      if (!r.found) {
+        toast.error(
+          'No aparece inscrito',
+          'La Federación no tiene este equipo en la temporada que viene.',
+        );
+      } else {
+        const res = await fetchClubInscripciones(
+          clubTeams.map((t) => ({
+            id: t.id, name: t.name, gender: t.gender, category: t.category,
+          })),
+        );
+        setInscripciones(res);
+        toast.success(
+          'Plantilla actualizada',
+          r.players != null ? `${r.players} jugadores inscritos.` : 'Sin cambios.',
+        );
+      }
+    } catch (e: any) {
+      toast.error('No se pudo consultar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setRefrescando(false);
+    }
+  };
+
   useEffect(() => {
     if (!isFcpClub || clubTeams.length === 0) {
       setInscripciones(null);
@@ -99,7 +144,12 @@ export const ClubDashboardScreen = ({
     }
     let alive = true;
     fetchClubInscripciones(
-      clubTeams.map((t) => ({ name: t.name, gender: t.gender, category: t.category })),
+      clubTeams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        gender: t.gender,
+        category: t.category,
+      })),
     )
       .then((r) => alive && setInscripciones(r))
       .catch(() => alive && setInscripciones(null));
@@ -436,8 +486,12 @@ export const ClubDashboardScreen = ({
                     ? `Tus ${inscripciones.total} equipos están inscritos y confirmados.`
                     : `${inscripciones.confirmados} de ${inscripciones.total} confirmados por la Federación.`}
                 </Text>
-                {inscripciones.rows.map((r) => (
-                  <View key={`${r.equipo}-${r.genero}`} style={styles.inscripRow}>
+                {inscripciones.rows.map((r, i) => (
+                  <Pressable
+                    key={`${r.equipo}-${r.genero}`}
+                    onPress={() => setAbierta(abierta === i ? null : i)}
+                    style={({ pressed }) => [styles.inscripRow, pressed && { opacity: 0.7 }]}
+                  >
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.inscripTeam} numberOfLines={1}>
                         {r.equipo}
@@ -459,8 +513,48 @@ export const ClubDashboardScreen = ({
                     <Text style={[styles.inscripState, !r.confirmado && styles.inscripPending]}>
                       {r.confirmado ? 'CONFIRMADO' : 'PENDIENTE'}
                     </Text>
-                  </View>
+                  </Pressable>
                 ))}
+                {/* Plantilla del equipo elegido. Los clubes tienen muchos
+                    equipos y enseñarlas todas a la vez haría ilegible el panel,
+                    así que se abre una cada vez. */}
+                {abierta != null && inscripciones.rows[abierta] ? (
+                  <View style={styles.rosterBox}>
+                    <Text style={styles.rosterTitle} numberOfLines={1}>
+                      {inscripciones.rows[abierta].equipo}
+                      {inscripciones.rows[abierta].sede
+                        ? ` · juega en ${inscripciones.rows[abierta].sede}`
+                        : ''}
+                    </Text>
+                    {inscripciones.rows[abierta].jugadores.length === 0 ? (
+                      <Text style={styles.inscripFoot}>
+                        La Federación todavía no publica jugadores en este equipo.
+                      </Text>
+                    ) : (
+                      inscripciones.rows[abierta].jugadores.map((j, i) => (
+                        <View key={j.idJugador} style={styles.rosterRow}>
+                          <Text style={styles.rosterNum}>{i + 1}</Text>
+                          <Text style={styles.rosterName} numberOfLines={1}>
+                            {j.nombre}
+                          </Text>
+                          <Text style={styles.rosterPts}>{fmtPts(j.puntos)}</Text>
+                        </View>
+                      ))
+                    )}
+                    <Pressable
+                      onPress={() => refrescarPlantilla(abierta)}
+                      disabled={refrescando}
+                      style={({ pressed }) => [
+                        styles.rosterBtn,
+                        (pressed || refrescando) && { opacity: 0.6 },
+                      ]}
+                    >
+                      <Text style={styles.rosterBtnText}>
+                        {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 <Text style={styles.inscripFoot}>
                   Todavía no hay calendario. Cuando la Federación lo publique, podrás
                   volcar la temporada.
@@ -1127,6 +1221,35 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: 0.6,
   },
   inscripPending: { color: c.warning },
+  rosterBox: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: c.hairStrong,
+  },
+  rosterTitle: {
+    fontFamily: Fonts.mono,
+    color: c.textMuted,
+    fontSize: 10.5,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  rosterRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  rosterNum: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10.5, width: 18 },
+  rosterName: { flex: 1, minWidth: 0, color: c.text, fontSize: 13 },
+  rosterPts: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11.5 },
+  rosterBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
+  },
+  rosterBtnText: { color: c.accent, fontSize: 12, fontWeight: '700' },
   inscripFoot: {
     color: c.textFaint,
     fontSize: 11.5,

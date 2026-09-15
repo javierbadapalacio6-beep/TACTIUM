@@ -32,6 +32,12 @@ const clubOf = (equipo: string): string => {
   return s || equipo.trim();
 };
 
+export interface FcpJugadorInscrito {
+  idJugador: string;
+  nombre: string;
+  puntos: number;
+}
+
 export interface FcpInscripcion {
   equipo: string;
   genero: 'M' | 'F' | null;
@@ -39,9 +45,18 @@ export interface FcpInscripcion {
   confirmado: boolean;
   /** Ese equipo ya existe en el club dentro de TACTIUM. */
   enTactium: boolean;
+  /** Id del equipo en TACTIUM, para poder pedir el refresco manual. */
+  teamId: string | null;
   /** Su categoría en la temporada en curso, si la sabemos. Sirve para ver de un
    *  vistazo quién sube y quién baja. */
   categoriaActual: string | null;
+  /** Club donde jugará de local, según la Federación. */
+  sede: string | null;
+  /** Plantilla inscrita, de más a menos puntos. */
+  jugadores: FcpJugadorInscrito[];
+  /** Cuándo se leyó esa plantilla. La lista cambia mientras dura la
+   *  inscripción, así que la pantalla dice de cuándo es la foto. */
+  plantillaAt: string | null;
 }
 
 export interface FcpInscripcionesResumen {
@@ -52,9 +67,30 @@ export interface FcpInscripcionesResumen {
 }
 
 export interface TeamLite {
+  id: string;
   name: string;
   gender: string | null;
   category: string | null;
+}
+
+/**
+ * Fuerza la relectura de la plantilla de UN equipo en la Federación.
+ *
+ * El volcado automático pasa dos veces por semana; esto es para cuando el club
+ * acaba de dar a alguien de alta y no quiere esperar. Va por función de
+ * servidor porque hay que entrar en la web de la FCP, cosa que la app no puede
+ * hacer. Devuelve cuántos jugadores tiene el equipo ahora, o null si ese equipo
+ * no está inscrito en la temporada que viene.
+ */
+export async function refreshInscripcionRoster(
+  teamId: string,
+): Promise<{ found: boolean; players: number | null }> {
+  const { data, error } = await supabase.functions.invoke('fcp-refresh-roster', {
+    body: { team_id: teamId },
+  });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as { found?: boolean; players?: number | null };
+  return { found: !!r.found, players: r.players ?? null };
 }
 
 /**
@@ -79,6 +115,8 @@ export async function fetchClubInscripciones(
 
   const bases = [...new Set(conNombre.map((t) => clubOf(t.name)).filter(Boolean))];
   const vistos = new Set<string>();
+  // Fila -> id_equipo de la Federacion, para colgarle luego su plantilla.
+  const idEquipoPorFila = new Map<number, number>();
   const rows: FcpInscripcion[] = [];
   let idLiga: number | null = null;
 
@@ -88,16 +126,19 @@ export async function fetchClubInscripciones(
     const safe = base.replace(/[%,()]/g, ' ').trim();
     if (safe.length < 2) continue;
     const { data } = await rawFrom('fcp_inscripciones')
-      .select('id_liga, equipo, genero, grupo_nombre, confirmado')
+      .select('id_liga, id_equipo, equipo, genero, grupo_nombre, confirmado, sede, plantilla_updated_at')
       .ilike('equipo', `${safe}%`)
       .limit(200);
 
     for (const r of (data ?? []) as {
       id_liga: number;
+      id_equipo: number;
       equipo: string | null;
       genero: string | null;
       grupo_nombre: string | null;
       confirmado: boolean | null;
+      sede: string | null;
+      plantilla_updated_at: string | null;
     }[]) {
       if (currentLiga != null && r.id_liga <= currentLiga) continue;
       const equipo = (r.equipo ?? '').trim();
@@ -121,12 +162,54 @@ export async function fetchClubInscripciones(
         categoria: catShort(r.grupo_nombre),
         confirmado: !!r.confirmado,
         enTactium: !!mio,
+        teamId: mio?.id ?? null,
         categoriaActual: mio?.category ?? null,
+        sede: r.sede ?? null,
+        jugadores: [],
+        plantillaAt: r.plantilla_updated_at ?? null,
       });
+      idEquipoPorFila.set(rows.length - 1, r.id_equipo);
     }
   }
 
   if (rows.length === 0) return null;
+
+  // Plantillas. Viven en `fcp_jugadores` con el `id_liga` de la temporada nueva
+  // (misma tabla de siempre: los campos son idénticos). Una sola consulta para
+  // todos los equipos, no una por fila.
+  const idsEquipo = [...new Set([...idEquipoPorFila.values()])];
+  if (idsEquipo.length > 0) {
+    const { data: jug } = await rawFrom('fcp_jugadores')
+      .select('id_jugador, nombre, nombre_pila, apellido1, apellido2, puntos, id_equipo')
+      .in('id_equipo', idsEquipo)
+      .order('puntos', { ascending: false, nullsFirst: false })
+      .limit(2000);
+    const porEquipo = new Map<number, FcpJugadorInscrito[]>();
+    for (const j of (jug ?? []) as {
+      id_jugador: string;
+      nombre: string | null;
+      nombre_pila: string | null;
+      apellido1: string | null;
+      apellido2: string | null;
+      puntos: number | null;
+      id_equipo: number;
+    }[]) {
+      const lista = porEquipo.get(j.id_equipo) ?? [];
+      lista.push({
+        idJugador: j.id_jugador,
+        // "Nombre Apellido1 Apellido2" se lee mejor que el "APELLIDOS, Nombre"
+        // que publica la Federación.
+        nombre:
+          [j.nombre_pila, j.apellido1, j.apellido2].filter(Boolean).join(' ').trim() ||
+          (j.nombre ?? '—'),
+        puntos: j.puntos ?? 0,
+      });
+      porEquipo.set(j.id_equipo, lista);
+    }
+    for (const [i, idEq] of idEquipoPorFila) {
+      rows[i].jugadores = porEquipo.get(idEq) ?? [];
+    }
+  }
 
   let temporada = '';
   if (idLiga != null) {
