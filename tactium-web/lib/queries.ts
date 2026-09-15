@@ -908,6 +908,15 @@ export async function fetchSubscription(): Promise<DbSubscription | null> {
       "id, status, plan_tier, platform, subject_type, current_period_end, scheduled_plan_tier, billing_period"
     )
     .in("status", ["trialing", "active", "grace_period"])
+    // El periodo tiene que seguir vivo, no basta con el estado.
+    //
+    // Hay filas zombi: suscripciones que se quedaron en `active` con la fecha ya
+    // pasada. Salen cuando al comprar conviven la fila que crea la app y la que
+    // crea el webhook, cada una con su id de transaccion, y los eventos de la
+    // tienda solo tocan la suya. Sin esta condicion, la web enseñaba «ACTIVA ·
+    // renueva el 14 de septiembre» el dia 15. Mismo arreglo que `isLiveSub` en
+    // la app; aqui se hace en la consulta porque solo se pide una fila.
+    .gt("current_period_end", new Date().toISOString())
     .order("current_period_end", { ascending: false })
     .limit(1)
     .maybeSingle();
