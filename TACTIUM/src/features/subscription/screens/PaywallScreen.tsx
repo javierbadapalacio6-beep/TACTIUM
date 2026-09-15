@@ -269,6 +269,11 @@ export const PaywallScreen = ({
         formatted: store?.formatted ?? formatEur(fallback),
         perMonth: store?.perMonth ?? null,
         perMonthString: store?.perMonthString ?? null,
+        // De dónde salió el importe. Hace falta para no comparar peras con
+        // manzanas al calcular el descuento anual: el respaldo de `plans.ts`
+        // está en euros y el de la tienda en la moneda de esa cuenta, que no
+        // tiene por qué ser la misma.
+        fromStore: store != null,
       };
     },
     [storePrices],
@@ -277,10 +282,17 @@ export const PaywallScreen = ({
   const selectedPrice = priceOf(selectedPlan, billing);
   // Descuento anual calculado con los precios REALES (mensual×12 vs anual).
   const yearlyDiscount = useMemo(() => {
-    const m = priceOf(selectedPlan, 'monthly').amount;
-    const y = priceOf(selectedPlan, 'yearly').amount;
-    if (m <= 0) return 0;
-    return Math.round(((m * 12 - y) / (m * 12)) * 100);
+    const mensual = priceOf(selectedPlan, 'monthly');
+    const anual = priceOf(selectedPlan, 'yearly');
+    // Los dos importes tienen que venir del MISMO sitio. Si uno lo da la tienda
+    // y el otro sale del respaldo, están en monedas distintas —la tienda cobra
+    // en la moneda de la cuenta, que puede no ser el euro— y el porcentaje
+    // saldría inventado. Antes que enseñar un descuento falso, no se enseña.
+    if (mensual.fromStore !== anual.fromStore) return 0;
+    if (mensual.amount <= 0 || anual.amount <= 0) return 0;
+    const pct = Math.round(((mensual.amount * 12 - anual.amount) / (mensual.amount * 12)) * 100);
+    // Un anual más caro que doce mensualidades no es un descuento.
+    return pct > 0 && pct < 100 ? pct : 0;
   }, [priceOf, selectedPlan]);
   // Importe FACTURADO formateado para la hoja de confirmación (elemento de
   // precio prominente, coherente con el fix de 3.1.2(c) en las cards).
