@@ -61,6 +61,14 @@ export async function searchFcpTeams(
   const { idLiga, genero = 'all', categoria = 'all', grupoIds, limit = 40 } = filters;
   if (q.length < 2 && !(grupoIds && grupoIds.length)) return [];
 
+  // Una liga POSTERIOR a la que se juega está en periodo de inscripción: no
+  // tiene clasificación, sus equipos viven en `fcp_inscripciones`. Se devuelven
+  // con la misma forma para que la pantalla no tenga que saber la diferencia.
+  const currentLiga = await fetchCurrentLiga();
+  if (idLiga != null && currentLiga != null && idLiga > currentLiga) {
+    return searchInscritos(q, { idLiga, genero, categoria, grupoIds, limit });
+  }
+
   let sel = rawFrom('fcp_clasificacion').select('id_equipo, equipo, id_grupo, id_liga');
   if (q.length >= 2) sel = sel.ilike('equipo', `%${q}%`);
   else if (grupoIds && grupoIds.length) sel = sel.in('id_grupo', grupoIds);
@@ -112,6 +120,50 @@ export async function searchFcpTeams(
   return out.slice(0, limit);
 }
 
+/**
+ * Equipos apuntados a una liga que aún no ha empezado. Devuelve la misma forma
+ * que `searchFcpTeams` para que la pantalla de Federación no tenga que
+ * distinguir entre una temporada en juego y una en inscripción.
+ */
+async function searchInscritos(
+  q: string,
+  filters: FcpTeamFilters & { idLiga: number },
+): Promise<FcpTeamResult[]> {
+  const { idLiga, genero = 'all', categoria = 'all', grupoIds, limit = 40 } = filters;
+  let sel = rawFrom('fcp_inscripciones')
+    .select('id_equipo, equipo, id_grupo, grupo_nombre, genero')
+    .eq('id_liga', idLiga);
+  if (q.length >= 2) sel = sel.ilike('equipo', `%${q}%`);
+  else if (grupoIds && grupoIds.length) sel = sel.in('id_grupo', grupoIds);
+  const { data } = await sel.limit(600);
+
+  const { data: liga } = await rawFrom('fcp_ligas')
+    .select('temporada')
+    .eq('id_liga', idLiga)
+    .maybeSingle();
+  const temporada = (liga as { temporada: string | null } | null)?.temporada ?? null;
+
+  let out = ((data ?? []) as {
+    id_equipo: number;
+    equipo: string | null;
+    id_grupo: string;
+    grupo_nombre: string | null;
+    genero: string | null;
+  }[]).map((r) => ({
+    idEquipo: r.id_equipo,
+    equipo: r.equipo ?? '—',
+    idGrupo: r.id_grupo,
+    grupoNombre: r.grupo_nombre ?? '',
+    genero: r.genero ?? 'M',
+    categoria: catShort(r.grupo_nombre),
+    temporada,
+  }));
+  if (genero !== 'all') out = out.filter((t) => t.genero === genero);
+  if (categoria && categoria !== 'all') out = out.filter((t) => t.categoria === categoria);
+  out.sort((a, b) => a.equipo.localeCompare(b.equipo));
+  return out.slice(0, limit);
+}
+
 export interface FcpPlayerResult {
   idJugador: string; // las rutas usan idJugador como string
   name: string;
@@ -156,8 +208,14 @@ export async function searchFcpPlayers(
   // Nada posterior a la temporada que se juega: la liga en periodo de
   // inscripción ya tiene plantillas cargadas, pero sin puntos ni partidos, y
   // sería la «más reciente» de todo el mundo.
-  const currentLiga = await fetchCurrentLiga();
-  if (currentLiga != null) sel = sel.lte('id_liga', currentLiga);
+  //
+  // La excepción es cuando quien llama acota a unos equipos concretos: ahí ya
+  // ha elegido la temporada (p. ej. mirando una categoría de la liga que viene)
+  // y lo que quiere es justo esa plantilla.
+  if (!hasScope) {
+    const currentLiga = await fetchCurrentLiga();
+    if (currentLiga != null) sel = sel.lte('id_liga', currentLiga);
+  }
   // Ordenado por TEMPORADA descendente (`id_liga` crece cada año), no por
   // puntos: ver el porqué en el dedup de aquí abajo.
   const { data } = await sel.order('id_liga', { ascending: false }).limit(300);
@@ -501,13 +559,22 @@ export async function resolveFcpPlayer(
 /** id_equipo de los equipos de un grupo (para acotar jugadores por grupo). */
 export async function fetchGroupTeamIds(idGrupo: string): Promise<number[]> {
   const { data } = await rawFrom('fcp_clasificacion').select('id_equipo').eq('id_grupo', idGrupo);
-  return [
-    ...new Set(
-      ((data ?? []) as { id_equipo: number | null }[])
+  const ids = ((data ?? []) as { id_equipo: number | null }[])
+    .map((r) => r.id_equipo)
+    .filter((x): x is number => x != null);
+  // En una liga en inscripción no hay clasificación: los equipos de esa
+  // categoría están en `fcp_inscripciones`.
+  if (ids.length === 0) {
+    const { data: insc } = await rawFrom('fcp_inscripciones')
+      .select('id_equipo')
+      .eq('id_grupo', idGrupo);
+    ids.push(
+      ...((insc ?? []) as { id_equipo: number | null }[])
         .map((r) => r.id_equipo)
         .filter((x): x is number => x != null),
-    ),
-  ];
+    );
+  }
+  return [...new Set(ids)];
 }
 
 export interface FcpRankingRow {

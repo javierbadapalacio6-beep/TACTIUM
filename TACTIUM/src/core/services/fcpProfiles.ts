@@ -68,9 +68,48 @@ export interface FcpTeamProfile {
   roster: FcpRosterPlayer[];
 }
 
+/** Ficha de un equipo que solo está INSCRITO: plantilla sí, competición no. */
+async function fetchFcpTeamInscrito(idEquipo: number): Promise<FcpTeamProfile | null> {
+  const { data: insc } = await rawFrom('fcp_inscripciones')
+    .select('equipo, grupo_nombre')
+    .eq('id_equipo', idEquipo)
+    .maybeSingle();
+  if (!insc) return null;
+  const i = insc as { equipo: string | null; grupo_nombre: string | null };
+
+  const { data: jug } = await rawFrom('fcp_jugadores')
+    .select('id_jugador, nombre_pila, apellido1, apellido2, nombre, puntos, categoria')
+    .eq('id_equipo', idEquipo)
+    .order('puntos', { ascending: false, nullsFirst: false });
+
+  return {
+    idEquipo,
+    equipo: i.equipo ?? '—',
+    grupo: i.grupo_nombre,
+    posicion: null,
+    puntos: 0,
+    pj: 0,
+    pg: 0,
+    pp: 0,
+    setsFavor: 0,
+    setsContra: 0,
+    form: [],
+    roster: ((jug ?? []) as JugRow[]).map((r) => ({
+      idJugador: r.id_jugador,
+      name: displayName(r),
+      puntos: r.puntos ?? 0,
+      categoria: r.categoria ?? null,
+    })),
+  };
+}
+
 export async function fetchFcpTeamProfile(idEquipo: number): Promise<FcpTeamProfile | null> {
   const main = await resolveMainGroup(idEquipo);
-  if (!main) return null;
+  // Sin clasificación puede ser un equipo INSCRITO en la temporada que viene:
+  // todavía no ha jugado nada, pero tiene plantilla y categoría. Se devuelve la
+  // ficha con lo que hay —jugadores— y las estadísticas a cero, en vez de dejar
+  // la pantalla en blanco al tocarlo desde el buscador.
+  if (!main) return fetchFcpTeamInscrito(idEquipo);
   const grupoId = main.id_grupo;
   const equipo = main.equipo;
 

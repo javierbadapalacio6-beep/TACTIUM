@@ -49,15 +49,22 @@ const LIGA_TTL_MS = 5 * 60 * 1000;
 
 /** Años/ligas con datos reales (los que tienen grupos scrapeados). */
 export async function fetchFcpYears(): Promise<FcpYear[]> {
-  const [current, { data: grupos }, { data: ligas }] = await Promise.all([
+  const [current, { data: grupos }, { data: inscritas }, { data: ligas }] = await Promise.all([
     fetchCurrentLiga(),
     // El limit explícito importa: por defecto PostgREST corta en 1000 filas y
     // los grupos crecen ~130 por temporada, así que sin esto acabarían
     // desapareciendo temporadas viejas del selector sin avisar.
     rawFrom('fcp_grupos').select('id_liga').limit(20000),
+    // Una liga EN INSCRIPCIÓN no tiene grupos todavía, pero sí equipos
+    // apuntados: es información real y esconderla no ayuda a nadie. Lo que no
+    // cambia es cuál sale elegida por defecto (ver `defaultYear`).
+    rawFrom('fcp_inscripciones').select('id_liga').limit(20000),
     rawFrom('fcp_ligas').select('id_liga, temporada, nombre'),
   ]);
-  const withData = new Set(((grupos ?? []) as { id_liga: number | null }[]).map((g) => g.id_liga));
+  const withData = new Set([
+    ...((grupos ?? []) as { id_liga: number | null }[]).map((g) => g.id_liga),
+    ...((inscritas ?? []) as { id_liga: number | null }[]).map((i) => i.id_liga),
+  ]);
   return ((ligas ?? []) as { id_liga: number; temporada: string | null; nombre: string | null }[])
     .filter((l) => withData.has(l.id_liga))
     .map((l) => ({
@@ -87,6 +94,31 @@ export async function fetchFcpGroups(idLiga: number): Promise<FcpGroupItem[]> {
   const { data } = await rawFrom('fcp_grupos')
     .select('id_grupo, nombre, genero')
     .eq('id_liga', idLiga);
+
+  // En una liga que aún no ha empezado no hay grupos: el sorteo no está hecho.
+  // Lo que sí hay son CATEGORÍAS, que es donde se inscriben los equipos, y
+  // sirven igual para filtrar. Se sacan de las inscripciones.
+  if (!data || data.length === 0) {
+    const { data: insc } = await rawFrom('fcp_inscripciones')
+      .select('id_grupo, grupo_nombre, genero')
+      .eq('id_liga', idLiga)
+      .limit(5000);
+    const vistos = new Map<string, FcpGroupItem>();
+    for (const r of (insc ?? []) as {
+      id_grupo: string;
+      grupo_nombre: string | null;
+      genero: string | null;
+    }[]) {
+      if (vistos.has(r.id_grupo)) continue;
+      vistos.set(r.id_grupo, {
+        idGrupo: r.id_grupo,
+        nombre: r.grupo_nombre ?? r.id_grupo,
+        genero: r.genero ?? 'M',
+        esPlayoff: false,
+      });
+    }
+    return [...vistos.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }
   return ((data ?? []) as { id_grupo: string; nombre: string | null; genero: string | null }[])
     .map((g) => ({
       idGrupo: g.id_grupo,

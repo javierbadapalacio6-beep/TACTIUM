@@ -283,6 +283,9 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
   const selGrupoObj = grupoOptions.find((g) => g.idGrupo === selGrupo) ?? null;
   const tempYear = years.find((y) => y.idLiga === year);
   const tempLabel = (tempYear?.temporada ? seasonLabel(tempYear.temporada) : tempYear?.nombre) || '—';
+  // Temporada en periodo de inscripción: no hay competición que enseñar, solo
+  // los equipos apuntados. La pantalla lo dice en vez de enseñar huecos.
+  const enInscripcion = !!tempYear && !tempYear.conCalendario;
   const tempDefault = years.length > 0 && year === defaultYear(years)?.idLiga;
   const grupoValue = (() => {
     if (selGrupo === 'all') return 'TODOS';
@@ -494,7 +497,9 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
             key={y.idLiga}
             styles={styles}
             c={c}
-            label={y.temporada ? seasonShort(y.temporada) : y.nombre}
+            // La que aún no ha empezado se marca: tiene equipos apuntados,
+            // pero ni calendario ni clasificación.
+            label={(y.temporada ? seasonShort(y.temporada) : y.nombre) + (y.conCalendario ? '' : ' ·')}
             on={year === y.idLiga}
             onPress={() => {
               setYear(y.idLiga);
