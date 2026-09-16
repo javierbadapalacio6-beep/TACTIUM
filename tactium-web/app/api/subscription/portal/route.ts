@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
+import { webAppOrigin } from "@/lib/connect";
 
 // POST /api/subscription/portal
 // Abre el portal de facturación de Stripe (cancelar, cambiar método de pago,
@@ -45,10 +46,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    req.headers.get("origin") ??
-    "https://tactium.io";
+  // `/suscripcion` y `/pro` viven en la web app, no en la landing del apex: el
+  // helper compartido normaliza el origen para no devolver al usuario a una
+  // ruta que allí no existe (ver lib/connect.ts).
+  const origin = webAppOrigin(req);
 
   const stripe = getStripe();
   const session = await stripe.billingPortal.sessions.create({
