@@ -41,6 +41,24 @@ export function webAppOrigin(req: Request): string {
   }
 }
 
+/**
+ * Traduce un fallo de Stripe a un mensaje que el admin pueda accionar.
+ *
+ * Sin esto la excepción sube sin capturar, Next responde un 500 sin cuerpo y el
+ * cliente solo puede enseñar su mensaje de reserva ("no se pudo conectar"): el
+ * motivo real se queda enterrado en los logs del servidor.
+ */
+export function connectErrorMessage(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  // El cuestionario de Connect lo responde la PLATAFORMA, no el club: mientras
+  // falte, `accounts.create` falla en vivo y no se puede dar de alta a nadie.
+  // Que el club no se vuelva loco buscando el fallo en su lado.
+  if (raw.includes("complete your platform profile")) {
+    return "Los cobros por Stripe todavía no están habilitados en TACTIUM. No es cosa de tu club: avísanos y lo activamos.";
+  }
+  return `Stripe no pudo completar la operación: ${raw}`;
+}
+
 export type ConnectStatus = "none" | "onboarding" | "restricted" | "active";
 
 /** Traduce el estado de una cuenta Express de Stripe al de TACTIUM. */

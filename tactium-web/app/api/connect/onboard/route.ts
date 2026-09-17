@@ -7,6 +7,7 @@ import {
   userIdFromRequest,
   mapAccountStatus,
   webAppOrigin,
+  connectErrorMessage,
 } from "@/lib/connect";
 
 // POST /api/connect/onboard  { clubId }
@@ -47,59 +48,67 @@ export async function POST(req: Request) {
 
   // Reutiliza la cuenta si ya existe; si no, crea una Express (ES/EUR).
   let accountId = club.stripe_connect_account_id as string | null;
-  if (!accountId) {
-    const account = await stripe.accounts.create({
-      type: "express",
-      country: "ES",
-      email: undefined,
-      capabilities: {
-        card_payments: { requested: true },
-        transfers: { requested: true },
-      },
-      business_profile: {
-        name: club.name ?? undefined,
-        product_description: "Inscripciones de torneos de pádel",
-      },
-      metadata: { club_id: clubId },
+
+  // Todo lo que habla con Stripe va dentro del try: cualquier rechazo suyo debe
+  // llegar al admin como un mensaje legible, no como un 500 mudo.
+  try {
+    if (!accountId) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        country: "ES",
+        email: undefined,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+        business_profile: {
+          name: club.name ?? undefined,
+          product_description: "Inscripciones de torneos de pádel",
+        },
+        metadata: { club_id: clubId },
+      });
+      accountId = account.id;
+      await admin
+        .from("clubs")
+        .update({
+          stripe_connect_account_id: accountId,
+          stripe_connect_status: "onboarding",
+        })
+        .eq("id", clubId);
+    }
+
+    const origin = webAppOrigin(req);
+
+    // Si el alta la inició la APP (token Bearer), al terminar Stripe no debe
+    // devolver a una página web (el navegador no tiene sesión → login): la
+    // mandamos a /connect/return, que rebota de vuelta a la app por deep link.
+    // Desde la web (cookie) sí volvemos a la consola de Cobros del club.
+    const fromApp = (req.headers.get("authorization") ?? "").startsWith("Bearer ");
+    const returnUrl = fromApp
+      ? `${origin}/connect/return`
+      : `${origin}/club/cobros?connect=done`;
+    const refreshUrl = fromApp
+      ? `${origin}/connect/return?retry=1`
+      : `${origin}/club/cobros?connect=refresh`;
+
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      // Si el alta caduca o falta algo, Stripe manda a refresh_url para reintentar.
+      refresh_url: refreshUrl,
+      return_url: returnUrl,
+      type: "account_onboarding",
     });
-    accountId = account.id;
+
+    // Estado por si acaso (aún no estará activo hasta completar el alta).
+    const account = await stripe.accounts.retrieve(accountId);
     await admin
       .from("clubs")
-      .update({
-        stripe_connect_account_id: accountId,
-        stripe_connect_status: "onboarding",
-      })
+      .update({ stripe_connect_status: mapAccountStatus(account) })
       .eq("id", clubId);
+
+    return NextResponse.json({ url: link.url });
+  } catch (e) {
+    console.error("[connect/onboard] Stripe rechazó la operación", { clubId, accountId }, e);
+    return NextResponse.json({ error: connectErrorMessage(e) }, { status: 502 });
   }
-
-  const origin = webAppOrigin(req);
-
-  // Si el alta la inició la APP (token Bearer), al terminar Stripe no debe
-  // devolver a una página web (el navegador no tiene sesión → login): la
-  // mandamos a /connect/return, que rebota de vuelta a la app por deep link.
-  // Desde la web (cookie) sí volvemos a la consola de Cobros del club.
-  const fromApp = (req.headers.get("authorization") ?? "").startsWith("Bearer ");
-  const returnUrl = fromApp
-    ? `${origin}/connect/return`
-    : `${origin}/club/cobros?connect=done`;
-  const refreshUrl = fromApp
-    ? `${origin}/connect/return?retry=1`
-    : `${origin}/club/cobros?connect=refresh`;
-
-  const link = await stripe.accountLinks.create({
-    account: accountId,
-    // Si el alta caduca o falta algo, Stripe manda a refresh_url para reintentar.
-    refresh_url: refreshUrl,
-    return_url: returnUrl,
-    type: "account_onboarding",
-  });
-
-  // Estado por si acaso (aún no estará activo hasta completar el alta).
-  const account = await stripe.accounts.retrieve(accountId);
-  await admin
-    .from("clubs")
-    .update({ stripe_connect_status: mapAccountStatus(account) })
-    .eq("id", clubId);
-
-  return NextResponse.json({ url: link.url });
 }

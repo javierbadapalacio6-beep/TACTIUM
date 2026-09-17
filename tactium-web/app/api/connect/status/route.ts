@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
@@ -6,6 +7,7 @@ import {
   isClubAdmin,
   userIdFromRequest,
   mapAccountStatus,
+  connectErrorMessage,
   type ConnectStatus,
 } from "@/lib/connect";
 
@@ -40,7 +42,22 @@ export async function GET(req: Request) {
   }
 
   const stripe = getStripe();
-  const account = await stripe.accounts.retrieve(accountId);
+
+  // Si Stripe no contesta, se devuelve el último estado conocido en vez de dejar
+  // que la excepción tumbe la respuesta: el cliente caía al `catch` y pintaba
+  // "sin conectar" a un club que sí lo estaba.
+  let account: Stripe.Account;
+  try {
+    account = await stripe.accounts.retrieve(accountId);
+  } catch (e) {
+    console.error("[connect/status] no se pudo leer la cuenta", { clubId, accountId }, e);
+    return NextResponse.json({
+      status: (club.stripe_connect_status as ConnectStatus) ?? "none",
+      hasAccount: true,
+      error: connectErrorMessage(e),
+    });
+  }
+
   const status = mapAccountStatus(account);
   if (status !== club.stripe_connect_status) {
     await admin
