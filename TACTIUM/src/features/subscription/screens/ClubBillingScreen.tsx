@@ -208,6 +208,14 @@ export const ClubBillingScreen = ({
                   {formatDate(clubSub.current_period_end)}
                 </Text>
               </View>
+              {clubSub.cancel_at_period_end ? (
+                <View style={styles.scheduledNotice}>
+                  <Text style={styles.scheduledText}>
+                    No se renovará: tu acceso termina el{' '}
+                    {formatDate(clubSub.current_period_end)}.
+                  </Text>
+                </View>
+              ) : null}
               {clubSub.scheduled_plan_tier ? (
                 <View style={styles.scheduledNotice}>
                   <Text style={styles.scheduledText}>

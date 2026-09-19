@@ -872,15 +872,15 @@ const SubscriptionCard: React.FC<{
           </Text>
           <Text style={styles.subHint} numberOfLines={1}>
             {activeSub
-              ? activeSub.status === 'trialing'
+              ? activeSub.cancel_at_period_end
+                ? 'No se renovará · Gestionar'
+                : activeSub.status === 'trialing'
                 ? trialDaysLeft === 0
                   ? 'Tu prueba termina hoy · Gestionar'
                   : trialDaysLeft === 1
                     ? 'Tu prueba termina mañana · Gestionar'
                     : `Te quedan ${trialDaysLeft} días de prueba · Gestionar`
-                : activeSub.cancel_at_period_end
-                  ? 'Termina pronto · Gestionar plan'
-                  : 'Activa · Gestionar plan'
+                : 'Activa · Gestionar plan'
               : isClubAdmin
                 ? 'Cubre a todos los capitanes del club'
                 : 'Prueba 14 días · Sin compromiso'}

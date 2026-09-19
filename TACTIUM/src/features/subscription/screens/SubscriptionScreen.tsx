@@ -235,6 +235,14 @@ export const SubscriptionScreen = ({
                   {formatDate(mySub.current_period_end)}
                 </Text>
               </View>
+              {mySub.cancel_at_period_end ? (
+                <View style={styles.scheduledNotice}>
+                  <Text style={styles.scheduledText}>
+                    No se renovará: tu acceso termina el{' '}
+                    {formatDate(mySub.current_period_end)}.
+                  </Text>
+                </View>
+              ) : null}
               {mySub.scheduled_plan_tier ? (
                 <View style={styles.scheduledNotice}>
                   <Text style={styles.scheduledText}>

@@ -55,6 +55,7 @@ async function upsertFromStripeSub(
     current_period_end?: number;
     trial_end?: number | null;
     cancel_at_period_end?: boolean;
+    cancel_at?: number | null;
     metadata?: Record<string, string>;
     items?: {
       data?: { current_period_start?: number; current_period_end?: number }[];
@@ -89,7 +90,11 @@ async function upsertFromStripeSub(
     current_period_start: periodStart,
     current_period_end: periodEnd,
     trial_end: toIso(s.trial_end ?? null),
-    cancel_at_period_end: Boolean(s.cancel_at_period_end),
+    // Stripe ya no marca `cancel_at_period_end` cuando la baja se pide desde el
+    // portal: la apunta en `cancel_at` (la fecha en que se corta). Mirando solo
+    // el booleano, la baja era invisible y seguiamos anunciando un cobro que no
+    // iba a producirse.
+    cancel_at_period_end: Boolean(s.cancel_at_period_end || s.cancel_at),
     product_id: md.product_id ?? `tactium_${tier}_${cycle}`,
     platform: "web",
     revenuecat_customer_id: customerId,

@@ -859,6 +859,7 @@ export interface DbSubscription {
   subjectType: string;
   currentPeriodEnd: string | null;
   scheduledPlanTier: string | null;
+  cancelAtPeriodEnd: boolean;
   billingPeriod: string | null;
 }
 
@@ -905,7 +906,7 @@ export async function fetchSubscription(): Promise<DbSubscription | null> {
   const { data, error } = await supabaseBrowser()
     .from("subscriptions")
     .select(
-      "id, status, plan_tier, platform, subject_type, current_period_end, scheduled_plan_tier, billing_period"
+      "id, status, plan_tier, platform, subject_type, current_period_end, scheduled_plan_tier, billing_period, cancel_at_period_end"
     )
     .in("status", ["trialing", "active", "grace_period"])
     // El periodo tiene que seguir vivo, no basta con el estado.
@@ -931,6 +932,7 @@ export async function fetchSubscription(): Promise<DbSubscription | null> {
     subjectType: data.subject_type,
     currentPeriodEnd: data.current_period_end,
     scheduledPlanTier: data.scheduled_plan_tier,
+    cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
     billingPeriod: data.billing_period,
   };
 }

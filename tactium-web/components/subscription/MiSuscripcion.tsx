@@ -82,8 +82,11 @@ function toSubscription(row: DbSubscription | null): Subscription {
       ? formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)
       : "—",
     period: yearly ? "/AÑO" : "/MES",
-    renewNote:
-      row.status === "trialing"
+    // Con la baja programada no hay renovación ni primer cobro: decir lo
+    // contrario es prometer un cargo que no va a llegar.
+    renewNote: row.cancelAtPeriodEnd
+      ? `No se renovará · termina el ${fmtDate(row.currentPeriodEnd)}`
+      : row.status === "trialing"
         ? `Primer cobro el ${fmtDate(row.currentPeriodEnd)}`
         : `Próxima renovación · ${fmtDate(row.currentPeriodEnd)}`,
     ...(scheduled
