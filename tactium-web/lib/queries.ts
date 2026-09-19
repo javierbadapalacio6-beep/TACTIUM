@@ -1067,6 +1067,8 @@ export async function createTournament(input: {
   startTime?: string | null;
   endTime?: string | null;
   maxRemovableHours?: number | null;
+  /** Condiciones de participación que el inscrito tiene que aceptar. */
+  terms?: string | null;
 }): Promise<{ id: string; code: string }> {
   const code = genTournamentCode();
   const social = input.format === "americano" || input.format === "mexicano";
@@ -1095,6 +1097,7 @@ export async function createTournament(input: {
       ...(input.maxRemovableHours != null
         ? { max_removable_hours: input.maxRemovableHours }
         : {}),
+      ...(input.terms?.trim() ? { terms: input.terms.trim() } : {}),
       // Nace como BORRADOR: hay que publicarlo (pagar la cuota) antes de que
       // nadie se inscriba. El boton "Pagar / publicar" lo pasa a 'open'.
       status: "draft",
@@ -3198,13 +3201,33 @@ export async function clearTournamentSchedule(
   if (error) throw error;
 }
 
-/** Estadísticas por pareja de un equipo (con quién funciona cada jugador). */
+export interface DbPairStat {
+  a: string;
+  b: string;
+  wins: number;
+  played: number;
+}
+
+/**
+ * Estadísticas por pareja de un equipo: con quién funciona cada jugador. La
+ * RPC devuelve ids, así que el nombre lo pone el llamador con la plantilla.
+ */
 export async function fetchTeamPairStats(
   teamId: string,
-): Promise<Record<string, unknown>[]> {
+): Promise<DbPairStat[]> {
   const { data, error } = await supabaseBrowser().rpc("team_pair_stats", {
     p_team_id: teamId,
   });
   if (error) throw error;
-  return (data ?? []) as Record<string, unknown>[];
+  return ((data ?? []) as {
+    player_a: string;
+    player_b: string;
+    wins: number;
+    played: number;
+  }[]).map((r) => ({
+    a: r.player_a,
+    b: r.player_b,
+    wins: r.wins ?? 0,
+    played: r.played ?? 0,
+  }));
 }

@@ -160,3 +160,29 @@ Capa pública que la app no necesita: `explore_tournaments`,
 5. Borrar equipo / club / jornada / torneo — destructivas, hoy solo en móvil.
 6. Variante activa de alineación — la funcionalidad está a medias.
 7. Compartir — es crecimiento, no mantenimiento; va aparte.
+
+---
+
+## Estado tras la implementación (2026-09-19)
+
+Cerrado todo lo de la lista. La comprobación que vale es el diff de RPCs; sólo
+quedan cuatro en la app, y las cuatro **deben** quedarse ahí:
+
+| RPC | Por qué no va a la web |
+|---|---|
+| `start_subscription_trial` | en web la prueba la abre Stripe Checkout |
+| `sync_subscription_from_revenuecat` | específico de las tiendas |
+| `link_subscription_to_club` | reconcilia compras restauradas (IAP) |
+| `set_scheduled_plan_change` | el cambio de plan diferido es del modelo de RevenueCat; en web lo gestiona el portal de Stripe |
+
+**Corrección de método:** la primera pasada se dejó RPCs fuera porque la app las
+envuelve en `rpcCall(...)` y la extracción sólo buscaba `.rpc(`. Si se repite la
+auditoría, hay que buscar los dos patrones.
+
+**Dos botones que mentían**, no huecos: «Borrar cuenta» (Ajustes) y «Borrar
+club» (Panel del club) tenían la interfaz entera —incluida la confirmación
+escribiendo el nombre— y ninguna llamada detrás. Los dos conectados.
+
+**Lo que sigue fuera, a propósito:** compartir (tarjetas de imagen). La app
+tiene tres y la web ninguna. No es paridad de gestión, es crecimiento, y
+merece decidirse aparte.

@@ -10,7 +10,11 @@ import {
   TYPE_NOTE,
   type TournamentType,
 } from "@/lib/tournament-data";
-import { createTournament, fetchClubTournaments } from "@/lib/queries";
+import {
+  createTournament,
+  defaultTournamentTerms,
+  fetchClubTournaments,
+} from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -164,7 +168,22 @@ export function CreateTournament() {
   const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
   const { clubId } = useSession();
+  const [terms, setTerms] = useState("");
+  const [termsBusy, setTermsBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  /** Trae el texto estándar del servidor, para no partir de una hoja en blanco. */
+  async function loadDefaultTerms() {
+    if (termsBusy) return;
+    setTermsBusy(true);
+    try {
+      setTerms(await defaultTournamentTerms());
+    } catch {
+      /* si falla, el club escribe las suyas y ya */
+    } finally {
+      setTermsBusy(false);
+    }
+  }
   const [err, setErr] = useState<string | null>(null);
 
   // Torneos reales del club (incluye borradores; se recarga al crear uno).
@@ -185,6 +204,7 @@ export function CreateTournament() {
     setErr(null);
     const res = await guardedWrite("crear el torneo", () =>
       createTournament({
+        terms: terms.trim() || null,
         clubId,
         name: name.trim(),
         format: TYPE_TO_FORMAT[type],
@@ -731,6 +751,60 @@ export function CreateTournament() {
                   </p>
                 </div>
               )}
+            </div>
+
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Label>CONDICIONES DE PARTICIPACIÓN · OPCIONAL</Label>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => void loadDefaultTerms()}
+                  disabled={termsBusy}
+                  style={{ padding: "8px 14px", fontSize: 12 }}
+                >
+                  {termsBusy ? "Cargando…" : "Partir de las estándar"}
+                </button>
+              </div>
+              <textarea
+                value={terms}
+                onChange={(e) => setTerms(e.target.value)}
+                rows={6}
+                placeholder="Lo que la pareja acepta al inscribirse (reordenar parejas, política de bajas…)."
+                style={{
+                  width: "100%",
+                  marginTop: 8,
+                  padding: "13px 15px",
+                  borderRadius: 12,
+                  border: "1px solid var(--hair-strong)",
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  fontSize: 13.5,
+                  lineHeight: 1.55,
+                  resize: "vertical",
+                  outline: "none",
+                  fontFamily: "'Satoshi', sans-serif",
+                }}
+              />
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  textWrap: "pretty",
+                }}
+              >
+                Quien se inscriba tendrá que marcarlas para poder pagar, y queda
+                constancia de lo que aceptó.
+              </p>
             </div>
 
             <div>

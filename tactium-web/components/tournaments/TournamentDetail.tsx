@@ -18,6 +18,7 @@ import {
   fetchTournamentMatches,
   fetchTournamentRegs,
   fetchRegsPayments,
+  mergeDivision,
   moveRegistration,
   setRegistrationPayment,
 } from "@/lib/queries";
@@ -986,6 +987,10 @@ export function TournamentDetail({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeFrom, setMergeFrom] = useState("");
+  const [mergeTo, setMergeTo] = useState("");
+  const [mergeClose, setMergeClose] = useState(true);
   const [moveReg, setMoveReg] = useState<{
     id: string;
     label: string;
@@ -1198,6 +1203,33 @@ export function TournamentDetail({
   }
 
   // Marca el cobro de una inscripción (organizador): pagada / pendiente.
+  /**
+   * Vuelca una categoría entera sobre otra. Es lo que se hace cuando una se
+   * queda con tres parejas y no da para cuadro: en vez de cancelarla, se juntan.
+   */
+  async function doMerge() {
+    const [fg, fc] = mergeFrom.split("|");
+    const [tg, tc] = mergeTo.split("|");
+    if (!fg || !fc || !tg || !tc || mergeFrom === mergeTo || busy) return;
+    setBusy(true);
+    const res = await guardedWrite("agrupar las categorías", () =>
+      mergeDivision({
+        tournamentId: id,
+        fromGender: fg,
+        fromCategory: fc,
+        toGender: tg,
+        toCategory: tc,
+        closeSource: mergeClose,
+      }),
+    );
+    setBusy(false);
+    setMergeOpen(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Categorías agrupadas");
+    } else setToast(res.reason);
+  }
+
   /** Vacía horas y pistas del horario para volver a generarlo desde cero. */
   async function clearSchedule() {
     if (busy) return;
@@ -2055,6 +2087,30 @@ export function TournamentDetail({
           <div
             style={{ height: 1, background: "var(--hair)", margin: "24px 0" }}
           />
+          <Eyebrow>AGRUPAR CATEGORÍAS</Eyebrow>
+          <p
+            style={{
+              margin: "12px 0 14px",
+              fontSize: 13,
+              color: "var(--text-muted)",
+              textWrap: "pretty",
+            }}
+          >
+            Si una categoría se queda con pocas parejas, vuélcala sobre otra en
+            vez de cancelarla. Las inscripciones se mantienen con su pago.
+          </p>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setMergeOpen(true)}
+            style={{ padding: "11px 18px", fontSize: 13 }}
+          >
+            Agrupar categorías
+          </button>
+
+          <div
+            style={{ height: 1, background: "var(--hair)", margin: "24px 0" }}
+          />
           <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
           <p
             style={{
@@ -2109,6 +2165,111 @@ export function TournamentDetail({
           onSave={saveResult}
           onClose={() => setEntry(null)}
         />
+      )}
+
+      {mergeOpen && (
+        <Modal open onClose={() => setMergeOpen(false)} labelledBy="agrupar-cat">
+          <h2 id="agrupar-cat" style={{ fontSize: 23 }}>
+            Agrupar categorías
+          </h2>
+          <p
+            style={{
+              margin: "10px 0 20px",
+              fontSize: 13.5,
+              color: "var(--text-muted)",
+              textWrap: "pretty",
+            }}
+          >
+            Todas las parejas de la primera pasan a la segunda.
+          </p>
+          {[
+            { label: "MUEVE LAS DE", value: mergeFrom, set: setMergeFrom },
+            { label: "A", value: mergeTo, set: setMergeTo },
+          ].map((f) => (
+            <div key={f.label} style={{ marginBottom: 16 }}>
+              <span
+                className="mono"
+                style={{
+                  display: "block",
+                  fontSize: 10,
+                  letterSpacing: "0.18em",
+                  color: "var(--text-faint)",
+                  marginBottom: 8,
+                }}
+              >
+                {f.label}
+              </span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(t?.genders ?? []).flatMap((g) =>
+                  (t?.categories ?? []).map((c) => {
+                    const v = `${g}|${c}`;
+                    const on = f.value === v;
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => f.set(v)}
+                        className="btn"
+                        style={{
+                          padding: "9px 14px",
+                          fontSize: 12.5,
+                          fontWeight: on ? 700 : 500,
+                          background: on ? "var(--accent-10)" : "transparent",
+                          color: on ? "var(--accent)" : "var(--text-muted)",
+                          border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                        }}
+                      >
+                        {c} · {g}
+                      </button>
+                    );
+                  }),
+                )}
+              </div>
+            </div>
+          ))}
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginTop: 6,
+              fontSize: 13.5,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={mergeClose}
+              onChange={() => setMergeClose((v) => !v)}
+            />
+            Cerrar la categoría de origen a nuevas inscripciones
+          </label>
+          <div
+            style={{
+              marginTop: 24,
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setMergeOpen(false)}
+              style={{ padding: "12px 20px", fontSize: 13.5 }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={!mergeFrom || !mergeTo || mergeFrom === mergeTo || busy}
+              onClick={() => void doMerge()}
+              style={{ padding: "12px 22px", fontSize: 13.5 }}
+            >
+              {busy ? "Agrupando…" : "Agrupar"}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {moveReg && (
