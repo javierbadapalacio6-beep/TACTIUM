@@ -3140,3 +3140,71 @@ export async function deleteTournament(tournamentId: string): Promise<void> {
     .eq("id", tournamentId);
   if (error) throw error;
 }
+
+/* ── Torneos · acciones de organización (paridad con la app) ─────── */
+
+/** Mueve una inscripción a otra categoría o género sin perder nada. */
+export async function moveRegistration(
+  regId: string,
+  gender: string,
+  category: string,
+): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("tournament_move_registration", {
+    p_reg_id: regId,
+    p_gender: gender,
+    p_category: category,
+  });
+  if (error) throw error;
+}
+
+/** Vuelca una categoría entera sobre otra (agrupar cuando se quedan pocas
+ *  parejas). `closeSource` deja la de origen cerrada a nuevas inscripciones. */
+export async function mergeDivision(input: {
+  tournamentId: string;
+  fromGender: string;
+  fromCategory: string;
+  toGender: string;
+  toCategory: string;
+  closeSource: boolean;
+}): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("tournament_merge_division", {
+    p_tournament_id: input.tournamentId,
+    p_from_gender: input.fromGender,
+    p_from_category: input.fromCategory,
+    p_to_gender: input.toGender,
+    p_to_category: input.toCategory,
+    p_close_source: input.closeSource,
+  });
+  if (error) throw error;
+}
+
+/** Texto estándar de condiciones de participación, para partir de algo. */
+export async function defaultTournamentTerms(): Promise<string> {
+  const { data, error } = await supabaseBrowser().rpc(
+    "tournament_default_terms",
+  );
+  if (error) throw error;
+  return (data as string) ?? "";
+}
+
+/** Vacía el horario del torneo: deja todos los partidos sin hora ni pista. */
+export async function clearTournamentSchedule(
+  tournamentId: string,
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("tournament_matches")
+    .update({ scheduled_at: null, court: null })
+    .eq("tournament_id", tournamentId);
+  if (error) throw error;
+}
+
+/** Estadísticas por pareja de un equipo (con quién funciona cada jugador). */
+export async function fetchTeamPairStats(
+  teamId: string,
+): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabaseBrowser().rpc("team_pair_stats", {
+    p_team_id: teamId,
+  });
+  if (error) throw error;
+  return (data ?? []) as Record<string, unknown>[];
+}

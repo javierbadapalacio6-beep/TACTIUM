@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { type Position } from "@/lib/team-data";
 import {
+  captainUnclaimPlayer,
   createPlayer,
   deletePlayer,
   fetchPlayers,
@@ -102,6 +103,24 @@ export function Roster() {
     } else {
       setToast(res.reason);
     }
+  }
+
+  /**
+   * Suelta la ficha de la cuenta a la que está vinculada. Útil cuando alguien
+   * se vincula al jugador equivocado: la ficha se queda, la cuenta se va.
+   */
+  async function unlinkAccount() {
+    if (busy || !editing || editing.id === "new" || !editing.userId) return;
+    setBusy(true);
+    const res = await guardedWrite("desvincular al jugador", () =>
+      captainUnclaimPlayer(editing.id),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setEditing(null);
+      setReloadKey((k) => k + 1);
+      setToast("Jugador desvinculado de su cuenta");
+    } else setToast(res.reason);
   }
 
   async function removePlayer() {
@@ -719,6 +738,16 @@ export function Roster() {
                 flexWrap: "wrap",
               }}
             >
+              {editing.id !== "new" && editing.userId && (
+                <button
+                  className="btn btn-ghost"
+                  disabled={busy}
+                  onClick={() => void unlinkAccount()}
+                  style={{ padding: "12px 18px", fontSize: 13.5 }}
+                >
+                  Desvincular cuenta
+                </button>
+              )}
               {editing.id !== "new" && (
                 <button
                   className="btn btn-danger-ghost"

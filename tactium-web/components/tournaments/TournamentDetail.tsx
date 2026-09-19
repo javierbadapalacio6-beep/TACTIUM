@@ -12,11 +12,13 @@ import {
   type ScheduledMatch,
 } from "@/lib/tournament-data";
 import {
+  clearTournamentSchedule,
   deleteTournament,
   fetchTournament,
   fetchTournamentMatches,
   fetchTournamentRegs,
   fetchRegsPayments,
+  moveRegistration,
   setRegistrationPayment,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
@@ -984,6 +986,12 @@ export function TournamentDetail({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [moveReg, setMoveReg] = useState<{
+    id: string;
+    label: string;
+    gender: string | null;
+    category: string | null;
+  } | null>(null);
   const [deletingT, setDeletingT] = useState(false);
 
   async function removeTournament() {
@@ -1190,6 +1198,35 @@ export function TournamentDetail({
   }
 
   // Marca el cobro de una inscripción (organizador): pagada / pendiente.
+  /** Vacía horas y pistas del horario para volver a generarlo desde cero. */
+  async function clearSchedule() {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("limpiar el horario", () =>
+      clearTournamentSchedule(id),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Horario vaciado");
+    } else setToast(res.reason);
+  }
+
+  /** Cambia de categoría o género una inscripción ya hecha, sin perderla. */
+  async function doMoveReg(gender: string, category: string) {
+    if (!moveReg || busy) return;
+    setBusy(true);
+    const res = await guardedWrite("mover la inscripción", () =>
+      moveRegistration(moveReg.id, gender, category),
+    );
+    setBusy(false);
+    setMoveReg(null);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Inscripción movida");
+    } else setToast(res.reason);
+  }
+
   async function markRegPayment(regId: string, status: "paid" | "pending_club") {
     if (busy) return;
     setBusy(true);
@@ -1605,9 +1642,37 @@ export function TournamentDetail({
               {regs.map((r) => (
                 <div key={r.id} className="tw-signup-row">
                   <span style={{ fontSize: 13.5, fontWeight: 700 }}>{pairName(r)}</span>
-                  <span className="mono" style={{ fontSize: 12 }}>
-                    {r.category ?? "—"}
-                  </span>
+                  {spectator ? (
+                    <span className="mono" style={{ fontSize: 12 }}>
+                      {r.category ?? "—"}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="mono"
+                      onClick={() =>
+                        setMoveReg({
+                          id: r.id,
+                          label: pairName(r),
+                          gender: r.gender,
+                          category: r.category,
+                        })
+                      }
+                      title="Mover de categoría"
+                      style={{
+                        fontSize: 12,
+                        background: "transparent",
+                        border: "1px dashed var(--hair-strong)",
+                        borderRadius: 8,
+                        padding: "3px 8px",
+                        color: "var(--text)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
+                      {r.category ?? "—"}
+                    </button>
+                  )}
                   <span
                     className="mono"
                     style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--text-faint)" }}
@@ -1947,9 +2012,30 @@ export function TournamentDetail({
         ))}
 
       {curTab === "horario" && (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <ScheduleGrid />
-        </Card>
+        <>
+          {!spectator && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: 12,
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => void clearSchedule()}
+                disabled={busy}
+                style={{ padding: "10px 16px", fontSize: 12.5 }}
+              >
+                Limpiar horario
+              </button>
+            </div>
+          )}
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <ScheduleGrid />
+          </Card>
+        </>
       )}
 
       {curTab === "config" && (
@@ -2023,6 +2109,65 @@ export function TournamentDetail({
           onSave={saveResult}
           onClose={() => setEntry(null)}
         />
+      )}
+
+      {moveReg && (
+        <Modal
+          open
+          onClose={() => setMoveReg(null)}
+          labelledBy="mover-inscripcion"
+        >
+          <h2 id="mover-inscripcion" style={{ fontSize: 23 }}>
+            Mover {moveReg.label}
+          </h2>
+          <p
+            style={{
+              margin: "10px 0 20px",
+              fontSize: 13.5,
+              color: "var(--text-muted)",
+              textWrap: "pretty",
+            }}
+          >
+            La pareja conserva su inscripción y su pago; solo cambia de cuadro.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(t?.genders ?? []).flatMap((g) =>
+              (t?.categories ?? []).map((c) => {
+                const same = g === moveReg.gender && c === moveReg.category;
+                return (
+                  <button
+                    key={`${g}-${c}`}
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={same || busy}
+                    onClick={() => void doMoveReg(g, c)}
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: 13.5,
+                      justifyContent: "flex-start",
+                      opacity: same ? 0.45 : 1,
+                    }}
+                  >
+                    {c} · {g}
+                    {same && " (actual)"}
+                  </button>
+                );
+              }),
+            )}
+          </div>
+          <div
+            style={{ marginTop: 22, display: "flex", justifyContent: "flex-end" }}
+          >
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setMoveReg(null)}
+              style={{ padding: "12px 20px", fontSize: 13.5 }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </Modal>
       )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}

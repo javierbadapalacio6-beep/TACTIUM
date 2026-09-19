@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   createMatchday,
   fetchMatchdays,
+  renumberSeasonMatchdays,
   fetchSeasons,
   type DbMatchday,
   type DbSeason,
@@ -75,6 +76,23 @@ export function SeasonDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  /**
+   * Renumera las jornadas 1..N por fecha. Tras borrar una en medio, la
+   * numeración queda con huecos y no hay forma de arreglarla a mano.
+   */
+  async function renumber() {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("renumerar las jornadas", () =>
+      renumberSeasonMatchdays(id),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Jornadas renumeradas");
+    } else setToast(res.reason);
+  }
 
   // La temporada vive bajo el equipo; las jornadas se piden por su id. Ambas van
   // en paralelo porque son independientes bajo RLS.
@@ -295,6 +313,16 @@ export function SeasonDetail({ id }: { id: string }) {
           );
         })}
         <div style={{ flex: 1 }} />
+        {!archived && tab === "jornadas" && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => void renumber()}
+            disabled={busy}
+            style={{ padding: "11px 18px", fontSize: 13 }}
+          >
+            Renumerar
+          </button>
+        )}
         {!archived && (
           <button
             className="btn btn-accent"

@@ -3,12 +3,18 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { fetchClub, fetchClubTeams, type DbClubTeam } from "@/lib/queries";
+import {
+  coverTeam,
+  deleteClub,
+  fetchClub,
+  fetchClubTeams,
+  type DbClubTeam,
+} from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { READ_ONLY_MESSAGE, WRITES_ENABLED } from "@/lib/writes";
+import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import {
   IconBuilding,
   IconChevronRight,
@@ -31,6 +37,9 @@ export function ClubDashboard() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const { data, loading, error } = useAsync<ClubData>(
     async () => {
@@ -40,7 +49,7 @@ export function ClubDashboard() {
       ]);
       return { club, teams };
     },
-    [clubId],
+    [clubId, reloadKey],
     !!clubId
   );
 
@@ -77,6 +86,33 @@ export function ClubDashboard() {
   const teams = data?.teams ?? [];
   const covered = teams.filter((t) => t.covered).length;
   const nameOk = !!club && typed.trim() === club.name;
+
+  async function doDeleteClub() {
+    if (!club || busy || !nameOk) return;
+    setBusy(true);
+    const res = await guardedWrite("borrar el club", () => deleteClub(club.id));
+    setBusy(false);
+    if (!res.ok) {
+      // El RPC se niega si el club tiene suscripción activa: hay que decirlo.
+      setDeleteOpen(false);
+      setToast(res.reason);
+      return;
+    }
+    // Recarga completa: la sesión cachea los clubes del usuario.
+    window.location.href = "/";
+  }
+
+  /** Gasta una plaza del plan del club para cubrir a un equipo suyo. */
+  async function doCoverTeam(teamId: string) {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("cubrir el equipo", () => coverTeam(teamId));
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Equipo cubierto con la suscripción del club");
+    } else setToast(res.reason);
+  }
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
@@ -231,7 +267,22 @@ export function ClubDashboard() {
                     {t.covered ? (
                       <span className="chip">Cubierto</span>
                     ) : (
-                      <span className="chip chip-warning">No cubierto</span>
+                      <button
+                        type="button"
+                        className="chip chip-warning"
+                        disabled={busy}
+                        onClick={(e) => {
+                          // La tarjeta entera es un Link: sin esto, cubrir al
+                          // equipo te sacaría de la pantalla.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void doCoverTeam(t.id);
+                        }}
+                        style={{ cursor: "pointer", border: "none" }}
+                        title="Cubrir con la suscripción del club"
+                      >
+                        No cubierto · cubrir
+                      </button>
                     )}
                     <div style={{ flex: 1 }} />
                     <span
@@ -378,10 +429,11 @@ export function ClubDashboard() {
           </button>
           <button
             className="btn btn-danger"
-            disabled={!nameOk || !WRITES_ENABLED}
+            disabled={!nameOk || !WRITES_ENABLED || busy}
+            onClick={() => void doDeleteClub()}
             style={{ padding: "12px 22px", fontSize: 13.5 }}
           >
-            Borrar club
+            {busy ? "Borrando…" : "Borrar club"}
           </button>
         </div>
       </Modal>
@@ -395,6 +447,8 @@ export function ClubDashboard() {
           initialFederation={club.federation}
         />
       )}
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
