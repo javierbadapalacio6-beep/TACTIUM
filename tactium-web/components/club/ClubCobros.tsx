@@ -97,9 +97,9 @@ export function ClubCobros() {
         <Eyebrow>CLUB · COBROS</Eyebrow>
         <h1 style={{ marginTop: 10, fontSize: 30 }}>Cobrar inscripciones</h1>
         <p style={{ margin: "10px 0 0", fontSize: 14, color: "var(--text-muted)" }}>
-          Conecta tu club con Stripe para cobrar online las inscripciones de tus
-          torneos. El dinero va a tu cuenta; TACTIUM se queda un 3 % por
-          inscripción.
+          Conecta tu club con Stripe para cobrar online las inscripciones de
+          tus torneos. El dinero va a tu cuenta: TACTIUM no cobra comisión y
+          solo se descuenta el coste de la pasarela (2 % + 0,25 € por cobro).
         </p>
       </div>
 

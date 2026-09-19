@@ -3,18 +3,37 @@
  *
  * TACTIUM es la plataforma; cada club una cuenta conectada Express. Las
  * inscripciones se cobran con destination charges hacia la cuenta del club, y
- * TACTIUM se queda una comisión (`application_fee`). Ver
+ * TACTIUM retiene por `application_fee` lo que le cuesta la pasarela. Ver
  * TACTIUM/docs/plan-inscripciones-connect.md.
  */
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Comisión de TACTIUM por inscripción, en puntos básicos. 300 = 3%. */
-export const INSCRIPTION_FEE_BPS = 300;
+/**
+ * Recuperación del COSTE DE PASARELA, en puntos básicos + fijo. No es margen.
+ *
+ * En un destination charge el comerciante ante Stripe es TACTIUM: la tarjeta se
+ * cobra en su cuenta, Stripe le factura a él y al club se le transfiere el
+ * precio íntegro. Sin retener nada, cada inscripción salía del bolsillo de
+ * TACTIUM — medido con un cobro real de 40 €: −0,31 €.
+ *
+ * 2% + 0,25 € cubre la tarifa estándar española (1,5% + 0,25 €) y deja un
+ * colchón para las tarjetas de fuera del EEE, que Stripe cobra bastante más
+ * caras y que no se pueden saber al crear el cobro. Decisión de producto
+ * (2026-09-19): el club se lleva el máximo posible y TACTIUM queda a la par.
+ */
+export const INSCRIPTION_FEE_BPS = 200;
+export const INSCRIPTION_FEE_FIXED_CENTS = 25;
 
-/** Comisión en céntimos para un importe dado (redondeo al céntimo). */
+/** Lo que se retiene, en céntimos, para un importe dado. */
 export function inscriptionFeeCents(amountCents: number): number {
-  return Math.round((amountCents * INSCRIPTION_FEE_BPS) / 10000);
+  if (amountCents <= 0) return 0;
+  const fee =
+    Math.round((amountCents * INSCRIPTION_FEE_BPS) / 10000) +
+    INSCRIPTION_FEE_FIXED_CENTS;
+  // Nunca por encima del importe: dejaría al club con una transferencia de 0
+  // y a Stripe rechazando el cobro.
+  return Math.min(fee, amountCents);
 }
 
 /**
