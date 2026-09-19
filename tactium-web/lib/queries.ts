@@ -2909,3 +2909,22 @@ export function fcpSameTeam(
   const nb = fcpNorm(b);
   return !!na && na === nb;
 }
+
+/* ── Cuenta ──────────────────────────────────────────────────────── */
+
+/**
+ * Elimina la cuenta del usuario logueado (RPC SECURITY DEFINER
+ * `delete_my_account`, la misma que usa la app).
+ *
+ * Borra SIEMPRE: si quedaba una suscripción de App Store o Google Play, esa
+ * sigue viva y hay que cancelarla aparte — por eso el diálogo lo avisa antes.
+ * El `DELETE FROM auth.users` arrastra en cascada perfil, clubes, equipos,
+ * temporadas, jornadas y alineaciones.
+ *
+ * Después de llamar hay que hacer `signOut()`: el JWT del cliente sigue en
+ * memoria apuntando a un usuario que ya no existe.
+ */
+export async function deleteMyAccount(): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("delete_my_account");
+  if (error) throw error;
+}

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ICONS,
   IconBell,
+  IconBuilding,
   IconCheck,
   IconChevronDown,
   IconMoon,
@@ -230,15 +231,27 @@ function useDismiss(open: boolean, close: () => void) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { role, user, teams, activeTeam, setActiveTeam, ready, signOut } =
-    useSession();
+  const {
+    role,
+    user,
+    teams,
+    activeTeam,
+    setActiveTeam,
+    clubs,
+    clubId,
+    setActiveClub,
+    ready,
+    signOut,
+  } = useSession();
   const { resolved, toggle } = useTheme();
 
   const [teamOpen, setTeamOpen] = useState(false);
+  const [clubOpen, setClubOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
 
   const teamRef = useDismiss(teamOpen, () => setTeamOpen(false));
+  const clubRef = useDismiss(clubOpen, () => setClubOpen(false));
   const bellRef = useDismiss(bellOpen, () => setBellOpen(false));
   const roleRef = useDismiss(roleOpen, () => setRoleOpen(false));
 
@@ -400,6 +413,121 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+
+        {/* Selector de club. Se muestra aunque solo haya uno: saber sobre qué
+            club estás actuando es justo lo que faltaba. Antes, las pantallas de
+            club usaban el primero que devolviera la consulta —sin ordenar— y no
+            había manera de cambiarlo. */}
+        {clubs.length > 0 && (
+          <div className="tw-side-team" ref={clubRef}>
+            <div className="eyebrow eyebrow-faint tw-side-eyebrow">
+              CLUB ACTIVO
+            </div>
+            <button
+              type="button"
+              onClick={() => setClubOpen((v) => !v)}
+              aria-expanded={clubOpen}
+              className="tw-teambtn"
+            >
+              <span
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 8,
+                  background: "var(--primary-dim)",
+                  color: "var(--accent)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flex: "none",
+                }}
+              >
+                <IconBuilding size={15} />
+              </span>
+              <span className="tw-navitem-label" style={{ flex: 1, minWidth: 0 }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    letterSpacing: "-0.01em",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {clubs.find((c) => c.id === clubId)?.name ?? "Sin club"}
+                </span>
+                <span
+                  className="mono"
+                  style={{
+                    display: "block",
+                    fontSize: 10,
+                    letterSpacing: "0.14em",
+                    color: "var(--text-faint)",
+                    marginTop: 2,
+                  }}
+                >
+                  {clubs.length > 1 ? `${clubs.length} CLUBES` : "CLUB"}
+                </span>
+              </span>
+              <span
+                className="tw-navitem-label"
+                style={{
+                  color: "var(--text-faint)",
+                  display: "flex",
+                  transform: clubOpen ? "rotate(180deg)" : "none",
+                  transition: "transform var(--dur-base) var(--ease)",
+                }}
+              >
+                <IconChevronDown size={15} />
+              </span>
+            </button>
+
+            {clubOpen && (
+              <div className="tw-popover" style={{ marginTop: 6, padding: 6 }}>
+                {clubs.map((c) => {
+                  const on = c.id === clubId;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveClub(c.id);
+                        setClubOpen(false);
+                      }}
+                      className="tw-popitem"
+                      style={{
+                        color: on ? "var(--accent)" : "var(--text-muted)",
+                        background: on ? "var(--accent-10)" : "transparent",
+                        fontWeight: on ? 700 : 500,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 6,
+                          background: on
+                            ? "var(--primary-dim)"
+                            : "var(--bg-card-2)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flex: "none",
+                        }}
+                      >
+                        <IconBuilding size={12} />
+                      </span>
+                      <span style={{ flex: 1, textAlign: "left" }}>{c.name}</span>
+                      {on && <IconCheck size={14} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Selector de equipo — el jugador suelto no tiene plantilla */}
         {hasTeamSwitcher(role) ? (

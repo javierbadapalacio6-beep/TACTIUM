@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import { useSession } from "@/lib/session";
+import { deleteMyAccount } from "@/lib/queries";
+import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
 import { IconAlert } from "@/components/Icon";
 
@@ -17,6 +19,8 @@ export function ZonaPeligro() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const emailOk =
     !!accountEmail &&
@@ -26,17 +30,33 @@ export function ZonaPeligro() {
   function openDialog() {
     setStep(1);
     setTyped("");
+    setError(null);
     setOpen(true);
   }
 
-  function advance() {
+  async function advance() {
     if (step === 1) {
       setStep(2);
       return;
     }
-    if (!emailOk) return;
-    // Aquí irá la llamada al RPC `delete_my_account`.
+    if (!emailOk || busy) return;
+
+    setBusy(true);
+    setError(null);
+    const res = await guardedWrite("eliminar la cuenta", deleteMyAccount);
+    setBusy(false);
+
+    if (!res.ok) {
+      // El diálogo se queda abierto: si falla, la cuenta sigue viva y el
+      // usuario tiene que saberlo. Cerrarlo aquí daría a entender lo contrario.
+      setError(res.reason);
+      return;
+    }
+
+    // La cuenta ya no existe, pero el JWT sigue en memoria apuntando a ella:
+    // sin cerrar sesión, la siguiente petición falla de forma rara.
     setOpen(false);
+    await signOut();
   }
 
   return (
@@ -206,6 +226,23 @@ export function ZonaPeligro() {
           </div>
         )}
 
+        {error && (
+          <p
+            role="alert"
+            style={{
+              margin: "18px 0 0",
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "color-mix(in srgb, var(--error) 12%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--error) 40%, transparent)",
+              color: "var(--text)",
+              fontSize: 13.5,
+            }}
+          >
+            No se ha podido eliminar la cuenta: {error}
+          </p>
+        )}
+
         <div
           style={{
             marginTop: 24,
@@ -218,6 +255,7 @@ export function ZonaPeligro() {
             type="button"
             className="btn btn-ghost"
             onClick={() => setOpen(false)}
+            disabled={busy}
             style={{ padding: "12px 20px", fontSize: 13.5 }}
           >
             Cancelar
@@ -225,11 +263,15 @@ export function ZonaPeligro() {
           <button
             type="button"
             className="btn btn-danger"
-            onClick={advance}
-            disabled={!canAdvance}
+            onClick={() => void advance()}
+            disabled={!canAdvance || busy}
             style={{ padding: "12px 22px", fontSize: 13.5 }}
           >
-            {step === 1 ? "Sí, continuar" : "Eliminar cuenta"}
+            {busy
+              ? "Eliminando…"
+              : step === 1
+                ? "Sí, continuar"
+                : "Eliminar cuenta"}
           </button>
         </div>
       </Modal>

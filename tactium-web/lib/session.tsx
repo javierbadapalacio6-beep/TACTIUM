@@ -52,6 +52,11 @@ export interface TeamRef {
   role: string;
 }
 
+export interface ClubRef {
+  id: string;
+  name: string;
+}
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -69,7 +74,11 @@ interface SessionValue {
   teams: TeamRef[];
   activeTeam: TeamRef | null;
   setActiveTeam: (id: string) => void;
+  /** Todos los clubes que administra el usuario, por nombre. */
+  clubs: ClubRef[];
+  /** El club sobre el que actúan las pantallas de club. */
   clubId: string | null;
+  setActiveClub: (id: string) => void;
   /** false mientras se resuelve la sesión y el rol. */
   ready: boolean;
   signOut: () => Promise<void>;
@@ -78,6 +87,7 @@ interface SessionValue {
 const SessionContext = createContext<SessionValue | null>(null);
 
 const ACTIVE_TEAM_KEY = "tactium-active-team";
+const ACTIVE_CLUB_KEY = "tactium-active-club";
 
 function initialsOf(name: string): string {
   return (
@@ -95,7 +105,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [role, setRole] = useState<Role>("suelto");
   const [teams, setTeams] = useState<TeamRef[]>([]);
-  const [clubId, setClubId] = useState<string | null>(null);
+  const [clubs, setClubs] = useState<ClubRef[]>([]);
+  const [activeClubId, setActiveClubId] = useState<string | null>(null);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -106,7 +117,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setRole("suelto");
       setTeams([]);
-      setClubId(null);
+      setClubs([]);
+      setActiveClubId(null);
       setReady(true);
       return;
     }
@@ -122,7 +134,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         .from("team_members")
         .select("role, teams(id, name, category, gender, club_id)")
         .eq("user_id", authUser.id),
-      sb.from("club_members").select("club_id").eq("user_id", authUser.id),
+      sb
+        .from("club_members")
+        .select("club_id, clubs(id, name)")
+        .eq("user_id", authUser.id),
     ]);
 
     const profile = profileRes.data;
@@ -156,7 +171,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         role: r.role,
       }));
 
-    const myClub = clubRes.data?.[0]?.club_id ?? null;
+    // Antes se cogía `clubRes.data[0].club_id` sin ordenar: con dos clubes te
+    // tocaba el que devolviera Postgres y no había forma de cambiarlo. Ahora se
+    // cargan todos y el usuario elige (la elección se guarda en el navegador).
+    const clubRows = (clubRes.data ?? []) as unknown as {
+      club_id: string;
+      clubs: { id: string; name: string } | { id: string; name: string }[] | null;
+    }[];
+    const myClubs: ClubRef[] = clubRows
+      .map((r) => {
+        const c = Array.isArray(r.clubs) ? r.clubs[0] : r.clubs;
+        return c ? { id: c.id, name: c.name } : null;
+      })
+      .filter((c): c is ClubRef => c !== null)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    const myClub = myClubs[0]?.id ?? null;
     const isCaptain = myTeams.some(
       (t) => t.role === "captain" || t.role === "admin"
     );
@@ -180,7 +209,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
     setRole(derived);
     setTeams(myTeams);
-    setClubId(myClub);
+    setClubs(myClubs);
+
+    let storedClub: string | null = null;
+    try {
+      storedClub = localStorage.getItem(ACTIVE_CLUB_KEY);
+    } catch {
+      /* sin persistencia */
+    }
+    setActiveClubId(
+      storedClub && myClubs.some((c) => c.id === storedClub)
+        ? storedClub
+        : myClub
+    );
 
     // Equipo activo: el guardado si sigue siendo suyo, si no el primero.
     let stored: string | null = null;
@@ -216,6 +257,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, [loadFor]);
 
+  const setActiveClub = useCallback((id: string) => {
+    setActiveClubId(id);
+    try {
+      localStorage.setItem(ACTIVE_CLUB_KEY, id);
+    } catch {
+      /* sin persistencia */
+    }
+  }, []);
+
   const setActiveTeam = useCallback((id: string) => {
     setActiveTeamId(id);
     try {
@@ -236,6 +286,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") window.location.href = "/?signedout=1";
   }, []);
 
+  const clubId = useMemo(
+    () =>
+      clubs.find((c) => c.id === activeClubId)?.id ?? clubs[0]?.id ?? null,
+    [clubs, activeClubId]
+  );
+
   const activeTeam = useMemo(
     () => teams.find((t) => t.id === activeTeamId) ?? teams[0] ?? null,
     [teams, activeTeamId]
@@ -249,7 +305,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         teams,
         activeTeam,
         setActiveTeam,
+        clubs,
         clubId,
+        setActiveClub,
         ready,
         signOut,
       }}
