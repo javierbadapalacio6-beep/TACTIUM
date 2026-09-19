@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Eyebrow, Modal, Toggle } from "@/components/ui";
 import { Toast } from "@/components/states";
-import { fetchTeam, updateTeam } from "@/lib/queries";
+import { deleteTeam, fetchTeam, updateTeam } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
 import { TEAM_CATEGORIES, TEAM_GROUPS } from "@/lib/federations";
 
@@ -18,18 +18,37 @@ export function EditTeamModal({
   teamId,
   teamName,
   initialCategory,
+  onDeleted,
 }: {
   open: boolean;
   onClose: () => void;
   teamId: string;
   teamName: string;
   initialCategory: string | null;
+  /** El padre decide a dónde ir: aquí ya no hay equipo que enseñar. */
+  onDeleted?: () => void;
 }) {
   const [cat, setCat] = useState(initialCategory ?? "2ª");
   const [hasGroup, setHasGroup] = useState(false);
   const [group, setGroup] = useState("A");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function doDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    const res = await guardedWrite("borrar el equipo", () => deleteTeam(teamId));
+    setDeleting(false);
+    if (!res.ok) {
+      setConfirmDelete(false);
+      setToast(res.reason);
+      return;
+    }
+    onClose();
+    onDeleted?.();
+  }
 
   // Rehidrata al abrir: la sesión no trae el grupo, así que se lee de la BD.
   useEffect(() => {
@@ -194,6 +213,58 @@ export function EditTeamModal({
             </p>
           )}
         </div>
+      </div>
+
+
+      <div
+        style={{
+          marginTop: 26,
+          paddingTop: 20,
+          borderTop: "1px solid var(--hair)",
+        }}
+      >
+        <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
+        <p
+          style={{
+            margin: "12px 0 14px",
+            fontSize: 13,
+            color: "var(--text-muted)",
+            textWrap: "pretty",
+          }}
+        >
+          {`Se borrará «${teamName}» con su plantilla, jornadas y alineaciones. No se puede deshacer.`}
+        </p>
+        {!confirmDelete ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setConfirmDelete(true)}
+            style={{ padding: "11px 18px", fontSize: 13.5 }}
+          >
+            Borrar equipo
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              style={{ padding: "11px 18px", fontSize: 13.5 }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => void doDelete()}
+              disabled={deleting}
+              style={{ padding: "11px 18px", fontSize: 13.5 }}
+            >
+              {deleting ? "Borrando…" : "Sí, borrar el equipo"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div

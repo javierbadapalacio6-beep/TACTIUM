@@ -60,6 +60,8 @@ export interface ClubRef {
 export interface SessionUser {
   id: string;
   name: string;
+  /** Nombre corto único (`profiles.username`). null si aún no ha puesto uno. */
+  username: string | null;
   initials: string;
   email: string | null;
   avatarUrl: string | null;
@@ -81,6 +83,8 @@ interface SessionValue {
   setActiveClub: (id: string) => void;
   /** false mientras se resuelve la sesión y el rol. */
   ready: boolean;
+  /** Recarga perfil, equipos y clubes (tras editar el perfil, por ejemplo). */
+  refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -201,6 +205,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser({
       id: authUser.id,
       name,
+      username: profile?.username ?? null,
       initials: initialsOf(name),
       email: profile?.email ?? authUser.email ?? null,
       avatarUrl: profile?.avatar_url ?? null,
@@ -275,6 +280,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    const { data } = await supabaseBrowser().auth.getUser();
+    await loadFor(data.user ?? null);
+  }, [loadFor]);
+
   const signOut = useCallback(async () => {
     try {
       await supabaseBrowser().auth.signOut();
@@ -309,6 +319,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         clubId,
         setActiveClub,
         ready,
+        refresh,
         signOut,
       }}
     >

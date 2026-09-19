@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Eyebrow, Modal } from "@/components/ui";
 import { Toast } from "@/components/states";
 import { FederationSelect } from "@/components/entry/start";
-import { updateClub } from "@/lib/queries";
+import { deleteClub, updateClub } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
 import { FEDERATIONS, type Federation } from "@/lib/federations";
 
@@ -35,6 +35,23 @@ export function EditClubModal({
   );
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function doDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    const res = await guardedWrite("borrar el club", () => deleteClub(clubId));
+    setDeleting(false);
+    if (!res.ok) {
+      // El RPC bloquea si hay suscripción activa: ese motivo hay que verlo.
+      setConfirmDelete(false);
+      setToast(res.reason);
+      return;
+    }
+    // Recarga completa: la sesión cachea los clubes del usuario.
+    window.location.href = "/";
+  }
 
   // Rehidrata al abrir para no arrastrar estado entre aperturas.
   useEffect(() => {
@@ -118,6 +135,58 @@ export function EditClubModal({
           </span>
           <FederationSelect value={federation} onChange={setFederation} />
         </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 26,
+          paddingTop: 20,
+          borderTop: "1px solid var(--hair)",
+        }}
+      >
+        <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
+        <p
+          style={{
+            margin: "12px 0 14px",
+            fontSize: 13,
+            color: "var(--text-muted)",
+            textWrap: "pretty",
+          }}
+        >
+          Se borrará el club con sus equipos, temporadas y torneos. No se puede
+          deshacer, y no se podrá si el club tiene una suscripción activa.
+        </p>
+        {!confirmDelete ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setConfirmDelete(true)}
+            style={{ padding: "11px 18px", fontSize: 13.5 }}
+          >
+            Borrar club
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              style={{ padding: "11px 18px", fontSize: 13.5 }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => void doDelete()}
+              disabled={deleting}
+              style={{ padding: "11px 18px", fontSize: 13.5 }}
+            >
+              {deleting ? "Borrando…" : "Sí, borrar el club"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div

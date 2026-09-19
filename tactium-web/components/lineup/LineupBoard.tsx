@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  cloneLineupVariantPairs,
   fetchMatchdayBundle,
   saveLineupVariant,
+  setActiveLineupVariant,
   type DbPlayer,
   type MatchdayBundle,
 } from "@/lib/queries";
@@ -63,9 +65,12 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const { activeTeam, role } = useSession();
   const teamId = activeTeam?.id ?? null;
 
+  // `reloadKey` fuerza recarga tras cambiar la variante oficial o clonar
+  // parejas: esos cambios viven en servidor y no se pueden reflejar en local.
+  const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
     () => fetchMatchdayBundle(id, teamId!),
-    [id, teamId],
+    [id, teamId, reloadKey],
     !!teamId
   );
 
@@ -111,6 +116,35 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const [order, setOrder] = useState<"Drive + Revés" | "Por fuerza">("Drive + Revés");
   const [notify, setNotify] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [variantBusy, setVariantBusy] = useState(false);
+
+  /** Marca la variante mostrada como la oficial (la que ve la plantilla). */
+  async function makeOfficial() {
+    if (!variant || variantBusy || variant.isActive) return;
+    setVariantBusy(true);
+    const res = await guardedWrite("hacer oficial la alineación", () =>
+      setActiveLineupVariant(variant.id),
+    );
+    setVariantBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(`«${variant.label}» es ahora la alineación oficial`);
+    } else setToast(res.reason);
+  }
+
+  /** Copia las parejas de otra variante sobre la actual, para partir de algo. */
+  async function copyFrom(sourceId: string, sourceLabel: string) {
+    if (!variant || variantBusy) return;
+    setVariantBusy(true);
+    const res = await guardedWrite("copiar las parejas", () =>
+      cloneLineupVariantPairs(sourceId, variant.id),
+    );
+    setVariantBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(`Parejas copiadas de «${sourceLabel}»`);
+    } else setToast(res.reason);
+  }
 
   // El bloqueo se deduce: no es capitán, acta cerrada, o forzado por props.
   const derivedLock: Lock =
@@ -528,6 +562,45 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
             );
           })}
         </div>
+
+        {variant && variants.length > 0 && !readOnly && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
+            {!variant.isActive && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={variantBusy}
+                onClick={() => void makeOfficial()}
+                style={{ padding: "9px 15px", fontSize: 12.5 }}
+              >
+                <IconCheck size={14} />
+                Hacer oficial esta alineación
+              </button>
+            )}
+            {variants
+              .filter((v) => v.id !== variant.id)
+              .map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={variantBusy}
+                  onClick={() => void copyFrom(v.id, v.label)}
+                  style={{ padding: "9px 15px", fontSize: 12.5 }}
+                >
+                  Copiar parejas de {v.label}
+                </button>
+              ))}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button

@@ -2928,3 +2928,215 @@ export async function deleteMyAccount(): Promise<void> {
   const { error } = await supabaseBrowser().rpc("delete_my_account");
   if (error) throw error;
 }
+
+/* ── Perfil propio ───────────────────────────────────────────────── */
+
+/**
+ * Nombre y nombre de usuario. Espejo de `setMyUsername` de la app: además de
+ * `profiles` hay que tocar los metadatos de auth, porque de ahí sale el nombre
+ * que se ve mientras la sesión no se recarga.
+ */
+export async function updateMyProfile(input: {
+  fullName: string;
+  username: string | null;
+}): Promise<void> {
+  const sb = supabaseBrowser();
+  const { data: auth } = await sb.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Sin sesión activa");
+
+  const username = input.username?.trim() || null;
+  const fullName = input.fullName.trim();
+  if (!fullName) throw new Error("El nombre no puede quedar vacío");
+
+  const { error } = await sb
+    .from("profiles")
+    .update({ full_name: fullName, username })
+    .eq("id", userId);
+  if (error) {
+    // 23505 = unique_violation → el nombre de usuario ya está cogido. Sin este
+    // caso, el usuario vería el error crudo de Postgres.
+    if ((error as { code?: string }).code === "23505") {
+      throw new Error("Ese nombre de usuario ya está en uso. Prueba otro.");
+    }
+    throw error;
+  }
+
+  const { error: authErr } = await sb.auth.updateUser({
+    data: { username, full_name: fullName },
+  });
+  if (authErr) throw authErr;
+}
+
+const AVATAR_BUCKET = "avatars";
+
+/**
+ * Sube el avatar al bucket público `avatars` y deja la URL en
+ * `profiles.avatar_url`. Misma estructura de rutas que la app
+ * (`{user_id}/avatar_{timestamp}.{ext}`): el timestamp va en el nombre para
+ * que cambie la URL pública y el CDN no siga sirviendo la foto vieja.
+ */
+export async function uploadMyAvatar(file: File): Promise<string> {
+  const sb = supabaseBrowser();
+  const { data: auth } = await sb.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Sin sesión activa");
+
+  if (!file.type.startsWith("image/")) {
+    throw new Error("El archivo tiene que ser una imagen");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("La imagen no puede pesar más de 5 MB");
+  }
+
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const filename = `avatar_${Date.now()}.${ext}`;
+  const path = `${userId}/${filename}`;
+
+  const { error: upErr } = await sb.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: true });
+  if (upErr) throw upErr;
+
+  // Limpieza de los anteriores: si no, cada cambio deja basura en storage.
+  // Que falle no invalida la subida, así que no se propaga.
+  try {
+    const { data: files } = await sb.storage.from(AVATAR_BUCKET).list(userId);
+    const old = (files ?? [])
+      .filter((f) => f.name !== filename)
+      .map((f) => `${userId}/${f.name}`);
+    if (old.length > 0) await sb.storage.from(AVATAR_BUCKET).remove(old);
+  } catch {
+    /* basura en storage, no es motivo para fallar */
+  }
+
+  const {
+    data: { publicUrl },
+  } = sb.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+
+  const { error } = await sb
+    .from("profiles")
+    .update({ avatar_url: publicUrl })
+    .eq("id", userId);
+  if (error) throw error;
+
+  return publicUrl;
+}
+
+/** Quita el avatar: borra los ficheros del usuario y limpia la columna. */
+export async function deleteMyAvatar(): Promise<void> {
+  const sb = supabaseBrowser();
+  const { data: auth } = await sb.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Sin sesión activa");
+
+  const { data: files } = await sb.storage.from(AVATAR_BUCKET).list(userId);
+  if (files && files.length > 0) {
+    await sb.storage
+      .from(AVATAR_BUCKET)
+      .remove(files.map((f) => `${userId}/${f.name}`));
+  }
+
+  const { error } = await sb
+    .from("profiles")
+    .update({ avatar_url: null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+/**
+ * Volcado completo de datos personales (RGPD art. 20, portabilidad). Lo genera
+ * el servidor con la RPC `export_my_data`, la misma que la app: exportar solo
+ * lo que se ve en pantalla no cumple el derecho de portabilidad.
+ */
+export async function exportMyData(): Promise<Record<string, unknown>> {
+  const { data, error } = await supabaseBrowser().rpc("export_my_data");
+  if (error) throw error;
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+/* ── Acciones destructivas y de gestión (paridad con la app) ─────── */
+
+/** Borra un equipo. La RPC `delete_team` pre-borra alineaciones y
+ *  disponibilidad: el orden de las cascadas no es trivial y por eso no se
+ *  hace con un DELETE a pelo. */
+export async function deleteTeam(teamId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("delete_team", {
+    p_team_id: teamId,
+  });
+  if (error) throw error;
+}
+
+/** Borra un club entero. Bloquea si tiene una suscripción activa, y borra los
+ *  equipos explícitamente antes (`teams.club_id` es SET NULL: sin eso los
+ *  equipos quedarían huérfanos en vez de borrarse). */
+export async function deleteClub(clubId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("delete_club", {
+    p_club_id: clubId,
+  });
+  if (error) throw error;
+}
+
+/** Cubre un equipo con la suscripción del club (consume una plaza del plan). */
+export async function coverTeam(teamId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("cover_team", {
+    p_team_id: teamId,
+  });
+  if (error) throw error;
+}
+
+/** El capitán desvincula a un jugador de la cuenta a la que estaba atado. */
+export async function captainUnclaimPlayer(playerId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("captain_unclaim_player", {
+    p_player_id: playerId,
+  });
+  if (error) throw error;
+}
+
+/** Renumera las jornadas de una temporada (1..N por fecha), tras borrar o
+ *  reordenar alguna. */
+export async function renumberSeasonMatchdays(seasonId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("renumber_season_matchdays", {
+    target_season: seasonId,
+  });
+  if (error) throw error;
+}
+
+/** Marca qué variante de alineación es la oficial (la que ve la plantilla). */
+export async function setActiveLineupVariant(variantId: string): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("set_active_lineup_variant", {
+    p_variant_id: variantId,
+  });
+  if (error) throw error;
+}
+
+/** Copia las parejas de una variante a otra, para partir de algo en vez de
+ *  montar la alternativa desde cero. */
+export async function cloneLineupVariantPairs(
+  sourceVariantId: string,
+  targetVariantId: string,
+): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("clone_lineup_variant_pairs", {
+    p_source_variant_id: sourceVariantId,
+    p_target_variant_id: targetVariantId,
+  });
+  if (error) throw error;
+}
+
+/** Borra una jornada. */
+export async function deleteMatchday(matchdayId: string): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("matchdays")
+    .delete()
+    .eq("id", matchdayId);
+  if (error) throw error;
+}
+
+/** Borra un torneo. */
+export async function deleteTournament(tournamentId: string): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("tournaments")
+    .delete()
+    .eq("id", tournamentId);
+  if (error) throw error;
+}

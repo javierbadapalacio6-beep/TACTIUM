@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   closeMatchday,
+  deleteMatchday,
   fetchMatchdayBundle,
   type DbPlayer,
   type MatchdayBundle,
@@ -74,6 +75,24 @@ export function MatchdayView({ id }: { id: string }) {
   const [confirmClose, setConfirmClose] = useState(false);
   const [woFor, setWoFor] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function removeMatchday() {
+    if (deleting) return;
+    setDeleting(true);
+    const res = await guardedWrite("eliminar la jornada", () =>
+      deleteMatchday(id),
+    );
+    setDeleting(false);
+    if (!res.ok) {
+      setConfirmDelete(false);
+      setToast(res.reason);
+      return;
+    }
+    // La jornada ya no existe: quedarse aquí daría un 404 al recargar.
+    window.location.href = "/temporadas";
+  }
 
   // Al llegar los datos se arma la tabla del acta: una fila por pista, con sus
   // sets agrupados y la pareja de la alineación activa.
@@ -375,6 +394,57 @@ export function MatchdayView({ id }: { id: string }) {
               <IconUpload size={19} />
               Sin foto
             </div>
+          )}
+
+          {isCaptain && (
+            <>
+              <div
+                style={{ height: 1, background: "var(--hair)", margin: "22px 0" }}
+              />
+              <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
+              <p
+                style={{
+                  margin: "12px 0 14px",
+                  fontSize: 13,
+                  color: "var(--text-muted)",
+                  textWrap: "pretty",
+                }}
+              >
+                Eliminar la jornada borra también su alineación, la
+                disponibilidad y los resultados. No se puede deshacer.
+              </p>
+              {!confirmDelete ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setConfirmDelete(true)}
+                  style={{ padding: "11px 18px", fontSize: 13 }}
+                >
+                  Eliminar jornada
+                </button>
+              ) : (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={deleting}
+                    style={{ padding: "11px 18px", fontSize: 13 }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => void removeMatchday()}
+                    disabled={deleting}
+                    style={{ padding: "11px 18px", fontSize: 13 }}
+                  >
+                    {deleting ? "Eliminando…" : "Sí, eliminar"}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </Card>
 

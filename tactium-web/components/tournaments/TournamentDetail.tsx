@@ -12,6 +12,7 @@ import {
   type ScheduledMatch,
 } from "@/lib/tournament-data";
 import {
+  deleteTournament,
   fetchTournament,
   fetchTournamentMatches,
   fetchTournamentRegs,
@@ -982,6 +983,21 @@ export function TournamentDetail({
   const [reloadKey, setReloadKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingT, setDeletingT] = useState(false);
+
+  async function removeTournament() {
+    if (deletingT) return;
+    setDeletingT(true);
+    const res = await guardedWrite("borrar el torneo", () => deleteTournament(id));
+    setDeletingT(false);
+    if (!res.ok) {
+      setConfirmDelete(false);
+      setToast(res.reason);
+      return;
+    }
+    window.location.href = "/club/torneos";
+  }
   const [entry, setEntry] = useState<EntryTarget | null>(null);
 
   // Vuelta del pago de inscripción (?inscripcion=ok): confirma y refresca la
@@ -1949,6 +1965,54 @@ export function TournamentDetail({
           >
             Editar torneo
           </Link>
+
+          <div
+            style={{ height: 1, background: "var(--hair)", margin: "24px 0" }}
+          />
+          <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
+          <p
+            style={{
+              margin: "12px 0 14px",
+              fontSize: 13,
+              color: "var(--text-muted)",
+              textWrap: "pretty",
+            }}
+          >
+            Borrar el torneo elimina sus inscripciones, cuadros y horario. No se
+            puede deshacer, y si ya se han cobrado inscripciones esos pagos no
+            se devuelven solos.
+          </p>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setConfirmDelete(true)}
+              style={{ padding: "11px 18px", fontSize: 13 }}
+            >
+              Borrar torneo
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deletingT}
+                style={{ padding: "11px 18px", fontSize: 13 }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => void removeTournament()}
+                disabled={deletingT}
+                style={{ padding: "11px 18px", fontSize: 13 }}
+              >
+                {deletingT ? "Borrando…" : "Sí, borrar el torneo"}
+              </button>
+            </div>
+          )}
         </Card>
       )}
 

@@ -998,6 +998,11 @@ export function Roster() {
           teamId={teamId}
           teamName={activeTeam?.name ?? "Equipo"}
           initialCategory={activeTeam?.category ?? null}
+          onDeleted={() => {
+            // Recarga completa: la sesión cachea equipos y el que acabamos de
+            // borrar seguiría apareciendo en el selector.
+            window.location.href = "/";
+          }}
         />
       )}
 
