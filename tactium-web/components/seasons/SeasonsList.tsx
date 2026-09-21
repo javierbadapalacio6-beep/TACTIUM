@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { type SeasonFormat } from "@/lib/team-data";
@@ -8,9 +7,24 @@ import { createSeason, fetchSeasons, type DbSeason } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
-import { IconCalendar, IconChevronRight, IconPlus } from "@/components/Icon";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  IconTile,
+  Input,
+  ListRow,
+  Modal,
+  Note,
+  PageHeader,
+  SectionHead,
+  Stat,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import { IconCalendar, IconPlus } from "@/components/Icon";
 
 const FORMATS: { key: SeasonFormat; note: string }[] = [
   { key: "Liga regular", note: "Jornadas en orden" },
@@ -76,57 +90,33 @@ export function SeasonsList() {
     }
   }
 
+  if (teamId && loading) return <SkeletonPage />;
+
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: 20,
-          marginBottom: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <Eyebrow>TEMPORADAS</Eyebrow>
-          <h1 style={{ marginTop: 10, fontSize: 30 }}>Temporadas</h1>
-          <p
-            className="mono"
-            style={{
-              margin: "8px 0 0",
-              fontSize: 11,
-              letterSpacing: "0.14em",
-              color: "var(--text-faint)",
-            }}
-          >
-            {activeTeam?.name} · {activeTeam?.category ?? ""}
-          </p>
-        </div>
-        <button
-          className="btn btn-accent"
-          onClick={() => setOpen(true)}
-          style={{ padding: "13px 22px", fontSize: 14 }}
-        >
-          <IconPlus size={16} />
-          Crear nueva temporada
-        </button>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        title="Temporadas"
+        lede="Cada temporada agrupa las jornadas de una liga o un playoff."
+        meta={[activeTeam?.name ?? null, activeTeam?.category ?? null]}
+        actions={
+          <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
+            Nueva temporada
+          </Btn>
+        }
+      />
 
       {!teamId ? (
         <Card>
           <EmptyState
-            icon={<IconCalendar size={34} />}
+            icon={<IconCalendar size={24} />}
             title="Sin equipo activo"
             body="Entra con una cuenta que pertenezca a un equipo."
           />
         </Card>
-      ) : loading ? (
-        <SkeletonCard />
       ) : error ? (
         <Card>
           <EmptyState
-            icon={<IconCalendar size={34} />}
+            icon={<IconCalendar size={24} />}
             title="No se pudieron cargar las temporadas"
             body={error}
           />
@@ -134,350 +124,159 @@ export function SeasonsList() {
       ) : SEASONS.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconCalendar size={34} />}
+            icon={<IconCalendar size={24} />}
             title="Sin temporadas"
             body="Crea la primera y empieza a planificar jornadas."
             action={
-              <button
-                className="btn btn-accent"
-                onClick={() => setOpen(true)}
-                style={{ padding: "13px 22px" }}
-              >
-                Crear primera temporada
-              </button>
+              <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={14} />}>
+                Crear temporada
+              </Btn>
             }
           />
         </Card>
       ) : (
         <>
           {active.map((s) => (
-            <Card
-              key={s.id}
-              style={{ border: "1.5px solid var(--accent)", marginBottom: 24 }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  gap: 20,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span className="chip">Activa</span>
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: "0.16em",
-                        color: "var(--text-faint)",
-                      }}
-                    >
-                      {PHASE_LABEL[s.phase].toUpperCase()}
-                    </span>
-                  </div>
-                  <h2 style={{ margin: "14px 0 0", fontSize: 26 }}>{s.name}</h2>
-                </div>
-                <Link
-                  href={`/temporadas/${s.id}`}
-                  className="btn btn-accent"
-                  style={{ padding: "12px 20px", fontSize: 13.5 }}
-                >
+            <Card key={s.id} flush style={{ borderColor: "var(--accent-40)" }}>
+              <CardHead title={s.name} sub={PHASE_LABEL[s.phase]}>
+                <Chip>Activa</Chip>
+                <BtnLink href={`/temporadas/${s.id}`} variant="accent" size="sm">
                   Abrir temporada
-                </Link>
-              </div>
-
+                </BtnLink>
+              </CardHead>
               <div
                 style={{
-                  marginTop: 24,
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                  gap: 20,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
                 }}
               >
-                {[
-                  { l: "JORNADAS", v: String(s.totalMatchdays ?? "—") },
-                  { l: "CATEGORÍA", v: s.category ?? "—" },
-                                    { l: "FASE", v: PHASE_LABEL[s.phase], accent: true },
-                ].map((k) => (
-                  <div key={k.l}>
-                    <div className="mono tw-stat-label">{k.l}</div>
-                    <div
-                      className="mono tw-stat-value"
-                      style={{
-                        fontSize: 24,
-                        ...(k.accent ? { color: "var(--accent)" } : null),
-                      }}
-                    >
-                      {k.v}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 20,
-                  height: 8,
-                  borderRadius: 999,
-                  background: "var(--hair-strong)",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: "0%",
-                    height: "100%",
-                    background: "var(--accent)",
-                  }}
-                />
+                <Stat label="Jornadas" value={s.totalMatchdays ?? "—"} />
+                <Stat label="Categoría" value={s.category ?? "—"} />
+                <Stat label="Formato" value={PHASE_LABEL[s.phase]} />
               </div>
             </Card>
           ))}
 
           {past.length > 0 && (
             <>
-              <Eyebrow tone="faint" style={{ marginBottom: 12 }}>
-                HISTÓRICO
-              </Eyebrow>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <SectionHead title="Histórico" count={past.length} />
+              <Card flush>
                 {past.map((s) => (
-                  <Link
+                  <ListRow
                     key={s.id}
                     href={`/temporadas/${s.id}`}
-                    style={{ color: "inherit" }}
-                  >
-                    <Card style={{ padding: 20, opacity: 0.8 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 16,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span style={{ flex: 1, minWidth: 160 }}>
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: 16,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {s.name}
-                          </span>
-                          <span
-                            className="mono"
-                            style={{
-                              display: "block",
-                              marginTop: 5,
-                              fontSize: 10,
-                              letterSpacing: "0.14em",
-                              color: "var(--text-faint)",
-                            }}
-                          >
-                            {PHASE_LABEL[s.phase].toUpperCase()} · {s.totalMatchdays ?? "—"} JORNADAS
-                          </span>
-                        </span>
-                        <span
-                          className="mono"
-                          style={{ fontSize: 13, color: "var(--text-muted)" }}
-                        >
-                          {PHASE_LABEL[s.phase]}
-                        </span>
-                        {!s.active && (
-                          <span className="chip chip-mute">Archivada</span>
-                        )}
-                        <span style={{ color: "var(--text-faint)", display: "flex" }}>
-                          <IconChevronRight size={16} />
-                        </span>
-                      </div>
-                    </Card>
-                  </Link>
+                    icon={
+                      <IconTile mute>
+                        <IconCalendar size={16} />
+                      </IconTile>
+                    }
+                    title={s.name}
+                    sub={`${PHASE_LABEL[s.phase]} · ${s.totalMatchdays ?? "—"} jornadas`}
+                    right={<Chip tone="mute">Archivada</Chip>}
+                  />
                 ))}
-              </div>
+              </Card>
             </>
           )}
         </>
       )}
 
       {/* ── Crear temporada ──────────────────────────────────────── */}
-      <Modal open={open} onClose={() => setOpen(false)} labelledBy="nueva-temp" width={520}>
-        <h2 id="nueva-temp" style={{ fontSize: 23 }}>
-          Crear temporada
-        </h2>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        labelledBy="nueva-temp"
+        width={520}
+        title="Crear temporada"
+        footer={
+          <>
+            <Btn onClick={() => setOpen(false)}>Cancelar</Btn>
+            <Btn variant="accent" disabled={busy} onClick={saveSeason}>
+              {busy
+                ? "Creando…"
+                : active.length > 0
+                  ? "Cerrar y crear nueva"
+                  : "Crear temporada"}
+            </Btn>
+          </>
+        }
+      >
         {active.length > 0 && (
-          <p
-            style={{
-              margin: "12px 0 0",
-              padding: "12px 16px",
-              borderRadius: 10,
-              background: "var(--warning-soft)",
-              border: "1px solid var(--warning)",
-              color: "var(--warning)",
-              fontSize: 12.5,
-            }}
-          >
+          <Note tone="warning" style={{ marginBottom: 18 }}>
             Ya tienes una temporada activa. Al crear una nueva, la actual se
             cierra y pasa al histórico.
-          </p>
+          </Note>
         )}
 
-        <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 18 }}>
-          <label>
-            <span
-              className="mono"
-              style={{
-                display: "block",
-                fontSize: 10,
-                letterSpacing: "0.2em",
-                color: "var(--text-faint)",
-                marginBottom: 7,
-              }}
-            >
-              NOMBRE
-            </span>
-            <input
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <Field label="Nombre" htmlFor="temporada-nombre">
+            <Input
+              id="temporada-nombre"
               type="text"
               placeholder="Temporada 26/27"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: 12,
-                border: "1px solid var(--hair-strong)",
-                background: "var(--bg-card)",
-                color: "var(--text)",
-                fontSize: 14,
-                outline: "none",
-                fontFamily: "'Satoshi', sans-serif",
-              }}
             />
-          </label>
+          </Field>
 
-          <div>
-            <span
-              className="mono"
-              style={{
-                display: "block",
-                fontSize: 10,
-                letterSpacing: "0.2em",
-                color: "var(--text-faint)",
-                marginBottom: 8,
-              }}
+          <Field label="Formato">
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: 8 }}
+              role="radiogroup"
+              aria-label="Formato"
             >
-              FORMATO
-            </span>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {FORMATS.map((f) => {
                 const on = format === f.key;
                 return (
                   <button
                     key={f.key}
                     type="button"
+                    role="radio"
+                    aria-checked={on}
                     onClick={() => setFormat(f.key)}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: 12,
-                      padding: "14px 16px",
-                      borderRadius: 12,
+                      minHeight: 44,
+                      padding: "0 14px",
+                      borderRadius: 10,
                       cursor: "pointer",
                       textAlign: "left",
+                      fontFamily: "var(--font-ui)",
                       background: on ? "var(--accent-10)" : "var(--bg-card-2)",
                       color: on ? "var(--accent)" : "var(--text)",
-                      border: `1.5px solid ${on ? "var(--accent)" : "transparent"}`,
-                      fontFamily: "'Satoshi', sans-serif",
+                      border: `1px solid ${on ? "var(--accent-40)" : "var(--line)"}`,
+                      transition:
+                        "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
                     }}
                   >
                     <span style={{ fontSize: 14, fontWeight: on ? 700 : 500 }}>
                       {f.key}
                     </span>
                     <span
-                      className="mono"
                       style={{
-                        fontSize: 9.5,
-                        letterSpacing: "0.14em",
+                        fontSize: 12.5,
                         color: on ? "var(--accent)" : "var(--text-faint)",
                       }}
                     >
-                      {f.note.toUpperCase()}
+                      {f.note}
                     </span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </Field>
 
           <div className="tw-form-grid">
-            {[
-              "NÚMERO DE JORNADAS · OPCIONAL",
-              "NÚMERO DE ELIMINATORIAS · OPCIONAL",
-            ].map((l) => (
-              <label key={l}>
-                <span
-                  className="mono"
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    letterSpacing: "0.18em",
-                    color: "var(--text-faint)",
-                    marginBottom: 7,
-                  }}
-                >
-                  {l}
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="mono"
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1px solid var(--hair-strong)",
-                    background: "var(--bg-card)",
-                    color: "var(--text)",
-                    fontSize: 14,
-                    outline: "none",
-                  }}
-                />
-              </label>
-            ))}
+            <Field label="Número de jornadas" hint="Opcional" htmlFor="temporada-jornadas">
+              <Input id="temporada-jornadas" type="text" inputMode="numeric" className="mono" />
+            </Field>
+            <Field label="Número de eliminatorias" hint="Opcional" htmlFor="temporada-elim">
+              <Input id="temporada-elim" type="text" inputMode="numeric" className="mono" />
+            </Field>
           </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 24,
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-          }}
-        >
-          <button
-            className="btn btn-ghost"
-            onClick={() => setOpen(false)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-accent"
-            disabled={busy}
-            onClick={saveSeason}
-            style={{ padding: "12px 22px", fontSize: 13.5 }}
-          >
-            {busy
-              ? "Creando…"
-              : active.length > 0
-                ? "Cerrar y crear nueva"
-                : "Crear temporada"}
-          </button>
         </div>
       </Modal>
 

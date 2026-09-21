@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { exploreTournaments } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow } from "@/components/ui";
+import { BtnLink, Card, Chip, IconTile, SectionHead } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconFlag, IconSearch, IconTrophy } from "@/components/Icon";
 import { PadelCourt3D } from "@/components/PadelCourt3D";
@@ -24,10 +24,10 @@ import { PadelCourt3D } from "@/components/PadelCourt3D";
 /** Cuántos torneos caben en la portada antes de mandar al listado completo. */
 const PREVIEW = 6;
 
-const STATUS_TONE: Record<string, string> = {
-  open: "var(--accent)",
-  in_progress: "var(--warning)",
-  finished: "var(--text-faint)",
+const STATUS_TONE: Record<string, "accent" | "warning" | "mute"> = {
+  open: "accent",
+  in_progress: "warning",
+  finished: "mute",
 };
 const STATUS_LABEL: Record<string, string> = {
   open: "Inscripción abierta",
@@ -51,7 +51,7 @@ export function PublicHome() {
   const searching = debounced.trim().length > 0;
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+    <div className="tw-page">
       {/* ── Entrada ──────────────────────────────────────────────────
           La pista 3D entra y se queda de fondo; el texto y el
           buscador se componen encima escalonados. No es una cortinilla que
@@ -62,17 +62,16 @@ export function PublicHome() {
         </div>
 
         <header className="tw-pub-hero-copy">
-          <Eyebrow style={{ marginBottom: 10 }}>EXPLORAR</Eyebrow>
-          <h1 style={{ fontSize: 38, lineHeight: 1.04, maxWidth: "18ch" }}>
+          {/* Único titular en tamaño de portada de toda la web. */}
+          <h1 style={{ fontSize: "clamp(28px, 4vw, 38px)", maxWidth: "18ch" }}>
             Torneos y federación, sin crear cuenta
           </h1>
           <p
             style={{
               margin: "14px 0 0",
-              fontSize: 15,
+              fontSize: 14,
               color: "var(--text-muted)",
               maxWidth: "56ch",
-              textWrap: "pretty",
             }}
           >
             Cuadros, horarios y resultados de los torneos que organizan los
@@ -94,9 +93,8 @@ export function PublicHome() {
                 border: "none",
                 background: "transparent",
                 color: "var(--text)",
-                fontSize: 14.5,
+                fontSize: 14,
                 outline: "none",
-                fontFamily: "'Satoshi', sans-serif",
               }}
             />
           </div>
@@ -104,39 +102,23 @@ export function PublicHome() {
       </section>
 
       {/* ── Torneos ──────────────────────────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 16,
-          marginBottom: 14,
-        }}
+      <SectionHead
+        title={searching ? "Resultados" : "Torneos ahora mismo"}
+        count={rows.length > 0 ? rows.length : undefined}
       >
-        <Eyebrow tone="faint">
-          {searching ? "RESULTADOS" : "TORNEOS AHORA MISMO"}
-        </Eyebrow>
         {rows.length > PREVIEW && (
-          <Link
-            href="/torneos"
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "var(--accent)",
-              textDecoration: "none",
-            }}
-          >
-            Ver los {rows.length} torneos →
+          <Link href="/torneos" className="link-action">
+            Ver los {rows.length} torneos
           </Link>
         )}
-      </div>
+      </SectionHead>
 
       {tournaments.loading ? (
         <SkeletonCard />
       ) : tournaments.error ? (
         <Card>
           <EmptyState
-            icon={<IconTrophy size={34} />}
+            icon={<IconTrophy size={24} />}
             title="No se han podido cargar los torneos"
             body={tournaments.error}
           />
@@ -144,7 +126,7 @@ export function PublicHome() {
       ) : shown.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconTrophy size={34} />}
+            icon={<IconTrophy size={24} />}
             title={searching ? "Ningún torneo con esa búsqueda" : "Todavía no hay torneos"}
             body={
               searching
@@ -157,20 +139,14 @@ export function PublicHome() {
         <div className="tw-tourney-cards">
           {shown.map((t) => (
             <Link key={t.id} href={`/torneos/${t.id}`} style={{ color: "inherit" }}>
-              <Card style={{ padding: 20, height: "100%" }}>
-                <span
-                  className="chip"
-                  style={{
-                    color: STATUS_TONE[t.status] ?? "var(--text-faint)",
-                    borderColor: STATUS_TONE[t.status] ?? "var(--hair-strong)",
-                  }}
-                >
+              <Card hover style={{ height: "100%" }}>
+                <Chip tone={STATUS_TONE[t.status] ?? "mute"}>
                   {STATUS_LABEL[t.status] ?? t.status}
-                </span>
+                </Chip>
                 <div
                   style={{
                     marginTop: 12,
-                    fontSize: 17,
+                    fontSize: 15,
                     fontWeight: 700,
                     letterSpacing: "-0.01em",
                   }}
@@ -178,28 +154,26 @@ export function PublicHome() {
                   {t.name}
                 </div>
                 <div
-                  className="mono"
                   style={{
-                    marginTop: 6,
-                    fontSize: 10,
-                    letterSpacing: "0.14em",
-                    color: "var(--text-faint)",
+                    marginTop: 4,
+                    fontSize: 12.5,
+                    color: "var(--text-muted)",
                   }}
                 >
-                  {(t.club_name ?? "SIN CLUB").toUpperCase()}
-                  {t.location ? ` · ${t.location.toUpperCase()}` : ""}
+                  {t.club_name ?? "Sin club"}
+                  {t.location ? ` · ${t.location}` : ""}
                 </div>
                 {t.players != null && (
                   <div
                     style={{
                       marginTop: 14,
                       paddingTop: 14,
-                      borderTop: "1px solid var(--hair)",
-                      fontSize: 13,
+                      borderTop: "1px solid var(--line)",
+                      fontSize: 12.5,
                       color: "var(--text-muted)",
                     }}
                   >
-                    {t.players} jugadores
+                    <span className="mono">{t.players}</span> jugadores
                   </div>
                 )}
               </Card>
@@ -211,70 +185,37 @@ export function PublicHome() {
       {/* ── Federación y alta ────────────────────────────────────── */}
       <div className="tw-pub-home-split">
         <Link href="/federacion" style={{ color: "inherit" }}>
-          <Card style={{ height: "100%" }}>
-            <IconFlag size={26} />
-            <h2 style={{ margin: "14px 0 0", fontSize: 20 }}>
+          <Card hover style={{ height: "100%" }}>
+            <IconTile>
+              <IconFlag size={16} />
+            </IconTile>
+            <h2 style={{ margin: "14px 0 0", fontSize: 18 }}>
               Competición federada
             </h2>
-            <p
-              style={{
-                margin: "10px 0 0",
-                fontSize: 14,
-                color: "var(--text-muted)",
-                textWrap: "pretty",
-              }}
-            >
+            <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
               Clasificaciones, jornadas, actas y rankings de la Federación
               Cántabra de Pádel. Abierto, sin cuenta.
             </p>
-            <span
-              style={{
-                display: "inline-block",
-                marginTop: 16,
-                fontSize: 13,
-                fontWeight: 700,
-                color: "var(--accent)",
-              }}
-            >
-              Explorar la federación →
+            <span className="link-action" style={{ marginTop: 16 }}>
+              Explorar la federación
             </span>
           </Card>
         </Link>
 
         <Card style={{ height: "100%" }}>
-          <IconTrophy size={26} />
-          <h2 style={{ margin: "14px 0 0", fontSize: 20 }}>¿Organizas torneos?</h2>
-          <p
-            style={{
-              margin: "10px 0 0",
-              fontSize: 14,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
+          <IconTile mute>
+            <IconTrophy size={16} />
+          </IconTile>
+          <h2 style={{ margin: "14px 0 0", fontSize: 18 }}>¿Organizas torneos?</h2>
+          <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
             Monta el cuadro, reparte horarios y publica resultados en directo.
             Hasta 16 parejas es gratis.
           </p>
-          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <Link
-              href="/empezar"
-              className="btn btn-accent"
-              style={{ padding: "11px 20px", fontSize: 13.5 }}
-            >
+          <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+            <BtnLink href="/empezar" variant="accent">
               Crear cuenta
-            </Link>
-            <Link
-              href="/pro"
-              className="btn"
-              style={{
-                padding: "11px 20px",
-                fontSize: 13.5,
-                border: "1px solid var(--hair-strong)",
-                color: "var(--text)",
-              }}
-            >
-              Ver planes
-            </Link>
+            </BtnLink>
+            <BtnLink href="/pro">Ver planes</BtnLink>
           </div>
         </Card>
       </div>

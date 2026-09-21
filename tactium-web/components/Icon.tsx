@@ -293,7 +293,8 @@ export const IconSliders = (p: Props) => (
   </Svg>
 );
 
-/** Resolutor por nombre — lo usa `lib/nav.ts`, que no puede traer JSX. */
+/** Resolutor por nombre — lo usan `lib/nav.ts` y `lib/account-data.ts`, que no
+ *  pueden traer JSX. */
 export const ICONS = {
   home: IconHome,
   calendar: IconCalendar,
@@ -307,4 +308,14 @@ export const ICONS = {
   clock: IconClock,
   receipt: IconReceipt,
   userPlus: IconUserPlus,
+  sun: IconSun,
+  bell: IconBell,
+  user: IconUser,
+  creditCard: IconCreditCard,
+  info: IconInfo,
+  file: IconFile,
+  alert: IconAlert,
+  settings: IconSettings,
+  lock: IconLock,
+  search: IconSearch,
 } as const;

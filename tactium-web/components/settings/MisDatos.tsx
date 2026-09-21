@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useSession } from "@/lib/session";
+import { ROLE_LABELS, useSession } from "@/lib/session";
 import {
   deleteMyAvatar,
   exportMyData,
@@ -11,9 +10,17 @@ import {
   uploadMyAvatar,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow } from "@/components/ui";
+import {
+  Avatar,
+  Btn,
+  Card,
+  CardHead,
+  Field,
+  Input,
+  ListRow,
+} from "@/components/ui";
 import { Toast } from "@/components/states";
-import { IconChevronRight, IconDownload } from "@/components/Icon";
+import { IconDownload, IconFile, IconLock } from "@/components/Icon";
 
 /**
  * Mis datos (RGPD) y edición del perfil.
@@ -22,17 +29,6 @@ import { IconChevronRight, IconDownload } from "@/components/Icon";
  * portabilidad, es una captura. Se pide el volcado completo al servidor con la
  * RPC `export_my_data`, la misma que usa la app.
  */
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid var(--hair-strong)",
-  background: "var(--bg-card)",
-  color: "var(--text)",
-  fontSize: 14,
-  outline: "none",
-};
-
 export function MisDatos() {
   const { user, role, teams, clubId, refresh } = useSession();
   const [downloading, setDownloading] = useState(false);
@@ -97,18 +93,14 @@ export function MisDatos() {
       [
         { label: "Nombre", value: user?.name || "—", mono: false },
         { label: "Email", value: user?.email || "—", mono: false },
-        { label: "Rol", value: user?.roleLabel || role, mono: false },
+        { label: "Rol", value: ROLE_LABELS[role] ?? role, mono: false },
         {
           label: "Equipos a los que perteneces",
           value: String(teams.length),
           mono: true,
         },
-        {
-          label: "Club",
-          value: clubId ? "Sí" : "No",
-          mono: true,
-        },
-        { label: "ID interno", value: user?.id || "—", mono: true },
+        { label: "Club", value: clubId ? "Sí" : "No", mono: false },
+        { label: "Identificador interno", value: user?.id || "—", mono: true },
       ] as { label: string; value: string; mono: boolean }[],
     [user, role, teams, clubId],
   );
@@ -142,303 +134,146 @@ export function MisDatos() {
     }
   }
 
-  const initials = (user?.initials ?? "··").toUpperCase();
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <Card>
-        <Eyebrow>TU PERFIL</Eyebrow>
-        <h2 style={{ margin: "14px 0 20px", fontSize: 24 }}>
-          Cómo te ven los demás
-        </h2>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* ── Perfil ────────────────────────────────────────────────── */}
+      <Card flush>
+        <CardHead title="Tu perfil" sub="Cómo te ven los demás en TACTIUM" />
+        <div className="card-body">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              flexWrap: "wrap",
+              paddingBottom: 18,
+              marginBottom: 18,
+              borderBottom: "1px solid var(--line)",
+            }}
+          >
+            <Avatar initials={user?.initials ?? "··"} src={user?.avatarUrl} size={64} />
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 18,
-            flexWrap: "wrap",
-            paddingBottom: 22,
-            marginBottom: 22,
-            borderBottom: "1px solid var(--hair)",
-          }}
-        >
-          {user?.avatarUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={user.avatarUrl}
-              alt="Tu foto de perfil"
-              width={72}
-              height={72}
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                objectFit: "cover",
-                border: "1px solid var(--hair-strong)",
-              }}
-            />
-          ) : (
-            <span
-              aria-hidden
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                background: "var(--primary-dim)",
-                color: "var(--accent)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 22,
-                fontWeight: 700,
-              }}
-            >
-              {initials}
-            </span>
-          )}
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700 }}>
+                {user?.name ?? "Tu cuenta"}
+              </div>
+              <div style={{ marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
+                JPG, PNG o WebP. Se recorta en cuadrado.
+              </div>
+            </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              onChange={(e) => {
-                void pickAvatar(e.target.files?.[0]);
-                // Sin esto, elegir el mismo archivo dos veces no dispara change.
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => fileRef.current?.click()}
-              disabled={avatarBusy}
-              style={{ padding: "11px 18px", fontSize: 13.5 }}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+                onChange={(e) => {
+                  void pickAvatar(e.target.files?.[0]);
+                  // Sin esto, elegir el mismo archivo dos veces no dispara change.
+                  e.target.value = "";
+                }}
+              />
+              <Btn onClick={() => fileRef.current?.click()} disabled={avatarBusy}>
+                {avatarBusy ? "Subiendo…" : user?.avatarUrl ? "Cambiar foto" : "Subir foto"}
+              </Btn>
+              {user?.avatarUrl && (
+                <Btn variant="quiet" onClick={() => void removeAvatar()} disabled={avatarBusy}>
+                  Quitar
+                </Btn>
+              )}
+            </div>
+          </div>
+
+          <div className="tw-form-grid">
+            <Field label="Nombre" htmlFor="perfil-nombre">
+              <Input
+                id="perfil-nombre"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Tu nombre y apellidos"
+              />
+            </Field>
+
+            <Field
+              label="Nombre de usuario"
+              htmlFor="perfil-usuario"
+              hint="Sin espacios y único. Es el que se ve en tu perfil público."
             >
-              {avatarBusy ? "Subiendo…" : user?.avatarUrl ? "Cambiar foto" : "Subir foto"}
-            </button>
-            {user?.avatarUrl && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => void removeAvatar()}
-                disabled={avatarBusy}
-                style={{ padding: "11px 18px", fontSize: 13.5 }}
-              >
-                Quitar
-              </button>
-            )}
+              <Input
+                id="perfil-usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="tunombre"
+              />
+            </Field>
           </div>
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 16,
-          }}
-        >
-          <label style={{ display: "block" }}>
-            <span
-              className="mono"
-              style={{
-                display: "block",
-                fontSize: 10,
-                letterSpacing: "0.18em",
-                color: "var(--text-faint)",
-                marginBottom: 8,
-              }}
-            >
-              NOMBRE
-            </span>
-            <input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Tu nombre y apellidos"
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={{ display: "block" }}>
-            <span
-              className="mono"
-              style={{
-                display: "block",
-                fontSize: 10,
-                letterSpacing: "0.18em",
-                color: "var(--text-faint)",
-                marginBottom: 8,
-              }}
-            >
-              NOMBRE DE USUARIO
-            </span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="sin espacios, único"
-              style={inputStyle}
-            />
-          </label>
-        </div>
-
-        <div
-          style={{
-            marginTop: 20,
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <button
-            type="button"
-            className="btn btn-accent"
+        <div className="card-foot" style={{ justifyContent: "flex-end" }}>
+          <Btn
+            variant="accent"
             onClick={() => void saveProfile()}
             disabled={!profileDirty || savingProfile}
-            style={{ padding: "12px 22px", fontSize: 13.5 }}
           >
             {savingProfile ? "Guardando…" : "Guardar cambios"}
-          </button>
+          </Btn>
         </div>
       </Card>
 
-      <Card>
-        <Eyebrow>MIS DATOS</Eyebrow>
-        <h2 style={{ margin: "14px 0 20px", fontSize: 24 }}>
-          Resumen de tus datos
-        </h2>
-
-        <div
-          style={{
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-            overflow: "hidden",
-          }}
-        >
-          {rows.map((d, i) => (
-            <div
-              key={d.label}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1.2fr",
-                gap: 20,
-                padding: "12px 18px",
-                borderBottom:
-                  i === rows.length - 1
-                    ? "none"
-                    : "1px solid var(--hair)",
-              }}
-            >
-              <span
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.18em",
-                  textTransform: "uppercase",
-                  color: "var(--text-faint)",
-                }}
-              >
-                {d.label}
-              </span>
-              <span
-                className={d.mono ? "mono" : undefined}
-                style={
-                  d.mono
-                    ? { fontSize: 13, letterSpacing: "0.08em" }
-                    : { fontSize: 13.5 }
-                }
-              >
-                {d.value}
-              </span>
-            </div>
-          ))}
+      {/* ── Resumen de datos ──────────────────────────────────────── */}
+      <Card flush>
+        <CardHead title="Resumen de tus datos" />
+        <div className="card-body">
+          <dl className="kv" style={{ margin: 0, gridTemplateColumns: "minmax(140px, 220px) minmax(0, 1fr)" }}>
+            {rows.map((d) => (
+              <div key={d.label} style={{ display: "contents" }}>
+                <dt>{d.label}</dt>
+                <dd className={d.mono ? "mono" : undefined} style={{ wordBreak: "break-all" }}>
+                  {d.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </Card>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 20,
-        }}
-      >
-        <Card
-          style={{
-            padding: 24,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 20,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <Eyebrow>EXPORTAR</Eyebrow>
-            <div
-              style={{
-                marginTop: 12,
-                fontSize: 13.5,
-                color: "var(--text-muted)",
-                maxWidth: "36ch",
-                textWrap: "pretty",
-              }}
-            >
-              Un archivo con todo lo que guardamos de ti.
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn btn-accent"
-            onClick={exportJson}
-            disabled={downloading}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            <IconDownload size={15} />
-            Descargar mis datos como JSON
-          </button>
-        </Card>
-
-        <Card style={{ padding: 24 }}>
-          <Eyebrow>POLÍTICAS</Eyebrow>
-          <div style={{ marginTop: 16 }}>
-            <Link
-              href="/legal/terminos"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 0",
-                borderBottom: "1px solid var(--hair)",
-                color: "var(--text)",
-              }}
-            >
-              <span style={{ flex: 1, fontSize: 13.5 }}>
-                Términos del servicio
-              </span>
-              <span style={{ color: "var(--text-faint)", display: "flex" }}>
-                <IconChevronRight size={15} />
-              </span>
-            </Link>
-            <Link
-              href="/legal/privacidad"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 0",
-                color: "var(--text)",
-              }}
-            >
-              <span style={{ flex: 1, fontSize: 13.5 }}>
-                Política de privacidad
-              </span>
-              <span style={{ color: "var(--text-faint)", display: "flex" }}>
-                <IconChevronRight size={15} />
-              </span>
-            </Link>
-          </div>
-        </Card>
-      </div>
+      {/* ── Exportar y políticas ──────────────────────────────────── */}
+      <Card flush>
+        <CardHead title="Portabilidad y políticas" />
+        <ListRow
+          icon={
+            <span className="tile-icon">
+              <IconDownload size={16} />
+            </span>
+          }
+          title="Descargar mis datos"
+          sub="Un archivo JSON con todo lo que guardamos de ti."
+          chevron={false}
+          right={
+            <Btn size="sm" variant="accent" onClick={exportJson} disabled={downloading}>
+              {downloading ? "Preparando…" : "Descargar"}
+            </Btn>
+          }
+        />
+        <ListRow
+          href="/legal/terminos"
+          icon={
+            <span className="tile-icon tile-icon-mute">
+              <IconFile size={16} />
+            </span>
+          }
+          title="Términos del servicio"
+        />
+        <ListRow
+          href="/legal/privacidad"
+          icon={
+            <span className="tile-icon tile-icon-mute">
+              <IconLock size={16} />
+            </span>
+          }
+          title="Política de privacidad"
+        />
+      </Card>
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>

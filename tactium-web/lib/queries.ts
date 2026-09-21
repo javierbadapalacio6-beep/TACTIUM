@@ -1547,6 +1547,28 @@ export async function fetchFcpGroups(
 }
 
 /**
+ * Cabecera de un grupo: su nombre legible y la temporada. La pantalla de
+ * clasificación recibe el `id_grupo` por la URL y sin esto pintaba el propio
+ * identificador como título ("31271" en vez de "2ª Categoría Femenina · A").
+ */
+export async function fetchFcpGroupHeader(
+  idGrupo: string,
+): Promise<{ nombre: string; genero: string | null; temporada: string | null } | null> {
+  const { data, error } = await supabaseBrowser()
+    .from("fcp_grupos")
+    .select("nombre, genero, temporada")
+    .eq("id_grupo", idGrupo)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    nombre: data.nombre ?? idGrupo,
+    genero: data.genero ?? null,
+    temporada: data.temporada ?? null,
+  };
+}
+
+/**
  * Nombre de la lista de ranking en la FCP según género y categoría. Las listas
  * generales usan "MASCULINO/FEMENINO"; las de división "MASCULINA/FEMENINA".
  * Copiado literal de la app: si no casa exacto, la consulta no devuelve nada.

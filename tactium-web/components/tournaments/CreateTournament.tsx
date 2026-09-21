@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
 
 import {
   CATEGORIES,
@@ -18,8 +18,34 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow, Toggle } from "@/components/ui";
-import { IconCheck, IconCopy, IconUpload } from "@/components/Icon";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  IconTile,
+  Input,
+  Note,
+  PageHeader,
+  SectionHead,
+  Segmented,
+  Stat,
+  StatRow,
+  Table,
+  Textarea,
+  Toggle,
+} from "@/components/ui";
+import { EmptyState, Skeleton } from "@/components/states";
+import {
+  IconAlert,
+  IconCheck,
+  IconCopy,
+  IconInfo,
+  IconTrophy,
+  IconUpload,
+} from "@/components/Icon";
 
 /** Estado del torneo → etiqueta (torneos reales, no la maqueta). */
 const TOURNAMENT_STATUS_LABEL: Record<string, string> = {
@@ -28,6 +54,18 @@ const TOURNAMENT_STATUS_LABEL: Record<string, string> = {
   in_progress: "En juego",
   finished: "Finalizado",
   canceled: "Cancelado",
+};
+
+/** Estado del torneo → tono del chip. */
+const TOURNAMENT_STATUS_TONE: Record<
+  string,
+  "accent" | "mute" | "warning" | "error"
+> = {
+  draft: "mute",
+  open: "accent",
+  in_progress: "warning",
+  finished: "mute",
+  canceled: "error",
 };
 
 /** Fecha corta es-ES para la lista. */
@@ -58,51 +96,13 @@ const GENDER_TO_DB: Record<string, string> = {
 };
 
 const STEPS = [
-  { n: 1, label: "PASO 1 · BÁSICOS", note: "Lo esencial del torneo" },
-  { n: 2, label: "PASO 2 · CATEGORÍAS Y GÉNEROS", note: "Quién puede jugar" },
-  { n: 3, label: "PASO 3 · FECHAS", note: "Cuándo se juega" },
-  { n: 4, label: "PASO 4 · CUOTA Y REGLAS", note: "Dinero y formato" },
+  { n: 1, label: "Básicos", note: "Lo esencial del torneo" },
+  { n: 2, label: "Categorías y géneros", note: "Quién puede jugar" },
+  { n: 3, label: "Fechas", note: "Cuándo se juega" },
+  { n: 4, label: "Cuota y reglas", note: "Dinero y formato" },
 ];
 
 const TYPES = Object.keys(TYPE_NOTE) as TournamentType[];
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="mono"
-      style={{
-        display: "block",
-        fontSize: 10,
-        letterSpacing: "0.18em",
-        color: "var(--text-faint)",
-        marginBottom: 8,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const { style, ...rest } = props;
-  return (
-    <input
-      {...rest}
-      style={{
-        width: "100%",
-        padding: "12px 14px",
-        borderRadius: 12,
-        border: "1px solid var(--hair-strong)",
-        background: "var(--bg-card-2)",
-        color: "var(--text)",
-        fontSize: 14,
-        outline: "none",
-        fontFamily: "'Satoshi', sans-serif",
-        ...style,
-      }}
-    />
-  );
-}
 
 /** Chips de selección múltiple. */
 function ChipPicker({
@@ -128,15 +128,8 @@ function ChipPicker({
             onClick={() =>
               onChange(on ? value.filter((v) => v !== o) : [...value, o])
             }
-            className="btn"
-            style={{
-              padding: "9px 16px",
-              fontSize: 13,
-              fontWeight: on ? 700 : 500,
-              background: on ? "var(--accent-10)" : "transparent",
-              color: on ? "var(--accent)" : "var(--text-muted)",
-              border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-            }}
+            className={"tw-fcp-chip" + (on ? " is-on" : "")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
           >
             {on && <IconCheck size={13} />}
             {o}
@@ -187,7 +180,7 @@ export function CreateTournament() {
   const [err, setErr] = useState<string | null>(null);
 
   // Torneos reales del club (incluye borradores; se recarga al crear uno).
-  const { data: clubTournaments } = useAsync(
+  const { data: clubTournaments, loading: loadingTournaments } = useAsync(
     () => (clubId ? fetchClubTournaments(clubId) : Promise.resolve([])),
     [clubId, created],
   );
@@ -234,65 +227,59 @@ export function CreateTournament() {
   }
 
   const canNext = step !== 1 || name.trim().length > 2;
+  const current = STEPS.find((s) => s.n === step) ?? STEPS[0];
 
   if (created) {
     const code = createdCode;
     return (
-      <div style={{ maxWidth: 620, margin: "0 auto" }}>
-        <Card style={{ textAlign: "center", padding: 40 }}>
+      <div className="tw-page-narrow">
+        <Card style={{ maxWidth: 560, margin: "0 auto", textAlign: "center", padding: "40px 24px" }}>
           <span
             style={{
-              width: 46,
-              height: 46,
+              width: 52,
+              height: 52,
               borderRadius: 14,
               background: "var(--accent-10)",
               color: "var(--accent)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              marginBottom: 18,
+              marginBottom: 16,
             }}
           >
-            <IconCheck size={22} />
+            <IconCheck size={24} />
           </span>
-          <h1 style={{ fontSize: 26 }}>Torneo creado</h1>
-          <p
-            style={{
-              margin: "12px 0 24px",
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-            }}
-          >
+          <h2 style={{ fontSize: 20 }}>Torneo creado</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
             Compártelo para que se apunten desde la app.
           </p>
 
-          <Eyebrow>CÓDIGO DE INSCRIPCIÓN</Eyebrow>
+          <div style={{ marginTop: 24, fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>
+            Código de inscripción
+          </div>
           <div
             style={{
-              marginTop: 14,
+              marginTop: 8,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 14,
-              padding: "20px 24px",
-              borderRadius: 14,
+              gap: 12,
+              padding: "18px 24px",
+              borderRadius: "var(--r-md)",
               background: "var(--bg-card-2)",
+              border: "1px solid var(--line)",
             }}
           >
             <span
               className="mono"
-              style={{
-                fontSize: 30,
-                fontWeight: 700,
-                letterSpacing: "0.22em",
-                color: "var(--accent)",
-              }}
+              style={{ fontSize: 28, fontWeight: 700, letterSpacing: "0.18em" }}
             >
               {code}
             </span>
             <button
               type="button"
               aria-label="Copiar código"
+              className="btn btn-icon"
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(code);
@@ -302,114 +289,115 @@ export function CreateTournament() {
                   /* se puede copiar a mano */
                 }
               }}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: copied ? "var(--accent)" : "var(--text-faint)",
-                cursor: "pointer",
-                display: "flex",
-              }}
+              style={{ color: copied ? "var(--accent)" : undefined }}
             >
-              <IconCopy size={18} />
+              {copied ? <IconCheck size={17} /> : <IconCopy size={17} />}
             </button>
           </div>
 
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              setCreated(false);
-              setStep(1);
-            }}
-            style={{ marginTop: 26, padding: "12px 22px", fontSize: 13.5 }}
-          >
-            Volver al asistente
-          </button>
+          <div style={{ marginTop: 24 }}>
+            <Btn
+              onClick={() => {
+                setCreated(false);
+                setStep(1);
+              }}
+            >
+              Volver al asistente
+            </Btn>
+          </div>
         </Card>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>CLUB · TORNEOS</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Mis torneos</h1>
-        <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-          Gestiona los torneos de tu club o crea uno nuevo.
-        </p>
-      </div>
+    <div className="tw-page-narrow">
+      <PageHeader
+        title="Mis torneos"
+        lede="Gestiona los torneos de tu club o crea uno nuevo."
+      />
 
       {/* Torneos del club — arriba del todo: es lo primero que necesita el club
           (encontrar, pagar y gestionar los suyos), antes del asistente. */}
-      <section style={{ marginBottom: 32 }}>
-        <Eyebrow style={{ marginBottom: 12 }}>TORNEOS DEL CLUB</Eyebrow>
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          {tournaments.length === 0 ? (
-            <div
-              style={{
-                padding: "22px 20px",
-                fontSize: 13,
-                color: "var(--text-faint)",
-                textAlign: "center",
-              }}
-            >
-              Aún no has creado ningún torneo. Crea el primero abajo.
-            </div>
-          ) : (
-            tournaments.map((t, i) => (
-              <Link
-                key={t.id}
-                href={`/torneos/${t.id}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: "14px 20px",
-                  borderBottom:
-                    i === tournaments.length - 1 ? "none" : "1px solid var(--hair)",
-                  flexWrap: "wrap",
-                  color: "inherit",
-                  textDecoration: "none",
-                }}
-              >
-                <span style={{ flex: 1, minWidth: 160, fontSize: 13.5, fontWeight: 700 }}>
-                  {t.name}
-                </span>
-                <span
-                  className="mono"
-                  style={{ fontSize: 11, color: "var(--text-faint)" }}
-                >
-                  {shortDate(t.starts_on)}
-                </span>
-                <span className="chip chip-mute">
-                  {TOURNAMENT_STATUS_LABEL[t.status] ?? t.status}
-                </span>
-              </Link>
-            ))
-          )}
-        </Card>
-        {drafts.length > 0 && (
-          <p
-            className="mono"
-            style={{
-              marginTop: 12,
-              fontSize: 10,
-              letterSpacing: "0.14em",
-              color: "var(--text-faint)",
-            }}
-          >
-            {drafts.length} BORRADOR{drafts.length > 1 ? "ES" : ""} SIN PUBLICAR ·
-            ÁBRELO PARA PAGAR Y PUBLICAR
-          </p>
+      <Card flush>
+        <CardHead title="Torneos del club" count={tournaments.length} />
+        {loadingTournaments ? (
+          <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+            <Skeleton h={14} w="45%" />
+            <Skeleton h={14} w="30%" />
+            <Skeleton h={14} w="38%" />
+          </div>
+        ) : tournaments.length === 0 ? (
+          <EmptyState
+            compact
+            icon={<IconTrophy size={22} />}
+            title="Aún no hay torneos"
+            body="Crea el primero con el asistente de abajo."
+          />
+        ) : (
+          <Table>
+            <thead>
+              <tr>
+                <th>Torneo</th>
+                <th>Empieza</th>
+                <th>Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {tournaments.map((t) => (
+                <tr key={t.id}>
+                  <td>
+                    <Link
+                      href={`/torneos/${t.id}`}
+                      className="cell-main"
+                      style={{
+                        color: "inherit",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                    >
+                      <IconTile small>
+                        <IconTrophy size={14} />
+                      </IconTile>
+                      <span className="truncate">{t.name}</span>
+                    </Link>
+                  </td>
+                  <td className="cell-muted mono">{shortDate(t.starts_on)}</td>
+                  <td>
+                    <Chip tone={TOURNAMENT_STATUS_TONE[t.status] ?? "mute"}>
+                      {TOURNAMENT_STATUS_LABEL[t.status] ?? t.status}
+                    </Chip>
+                  </td>
+                  <td>
+                    <div className="tw-table-actions">
+                      <BtnLink href={`/torneos/${t.id}`} size="sm" variant="quiet">
+                        Gestionar
+                      </BtnLink>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
         )}
-      </section>
+      </Card>
+      {drafts.length > 0 && (
+        <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginTop: 12 }}>
+          {drafts.length === 1
+            ? "Tienes 1 borrador sin publicar. Ábrelo para pagar y publicar."
+            : `Tienes ${drafts.length} borradores sin publicar. Ábrelos para pagar y publicar.`}
+        </Note>
+      )}
 
-      <Eyebrow style={{ display: "block", marginBottom: 14 }}>
-        CREAR NUEVO TORNEO
-      </Eyebrow>
+      <SectionHead
+        title="Crear nuevo torneo"
+        sub={`Paso ${step} de ${STEPS.length} · ${current.note}`}
+      />
 
       {/* Indicador de progreso */}
-      <div className="tw-steps" style={{ marginBottom: 22 }}>
+      <div className="tw-steps" style={{ marginBottom: 16 }}>
         {STEPS.map((s) => {
           const on = s.n === step;
           const done = s.n < step;
@@ -417,41 +405,19 @@ export function CreateTournament() {
             <button
               key={s.n}
               type="button"
+              aria-current={on ? "step" : undefined}
               onClick={() => setStep(s.n)}
-              style={{
-                flex: 1,
-                minWidth: 160,
-                textAlign: "left",
-                padding: "14px 16px",
-                borderRadius: 12,
-                cursor: "pointer",
-                background: on ? "var(--accent-10)" : "var(--bg-card)",
-                border: `1px solid ${on ? "var(--accent)" : "var(--hair)"}`,
-                color: "var(--text)",
-              }}
+              className={"tw-fcp-chip" + (on ? " is-on" : "")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              <span
-                className="mono"
-                style={{
-                  display: "block",
-                  fontSize: 9.5,
-                  letterSpacing: "0.16em",
-                  color: on || done ? "var(--accent)" : "var(--text-faint)",
-                }}
-              >
-                {done ? "✓ " : ""}
-                {s.label}
-              </span>
-              <span
-                style={{
-                  display: "block",
-                  marginTop: 6,
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                }}
-              >
-                {s.note}
-              </span>
+              {done ? (
+                <IconCheck size={13} />
+              ) : (
+                <span className="mono" style={{ fontSize: 11.5 }}>
+                  {s.n}
+                </span>
+              )}
+              {s.label}
             </button>
           );
         })}
@@ -460,50 +426,45 @@ export function CreateTournament() {
       <Card>
         {step === 1 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            <div>
-              <Label>NOMBRE</Label>
+            <Field label="Nombre" htmlFor="ct-name">
               <Input
+                id="ct-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Torneo de primavera"
               />
-            </div>
+            </Field>
 
-            <div>
-              <Label>TIPO DE TORNEO</Label>
-              <div className="tw-type-grid">
+            <Field label="Tipo de torneo">
+              <div className="tw-type-grid" role="radiogroup" aria-label="Tipo de torneo">
                 {TYPES.map((t) => {
                   const on = type === t;
                   return (
                     <button
                       key={t}
                       type="button"
+                      role="radio"
+                      aria-checked={on}
                       onClick={() => setType(t)}
                       style={{
                         textAlign: "left",
-                        padding: 16,
-                        borderRadius: 12,
+                        padding: "14px 16px",
+                        borderRadius: 10,
                         cursor: "pointer",
                         background: on ? "var(--accent-10)" : "var(--bg-card-2)",
-                        border: `1.5px solid ${on ? "var(--accent)" : "transparent"}`,
+                        border: `1px solid ${on ? "var(--accent-40)" : "var(--line)"}`,
                         color: "var(--text)",
+                        transition: "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
                       }}
                     >
-                      <span
-                        style={{
-                          display: "block",
-                          fontSize: 14.5,
-                          fontWeight: 700,
-                          color: on ? "var(--accent)" : "var(--text)",
-                        }}
-                      >
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
                         {t}
                       </span>
                       <span
                         style={{
                           display: "block",
-                          marginTop: 6,
+                          marginTop: 4,
                           fontSize: 12.5,
                           color: "var(--text-muted)",
                           textWrap: "pretty",
@@ -515,191 +476,145 @@ export function CreateTournament() {
                   );
                 })}
               </div>
-            </div>
+            </Field>
 
             <div className="tw-form-grid">
-              <div>
-                <Label>LUGAR · OPCIONAL</Label>
-                <Input type="text" placeholder="Club Smash · Santander" />
-              </div>
-              <div>
-                <Label>FOTO DE PORTADA · OPCIONAL</Label>
+              <Field label="Lugar" hint="Opcional" htmlFor="ct-place">
+                <Input id="ct-place" type="text" placeholder="Club Smash · Santander" />
+              </Field>
+              <Field label="Foto de portada" hint="Opcional">
                 <label
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1px dashed var(--hair-strong)",
+                    gap: 10,
+                    minHeight: 38,
+                    padding: "0 12px",
+                    borderRadius: "var(--r-sm)",
+                    border: "1px dashed var(--line-strong)",
+                    background: "var(--bg-card-2)",
+                    color: "var(--text-muted)",
+                    fontSize: 13.5,
                     cursor: "pointer",
                   }}
                 >
-                  <span style={{ color: "var(--accent)", display: "flex" }}>
-                    <IconUpload size={17} />
-                  </span>
-                  <span style={{ flex: 1, fontSize: 13, color: "var(--text-muted)" }}>
-                    Añadir foto del torneo
-                  </span>
+                  <IconUpload size={15} />
+                  <span style={{ flex: 1 }}>Añadir foto del torneo</span>
                   <input type="file" accept="image/*" hidden />
                 </label>
-              </div>
+              </Field>
             </div>
           </div>
         )}
 
         {step === 2 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-            <div>
-              <Label>CATEGORÍAS · ELIGE UNA O VARIAS</Label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <Field
+              label="Categorías"
+              hint="Elige una o varias. Cada categoría tendrá su propio cuadro."
+            >
               <ChipPicker
                 options={CATEGORIES}
                 value={cats}
                 onChange={setCats}
                 label="Categorías"
               />
-              <p
-                style={{
-                  margin: "12px 0 0",
-                  fontSize: 12.5,
-                  color: "var(--text-faint)",
-                }}
-              >
-                Cada categoría tendrá su propio cuadro.
-              </p>
-            </div>
+            </Field>
 
-            <div>
-              <Label>GÉNERO · ELIGE UNO O VARIOS</Label>
+            <Field label="Género" hint="Elige uno o varios.">
               <ChipPicker
                 options={GENDERS}
                 value={genders}
                 onChange={setGenders}
                 label="Géneros"
               />
-            </div>
+            </Field>
 
-            <div>
-              <Label>LÍMITES POR CATEGORÍA · OPCIONAL</Label>
-              <p
-                style={{
-                  margin: "0 0 12px",
-                  fontSize: 12.5,
-                  color: "var(--text-muted)",
-                  textWrap: "pretty",
-                }}
-              >
-                Restringe quién puede inscribirse en cada categoría.
-              </p>
+            <Field
+              label="Límites por categoría"
+              hint="Opcional. Restringe quién puede inscribirse en cada categoría."
+            >
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {cats.map((c) => (
                   <div key={c} className="tw-limit-row">
-                    <span
-                      className="mono"
-                      style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)" }}
-                    >
+                    <span className="mono" style={{ fontSize: 13.5, fontWeight: 700, paddingBottom: 10 }}>
                       {c}
                     </span>
-                    <div>
-                      <Label>PUNTOS ≤</Label>
+                    <Field label="Puntos ≤">
                       <Input type="text" inputMode="numeric" placeholder="5000" className="mono" />
-                    </div>
-                    <div>
-                      <Label>NIVEL ≥</Label>
+                    </Field>
+                    <Field label="Nivel ≥">
                       <Input type="text" placeholder="2ª" />
-                    </div>
+                    </Field>
                   </div>
                 ))}
               </div>
-            </div>
+            </Field>
           </div>
         )}
 
         {step === 3 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div className="tw-form-grid">
-              <div>
-                <Label>FECHA INICIO · OPCIONAL</Label>
+              <Field label="Fecha de inicio" hint="Opcional" htmlFor="ct-starts">
                 <Input
+                  id="ct-starts"
                   type="date"
                   value={startsOn}
                   onChange={(e) => setStartsOn(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label>FECHA FIN · OPCIONAL</Label>
+              </Field>
+              <Field label="Fecha de fin" hint="Opcional, si dura varios días" htmlFor="ct-ends">
                 <Input
+                  id="ct-ends"
                   type="date"
                   value={endsOn}
                   min={startsOn || undefined}
                   onChange={(e) => setEndsOn(e.target.value)}
                 />
-                <p
-                  style={{
-                    margin: "8px 0 0",
-                    fontSize: 12,
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  Fin (si dura varios días)
-                </p>
-              </div>
+              </Field>
             </div>
 
             <div className="tw-form-grid">
-              <div>
-                <Label>HORA INICIO DE JUEGO</Label>
+              <Field label="Hora de inicio de juego" htmlFor="ct-start-time">
                 <Input
+                  id="ct-start-time"
                   type="time"
                   value={startTime}
                   step={3600}
                   onChange={(e) => setStartTime(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label>HORA FIN DE JUEGO</Label>
+              </Field>
+              <Field
+                label="Hora de fin de juego"
+                hint="Desde y hasta qué hora se juega. Define las franjas de la inscripción y del horario."
+                htmlFor="ct-end-time"
+              >
                 <Input
+                  id="ct-end-time"
                   type="time"
                   value={endTime}
                   step={3600}
                   min={startTime || undefined}
                   onChange={(e) => setEndTime(e.target.value)}
                 />
-                <p
-                  style={{
-                    margin: "8px 0 0",
-                    fontSize: 12,
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  Desde/hasta qué hora se juega. Define las franjas de la
-                  inscripción y del horario.
-                </p>
-              </div>
+              </Field>
             </div>
 
-            <p
-              style={{
-                margin: 0,
-                fontSize: 12.5,
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-              }}
-            >
+            <Note icon={<IconInfo size={15} />}>
               Los días de cada fase (octavos, cuartos, semis, final…) se asignan
               desde la app una vez determinadas las parejas y generado el cuadro.
-            </p>
+            </Note>
           </div>
         )}
 
         {step === 4 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
-              <Label>CUOTA DE INSCRIPCIÓN (€) · OPCIONAL</Label>
               <div className="tw-form-grid">
-                <div>
-                  <Label>CUOTA · 1 CATEGORÍA (€)</Label>
+                <Field label="Cuota por 1 categoría (€)" hint="Opcional. 0 = gratis" htmlFor="ct-fee">
                   <Input
+                    id="ct-fee"
                     type="text"
                     inputMode="decimal"
                     placeholder="0 = gratis"
@@ -709,10 +624,10 @@ export function CreateTournament() {
                       setFee(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))
                     }
                   />
-                </div>
-                <div>
-                  <Label>CUOTA · 2 CATEGORÍAS (€)</Label>
+                </Field>
+                <Field label="Cuota por 2 categorías (€)" hint="Opcional" htmlFor="ct-fee2">
                   <Input
+                    id="ct-fee2"
                     type="text"
                     inputMode="decimal"
                     placeholder="25"
@@ -722,12 +637,17 @@ export function CreateTournament() {
                       setFee2(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))
                     }
                   />
-                </div>
+                </Field>
               </div>
               {parseFloat(fee || "0") > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <Label>DÍAS LÍMITE PARA PAGAR EN EL CLUB</Label>
+                <Field
+                  label="Días límite para pagar en el club"
+                  hint={`La pareja paga online o en el club. Si elige pagar en el club y no paga hasta ${deadlineDays || "3"} día(s) antes, su inscripción se elimina para liberar la plaza.`}
+                  htmlFor="ct-deadline"
+                  style={{ marginTop: 16 }}
+                >
                   <Input
+                    id="ct-deadline"
                     type="text"
                     inputMode="numeric"
                     placeholder="3"
@@ -737,111 +657,80 @@ export function CreateTournament() {
                       setDeadlineDays(e.target.value.replace(/[^0-9]/g, ""))
                     }
                   />
-                  <p
-                    style={{
-                      margin: "8px 0 0",
-                      fontSize: 12,
-                      color: "var(--text-muted)",
-                      textWrap: "pretty",
-                    }}
-                  >
-                    La pareja paga online o en el club. Si elige pagar en el club y
-                    no paga hasta {deadlineDays || "3"} día(s) antes, su inscripción
-                    se elimina para liberar la plaza.
-                  </p>
-                </div>
+                </Field>
               )}
             </div>
 
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <Label>CONDICIONES DE PARTICIPACIÓN · OPCIONAL</Label>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => void loadDefaultTerms()}
-                  disabled={termsBusy}
-                  style={{ padding: "8px 14px", fontSize: 12 }}
-                >
-                  {termsBusy ? "Cargando…" : "Partir de las estándar"}
-                </button>
-              </div>
-              <textarea
+            {/* Resumen de coste: lo que verá la pareja al inscribirse. */}
+            <StatRow>
+              <Stat
+                label="Cuota por 1 categoría"
+                value={parseFloat(fee || "0") > 0 ? `${fee} €` : "Gratis"}
+                tone={parseFloat(fee || "0") > 0 ? "accent" : undefined}
+              />
+              <Stat
+                label="Cuota por 2 categorías"
+                value={parseFloat(fee2 || "0") > 0 ? `${fee2} €` : "—"}
+                sub={
+                  parseFloat(fee2 || "0") > 0
+                    ? "Para quien juega dos categorías"
+                    : "Sin cuota propia para dos categorías"
+                }
+              />
+              <Stat
+                label="Días límite para pagar"
+                value={parseFloat(fee || "0") > 0 ? deadlineDays || "3" : "—"}
+                unit={parseFloat(fee || "0") > 0 ? "días" : undefined}
+                sub={
+                  parseFloat(fee || "0") > 0
+                    ? "Antes del torneo, si paga en el club"
+                    : "Solo aplica con cuota"
+                }
+              />
+            </StatRow>
+
+            <Field
+              label="Condiciones de participación"
+              hint="Opcional. Quien se inscriba tendrá que marcarlas para poder pagar, y queda constancia de lo que aceptó."
+              htmlFor="ct-terms"
+            >
+              <Textarea
+                id="ct-terms"
                 value={terms}
                 onChange={(e) => setTerms(e.target.value)}
                 rows={6}
                 placeholder="Lo que la pareja acepta al inscribirse (reordenar parejas, política de bajas…)."
-                style={{
-                  width: "100%",
-                  marginTop: 8,
-                  padding: "13px 15px",
-                  borderRadius: 12,
-                  border: "1px solid var(--hair-strong)",
-                  background: "var(--bg-card)",
-                  color: "var(--text)",
-                  fontSize: 13.5,
-                  lineHeight: 1.55,
-                  resize: "vertical",
-                  outline: "none",
-                  fontFamily: "'Satoshi', sans-serif",
-                }}
               />
-              <p
-                style={{
-                  margin: "8px 0 0",
-                  fontSize: 12,
-                  color: "var(--text-muted)",
-                  textWrap: "pretty",
-                }}
-              >
-                Quien se inscriba tendrá que marcarlas para poder pagar, y queda
-                constancia de lo que aceptó.
-              </p>
-            </div>
-
-            <div>
-              <Label>FORMATO DE PARTIDO</Label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {MATCH_FORMATS.map((f) => {
-                  const on = format === f;
-                  return (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => setFormat(f)}
-                      className="btn"
-                      style={{
-                        padding: "10px 16px",
-                        fontSize: 13,
-                        fontWeight: on ? 700 : 500,
-                        background: on ? "var(--accent-10)" : "transparent",
-                        color: on ? "var(--accent)" : "var(--text-muted)",
-                        border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                      }}
-                    >
-                      {f}
-                    </button>
-                  );
-                })}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+                <Btn
+                  size="sm"
+                  variant="quiet"
+                  onClick={() => void loadDefaultTerms()}
+                  disabled={termsBusy}
+                >
+                  {termsBusy ? "Cargando…" : "Partir de las estándar"}
+                </Btn>
               </div>
-            </div>
+            </Field>
+
+            <Field label="Formato de partido">
+              <Segmented
+                label="Formato de partido"
+                value={format}
+                onChange={setFormat}
+                options={MATCH_FORMATS.map((f) => ({ value: f, label: f }))}
+              />
+            </Field>
 
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 16,
-                padding: 16,
-                borderRadius: 12,
+                padding: "14px 16px",
+                borderRadius: "var(--r-md)",
                 background: "var(--bg-card-2)",
+                border: "1px solid var(--line)",
               }}
             >
               <span style={{ flex: 1 }}>
@@ -851,7 +740,7 @@ export function CreateTournament() {
                 <span
                   style={{
                     display: "block",
-                    marginTop: 5,
+                    marginTop: 3,
                     fontSize: 12.5,
                     color: "var(--text-muted)",
                   }}
@@ -862,57 +751,44 @@ export function CreateTournament() {
               <Toggle on={seeded} onChange={() => setSeeded((v) => !v)} label="Siembra" />
             </div>
 
-            <div>
-              <Label>HORAS QUE UN JUGADOR PUEDE QUITAR · OPCIONAL</Label>
-              <Input type="text" inputMode="numeric" placeholder="8" className="mono" />
-            </div>
+            <Field label="Horas que un jugador puede quitar" hint="Opcional" htmlFor="ct-removable">
+              <Input id="ct-removable" type="text" inputMode="numeric" placeholder="8" className="mono" />
+            </Field>
           </div>
         )}
 
+        <div className="divider" style={{ margin: "24px 0 16px" }} />
         <div
           style={{
-            marginTop: 28,
             display: "flex",
             justifyContent: "space-between",
-            gap: 10,
+            gap: 8,
             flexWrap: "wrap",
           }}
         >
-          <button
-            className="btn btn-ghost"
-            disabled={step === 1}
-            onClick={() => setStep((s) => s - 1)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
+          <Btn disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
             Atrás
-          </button>
+          </Btn>
           {step < 4 ? (
-            <button
-              className="btn btn-accent"
-              disabled={!canNext}
-              onClick={() => setStep((s) => s + 1)}
-              style={{ padding: "12px 24px", fontSize: 13.5 }}
-            >
+            <Btn variant="accent" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
               Siguiente
-            </button>
+            </Btn>
           ) : (
-            <button
-              className="btn btn-accent"
+            <Btn
+              variant="accent"
               disabled={busy || name.trim().length < 3}
               onClick={submit}
-              style={{ padding: "12px 24px", fontSize: 13.5 }}
             >
               {busy ? "Creando…" : "Crear torneo"}
-            </button>
+            </Btn>
           )}
         </div>
         {err && (
-          <p style={{ marginTop: 14, color: "var(--error)", fontSize: 13 }}>
+          <Note tone="error" icon={<IconAlert size={15} />} style={{ marginTop: 14 }}>
             {err}
-          </p>
+          </Note>
         )}
       </Card>
-
     </div>
   );
 }

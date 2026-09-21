@@ -14,9 +14,22 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
-import { IconCalendar, IconLock, IconPlus } from "@/components/Icon";
+import {
+  Btn,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  Input,
+  Modal,
+  Note,
+  PageHeader,
+  Segmented,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import { IconCalendar, IconChevronRight, IconLock, IconPlus } from "@/components/Icon";
 
 /** Etiqueta de formato a partir de la fase que guarda la base de datos. */
 const PHASE_FORMAT: Record<DbSeason["phase"], string> = {
@@ -41,7 +54,7 @@ function fmtDate(iso: string | null): string {
 /** Cuadro de eliminatorias: columnas por ronda con conectores. */
 const BRACKET = [
   {
-    round: "CUARTOS",
+    round: "Cuartos",
     ties: [
       { a: "Halcones A", b: "CP Castro", score: "3–2", winner: 0 },
       { a: "Bahía", b: "Astillero", score: "2–3", winner: 1 },
@@ -50,14 +63,14 @@ const BRACKET = [
     ],
   },
   {
-    round: "SEMIS",
+    round: "Semifinales",
     ties: [
       { a: "Halcones A", b: "Astillero", score: "3–2", winner: 0 },
       { a: "CD Norte", b: "Indoor", score: "2–3", winner: 1 },
     ],
   },
   {
-    round: "FINAL",
+    round: "Final",
     ties: [{ a: "Halcones A", b: "Indoor", score: "", winner: -1 }],
   },
 ];
@@ -108,29 +121,33 @@ export function SeasonDetail({ id }: { id: string }) {
     !!user,
   );
 
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="No se pudo cargar la temporada"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="No se pudo cargar la temporada"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
 
   const dbSeason = data?.season ?? null;
   if (!dbSeason) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Temporada no encontrada"
-          body="Puede que no exista o que no tengas acceso a ella."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Temporada no encontrada"
+            body="Puede que no exista o que no tengas acceso a ella."
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -185,169 +202,95 @@ export function SeasonDetail({ id }: { id: string }) {
   const totalRounds = dbSeason.totalMatchdays ?? matchdays.length;
   const winRatePct = played ? Math.round((seasonWon / played) * 100) : 0;
 
-  const teamLine = [
-    activeTeam?.name,
-    activeTeam?.category,
-    "Federación Cántabra de Pádel",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>TEMPORADA</Eyebrow>
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <h1 style={{ fontSize: 30 }}>{dbSeason.name}</h1>
-          <span className={"chip " + (dbSeason.active ? "" : "chip-mute")}>
-            {dbSeason.active ? "Activa" : "Archivada"}
-          </span>
-          <span
-            className="mono"
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.16em",
-              color: "var(--text-faint)",
-            }}
-          >
-            {format.toUpperCase()}
-          </span>
-        </div>
-        <p
-          className="mono"
-          style={{
-            margin: "8px 0 0",
-            fontSize: 11,
-            letterSpacing: "0.12em",
-            color: "var(--text-faint)",
-          }}
-        >
-          {teamLine}
-        </p>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: "/temporadas", label: "Temporadas" }}
+        title={dbSeason.name}
+        meta={[
+          format,
+          activeTeam?.name ?? null,
+          activeTeam?.category ?? null,
+          "Federación Cántabra de Pádel",
+        ]}
+        actions={
+          <>
+            <Chip tone={dbSeason.active ? "accent" : "mute"}>
+              {dbSeason.active ? "Activa" : "Archivada"}
+            </Chip>
+            {!archived && tab === "jornadas" && (
+              <Btn variant="quiet" onClick={() => void renumber()} disabled={busy}>
+                Renumerar
+              </Btn>
+            )}
+            {!archived && (
+              <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={15} />}>
+                Añadir jornada
+              </Btn>
+            )}
+          </>
+        }
+      />
 
       {archived && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--hair-strong)",
-            color: "var(--text-muted)",
-            marginBottom: 20,
-            fontSize: 13,
-          }}
-        >
-          <IconLock size={16} />
-          Temporada archivada · solo lectura.
-        </div>
+        <Note icon={<IconLock size={15} />} style={{ marginBottom: 16 }}>
+          Temporada archivada: solo lectura.
+        </Note>
       )}
 
-      <div className="tw-solo-stats" style={{ marginBottom: 22 }}>
-        {[
-          { l: "JORNADAS", v: String(totalRounds) },
-          { l: "JUGADAS", v: `${played}/${totalRounds}` },
-          { l: "BALANCE", v: `${seasonWon}-${seasonDrawn}-${seasonLost}` },
-          { l: "TASA V.", v: `${winRatePct}%`, accent: true },
-        ].map((k) => (
-          <Card key={k.l} style={{ padding: 18 }}>
-            <div className="mono tw-stat-label">{k.l}</div>
-            <div
-              className="mono tw-stat-value"
-              style={{
-                fontSize: 24,
-                ...(k.accent ? { color: "var(--accent)" } : null),
-              }}
-            >
-              {k.v}
-            </div>
-          </Card>
-        ))}
-      </div>
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat label="Jornadas" value={totalRounds} icon={<IconCalendar size={14} />} />
+        <Stat label="Jugadas" value={played} unit={`/ ${totalRounds}`} />
+        <Stat
+          label="Balance"
+          value={`${seasonWon}-${seasonDrawn}-${seasonLost}`}
+          sub="Ganadas · empatadas · perdidas"
+        />
+        <Stat
+          label="Victorias"
+          value={winRatePct}
+          unit="%"
+          tone={played > 0 && winRatePct >= 50 ? "accent" : undefined}
+          sub={played > 0 ? `${seasonWon} de ${played} jugadas` : "Aún sin actas"}
+        />
+      </StatRow>
 
       {/* Pestañas */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 18,
-          flexWrap: "wrap",
-        }}
-      >
-        {(
-          [
-            ["jornadas", "Jornadas"],
-            ...(hasBracket ? ([["cuadro", "Cuadro"]] as const) : []),
-          ] as const
-        ).map(([k, label]) => {
-          const on = tab === k;
-          return (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setTab(k as typeof tab)}
-              className="btn"
-              style={{
-                padding: "10px 20px",
-                fontSize: 13,
-                fontWeight: on ? 700 : 500,
-                background: on ? "var(--accent-10)" : "transparent",
-                color: on ? "var(--accent)" : "var(--text-muted)",
-                border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-        <div style={{ flex: 1 }} />
-        {!archived && tab === "jornadas" && (
-          <button
-            className="btn btn-ghost"
-            onClick={() => void renumber()}
-            disabled={busy}
-            style={{ padding: "11px 18px", fontSize: 13 }}
-          >
-            Renumerar
-          </button>
-        )}
-        {!archived && (
-          <button
-            className="btn btn-accent"
-            onClick={() => setNewOpen(true)}
-            style={{ padding: "11px 20px", fontSize: 13 }}
-          >
-            <IconPlus size={15} />
-            Añadir jornada
-          </button>
-        )}
-      </div>
+      {hasBracket && (
+        <div className="tw-toolbar">
+          <Segmented
+            label="Vista de la temporada"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "jornadas", label: "Jornadas" },
+              { value: "cuadro", label: "Cuadro" },
+            ]}
+          />
+        </div>
+      )}
 
       {/* ── Jornadas ─────────────────────────────────────────────── */}
       {tab === "jornadas" &&
         (rounds.length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconCalendar size={34} />}
+              icon={<IconCalendar size={24} />}
               title="Aún no hay jornadas"
               body="Añade la primera para empezar a planificar."
+              action={
+                !archived ? (
+                  <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={14} />}>
+                    Añadir jornada
+                  </Btn>
+                ) : undefined
+              }
             />
           </Card>
         ) : (
-          <Card style={{ padding: 0, overflow: "hidden" }}>
-            {rounds.map((j: DbMatchday, i) => {
+          <Card flush>
+            <CardHead title="Jornadas" count={rounds.length} />
+            {rounds.map((j: DbMatchday) => {
               const isNext = j.id === nextRound?.id;
               const hasScore =
                 j.scoreFor !== null && j.scoreAgainst !== null;
@@ -362,39 +305,29 @@ export function SeasonDetail({ id }: { id: string }) {
                   href={`/jornada/${j.id}`}
                   className="tw-md-row"
                   style={{
-                    borderBottom:
-                      i === rounds.length - 1 ? "none" : "1px solid var(--hair)",
-                    color: "inherit",
                     boxShadow: isNext ? "inset 2px 0 0 var(--accent)" : "none",
                   }}
                 >
                   <span
                     className="mono"
                     style={{
-                      fontSize: 11,
-                      letterSpacing: "0.12em",
+                      fontSize: 12,
+                      fontWeight: 600,
                       color: isNext ? "var(--accent)" : "var(--text-faint)",
                     }}
                   >
-                    J·{j.round}
+                    J{j.round}
                   </span>
                   <span style={{ fontSize: 14, fontWeight: 700 }}>
                     vs {j.opponent}
                   </span>
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 11.5,
-                      letterSpacing: "0.08em",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    {meta}
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                    {meta || "Fecha por confirmar"}
                   </span>
-                  <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span className={"chip " + (j.isHome ? "" : "chip-mute")}>
-                      {j.isHome ? "Local" : "Visitante"}
-                    </span>
+                  <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <Chip tone={j.isHome ? "accent" : "mute"} plain>
+                      {j.isHome ? "En casa" : "Fuera"}
+                    </Chip>
                     {hasScore ? (
                       <span
                         className="mono"
@@ -411,18 +344,15 @@ export function SeasonDetail({ id }: { id: string }) {
                         {j.scoreFor}–{j.scoreAgainst}
                       </span>
                     ) : isNext ? (
-                      <span className="chip">Próxima</span>
+                      <Chip>Próxima</Chip>
+                    ) : j.status === "finished" ? (
+                      <Chip tone="mute" plain>
+                        Acta
+                      </Chip>
                     ) : null}
                   </span>
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 9,
-                      letterSpacing: "0.16em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    {j.status === "finished" ? "ACTA" : ""}
+                  <span style={{ color: "var(--text-faint)", display: "flex" }}>
+                    <IconChevronRight size={16} />
                   </span>
                 </Link>
               );
@@ -432,20 +362,15 @@ export function SeasonDetail({ id }: { id: string }) {
 
       {/* ── Cuadro ───────────────────────────────────────────────── */}
       {tab === "cuadro" && (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
+        <Card flush>
+          <CardHead title="Cuadro de eliminatorias" sub="Maqueta: los cruces reales llegarán con el playoff." />
           <div className="tw-bracket-scroll">
             <div className="tw-bracket">
               {BRACKET.map((col) => (
                 <div key={col.round} className="tw-bracket-col">
                   <div
-                    className="mono"
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: "0.2em",
-                      color: "var(--text-faint)",
-                      textAlign: "center",
-                      marginBottom: 14,
-                    }}
+                    className="grid-head"
+                    style={{ textAlign: "center", marginBottom: 14 }}
                   >
                     {col.round}
                   </div>
@@ -464,7 +389,7 @@ export function SeasonDetail({ id }: { id: string }) {
                                 gap: 10,
                                 padding: "10px 12px",
                                 borderBottom:
-                                  side === 0 ? "1px solid var(--hair)" : "none",
+                                  side === 0 ? "1px solid var(--line)" : "none",
                                 boxShadow: isWinner
                                   ? "inset 2px 0 0 var(--accent)"
                                   : "none",
@@ -472,9 +397,10 @@ export function SeasonDetail({ id }: { id: string }) {
                               }}
                             >
                               <span
+                                className="truncate"
                                 style={{
                                   flex: 1,
-                                  fontSize: 12.5,
+                                  fontSize: 13,
                                   fontWeight: isWinner ? 700 : 500,
                                 }}
                               >
@@ -483,7 +409,7 @@ export function SeasonDetail({ id }: { id: string }) {
                               {decided && side === 0 && (
                                 <span
                                   className="mono"
-                                  style={{ fontSize: 12, fontWeight: 700 }}
+                                  style={{ fontSize: 12.5, fontWeight: 700 }}
                                 >
                                   {t.score}
                                 </span>
@@ -499,26 +425,20 @@ export function SeasonDetail({ id }: { id: string }) {
 
               <div className="tw-bracket-col">
                 <div
-                  className="mono"
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: "0.2em",
-                    color: "var(--accent)",
-                    textAlign: "center",
-                    marginBottom: 14,
-                  }}
+                  className="grid-head"
+                  style={{ textAlign: "center", marginBottom: 14 }}
                 >
-                  CAMPEONES
+                  Campeón
                 </div>
                 <div
                   style={{
-                    padding: "18px 14px",
-                    borderRadius: 12,
+                    padding: "16px 14px",
+                    borderRadius: 10,
                     background: "var(--accent-10)",
-                    border: "1.5px solid var(--accent)",
+                    border: "1px solid var(--accent-40)",
                     textAlign: "center",
                     color: "var(--accent)",
-                    fontSize: 13,
+                    fontSize: 13.5,
                     fontWeight: 700,
                   }}
                 >
@@ -531,133 +451,72 @@ export function SeasonDetail({ id }: { id: string }) {
       )}
 
       {/* ── Crear jornada ────────────────────────────────────────── */}
-      <Modal open={newOpen} onClose={() => setNewOpen(false)} labelledBy="nueva-jor" width={520}>
-        <Eyebrow>JORNADA · NUEVA</Eyebrow>
-        <h2 id="nueva-jor" style={{ margin: "14px 0 22px", fontSize: 23 }}>
-          Crear nueva jornada
-        </h2>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {(
-            [
-              ["RIVAL", "Club Visitante", "text", jorRival, setJorRival],
-              ["FECHA DEL PARTIDO", "", "date", jorDate, setJorDate],
-              ["HORA DEL PARTIDO", "", "time", jorTime, setJorTime],
-              [
-                "LUGAR (OPCIONAL)",
-                "Ej. Club Pádel Indoor, Pista 3",
-                "text",
-                jorLoc,
-                setJorLoc,
-              ],
-            ] as const
-          ).map(([l, ph, type, val, set]) => (
-            <label key={l}>
-              <span
-                className="mono"
-                style={{
-                  display: "block",
-                  fontSize: 10,
-                  letterSpacing: "0.2em",
-                  color: "var(--text-faint)",
-                  marginBottom: 7,
-                }}
-              >
-                {l}
-              </span>
-              <input
-                type={type}
-                placeholder={ph}
-                value={val}
-                onChange={(e) => set(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: "1px solid var(--hair-strong)",
-                  background: "var(--bg-card)",
-                  color: "var(--text)",
-                  fontSize: 14,
-                  outline: "none",
-                  fontFamily: "'Satoshi', sans-serif",
-                }}
+      <Modal
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        labelledBy="nueva-jor"
+        width={520}
+        title="Nueva jornada"
+        lede="Se numera automáticamente a continuación de la última."
+        footer={
+          <>
+            <Btn onClick={() => setNewOpen(false)}>Cancelar</Btn>
+            <Btn variant="accent" disabled={busy} onClick={saveJornada}>
+              {busy ? "Creando…" : "Crear jornada"}
+            </Btn>
+          </>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Field label="Rival" htmlFor="jor-rival">
+            <Input
+              id="jor-rival"
+              type="text"
+              placeholder="Club Visitante"
+              value={jorRival}
+              onChange={(e) => setJorRival(e.target.value)}
+            />
+          </Field>
+          <div className="tw-form-grid">
+            <Field label="Fecha del partido" htmlFor="jor-fecha">
+              <Input
+                id="jor-fecha"
+                type="date"
+                value={jorDate}
+                onChange={(e) => setJorDate(e.target.value)}
               />
-            </label>
-          ))}
-
-          <div>
-            <span
-              className="mono"
-              style={{
-                display: "block",
-                fontSize: 10,
-                letterSpacing: "0.2em",
-                color: "var(--text-faint)",
-                marginBottom: 8,
-              }}
-            >
-              LOCALIZACIÓN
-            </span>
-            <div
-              style={{
-                display: "flex",
-                gap: 4,
-                padding: 4,
-                borderRadius: 12,
-                background: "var(--bg-card-2)",
-              }}
-            >
-              {(
-                [
-                  ["En nuestras pistas", true],
-                  ["Fuera de casa", false],
-                ] as const
-              ).map(([s, home]) => {
-                const on = jorHome === home;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setJorHome(home)}
-                    style={{
-                      flex: 1,
-                      textAlign: "center",
-                      padding: "9px 10px",
-                      borderRadius: 9,
-                      fontSize: 12.5,
-                      fontWeight: on ? 700 : 500,
-                      cursor: "pointer",
-                      background: on ? "var(--accent-10)" : "transparent",
-                      color: on ? "var(--accent)" : "var(--text-muted)",
-                      border: "none",
-                      boxShadow: on ? "inset 0 0 0 1.5px var(--accent)" : "none",
-                      fontFamily: "'Satoshi', sans-serif",
-                    }}
-                  >
-                    {s}
-                  </button>
-                );
-              })}
-            </div>
+            </Field>
+            <Field label="Hora del partido" htmlFor="jor-hora">
+              <Input
+                id="jor-hora"
+                type="time"
+                value={jorTime}
+                onChange={(e) => setJorTime(e.target.value)}
+              />
+            </Field>
           </div>
-        </div>
+          <Field label="Lugar" hint="Opcional" htmlFor="jor-lugar">
+            <Input
+              id="jor-lugar"
+              type="text"
+              placeholder="Ej. Club Pádel Indoor, Pista 3"
+              value={jorLoc}
+              onChange={(e) => setJorLoc(e.target.value)}
+            />
+          </Field>
 
-        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => setNewOpen(false)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-accent"
-            disabled={busy}
-            onClick={saveJornada}
-            style={{ padding: "12px 22px", fontSize: 13.5 }}
-          >
-            {busy ? "Creando…" : "Crear jornada"}
-          </button>
+          <Field label="Localización">
+            <Segmented
+              label="Localización"
+              value={jorHome ? "home" : "away"}
+              onChange={(v) => setJorHome(v === "home")}
+              options={[
+                { value: "home", label: "En nuestras pistas" },
+                { value: "away", label: "Fuera de casa" },
+              ]}
+              style={{ alignSelf: "flex-start" }}
+            />
+          </Field>
         </div>
       </Modal>
 

@@ -13,8 +13,8 @@ import {
 import { fetchSubscription, type DbSubscription } from "@/lib/queries";
 import { ALL_PLANS, formatEur } from "@/lib/plans";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow, PageHeader } from "@/components/ui";
-import { SkeletonCard } from "@/components/states";
+import { Btn, BtnLink, Card, Chip, Note, PageHeader } from "@/components/ui";
+import { SkeletonPage } from "@/components/states";
 import { IconClock, IconLock } from "@/components/Icon";
 
 /**
@@ -42,9 +42,9 @@ function sourceOf(platform: string | null | undefined): SubscriptionSource {
 }
 
 const STATE_LABEL: Record<string, string> = {
-  trialing: "EN PRUEBA",
-  active: "ACTIVA",
-  grace_period: "PAGO PENDIENTE",
+  trialing: "En prueba",
+  active: "Activa",
+  grace_period: "Pago pendiente",
 };
 
 const fmtDate = (iso: string | null) =>
@@ -62,9 +62,9 @@ function toSubscription(row: DbSubscription | null): Subscription {
     return {
       source: "none",
       planName: "Plan gratuito",
-      state: "SIN PLAN",
+      state: "Sin plan",
       price: "0 €",
-      period: "/MES",
+      period: "al mes",
       renewNote: "Sin renovación · sin cobros",
     };
   }
@@ -77,11 +77,11 @@ function toSubscription(row: DbSubscription | null): Subscription {
   return {
     source: sourceOf(row.platform),
     planName: plan?.displayName ?? row.planTier,
-    state: STATE_LABEL[row.status] ?? row.status.toUpperCase(),
+    state: STATE_LABEL[row.status] ?? row.status,
     price: plan
       ? formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)
       : "—",
-    period: yearly ? "/AÑO" : "/MES",
+    period: yearly ? "al año" : "al mes",
     // Con la baja programada no hay renovación ni primer cobro: decir lo
     // contrario es prometer un cargo que no va a llegar.
     renewNote: row.cancelAtPeriodEnd
@@ -127,307 +127,161 @@ export function MiSuscripcion() {
     }
   }
 
+  if (loading) return <SkeletonPage />;
+
   const storeManaged = isStoreManaged(sub.source);
   const webManaged = sub.source === "stripe";
   const noPlan = sub.source === "none";
 
   return (
-    <div style={{ maxWidth: 880, margin: "0 auto" }}>
+    <div className="tw-page-narrow">
       <PageHeader
-        eyebrow="CUENTA · MI SUSCRIPCIÓN"
         title="Mi suscripción"
         lede="Tu plan, de dónde viene y qué puedes hacer con él desde aquí."
       />
 
-      {loading && <SkeletonCard />}
       {error && (
-        <Card style={{ marginBottom: 20 }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
-            No se ha podido leer tu suscripción: {error}
-          </p>
-        </Card>
+        <Note tone="error" style={{ marginBottom: 16 }}>
+          No se ha podido leer tu suscripción: {error}
+        </Note>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <Eyebrow>MI SUSCRIPCIÓN</Eyebrow>
+      {/* Cambio de plan diferido: Apple/Google aplican los downgrades al
+          final del ciclo, así que se anuncia de forma persistente. */}
+      {sub.scheduledPlan && (
+        <Note tone="accent" icon={<IconClock size={16} />} style={{ marginBottom: 16 }}>
+          Pasarás a <strong style={{ fontWeight: 700 }}>{sub.scheduledPlan.name}</strong> el{" "}
+          <span className="mono">{sub.scheduledPlan.date}</span>
+        </Note>
+      )}
 
-        {/* Cambio de plan diferido: Apple/Google aplican los downgrades al
-            final del ciclo, así que se anuncia de forma persistente. */}
-        {sub.scheduledPlan && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "16px 20px",
-              borderRadius: 12,
-              background: "var(--accent-10)",
-              border: "1px solid var(--accent-25)",
-              color: "var(--accent)",
-            }}
-          >
-            <IconClock size={17} />
-            <span style={{ fontSize: 13.5 }}>
-              Pasarás a{" "}
-              <strong style={{ fontWeight: 700 }}>
-                {sub.scheduledPlan.name}
-              </strong>{" "}
-              el{" "}
-              <span
-                className="mono"
-                style={{ letterSpacing: "0.06em" }}
-              >
-                {sub.scheduledPlan.date}
-              </span>
-            </span>
-          </div>
-        )}
-
-        <Card
+      <Card>
+        <div
           style={{
-            border: `1.5px solid ${
-              storeManaged ? "var(--hair-strong)" : "transparent"
-            }`,
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 24,
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <h2 style={{ fontSize: 30 }}>{sub.planName}</h2>
-                <span className={"chip" + (noPlan ? " chip-mute" : "")}>
-                  {sub.state}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: 10,
-                }}
-              >
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 38,
-                    fontWeight: 700,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  {sub.price}
-                </span>
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 12,
-                    letterSpacing: "0.16em",
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  {sub.period}
-                </span>
-              </div>
-
-              <div
-                className="mono"
-                style={{
-                  marginTop: 14,
-                  fontSize: 12,
-                  letterSpacing: "0.08em",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {sub.renewNote}
-              </div>
-            </div>
-
-            <span className="chip chip-mute" style={{ flex: "none" }}>
-              {sourceLabel(sub.source)}
-            </span>
-          </div>
-
-          {/* CASO C · solo lectura. Ni un botón de compra. */}
-          {storeManaged && (
-            <>
-              <div
-                style={{
-                  marginTop: 24,
-                  padding: "18px 20px",
-                  borderRadius: 12,
-                  background: "var(--bg-card-2)",
-                  border: "1px solid var(--hair-strong)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "flex",
-                    flex: "none",
-                  }}
-                >
-                  <IconLock size={18} />
-                </span>
-                <span style={{ flex: 1, minWidth: 200 }}>
-                  <span
-                    style={{ display: "block", fontSize: 14, fontWeight: 700 }}
-                  >
-                    Gestionas tu plan desde {storeName(sub.source)}
-                  </span>
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 5,
-                      fontSize: 12.5,
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    Aquí solo puedes consultarla · el cobro y la cancelación se
-                    gestionan en la tienda.
-                  </span>
-                </span>
-                <Link
-                  href="/ayuda/suscripcion-tienda"
-                  style={{ fontSize: 12.5, flex: "none" }}
-                >
-                  Cómo gestionarla →
-                </Link>
-              </div>
-
-              {sub.willNotRenew && (
-                <div
-                  className="mono"
-                  style={{
-                    marginTop: 12,
-                    fontSize: 10.5,
-                    letterSpacing: "0.16em",
-                    textTransform: "uppercase",
-                    color: "var(--warning)",
-                  }}
-                >
-                  No se renovará al expirar
-                </div>
-              )}
-            </>
-          )}
-
-          {/* CASO B · comprada en la web: aquí sí se gestiona. */}
-          {webManaged && (
+          <div style={{ minWidth: 0 }}>
             <div
               style={{
-                marginTop: 24,
                 display: "flex",
+                alignItems: "center",
                 gap: 10,
                 flexWrap: "wrap",
               }}
             >
-              <Link
-                href="/pro"
-                className="btn btn-accent"
-                style={{ padding: "12px 20px", fontSize: 13.5 }}
-              >
-                Cambiar plan
-              </Link>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: "12px 20px", fontSize: 13.5 }}
-              >
-                Canjear código
-              </button>
-              <div style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={openPortal}
-                disabled={portalBusy}
-                className="btn btn-danger-ghost"
-                style={{ padding: "12px 20px", fontSize: 13.5 }}
-              >
-                {portalBusy ? "Abriendo…" : "Cancelar suscripción"}
-              </button>
+              <h2 style={{ fontSize: 20 }}>{sub.planName}</h2>
+              <Chip tone={noPlan ? "mute" : "accent"}>{sub.state}</Chip>
             </div>
-          )}
 
-          {/* CASO A · sin plan: es el único caso que puede contratar. */}
-          {noPlan && (
             <div
               style={{
-                marginTop: 24,
+                marginTop: 14,
                 display: "flex",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
+                alignItems: "baseline",
+                gap: 8,
               }}
             >
-              <Link
-                href="/pro"
-                className="btn btn-accent"
-                style={{ padding: "14px 24px", fontSize: 14.5 }}
+              <span
+                className="mono"
+                style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}
               >
-                Hazte Pro · Prueba 14 días
-              </Link>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: "14px 22px", fontSize: 14 }}
-              >
-                Canjear código
-              </button>
+                {sub.price}
+              </span>
+              <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                {sub.period}
+              </span>
             </div>
-          )}
-        </Card>
+          </div>
 
-        {/* Los otros estados que puede devolver el webhook. */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 14,
-          }}
-        >
-          {[
-            { label: "EN PRUEBA", color: "var(--text-faint)" },
-            { label: "PAGO PENDIENTE", color: "var(--warning)" },
-            { label: "CANCELADA · EXPIRADA", color: "var(--error)" },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="mono"
-              style={{
-                padding: "16px 18px",
-                borderRadius: 12,
-                border: "1px solid var(--hair-strong)",
-                fontSize: 10,
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                color: s.color,
-                textAlign: "center",
-              }}
-            >
-              {s.label}
-            </div>
-          ))}
+          <Chip tone="mute" plain style={{ flex: "none" }}>
+            {sourceLabel(sub.source)}
+          </Chip>
         </div>
-      </div>
+
+        <div className="divider" />
+
+        <dl className="kv">
+          <dt>Renovación</dt>
+          <dd>{sub.renewNote}</dd>
+          {sub.scheduledPlan && (
+            <>
+              <dt>Cambio programado</dt>
+              <dd>
+                {sub.scheduledPlan.name} · {sub.scheduledPlan.date}
+              </dd>
+            </>
+          )}
+          <dt>Se gestiona en</dt>
+          <dd>{sourceLabel(sub.source)}</dd>
+        </dl>
+
+        {/* CASO C · solo lectura. Ni un botón de compra. */}
+        {storeManaged && (
+          <>
+            <Note icon={<IconLock size={16} />} style={{ marginTop: 18 }}>
+              <span style={{ display: "block", fontWeight: 700, color: "var(--text)" }}>
+                Gestionas tu plan desde {storeName(sub.source)}
+              </span>
+              <span style={{ display: "block", marginTop: 4 }}>
+                Aquí solo puedes consultarla · el cobro y la cancelación se gestionan en
+                la tienda.{" "}
+                <Link href="/ayuda/suscripcion-tienda">Cómo gestionarla</Link>
+              </span>
+            </Note>
+
+            {sub.willNotRenew && (
+              <Note tone="warning" style={{ marginTop: 10 }}>
+                No se renovará al expirar.
+              </Note>
+            )}
+          </>
+        )}
+
+        {/* CASO B · comprada en la web: aquí sí se gestiona. */}
+        {webManaged && (
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <BtnLink href="/pro" variant="accent">
+              Cambiar plan
+            </BtnLink>
+            <Btn>Canjear código</Btn>
+            <div style={{ flex: 1 }} />
+            <Btn variant="danger-ghost" onClick={openPortal} disabled={portalBusy}>
+              {portalBusy ? "Abriendo…" : "Cancelar suscripción"}
+            </Btn>
+          </div>
+        )}
+
+        {/* CASO A · sin plan: es el único caso que puede contratar. */}
+        {noPlan && (
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <BtnLink href="/pro" variant="accent">
+              Hazte Pro · Prueba 14 días
+            </BtnLink>
+            <Btn>Canjear código</Btn>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

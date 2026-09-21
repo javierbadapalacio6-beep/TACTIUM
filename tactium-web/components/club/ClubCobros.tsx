@@ -3,17 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/lib/session";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import { Btn, Card, Chip, IconTile, PageHeader } from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { IconBuilding, IconCheckCircle, IconCreditCard } from "@/components/Icon";
 
 type ConnectStatus = "none" | "onboarding" | "restricted" | "active";
 
-const LABEL: Record<ConnectStatus, { text: string; tone: string }> = {
-  none: { text: "Sin conectar", tone: "var(--text-faint)" },
-  onboarding: { text: "Alta pendiente", tone: "var(--warning)" },
-  restricted: { text: "Faltan datos", tone: "var(--warning)" },
-  active: { text: "Conectado · listo para cobrar", tone: "var(--accent)" },
+const LABEL: Record<ConnectStatus, { text: string; tone: "mute" | "warning" | "accent" }> = {
+  none: { text: "Sin conectar", tone: "mute" },
+  onboarding: { text: "Alta pendiente", tone: "warning" },
+  restricted: { text: "Faltan datos", tone: "warning" },
+  active: { text: "Conectado · listo para cobrar", tone: "accent" },
 };
 
 /**
@@ -77,113 +77,68 @@ export function ClubCobros() {
 
   if (!clubId) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconBuilding size={34} />}
-          title="Sin club activo"
-          body="Necesitas gestionar un club para configurar los cobros."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconBuilding size={24} />}
+            title="Sin club activo"
+            body="Necesitas gestionar un club para configurar los cobros."
+          />
+        </Card>
+      </div>
     );
   }
-  if (loading || status === null) return <SkeletonCard />;
+  if (loading || status === null) return <SkeletonPage />;
 
   const active = status === "active";
   const l = LABEL[status];
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>CLUB · COBROS</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Cobrar inscripciones</h1>
-        <p style={{ margin: "10px 0 0", fontSize: 14, color: "var(--text-muted)" }}>
-          Conecta tu club con Stripe para cobrar online las inscripciones de
-          tus torneos. El dinero va a tu cuenta: TACTIUM no cobra comisión y
-          solo se descuenta el coste de la pasarela (2 % + 0,25 € por cobro).
-        </p>
-      </div>
+    <div className="tw-page-narrow">
+      <PageHeader
+        title="Cobrar inscripciones"
+        lede="Conecta tu club con Stripe para cobrar online las inscripciones de tus torneos. El dinero va a tu cuenta: TACTIUM no cobra comisión y solo se descuenta el coste de la pasarela (2 % + 0,25 € por cobro)."
+        actions={
+          !active ? (
+            <Btn variant="accent" onClick={connect} disabled={busy}>
+              {busy
+                ? "Abriendo…"
+                : status === "none"
+                  ? "Conectar con Stripe"
+                  : "Continuar alta"}
+            </Btn>
+          ) : undefined
+        }
+      />
 
       <Card>
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 16,
+            gap: 14,
             flexWrap: "wrap",
           }}
         >
-          <span
-            style={{
-              width: 46,
-              height: 46,
-              borderRadius: 12,
-              background: "var(--primary-dim)",
-              color: active ? "var(--accent)" : "var(--text-muted)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: "none",
-            }}
-          >
-            {active ? <IconCheckCircle size={22} /> : <IconCreditCard size={22} />}
-          </span>
+          <IconTile mute={!active}>
+            {active ? <IconCheckCircle size={17} /> : <IconCreditCard size={17} />}
+          </IconTile>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>Stripe Connect</div>
-            <div
-              className="mono"
-              style={{
-                marginTop: 4,
-                fontSize: 11,
-                letterSpacing: "0.12em",
-                color: l.tone,
-                textTransform: "uppercase",
-              }}
-            >
-              {l.text}
+            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>Stripe Connect</div>
+            <div style={{ marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
+              Cuenta de cobros del club
             </div>
           </div>
-          {!active && (
-            <button
-              type="button"
-              className="btn btn-accent"
-              onClick={connect}
-              disabled={busy}
-              style={{ padding: "12px 22px", fontSize: 13.5 }}
-            >
-              {busy
-                ? "Abriendo…"
-                : status === "none"
-                  ? "Conectar con Stripe"
-                  : "Continuar alta"}
-            </button>
-          )}
+          <Chip tone={l.tone}>{l.text}</Chip>
         </div>
 
-        {active ? (
-          <p
-            style={{
-              marginTop: 18,
-              fontSize: 13,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Ya puedes poner cuota de inscripción a tus torneos y cobrarla online.
-            Stripe ingresa el dinero en tu cuenta bancaria automáticamente.
-          </p>
-        ) : (
-          <p
-            style={{
-              marginTop: 18,
-              fontSize: 13,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            El alta la gestiona Stripe (te pedirá tus datos y una cuenta bancaria).
-            Cuando termines, vuelve aquí; el estado se actualiza solo.
-          </p>
-        )}
+        <div className="divider" />
+
+        <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
+          {active
+            ? "Ya puedes poner cuota de inscripción a tus torneos y cobrarla online. Stripe ingresa el dinero en tu cuenta bancaria automáticamente."
+            : "El alta la gestiona Stripe (te pedirá tus datos y una cuenta bancaria). Cuando termines, vuelve aquí; el estado se actualiza solo."}
+        </p>
       </Card>
 
       {toast && (

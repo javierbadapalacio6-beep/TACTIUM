@@ -7,6 +7,10 @@ import { ReturnToApp } from "./ReturnToApp";
 //   · app → el pago se inició desde el móvil: ofrecemos volver a la app.
 //   · web → el usuario ya está en el navegador (pagó desde el escritorio):
 //           se queda en la web, con un atajo a su panel de torneos.
+//
+// Va fuera del shell y sin sesión garantizada, pero usa los MISMOS tokens que
+// el resto: antes traía sus propios hex, su tipografía del sistema y un emoji
+// como icono, y se notaba que era otra web.
 export default async function PagoOkPage({
   searchParams,
 }: {
@@ -17,23 +21,51 @@ export default async function PagoOkPage({
 
   return (
     <main
+      className="amb"
       style={{
         minHeight: "100dvh",
         display: "grid",
         placeItems: "center",
         padding: 24,
-        background: "#030F0F",
-        color: "#E8F5EF",
-        fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
-        textAlign: "center",
       }}
     >
-      <div style={{ maxWidth: 460 }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 10px" }}>
-          Pago completado
-        </h1>
-        <p style={{ color: "rgba(232,245,239,0.7)", lineHeight: 1.5 }}>
+      <div style={{ maxWidth: 440, textAlign: "center" }}>
+        <span
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 16,
+            background: "var(--accent-10)",
+            color: "var(--accent)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 18,
+          }}
+        >
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </span>
+        <h1>Pago completado</h1>
+        <p
+          style={{
+            margin: "10px 0 0",
+            fontSize: 14,
+            color: "var(--text-muted)",
+            lineHeight: 1.5,
+          }}
+        >
           {fromApp
             ? "Tu torneo ya está publicado. Vuelve a la app de TACTIUM para gestionarlo."
             : "Tu torneo ya está publicado. Puedes volver a tu panel para gestionarlo."}
@@ -46,16 +78,8 @@ export default async function PagoOkPage({
           // Pago desde la web → se queda en la web.
           <a
             href="/club/torneos"
-            style={{
-              display: "inline-block",
-              marginTop: 20,
-              padding: "12px 22px",
-              borderRadius: 999,
-              background: "#00DF82",
-              color: "#001810",
-              fontWeight: 700,
-              textDecoration: "none",
-            }}
+            className="btn btn-accent btn-lg"
+            style={{ marginTop: 22 }}
           >
             Ir a mis torneos
           </a>

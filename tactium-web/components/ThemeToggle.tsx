@@ -12,13 +12,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="btn btn-ghost mono"
-      style={{
-        padding: "8px 14px",
-        fontSize: 11,
-        letterSpacing: "0.18em",
-        textTransform: "uppercase",
-      }}
+      className="btn btn-ghost btn-sm"
       // Antes de rehidratar no sabemos el tema real: ocultamos el texto al
       // lector de pantalla en vez de anunciar uno que puede cambiar.
       aria-live="off"
@@ -31,7 +25,7 @@ export function ThemeToggle() {
       }
       suppressHydrationWarning
     >
-      {resolved === "dark" ? <IconSun size={15} /> : <IconMoon size={15} />}
+      {resolved === "dark" ? <IconSun size={14} /> : <IconMoon size={14} />}
       <span suppressHydrationWarning>
         {resolved === "dark" ? "Modo oscuro" : "Modo claro"}
       </span>

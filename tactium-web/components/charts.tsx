@@ -61,18 +61,13 @@ export function Ring({
         />
       </svg>
       <div>
-        <div className="mono" style={{ fontSize: 38, fontWeight: 700, lineHeight: 1 }}>
-          {value}%
-        </div>
         <div
           className="mono"
-          style={{
-            marginTop: 10,
-            fontSize: 10,
-            letterSpacing: "0.2em",
-            color: "var(--text-faint)",
-          }}
+          style={{ fontSize: 30, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em" }}
         >
+          {value}%
+        </div>
+        <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--text-muted)" }}>
           {label}
         </div>
       </div>
@@ -123,7 +118,7 @@ export function WonLostBar({
         style={{
           marginTop: 14,
           display: "flex",
-          gap: 22,
+          gap: 20,
           flexWrap: "wrap",
         }}
       >
@@ -133,7 +128,7 @@ export function WonLostBar({
         ].map((s) => (
           <span
             key={s.l}
-            style={{ display: "flex", alignItems: "center", gap: 9 }}
+            style={{ display: "flex", alignItems: "center", gap: 8 }}
           >
             <span
               style={{
@@ -144,7 +139,7 @@ export function WonLostBar({
                 flex: "none",
               }}
             />
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{s.l}</span>
+            <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{s.l}</span>
             <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
               {s.v}
             </span>
@@ -204,8 +199,10 @@ export function BarList({
                   <span
                     style={{
                       marginLeft: 8,
+                      fontFamily: "var(--font-ui)",
+                      fontSize: 12,
                       color: "var(--text-faint)",
-                      fontWeight: 400,
+                      fontWeight: 500,
                     }}
                   >
                     {d.sub}

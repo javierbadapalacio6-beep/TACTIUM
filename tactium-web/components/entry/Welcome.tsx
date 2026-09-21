@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { EntryFrame } from "./EntryFrame";
+import { Btn, BtnLink, Card, Eyebrow, Progress } from "@/components/ui";
 
 const SLIDES = [
   {
@@ -33,6 +33,15 @@ const SLIDES = [
   },
 ] as const;
 
+/** Rótulo de la ilustración: frase normal, nunca mayúsculas con tracking. */
+function VisualLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>
+      {children}
+    </div>
+  );
+}
+
 /**
  * Ilustraciones de interfaz hechas sólo con tokens — nada de fotos ni stock.
  * Cada una es un fragmento reconocible del producto.
@@ -40,12 +49,12 @@ const SLIDES = [
 function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
   if (kind === "pareja") {
     return (
-      <div className="card" style={{ padding: 22 }}>
-        <div className="eyebrow">PAREJA · PISTA 1</div>
-        <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+      <Card>
+        <VisualLabel>Pareja · pista 1</VisualLabel>
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            { name: "Jugador 01", pos: "DRIVE", pts: "2400" },
-            { name: "Jugador 02", pos: "REVÉS", pts: "2200" },
+            { name: "Jugador 01", pos: "Drive", pts: "2400" },
+            { name: "Jugador 02", pos: "Revés", pts: "2200" },
           ].map((p) => (
             <div
               key={p.name}
@@ -54,7 +63,7 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
                 alignItems: "center",
                 gap: 12,
                 padding: "12px 14px",
-                borderRadius: 12,
+                borderRadius: "var(--r-md)",
                 background: "var(--bg-card-2)",
               }}
             >
@@ -63,21 +72,14 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
                   width: 30,
                   height: 30,
                   borderRadius: 999,
-                  background: "var(--primary-dim)",
+                  background: "var(--tile-bg)",
                   flex: "none",
                 }}
               />
               <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>
                 {p.name}
               </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 9.5,
-                  letterSpacing: "0.16em",
-                  color: "var(--text-faint)",
-                }}
-              >
+              <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
                 {p.pos}
               </span>
               <span
@@ -89,46 +91,33 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (kind === "disponibilidad") {
     return (
-      <div className="card" style={{ padding: 22 }}>
-        <div className="eyebrow">DISPONIBILIDAD</div>
+      <Card>
+        <VisualLabel>Disponibilidad</VisualLabel>
         <div
           style={{
-            marginTop: 16,
+            marginTop: 12,
             display: "flex",
             alignItems: "baseline",
             gap: 8,
           }}
         >
-          <span className="mono" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1 }}>
+          <span className="mono" style={{ fontSize: 34, fontWeight: 700, lineHeight: 1 }}>
             12
           </span>
-          <span
-            className="mono"
-            style={{ fontSize: 15, color: "var(--text-faint)" }}
-          >
+          <span className="mono" style={{ fontSize: 14, color: "var(--text-faint)" }}>
             / 16
           </span>
         </div>
+        <Progress value={75} style={{ marginTop: 16 }} />
         <div
           style={{
             marginTop: 16,
-            height: 8,
-            borderRadius: 999,
-            background: "var(--hair-strong)",
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ width: "75%", height: "100%", background: "var(--accent)" }} />
-        </div>
-        <div
-          style={{
-            marginTop: 18,
             display: "grid",
             gridTemplateColumns: "repeat(8, 1fr)",
             gap: 6,
@@ -139,25 +128,25 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
               key={i}
               style={{
                 height: 22,
-                borderRadius: 6,
+                borderRadius: "var(--r-xs)",
                 background: i < 12 ? "var(--accent-25)" : "var(--bg-card-2)",
               }}
             />
           ))}
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (kind === "temporada") {
     return (
-      <div className="card" style={{ padding: 22 }}>
-        <div className="eyebrow">TEMPORADA 25/26</div>
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+      <Card>
+        <VisualLabel>Temporada 25/26</VisualLabel>
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            { j: "J·12", rival: "vs CD Norte", res: "3-2", win: true },
-            { j: "J·13", rival: "vs Pádel Sur", res: "1-4", win: false },
-            { j: "J·14", rival: "vs CD Este", res: "—", win: null },
+            { j: "J12", rival: "vs CD Norte", res: "3-2", win: true },
+            { j: "J13", rival: "vs Pádel Sur", res: "1-4", win: false },
+            { j: "J14", rival: "vs CD Este", res: "—", win: null },
           ].map((r) => (
             <div
               key={r.j}
@@ -166,17 +155,14 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
                 alignItems: "center",
                 gap: 12,
                 padding: "11px 13px",
-                borderRadius: 10,
+                borderRadius: "var(--r-md)",
                 background: "var(--bg-card-2)",
               }}
             >
-              <span
-                className="mono"
-                style={{ fontSize: 11, color: "var(--text-faint)", letterSpacing: "0.1em" }}
-              >
+              <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)" }}>
                 {r.j}
               </span>
-              <span style={{ flex: 1, fontSize: 13 }}>{r.rival}</span>
+              <span style={{ flex: 1, fontSize: 13.5 }}>{r.rival}</span>
               <span
                 className="mono"
                 style={{
@@ -195,7 +181,7 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -204,10 +190,7 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
   const r = 52;
   const c = 2 * Math.PI * r;
   return (
-    <div
-      className="card"
-      style={{ padding: 22, display: "flex", alignItems: "center", gap: 24 }}
-    >
+    <Card style={{ display: "flex", alignItems: "center", gap: 24 }}>
       <svg width="130" height="130" viewBox="0 0 130 130" aria-hidden="true">
         <circle
           cx="65"
@@ -230,25 +213,14 @@ function Visual({ kind }: { kind: (typeof SLIDES)[number]["visual"] }) {
         />
       </svg>
       <div>
-        <div
-          className="mono"
-          style={{ fontSize: 34, fontWeight: 700, lineHeight: 1 }}
-        >
+        <div className="mono" style={{ fontSize: 30, fontWeight: 700, lineHeight: 1 }}>
           {pct}%
         </div>
-        <div
-          className="mono"
-          style={{
-            marginTop: 8,
-            fontSize: 10,
-            letterSpacing: "0.2em",
-            color: "var(--text-faint)",
-          }}
-        >
-          DE VICTORIAS
+        <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--text-muted)" }}>
+          de victorias
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -261,24 +233,23 @@ export function Welcome() {
     <EntryFrame wide>
       <div className="tw-welcome">
         <div>
-          <div className="eyebrow">CREATE · ANALYZE · ELEVATE</div>
+          {/* La web es en español y el antetítulo estaba en inglés. */}
+          <Eyebrow>Tu equipo, jornada a jornada</Eyebrow>
           <h1
             style={{
-              margin: "20px 0 0",
-              fontSize: "clamp(32px, 5vw, 46px)",
-              lineHeight: 1.04,
-              textWrap: "balance",
+              margin: "18px 0 0",
+              fontSize: "clamp(28px, 4vw, 38px)",
+              lineHeight: 1.06,
             }}
           >
             {s.title}
           </h1>
           <p
             style={{
-              margin: "18px 0 0",
-              fontSize: 15.5,
+              margin: "16px 0 0",
+              fontSize: 15,
               color: "var(--text-muted)",
               maxWidth: "46ch",
-              textWrap: "pretty",
             }}
           >
             {s.body}
@@ -286,7 +257,7 @@ export function Welcome() {
 
           <div
             style={{
-              marginTop: 32,
+              marginTop: 28,
               display: "flex",
               alignItems: "center",
               gap: 10,
@@ -318,47 +289,26 @@ export function Welcome() {
 
           <div
             style={{
-              marginTop: 28,
+              marginTop: 24,
               display: "flex",
               alignItems: "center",
-              gap: 12,
+              gap: 8,
               flexWrap: "wrap",
             }}
           >
             {last ? (
-              <Link
-                href="/entrar"
-                className="btn btn-accent"
-                style={{ padding: "14px 26px", fontSize: 14.5 }}
-              >
+              <BtnLink href="/entrar" variant="accent" size="lg">
                 Empezar
-              </Link>
+              </BtnLink>
             ) : (
-              <button
-                type="button"
-                onClick={() => setI(i + 1)}
-                className="btn btn-accent"
-                style={{ padding: "14px 26px", fontSize: 14.5 }}
-              >
+              <Btn variant="accent" size="lg" onClick={() => setI(i + 1)}>
                 Continuar
-              </button>
+              </Btn>
             )}
             {!last && (
-              <button
-                type="button"
-                onClick={() => setI(SLIDES.length - 1)}
-                className="btn"
-                style={{
-                  padding: "14px 20px",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--text-muted)",
-                }}
-              >
+              <Btn variant="quiet" size="lg" onClick={() => setI(SLIDES.length - 1)}>
                 Saltar
-              </button>
+              </Btn>
             )}
           </div>
         </div>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EntryFrame, Field, Input } from "./EntryFrame";
-import { Modal } from "@/components/ui";
+import { Btn, Modal, Note } from "@/components/ui";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { WRITES_ENABLED } from "@/lib/writes";
 import { IconCheckCircle, IconEye, IconEyeOff } from "@/components/Icon";
@@ -115,28 +115,21 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
 
   return (
     <EntryFrame>
-      <div className="eyebrow">{signup ? "CREAR CUENTA" : "INICIAR SESIÓN"}</div>
-      <h1
-        style={{
-          margin: "16px 0 0",
-          fontSize: 26,
-          lineHeight: 1.15,
-          textWrap: "pretty",
-        }}
-      >
+      <h1>{signup ? "Crear cuenta" : "Iniciar sesión"}</h1>
+      <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
         {signup
           ? "Configura tu cuenta y empieza a gestionar tu equipo."
           : "Accede a tu equipo y planifica la próxima jornada."}
-      </h1>
+      </p>
 
       <form
         onSubmit={submit}
         noValidate
         style={{
-          marginTop: 28,
+          marginTop: 24,
           display: "flex",
           flexDirection: "column",
-          gap: 18,
+          gap: 16,
         }}
       >
         {signup && (
@@ -191,17 +184,15 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
                   setRecoverSent(false);
                   setRecoverOpen(true);
                 }}
+                className="link-action"
                 style={{
                   border: "none",
                   background: "transparent",
-                  color: "var(--accent)",
-                  fontSize: 12,
                   cursor: "pointer",
                   padding: 0,
-                  fontFamily: "'Satoshi', sans-serif",
                 }}
               >
-                ¿Olvidaste?
+                ¿Olvidaste tu contraseña?
               </button>
             ) : undefined
           }
@@ -224,101 +215,66 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
               aria-label={showPass ? "Ocultar contraseña" : "Ver contraseña"}
               aria-pressed={showPass}
               tabIndex={-1}
+              className="btn btn-icon"
               style={{
                 position: "absolute",
-                right: 6,
+                right: 4,
                 top: "50%",
                 transform: "translateY(-50%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
                 width: 34,
-                height: 34,
-                border: "none",
-                background: "transparent",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                padding: 0,
+                minHeight: 34,
               }}
             >
-              {showPass ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+              {showPass ? <IconEyeOff size={17} /> : <IconEye size={17} />}
             </button>
           </div>
         </Field>
 
         {serverError && (
-          <p
-            role="alert"
-            style={{
-              margin: 0,
-              padding: "12px 14px",
-              borderRadius: 10,
-              background: "var(--error-soft)",
-              border: "1px solid var(--error)",
-              color: "var(--error)",
-              fontSize: 13,
-            }}
-          >
-            {serverError}
-          </p>
+          <Note tone="error" style={{ margin: 0 }}>
+            <span role="alert">{serverError}</span>
+          </Note>
         )}
 
-        <button
+        <Btn
           type="submit"
-          className="btn btn-accent"
+          variant="accent"
+          size="lg"
+          block
           disabled={busy}
-          style={{ padding: 15, fontSize: 15, marginTop: 4 }}
+          style={{ marginTop: 4 }}
         >
           {busy ? "Entrando…" : signup ? "Crear cuenta" : "Iniciar sesión"}
-        </button>
+        </Btn>
       </form>
 
       <div
         style={{
-          margin: "26px 0",
+          margin: "24px 0",
           display: "flex",
           alignItems: "center",
           gap: 14,
         }}
       >
-        <span style={{ flex: 1, height: 1, background: "var(--hair)" }} />
-        <span
-          className="mono"
-          style={{
-            fontSize: 9.5,
-            letterSpacing: "0.2em",
-            color: "var(--text-faint)",
-          }}
-        >
-          O CONTINÚA CON
+        <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
+        <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+          o continúa con
         </span>
-        <span style={{ flex: 1, height: 1, background: "var(--hair)" }} />
+        <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={() => void oauth("google")}
-          className="btn btn-ghost"
-          style={{
-            flex: 1,
-            minWidth: 130,
-            padding: "13px 18px",
-            fontSize: 13.5,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-          }}
-        >
-          <GoogleLogo />
-          Continuar con Google
-        </button>
-      </div>
+      <Btn
+        size="lg"
+        block
+        onClick={() => void oauth("google")}
+        icon={<GoogleLogo />}
+      >
+        Continuar con Google
+      </Btn>
 
       <p
         style={{
-          margin: "26px 0 0",
+          margin: "24px 0 0",
           textAlign: "center",
           fontSize: 13.5,
           color: "var(--text-muted)",
@@ -331,15 +287,13 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
             setMode(signup ? "login" : "signup");
             setTouched(false);
           }}
+          className="link-action"
           style={{
             border: "none",
             background: "transparent",
-            color: "var(--accent)",
-            fontSize: 13.5,
-            fontWeight: 700,
             cursor: "pointer",
             padding: 0,
-            fontFamily: "'Satoshi', sans-serif",
+            fontSize: 13.5,
           }}
         >
           {signup ? "Inicia sesión" : "Crea una cuenta"}
@@ -357,7 +311,7 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
               style={{
                 width: 40,
                 height: 40,
-                borderRadius: 12,
+                borderRadius: "var(--r-md)",
                 background: "var(--accent-10)",
                 color: "var(--accent)",
                 display: "flex",
@@ -368,45 +322,22 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
             >
               <IconCheckCircle size={20} />
             </div>
-            <h2 id="recuperar-titulo" style={{ fontSize: 22 }}>
+            <h2 id="recuperar-titulo" style={{ fontSize: 19 }}>
               Email enviado
             </h2>
-            <p
-              style={{
-                margin: "10px 0 0",
-                fontSize: 13.5,
-                color: "var(--text-muted)",
-                textWrap: "pretty",
-              }}
-            >
+            <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
               Revisa tu bandeja de entrada · el enlace caduca en 30 minutos.
             </p>
-            <div
-              style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}
-            >
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setRecoverOpen(false)}
-                style={{ padding: "12px 20px", fontSize: 13.5 }}
-              >
-                Volver
-              </button>
+            <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end" }}>
+              <Btn onClick={() => setRecoverOpen(false)}>Volver</Btn>
             </div>
           </>
         ) : (
           <>
-            <h2 id="recuperar-titulo" style={{ fontSize: 22 }}>
+            <h2 id="recuperar-titulo" style={{ fontSize: 19 }}>
               Recuperar contraseña
             </h2>
-            <p
-              style={{
-                margin: "10px 0 20px",
-                fontSize: 13.5,
-                color: "var(--text-muted)",
-                textWrap: "pretty",
-              }}
-            >
+            <p style={{ margin: "8px 0 18px", fontSize: 13.5, color: "var(--text-muted)" }}>
               Te enviamos un enlace para crear una contraseña nueva.
             </p>
             <Field label="Email">
@@ -420,29 +351,20 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
             </Field>
             <div
               style={{
-                marginTop: 24,
+                marginTop: 22,
                 display: "flex",
                 justifyContent: "flex-end",
-                gap: 10,
+                gap: 8,
               }}
             >
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setRecoverOpen(false)}
-                style={{ padding: "12px 20px", fontSize: 13.5 }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn btn-accent"
+              <Btn onClick={() => setRecoverOpen(false)}>Cancelar</Btn>
+              <Btn
+                variant="accent"
                 disabled={!EMAIL_RE.test(recoverEmail)}
                 onClick={() => setRecoverSent(true)}
-                style={{ padding: "12px 22px", fontSize: 13.5 }}
               >
                 Enviar
-              </button>
+              </Btn>
             </div>
           </>
         )}

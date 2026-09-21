@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { fetchPlayers, fetchTeamPairStats } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow } from "@/components/ui";
+import { Card, CardHead, Table } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconUsers } from "@/components/Icon";
 
@@ -52,61 +52,49 @@ export function PairStats() {
   if (error) return null;
 
   return (
-    <Card>
-      <Eyebrow>CON QUIÉN JUEGAS MEJOR</Eyebrow>
-      <h2 style={{ margin: "14px 0 18px", fontSize: 24 }}>
-        Parejas de {activeTeam?.name}
-      </h2>
+    <Card flush>
+      <CardHead
+        title="Parejas"
+        count={rows.length || undefined}
+        sub={`Con quién juega mejor cada jugador de ${activeTeam?.name ?? "tu equipo"}`}
+      />
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={<IconUsers size={30} />}
+          compact
+          icon={<IconUsers size={22} />}
           title="Todavía no hay parejas con partidos"
           body="En cuanto cerréis actas con resultados, aquí se verá qué parejas funcionan."
         />
       ) : (
-        <div
-          style={{
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-            overflow: "hidden",
-          }}
-        >
-          {rows.map((r, i) => (
-            <div
-              key={r.key}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto auto",
-                alignItems: "center",
-                gap: 16,
-                padding: "12px 18px",
-                borderBottom:
-                  i === rows.length - 1 ? "none" : "1px solid var(--hair)",
-              }}
-            >
-              <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.names}</span>
-              <span
-                className="mono"
-                style={{ fontSize: 12, color: "var(--text-faint)" }}
-              >
-                {r.wins}/{r.played}
-              </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: r.pct >= 50 ? "var(--accent)" : "var(--text-muted)",
-                  minWidth: 46,
-                  textAlign: "right",
-                }}
-              >
-                {r.pct}%
-              </span>
-            </div>
-          ))}
-        </div>
+        <Table dense>
+          <thead>
+            <tr>
+              <th>Pareja</th>
+              <th className="num">Ganados</th>
+              <th className="num">Victorias</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key}>
+                <td className="cell-main">{r.names}</td>
+                <td className="num cell-muted">
+                  {r.wins}/{r.played}
+                </td>
+                <td
+                  className="num"
+                  style={{
+                    fontWeight: 700,
+                    color: r.pct >= 50 ? "var(--accent)" : "var(--text-muted)",
+                  }}
+                >
+                  {r.pct}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       )}
     </Card>
   );

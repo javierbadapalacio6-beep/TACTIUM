@@ -64,3 +64,26 @@ export function priceSignup(
   const totalCents = persons.reduce((s, p) => s + p.feeCents, 0);
   return { persons, totalCents };
 }
+
+/**
+ * Importe de una cuota tal y como lo escribiría el club: «25 €», no «25 EUR».
+ * El código de moneda de la base (`fee_currency`) es el dato; el símbolo es la
+ * presentación. Sin decimales cuando el importe es entero.
+ */
+export function formatFee(
+  amount: number,
+  currency: string | null | undefined = "EUR",
+): string {
+  const cur = (currency ?? "EUR").trim().toUpperCase();
+  try {
+    return new Intl.NumberFormat("es-ES", {
+      style: "currency",
+      currency: /^[A-Z]{3}$/.test(cur) ? cur : "EUR",
+      minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Un código de moneda que Intl no conoce no debe tumbar la pantalla.
+    return `${amount} €`;
+  }
+}

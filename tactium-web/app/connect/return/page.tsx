@@ -32,19 +32,10 @@ export default function ConnectReturnPage() {
       }}
     >
       <div
-        style={{
-          maxWidth: 460,
-          width: "100%",
-          textAlign: "center",
-          background: "var(--bg-card)",
-          border: "1px solid var(--hair-strong)",
-          borderRadius: 18,
-          padding: 36,
-        }}
+        className="card"
+        style={{ maxWidth: 440, width: "100%", textAlign: "center", padding: 32 }}
       >
-        <h1 style={{ fontSize: 24, margin: 0 }}>
-          {retry ? "Alta sin terminar" : "¡Cobros conectados!"}
-        </h1>
+        <h1>{retry ? "Alta sin terminar" : "Cobros conectados"}</h1>
         <p
           style={{
             margin: "14px 0 0",
@@ -58,16 +49,7 @@ export default function ConnectReturnPage() {
             ? "El enlace de alta caducó o faltan datos. Vuelve a la app y toca de nuevo “Cobros online de torneos”."
             : "Tu club ya puede cobrar inscripciones online. Vuelve a la app para continuar."}
         </p>
-        <a
-          href={APP_DEEP_LINK}
-          className="btn btn-accent"
-          style={{
-            display: "inline-flex",
-            marginTop: 26,
-            padding: "13px 26px",
-            fontSize: 14,
-          }}
-        >
+        <a href={APP_DEEP_LINK} className="btn btn-accent btn-lg" style={{ marginTop: 24 }}>
           Volver a la app
         </a>
       </div>

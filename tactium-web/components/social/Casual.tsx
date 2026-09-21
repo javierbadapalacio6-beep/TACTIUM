@@ -7,10 +7,22 @@ import { fetchCasualMatches, type DbCasual } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
 import {
-  IconChevronRight,
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  Input,
+  Note,
+  PageHeader,
+  Segmented,
+  Table,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage } from "@/components/states";
+import {
+  IconAlert,
   IconCopy,
   IconPlus,
   IconUpload,
@@ -19,9 +31,9 @@ import {
 
 /** Los tipos que guarda la base: amistoso · entreno · torneo. */
 const TYPE_LABEL: Record<string, string> = {
-  amistoso: "AMISTOSO",
-  entreno: "ENTRENAMIENTO",
-  torneo: "TORNEO",
+  amistoso: "Amistoso",
+  entreno: "Entrenamiento",
+  torneo: "Torneo",
 };
 
 const formatSets = (sets: [number, number][]) =>
@@ -54,49 +66,25 @@ export function CasualList() {
   );
   const matches = data ?? [];
 
-  return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: 20,
-          marginBottom: 22,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <Eyebrow>AMISTOSOS</Eyebrow>
-          <h1 style={{ marginTop: 10, fontSize: 30 }}>Amistosos</h1>
-          <p
-            className="mono"
-            style={{
-              margin: "8px 0 0",
-              fontSize: 10.5,
-              letterSpacing: "0.14em",
-              color: "var(--text-faint)",
-            }}
-          >
-            {loading ? "CARGANDO…" : `${matches.length} PARTIDOS`}
-          </p>
-        </div>
-        <Link
-          href="/amistosos/nuevo"
-          className="btn btn-accent"
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
-        >
-          <IconPlus size={15} />
-          Registrar amistoso
-        </Link>
-      </div>
+  if (loading) return <SkeletonPage />;
 
-      {loading ? (
-        <SkeletonCard />
-      ) : error ? (
+  return (
+    <div className="tw-page">
+      <PageHeader
+        title="Amistosos"
+        lede="Los partidos que apuntas fuera de la liga: amistosos, entrenos y torneos."
+        meta={[`${matches.length} ${matches.length === 1 ? "partido" : "partidos"}`]}
+        actions={
+          <BtnLink href="/amistosos/nuevo" variant="accent" icon={<IconPlus size={15} />}>
+            Registrar amistoso
+          </BtnLink>
+        }
+      />
+
+      {error ? (
         <Card>
           <EmptyState
-            icon={<IconUsers size={34} />}
+            icon={<IconUsers size={22} />}
             title="No se pudieron cargar los amistosos"
             body={error}
           />
@@ -104,92 +92,71 @@ export function CasualList() {
       ) : matches.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconUsers size={34} />}
+            icon={<IconUsers size={22} />}
             title="Sin partidos todavía"
             body="Registra tu primer amistoso y empieza a acumular números."
+            action={
+              <BtnLink href="/amistosos/nuevo" variant="accent" size="sm">
+                Registrar un amistoso
+              </BtnLink>
+            }
           />
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {matches.map((c) => {
-            const decided = c.winnerSide !== null;
-            const won = wonByUs(c);
-            return (
-              <Link key={c.id} href={`/amistosos/${c.id}`} style={{ color: "inherit" }}>
-                <Card style={{ padding: 20 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 14,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 9.5,
-                        letterSpacing: "0.16em",
-                        color: "var(--text-faint)",
-                      }}
-                    >
-                      {TYPE_LABEL[c.type] ?? c.type.toUpperCase()}
-                    </span>
-                    <span
-                      className="mono"
-                      style={{ fontSize: 11, color: "var(--text-faint)" }}
-                    >
-                      {formatDate(c.playedOn)}
-                    </span>
-                    <div style={{ flex: 1 }} />
-                    {decided && (
-                      <span
-                        className="chip"
-                        style={{
-                          color: won ? "var(--accent)" : "var(--error)",
-                          borderColor: won ? "var(--accent-40)" : "var(--error)",
-                        }}
-                      >
-                        {won ? "Victoria" : "Derrota"}
-                      </span>
-                    )}
-                    {c.photoUrl && <span className="chip chip-mute">Foto</span>}
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 14,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 20,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span style={{ flex: 1, minWidth: 160 }}>
-                      <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
-                        {c.sideA.join(" · ") || "—"}
-                      </span>
-                      <span
-                        style={{
-                          display: "block",
-                          marginTop: 4,
-                          fontSize: 13,
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        vs {c.sideB.join(" · ") || "—"}
-                      </span>
-                    </span>
-                    <span className="mono" style={{ fontSize: 22, fontWeight: 700 }}>
-                      {formatSets(c.sets)}
-                    </span>
-                    <IconChevronRight size={16} />
-                  </div>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+        <Card flush>
+          <CardHead title="Partidos" count={matches.length} />
+          <Table minWidth={620}>
+            <thead>
+              <tr>
+                <th>Partido</th>
+                <th>Tipo</th>
+                <th>Fecha</th>
+                <th className="num">Resultado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {matches.map((c) => {
+                const decided = c.winnerSide !== null;
+                const won = wonByUs(c);
+                return (
+                  <tr key={c.id}>
+                    <td>
+                      <Link href={`/amistosos/${c.id}`} style={{ color: "inherit" }}>
+                        <span
+                          className="cell-main truncate"
+                          style={{ display: "block", maxWidth: 260 }}
+                        >
+                          {c.sideA.join(" · ") || "—"}
+                        </span>
+                        <span className="cell-sub truncate" style={{ maxWidth: 260 }}>
+                          vs {c.sideB.join(" · ") || "—"}
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="cell-muted">{TYPE_LABEL[c.type] ?? c.type}</td>
+                    <td className="cell-muted">{formatDate(c.playedOn)}</td>
+                    <td className="num" style={{ fontWeight: 700 }}>
+                      {formatSets(c.sets) || "—"}
+                    </td>
+                    <td>
+                      <div className="tw-table-actions">
+                        {c.photoUrl && <Chip tone="mute">Foto</Chip>}
+                        {decided ? (
+                          <Chip tone={won ? "accent" : "error"}>
+                            {won ? "Victoria" : "Derrota"}
+                          </Chip>
+                        ) : (
+                          <Chip tone="mute">Sin resultado</Chip>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        </Card>
       )}
     </div>
   );
@@ -207,16 +174,18 @@ export function CasualDetail({ id }: { id: string }) {
   );
   const c = (data ?? []).find((m) => m.id === id) ?? null;
 
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error || !c) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconUsers size={34} />}
-          title="Partido no encontrado"
-          body={error ?? "Puede que no sea público o que se haya borrado."}
-        />
-      </Card>
+      <div className="tw-page-narrow">
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={22} />}
+            title="Partido no encontrado"
+            body={error ?? "Puede que no sea público o que se haya borrado."}
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -224,8 +193,17 @@ export function CasualDetail({ id }: { id: string }) {
   const won = wonByUs(c);
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <Card style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
+    <div className="tw-page-narrow">
+      <PageHeader
+        back={{ href: "/amistosos", label: "Amistosos" }}
+        title={TYPE_LABEL[c.type] ?? c.type}
+        meta={[formatDate(c.playedOn) || null, c.photoUrl ? "Con foto" : null].filter(
+          Boolean
+        ) as string[]}
+      />
+
+      {/* Marcador — el dato que se viene a ver. */}
+      <Card flush>
         <div
           className={c.photoUrl ? undefined : "amb"}
           style={
@@ -240,169 +218,126 @@ export function CasualDetail({ id }: { id: string }) {
               : { padding: 28, textAlign: "center" }
           }
         >
-          <span
-            className="mono"
-            style={{
-              fontSize: 9.5,
-              letterSpacing: "0.18em",
-              color: "var(--accent)",
-            }}
-          >
-            {TYPE_LABEL[c.type] ?? c.type.toUpperCase()}
-          </span>
           <div
             className="mono"
-            style={{
-              marginTop: 20,
-              fontSize: 46,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-            }}
+            style={{ fontSize: 40, fontWeight: 700, lineHeight: 1 }}
           >
             {formatSets(c.sets) || "—"}
           </div>
           <div
             style={{
-              marginTop: 18,
+              marginTop: 16,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 14,
+              gap: 8,
               flexWrap: "wrap",
             }}
           >
-            <span className="chip chip-mute">{c.sideA.join(" · ") || "—"}</span>
-            <span className="chip chip-mute">{c.sideB.join(" · ") || "—"}</span>
+            <Chip tone="mute" plain>
+              {c.sideA.join(" · ") || "—"}
+            </Chip>
+            <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>vs</span>
+            <Chip tone="mute" plain>
+              {c.sideB.join(" · ") || "—"}
+            </Chip>
           </div>
           {decided && (
-            <div style={{ marginTop: 18 }}>
-              <span
-                className="chip"
-                style={{
-                  color: won ? "var(--accent)" : "var(--error)",
-                  borderColor: won ? "var(--accent-40)" : "var(--error)",
-                }}
-              >
-                {won ? "Victoria" : "Derrota"}
-              </span>
+            <div style={{ marginTop: 16 }}>
+              <Chip tone={won ? "accent" : "error"}>{won ? "Victoria" : "Derrota"}</Chip>
             </div>
           )}
         </div>
       </Card>
 
       {c.sets.length > 0 && (
-        <Card style={{ marginBottom: 20 }}>
-          <Eyebrow>SETS</Eyebrow>
-          <div
-            style={{
-              marginTop: 18,
-              display: "grid",
-              gridTemplateColumns: `repeat(${c.sets.length}, 1fr)`,
-              gap: 14,
-              maxWidth: 320,
-            }}
-          >
-            {c.sets.map(([a, b], i) => (
-              <div key={i} style={{ textAlign: "center" }}>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 9.5,
-                    letterSpacing: "0.18em",
-                    color: "var(--text-faint)",
-                    marginBottom: 8,
-                  }}
-                >
-                  SET {i + 1}
+        <Card flush style={{ marginTop: 16 }}>
+          <CardHead title="Sets" count={c.sets.length} />
+          <div className="card-body">
+            <div className="tw-sets-row" style={{ marginTop: 0 }}>
+              {c.sets.map(([a, b], i) => (
+                <div key={i} style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--text-muted)",
+                      marginBottom: 7,
+                    }}
+                  >
+                    Set {i + 1}
+                  </div>
+                  <div
+                    className="mono"
+                    style={{
+                      padding: "12px 8px",
+                      borderRadius: "var(--r-sm)",
+                      background: "var(--bg-card-2)",
+                      border: "1px solid var(--line)",
+                      fontSize: 17,
+                      fontWeight: 700,
+                      color: a > b ? "var(--accent)" : "var(--text-muted)",
+                    }}
+                  >
+                    {a}-{b}
+                  </div>
                 </div>
-                <div
-                  className="mono"
-                  style={{
-                    padding: "12px 8px",
-                    borderRadius: 10,
-                    background: "var(--bg-card-2)",
-                    fontSize: 17,
-                    fontWeight: 700,
-                    color: a > b ? "var(--accent)" : "var(--text-muted)",
-                  }}
-                >
-                  {a}-{b}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </Card>
       )}
 
       {c.claimCode && (
-        <Card style={{ marginBottom: 20 }}>
-          <Eyebrow>CÓDIGO DEL PARTIDO</Eyebrow>
-          <p
-            style={{
-              margin: "14px 0 16px",
-              fontSize: 13,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Quien salga en este partido puede reclamarlo con el código y sumarlo
-            a sus estadísticas.
-          </p>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              padding: "16px 20px",
-              borderRadius: 12,
-              background: "var(--bg-card-2)",
-            }}
-          >
-            <span
-              className="mono"
+        <Card flush style={{ marginTop: 16 }}>
+          <CardHead
+            title="Código del partido"
+            sub="Quien salga en este partido puede reclamarlo y sumarlo a sus estadísticas."
+          />
+          <div className="card-body">
+            <div
               style={{
-                fontSize: 24,
-                fontWeight: 700,
-                letterSpacing: "0.2em",
-                color: "var(--accent)",
-              }}
-            >
-              {c.claimCode}
-            </span>
-            <button
-              type="button"
-              aria-label="Copiar código"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(c.claimCode!);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1800);
-                } catch {
-                  /* se puede copiar a mano */
-                }
-              }}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: copied ? "var(--accent)" : "var(--text-faint)",
-                cursor: "pointer",
                 display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+                padding: "14px 16px",
+                borderRadius: "var(--r-md)",
+                background: "var(--bg-card-2)",
+                border: "1px solid var(--line)",
               }}
             >
-              <IconCopy size={17} />
-            </button>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  letterSpacing: "0.16em",
+                  color: "var(--accent)",
+                }}
+              >
+                {c.claimCode}
+              </span>
+              <Btn
+                size="sm"
+                aria-label="Copiar código"
+                icon={<IconCopy size={15} />}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(c.claimCode!);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1800);
+                  } catch {
+                    /* se puede copiar a mano */
+                  }
+                }}
+              >
+                {copied ? "Copiado" : "Copiar"}
+              </Btn>
+            </div>
           </div>
         </Card>
       )}
-
-      <Link
-        href="/amistosos"
-        className="btn btn-ghost"
-        style={{ padding: "12px 20px", fontSize: 13.5 }}
-      >
-        Volver a amistosos
-      </Link>
     </div>
   );
 }
@@ -412,6 +347,13 @@ const KINDS = [
   { key: "amistoso", label: "Amistoso" },
   { key: "entreno", label: "Entreno" },
 ] as const;
+
+const PLAYER_FIELDS = [
+  { id: "casual-jugador-1", label: "Jugador 1" },
+  { id: "casual-jugador-2", label: "Jugador 2" },
+  { id: "casual-rival-1", label: "Rival 1" },
+  { id: "casual-rival-2", label: "Rival 2" },
+];
 
 export function NewCasual() {
   const [kind, setKind] = useState<string>("amistoso");
@@ -451,210 +393,142 @@ export function NewCasual() {
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>AMISTOSOS</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Registrar amistoso</h1>
-      </div>
+    <div className="tw-page-narrow">
+      <PageHeader
+        back={{ href: "/amistosos", label: "Amistosos" }}
+        title="Registrar amistoso"
+        lede="Apunta el partido y el resultado: se suma a tus números."
+      />
 
-      <Card style={{ marginBottom: 20 }}>
-        <Eyebrow>TIPO</Eyebrow>
-        <div className="tw-type-grid" style={{ marginTop: 16 }}>
-          {KINDS.map((k) => {
-            const on = kind === k.key;
-            return (
-              <button
-                key={k.key}
-                type="button"
-                onClick={() => setKind(k.key)}
-                style={{
-                  textAlign: "left",
-                  padding: 16,
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  background: on ? "var(--accent-10)" : "var(--bg-card-2)",
-                  border: `1.5px solid ${on ? "var(--accent)" : "transparent"}`,
-                  color: "var(--text)",
-                }}
-              >
-                <span
-                  style={{
-                    display: "block",
-                    fontSize: 15,
-                    fontWeight: 700,
-                    color: on ? "var(--accent)" : "var(--text)",
-                  }}
-                >
-                  {k.label}
-                </span>
-                <span
-                  className="mono"
-                  style={{
-                    display: "block",
-                    marginTop: 6,
-                    fontSize: 9,
-                    letterSpacing: "0.14em",
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  {TYPE_LABEL[k.key]}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card style={{ marginBottom: 20 }}>
-        <Eyebrow>TU PAREJA · PAREJA RIVAL</Eyebrow>
-        <div className="tw-form-grid" style={{ marginTop: 18 }}>
-          {["Jugador 1", "Jugador 2", "Rival 1", "Rival 2"].map((ph) => (
-            <input
-              key={ph}
-              type="text"
-              placeholder={ph}
-              aria-label={ph}
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: 12,
-                border: "1px solid var(--hair-strong)",
-                background: "var(--bg-card-2)",
-                color: "var(--text)",
-                fontSize: 14,
-                outline: "none",
-                fontFamily: "'Satoshi', sans-serif",
-              }}
+      <Card flush>
+        <CardHead title="El partido" />
+        <div className="card-body">
+          <div className="field" style={{ alignItems: "flex-start" }}>
+            <span className="field-label">Tipo de partido</span>
+            <Segmented
+              label="Tipo de partido"
+              value={kind}
+              onChange={setKind}
+              options={KINDS.map((k) => ({ value: k.key as string, label: k.label }))}
             />
-          ))}
-        </div>
-      </Card>
-
-      <Card style={{ marginBottom: 20 }}>
-        <Eyebrow>RESULTADO</Eyebrow>
-        <div className="tw-sets-row" style={{ marginTop: 18 }}>
-          {sets.map(([a, b], i) => (
-            <div key={i}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: 9.5,
-                  letterSpacing: "0.18em",
-                  color: "var(--text-faint)",
-                  marginBottom: 7,
-                  textAlign: "center",
-                }}
-              >
-                SET {i + 1}
-              </div>
-              <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={a || ""}
-                  placeholder="–"
-                  aria-label={`Set ${i + 1} nuestro`}
-                  onChange={(e) => edit(i, 0, e.target.value)}
-                  className="mono tw-set-input"
-                />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={b || ""}
-                  placeholder="–"
-                  aria-label={`Set ${i + 1} rival`}
-                  onChange={(e) => edit(i, 1, e.target.value)}
-                  className="mono tw-set-input"
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {hasResult && (
-          <div style={{ marginTop: 20 }}>
-            <span
-              className="chip"
-              style={{
-                color: u > t ? "var(--accent)" : "var(--error)",
-                borderColor: u > t ? "var(--accent-40)" : "var(--error)",
-              }}
-            >
-              {u > t ? "Victoria" : "Derrota"}
-            </span>
           </div>
-        )}
 
-        {error && (
-          <p style={{ margin: "16px 0 0", fontSize: 13, color: "var(--error)" }}>
-            {error}
-          </p>
-        )}
+          <div className="tw-form-grid" style={{ marginTop: 16 }}>
+            {PLAYER_FIELDS.map((f) => (
+              <Field key={f.id} label={f.label} htmlFor={f.id}>
+                <Input id={f.id} type="text" placeholder={f.label} aria-label={f.label} />
+              </Field>
+            ))}
+          </div>
+        </div>
       </Card>
 
-      <Card style={{ marginBottom: 20 }}>
-        <Eyebrow>FOTO DEL PARTIDO</Eyebrow>
-        <label
-          style={{
-            marginTop: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: 18,
-            borderRadius: 12,
-            border: "1px dashed var(--hair-strong)",
-            cursor: "pointer",
-          }}
-        >
-          <span style={{ color: "var(--accent)", display: "flex" }}>
-            <IconUpload size={20} />
-          </span>
-          <span style={{ flex: 1, fontSize: 13, color: "var(--text-muted)" }}>
-            Añadir foto del partido
-          </span>
-          <input type="file" accept="image/*" hidden />
-        </label>
+      <Card flush style={{ marginTop: 16 }}>
+        <CardHead title="Resultado" sub="Deja en blanco los sets que no se jugaron." />
+        <div className="card-body">
+          <div className="tw-sets-row" style={{ marginTop: 0 }}>
+            {sets.map(([a, b], i) => (
+              <div key={i}>
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    color: "var(--text-muted)",
+                    marginBottom: 7,
+                    textAlign: "center",
+                  }}
+                >
+                  Set {i + 1}
+                </div>
+                <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={a || ""}
+                    placeholder="–"
+                    aria-label={`Set ${i + 1} nuestro`}
+                    onChange={(e) => edit(i, 0, e.target.value)}
+                    className="mono tw-set-input"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={b || ""}
+                    placeholder="–"
+                    aria-label={`Set ${i + 1} rival`}
+                    onChange={(e) => edit(i, 1, e.target.value)}
+                    className="mono tw-set-input"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {hasResult && (
+            <div style={{ marginTop: 16 }}>
+              <Chip tone={u > t ? "accent" : "error"}>{u > t ? "Victoria" : "Derrota"}</Chip>
+            </div>
+          )}
+
+          {error && (
+            <Note tone="error" icon={<IconAlert size={15} />} style={{ marginTop: 16 }}>
+              {error}
+            </Note>
+          )}
+        </div>
+      </Card>
+
+      <Card flush style={{ marginTop: 16 }}>
+        <CardHead title="Foto del partido" sub="Opcional, sale en la tarjeta que compartes." />
+        <div className="card-body">
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              padding: 16,
+              borderRadius: "var(--r-md)",
+              border: "1px dashed var(--line-strong)",
+              background: "var(--bg-card-2)",
+              cursor: "pointer",
+            }}
+          >
+            <span style={{ color: "var(--accent)", display: "flex" }}>
+              <IconUpload size={17} />
+            </span>
+            <span style={{ flex: 1, fontSize: 13.5, color: "var(--text-muted)" }}>
+              Añadir foto del partido
+            </span>
+            <input type="file" accept="image/*" hidden />
+          </label>
+        </div>
       </Card>
 
       {!WRITES_ENABLED && (
-        <p
-          style={{
-            margin: "0 0 16px",
-            padding: "12px 14px",
-            borderRadius: 10,
-            background: "var(--warning-soft)",
-            border: "1px solid var(--warning)",
-            color: "var(--warning)",
-            fontSize: 12.5,
-          }}
-        >
+        <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginTop: 16 }}>
           {READ_ONLY_MESSAGE}
-        </p>
+        </Note>
       )}
 
       {result && (
-        <p
-          role="status"
-          style={{
-            margin: "0 0 16px",
-            padding: "12px 14px",
-            borderRadius: 10,
-            background: "var(--bg-card-2)",
-            color: "var(--text-muted)",
-            fontSize: 13,
-          }}
-        >
-          {result}
-        </p>
+        <Note style={{ marginTop: 16 }}>
+          <span role="status">{result}</span>
+        </Note>
       )}
 
-      <button
-        className="btn btn-accent"
-        onClick={() => void save()}
-        style={{ padding: "14px 24px", fontSize: 14.5 }}
+      <div
+        style={{
+          marginTop: 16,
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
       >
-        Guardar amistoso
-      </button>
+        <BtnLink href="/amistosos">Cancelar</BtnLink>
+        <Btn variant="accent" onClick={() => void save()}>
+          Guardar amistoso
+        </Btn>
+      </div>
     </div>
   );
 }

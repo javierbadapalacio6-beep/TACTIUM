@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { courtTotals, gameTotals, type CourtResult } from "@/lib/team-data";
@@ -13,8 +12,17 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  Chip,
+  Note,
+  PageHeader,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { IconCalendar, IconLock } from "@/components/Icon";
 
 /**
@@ -22,7 +30,7 @@ import { IconCalendar, IconLock } from "@/components/Icon";
  *
  * Es la pantalla que usan los JUGADORES para meter el resultado de su propio
  * partido, no solo el capitán. Por eso la pista del usuario se resalta arriba
- * con el rótulo "TU PARTIDO" y el resto queda por debajo.
+ * con el rótulo "Tu partido" y el resto queda por debajo.
  *
  * De sólo lectura por ahora: el acta se pinta desde `match_results` (una fila
  * por set) y los controles de entrada quedan como estaban, pendientes de la
@@ -127,36 +135,42 @@ export function ResultsView({ id }: { id: string }) {
 
   if (!teamId) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Sin equipo activo"
-          body="Entra con una cuenta que pertenezca a un equipo."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Sin equipo activo"
+            body="Entra con una cuenta que pertenezca a un equipo."
+          />
+        </Card>
+      </div>
     );
   }
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="No se pudieron cargar los resultados"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="No se pudieron cargar los resultados"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
   if (!data) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Sin jornada activa"
-          body="Abre una jornada del calendario para empezar."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Sin jornada activa"
+            body="Abre una jornada del calendario para empezar."
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -207,12 +221,7 @@ export function ResultsView({ id }: { id: string }) {
     const has = u + t > 0;
 
     return (
-      <Card
-        style={{
-          padding: 22,
-          border: c.mine ? "1.5px solid var(--accent)" : "1.5px solid transparent",
-        }}
-      >
+      <Card style={{ borderColor: c.mine ? "var(--accent-40)" : undefined }}>
         <div
           style={{
             display: "flex",
@@ -222,34 +231,24 @@ export function ResultsView({ id }: { id: string }) {
             flexWrap: "wrap",
           }}
         >
-          <span
-            className="mono"
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.18em",
-              color: c.mine ? "var(--accent)" : "var(--text-faint)",
-            }}
-          >
-            {c.mine ? `TU PARTIDO · PISTA ${c.court}` : `PISTA ${c.court}`}
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>
+              Pista {c.court}
+            </span>
+            {c.mine && <Chip plain>Tu partido</Chip>}
           </span>
           {has && (
-            <span
-              className="chip"
-              style={{
-                color: u > t ? "var(--accent)" : "var(--error)",
-                borderColor: u > t ? "var(--accent-40)" : "var(--error)",
-              }}
-            >
+            <Chip tone={u > t ? "accent" : "error"}>
               {u > t ? "Victoria" : "Derrota"}
-            </span>
+            </Chip>
           )}
         </div>
 
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 700 }}>
             {a && b ? `${a.name} · ${b.name}` : "Sin alineación"}
           </div>
-          <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>
+          <div style={{ marginTop: 3, fontSize: 13.5, color: "var(--text-muted)" }}>
             vs {m.opponent}
           </div>
         </div>
@@ -258,16 +257,10 @@ export function ResultsView({ id }: { id: string }) {
           {[0, 1, 2].map((si) => (
             <div key={si}>
               <div
-                className="mono"
-                style={{
-                  fontSize: 9.5,
-                  letterSpacing: "0.18em",
-                  color: "var(--text-faint)",
-                  marginBottom: 7,
-                  textAlign: "center",
-                }}
+                className="grid-head"
+                style={{ marginBottom: 6, textAlign: "center" }}
               >
-                SET {si + 1}
+                Set {si + 1}
               </div>
               <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
                 {([0, 1] as const).map((side) => (
@@ -289,17 +282,16 @@ export function ResultsView({ id }: { id: string }) {
         </div>
 
         {c.mine && !readOnly && (
-          <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
-            <button
-              className="btn btn-accent"
+          <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+            <Btn
+              variant="accent"
               disabled={savingCourt === c.court}
               onClick={() => saveCourt(c.court)}
-              style={{ padding: "11px 20px", fontSize: 13 }}
             >
               {savingCourt === c.court ? "Guardando…" : "Listo"}
-            </button>
-            <button
-              className="btn btn-ghost"
+            </Btn>
+            <Btn
+              variant="quiet"
               onClick={() =>
                 setSets((x) => ({
                   ...x,
@@ -310,10 +302,9 @@ export function ResultsView({ id }: { id: string }) {
                   ],
                 }))
               }
-              style={{ padding: "11px 18px", fontSize: 13 }}
             >
               Cancelar
-            </button>
+            </Btn>
           </div>
         )}
       </Card>
@@ -321,78 +312,46 @@ export function ResultsView({ id }: { id: string }) {
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Eyebrow>RESULTADOS · J·{m.round}</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>
-          {activeTeam?.name} vs {m.opponent}
-        </h1>
-        <div
-          className="mono"
-          style={{
-            marginTop: 8,
-            fontSize: 11.5,
-            letterSpacing: "0.1em",
-            color: "var(--text-muted)",
-          }}
-        >
-          {formatDate(m.date)}
-          {m.time ? ` · ${m.time.slice(0, 5)}` : ""} ·{" "}
-          {m.isHome ? "LOCAL" : "VISITANTE"}
-        </div>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: `/jornada/${m.id}`, label: "Jornada" }}
+        title={`${activeTeam?.name} vs ${m.opponent}`}
+        meta={[
+          `Jornada ${m.round}`,
+          formatDate(m.date),
+          m.time ? <span className="mono">{m.time.slice(0, 5)}</span> : null,
+          m.isHome ? "En casa" : "Fuera",
+        ]}
+        actions={
+          <BtnLink href={`/jornada/${m.id}`} variant="quiet">
+            Volver a la jornada
+          </BtnLink>
+        }
+      />
 
       {readOnly && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--hair-strong)",
-            color: "var(--text-muted)",
-            marginBottom: 20,
-            fontSize: 13,
-          }}
-        >
-          <IconLock size={16} />
-          Acta cerrada · no se pueden modificar resultados.
-        </div>
+        <Note icon={<IconLock size={15} />} style={{ marginBottom: 16 }}>
+          Acta cerrada: no se pueden modificar resultados.
+        </Note>
       )}
 
       {!readOnly && !WRITES_ENABLED && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--hair-strong)",
-            color: "var(--text-muted)",
-            marginBottom: 20,
-            fontSize: 13,
-          }}
-        >
-          <IconLock size={16} />
-          Modo solo lectura · la web aún no escribe en la base de datos. Puedes
+        <Note tone="warning" icon={<IconLock size={15} />} style={{ marginBottom: 16 }}>
+          Modo solo lectura: la web aún no escribe en la base de datos. Puedes
           teclear el resultado, pero «Listo» no lo guardará todavía.
-        </div>
+        </Note>
       )}
 
       {courts.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconCalendar size={34} />}
+            icon={<IconCalendar size={24} />}
             title="Sin alineación"
             body="Aún no hay parejas por pista para esta jornada."
           />
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {mine && <CourtCard c={mine} />}
           {rest.map((c) => (
             <CourtCard key={c.court} c={c} />
@@ -400,59 +359,22 @@ export function ResultsView({ id }: { id: string }) {
         </div>
       )}
 
-      <Card style={{ marginTop: 20 }}>
-        <Eyebrow>RESUMEN</Eyebrow>
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-            gap: 20,
-          }}
-        >
-          <div>
-            <div className="mono tw-stat-label">JUEGOS A FAVOR</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>
-              {games[0]}
-            </div>
-          </div>
-          <div>
-            <div className="mono tw-stat-label">JUEGOS DEL RIVAL</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>
-              {games[1]}
-            </div>
-          </div>
-          <div>
-            <div className="mono tw-stat-label">PISTAS</div>
-            <div
-              className="mono"
-              style={{
-                fontSize: 24,
-                fontWeight: 700,
-                marginTop: 6,
-                color:
-                  totals[0] > totals[1]
-                    ? "var(--accent)"
-                    : totals[0] < totals[1]
-                      ? "var(--error)"
-                      : "var(--warning)",
-              }}
-            >
-              {totals[0]}–{totals[1]}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div style={{ marginTop: 20 }}>
-        <Link
-          href={`/jornada/${m.id}`}
-          className="btn btn-ghost"
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
-        >
-          Volver a la jornada
-        </Link>
-      </div>
+      <StatRow style={{ marginTop: 16 }}>
+        <Stat label="Juegos a favor" value={games[0]} />
+        <Stat label="Juegos del rival" value={games[1]} />
+        <Stat
+          label="Pistas"
+          value={`${totals[0]}–${totals[1]}`}
+          tone={
+            totals[0] > totals[1]
+              ? "accent"
+              : totals[0] < totals[1]
+                ? "error"
+                : "warning"
+          }
+          sub="Ganadas · perdidas"
+        />
+      </StatRow>
 
       {toast && (
         <Toast

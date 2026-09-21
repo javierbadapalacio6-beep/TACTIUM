@@ -27,25 +27,14 @@ export function ReturnToApp({ tid }: { tid: string }) {
   }, [left, deepLink]);
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <a
-        href={deepLink}
-        style={{
-          display: "inline-block",
-          padding: "12px 22px",
-          borderRadius: 999,
-          background: "#00DF82",
-          color: "#001810",
-          fontWeight: 700,
-          textDecoration: "none",
-        }}
-      >
+    <div style={{ marginTop: 22 }}>
+      <a href={deepLink} className="btn btn-accent btn-lg">
         Volver a la app
       </a>
-      <p style={{ color: "rgba(232,245,239,0.55)", fontSize: 14, marginTop: 12 }}>
+      <p style={{ color: "var(--text-faint)", fontSize: 13, marginTop: 12 }}>
         {left > 0
           ? `Te llevamos de vuelta en ${left} s…`
-          : "Abriendo la app… ¿No ha vuelto? Toca «Volver a la app»."}
+          : "Abriendo la app. ¿No ha vuelto? Toca «Volver a la app»."}
       </p>
     </div>
   );

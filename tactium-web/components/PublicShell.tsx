@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ICONS } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 import { Wordmark } from "./Wordmark";
+import { BtnLink } from "./ui";
 import { PUBLIC_NAV } from "@/lib/nav";
 
 /**
@@ -70,12 +71,13 @@ export function PublicShell({ children }: { children: ReactNode }) {
           >
             Entrar
           </Link>
-          <Link
+          <BtnLink
             href="/empezar"
-            className="btn btn-accent tw-pub-cta tw-pub-deskonly"
+            variant="accent"
+            className="tw-pub-cta tw-pub-deskonly"
           >
             Crear cuenta
-          </Link>
+          </BtnLink>
           {/* Hamburguesa: sólo en móvil. */}
           <button
             type="button"
@@ -98,9 +100,9 @@ export function PublicShell({ children }: { children: ReactNode }) {
               <Link href={`/entrar?next=${next}`} className="tw-pub-ghost">
                 Entrar
               </Link>
-              <Link href="/empezar" className="btn btn-accent tw-pub-cta">
+              <BtnLink href="/empezar" variant="accent" className="tw-pub-cta">
                 Crear cuenta
-              </Link>
+              </BtnLink>
             </div>
           </div>
         )}

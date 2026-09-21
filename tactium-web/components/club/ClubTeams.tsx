@@ -6,9 +6,18 @@ import { useState } from "react";
 import { fetchClubTeams } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
-import { IconChevronRight, IconPlus, IconSearch, IconShield } from "@/components/Icon";
+import {
+  BtnLink,
+  Card,
+  Chip,
+  IconTile,
+  InputWrap,
+  PageHeader,
+  Segmented,
+  Table,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage } from "@/components/states";
+import { IconPlus, IconSearch, IconShield } from "@/components/Icon";
 
 const GENDERS = ["Todos", "Masculino", "Femenino", "Mixto"] as const;
 
@@ -19,183 +28,123 @@ export function ClubTeams() {
     [clubId],
     !!clubId
   );
-  const CLUB_TEAMS_FULL = data ?? [];
+  const all = data ?? [];
 
   const [query, setQuery] = useState("");
   const [gender, setGender] = useState<(typeof GENDERS)[number]>("Todos");
 
-  const rows = CLUB_TEAMS_FULL.filter((t) => {
+  const rows = all.filter((t) => {
     if (gender !== "Todos" && (t.gender ?? "").toLowerCase() !== gender.toLowerCase()) return false;
     const q = query.trim().toLowerCase();
     return !q || t.name.toLowerCase().includes(q);
   });
+  const covered = all.filter((t) => t.covered).length;
+
+  if (loading) return <SkeletonPage />;
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: 20,
-          marginBottom: 22,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <Eyebrow>CLUB · EQUIPOS</Eyebrow>
-          <h1 style={{ marginTop: 10, fontSize: 30 }}>Equipos</h1>
-        </div>
-        <Link
-          href="/club/equipos/nuevo"
-          className="btn btn-accent"
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
-        >
-          <IconPlus size={15} />
-          Crear nuevo equipo
-        </Link>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        title="Equipos"
+        lede="Los equipos del club, su categoría y si están cubiertos por el plan."
+        actions={
+          <BtnLink href="/club/equipos/nuevo" variant="accent" icon={<IconPlus size={15} />}>
+            Nuevo equipo
+          </BtnLink>
+        }
+      />
 
-      <Card style={{ padding: 18, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid var(--hair-strong)",
-              background: "var(--bg-card-2)",
-              flex: 1,
-              minWidth: 200,
-            }}
-          >
-            <IconSearch size={15} />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar equipo"
-              aria-label="Buscar equipo"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: "none",
-                background: "transparent",
-                color: "var(--text)",
-                fontSize: 13.5,
-                outline: "none",
-                fontFamily: "'Satoshi', sans-serif",
-              }}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {GENDERS.map((g) => {
-              const on = gender === g;
-              return (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGender(g)}
-                  className="btn"
-                  style={{
-                    padding: "9px 15px",
-                    fontSize: 12.5,
-                    fontWeight: on ? 700 : 500,
-                    background: on ? "var(--accent-10)" : "transparent",
-                    color: on ? "var(--accent)" : "var(--text-muted)",
-                    border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                  }}
-                >
-                  {g}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </Card>
+      <div className="tw-toolbar">
+        <InputWrap icon={<IconSearch size={15} />}>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar equipo"
+            aria-label="Buscar equipo"
+          />
+        </InputWrap>
+        <Segmented
+          label="Género"
+          value={gender}
+          onChange={setGender}
+          options={GENDERS.map((g) => ({ value: g, label: g }))}
+        />
+        <span className="tw-toolbar-spacer" />
+        <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+          {covered} de {all.length} cubiertos
+        </span>
+      </div>
 
       {!clubId ? (
         <Card>
-          <EmptyState icon={<IconShield size={34} />} title="Sin club activo" />
+          <EmptyState icon={<IconShield size={22} />} title="Sin club activo" />
         </Card>
-      ) : loading ? (
-        <SkeletonCard />
       ) : error ? (
         <Card>
-          <EmptyState icon={<IconShield size={34} />} title="No se pudieron cargar los equipos" body={error} />
+          <EmptyState icon={<IconShield size={22} />} title="No se pudieron cargar los equipos" body={error} />
         </Card>
       ) : rows.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconShield size={34} />}
-            title="Sin coincidencias"
-            body="Prueba con otro filtro o nombre."
+            icon={<IconShield size={22} />}
+            title={all.length === 0 ? "Aún no hay equipos" : "Sin coincidencias"}
+            body={all.length === 0 ? "Da de alta el primero y asígnale un capitán." : "Prueba con otro filtro o nombre."}
+            action={
+              all.length === 0 ? (
+                <BtnLink href="/club/equipos/nuevo" variant="accent" icon={<IconPlus size={14} />}>
+                  Crear equipo
+                </BtnLink>
+              ) : undefined
+            }
           />
         </Card>
       ) : (
-        <div className="tw-club-teams">
-          {rows.map((t) => (
-            <Link key={t.id} href={`/club/equipos/${t.id}`} style={{ color: "inherit" }}>
-              <Card style={{ padding: 22, height: "100%" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 11,
-                      background: "var(--primary-dim)",
-                      color: "var(--accent)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flex: "none",
-                    }}
-                  >
-                    <IconShield size={18} />
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>
-                      {t.name}
-                    </span>
-                    <span
-                      className="mono"
-                      style={{
-                        display: "block",
-                        marginTop: 4,
-                        fontSize: 9.5,
-                        letterSpacing: "0.14em",
-                        color: "var(--text-faint)",
-                      }}
+        <Card flush>
+          <Table>
+            <thead>
+              <tr>
+                <th>Equipo</th>
+                <th>Categoría</th>
+                <th>Género</th>
+                <th>Cobertura</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((t) => (
+                <tr key={t.id}>
+                  <td>
+                    <Link
+                      href={`/club/equipos/${t.id}`}
+                      className="cell-main"
+                      style={{ color: "inherit", display: "flex", alignItems: "center", gap: 10 }}
                     >
-                      {[t.category, t.gender].filter(Boolean).join(" · ").toUpperCase() || "SIN CATEGORÍA"}
-                    </span>
-                  </span>
-                  <IconChevronRight size={16} />
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 18,
-                    paddingTop: 14,
-                    borderTop: "1px solid var(--hair)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {t.covered ? (
-                    <span className="chip">Cubierto</span>
-                  ) : (
-                    <span className="chip chip-warning">No cubierto</span>
-                  )}
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                      <IconTile small>
+                        <IconShield size={14} />
+                      </IconTile>
+                      <span className="truncate">{t.name}</span>
+                    </Link>
+                  </td>
+                  <td className="cell-muted">
+                    {t.category ?? <span style={{ color: "var(--warning)" }}>Sin categoría</span>}
+                  </td>
+                  <td className="cell-muted">{t.gender ?? "—"}</td>
+                  <td>
+                    {t.covered ? <Chip>Cubierto</Chip> : <Chip tone="warning">No cubierto</Chip>}
+                  </td>
+                  <td>
+                    <div className="tw-table-actions">
+                      <BtnLink href={`/club/equipos/${t.id}`} size="sm" variant="quiet">
+                        Gestionar
+                      </BtnLink>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
       )}
     </div>
   );

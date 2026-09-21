@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
 
 import { EntryFrame, Field, Input, Segmented } from "./EntryFrame";
-import { Card, Eyebrow, Modal } from "@/components/ui";
+import { Btn, Card, CardHead, Modal, Note } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import {
   IconBuilding,
   IconCheck,
+  IconChevronRight,
+  IconFlag,
   IconPlus,
   IconShield,
   IconUpload,
@@ -57,21 +59,8 @@ function CellButton({
     <button
       type="button"
       onClick={onClick}
-      style={{
-        height: 46,
-        minWidth,
-        padding: "0 14px",
-        borderRadius: 12,
-        border: `1px solid ${selected ? "var(--accent)" : "var(--hair-strong)"}`,
-        background: selected ? "var(--accent-10)" : "transparent",
-        color: selected ? "var(--accent)" : "var(--text-muted)",
-        fontSize: 14,
-        fontWeight: selected ? 700 : 500,
-        cursor: "pointer",
-        fontFamily: "'Satoshi', sans-serif",
-        whiteSpace: "nowrap",
-        flex: "none",
-      }}
+      className={"tw-fcp-chip" + (selected ? " is-on" : "")}
+      style={{ minHeight: 36, minWidth }}
     >
       {label}
     </button>
@@ -89,7 +78,7 @@ const GENDER_DB: Record<string, string> = {
 const PATHS = [
   {
     key: "equipo",
-    tag: "RÁPIDO",
+    tag: "Rápido",
     title: "Equipo independiente",
     body: "Tú gestionas, tú alineas. Listo en 2 minutos.",
     foot: "Tras prueba: 4,99 €/mes",
@@ -98,7 +87,7 @@ const PATHS = [
   },
   {
     key: "club",
-    tag: "ESCALABLE",
+    tag: "Escalable",
     title: "Club con varios equipos",
     body: "Para clubes con múltiples equipos y capitanes.",
     foot: "Tras prueba: desde 11,99 €/mes",
@@ -107,7 +96,7 @@ const PATHS = [
   },
   {
     key: "invitado",
-    tag: "SOY JUGADOR",
+    tag: "Soy jugador",
     title: "Me han invitado a un equipo",
     body: "Entra con el código que te ha pasado tu capitán.",
     foot: "",
@@ -116,7 +105,7 @@ const PATHS = [
   },
   {
     key: "suelto",
-    tag: "GRATIS",
+    tag: "Gratis",
     title: "Juego por mi cuenta",
     body: "Registra tus partidos y mira tus números.",
     foot: "",
@@ -152,15 +141,14 @@ export function Start() {
 
   return (
     <EntryFrame wide>
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <Eyebrow>BIENVENIDO</Eyebrow>
-        <h1 style={{ margin: "16px 0 0", fontSize: "clamp(30px, 4.5vw, 42px)" }}>
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <h1 style={{ fontSize: "clamp(26px, 3.6vw, 34px)" }}>
           ¿Cómo vas a empezar?
         </h1>
         <p
           style={{
-            margin: "12px 0 0",
-            fontSize: 15,
+            margin: "10px 0 0",
+            fontSize: 13.5,
             color: "var(--text-muted)",
           }}
         >
@@ -186,14 +174,14 @@ export function Start() {
               role="radio"
               aria-checked={on}
               onClick={() => setPicked(p.key)}
-              className="card"
+              className="card card-hover"
               style={{
-                padding: 24,
+                padding: 18,
                 textAlign: "left",
                 cursor: "pointer",
                 color: "var(--text)",
-                border: `1.5px solid ${on ? "var(--accent)" : "transparent"}`,
-                transition: "all var(--dur-fast) var(--ease)",
+                background: on ? "var(--accent-10)" : undefined,
+                borderColor: on ? "var(--accent-40)" : undefined,
               }}
             >
               <div
@@ -205,27 +193,17 @@ export function Start() {
                 }}
               >
                 <span
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 11,
-                    background: on ? "var(--accent-10)" : "var(--bg-card-2)",
-                    color: on ? "var(--accent)" : "var(--text-muted)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flex: "none",
-                  }}
+                  className={"tile-icon" + (on ? "" : " tile-icon-mute")}
                 >
-                  <p.Icon size={18} />
+                  <p.Icon size={17} />
                 </span>
                 <span className="chip chip-mute">{p.tag}</span>
               </div>
 
               <div
                 style={{
-                  marginTop: 18,
-                  fontSize: 16.5,
+                  marginTop: 16,
+                  fontSize: 15,
                   fontWeight: 700,
                   letterSpacing: "-0.01em",
                 }}
@@ -234,21 +212,18 @@ export function Start() {
               </div>
               <div
                 style={{
-                  marginTop: 7,
+                  marginTop: 6,
                   fontSize: 13,
                   color: "var(--text-muted)",
-                  textWrap: "pretty",
                 }}
               >
                 {p.body}
               </div>
               {p.foot && (
                 <div
-                  className="mono"
                   style={{
-                    marginTop: 14,
-                    fontSize: 10,
-                    letterSpacing: "0.14em",
+                    marginTop: 12,
+                    fontSize: 12,
                     color: "var(--text-faint)",
                   }}
                 >
@@ -262,73 +237,58 @@ export function Start() {
 
       {needsCode && (
         <div style={{ marginTop: 20, maxWidth: 420, marginInline: "auto" }}>
-          <Field label="Código">
-            <div style={{ display: "flex", gap: 10 }}>
+          <Field label="Código de invitación">
+            <div style={{ display: "flex", gap: 8 }}>
               <Input
                 type="text"
                 placeholder="ABC-123"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 className="mono"
-                style={{ letterSpacing: "0.18em" }}
               />
-              <button
-                type="button"
-                className="btn btn-accent"
+              <Btn
+                variant="accent"
+                size="lg"
                 disabled={!canGo || busy}
                 onClick={redeem}
-                style={{ padding: "13px 22px", fontSize: 13.5, borderRadius: 12 }}
               >
                 {busy ? "…" : "Unirme"}
-              </button>
+              </Btn>
             </div>
           </Field>
           {err && (
-            <p style={{ marginTop: 12, color: "var(--error)", fontSize: 13 }}>
+            <Note tone="error" style={{ marginTop: 12 }}>
               {err}
-            </p>
+            </Note>
           )}
         </div>
       )}
 
       <div
         style={{
-          marginTop: 32,
+          marginTop: 24,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 16,
+          gap: 8,
           flexWrap: "wrap",
         }}
       >
         {!needsCode && (
-          <button
-            type="button"
-            className="btn btn-accent"
+          <Btn
+            variant="accent"
+            size="lg"
             onClick={() => router.push(current.href || "/")}
-            style={{ padding: "14px 30px", fontSize: 15 }}
           >
             Empezar
-          </button>
+          </Btn>
         )}
         {/* Sólo tiene sentido si HAY sesión (a /empezar se llega logueado para
             montar equipo/club). Para un visitante anónimo no se muestra. */}
         {user && (
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="btn"
-            style={{
-              padding: "14px 20px",
-              fontSize: 13.5,
-              fontWeight: 500,
-              background: "transparent",
-              border: "none",
-              color: "var(--text-muted)",
-            }}
-          >
+          <Btn variant="quiet" size="lg" onClick={() => void signOut()}>
             Cerrar sesión
-          </button>
+          </Btn>
         )}
       </div>
     </EntryFrame>
@@ -352,50 +312,44 @@ export function FederationSelect({
       <button
         type="button"
         onClick={() => setOpen(true)}
+        className="input"
         style={{
-          width: "100%",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
-          minHeight: 52,
-          padding: "12px 14px",
-          borderRadius: 12,
-          borderWidth: 1,
-          borderStyle: "solid",
-          borderColor: "var(--hair-strong)",
-          background: "var(--bg-card)",
-          color: "var(--text)",
+          minHeight: 48,
+          padding: "8px 12px",
           cursor: "pointer",
-          fontFamily: "'Satoshi', sans-serif",
           textAlign: "left",
         }}
       >
         {value ? (
           <span style={{ minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
+            <span style={{ display: "block", fontSize: 13.5, fontWeight: 600 }}>
               {value.name}
             </span>
-            <span
-              className="mono"
-              style={{ fontSize: 11, color: "var(--text-faint)" }}
-            >
+            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
               {value.region} · {value.shortName}
             </span>
           </span>
         ) : (
-          <span style={{ color: "var(--text-faint)", fontSize: 14 }}>
+          <span style={{ color: "var(--text-faint)", fontSize: 13.5 }}>
             Selecciona federación
           </span>
         )}
-        <span style={{ color: "var(--text-faint)", fontSize: 18 }}>›</span>
+        <span style={{ color: "var(--text-faint)", display: "flex", flex: "none" }}>
+          <IconChevronRight size={16} />
+        </span>
       </button>
 
       {open && (
-        <Modal open onClose={() => setOpen(false)} labelledBy="tw-fed-title">
-          <h3 id="tw-fed-title" style={{ margin: "0 0 14px", fontSize: 18 }}>
-            Selecciona federación
-          </h3>
+        <Modal
+          open
+          onClose={() => setOpen(false)}
+          labelledBy="tw-fed-title"
+          title="Selecciona federación"
+        >
           <div style={{ display: "grid", gap: 6, maxHeight: 440, overflowY: "auto" }}>
             {FEDERATIONS.map((f) => {
               const sel = value?.code === f.code;
@@ -411,37 +365,38 @@ export function FederationSelect({
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
-                    padding: "11px 12px",
-                    borderRadius: 12,
-                    border: `1px solid ${sel ? "var(--accent)" : "var(--hair)"}`,
-                    background: sel ? "var(--accent-10)" : "var(--bg-card)",
+                    padding: "10px 12px",
+                    borderRadius: "var(--r-md)",
+                    border: `1px solid ${sel ? "var(--accent-40)" : "var(--line)"}`,
+                    background: sel ? "var(--accent-10)" : "var(--bg-card-2)",
+                    color: "var(--text)",
                     cursor: "pointer",
                     textAlign: "left",
-                    fontFamily: "'Satoshi', sans-serif",
+                    fontFamily: "var(--font-ui)",
                   }}
                 >
                   <span
                     className="mono"
                     style={{
-                      minWidth: 56,
+                      minWidth: 52,
                       textAlign: "center",
-                      fontSize: 11,
-                      color: "var(--accent)",
+                      fontSize: 12,
+                      color: sel ? "var(--accent)" : "var(--text-muted)",
                       fontWeight: 600,
                     }}
                   >
                     {f.shortName}
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
+                    <span style={{ display: "block", fontSize: 13.5, fontWeight: 600 }}>
                       {f.name}
                     </span>
-                    <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                    <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
                       {f.region}
                     </span>
                   </span>
                   {sel && (
-                    <span style={{ marginLeft: "auto", color: "var(--accent)" }}>
+                    <span style={{ marginLeft: "auto", color: "var(--accent)", display: "flex" }}>
                       <IconCheck size={16} />
                     </span>
                   )}
@@ -556,15 +511,12 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
 
   const body = (
     <>
-      <Eyebrow>{fromClub ? "CLUB · NUEVO EQUIPO" : "EQUIPO · NUEVO"}</Eyebrow>
-      <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>
-        {fromClub ? "Configura el equipo" : "Crea tu equipo"}
-      </h1>
-      <p style={{ margin: "0 0 24px", fontSize: 14, color: "var(--text-muted)" }}>
+      <h1>{fromClub ? "Configura el equipo" : "Crea tu equipo"}</h1>
+      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
         Configura la competición · puedes cambiarlo todo después.
       </p>
 
-      <div style={{ display: "grid", gap: 18 }}>
+      <div style={{ display: "grid", gap: 16 }}>
         <Field label="Nombre del equipo">
           <Input
             type="text"
@@ -595,43 +547,20 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
         )}
 
         {isFcp && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              flexWrap: "wrap",
-              padding: 16,
-              borderRadius: 12,
-              background: "var(--accent-10)",
-              border: "1px solid var(--accent-25)",
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>
-                Importar de la Federación Cántabra
-              </div>
-              <div
-                style={{
-                  fontSize: 12.5,
-                  color: "var(--text-muted)",
-                  marginTop: 4,
-                  textWrap: "pretty",
-                }}
-              >
+          <Note tone="accent" icon={<IconFlag size={16} />} style={{ alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ flex: 1, minWidth: 200, color: "var(--text-muted)" }}>
+                <strong style={{ display: "block", color: "var(--text)", fontWeight: 700 }}>
+                  Importar de la Federación Cántabra
+                </strong>
                 Busca tu equipo y créalo con su plantilla y sus puntos
                 automáticamente. No hace falta rellenar lo de abajo.
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-accent"
-              onClick={() => setImportOpen(true)}
-              style={{ padding: "11px 18px", fontSize: 13.5, flex: "none" }}
-            >
-              Buscar mi equipo
-            </button>
-          </div>
+              </span>
+              <Btn variant="tint" size="sm" onClick={() => setImportOpen(true)}>
+                Buscar mi equipo
+              </Btn>
+            </span>
+          </Note>
         )}
 
         {(comp === "personalizada" || (isFederada && !isFcp)) && (
@@ -707,32 +636,29 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
       </div>
 
       {err && (
-        <p style={{ marginTop: 16, color: "var(--error)", fontSize: 13 }}>{err}</p>
+        <Note tone="error" style={{ marginTop: 16 }}>
+          {err}
+        </Note>
       )}
-      <button
-        type="button"
-        className="btn btn-accent"
+      <Btn
+        variant="accent"
+        size="lg"
+        block
         disabled={busy || !valid}
         onClick={submit}
-        style={{ marginTop: 20, width: "100%", padding: 15, fontSize: 15 }}
+        style={{ marginTop: 20 }}
       >
         {busy ? "Creando…" : "Crear equipo"}
-      </button>
+      </Btn>
 
       {importOpen && (
-        <Modal open onClose={() => setImportOpen(false)} labelledBy="tw-fcp-title">
-          <h3 id="tw-fcp-title" style={{ margin: "0 0 4px", fontSize: 18 }}>
-            Importar de la Federación
-          </h3>
-          <p
-            style={{
-              margin: "0 0 14px",
-              fontSize: 13,
-              color: "var(--text-muted)",
-            }}
-          >
-            Busca tu club o equipo y créalo con su plantilla y sus puntos.
-          </p>
+        <Modal
+          open
+          onClose={() => setImportOpen(false)}
+          labelledBy="tw-fcp-title"
+          title="Importar de la Federación"
+          lede="Busca tu club o equipo y créalo con su plantilla y sus puntos."
+        >
           <Input
             type="text"
             placeholder="Busca tu club o equipo"
@@ -740,9 +666,9 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
             onChange={(e) => setFcpQuery(e.target.value)}
           />
           {fcpErr && (
-            <p style={{ marginTop: 10, color: "var(--error)", fontSize: 13 }}>
+            <Note tone="error" style={{ marginTop: 10 }}>
               {fcpErr}
-            </p>
+            </Note>
           )}
           <div style={{ marginTop: 12, maxHeight: 380, overflowY: "auto" }}>
             {fcpLoading && (
@@ -757,7 +683,9 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
               )}
             {fcpResults.map((club) => (
               <div key={club.club} style={{ marginBottom: 14 }}>
-                <Eyebrow>{club.club}</Eyebrow>
+                <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.01em" }}>
+                  {club.club}
+                </div>
                 <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
                   {club.teams.map((t) => (
                     <button
@@ -769,22 +697,20 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
                         display: "flex",
                         alignItems: "center",
                         gap: 10,
-                        padding: "11px 12px",
-                        borderRadius: 12,
-                        border: "1px solid var(--hair)",
-                        background: "var(--bg-card)",
+                        padding: "10px 12px",
+                        borderRadius: "var(--r-md)",
+                        border: "1px solid var(--line)",
+                        background: "var(--bg-card-2)",
+                        color: "var(--text)",
                         cursor: "pointer",
                         textAlign: "left",
-                        fontFamily: "'Satoshi', sans-serif",
+                        fontFamily: "var(--font-ui)",
                       }}
                     >
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
+                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>
                         {t.equipo}
                       </span>
-                      <span
-                        className="mono"
-                        style={{ fontSize: 11, color: "var(--text-faint)" }}
-                      >
+                      <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
                         {[t.category, t.gender].filter(Boolean).join(" · ")}
                       </span>
                     </button>
@@ -804,8 +730,8 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
   );
 
   return fromClub ? (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <Card style={{ padding: 24 }}>{body}</Card>
+    <div className="tw-page-narrow">
+      <Card>{body}</Card>
     </div>
   ) : (
     <EntryFrame wide>{body}</EntryFrame>
@@ -836,13 +762,12 @@ export function CreateClub() {
 
   return (
     <EntryFrame>
-      <Eyebrow>CLUB · NUEVO</Eyebrow>
-      <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>Crea tu club</h1>
-      <p style={{ margin: "0 0 28px", fontSize: 14, color: "var(--text-muted)" }}>
+      <h1>Crea tu club</h1>
+      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
         Después darás de alta sus equipos.
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <Field label="Nombre del club">
           <Input
             type="text"
@@ -861,17 +786,20 @@ export function CreateClub() {
       </div>
 
       {err && (
-        <p style={{ marginTop: 16, color: "var(--error)", fontSize: 13 }}>{err}</p>
+        <Note tone="error" style={{ marginTop: 16 }}>
+          {err}
+        </Note>
       )}
-      <button
-        type="button"
-        className="btn btn-accent"
+      <Btn
+        variant="accent"
+        size="lg"
+        block
         disabled={busy || name.trim().length < 2}
         onClick={submit}
-        style={{ marginTop: 20, width: "100%", padding: 15, fontSize: 15 }}
+        style={{ marginTop: 20 }}
       >
         {busy ? "Creando…" : "Crear club"}
-      </button>
+      </Btn>
     </EntryFrame>
   );
 }
@@ -899,7 +827,7 @@ export function CreateClubTeams() {
       <EntryFrame wide>
         <Card>
           <EmptyState
-            icon={<IconBuilding size={30} />}
+            icon={<IconBuilding size={24} />}
             title="Crea primero tu club"
             body="Los equipos cuelgan de un club."
           />
@@ -971,11 +899,8 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
 
   return (
     <EntryFrame wide>
-      <Eyebrow>CLUB · IMPORTAR DE LA FEDERACIÓN</Eyebrow>
-      <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>
-        Importa los equipos de {clubName}
-      </h1>
-      <p style={{ margin: "0 0 20px", fontSize: 14, color: "var(--text-muted)" }}>
+      <h1>Importa los equipos de {clubName}</h1>
+      <p style={{ margin: "8px 0 20px", fontSize: 13.5, color: "var(--text-muted)" }}>
         Busca tu club en la Federación Cántabra y crea todos sus equipos con su
         plantilla y sus puntos oficiales.
       </p>
@@ -987,10 +912,12 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
         onChange={(e) => setQuery(e.target.value)}
       />
       {err && (
-        <p style={{ marginTop: 12, color: "var(--error)", fontSize: 13 }}>{err}</p>
+        <Note tone="error" style={{ marginTop: 12 }}>
+          {err}
+        </Note>
       )}
 
-      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         {loading && (
           <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Buscando…</p>
         )}
@@ -1000,10 +927,8 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
           </p>
         )}
         {results.map((cg) => (
-          <Card key={cg.club} style={{ padding: 0, overflow: "hidden" }}>
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--hair)" }}>
-              <Eyebrow>{cg.club}</Eyebrow>
-            </div>
+          <Card key={cg.club} flush>
+            <CardHead title={cg.club} count={cg.teams.length} />
             {cg.teams.map((t, i) => {
               const on = !!selected[t.id_equipo];
               return (
@@ -1016,38 +941,36 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
-                    padding: "13px 18px",
+                    padding: "12px 18px",
                     border: "none",
-                    borderTop: i === 0 ? "none" : "1px solid var(--hair)",
+                    borderTop: i === 0 ? "none" : "1px solid var(--line)",
                     background: on ? "var(--accent-10)" : "transparent",
+                    color: "var(--text)",
                     cursor: "pointer",
                     textAlign: "left",
-                    fontFamily: "'Satoshi', sans-serif",
+                    fontFamily: "var(--font-ui)",
                   }}
                 >
                   <span
                     style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 6,
-                      border: `1.5px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                      width: 20,
+                      height: 20,
+                      borderRadius: "var(--r-xs)",
+                      border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
                       background: on ? "var(--accent)" : "transparent",
-                      color: "#001810",
+                      color: "var(--text-inverse)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       flex: "none",
                     }}
                   >
-                    {on && <IconCheck size={14} />}
+                    {on && <IconCheck size={13} />}
                   </span>
                   <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>
                     {t.equipo}
                   </span>
-                  <span
-                    className="mono"
-                    style={{ fontSize: 11, color: "var(--text-faint)" }}
-                  >
+                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
                     {[t.category, t.gender].filter(Boolean).join(" · ")}
                   </span>
                 </button>
@@ -1062,29 +985,23 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
           marginTop: 20,
           display: "flex",
           alignItems: "center",
-          gap: 14,
+          gap: 8,
           flexWrap: "wrap",
         }}
       >
-        <button
-          type="button"
-          className="btn btn-accent"
+        <Btn
+          variant="accent"
+          size="lg"
           disabled={selCount === 0 || busy}
           onClick={importSelected}
-          style={{ padding: "14px 26px", fontSize: 14.5 }}
         >
           {busy
             ? "Importando…"
             : `Importar ${selCount} ${selCount === 1 ? "equipo" : "equipos"}`}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => router.push("/club")}
-          style={{ padding: "14px 22px", fontSize: 13.5 }}
-        >
+        </Btn>
+        <Btn size="lg" onClick={() => router.push("/club")}>
           Omitir · lo hago luego
-        </button>
+        </Btn>
       </div>
     </EntryFrame>
   );
@@ -1126,23 +1043,21 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
 
   return (
     <EntryFrame wide>
-      <Eyebrow>CLUB · EQUIPOS · EN LOTE</Eyebrow>
-      <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>Da de alta tus equipos</h1>
-      <p style={{ margin: "0 0 28px", fontSize: 14, color: "var(--text-muted)" }}>
+      <h1>Da de alta tus equipos</h1>
+      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
         Añade los que tengas ahora · puedes crear más en cualquier momento.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {teams.map((t, i) => (
-          <Card key={t.id} style={{ padding: 18 }}>
+          <Card key={t.id}>
             <div className="tw-team-row">
               <span
                 className="mono"
                 style={{
-                  fontSize: 10,
-                  letterSpacing: "0.18em",
+                  fontSize: 12,
                   color: "var(--text-faint)",
-                  paddingTop: 14,
+                  paddingTop: 28,
                 }}
               >
                 {String(i + 1).padStart(2, "0")}
@@ -1180,14 +1095,8 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
                 onClick={() => setTeams((ts) => ts.filter((x) => x.id !== t.id))}
                 disabled={teams.length === 1}
                 aria-label={`Quitar ${t.name || "equipo"}`}
-                className="btn btn-ghost"
-                style={{
-                  width: 40,
-                  height: 40,
-                  padding: 0,
-                  borderRadius: 12,
-                  marginTop: 22,
-                }}
+                className="btn btn-icon"
+                style={{ marginTop: 24, fontSize: 17, lineHeight: 1 }}
               >
                 ×
               </button>
@@ -1197,7 +1106,9 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
       </div>
 
       {err && (
-        <p style={{ marginTop: 14, color: "var(--error)", fontSize: 13 }}>{err}</p>
+        <Note tone="error" style={{ marginTop: 14 }}>
+          {err}
+        </Note>
       )}
 
       <div
@@ -1205,13 +1116,12 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
           marginTop: 16,
           display: "flex",
           alignItems: "center",
-          gap: 16,
+          gap: 12,
           flexWrap: "wrap",
         }}
       >
-        <button
-          type="button"
-          className="btn btn-ghost"
+        <Btn
+          icon={<IconPlus size={15} />}
           onClick={() => {
             setTeams((ts) => [
               ...ts,
@@ -1219,31 +1129,22 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
             ]);
             setNextId((n) => n + 1);
           }}
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
         >
-          <IconPlus size={15} />
           Añadir otro equipo
-        </button>
-        <span
-          className="mono"
-          style={{
-            fontSize: 11,
-            letterSpacing: "0.14em",
-            color: "var(--text-faint)",
-          }}
-        >
-          {validTeams.length} {validTeams.length === 1 ? "EQUIPO" : "EQUIPOS"}
+        </Btn>
+        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+          <span className="mono">{validTeams.length}</span>{" "}
+          {validTeams.length === 1 ? "equipo listo" : "equipos listos"}
         </span>
         <div style={{ flex: 1 }} />
-        <button
-          type="button"
-          className="btn btn-accent"
+        <Btn
+          variant="accent"
+          size="lg"
           disabled={validTeams.length === 0 || busy}
           onClick={createAll}
-          style={{ padding: "14px 26px", fontSize: 14.5 }}
         >
           {busy ? "Creando…" : "Crear equipos"}
-        </button>
+        </Btn>
       </div>
     </EntryFrame>
   );
@@ -1300,19 +1201,18 @@ export function AddPlayers() {
 
   return (
     <EntryFrame wide>
-      <Eyebrow>
-        PLANTILLA{activeTeam ? ` · ${activeTeam.name.toUpperCase()}` : ""}
-      </Eyebrow>
-      <h1 style={{ margin: "16px 0 6px", fontSize: 30 }}>Añade tus jugadores</h1>
-      <p style={{ margin: "0 0 28px", fontSize: 14, color: "var(--text-muted)" }}>
+      <h1>Añade tus jugadores</h1>
+      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
+        {activeTeam ? `Plantilla de ${activeTeam.name}. ` : ""}
         Añade jugadores a mano o escanea el ranking FEP.
       </p>
 
       <div className="tw-players-grid">
-        <Card style={{ padding: 0, overflow: "hidden" }}>
+        <Card flush>
           {players.length === 0 ? (
             <EmptyState
-              icon={<IconUsers size={34} />}
+              compact
+              icon={<IconUsers size={22} />}
               title="Plantilla vacía"
               body="Añade a tu primer jugador o importa el ranking."
             />
@@ -1353,19 +1253,8 @@ export function AddPlayers() {
                           key={o}
                           type="button"
                           onClick={() => patch(p.id, { pos: o })}
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            padding: "8px 4px",
-                            borderRadius: 8,
-                            border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                            background: on ? "var(--accent-10)" : "transparent",
-                            color: on ? "var(--accent)" : "var(--text-muted)",
-                            fontSize: 12,
-                            fontWeight: on ? 700 : 500,
-                            cursor: "pointer",
-                            fontFamily: "'Satoshi', sans-serif",
-                          }}
+                          className={"tw-fcp-chip" + (on ? " is-on" : "")}
+                          style={{ flex: 1, minWidth: 0, padding: "0 8px", fontSize: 12 }}
                         >
                           {o}
                         </button>
@@ -1378,14 +1267,8 @@ export function AddPlayers() {
                       setPlayers((ps) => ps.filter((x) => x.id !== p.id))
                     }
                     aria-label={`Quitar ${p.name || "jugador"}`}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "var(--text-faint)",
-                      cursor: "pointer",
-                      fontSize: 17,
-                      padding: 6,
-                    }}
+                    className="btn btn-icon"
+                    style={{ width: 30, minHeight: 30, fontSize: 16, lineHeight: 1 }}
                   >
                     ×
                   </button>
@@ -1394,10 +1277,10 @@ export function AddPlayers() {
             </>
           )}
 
-          <div style={{ padding: 14, borderTop: "1px solid var(--hair)" }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
+          <div className="card-foot">
+            <Btn
+              size="sm"
+              icon={<IconPlus size={14} />}
               onClick={() => {
                 setPlayers((ps) => [
                   ...ps,
@@ -1405,92 +1288,72 @@ export function AddPlayers() {
                 ]);
                 setNextId((n) => n + 1);
               }}
-              style={{ padding: "11px 18px", fontSize: 13 }}
             >
-              <IconPlus size={15} />
               Añadir jugador
-            </button>
+            </Btn>
           </div>
         </Card>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Card>
-            <Eyebrow>ESCANEAR RANKING</Eyebrow>
-            <label
-              style={{
-                marginTop: 16,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 12,
-                padding: "28px 18px",
-                borderRadius: 12,
-                border: "1px dashed var(--hair-strong)",
-                cursor: "pointer",
-                textAlign: "center",
-              }}
-            >
-              <span style={{ color: "var(--accent)" }}>
-                <IconUpload size={26} />
-              </span>
-              <span style={{ fontSize: 13, color: "var(--text-muted)", textWrap: "pretty" }}>
-                Arrastra una imagen o un PDF del ranking FEP, o pega desde el
-                portapapeles
-              </span>
-              <input type="file" accept="image/*,.pdf" hidden />
-            </label>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ marginTop: 12, width: "100%", padding: 12, fontSize: 13 }}
-            >
-              Importar desde la Federación Cántabra
-            </button>
+          <Card flush>
+            <CardHead title="Escanear ranking" />
+            <div className="card-body">
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "24px 18px",
+                  borderRadius: "var(--r-md)",
+                  border: "1px dashed var(--line-strong)",
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                <span style={{ color: "var(--accent)" }}>
+                  <IconUpload size={22} />
+                </span>
+                <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                  Arrastra una imagen o un PDF del ranking FEP, o pega desde el
+                  portapapeles
+                </span>
+                <input type="file" accept="image/*,.pdf" hidden />
+              </label>
+              <Btn block style={{ marginTop: 12 }}>
+                Importar desde la Federación Cántabra
+              </Btn>
+            </div>
           </Card>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "14px 16px",
-              borderRadius: 12,
-              border: "1px solid var(--hair-strong)",
-            }}
-          >
-            <span style={{ color: "var(--accent)", display: "flex" }}>
-              <IconCheck size={16} />
-            </span>
-            <span
-              className="mono"
-              style={{
-                fontSize: 11,
-                letterSpacing: "0.14em",
-                color: "var(--text-muted)",
-              }}
-            >
-              {validPlayers.length} {validPlayers.length === 1 ? "JUGADOR" : "JUGADORES"}
-            </span>
-          </div>
+          <Note icon={<IconCheck size={16} />}>
+            <span className="mono">{validPlayers.length}</span>{" "}
+            {validPlayers.length === 1
+              ? "jugador listo para añadir"
+              : "jugadores listos para añadir"}
+          </Note>
         </div>
       </div>
 
       {err && (
-        <p style={{ marginTop: 16, color: "var(--error)", fontSize: 13 }}>{err}</p>
+        <Note tone="error" style={{ marginTop: 16 }}>
+          {err}
+        </Note>
       )}
-      <button
-        type="button"
-        className="btn btn-accent"
+      <Btn
+        variant="accent"
+        size="lg"
+        block
         disabled={busy}
         onClick={saveAll}
-        style={{ marginTop: 28, width: "100%", padding: 15, fontSize: 15 }}
+        style={{ marginTop: 24 }}
       >
         {busy
           ? "Guardando…"
           : validPlayers.length > 0
             ? `Añadir ${validPlayers.length} y continuar`
             : "Continuar sin jugadores"}
-      </button>
+      </Btn>
     </EntryFrame>
   );
 }

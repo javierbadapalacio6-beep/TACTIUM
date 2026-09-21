@@ -2,15 +2,22 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
-import { DAYS, HOURS } from "@/lib/club-data";
 import {
   fetchClubHomeSchedule,
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import {
+  Btn,
+  Card,
+  CardHead,
+  Chip,
+  Input,
+  Modal,
+  PageHeader,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { IconCheck, IconClock } from "@/components/Icon";
 
 /**
@@ -18,25 +25,48 @@ import { IconCheck, IconClock } from "@/components/Icon";
  *
  * Es un lienzo, no un formulario: el club asigna día, hora y pista a cada
  * equipo que juega en casa. Al abrir el selector, las franjas que ese equipo
- * marcó como favoritas se resaltan en accent; las demás quedan atenuadas pero
- * siguen siendo elegibles.
+ * marcó como favoritas se resaltan; las demás quedan atenuadas pero siguen
+ * siendo elegibles.
  *
  * Datos REALES (solo lectura): los partidos de local, sus horas/pistas actuales
  * y las franjas favoritas salen de la RPC `get_club_home_schedule`. Asignar y
  * «guardar y avisar» siguen en estado local — la escritura llega en la fase 2.
  */
 interface Slot {
-  day: string;
+  /** Índice de día de la semana, como `Date.getDay()` (0 = domingo). */
+  day: number;
   hour: string;
   court: string;
 }
 
-const WEEKDAY = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"];
-const dayOf = (iso: string | null): string => {
-  if (!iso) return "";
+const WEEKDAY = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+/** Día de la semana (0-6) de una fecha ISO; null si no hay fecha. */
+const dayOf = (iso: string | null): number | null => {
+  if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? "" : WEEKDAY[d.getDay()];
+  return Number.isNaN(d.getTime()) ? null : d.getDay();
 };
+
+/**
+ * Las franjas favoritas se guardan como `dow|HH:MM` (p. ej. `6|10:00`), igual
+ * que en la app. Antes se pintaban en crudo y la rejilla las comparaba contra
+ * horas sueltas, así que NUNCA casaban: ni se resaltaban ni se leían.
+ */
+function parseSlot(raw: string): { day: number; hour: string } | null {
+  const [d, h] = raw.split("|");
+  const day = Number(d);
+  if (!h || Number.isNaN(day) || day < 0 || day > 6) return null;
+  return { day, hour: h.slice(0, 5) };
+}
+
+const slotKey = (day: number, hour: string) => `${day}|${hour}`;
+const slotLabel = (day: number, hour: string) => `${WEEKDAY[day]} ${hour}`;
+
+/** Días por defecto de la liga (sábado y domingo), en orden de fin de semana. */
+const DEFAULT_DAYS = [6, 0];
+/** Horas por defecto cuando aún no hay ninguna franja declarada. */
+const DEFAULT_HOURS = ["10:00", "12:00", "16:00", "18:00"];
 
 export function ClubSchedule() {
   const { clubId } = useSession();
@@ -47,10 +77,14 @@ export function ClubSchedule() {
   );
   const fixtures: DbClubHomeMatch[] = useMemo(() => data ?? [], [data]);
 
-  // Franjas favoritas reales por equipo (horas 'HH:MM').
+  // Franjas favoritas reales por equipo, ya interpretadas.
   const favByTeam = useMemo(() => {
-    const m: Record<string, string[]> = {};
-    for (const f of fixtures) m[f.team_name] = f.preferred_home_slots ?? [];
+    const m: Record<string, { day: number; hour: string }[]> = {};
+    for (const f of fixtures) {
+      m[f.team_name] = (f.preferred_home_slots ?? [])
+        .map(parseSlot)
+        .filter((s): s is { day: number; hour: string } => s !== null);
+    }
     return m;
   }, [fixtures]);
 
@@ -65,13 +99,11 @@ export function ClubSchedule() {
       for (const f of fixtures) {
         if (initedFor.current.has(f.team_name)) continue;
         initedFor.current.add(f.team_name);
-        next[f.team_name] = f.match_time
-          ? {
-              day: dayOf(f.match_date),
-              hour: f.match_time.slice(0, 5),
-              court: f.location ?? "",
-            }
-          : null;
+        const day = dayOf(f.match_date);
+        next[f.team_name] =
+          f.match_time && day !== null
+            ? { day, hour: f.match_time.slice(0, 5), court: f.location ?? "" }
+            : null;
       }
       return next;
     });
@@ -82,7 +114,37 @@ export function ClubSchedule() {
 
   const assigned = fixtures.filter((f) => slots[f.team_name]).length;
 
-  function assign(team: string, day: string, hour: string) {
+  // La rejilla del selector se DERIVA de los datos: los días y horas que los
+  // equipos han marcado como favoritos, más el fin de semana y unas horas
+  // razonables de respaldo. Antes era una lista fija de maqueta que no podía
+  // representar la mitad de las franjas reales.
+  const { gridDays, gridHours } = useMemo(() => {
+    const days = new Set<number>(DEFAULT_DAYS);
+    const hours = new Set<string>();
+    for (const list of Object.values(favByTeam)) {
+      for (const s of list) {
+        days.add(s.day);
+        hours.add(s.hour);
+      }
+    }
+    for (const s of Object.values(slots)) {
+      if (s) {
+        days.add(s.day);
+        hours.add(s.hour);
+      }
+    }
+    if (hours.size === 0) DEFAULT_HOURS.forEach((h) => hours.add(h));
+    return {
+      // Sábado y domingo primero, el resto detrás en orden natural.
+      gridDays: [...days].sort((a, b) => {
+        const rank = (d: number) => (d === 6 ? -2 : d === 0 ? -1 : d);
+        return rank(a) - rank(b);
+      }),
+      gridHours: [...hours].sort(),
+    };
+  }, [favByTeam, slots]);
+
+  function assign(team: string, day: number, hour: string) {
     setSlots((s) => ({
       ...s,
       [team]: { day, hour, court: s[team]?.court ?? "" },
@@ -97,211 +159,154 @@ export function ClubSchedule() {
     }));
   }
 
-  const favHours = picking ? (favByTeam[picking] ?? []) : [];
+  const favSlots = picking ? (favByTeam[picking] ?? []) : [];
+  const favKeys = new Set(favSlots.map((s) => slotKey(s.day, s.hour)));
 
-  if (loading) return <SkeletonCard />;
+  const header = (
+    <PageHeader
+      title="Horarios de local"
+      lede="Asigna día, hora y pista a los equipos que juegan en casa esta jornada."
+    />
+  );
+
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconClock size={34} />}
-          title="No se pudo cargar el horario"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        {header}
+        <Card>
+          <EmptyState
+            icon={<IconClock size={24} />}
+            title="No se pudo cargar el horario"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
   if (fixtures.length === 0) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconClock size={34} />}
-          title="Sin partidos de local"
-          body="Cuando tus equipos tengan jornadas en casa por jugar, aparecerán aquí para asignarles día, hora y pista."
-        />
-      </Card>
+      <div className="tw-page">
+        {header}
+        <Card>
+          <EmptyState
+            icon={<IconClock size={24} />}
+            title="Sin partidos de local"
+            body="Cuando tus equipos tengan jornadas en casa por jugar, aparecerán aquí para asignarles día, hora y pista."
+          />
+        </Card>
+      </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>HORARIOS DE LOCAL</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Horarios de local</h1>
-        <p
-          style={{
-            margin: "10px 0 0",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          Asigna día, hora y pista a los equipos que juegan en casa esta jornada.
-        </p>
-      </div>
+    <div className="tw-page">
+      {header}
 
       <div className="tw-schedule-grid">
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div
-            style={{
-              padding: "18px 20px",
-              borderBottom: "1px solid var(--hair)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <Eyebrow>PARTIDOS DE LOCAL</Eyebrow>
-            <span
-              className="mono"
-              style={{
-                fontSize: 10.5,
-                letterSpacing: "0.14em",
-                color:
-                  assigned === fixtures.length
-                    ? "var(--accent)"
-                    : "var(--warning)",
-              }}
-            >
-              {assigned}/{fixtures.length} ASIGNADOS
-            </span>
-          </div>
+        <Card flush>
+          <CardHead title="Partidos de local" count={fixtures.length}>
+            <Chip tone={assigned === fixtures.length ? "accent" : "warning"}>
+              {assigned} de {fixtures.length} asignados
+            </Chip>
+          </CardHead>
 
-          <div className="tw-sched-head">
-            <span>Equipo</span>
-            <span>Día y hora</span>
-            <span>Pista / lugar</span>
-            <span>Estado</span>
-          </div>
+          <div className="tw-table-wrap">
+            <div className="tw-sched-head">
+              <span>Equipo</span>
+              <span>Día y hora</span>
+              <span>Pista o lugar</span>
+              <span>Estado</span>
+            </div>
 
-          {fixtures.map((f, i) => {
-            const s = slots[f.team_name];
-            return (
-              <div
-                key={f.matchday_id}
-                className="tw-sched-row"
-                style={{
-                  borderBottom:
-                    i === fixtures.length - 1 ? "none" : "1px solid var(--hair)",
-                }}
-              >
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 700 }}>
-                    {f.team_name}
-                  </span>
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 3,
-                      fontSize: 12,
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    {f.jornada_number != null ? `J·${f.jornada_number} · ` : ""}
-                    vs {f.opponent ?? "—"}
-                  </span>
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => setPicking(f.team_name)}
-                  className="mono"
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: `1px solid ${s ? "var(--accent-40)" : "var(--hair-strong)"}`,
-                    background: s ? "var(--accent-10)" : "var(--bg-card-2)",
-                    color: s ? "var(--accent)" : "var(--text-faint)",
-                    fontSize: 12,
-                    letterSpacing: "0.1em",
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
-                >
-                  {s ? `${s.day} ${s.hour}`.trim() : "Sin fecha · HH:MM"}
-                </button>
-
-                <input
-                  type="text"
-                  value={s?.court ?? ""}
-                  disabled={!s}
-                  onChange={(e) => setCourt(f.team_name, e.target.value)}
-                  placeholder="Pista 1, Central…"
-                  aria-label={`Pista para ${f.team_name}`}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "1px solid var(--hair-strong)",
-                    background: s ? "var(--bg-card-2)" : "transparent",
-                    color: "var(--text)",
-                    fontSize: 13,
-                    outline: "none",
-                    fontFamily: "'Satoshi', sans-serif",
-                    opacity: s ? 1 : 0.5,
-                  }}
-                />
-
-                <span>
-                  {s ? (
-                    <span className="chip">Listo</span>
-                  ) : (
-                    <span className="chip chip-warning">Sin horario</span>
-                  )}
-                </span>
-              </div>
-            );
-          })}
-
-          <div style={{ padding: "18px 20px", borderTop: "1px solid var(--hair)" }}>
-            <button
-              className="btn btn-accent"
-              onClick={() => setToast(true)}
-              style={{ padding: "13px 22px", fontSize: 13.5 }}
-            >
-              <IconCheck size={15} />
-              Guardar y avisar al equipo
-            </button>
-          </div>
-        </Card>
-
-        {/* ── Franjas favoritas ──────────────────────────────────── */}
-        <Card>
-          <Eyebrow>FRANJAS FAVORITAS POR EQUIPO</Eyebrow>
-          <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
             {fixtures.map((f) => {
-              const list = favByTeam[f.team_name] ?? [];
+              const s = slots[f.team_name];
               return (
-                <div key={f.matchday_id}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-                    {f.team_name}
-                  </div>
-                  {list.length === 0 ? (
+                <div key={f.matchday_id} className="tw-sched-row">
+                  <span style={{ minWidth: 0 }}>
+                    <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>
+                      {f.team_name}
+                    </span>
                     <span
-                      className="mono"
                       style={{
-                        fontSize: 10,
-                        letterSpacing: "0.14em",
-                        color: "var(--text-faint)",
+                        display: "block",
+                        marginTop: 2,
+                        fontSize: 12.5,
+                        color: "var(--text-muted)",
                       }}
                     >
-                      SIN FRANJAS FAVORITAS
+                      {f.jornada_number != null ? `Jornada ${f.jornada_number} · ` : ""}
+                      vs {f.opponent ?? "—"}
                     </span>
-                  ) : (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {list.map((slot) => (
-                        <span key={slot} className="chip">
-                          {slot}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  </span>
+
+                  <Btn
+                    size="sm"
+                    variant={s ? "tint" : "ghost"}
+                    onClick={() => setPicking(f.team_name)}
+                    aria-label={`Elegir día y hora para ${f.team_name}`}
+                    style={{ justifyContent: "flex-start" }}
+                  >
+                    {s ? slotLabel(s.day, s.hour) : "Elegir hora"}
+                  </Btn>
+
+                  <Input
+                    type="text"
+                    value={s?.court ?? ""}
+                    disabled={!s}
+                    onChange={(e) => setCourt(f.team_name, e.target.value)}
+                    placeholder="Pista 1, Central…"
+                    aria-label={`Pista para ${f.team_name}`}
+                  />
+
+                  <span>
+                    {s ? <Chip>Listo</Chip> : <Chip tone="warning">Sin horario</Chip>}
+                  </span>
                 </div>
               );
             })}
           </div>
+
+          <div className="card-foot">
+            <Btn variant="accent" onClick={() => setToast(true)} icon={<IconCheck size={15} />}>
+              Guardar y avisar
+            </Btn>
+            <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+              Los jugadores reciben el día, la hora y la pista.
+            </span>
+          </div>
+        </Card>
+
+        {/* ── Franjas favoritas ──────────────────────────────────── */}
+        <Card flush>
+          <CardHead title="Franjas favoritas" sub="Las que cada equipo ha marcado" />
+          {fixtures.map((f) => {
+            const list = favByTeam[f.team_name] ?? [];
+            return (
+              <div
+                key={f.matchday_id}
+                className="list-row"
+                style={{ flexDirection: "column", alignItems: "stretch", gap: 8, minHeight: 0 }}
+              >
+                <span className="truncate" style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-0.01em" }}>
+                  {f.team_name}
+                </span>
+                {list.length === 0 ? (
+                  <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+                    Sin franjas favoritas
+                  </span>
+                ) : (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {list.map((s) => (
+                      <Chip key={slotKey(s.day, s.hour)} tone="mute" plain>
+                        {slotLabel(s.day, s.hour)}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </Card>
       </div>
 
@@ -311,62 +316,51 @@ export function ClubSchedule() {
         onClose={() => setPicking(null)}
         labelledBy="elige-hora"
         width={560}
+        title={picking ?? ""}
+        lede={
+          favSlots.length > 0
+            ? "Sus franjas favoritas van resaltadas. También puedes elegir otro día y hora."
+            : "Este equipo no ha marcado franjas favoritas."
+        }
+        footer={<Btn onClick={() => setPicking(null)}>Cancelar</Btn>}
       >
-        <Eyebrow>ELIGE DÍA Y HORA</Eyebrow>
-        <h2 id="elige-hora" style={{ margin: "14px 0 6px", fontSize: 23 }}>
-          {picking}
-        </h2>
-        <p style={{ margin: "0 0 20px", fontSize: 13, color: "var(--text-muted)" }}>
-          {favHours.length > 0
-            ? "Sus franjas favoritas van resaltadas · o elige otro día y hora."
-            : "Este equipo no ha marcado franjas favoritas."}
-        </p>
-
-        <div className="tw-slot-grid">
+        <div
+          className="tw-slot-grid"
+          style={{ gridTemplateColumns: `52px repeat(${gridHours.length}, 1fr)` }}
+        >
           <span />
-          {HOURS.map((h) => (
+          {gridHours.map((h) => (
             <span
               key={h}
               className="mono"
-              style={{
-                fontSize: 9.5,
-                letterSpacing: "0.12em",
-                color: "var(--text-faint)",
-                textAlign: "center",
-              }}
+              style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}
             >
               {h}
             </span>
           ))}
 
-          {DAYS.map((d) => (
+          {gridDays.map((d) => (
             // Fragment con key: si no, React avisa por cada fila de la rejilla.
             <Fragment key={d}>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.16em",
-                  color: "var(--text-faint)",
-                  alignSelf: "center",
-                }}
-              >
-                {d}
+              <span className="grid-head" style={{ alignSelf: "center" }}>
+                {WEEKDAY[d]}
               </span>
-              {HOURS.map((h) => {
-                const fav = favHours.includes(h);
+              {gridHours.map((h) => {
+                const fav = favKeys.has(slotKey(d, h));
                 const cur =
                   picking && slots[picking]?.day === d && slots[picking]?.hour === h;
                 return (
                   <button
-                    key={d + h}
+                    key={slotKey(d, h)}
                     type="button"
                     onClick={() => picking && assign(picking, d, h)}
-                    className="mono"
+                    aria-label={`${WEEKDAY[d]} ${h}${fav ? ", franja favorita" : ""}`}
+                    aria-pressed={!!cur}
                     style={{
-                      padding: "11px 4px",
-                      borderRadius: 9,
-                      fontSize: 10,
+                      minHeight: 36,
+                      padding: 0,
+                      borderRadius: "var(--r-sm)",
+                      fontSize: 12,
                       cursor: "pointer",
                       background: cur
                         ? "var(--accent)"
@@ -379,28 +373,17 @@ export function ClubSchedule() {
                           ? "var(--accent)"
                           : "var(--text-faint)",
                       border: `1px solid ${
-                        cur ? "var(--accent)" : fav ? "var(--accent-40)" : "transparent"
+                        cur ? "var(--accent)" : fav ? "var(--accent-40)" : "var(--line)"
                       }`,
-                      opacity: fav || cur ? 1 : 0.6,
-                      transition: "all var(--dur-fast) var(--ease)",
+                      transition: "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
                     }}
                   >
-                    {cur ? "✓" : fav ? "★" : "·"}
+                    {cur ? <IconCheck size={14} /> : fav ? "★" : "·"}
                   </button>
                 );
               })}
             </Fragment>
           ))}
-        </div>
-
-        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => setPicking(null)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
         </div>
       </Modal>
 

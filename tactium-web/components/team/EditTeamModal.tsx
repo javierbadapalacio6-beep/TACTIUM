@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Eyebrow, Modal, Toggle } from "@/components/ui";
+import { Btn, Field, Modal, Toggle } from "@/components/ui";
 import { Toast } from "@/components/states";
 import { deleteTeam, fetchTeam, updateTeam } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
@@ -92,114 +92,92 @@ export function EditTeamModal({
     flexWrap: "wrap",
   };
 
-  return (
-    <Modal open={open} onClose={onClose} labelledBy="edit-equipo" width={520}>
-      <Eyebrow>EDITAR EQUIPO</Eyebrow>
-      <h2 id="edit-equipo" style={{ margin: "10px 0 6px", fontSize: 23 }}>
-        {teamName}
-      </h2>
-      <p style={{ margin: "0 0 20px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        Corrige la categoría o completa el grupo cuando se sortee la liga.
-      </p>
+  /** Botón "tarjeta" de elección única (categoría, grupo). */
+  const cell = (on: boolean): React.CSSProperties => ({
+    minWidth: 52,
+    minHeight: 38,
+    padding: "0 12px",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontFamily: "var(--font-ui)",
+    fontSize: 14,
+    fontWeight: on ? 700 : 500,
+    color: on ? "var(--accent)" : "var(--text)",
+    background: on ? "var(--accent-10)" : "var(--bg-card-2)",
+    border: `1px solid ${on ? "var(--accent-40)" : "var(--line)"}`,
+    transition: "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
+  });
 
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      labelledBy="edit-equipo"
+      width={520}
+      title={teamName}
+      lede="Corrige la categoría o completa el grupo cuando se sortee la liga."
+      footer={
+        <>
+          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn variant="accent" disabled={busy} onClick={save}>
+            {busy ? "Guardando…" : "Guardar"}
+          </Btn>
+        </>
+      }
+    >
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div>
-          <span
-            className="mono"
-            style={{
-              display: "block",
-              fontSize: 10,
-              letterSpacing: "0.2em",
-              color: "var(--text-faint)",
-              marginBottom: 8,
-            }}
-          >
-            CATEGORÍA
-          </span>
-          <div style={cellRow}>
+        <Field label="Categoría">
+          <div style={cellRow} role="radiogroup" aria-label="Categoría">
             {TEAM_CATEGORIES.map((v) => {
               const on = cat === v;
               return (
                 <button
                   key={v}
                   type="button"
+                  role="radio"
+                  aria-checked={on}
                   onClick={() => setCat(v)}
-                  style={{
-                    minWidth: 52,
-                    padding: "11px 12px",
-                    borderRadius: 10,
-                    cursor: "pointer",
-                    fontFamily: "'Satoshi', sans-serif",
-                    fontSize: 15,
-                    fontWeight: on ? 700 : 500,
-                    color: on ? "var(--accent)" : "var(--text)",
-                    background: on ? "var(--accent-10)" : "var(--bg-card-2)",
-                    border: on
-                      ? "1.5px solid var(--accent)"
-                      : "1px solid var(--hair-strong)",
-                  }}
+                  style={cell(on)}
                 >
                   {v}
                 </button>
               );
             })}
           </div>
-        </div>
+        </Field>
 
-        <div>
+        <div className="field">
           <div
+            className="field-label"
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              marginBottom: 8,
+              gap: 12,
             }}
           >
-            <span
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: "0.2em",
-                color: "var(--text-faint)",
-              }}
-            >
-              GRUPO
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Grupo</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 500 }}>
+              <span>{hasGroup ? "Con grupo" : "Sin grupos"}</span>
               <Toggle
                 on={hasGroup}
                 onChange={() => setHasGroup((v) => !v)}
                 label="Con grupo"
               />
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {hasGroup ? "Sí" : "Sin grupos"}
-              </span>
             </span>
           </div>
           {hasGroup ? (
-            <div style={cellRow}>
+            <div style={cellRow} role="radiogroup" aria-label="Grupo">
               {TEAM_GROUPS.map((g) => {
                 const on = group === g;
                 return (
                   <button
                     key={g}
                     type="button"
+                    role="radio"
+                    aria-checked={on}
                     onClick={() => setGroup(g)}
-                    style={{
-                      flex: 1,
-                      minWidth: 60,
-                      padding: "12px 12px",
-                      borderRadius: 10,
-                      cursor: "pointer",
-                      fontFamily: "'Satoshi', sans-serif",
-                      fontSize: 16,
-                      fontWeight: on ? 700 : 500,
-                      color: on ? "var(--accent)" : "var(--text)",
-                      background: on ? "var(--accent-10)" : "var(--bg-card-2)",
-                      border: on
-                        ? "1.5px solid var(--accent)"
-                        : "1px solid var(--hair-strong)",
-                    }}
+                    style={{ ...cell(on), flex: 1, minWidth: 60 }}
                   >
                     {g}
                   </button>
@@ -207,89 +185,48 @@ export function EditTeamModal({
               })}
             </div>
           ) : (
-            <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)" }}>
+            <span className="field-hint">
               Actívalo cuando conozcas tu grupo; podrás cambiarlo aquí en
               cualquier momento.
-            </p>
+            </span>
           )}
         </div>
       </div>
 
+      <div className="divider" style={{ margin: "22px 0 16px" }} />
 
       <div
         style={{
-          marginTop: 26,
-          paddingTop: 20,
-          borderTop: "1px solid var(--hair)",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+          padding: 14,
+          borderRadius: 10,
+          background: "var(--bg-card-2)",
+          border: "1px solid color-mix(in srgb, var(--error) 45%, transparent)",
         }}
       >
-        <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
-        <p
-          style={{
-            margin: "12px 0 14px",
-            fontSize: 13,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          {`Se borrará «${teamName}» con su plantilla, jornadas y alineaciones. No se puede deshacer.`}
-        </p>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Borrar equipo</div>
+          <div style={{ marginTop: 3, fontSize: 12.5, color: "var(--text-muted)", textWrap: "pretty" }}>
+            {`Se borrará «${teamName}» con su plantilla, jornadas y alineaciones. No se puede deshacer.`}
+          </div>
+        </div>
         {!confirmDelete ? (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setConfirmDelete(true)}
-            style={{ padding: "11px 18px", fontSize: 13.5 }}
-          >
+          <Btn variant="danger-ghost" size="sm" onClick={() => setConfirmDelete(true)}>
             Borrar equipo
-          </button>
+          </Btn>
         ) : (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setConfirmDelete(false)}
-              disabled={deleting}
-              style={{ padding: "11px 18px", fontSize: 13.5 }}
-            >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn size="sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>
               Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => void doDelete()}
-              disabled={deleting}
-              style={{ padding: "11px 18px", fontSize: 13.5 }}
-            >
+            </Btn>
+            <Btn variant="danger" size="sm" onClick={() => void doDelete()} disabled={deleting}>
               {deleting ? "Borrando…" : "Sí, borrar el equipo"}
-            </button>
+            </Btn>
           </div>
         )}
-      </div>
-
-      <div
-        style={{
-          marginTop: 24,
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 10,
-        }}
-      >
-        <button
-          className="btn btn-ghost"
-          onClick={onClose}
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
-        >
-          Cancelar
-        </button>
-        <button
-          className="btn btn-accent"
-          disabled={busy}
-          onClick={save}
-          style={{ padding: "12px 22px", fontSize: 13.5 }}
-        >
-          {busy ? "Guardando…" : "Guardar"}
-        </button>
       </div>
 
       {toast && (

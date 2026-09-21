@@ -10,6 +10,7 @@ import {
   IconBuilding,
   IconCheck,
   IconChevronDown,
+  IconChevronRight,
   IconMoon,
   IconPlus,
   IconSearch,
@@ -20,13 +21,14 @@ import { LogoMark } from "./LogoMark";
 import { LogoSpinner } from "./TactiumLogo3D";
 import { PublicShell } from "./PublicShell";
 import { Wordmark } from "./Wordmark";
+import { Avatar } from "./ui";
 import {
   NAV_BY_ROLE,
   TABS_BY_ROLE,
   hasTeamSwitcher,
   isKnownRoute,
   isPublicPath,
-  routeMeta,
+  routeCrumbs,
 } from "@/lib/nav";
 import { ROLE_LABELS, useSession } from "@/lib/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -35,9 +37,10 @@ import { fetchNotifications, markNotificationsRead } from "@/lib/queries";
 import { WRITES_ENABLED } from "@/lib/writes";
 
 /**
- * Shell persistente (Tanda 1 · `Marco TACTIUM.dc.html`).
+ * Shell persistente del panel.
  *
- *  - Escritorio (>=1024px): barra lateral 240px + barra superior 64px.
+ *  - Escritorio (>=1024px): barra lateral 240px + barra superior 56px con
+ *    migas de pan, buscador y avisos.
  *  - Tablet (768–1023px): barra lateral colapsada a 72px, sólo iconos.
  *  - Móvil (<768px): sin barra lateral; tab bar inferior flotante.
  *
@@ -48,19 +51,13 @@ import { WRITES_ENABLED } from "@/lib/writes";
 /** Rutas sin shell: onboarding y acceso ocupan toda la pantalla. */
 const BARE_ROUTES = ["/entrar", "/alta", "/recuperar", "/empezar", "/bienvenida"];
 
-// Qué rutas funcionan sin sesión vive en `lib/nav.ts` (`isPublicPath`), que es
-// donde está también el menú del marco público.
-
-/** Pantalla para rutas privadas sin sesión. */
 const REHEAL_KEY = "tw_session_reheal";
 
+/** Pantalla para rutas privadas sin sesión. */
 function SignedOut() {
   // Auto-cura del "salto a login" al volver de un sitio externo (p. ej. el alta
   // de Stripe Connect): el token puede haber caducado durante el rodeo y
   // `getUser()` devolver null aunque las cookies de sesión sigan siendo válidas.
-  // Si getSession ve una sesión en cookies, se refresca y se recarga UNA vez
-  // (bandera en sessionStorage para no entrar en bucle). Si de verdad no hay
-  // sesión, getSession devuelve null y se muestra el aviso normal.
   useEffect(() => {
     let done = false;
     try {
@@ -74,7 +71,6 @@ function SignedOut() {
       try {
         sessionStorage.setItem(REHEAL_KEY, "1");
       } catch {
-        /* sin storage: no auto-curamos para no arriesgar un bucle */
         return;
       }
       sb.auth.refreshSession().finally(() => window.location.reload());
@@ -94,27 +90,33 @@ function SignedOut() {
         padding: 24,
       }}
     >
-      <div style={{ textAlign: "center", maxWidth: 420 }}>
-        <div className="eyebrow">SESIÓN NECESARIA</div>
-        <h1 style={{ margin: "16px 0 0", fontSize: 28 }}>
-          Entra para ver tu equipo
-        </h1>
+      <div style={{ textAlign: "center", maxWidth: 400 }}>
+        <span
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: "var(--primary)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 18,
+          }}
+        >
+          <LogoMark size={28} color="var(--accent)" />
+        </span>
+        <h1 style={{ fontSize: 26 }}>Entra para ver tu equipo</h1>
         <p
           style={{
-            margin: "12px 0 24px",
+            margin: "10px 0 22px",
             fontSize: 14,
             color: "var(--text-muted)",
-            textWrap: "pretty",
           }}
         >
           Tus jornadas, alineaciones y plantilla están protegidas. Sólo tú y tu
           equipo podéis verlas.
         </p>
-        <Link
-          href="/entrar"
-          className="btn btn-accent"
-          style={{ padding: "14px 26px", fontSize: 14.5 }}
-        >
+        <Link href="/entrar" className="btn btn-accent btn-lg">
           Iniciar sesión
         </Link>
       </div>
@@ -132,7 +134,6 @@ interface Notice {
   tone: NoticeTone;
 }
 
-// Icono por tipo de notificación (mismos que la app; ver notifications.ts).
 function iconForNotif(type: string): keyof typeof ICONS {
   if (["member_joined", "joined_team", "player_claimed"].includes(type))
     return "userPlus";
@@ -142,7 +143,6 @@ function iconForNotif(type: string): keyof typeof ICONS {
   return "calendar";
 }
 
-// Tiempo relativo en español ("hace 2 h", "hace 3 d").
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
@@ -160,39 +160,12 @@ function timeAgo(iso: string): string {
   return `hace ${mo} ${mo === 1 ? "mes" : "meses"}`;
 }
 
-function Avatar({ initials, size = 32 }: { initials: string; size?: number }) {
-  return (
-    <span
-      className="mono"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 999,
-        background: "var(--primary-dim)",
-        color: "var(--accent)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: size * 0.36,
-        fontWeight: 700,
-        flex: "none",
-      }}
-    >
-      {initials}
-    </span>
-  );
-}
-
 function matchesHref(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-/**
- * Href activo entre una lista: el prefijo MÁS específico que casa. Sin esto,
- * `/club` marcaría activo en `/club/equipos/xxx` a la vez que `/club/equipos`
- * (dos secciones resaltadas). Gana el href más largo que coincide.
- */
+/** Href activo entre una lista: el prefijo MÁS específico que casa. */
 function activeHref(pathname: string, hrefs: string[]): string | null {
   let best: string | null = null;
   for (const href of hrefs) {
@@ -229,6 +202,142 @@ function useDismiss(open: boolean, close: () => void) {
   return ref;
 }
 
+/** Selector de contexto (club / equipo) de la barra lateral. */
+function ContextPicker({
+  label,
+  icon,
+  title,
+  sub,
+  open,
+  onToggle,
+  children,
+  refEl,
+}: {
+  label: string;
+  icon: ReactNode;
+  title: string;
+  sub: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+  refEl: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div className="tw-side-team" ref={refEl}>
+      <div className="tw-side-eyebrow">{label}</div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="tw-teambtn"
+        title={title}
+      >
+        <span
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: "var(--tile-bg)",
+            color: "var(--tile-fg)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flex: "none",
+          }}
+        >
+          {icon}
+        </span>
+        <span className="tw-navitem-label" style={{ flex: 1, minWidth: 0 }}>
+          <span
+            className="truncate"
+            style={{
+              display: "block",
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {title}
+          </span>
+          <span
+            className="truncate"
+            style={{
+              display: "block",
+              fontSize: 11.5,
+              color: "var(--text-faint)",
+              marginTop: 1,
+            }}
+          >
+            {sub}
+          </span>
+        </span>
+        <span
+          className="tw-navitem-label"
+          style={{
+            color: "var(--text-faint)",
+            display: "flex",
+            transform: open ? "rotate(180deg)" : "none",
+            transition: "transform var(--dur-base) var(--ease)",
+          }}
+        >
+          <IconChevronDown size={15} />
+        </span>
+      </button>
+      {open && (
+        <div className="tw-popover" style={{ marginTop: 6, padding: 6 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PopItem({
+  on,
+  icon,
+  label,
+  onClick,
+}: {
+  on: boolean;
+  icon?: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="tw-popitem"
+      style={{
+        color: on ? "var(--accent)" : undefined,
+        background: on ? "var(--accent-10)" : undefined,
+        fontWeight: on ? 700 : 500,
+      }}
+    >
+      {icon && (
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            background: on ? "var(--tile-bg)" : "var(--bg-card-2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flex: "none",
+          }}
+        >
+          {icon}
+        </span>
+      )}
+      <span className="truncate" style={{ flex: 1, textAlign: "left" }}>
+        {label}
+      </span>
+      {on && <IconCheck size={14} />}
+    </button>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const {
@@ -257,16 +366,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const bellRef = useDismiss(bellOpen, () => setBellOpen(false));
   const roleRef = useDismiss(roleOpen, () => setRoleOpen(false));
 
-  // Cerrar los popovers al cambiar de ruta: si no, se quedan abiertos encima
-  // de la pantalla nueva.
   useEffect(() => {
     setTeamOpen(false);
+    setClubOpen(false);
     setBellOpen(false);
     setRoleOpen(false);
   }, [pathname]);
 
-  // Con sesión válida, limpiar la bandera de auto-cura para que pueda volver a
-  // actuar si el token caduca en otro rodeo externo más adelante.
   useEffect(() => {
     if (user) {
       try {
@@ -277,9 +383,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  // Avisos reales (campanita): la RLS acota a los del usuario. Antes esto era un
-  // array de maqueta ("Marco se ha unido a Halcones A"…) que se colaba en una
-  // vista autenticada real. Solo lectura; marcar leídas es una escritura aparte.
   const [notices, setNotices] = useState<Notice[]>([]);
   useEffect(() => {
     if (!user) {
@@ -316,8 +419,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  // Mientras se resuelve la sesión no se pinta el shell: si no, aparece con el
-  // rol por defecto y salta al real medio segundo después.
   if (!ready) {
     return (
       <div
@@ -328,19 +429,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           placeItems: "center",
         }}
       >
-        {/* Resolver la sesión suele ser instantáneo; cuando no lo es, el
-            spinner de marca aparece solo (lleva su propio retardo). */}
         <LogoSpinner size={104} />
       </div>
     );
   }
 
-  // Sin sesión: las rutas privadas mandan a la entrada y las públicas van con
-  // el MARCO PÚBLICO. Antes se servían con este mismo shell y el visitante veía
-  // una barra lateral de rol "INVITADO" llena de destinos que no podía abrir.
   if (!user) {
-    // Ruta pública → marco público. Ruta protegida CONOCIDA → aviso de sesión.
-    // Ruta desconocida → 404 (children) en el marco público, no el aviso.
     if (isPublicPath(pathname)) return <PublicShell>{children}</PublicShell>;
     if (!isKnownRoute(pathname)) return <PublicShell>{children}</PublicShell>;
     return <SignedOut />;
@@ -350,12 +444,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tabs = TABS_BY_ROLE[role];
   const navActiveHref = activeHref(pathname, nav.map((i) => i.href));
   const tabsActiveHref = activeHref(pathname, tabs.map((t) => t.href));
-  const meta = routeMeta(pathname, role);
+  const crumbs = routeCrumbs(pathname, role);
   const unread = notices.filter((n) => n.unread).length;
+  const activeClub = clubs.find((c) => c.id === clubId) ?? null;
 
-  // Abrir la campana marca los avisos como vistos: el badge se limpia en local
-  // siempre; solo se PERSISTE en la BD si las escrituras están activas (la web
-  // es solo-lectura por defecto, así que no toca producción sin querer).
   function toggleBell() {
     setBellOpen((v) => {
       const next = !v;
@@ -372,18 +464,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ══ Barra lateral ══════════════════════════════════════════ */}
       <aside className="tw-sidebar">
         <Link
-          href="/"
+          href={role === "club" ? "/club" : "/"}
           className="tw-side-brand"
           aria-label="TACTIUM · Inicio"
           style={{ textDecoration: "none", color: "inherit" }}
         >
-          <Wordmark />
-          {/* Barra lateral colapsada (tablet): sólo la tesela con el isotipo. */}
+          <Wordmark size={15} />
           <span className="tw-side-brand-mini">
             <span
               style={{
-                width: 26,
-                height: 26,
+                width: 28,
+                height: 28,
                 borderRadius: 8,
                 background: "var(--primary)",
                 display: "flex",
@@ -391,13 +482,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 justifyContent: "center",
               }}
             >
-              <LogoMark size={19} color="var(--accent)" />
+              <LogoMark size={20} color="var(--accent)" />
             </span>
           </span>
         </Link>
 
         <nav className="tw-side-nav" aria-label="Navegación principal">
-          <div className="eyebrow tw-side-eyebrow">{(user?.roleLabel ?? "INVITADO")}</div>
           {nav.map((item) => {
             const active = item.href === navActiveHref;
             const Icon = ICONS[item.icon];
@@ -416,291 +506,82 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Selector de club. Se muestra aunque solo haya uno: saber sobre qué
-            club estás actuando es justo lo que faltaba. Antes, las pantallas de
-            club usaban el primero que devolviera la consulta —sin ordenar— y no
-            había manera de cambiarlo. */}
+        {/* Selector de club */}
         {clubs.length > 0 && (
-          <div className="tw-side-team" ref={clubRef}>
-            <div className="eyebrow eyebrow-faint tw-side-eyebrow">
-              CLUB ACTIVO
-            </div>
-            <button
-              type="button"
-              onClick={() => setClubOpen((v) => !v)}
-              aria-expanded={clubOpen}
-              className="tw-teambtn"
-            >
-              <span
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 8,
-                  background: "var(--primary-dim)",
-                  color: "var(--accent)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flex: "none",
+          <ContextPicker
+            label="Club"
+            icon={<IconBuilding size={15} />}
+            title={activeClub?.name ?? "Sin club"}
+            sub={clubs.length > 1 ? `${clubs.length} clubes` : "Club activo"}
+            open={clubOpen}
+            onToggle={() => setClubOpen((v) => !v)}
+            refEl={clubRef}
+          >
+            {clubs.map((c) => (
+              <PopItem
+                key={c.id}
+                on={c.id === clubId}
+                icon={<IconBuilding size={12} />}
+                label={c.name}
+                onClick={() => {
+                  setActiveClub(c.id);
+                  setClubOpen(false);
                 }}
-              >
-                <IconBuilding size={15} />
-              </span>
-              <span className="tw-navitem-label" style={{ flex: 1, minWidth: 0 }}>
-                <span
-                  style={{
-                    display: "block",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    letterSpacing: "-0.01em",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {clubs.find((c) => c.id === clubId)?.name ?? "Sin club"}
-                </span>
-                <span
-                  className="mono"
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    letterSpacing: "0.14em",
-                    color: "var(--text-faint)",
-                    marginTop: 2,
-                  }}
-                >
-                  {clubs.length > 1 ? `${clubs.length} CLUBES` : "CLUB"}
-                </span>
-              </span>
-              <span
-                className="tw-navitem-label"
-                style={{
-                  color: "var(--text-faint)",
-                  display: "flex",
-                  transform: clubOpen ? "rotate(180deg)" : "none",
-                  transition: "transform var(--dur-base) var(--ease)",
-                }}
-              >
-                <IconChevronDown size={15} />
-              </span>
-            </button>
-
-            {clubOpen && (
-              <div className="tw-popover" style={{ marginTop: 6, padding: 6 }}>
-                {clubs.map((c) => {
-                  const on = c.id === clubId;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveClub(c.id);
-                        setClubOpen(false);
-                      }}
-                      className="tw-popitem"
-                      style={{
-                        color: on ? "var(--accent)" : "var(--text-muted)",
-                        background: on ? "var(--accent-10)" : "transparent",
-                        fontWeight: on ? 700 : 500,
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 6,
-                          background: on
-                            ? "var(--primary-dim)"
-                            : "var(--bg-card-2)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flex: "none",
-                        }}
-                      >
-                        <IconBuilding size={12} />
-                      </span>
-                      <span style={{ flex: 1, textAlign: "left" }}>{c.name}</span>
-                      {on && <IconCheck size={14} />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              />
+            ))}
+          </ContextPicker>
         )}
 
         {/* Selector de equipo — el jugador suelto no tiene plantilla */}
-        {hasTeamSwitcher(role) ? (
-          <div className="tw-side-team" ref={teamRef}>
-            <div className="eyebrow eyebrow-faint tw-side-eyebrow">
-              EQUIPO ACTIVO
-            </div>
-            <button
-              type="button"
-              onClick={() => setTeamOpen((v) => !v)}
-              aria-expanded={teamOpen}
-              className="tw-teambtn"
-            >
-              <span
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 8,
-                  background: "var(--primary-dim)",
-                  color: "var(--accent)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flex: "none",
+        {hasTeamSwitcher(role) && (
+          <ContextPicker
+            label="Equipo"
+            icon={<IconShield size={15} />}
+            title={activeTeam?.name ?? "Sin equipo"}
+            sub={
+              [activeTeam?.category, activeTeam?.gender].filter(Boolean).join(" · ") ||
+              "Sin categoría"
+            }
+            open={teamOpen}
+            onToggle={() => setTeamOpen((v) => !v)}
+            refEl={teamRef}
+          >
+            {teams.map((t) => (
+              <PopItem
+                key={t.id}
+                on={t.id === activeTeam?.id}
+                icon={<IconShield size={12} />}
+                label={t.name}
+                onClick={() => {
+                  setActiveTeam(t.id);
+                  setTeamOpen(false);
                 }}
-              >
-                <IconShield size={15} />
-              </span>
-              <span className="tw-navitem-label" style={{ flex: 1, minWidth: 0 }}>
-                <span
-                  style={{
-                    display: "block",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    letterSpacing: "-0.01em",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {activeTeam?.name ?? "Sin equipo"}
-                </span>
-                <span
-                  className="mono"
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    letterSpacing: "0.14em",
-                    color: "var(--text-faint)",
-                    marginTop: 2,
-                  }}
-                >
-                  {[activeTeam?.category, activeTeam?.gender]
-                    .filter(Boolean)
-                    .join(" · ")
-                    .toUpperCase() || "SIN CATEGORÍA"}
-                </span>
-              </span>
+              />
+            ))}
+            {teams.length === 0 && (
               <span
-                className="tw-navitem-label"
                 style={{
+                  padding: "10px 12px",
+                  fontSize: 12.5,
                   color: "var(--text-faint)",
-                  display: "flex",
-                  transform: teamOpen ? "rotate(180deg)" : "none",
-                  transition: "transform var(--dur-base) var(--ease)",
                 }}
               >
-                <IconChevronDown size={15} />
+                Sin equipos
               </span>
-            </button>
-
-            {teamOpen && (
-              <div className="tw-popover" style={{ marginTop: 6, padding: 6 }}>
-                {teams.map((t) => {
-                  const on = t.id === activeTeam?.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveTeam(t.id);
-                        setTeamOpen(false);
-                      }}
-                      className="tw-popitem"
-                      style={{
-                        color: on ? "var(--accent)" : "var(--text-muted)",
-                        background: on ? "var(--accent-10)" : "transparent",
-                        fontWeight: on ? 700 : 500,
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 6,
-                          background: on
-                            ? "var(--primary-dim)"
-                            : "var(--bg-card-2)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flex: "none",
-                        }}
-                      >
-                        <IconShield size={12} />
-                      </span>
-                      <span style={{ flex: 1, textAlign: "left" }}>{t.name}</span>
-                      {on && <IconCheck size={14} />}
-                    </button>
-                  );
-                })}
-                {teams.length === 0 && (
-                  <span
-                    className="mono"
-                    style={{
-                      padding: "10px 12px",
-                      fontSize: 10,
-                      letterSpacing: "0.14em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    SIN EQUIPOS
-                  </span>
-                )}
-                <div
-                  style={{
-                    height: 1,
-                    background: "var(--hair)",
-                    margin: "4px 6px",
-                  }}
-                />
-                <Link href="/empezar" className="tw-popitem" style={{ color: "var(--accent)", fontWeight: 700 }}>
-                  <span
-                    style={{
-                      width: 20,
-                      display: "flex",
-                      justifyContent: "center",
-                      flex: "none",
-                    }}
-                  >
-                    <IconPlus size={14} />
-                  </span>
-                  <span style={{ flex: 1, textAlign: "left" }}>Crear equipo</span>
-                </Link>
-              </div>
             )}
-          </div>
-        ) : (
-          <div className="tw-side-team tw-navitem-label">
-            <div
-              style={{
-                margin: "4px 0 0",
-                padding: 12,
-                borderRadius: 12,
-                border: "1px dashed var(--hair-strong)",
-                textAlign: "center",
-                fontSize: 12.5,
-                color: "var(--text-faint)",
-                textWrap: "pretty",
-              }}
-            >
-              Sin equipo · no hay selector
-            </div>
-          </div>
+            <div className="tw-pop-sep" />
+            <Link href="/empezar" className="tw-popitem" style={{ color: "var(--accent)", fontWeight: 600 }}>
+              <span style={{ width: 22, display: "flex", justifyContent: "center", flex: "none" }}>
+                <IconPlus size={14} />
+              </span>
+              <span style={{ flex: 1, textAlign: "left" }}>Crear equipo</span>
+            </Link>
+          </ContextPicker>
         )}
 
         <div style={{ flex: 1 }} />
 
-        {/* Bloque de usuario. El rol se DERIVA, pero quien tiene varios puede
-            elegir: administrar el club y ser capitán son dos trabajos y la
-            jerarquía sola dejaba al club encerrado en su vista. */}
+        {/* Bloque de usuario: rol elegido + ajustes + salir */}
         <div className="tw-side-user" ref={roleRef}>
           {roleOpen && (
             <div
@@ -710,49 +591,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {availableRoles.length > 1 && (
                 <>
-                  <span
-                    className="mono"
-                    style={{
-                      display: "block",
-                      padding: "8px 12px 6px",
-                      fontSize: 9.5,
-                      letterSpacing: "0.16em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    USAR TACTIUM COMO
-                  </span>
-                  {availableRoles.map((r) => {
-                    const on = r === role;
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => {
-                          setRole(r);
-                          setRoleOpen(false);
-                        }}
-                        className="tw-popitem"
-                        style={{
-                          color: on ? "var(--accent)" : "var(--text-muted)",
-                          background: on ? "var(--accent-10)" : "transparent",
-                          fontWeight: on ? 700 : 500,
-                        }}
-                      >
-                        <span style={{ flex: 1, textAlign: "left" }}>
-                          {ROLE_LABELS[r]}
-                        </span>
-                        {on && <IconCheck size={14} />}
-                      </button>
-                    );
-                  })}
-                  <div
-                    style={{
-                      height: 1,
-                      background: "var(--hair)",
-                      margin: "4px 6px",
-                    }}
-                  />
+                  <span className="tw-pop-label">Usar TACTIUM como</span>
+                  {availableRoles.map((r) => (
+                    <PopItem
+                      key={r}
+                      on={r === role}
+                      label={ROLE_LABELS[r]}
+                      onClick={() => {
+                        setRole(r);
+                        setRoleOpen(false);
+                      }}
+                    />
+                  ))}
+                  <div className="tw-pop-sep" />
                 </>
               )}
               <Link href="/ajustes/apariencia" className="tw-popitem">
@@ -761,9 +612,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link href="/ajustes/datos" className="tw-popitem">
                 <span style={{ flex: 1, textAlign: "left" }}>Mis datos</span>
               </Link>
-              <div
-                style={{ height: 1, background: "var(--hair)", margin: "4px 6px" }}
-              />
+              <Link href="/suscripcion" className="tw-popitem">
+                <span style={{ flex: 1, textAlign: "left" }}>Mi suscripción</span>
+              </Link>
+              <div className="tw-pop-sep" />
               <button
                 type="button"
                 onClick={() => void signOut()}
@@ -781,37 +633,32 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="tw-userbtn"
             title="Tu cuenta"
           >
-            <Avatar initials={(user?.initials ?? "··")} />
+            <Avatar initials={user.initials} src={user.avatarUrl} size={30} />
             <span
               className="tw-navitem-label"
               style={{ flex: 1, minWidth: 0, textAlign: "left" }}
             >
               <span
+                className="truncate"
                 style={{
                   display: "block",
                   fontSize: 13,
                   fontWeight: 700,
                   letterSpacing: "-0.01em",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
                 }}
               >
-                {(user?.name ?? "Invitado")}
+                {user.name}
               </span>
               <span
-                className="mono"
+                className="truncate"
                 style={{
                   display: "block",
-                  fontSize: 10,
-                  letterSpacing: "0.16em",
-                  marginTop: 2,
-                  color: !!user?.roleIsPrivileged
-                    ? "var(--accent)"
-                    : "var(--text-faint)",
+                  fontSize: 11.5,
+                  marginTop: 1,
+                  color: user.roleIsPrivileged ? "var(--accent)" : "var(--text-faint)",
                 }}
               >
-                {(user?.roleLabel ?? "INVITADO")}
+                {ROLE_LABELS[role]}
               </span>
             </span>
             <span
@@ -827,25 +674,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ══ Contenido ══════════════════════════════════════════════ */}
       <div className="tw-main">
         <header className="tw-topbar">
-          <div className="tw-topbar-title">
-            <div
-              className="eyebrow"
-              style={{ lineHeight: 1, whiteSpace: "nowrap" }}
-            >
-              {meta.eyebrow}
+          <nav className="tw-topbar-title" aria-label="Migas de pan">
+            <div className="tw-crumbs">
+              {crumbs.map((c, i) => (
+                <span key={i} style={{ display: "contents" }}>
+                  {i > 0 && (
+                    <span className="sep" aria-hidden="true">
+                      <IconChevronRight size={13} />
+                    </span>
+                  )}
+                  {c.href ? (
+                    <Link href={c.href}>{c.label}</Link>
+                  ) : (
+                    <span className="cur">{c.label}</span>
+                  )}
+                </span>
+              ))}
             </div>
-            <div
-              style={{
-                fontSize: 17,
-                fontWeight: 700,
-                letterSpacing: "-0.02em",
-                lineHeight: 1.1,
-                marginTop: 5,
-              }}
-            >
-              {meta.title}
-            </div>
-          </div>
+          </nav>
 
           <Link
             href="/"
@@ -860,14 +706,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/comunidad" className="tw-searchbox">
               <IconSearch size={15} />
               <span style={{ flex: 1, textAlign: "left" }}>
-                Busca jugadores, equipos o torneos
+                Buscar jugadores, equipos o torneos
               </span>
-              <span className="mono tw-kbd">⌘K</span>
+              <span className="tw-kbd">⌘K</span>
             </Link>
           </div>
 
           <div
-            style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}
+            style={{ display: "flex", alignItems: "center", gap: 4, flex: "none", position: "relative" }}
             ref={bellRef}
           >
             <button
@@ -878,9 +724,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="tw-iconbtn"
             >
               <IconBell size={17} />
-              {unread > 0 && (
-                <span className="mono tw-badge">{unread}</span>
-              )}
+              {unread > 0 && <span className="tw-badge">{unread}</span>}
             </button>
 
             <button
@@ -895,22 +739,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               {resolved === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
             </button>
 
-            <Link href="/ajustes" aria-label="Tu cuenta">
-              <Avatar initials={(user?.initials ?? "··")} size={34} />
+            <Link href="/ajustes" aria-label="Tu cuenta" style={{ marginLeft: 6, display: "flex" }}>
+              <Avatar initials={user.initials} src={user.avatarUrl} size={32} />
             </Link>
 
             {bellOpen && (
               <div className="tw-popover tw-bell">
                 <div className="tw-bell-head">
-                  <span className="eyebrow">AVISOS</span>
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: "0.1em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
+                  <span style={{ fontSize: 14, fontWeight: 700 }}>Avisos</span>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
                     {unread} sin leer
                   </span>
                 </div>
@@ -940,9 +777,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       className="tw-bell-row"
                       style={{
                         borderBottom:
-                          i === notices.length - 1
-                            ? "none"
-                            : "1px solid var(--hair)",
+                          i === notices.length - 1 ? "none" : "1px solid var(--line)",
                       }}
                     >
                       <span
@@ -951,9 +786,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           height: 30,
                           borderRadius: 9,
                           background:
-                            n.tone === "accent"
-                              ? "var(--accent-10)"
-                              : "var(--bg-card-2)",
+                            n.tone === "accent" ? "var(--accent-10)" : "var(--bg-card-2)",
                           color,
                           display: "flex",
                           alignItems: "center",
@@ -963,27 +796,23 @@ export function AppShell({ children }: { children: ReactNode }) {
                       >
                         <Icon size={15} />
                       </span>
-                      <span style={{ flex: 1 }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>
                         <span
                           style={{
                             display: "block",
                             fontSize: 13.5,
                             lineHeight: 1.35,
-                            color: n.unread
-                              ? "var(--text)"
-                              : "var(--text-muted)",
+                            color: n.unread ? "var(--text)" : "var(--text-muted)",
                           }}
                         >
                           {n.text}
                         </span>
                         <span
-                          className="mono"
                           style={{
                             display: "block",
-                            fontSize: 10.5,
-                            letterSpacing: "0.1em",
+                            fontSize: 12,
                             color: "var(--text-faint)",
-                            marginTop: 5,
+                            marginTop: 4,
                           }}
                         >
                           {n.time}
@@ -1025,7 +854,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={"tw-tab" + (active ? " is-active" : "")}
             >
               <Icon size={19} />
-              <span style={{ fontSize: 10, fontWeight: active ? 700 : 500 }}>
+              <span style={{ fontSize: 10.5, fontWeight: active ? 700 : 500 }}>
                 {t.label}
               </span>
             </Link>

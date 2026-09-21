@@ -2,7 +2,7 @@
 
 import { CreateTeam } from "@/components/entry/start";
 import { useSession } from "@/lib/session";
-import { SkeletonCard } from "@/components/states";
+import { SkeletonPage } from "@/components/states";
 
 /**
  * Alta de equipo DESDE el panel del club: reutiliza el formulario de creación
@@ -11,6 +11,6 @@ import { SkeletonCard } from "@/components/states";
  */
 export function ClubCreateTeam() {
   const { clubId } = useSession();
-  if (!clubId) return <SkeletonCard />;
+  if (!clubId) return <SkeletonPage />;
   return <CreateTeam clubId={clubId} />;
 }

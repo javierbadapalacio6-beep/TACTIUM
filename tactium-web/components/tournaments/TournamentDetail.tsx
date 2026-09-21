@@ -1,13 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-} from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
   type BracketTie,
@@ -38,15 +31,33 @@ import {
   setSocialResult,
   type ResultMatch,
 } from "@/lib/tournament-engine";
+import { formatFee } from "@/lib/tournament-signup-pricing";
 import { guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  Input,
+  Modal,
+  Note,
+  PageHeader,
+  Segmented,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import {
   IconAlert,
   IconCalendar,
+  IconCheck,
   IconCopy,
+  IconInfo,
+  IconTicket,
   IconTrophy,
-  IconZap,
+  IconUsers,
 } from "@/components/Icon";
 import { PayTournamentButton } from "@/components/tournaments/PayTournamentButton";
 
@@ -197,11 +208,11 @@ function setsToScore(sets: number[][] | null): string {
 
 /* ── Cuadros: orden y etiqueta (espejo de bracketRank/bracketLabel) ─ */
 const BRACKET_TITLE: Record<string, string> = {
-  main: "CUADRO PRINCIPAL",
-  consol: "CUADRO DE CONSOLACIÓN",
-  gold: "CUADRO ORO",
-  silver: "CUADRO PLATA",
-  bronze: "CUADRO BRONCE",
+  main: "Cuadro principal",
+  consol: "Cuadro de consolación",
+  gold: "Cuadro oro",
+  silver: "Cuadro plata",
+  bronze: "Cuadro bronce",
 };
 
 function bracketRank(b: string): number {
@@ -221,19 +232,19 @@ function bracketTitle(b: string): string {
   if (BRACKET_TITLE[b]) return BRACKET_TITLE[b];
   if (b.startsWith("pos")) {
     const n = parseInt(b.slice(3), 10) || 0;
-    return n <= 4 ? "CUADRO DE CONSOLACIÓN" : `CONSOLACIÓN ${n - 3}`;
+    return n <= 4 ? "Cuadro de consolación" : `Consolación ${n - 3}`;
   }
-  return `CUADRO ${b.toUpperCase()}`;
+  return `Cuadro ${b}`;
 }
 
 /* ── Etiqueta de ronda (espejo de roundLabel de la app) ──────────── */
 function roundLabel(round: number, total: number): string {
   const fromEnd = total - round;
-  if (fromEnd === 0) return "FINAL";
-  if (fromEnd === 1) return "SEMIFINALES";
-  if (fromEnd === 2) return "CUARTOS";
-  if (fromEnd === 3) return "OCTAVOS";
-  return `RONDA ${round}`;
+  if (fromEnd === 0) return "Final";
+  if (fromEnd === 1) return "Semifinales";
+  if (fromEnd === 2) return "Cuartos";
+  if (fromEnd === 3) return "Octavos";
+  return `Ronda ${round}`;
 }
 
 const groupLetter = (n: number): string => String.fromCharCode(65 + n); // A, B, C…
@@ -370,24 +381,26 @@ function Bracket({
   rounds: { round: string; ties: UiTie[] }[];
   title?: string;
 }) {
+  // Campeón: la última ronda con un solo cruce ya resuelto. Se deduce de lo que
+  // ya llega en `rounds`, no se consulta nada nuevo.
+  const finalTie = rounds.at(-1)?.ties.length === 1 ? rounds.at(-1)!.ties[0] : null;
+  const champion =
+    finalTie && finalTie.winner >= 0
+      ? finalTie.winner === 0
+        ? finalTie.a
+        : finalTie.b
+      : null;
+
   return (
-    <div style={{ marginBottom: title ? 28 : 0 }}>
-      {title && (
-        <Eyebrow style={{ marginBottom: 14, paddingLeft: 24 }}>{title}</Eyebrow>
-      )}
+    <Card flush>
+      {title && <CardHead title={title} />}
       <div className="tw-bracket-scroll">
         <div className="tw-bracket">
           {rounds.map((col) => (
             <div key={col.round} className="tw-bracket-col">
               <div
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.2em",
-                  color: "var(--text-faint)",
-                  textAlign: "center",
-                  marginBottom: 14,
-                }}
+                className="grid-head"
+                style={{ textAlign: "center", marginBottom: 12 }}
               >
                 {col.round}
               </div>
@@ -425,19 +438,23 @@ function Bracket({
                             gap: 10,
                             padding: "10px 12px",
                             borderBottom:
-                              side === 0 ? "1px solid var(--hair)" : "none",
+                              side === 0 ? "1px solid var(--line)" : "none",
                             boxShadow: isWinner
                               ? "inset 2px 0 0 var(--accent)"
                               : "none",
-                            opacity: tbd ? 0.45 : decided && !isWinner ? 0.5 : 1,
                           }}
                         >
                           <span
+                            className="truncate"
                             style={{
                               flex: 1,
-                              fontSize: 12.5,
+                              fontSize: 13,
                               fontWeight: isWinner ? 700 : 500,
-                              fontStyle: tbd ? "italic" : "normal",
+                              color: tbd
+                                ? "var(--text-faint)"
+                                : decided && !isWinner
+                                  ? "var(--text-muted)"
+                                  : "var(--text)",
                             }}
                           >
                             {name}
@@ -450,10 +467,9 @@ function Bracket({
                         className="mono"
                         style={{
                           padding: "6px 12px",
-                          fontSize: 10.5,
-                          letterSpacing: "0.08em",
+                          fontSize: 12,
                           color: "var(--text-faint)",
-                          borderTop: "1px solid var(--hair)",
+                          borderTop: "1px solid var(--line)",
                         }}
                       >
                         {t.score}
@@ -467,40 +483,34 @@ function Bracket({
 
           <div className="tw-bracket-col">
             <div
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: "0.2em",
-                color: "var(--accent)",
-                textAlign: "center",
-                marginBottom: 14,
-              }}
+              className="grid-head"
+              style={{ textAlign: "center", marginBottom: 12 }}
             >
-              CAMPEONES
+              Campeones
             </div>
             <div
               style={{
-                padding: "20px 14px",
-                borderRadius: 12,
-                background: "var(--accent-10)",
-                border: "1.5px solid var(--accent)",
+                padding: "16px 14px",
+                borderRadius: "var(--r-md)",
+                background: champion ? "var(--accent-10)" : "var(--bg-card-2)",
+                border: `1px solid ${champion ? "var(--accent-40)" : "var(--line)"}`,
                 textAlign: "center",
-                color: "var(--accent)",
+                color: champion ? "var(--accent)" : "var(--text-faint)",
                 fontSize: 13,
-                fontWeight: 700,
+                fontWeight: champion ? 700 : 500,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: 10,
+                gap: 8,
               }}
             >
-              <IconTrophy size={20} />
-              Por determinar
+              <IconTrophy size={18} />
+              {champion ?? "Por determinar"}
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -663,7 +673,7 @@ function ScheduleGrid({
       if (seen.has(key)) continue;
       const label =
         m.bracket === "group"
-          ? "GRUPOS"
+          ? "Grupos"
           : roundLabel(m.round, maxRound.get(m.bracket) ?? m.round);
       seen.set(key, { bracket: m.bracket, round: m.round, label });
     }
@@ -676,7 +686,7 @@ function ScheduleGrid({
    *  tarjeta decía «RONDA 1» donde el bloque decía «SEMIFINALES». */
   const phaseLabel = (m: RealMatch): string =>
     phases.find((p) => p.bracket === m.bracket && p.round === m.round)?.label ??
-    `RONDA ${m.round}`;
+    `Ronda ${m.round}`;
 
   const posOf = (id: string): { ti: number; ci: number } | null => {
     const sl = slots[id];
@@ -777,17 +787,26 @@ function ScheduleGrid({
         }}
       >
         <span
-          className="mono"
-          style={{ fontSize: 8.5, letterSpacing: "0.16em", color: "var(--accent)" }}
+          className="truncate"
+          style={{
+            display: "block",
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: "var(--text-faint)",
+          }}
         >
           {phaseLabel(m)}
           {label ? ` · ${label}` : ""}
         </span>
-        <span style={{ display: "block", marginTop: 5, fontSize: 11.5, fontWeight: 700 }}>
+        <span
+          className="truncate"
+          style={{ display: "block", marginTop: 4, fontSize: 12.5, fontWeight: 700 }}
+        >
           {home}
         </span>
         <span
-          style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--text-muted)" }}
+          className="truncate"
+          style={{ display: "block", marginTop: 2, fontSize: 12, color: "var(--text-muted)" }}
         >
           {away}
         </span>
@@ -797,13 +816,11 @@ function ScheduleGrid({
 
   if (matches.length === 0) {
     return (
-      <div style={{ padding: 28 }}>
-        <EmptyState
-          icon={<IconCalendar size={30} />}
-          title="Todavía no hay partidos"
-          body="Genera el cuadro o los grupos y aquí podrás repartirlos por horas y pistas."
-        />
-      </div>
+      <EmptyState
+        icon={<IconCalendar size={22} />}
+        title="Todavía no hay partidos"
+        body="Genera el cuadro o los grupos y aquí podrás repartirlos por horas y pistas."
+      />
     );
   }
 
@@ -813,91 +830,72 @@ function ScheduleGrid({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 20,
-          padding: "16px 20px",
-          borderBottom: "1px solid var(--hair)",
+          gap: 16,
+          padding: "12px 18px",
+          borderBottom: "1px solid var(--line)",
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <div className="mono tw-stat-label">DURACIÓN POR PARTIDO</div>
-          <div className="mono" style={{ marginTop: 6, fontSize: 16, fontWeight: 700 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Partido</span>
+          <span className="mono" style={{ fontSize: 13.5, fontWeight: 700 }}>
             {slotMinutes || 60} min
-          </div>
+          </span>
         </div>
-        <div>
-          <div className="mono tw-stat-label">DESCANSO ENTRE PARTIDOS</div>
-          <div className="mono" style={{ marginTop: 6, fontSize: 16, fontWeight: 700 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Descanso</span>
+          <span className="mono" style={{ fontSize: 13.5, fontWeight: 700 }}>
             {restMinutes || 0} min
-          </div>
+          </span>
         </div>
         {days.length > 1 && (
-          <div>
-            <div className="mono tw-stat-label">DÍA</div>
-            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-              {days.map((d) => {
-                const on = d === activeDay;
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDay(d)}
-                    className="btn"
-                    style={{
-                      padding: "6px 10px",
-                      fontSize: 11.5,
-                      fontWeight: on ? 700 : 500,
-                      background: on ? "var(--accent-10)" : "transparent",
-                      color: on ? "var(--accent)" : "var(--text-muted)",
-                      border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                    }}
-                  >
-                    {d.slice(8, 10)}/{d.slice(5, 7)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <Segmented
+            label="Día"
+            value={activeDay}
+            onChange={setDay}
+            options={days.map((d) => ({
+              value: d,
+              label: <span className="mono">{`${d.slice(8, 10)}/${d.slice(5, 7)}`}</span>,
+            }))}
+          />
         )}
-        <div style={{ flex: 1 }} />
+        <span className="tw-toolbar-spacer" />
         {!readOnly && (
-          <button
-            className="btn btn-danger-ghost"
+          <Btn
+            variant="danger-ghost"
+            size="sm"
             onClick={() => setClearOpen(true)}
             disabled={busy}
-            style={{ padding: "10px 16px", fontSize: 12.5 }}
           >
             Vaciar horario
-          </button>
+          </Btn>
         )}
       </div>
 
       {days.length > 1 && phases.length > 0 && !readOnly && (
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--hair)" }}>
-          <div className="mono tw-stat-label">DÍAS DE CADA FASE</div>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--line)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Días de cada fase</div>
           <p
             style={{
-              margin: "8px 0 14px",
+              margin: "4px 0 12px",
               fontSize: 12.5,
               color: "var(--text-muted)",
-              textWrap: "pretty",
             }}
           >
             Marca en qué días se juega cada fase; puede ser más de uno. Los
             partidos de las fases que no tocan hoy se ven atenuados abajo.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {phases.map((ph) => {
               const key = `${ph.bracket}:${ph.round}`;
               const sel = phaseDays[key] ?? [];
               return (
-                <div key={key} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div key={key} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span
-                    className="mono"
                     style={{
-                      fontSize: 10,
-                      letterSpacing: "0.14em",
-                      color: "var(--text-faint)",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: "var(--text-muted)",
                       minWidth: 110,
                     }}
                   >
@@ -910,6 +908,7 @@ function ScheduleGrid({
                         key={d}
                         type="button"
                         disabled={busy}
+                        aria-pressed={on}
                         onClick={() => {
                           void (async () => {
                             setBusy(true);
@@ -923,17 +922,8 @@ function ScheduleGrid({
                             if (reason) setErr(reason);
                           })();
                         }}
-                        className="btn"
-                        style={{
-                          padding: "6px 10px",
-                          fontSize: 11.5,
-                          fontWeight: on ? 700 : 500,
-                          background: on ? "var(--accent-10)" : "transparent",
-                          color: on ? "var(--accent)" : "var(--text-muted)",
-                          border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                        }}
+                        className={"tw-fcp-chip mono" + (on ? " is-on" : "")}
                       >
-                        {on ? "✓ " : ""}
                         {d.slice(8, 10)}/{d.slice(5, 7)}
                       </button>
                     );
@@ -948,21 +938,14 @@ function ScheduleGrid({
       {unassigned.length > 0 && (
         <div
           style={{
-            padding: "16px 20px",
-            borderBottom: "1px solid var(--hair)",
+            padding: "14px 18px",
+            borderBottom: "1px solid var(--line)",
             background: "var(--bg-card-2)",
           }}
         >
-          <div
-            className="mono"
-            style={{
-              fontSize: 9.5,
-              letterSpacing: "0.16em",
-              color: "var(--warning)",
-              marginBottom: 10,
-            }}
-          >
-            SIN HORA · {unassigned.length}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>Sin hora</span>
+            <span className="card-head-count">{unassigned.length}</span>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {unassigned.map((m) => (
@@ -981,16 +964,10 @@ function ScheduleGrid({
           {courts.map((c) => (
             <span
               key={c}
-              className="mono"
-              style={{
-                fontSize: 9.5,
-                letterSpacing: "0.16em",
-                color: "var(--text-faint)",
-                textAlign: "center",
-                paddingBottom: 10,
-              }}
+              className="grid-head"
+              style={{ textAlign: "center", paddingBottom: 8 }}
             >
-              {c.toUpperCase()}
+              {c}
             </span>
           ))}
 
@@ -999,8 +976,7 @@ function ScheduleGrid({
               <span
                 className="mono"
                 style={{
-                  fontSize: 11,
-                  letterSpacing: "0.08em",
+                  fontSize: 12,
                   color: "var(--text-faint)",
                   alignSelf: "start",
                   paddingTop: 12,
@@ -1035,7 +1011,7 @@ function ScheduleGrid({
                         ? conflict
                           ? "var(--error)"
                           : "var(--accent)"
-                        : "var(--hair)",
+                        : "var(--line)",
                       background: isHover
                         ? conflict
                           ? "var(--error-soft)"
@@ -1047,16 +1023,15 @@ function ScheduleGrid({
                       <MatchCard m={m} />
                     ) : isHover && conflict ? (
                       <span
-                        className="mono"
                         style={{
-                          fontSize: 9,
-                          letterSpacing: "0.1em",
+                          fontSize: 12,
+                          fontWeight: 600,
                           color: "var(--error)",
                           textAlign: "center",
                           padding: 6,
                         }}
                       >
-                        {conflict.toUpperCase()}
+                        {conflict}
                       </span>
                     ) : null}
                   </div>
@@ -1072,38 +1047,29 @@ function ScheduleGrid({
         onClose={() => setClearOpen(false)}
         labelledBy="vaciar-horario"
         width={440}
+        title="¿Quitar todas las horas y pistas asignadas?"
+        lede="Los partidos vuelven a la bandeja de «sin hora». Afecta a todos los días, no solo al que estás viendo."
+        footer={
+          <>
+            <Btn onClick={() => setClearOpen(false)}>Cancelar</Btn>
+            <Btn
+              variant="danger"
+              disabled={busy}
+              onClick={() => {
+                setClearOpen(false);
+                void (async () => {
+                  for (const m of matches) {
+                    if (slots[m.id]?.at) await place(m.id, null, null);
+                  }
+                })();
+              }}
+            >
+              Vaciar
+            </Btn>
+          </>
+        }
       >
-        <h2 id="vaciar-horario" style={{ fontSize: 22 }}>
-          ¿Quitar todas las horas y pistas asignadas?
-        </h2>
-        <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-          Los partidos vuelven a la bandeja de «sin hora». Afecta a todos los
-          días, no solo al que estás viendo.
-        </p>
-        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => setClearOpen(false)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-danger"
-            disabled={busy}
-            onClick={() => {
-              setClearOpen(false);
-              void (async () => {
-                for (const m of matches) {
-                  if (slots[m.id]?.at) await place(m.id, null, null);
-                }
-              })();
-            }}
-            style={{ padding: "12px 22px", fontSize: 13.5 }}
-          >
-            Vaciar
-          </button>
-        </div>
+        {null}
       </Modal>
 
       {err && <Toast tone="error" title={err} onClose={() => setErr(null)} />}
@@ -1157,88 +1123,91 @@ function ResultModal({
     }
   };
 
-  const inputStyle: CSSProperties = {
-    width: 52,
-    padding: "8px 6px",
-    textAlign: "center",
-    fontSize: 15,
-    borderRadius: 8,
-    border: "1px solid var(--hair)",
-    background: "var(--surface)",
-    color: "var(--text)",
-  };
+  const scoreStyle = { width: 60, textAlign: "center" as const, fontSize: 15 };
 
   return (
-    <Modal open onClose={onClose} labelledBy="tw-result-title">
-      <div style={{ display: "grid", gap: 14 }}>
-        <h3 id="tw-result-title" style={{ margin: 0, fontSize: 16 }}>
-          Resultado
-        </h3>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy="tw-result-title"
+      title="Resultado"
+      lede={
+        <>
           {homeName} <span style={{ color: "var(--text-faint)" }}>vs</span> {awayName}
-        </div>
-        {isSocial ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <input
-              inputMode="numeric"
-              value={pts[0]}
-              onChange={(e) =>
-                setPts([e.target.value.replace(/[^0-9]/g, "").slice(0, 2), pts[1]])
-              }
-              style={inputStyle}
-              aria-label={`Puntos ${homeName}`}
-            />
-            <span className="mono" style={{ color: "var(--text-faint)" }}>
-              —
-            </span>
-            <input
-              inputMode="numeric"
-              value={pts[1]}
-              onChange={(e) =>
-                setPts([pts[0], e.target.value.replace(/[^0-9]/g, "").slice(0, 2)])
-              }
-              style={inputStyle}
-              aria-label={`Puntos ${awayName}`}
-            />
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {sets.map((s, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span
-                  className="mono"
-                  style={{ fontSize: 11, color: "var(--text-faint)", width: 44 }}
-                >
-                  SET {i + 1}
-                </span>
-                <input
-                  inputMode="numeric"
-                  value={s[0]}
-                  onChange={(e) => setCell(i, 0, e.target.value)}
-                  style={inputStyle}
-                />
-                <span className="mono" style={{ color: "var(--text-faint)" }}>
-                  —
-                </span>
-                <input
-                  inputMode="numeric"
-                  value={s[1]}
-                  onChange={(e) => setCell(i, 1, e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
+        </>
+      }
+      footer={
+        <>
+          <Btn onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button className="btn btn-accent" onClick={submit} disabled={busy}>
+          </Btn>
+          <Btn variant="accent" onClick={submit} disabled={busy}>
             {busy ? "Guardando…" : "Guardar"}
-          </button>
+          </Btn>
+        </>
+      }
+    >
+      {isSocial ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Input
+            className="mono"
+            inputMode="numeric"
+            value={pts[0]}
+            onChange={(e) =>
+              setPts([e.target.value.replace(/[^0-9]/g, "").slice(0, 2), pts[1]])
+            }
+            style={scoreStyle}
+            aria-label={`Puntos ${homeName}`}
+          />
+          <span className="mono" style={{ color: "var(--text-faint)" }}>
+            —
+          </span>
+          <Input
+            className="mono"
+            inputMode="numeric"
+            value={pts[1]}
+            onChange={(e) =>
+              setPts([pts[0], e.target.value.replace(/[^0-9]/g, "").slice(0, 2)])
+            }
+            style={scoreStyle}
+            aria-label={`Puntos ${awayName}`}
+          />
         </div>
-      </div>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {sets.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: "var(--text-muted)",
+                  width: 48,
+                }}
+              >
+                Set {i + 1}
+              </span>
+              <Input
+                className="mono"
+                inputMode="numeric"
+                value={s[0]}
+                onChange={(e) => setCell(i, 0, e.target.value)}
+                style={scoreStyle}
+              />
+              <span className="mono" style={{ color: "var(--text-faint)" }}>
+                —
+              </span>
+              <Input
+                className="mono"
+                inputMode="numeric"
+                value={s[1]}
+                onChange={(e) => setCell(i, 1, e.target.value)}
+                style={scoreStyle}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </Modal>
   );
 }
@@ -1260,7 +1229,7 @@ function MatchRows({
   const sorted = [...matches].sort((a, b) => a.round - b.round || a.slot - b.slot);
   return (
     <>
-      {sorted.map((m, i) => {
+      {sorted.map((m) => {
         const can = organizer && !!m.home_reg && !!m.away_reg;
         const done = m.status === "finished";
         const score = isSocial
@@ -1284,26 +1253,35 @@ function MatchRows({
                   }
                 : undefined
             }
+            className={"list-row" + (can ? " is-link" : "")}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "11px 20px",
-              borderBottom: i === sorted.length - 1 ? "none" : "1px solid var(--hair)",
+              minHeight: 46,
+              padding: "10px 18px",
               cursor: can ? "pointer" : "default",
             }}
             title={can ? "Meter resultado" : undefined}
           >
-            <span style={{ flex: 1, fontSize: 13, fontWeight: done ? 700 : 500 }}>
+            <span
+              className="truncate"
+              style={{ flex: 1, fontSize: 13.5, fontWeight: done ? 700 : 500 }}
+            >
               {nameOr(m.home_reg)}
             </span>
-            <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>
+            <span
+              className="mono"
+              style={{
+                fontSize: 12,
+                color: done ? "var(--text)" : "var(--text-faint)",
+                fontWeight: done ? 700 : 500,
+              }}
+            >
               {score || "vs"}
             </span>
             <span
+              className="truncate"
               style={{
                 flex: 1,
-                fontSize: 13,
+                fontSize: 13.5,
                 fontWeight: done ? 700 : 500,
                 textAlign: "right",
               }}
@@ -1412,29 +1390,40 @@ export function TournamentDetail({
     [id, reloadKey],
   );
 
-  if (loading) return <SkeletonCard />;
+  const backLink = {
+    href: spectator ? "/torneos" : "/club/torneos",
+    label: "Torneos",
+  };
+
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconAlert size={34} />}
-          title="No se pudo cargar el torneo"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconAlert size={24} />}
+            title="No se pudo cargar el torneo"
+            body={error}
+            action={<BtnLink href={backLink.href}>Volver a torneos</BtnLink>}
+          />
+        </Card>
+      </div>
     );
   }
 
   const t = data?.tour ?? null;
   if (!t) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconAlert size={34} />}
-          title="Torneo no disponible."
-          body="Puede que el enlace haya caducado o el torneo se haya borrado."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconAlert size={24} />}
+            title="Torneo no disponible"
+            body="Puede que el enlace haya caducado o el torneo se haya borrado."
+            action={<BtnLink href={backLink.href}>Volver a torneos</BtnLink>}
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -1482,9 +1471,19 @@ export function TournamentDetail({
       : [];
   const gens = t.genders?.length ? t.genders : t.gender ? [t.gender] : [];
   const dateStr = fmtDates(t.starts_on, t.ends_on);
-  const metaLine = [t.club_name, t.location, dateStr || "Fecha por confirmar"]
-    .filter(Boolean)
-    .join(" · ");
+  const statusTone: "accent" | "mute" | "warning" | "error" =
+    t.status === "open"
+      ? "accent"
+      : t.status === "in_progress"
+        ? "warning"
+        : t.status === "canceled"
+          ? "error"
+          : "mute";
+  // El importe se escribe como lo escribiría el club: «25 €», no «25 EUR».
+  const feeLabel =
+    t.entry_fee != null && t.entry_fee > 0
+      ? formatFee(t.entry_fee, t.fee_currency)
+      : "Gratis";
 
   /* ── Derivados de partidos ────────────────────────────────────── */
   const social = isSocialFormat(t.format);
@@ -1688,7 +1687,7 @@ export function TournamentDetail({
   ).sort((a, b) => a - b);
   const groups = groupNos.map((gn) => ({
     key: gn,
-    name: `GRUPO ${groupLetter(gn)}`,
+    name: `Grupo ${groupLetter(gn)}`,
     rows: computeStandings(
       regs.filter((r) => r.group_no === gn),
       groupMatches.filter((m) => m.group_no === gn),
@@ -1825,173 +1824,158 @@ export function TournamentDetail({
     return { key, title: bracketTitle(key), rounds };
   });
 
+  const paidCount = regs.filter((r) => r.payment_status === "paid").length;
+  const playedCount = matches.filter((m) => m.status === "finished").length;
+
   return (
-    <div className="tw-lineup-wrap">
-      {/* ── Hero ─────────────────────────────────────────────────── */}
-      <Card style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
-        <div className="amb" style={{ padding: 28 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 20,
-              flexWrap: "wrap",
+    <div className="tw-page">
+      {/* ── Cabecera ─────────────────────────────────────────────── */}
+      <PageHeader
+        back={backLink}
+        title={t.name}
+        meta={[
+          typeLabel,
+          t.club_name ?? null,
+          t.location ?? null,
+          dateStr || "Fecha por confirmar",
+        ]}
+        actions={
+          spectator ? (
+            <>
+              {/* Apuntarse es la acción principal: seguir el torneo es
+                  secundario y no puede competir con ella en el acento. */}
+              <Btn
+                variant="quiet"
+                icon={followed ? <IconCheck size={15} /> : undefined}
+                onClick={() => setFollowed((v) => !v)}
+              >
+                {followed ? "Siguiendo" : "Seguir torneo"}
+              </Btn>
+              <BtnLink href={`/torneos/${t.id}/inscripcion`} variant="accent">
+                Apuntarme
+              </BtnLink>
+            </>
+          ) : t.status === "draft" ? (
+            // Borrador: no publicado. Hasta pagar/publicar, NADIE se inscribe
+            // ni se puede añadir a nadie (la BD lo bloquea; aquí la UX).
+            <PayTournamentButton tournamentId={t.id} />
+          ) : (
+            <>
+              <Btn variant="quiet">Alta manual</Btn>
+              <BtnLink href={`/torneos/${t.id}/inscripcion`} icon={<IconTicket size={15} />}>
+                Ficha de inscripción
+              </BtnLink>
+            </>
+          )
+        }
+      >
+        <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Chip tone={statusTone}>{statusLabel}</Chip>
+          {!spectator && t.status !== "draft" && (
+            <Chip plain>
+              {t.billing_status === "paid" ? "Publicado y pagado" : "Publicado"}
+            </Chip>
+          )}
+          {cats.map((c) => (
+            <Chip key={c} tone="mute" plain>
+              {c}
+            </Chip>
+          ))}
+          {gens.map((g) => (
+            <Chip key={g} tone="mute" plain>
+              {g}
+            </Chip>
+          ))}
+        </div>
+      </PageHeader>
+
+      {!spectator && t.status === "draft" && (
+        <Note tone="warning" icon={<IconInfo size={16} />} style={{ marginBottom: 16 }}>
+          Publica el torneo para abrir las inscripciones. Hasta entonces nadie
+          puede unirse ni añadirse.
+        </Note>
+      )}
+
+      {!spectator && t.signup_code && (
+        <Card
+          style={{
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "12px 18px",
+          }}
+        >
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>
+            Código de inscripción
+          </span>
+          <span className="code" style={{ fontSize: 15, fontWeight: 700 }}>
+            {t.signup_code}
+          </span>
+          <Btn
+            variant="quiet"
+            size="sm"
+            aria-label="Copiar código"
+            icon={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(t.signup_code ?? "");
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1800);
+              } catch {
+                /* se puede copiar a mano */
+              }
             }}
           >
-            <div>
-              <Eyebrow>TORNEO · {typeLabel.toUpperCase()}</Eyebrow>
-              <h1 style={{ margin: "12px 0 0", fontSize: 32, lineHeight: 1.04 }}>
-                {t.name}
-              </h1>
-              <div
-                className="mono"
-                style={{
-                  marginTop: 10,
-                  fontSize: 12,
-                  letterSpacing: "0.1em",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {metaLine}
-              </div>
-              <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {cats.map((c) => (
-                  <span key={c} className="chip chip-mute">
-                    {c}
-                  </span>
-                ))}
-                {gens.map((g) => (
-                  <span key={g} className="chip chip-mute">
-                    {g}
-                  </span>
-                ))}
-                <span className="chip">{statusLabel}</span>
-              </div>
-            </div>
+            {copied ? "Copiado" : "Copiar"}
+          </Btn>
+          <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+            Compártelo para que se apunten desde la app.
+          </span>
+        </Card>
+      )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {spectator ? (
-                <>
-                  <button
-                    className={"btn " + (followed ? "btn-ghost" : "btn-accent")}
-                    onClick={() => setFollowed((v) => !v)}
-                    style={{ padding: "12px 22px", fontSize: 13.5 }}
-                  >
-                    {followed ? "Seguido" : "Seguir torneo"}
-                  </button>
-                  <Link
-                    href={`/torneos/${t.id}/inscripcion`}
-                    className="btn btn-ghost"
-                    style={{ padding: "12px 20px", fontSize: 13.5 }}
-                  >
-                    Apuntarme a este torneo
-                  </Link>
-                </>
-              ) : t.status === "draft" ? (
-                // Borrador: no publicado. Hasta pagar/publicar, NADIE se inscribe
-                // ni se puede añadir a nadie (la BD lo bloquea; aquí la UX).
-                <>
-                  <PayTournamentButton tournamentId={t.id} />
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "var(--text-muted)",
-                      textWrap: "pretty",
-                      maxWidth: 240,
-                    }}
-                  >
-                    Publica el torneo para abrir las inscripciones. Hasta
-                    entonces nadie puede unirse ni añadirse.
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span
-                    className="chip"
-                    style={{
-                      background: "var(--accent-10)",
-                      color: "var(--accent)",
-                      padding: "10px 16px",
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      textAlign: "center",
-                    }}
-                  >
-                    ✓ Publicado{t.billing_status === "paid" ? " · pagado" : ""}
-                  </span>
-                  <Link
-                    href={`/torneos/${t.id}/inscripcion`}
-                    className="btn btn-ghost"
-                    style={{ padding: "11px 18px", fontSize: 13 }}
-                  >
-                    Ficha de inscripción
-                  </Link>
-                  <button className="btn btn-ghost" style={{ padding: "11px 18px", fontSize: 13 }}>
-                    Alta manual
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {!spectator && t.signup_code && (
-            <div
-              style={{
-                marginTop: 22,
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                padding: "14px 18px",
-                borderRadius: 12,
-                background: "var(--bg-card-2)",
-                flexWrap: "wrap",
-              }}
-            >
-              <span className="eyebrow">CÓDIGO DE INSCRIPCIÓN</span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 20,
-                  fontWeight: 700,
-                  letterSpacing: "0.2em",
-                  color: "var(--accent)",
-                }}
-              >
-                {t.signup_code}
-              </span>
-              <button
-                type="button"
-                aria-label="Copiar código"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(t.signup_code ?? "");
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1800);
-                  } catch {
-                    /* se puede copiar a mano */
-                  }
-                }}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: copied ? "var(--accent)" : "var(--text-faint)",
-                  cursor: "pointer",
-                  display: "flex",
-                }}
-              >
-                <IconCopy size={16} />
-              </button>
-              <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                Compártelo para que se apunten desde la app.
-              </span>
-            </div>
-          )}
-        </div>
-      </Card>
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat
+          label="Parejas inscritas"
+          value={regs.length}
+          unit={t.max_pairs ? `/ ${t.max_pairs}` : undefined}
+          icon={<IconUsers size={14} />}
+          sub={
+            t.max_pairs
+              ? regs.length >= t.max_pairs
+                ? "Cupo completo"
+                : `${t.max_pairs - regs.length} plazas libres`
+              : undefined
+          }
+        />
+        <Stat
+          label="Partidos"
+          value={matches.length}
+          icon={<IconTrophy size={14} />}
+          sub={matches.length > 0 ? `${playedCount} jugados` : "Aún sin generar"}
+        />
+        <Stat label="Cuota" value={feeLabel} icon={<IconTicket size={14} />} />
+        {!spectator && (
+          <Stat
+            label="Cobradas"
+            value={paidCount}
+            unit={`/ ${regs.length}`}
+            tone={regs.length > 0 && paidCount === regs.length ? "accent" : undefined}
+            sub={
+              regs.length === 0
+                ? "Sin inscripciones"
+                : paidCount === regs.length
+                  ? "Todas cobradas"
+                  : `${regs.length - paidCount} pendientes`
+            }
+          />
+        )}
+      </StatRow>
 
       {/* ── Pestañas ─────────────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+      <div className="tw-toolbar">
         {visibleTabs.map(([k, label]) => {
           const on = curTab === k;
           return (
@@ -1999,15 +1983,8 @@ export function TournamentDetail({
               key={k}
               type="button"
               onClick={() => setTab(k)}
-              className="btn"
-              style={{
-                padding: "10px 18px",
-                fontSize: 13,
-                fontWeight: on ? 700 : 500,
-                background: on ? "var(--accent-10)" : "transparent",
-                color: on ? "var(--accent)" : "var(--text-muted)",
-                border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-              }}
+              aria-pressed={on}
+              className={"tw-fcp-chip" + (on ? " is-on" : "")}
             >
               {label}
             </button>
@@ -2020,13 +1997,22 @@ export function TournamentDetail({
         (regs.length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconTrophy size={34} />}
+              icon={<IconTrophy size={24} />}
               title="Sin inscripciones todavía"
               body="Comparte el código para que las parejas se apunten desde la app."
             />
           </Card>
         ) : (
-          <Card style={{ padding: 0, overflow: "hidden" }}>
+          <Card flush>
+            <CardHead
+              title="Parejas inscritas"
+              count={regs.length}
+              sub={
+                spectator
+                  ? undefined
+                  : "Toca la categoría de una pareja para moverla de cuadro."
+              }
+            />
             <div className="tw-roster-scroll">
               <div className="tw-signup-head">
                 <span>Pareja</span>
@@ -2038,15 +2024,15 @@ export function TournamentDetail({
               </div>
               {regs.map((r) => (
                 <div key={r.id} className="tw-signup-row">
-                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{pairName(r)}</span>
+                  <span className="truncate" style={{ fontSize: 13.5, fontWeight: 700 }}>
+                    {pairName(r)}
+                  </span>
                   {spectator ? (
-                    <span className="mono" style={{ fontSize: 12 }}>
-                      {r.category ?? "—"}
-                    </span>
+                    <span style={{ fontSize: 13 }}>{r.category ?? "—"}</span>
                   ) : (
-                    <button
-                      type="button"
-                      className="mono"
+                    <Btn
+                      size="sm"
+                      variant="quiet"
                       onClick={() =>
                         setMoveReg({
                           id: r.id,
@@ -2056,63 +2042,43 @@ export function TournamentDetail({
                         })
                       }
                       title="Mover de categoría"
-                      style={{
-                        fontSize: 12,
-                        background: "transparent",
-                        border: "1px dashed var(--hair-strong)",
-                        borderRadius: 8,
-                        padding: "3px 8px",
-                        color: "var(--text)",
-                        cursor: "pointer",
-                        textAlign: "left",
-                      }}
                     >
                       {r.category ?? "—"}
-                    </button>
+                    </Btn>
                   )}
-                  <span
-                    className="mono"
-                    style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--text-faint)" }}
-                  >
-                    {(r.gender ?? "").toUpperCase()}
+                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                    {r.gender ?? "—"}
                   </span>
-                  <span className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
+                  <span className="mono" style={{ fontSize: 13 }}>
                     {r.seed_points ?? "—"}
                   </span>
-                  <span className="mono" style={{ fontSize: 11 }}>
+                  <span>
                     {r.payment_status === "paid" ? (
-                      <span style={{ color: "var(--accent)", fontWeight: 700 }}>
-                        {r.payment_method === "stripe" ? "Online ✓" : "Club ✓"}
-                      </span>
+                      <Chip tone="accent">
+                        {r.payment_method === "stripe" ? "Online" : "En club"}
+                      </Chip>
                     ) : r.payment_status === "pending_club" ? (
                       !spectator ? (
                         <button
                           type="button"
+                          className="chip chip-warning"
                           onClick={() => markRegPayment(r.id, "paid")}
                           disabled={busy}
                           title="Marcar como pagada"
-                          style={{
-                            border: "1px solid var(--warning)",
-                            background: "transparent",
-                            color: "var(--warning)",
-                            borderRadius: 8,
-                            padding: "3px 8px",
-                            fontSize: 10.5,
-                            cursor: "pointer",
-                          }}
+                          style={{ cursor: busy ? "default" : "pointer" }}
                         >
-                          Pendiente · cobrar
+                          Pendiente
                         </button>
                       ) : (
-                        <span style={{ color: "var(--warning)" }}>Pendiente</span>
+                        <Chip tone="warning">Pendiente</Chip>
                       )
                     ) : (
-                      <span style={{ color: "var(--text-faint)" }}>—</span>
+                      <span style={{ fontSize: 13, color: "var(--text-faint)" }}>—</span>
                     )}
                   </span>
                   <span
-                    className="mono"
-                    style={{ fontSize: 11, color: "var(--text-muted)" }}
+                    className="mono truncate"
+                    style={{ fontSize: 12.5, color: "var(--text-muted)" }}
                   >
                     {r.p1_phone ?? "—"}
                   </span>
@@ -2126,7 +2092,7 @@ export function TournamentDetail({
         (groups.length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconTrophy size={34} />}
+              icon={<IconTrophy size={24} />}
               title="Sin grupos todavía"
               body={
                 canGenerateGroups
@@ -2139,26 +2105,16 @@ export function TournamentDetail({
                     style={{
                       display: "flex",
                       flexWrap: "wrap",
-                      gap: 10,
+                      gap: 8,
                       justifyContent: "center",
                     }}
                   >
-                    <button
-                      className="btn btn-accent"
-                      disabled={busy}
-                      onClick={() => genGroups(3)}
-                      style={{ padding: "13px 20px", fontSize: 13.5 }}
-                    >
-                      Grupos de 3
-                    </button>
-                    <button
-                      className="btn btn-accent"
-                      disabled={busy}
-                      onClick={() => genGroups(4)}
-                      style={{ padding: "13px 20px", fontSize: 13.5 }}
-                    >
+                    <Btn variant="accent" disabled={busy} onClick={() => genGroups(4)}>
                       Grupos de 4
-                    </button>
+                    </Btn>
+                    <Btn variant="ghost" disabled={busy} onClick={() => genGroups(3)}>
+                      Grupos de 3
+                    </Btn>
                   </div>
                 ) : undefined
               }
@@ -2167,38 +2123,30 @@ export function TournamentDetail({
         ) : (
           <div className="tw-club-grid">
             {groups.map((g) => (
-              <Card key={g.key} style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--hair)" }}>
-                  <Eyebrow>{g.name}</Eyebrow>
+              <Card key={g.key} flush>
+                <CardHead title={g.name} count={g.rows.length} />
+                <div className="tw-standings-head" style={{ minWidth: 0, gridTemplateColumns: "28px minmax(0,1fr) 56px 44px" }}>
+                  <span>#</span>
+                  <span>Pareja</span>
+                  <span>G-P</span>
+                  <span>Pts</span>
                 </div>
                 {g.rows.map((p, i) => (
                   <div
                     key={p.regId}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 20px",
-                      borderBottom:
-                        i === g.rows.length - 1 ? "none" : "1px solid var(--hair)",
-                    }}
+                    className="tw-standings-row"
+                    style={{ minWidth: 0, gridTemplateColumns: "28px minmax(0,1fr) 56px 44px" }}
                   >
-                    <span
-                      className="mono"
-                      style={{ fontSize: 11, color: "var(--text-faint)", width: 18 }}
-                    >
+                    <span className="mono" style={{ color: "var(--text-faint)" }}>
                       {i + 1}
                     </span>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>
+                    <span className="truncate" style={{ fontWeight: 600 }}>
                       {p.name}
                     </span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    <span className="mono" style={{ color: "var(--text-muted)" }}>
                       {p.won}-{p.lost}
                     </span>
-                    <span
-                      className="mono"
-                      style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
-                    >
+                    <span className="mono" style={{ fontWeight: 700, color: "var(--accent)" }}>
                       {p.points}
                     </span>
                   </div>
@@ -2209,13 +2157,15 @@ export function TournamentDetail({
                   return (
                     <>
                       <div
+                        className="grid-head"
                         style={{
-                          padding: "8px 20px",
-                          borderTop: "1px solid var(--hair)",
-                          background: "var(--surface-2, transparent)",
+                          padding: "10px 18px",
+                          borderTop: "1px solid var(--line)",
+                          borderBottom: "1px solid var(--line)",
+                          background: "color-mix(in srgb, var(--bg-card-2) 45%, transparent)",
                         }}
                       >
-                        <Eyebrow>PARTIDOS</Eyebrow>
+                        Partidos del grupo
                       </div>
                       <MatchRows
                         matches={gm}
@@ -2236,7 +2186,7 @@ export function TournamentDetail({
         (!hasClass ? (
           <Card>
             <EmptyState
-              icon={<IconTrophy size={34} />}
+              icon={<IconTrophy size={24} />}
               title="Sin clasificación todavía"
               body={
                 canGenerateRR
@@ -2249,60 +2199,36 @@ export function TournamentDetail({
               }
               action={
                 canGenerateRR ? (
-                  <button
-                    className="btn btn-accent"
-                    disabled={busy}
-                    onClick={genRoundRobin}
-                    style={{ padding: "13px 24px", fontSize: 14 }}
-                  >
+                  <Btn variant="accent" disabled={busy} onClick={genRoundRobin}>
                     {busy ? "Generando…" : "Generar liga"}
-                  </button>
+                  </Btn>
                 ) : canGenerateAmericano ? (
-                  <button
-                    className="btn btn-accent"
-                    disabled={busy}
-                    onClick={genAmericano}
-                    style={{ padding: "13px 24px", fontSize: 14 }}
-                  >
+                  <Btn variant="accent" disabled={busy} onClick={genAmericano}>
                     {busy ? "Generando…" : "Generar americano"}
-                  </button>
+                  </Btn>
                 ) : canGenerateMexicano ? (
-                  <button
-                    className="btn btn-accent"
-                    disabled={busy}
-                    onClick={genMexicanoRound}
-                    style={{ padding: "13px 24px", fontSize: 14 }}
-                  >
+                  <Btn variant="accent" disabled={busy} onClick={genMexicanoRound}>
                     {busy ? "Generando…" : "Generar 1ª ronda"}
-                  </button>
+                  </Btn>
                 ) : undefined
               }
             />
           </Card>
         ) : (
-          <Card style={{ padding: 0, overflow: "hidden" }}>
-            {canGenerateMexicano && mexRounds > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  padding: "12px 16px",
-                  borderBottom: "1px solid var(--hair)",
-                }}
-              >
-                <button
-                  className="btn btn-accent"
-                  disabled={busy}
-                  onClick={genMexicanoRound}
-                  style={{ padding: "9px 16px", fontSize: 13 }}
-                >
-                  {busy ? "Generando…" : "Generar siguiente ronda"}
-                </button>
-              </div>
-            )}
+          <Card flush>
+            <CardHead
+              title={social ? "Clasificación individual" : "Clasificación"}
+              count={classRows.length}
+            >
+              {canGenerateMexicano && mexRounds > 0 && (
+                <Btn variant="accent" size="sm" disabled={busy} onClick={genMexicanoRound}>
+                  {busy ? "Generando…" : "Siguiente ronda"}
+                </Btn>
+              )}
+            </CardHead>
             <div className="tw-roster-scroll">
               <div className="tw-standings-head">
-                {["POS", "PAREJA", "PJ", "PG", "PP", "SETS +", "SETS −", "JUEGOS +", "JUEGOS −", "PTS"].map(
+                {["Pos", "Pareja", "PJ", "PG", "PP", "Sets +", "Sets −", "Juegos +", "Juegos −", "Pts"].map(
                   (h) => (
                     <span key={h}>{h}</span>
                   )
@@ -2310,8 +2236,12 @@ export function TournamentDetail({
               </div>
               {classRows.map((p, i) => (
                 <div key={p.key} className="tw-standings-row">
-                  <span className="mono">{i + 1}</span>
-                  <span style={{ fontWeight: 700 }}>{p.name}</span>
+                  <span className="mono" style={{ color: "var(--text-faint)" }}>
+                    {i + 1}
+                  </span>
+                  <span className="truncate" style={{ fontWeight: 700 }}>
+                    {p.name}
+                  </span>
                   <span className="mono">{p.played ?? "—"}</span>
                   <span className="mono">{p.won ?? "—"}</span>
                   <span className="mono">{p.lost ?? "—"}</span>
@@ -2331,10 +2261,12 @@ export function TournamentDetail({
       {curTab === "clasificacion" &&
         (isRR || social) &&
         (social ? socialMatches.length > 0 : rrMatches.length > 0) && (
-          <Card style={{ padding: 0, overflow: "hidden", marginTop: 16 }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--hair)" }}>
-              <Eyebrow>PARTIDOS</Eyebrow>
-            </div>
+          <Card flush style={{ marginTop: 16 }}>
+            <CardHead
+              title="Partidos"
+              count={(social ? socialMatches : rrMatches).length}
+              sub={organizer ? "Toca un partido para meter su resultado." : undefined}
+            />
             <MatchRows
               matches={social ? socialMatches : rrMatches}
               nameOr={nameOr}
@@ -2349,7 +2281,7 @@ export function TournamentDetail({
         (koBrackets.length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconTrophy size={34} />}
+              icon={<IconTrophy size={24} />}
               title="Sin cuadro todavía"
               body={
                 canGenerateKo
@@ -2362,55 +2294,40 @@ export function TournamentDetail({
               }
               action={
                 canGenerateKo ? (
-                  <button
-                    className="btn btn-accent"
-                    disabled={busy}
-                    onClick={genKo}
-                    style={{ padding: "13px 24px", fontSize: 14 }}
-                  >
+                  <Btn variant="accent" disabled={busy} onClick={genKo}>
                     {busy ? "Generando…" : "Generar cuadro"}
-                  </button>
+                  </Btn>
                 ) : canGenerateKnockout ? (
                   <div
                     style={{
                       display: "flex",
                       flexWrap: "wrap",
-                      gap: 10,
+                      gap: 8,
                       justifyContent: "center",
                     }}
                   >
-                    <button
-                      className="btn btn-accent"
-                      disabled={busy}
-                      onClick={genPrincipalConsol}
-                      style={{ padding: "13px 20px", fontSize: 13.5 }}
-                    >
-                      Principal + consolación
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      disabled={busy}
-                      onClick={genKnockoutByPosition}
-                      style={{ padding: "13px 20px", fontSize: 13.5 }}
-                    >
-                      Por posición (oro/plata…)
-                    </button>
+                    <Btn variant="accent" disabled={busy} onClick={genPrincipalConsol}>
+                      Principal y consolación
+                    </Btn>
+                    <Btn variant="ghost" disabled={busy} onClick={genKnockoutByPosition}>
+                      Por posición
+                    </Btn>
                   </div>
                 ) : undefined
               }
             />
           </Card>
         ) : (
-          <Card style={{ padding: "24px 0" }}>
+          <div style={{ display: "grid", gap: 16 }}>
             {koBrackets.map((b) => (
               <Bracket key={b.key} rounds={b.rounds} title={b.title} />
             ))}
-          </Card>
+          </div>
         ))}
 
       {curTab === "horario" && (
         <>
-          <Card style={{ padding: 0, overflow: "hidden" }}>
+          <Card flush>
             <ScheduleGrid
               matches={matches}
               nameById={nameById}
@@ -2431,91 +2348,84 @@ export function TournamentDetail({
       )}
 
       {curTab === "config" && (
-        <Card>
-          <Eyebrow>CONFIGURACIÓN</Eyebrow>
-          <p style={{ margin: "16px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-            Edita el torneo desde el asistente de creación.
-          </p>
-          <Link
-            href="/club/torneos"
-            className="btn btn-ghost"
-            style={{ marginTop: 18, padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Editar torneo
-          </Link>
-
-          <div
-            style={{ height: 1, background: "var(--hair)", margin: "24px 0" }}
-          />
-          <Eyebrow>AGRUPAR CATEGORÍAS</Eyebrow>
-          <p
-            style={{
-              margin: "12px 0 14px",
-              fontSize: 13,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Si una categoría se queda con pocas parejas, vuélcala sobre otra en
-            vez de cancelarla. Las inscripciones se mantienen con su pago.
-          </p>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setMergeOpen(true)}
-            style={{ padding: "11px 18px", fontSize: 13 }}
-          >
-            Agrupar categorías
-          </button>
-
-          <div
-            style={{ height: 1, background: "var(--hair)", margin: "24px 0" }}
-          />
-          <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
-          <p
-            style={{
-              margin: "12px 0 14px",
-              fontSize: 13,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Borrar el torneo elimina sus inscripciones, cuadros y horario. No se
-            puede deshacer, y si ya se han cobrado inscripciones esos pagos no
-            se devuelven solos.
-          </p>
-          {!confirmDelete ? (
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setConfirmDelete(true)}
-              style={{ padding: "11px 18px", fontSize: 13 }}
-            >
-              Borrar torneo
-            </button>
-          ) : (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setConfirmDelete(false)}
-                disabled={deletingT}
-                style={{ padding: "11px 18px", fontSize: 13 }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => void removeTournament()}
-                disabled={deletingT}
-                style={{ padding: "11px 18px", fontSize: 13 }}
-              >
-                {deletingT ? "Borrando…" : "Sí, borrar el torneo"}
-              </button>
+        <div style={{ display: "grid", gap: 16 }}>
+          <Card flush>
+            <CardHead title="Datos del torneo" />
+            <div className="card-body">
+              <dl className="kv" style={{ margin: 0 }}>
+                <dt>Formato</dt>
+                <dd>{typeLabel}</dd>
+                <dt>Estado</dt>
+                <dd>{statusLabel}</dd>
+                <dt>Fechas</dt>
+                <dd>{dateStr || "Por confirmar"}</dd>
+                <dt>Lugar</dt>
+                <dd>{t.location ?? "—"}</dd>
+                <dt>Cuota</dt>
+                <dd>{feeLabel}</dd>
+                <dt>Pistas</dt>
+                <dd className="mono">{t.courts ?? "—"}</dd>
+              </dl>
             </div>
-          )}
-        </Card>
+            <div className="card-foot" style={{ flexWrap: "wrap" }}>
+              <span style={{ flex: 1, minWidth: 180, fontSize: 12.5, color: "var(--text-muted)" }}>
+                El torneo se edita desde el asistente de creación.
+              </span>
+              <BtnLink href="/club/torneos" size="sm">
+                Editar torneo
+              </BtnLink>
+            </div>
+          </Card>
+
+          <Card flush>
+            <CardHead title="Agrupar categorías" />
+            <div className="card-body">
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)", textWrap: "pretty" }}>
+                Si una categoría se queda con pocas parejas, vuélcala sobre otra
+                en vez de cancelarla. Las inscripciones se mantienen con su pago.
+              </p>
+            </div>
+            <div className="card-foot">
+              <span style={{ flex: 1 }} />
+              <Btn size="sm" onClick={() => setMergeOpen(true)}>
+                Agrupar categorías
+              </Btn>
+            </div>
+          </Card>
+
+          <Card flush danger>
+            <CardHead title="Zona de peligro" />
+            <div className="card-body">
+              <Note tone="error" icon={<IconAlert size={16} />}>
+                Borrar el torneo elimina sus inscripciones, cuadros y horario. No
+                se puede deshacer, y si ya se han cobrado inscripciones esos pagos
+                no se devuelven solos.
+              </Note>
+            </div>
+            <div className="card-foot" style={{ flexWrap: "wrap" }}>
+              <span style={{ flex: 1 }} />
+              {!confirmDelete ? (
+                <Btn size="sm" variant="danger-ghost" onClick={() => setConfirmDelete(true)}>
+                  Borrar torneo
+                </Btn>
+              ) : (
+                <>
+                  <Btn size="sm" onClick={() => setConfirmDelete(false)} disabled={deletingT}>
+                    Cancelar
+                  </Btn>
+                  <Btn
+                    size="sm"
+                    variant="danger"
+                    onClick={() => void removeTournament()}
+                    disabled={deletingT}
+                  >
+                    {deletingT ? "Borrando…" : "Sí, borrar el torneo"}
+                  </Btn>
+                </>
+              )}
+            </div>
+          </Card>
+        </div>
       )}
 
       {entry && (
@@ -2528,37 +2438,30 @@ export function TournamentDetail({
       )}
 
       {mergeOpen && (
-        <Modal open onClose={() => setMergeOpen(false)} labelledBy="agrupar-cat">
-          <h2 id="agrupar-cat" style={{ fontSize: 23 }}>
-            Agrupar categorías
-          </h2>
-          <p
-            style={{
-              margin: "10px 0 20px",
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Todas las parejas de la primera pasan a la segunda.
-          </p>
-          {[
-            { label: "MUEVE LAS DE", value: mergeFrom, set: setMergeFrom },
-            { label: "A", value: mergeTo, set: setMergeTo },
-          ].map((f) => (
-            <div key={f.label} style={{ marginBottom: 16 }}>
-              <span
-                className="mono"
-                style={{
-                  display: "block",
-                  fontSize: 10,
-                  letterSpacing: "0.18em",
-                  color: "var(--text-faint)",
-                  marginBottom: 8,
-                }}
+        <Modal
+          open
+          onClose={() => setMergeOpen(false)}
+          labelledBy="agrupar-cat"
+          title="Agrupar categorías"
+          lede="Todas las parejas de la primera categoría pasan a la segunda."
+          footer={
+            <>
+              <Btn onClick={() => setMergeOpen(false)}>Cancelar</Btn>
+              <Btn
+                variant="accent"
+                disabled={!mergeFrom || !mergeTo || mergeFrom === mergeTo || busy}
+                onClick={() => void doMerge()}
               >
-                {f.label}
-              </span>
+                {busy ? "Agrupando…" : "Agrupar"}
+              </Btn>
+            </>
+          }
+        >
+          {[
+            { label: "Mueve las de", value: mergeFrom, set: setMergeFrom },
+            { label: "A la categoría", value: mergeTo, set: setMergeTo },
+          ].map((f) => (
+            <Field key={f.label} label={f.label}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {(t?.genders ?? []).flatMap((g) =>
                   (t?.categories ?? []).map((c) => {
@@ -2568,16 +2471,9 @@ export function TournamentDetail({
                       <button
                         key={v}
                         type="button"
+                        aria-pressed={on}
                         onClick={() => f.set(v)}
-                        className="btn"
-                        style={{
-                          padding: "9px 14px",
-                          fontSize: 12.5,
-                          fontWeight: on ? 700 : 500,
-                          background: on ? "var(--accent-10)" : "transparent",
-                          color: on ? "var(--accent)" : "var(--text-muted)",
-                          border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                        }}
+                        className={"tw-fcp-chip" + (on ? " is-on" : "")}
                       >
                         {c} · {g}
                       </button>
@@ -2585,7 +2481,7 @@ export function TournamentDetail({
                   }),
                 )}
               </div>
-            </div>
+            </Field>
           ))}
           <label
             style={{
@@ -2603,32 +2499,6 @@ export function TournamentDetail({
             />
             Cerrar la categoría de origen a nuevas inscripciones
           </label>
-          <div
-            style={{
-              marginTop: 24,
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 10,
-            }}
-          >
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setMergeOpen(false)}
-              style={{ padding: "12px 20px", fontSize: 13.5 }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-accent"
-              disabled={!mergeFrom || !mergeTo || mergeFrom === mergeTo || busy}
-              onClick={() => void doMerge()}
-              style={{ padding: "12px 22px", fontSize: 13.5 }}
-            >
-              {busy ? "Agrupando…" : "Agrupar"}
-            </button>
-          </div>
         </Modal>
       )}
 
@@ -2637,56 +2507,28 @@ export function TournamentDetail({
           open
           onClose={() => setMoveReg(null)}
           labelledBy="mover-inscripcion"
+          title={`Mover ${moveReg.label}`}
+          lede="La pareja conserva su inscripción y su pago; solo cambia de cuadro."
+          footer={<Btn onClick={() => setMoveReg(null)}>Cancelar</Btn>}
         >
-          <h2 id="mover-inscripcion" style={{ fontSize: 23 }}>
-            Mover {moveReg.label}
-          </h2>
-          <p
-            style={{
-              margin: "10px 0 20px",
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            La pareja conserva su inscripción y su pago; solo cambia de cuadro.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {(t?.genders ?? []).flatMap((g) =>
               (t?.categories ?? []).map((c) => {
                 const same = g === moveReg.gender && c === moveReg.category;
                 return (
-                  <button
+                  <Btn
                     key={`${g}-${c}`}
-                    type="button"
-                    className="btn btn-ghost"
+                    block
                     disabled={same || busy}
                     onClick={() => void doMoveReg(g, c)}
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: 13.5,
-                      justifyContent: "flex-start",
-                      opacity: same ? 0.45 : 1,
-                    }}
+                    style={{ justifyContent: "flex-start" }}
                   >
                     {c} · {g}
                     {same && " (actual)"}
-                  </button>
+                  </Btn>
                 );
               }),
             )}
-          </div>
-          <div
-            style={{ marginTop: 22, display: "flex", justifyContent: "flex-end" }}
-          >
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setMoveReg(null)}
-              style={{ padding: "12px 20px", fontSize: 13.5 }}
-            >
-              Cancelar
-            </button>
           </div>
         </Modal>
       )}

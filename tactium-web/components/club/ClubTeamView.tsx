@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import {
@@ -15,13 +14,24 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Note,
+  PageHeader,
+  Stat,
+  StatRow,
+  Table,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage } from "@/components/states";
 import {
   IconCalendar,
   IconChevronDown,
-  IconChevronRight,
   IconFlag,
+  IconInfo,
   IconShield,
 } from "@/components/Icon";
 
@@ -72,21 +82,25 @@ export function ClubTeamView({ id }: { id: string }) {
 
   if (!clubId) {
     return (
-      <Card>
-        <EmptyState icon={<IconShield size={34} />} title="Sin club activo" />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState icon={<IconShield size={24} />} title="Sin club activo" />
+        </Card>
+      </div>
     );
   }
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconShield size={34} />}
-          title="No se pudo cargar el equipo."
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconShield size={24} />}
+            title="No se pudo cargar el equipo."
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -105,227 +119,129 @@ export function ClubTeamView({ id }: { id: string }) {
   const lost = finished.filter((m) => m.outcome === "loss").length;
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>CLUB · EQUIPO</Eyebrow>
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 12,
-              background: "var(--primary-dim)",
-              color: "var(--accent)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: "none",
-            }}
-          >
-            <IconShield size={20} />
-          </span>
-          <h1 style={{ fontSize: 30 }}>{team?.name ?? "Equipo"}</h1>
-        </div>
-        <p
-          className="mono"
-          style={{
-            margin: "10px 0 0",
-            fontSize: 11,
-            letterSpacing: "0.14em",
-            color: "var(--text-faint)",
-          }}
-        >
-          {[team?.category, team?.gender, season?.name]
-            .filter(Boolean)
-            .join(" · ")
-            .toUpperCase() || "SIN CATEGORÍA"}
-        </p>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: "/club/equipos", label: "Equipos" }}
+        title={team?.name ?? "Equipo"}
+        meta={[
+          [team?.category, team?.gender].filter(Boolean).join(" · ") || "Sin categoría",
+          season?.name ?? null,
+        ]}
+        actions={
+          <BtnLink href={grupoHref} icon={<IconFlag size={15} />}>
+            {fcpGroup ? "Mi grupo" : "Federación"}
+          </BtnLink>
+        }
+      />
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "13px 18px",
-          borderRadius: 12,
-          background: "var(--bg-card-2)",
-          border: "1px solid var(--hair-strong)",
-          color: "var(--text-muted)",
-          marginBottom: 22,
-          fontSize: 13,
-          textWrap: "pretty",
-        }}
-      >
+      <Note icon={<IconInfo size={16} />} style={{ marginBottom: 16 }}>
         Solo lectura para el club. Las jornadas, la alineación y los resultados
         los gestiona el capitán del equipo.
-      </div>
+      </Note>
 
-      <div className="tw-solo-stats" style={{ marginBottom: 22 }}>
-        {[
-          { l: "JUGADAS", v: String(finished.length) },
-          { l: "VICTORIAS", v: String(won), c: "var(--accent)" },
-          { l: "EMPATES", v: String(drawn), c: "var(--warning)" },
-          { l: "DERROTAS", v: String(lost), c: "var(--error)" },
-        ].map((k) => (
-          <Card key={k.l} style={{ padding: 18 }}>
-            <div className="mono tw-stat-label">{k.l}</div>
-            <div
-              className="mono tw-stat-value"
-              style={{ fontSize: 24, ...(k.c ? { color: k.c } : null) }}
-            >
-              {k.v}
-            </div>
-          </Card>
-        ))}
-      </div>
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat label="Jugadas" value={finished.length} />
+        <Stat label="Victorias" value={won} tone={won > 0 ? "accent" : undefined} />
+        <Stat label="Empates" value={drawn} tone={drawn > 0 ? "warning" : undefined} />
+        <Stat label="Derrotas" value={lost} tone={lost > 0 ? "error" : undefined} />
+      </StatRow>
 
-      <Card style={{ marginBottom: 20 }}>
-        <Eyebrow>PRÓXIMA JORNADA</Eyebrow>
-        {next ? (
-          <div
-            style={{
-              marginTop: 18,
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              flexWrap: "wrap",
-            }}
-          >
-            <span style={{ flex: 1, minWidth: 180 }}>
-              <span style={{ display: "block", fontSize: 18, fontWeight: 700 }}>
-                vs {next.opponent}
-              </span>
-              <span
-                className="mono"
-                style={{
-                  display: "block",
-                  marginTop: 6,
-                  fontSize: 11.5,
-                  letterSpacing: "0.1em",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {formatDate(next.date)}
-                {next.time ? ` · ${next.time.slice(0, 5)}` : " · sin hora"}
-                {next.location ? ` · ${next.location}` : ""}
-              </span>
-            </span>
-            <span className={"chip " + (next.isHome ? "" : "chip-mute")}>
+      <Card flush style={{ marginBottom: 16 }}>
+        <CardHead title="Próxima jornada">
+          {next && (
+            <Chip tone={next.isHome ? "accent" : "mute"}>
               {next.isHome ? "Local" : "Visitante"}
-            </span>
+            </Chip>
+          )}
+        </CardHead>
+        {next ? (
+          <div className="card-body">
+            <h2 style={{ fontSize: 20 }}>vs {next.opponent}</h2>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 13.5,
+                color: "var(--text-muted)",
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>{formatDate(next.date)}</span>
+              <span style={{ color: "var(--text-faint)" }}>·</span>
+              {next.time ? (
+                <span className="mono">{next.time.slice(0, 5)}</span>
+              ) : (
+                <span>Sin hora</span>
+              )}
+              {next.location && (
+                <>
+                  <span style={{ color: "var(--text-faint)" }}>·</span>
+                  <span>{next.location}</span>
+                </>
+              )}
+            </div>
           </div>
         ) : !season ? (
           <EmptyState
-            icon={<IconCalendar size={30} />}
+            compact
+            icon={<IconCalendar size={22} />}
             title="Sin temporada activa"
             body="El capitán debe crear una temporada para empezar."
           />
         ) : (
           <EmptyState
-            icon={<IconCalendar size={30} />}
+            compact
+            icon={<IconCalendar size={22} />}
             title="Sin jornadas configuradas"
             body="El capitán de este equipo añadirá las jornadas."
           />
         )}
       </Card>
 
-      <Card style={{ marginBottom: 20 }}>
-        <button
-          type="button"
-          onClick={() => setShowPlayers((v) => !v)}
-          aria-expanded={showPlayers}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            border: "none",
-            background: "transparent",
-            color: "var(--text)",
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          <span className="eyebrow">PLANTILLA · {players.length} JUGADORES</span>
-          <span
-            style={{
-              color: "var(--text-faint)",
-              display: "flex",
-              transform: showPlayers ? "rotate(180deg)" : "none",
-              transition: "transform var(--dur-base) var(--ease)",
-            }}
+      <Card flush>
+        <CardHead title="Plantilla" count={players.length}>
+          <Btn
+            size="sm"
+            variant="quiet"
+            onClick={() => setShowPlayers((v) => !v)}
+            aria-expanded={showPlayers}
+            icon={
+              <IconChevronDown
+                size={15}
+                style={{
+                  transform: showPlayers ? "rotate(180deg)" : "none",
+                  transition: "transform var(--dur-base) var(--ease)",
+                }}
+              />
+            }
           >
-            <IconChevronDown size={16} />
-          </span>
-        </button>
+            {showPlayers ? "Ocultar" : "Mostrar"}
+          </Btn>
+        </CardHead>
 
         {showPlayers &&
           (players.length === 0 ? (
-            <p style={{ margin: "18px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
-              Plantilla vacía.
-            </p>
+            <EmptyState compact title="Plantilla vacía" />
           ) : (
-            <div
-              style={{
-                marginTop: 18,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                gap: 8,
-              }}
-            >
-              {players.map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    background: "var(--bg-card-2)",
-                    opacity: p.active ? 1 : 0.55,
-                  }}
-                >
-                  <span style={{ flex: 1, fontSize: 13, minWidth: 0 }}>{p.name}</span>
-                  <span className="mono" style={{ fontSize: 12, color: "var(--accent)" }}>
-                    {p.pts}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <Table dense>
+              <thead>
+                <tr>
+                  <th>Jugador</th>
+                  <th className="num">Puntos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {players.map((p) => (
+                  <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
+                    <td className="cell-main">{p.name}</td>
+                    <td className="num">{p.pts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
           ))}
       </Card>
-
-      <Link href={grupoHref} style={{ color: "inherit" }}>
-        <Card
-          style={{
-            padding: "16px 20px",
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-          }}
-        >
-          <span style={{ color: "var(--accent)", display: "flex" }}>
-            <IconFlag size={17} />
-          </span>
-          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>
-            {fcpGroup
-              ? "Mi grupo · clasificación y jornadas"
-              : "Explorar la Federación"}
-          </span>
-          <IconChevronRight size={16} />
-        </Card>
-      </Link>
     </div>
   );
 }

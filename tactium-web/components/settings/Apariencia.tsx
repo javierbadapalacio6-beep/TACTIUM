@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme, type ThemeMode } from "@/lib/theme";
-import { Card, Eyebrow } from "@/components/ui";
+import { Card, CardHead } from "@/components/ui";
 import { IconCheckCircle } from "@/components/Icon";
 
 /**
@@ -21,35 +21,26 @@ const MODES: {
   tag: string;
   swatch: keyof typeof SWATCHES;
 }[] = [
-  { key: "light", name: "Claro", tag: "SIEMPRE CLARO", swatch: "light" },
-  { key: "dark", name: "Oscuro", tag: "SIEMPRE OSCURO", swatch: "dark" },
-  { key: "system", name: "Sistema", tag: "SIGUE A TU EQUIPO", swatch: "dark" },
+  { key: "light", name: "Claro", tag: "Siempre claro", swatch: "light" },
+  { key: "dark", name: "Oscuro", tag: "Siempre oscuro", swatch: "dark" },
+  { key: "system", name: "Sistema", tag: "Sigue a tu equipo", swatch: "dark" },
 ];
 
 export function Apariencia() {
   const { mode, resolved, setMode, ready } = useTheme();
 
   return (
-    <Card>
-      <Eyebrow>APARIENCIA</Eyebrow>
-      <h2 style={{ margin: "14px 0 6px", fontSize: 24 }}>Modo</h2>
-      <p
-        style={{
-          margin: "0 0 24px",
-          fontSize: 13.5,
-          color: "var(--text-muted)",
-        }}
-      >
-        Elige cómo se ve TACTIUM en este navegador.
-      </p>
+    <Card flush>
+      <CardHead title="Modo" sub="Elige cómo se ve TACTIUM en este navegador." />
 
       <div
+        className="card-body"
         role="radiogroup"
         aria-label="Modo de color"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-          gap: 16,
+          gap: 12,
         }}
       >
         {MODES.map((m) => {
@@ -68,26 +59,24 @@ export function Apariencia() {
               onClick={() => setMode(m.key)}
               style={{
                 textAlign: "left",
-                borderRadius: 16,
-                padding: 16,
+                borderRadius: 10,
+                padding: 12,
                 cursor: "pointer",
-                background: "var(--bg-card-2)",
+                background: active ? "var(--accent-10)" : "var(--bg-card-2)",
                 color: "var(--text)",
-                border: `1.5px solid ${
-                  active ? "var(--accent)" : "var(--hair-strong)"
-                }`,
-                transition: "all var(--dur-fast) var(--ease)",
+                border: `1px solid ${active ? "var(--accent-40)" : "var(--line)"}`,
+                transition: "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
               }}
             >
               {/* Miniatura de la interfaz en ese tema */}
               <div
                 style={{
-                  height: 108,
-                  borderRadius: 10,
+                  height: 96,
+                  borderRadius: "var(--r-sm)",
                   overflow: "hidden",
                   display: "flex",
                   background: p.bg,
-                  border: "1px solid var(--hair-strong)",
+                  border: "1px solid var(--line-strong)",
                 }}
               >
                 <div
@@ -121,15 +110,16 @@ export function Apariencia() {
 
               <div
                 style={{
-                  marginTop: 14,
+                  marginTop: 12,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
+                  gap: 8,
                 }}
               >
                 <span
                   style={{
-                    fontSize: 14.5,
+                    fontSize: 14,
                     fontWeight: 700,
                     letterSpacing: "-0.01em",
                   }}
@@ -138,19 +128,11 @@ export function Apariencia() {
                 </span>
                 {active && (
                   <span style={{ color: "var(--accent)", display: "flex" }}>
-                    <IconCheckCircle size={17} />
+                    <IconCheckCircle size={16} />
                   </span>
                 )}
               </div>
-              <div
-                className="mono"
-                style={{
-                  marginTop: 5,
-                  fontSize: 9.5,
-                  letterSpacing: "0.16em",
-                  color: "var(--text-faint)",
-                }}
-              >
+              <div style={{ marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
                 {m.tag}
               </div>
             </button>

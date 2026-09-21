@@ -3,8 +3,8 @@
 import { fetchSubscription, fetchClub } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import { Card, Chip, IconTile } from "@/components/ui";
+import { EmptyState, SkeletonPage } from "@/components/states";
 import { IconBuilding, IconFlag } from "@/components/Icon";
 import { ClubFcpImport } from "@/components/entry/start";
 import { Paywall } from "@/components/subscription/Paywall";
@@ -34,58 +34,41 @@ export function ClubImport() {
 
   if (!clubId) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconBuilding size={34} />}
-          title="Sin club activo"
-          body="Necesitas gestionar un club para importar equipos de la Federación."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconBuilding size={24} />}
+            title="Sin club activo"
+            body="Necesitas gestionar un club para importar equipos de la Federación."
+          />
+        </Card>
+      </div>
     );
   }
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
 
   // Sin suscripción → paywall (la acción de más valor va tras el plan).
   if (!data?.hasSub) {
     return (
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+      <div className="tw-page">
         <Card
           style={{
-            marginBottom: 24,
+            marginBottom: 16,
             display: "flex",
             alignItems: "center",
-            gap: 16,
+            gap: 14,
             flexWrap: "wrap",
           }}
         >
-          <span
-            style={{
-              width: 46,
-              height: 46,
-              borderRadius: 12,
-              background: "var(--primary-dim)",
-              color: "var(--accent)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: "none",
-            }}
-          >
-            <IconFlag size={22} />
-          </span>
+          <IconTile>
+            <IconFlag size={17} />
+          </IconTile>
           <div style={{ flex: 1, minWidth: 240 }}>
-            <Eyebrow>FUNCIÓN PREMIUM</Eyebrow>
-            <h1 style={{ margin: "8px 0 6px", fontSize: 24 }}>
-              Importar de la Federación es premium
-            </h1>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13.5,
-                color: "var(--text-muted)",
-                textWrap: "pretty",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 18 }}>Importar de la Federación es premium</h2>
+              <Chip plain>Función premium</Chip>
+            </div>
+            <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
               Crea todos los equipos del club con su plantilla y sus puntos
               oficiales de la Federación en un clic. Con suscripción es
               automático; contrata un plan para desbloquearlo.

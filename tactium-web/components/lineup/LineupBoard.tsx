@@ -1,12 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 import {
   cloneLineupVariantPairs,
   createLineupVariant,
   deleteLineupVariant,
+  fetchLineup,
   fetchMatchdayBundle,
   renameLineupVariant,
   saveLineupVariant,
@@ -16,13 +32,29 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow, Modal, Toggle } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import { guardedWrite } from "@/lib/writes";
+import {
+  Avatar,
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  Input,
+  InputWrap,
+  Modal,
+  Note,
+  Segmented,
+  Toggle,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import {
   IconAlert,
   IconCalendar,
   IconCheck,
+  IconChevronDown,
+  IconChevronRight,
   IconLock,
   IconSearch,
   IconZap,
@@ -33,11 +65,11 @@ import {
  *
  * En el móvil la alineación se monta tocando dos jugadores. Aquí se ARRASTRA,
  * con todo a la vista: cinco pistas a la izquierda y el banquillo a la derecha.
- * Es el mayor motivo para tener versión web.
  *
- * El arrastre usa la API nativa de HTML5 (sin dependencias). El modo
- * tap-para-intercambiar se mantiene como alternativa accesible: es la única
- * que funciona con teclado y lectores de pantalla.
+ * El arrastre va con dnd-kit: sensores de puntero, táctil y teclado, y una
+ * copia flotante (`DragOverlay`) que sigue al cursor sin el fantasma nativo.
+ * El modo tap-para-intercambiar se mantiene: es la alternativa accesible y la
+ * que funciona con lectores de pantalla.
  */
 
 type Slot = { court: number; idx: 0 | 1 };
@@ -47,8 +79,15 @@ type Lock = "none" | "notCaptain" | "closed" | "archived";
 
 const LOCK_COPY: Record<Exclude<Lock, "none">, string> = {
   notCaptain: "Solo el capitán puede editar la alineación.",
-  closed: "Acta cerrada · solo lectura.",
-  archived: "Temporada archivada · alineación en solo lectura.",
+  closed: "Acta cerrada: la alineación es de solo lectura.",
+  archived: "Temporada archivada: la alineación es de solo lectura.",
+};
+
+const BENCH_ID = "bench";
+const slotId = (s: Slot) => `slot-${s.court}-${s.idx}`;
+const parseSlot = (id: string): Slot | null => {
+  const m = /^slot-(\d+)-(0|1)$/.exec(id);
+  return m ? { court: Number(m[1]), idx: Number(m[2]) as 0 | 1 } : null;
 };
 
 function initials(n: string) {
@@ -64,12 +103,214 @@ function firstName(n: string) {
   return n.split(" ")[0];
 }
 
+/* ── Ficha de jugador ─────────────────────────────────────────────── */
+function PlayerChipView({
+  p,
+  inSlot,
+  selected,
+  ghost,
+  overlay,
+  readOnly,
+}: {
+  p: DbPlayer;
+  inSlot?: boolean;
+  selected?: boolean;
+  ghost?: boolean;
+  overlay?: boolean;
+  readOnly?: boolean;
+}) {
+  return (
+    <div
+      className="tw-player-chip"
+      style={{
+        cursor: readOnly ? "default" : overlay ? "grabbing" : "grab",
+        opacity: ghost ? 0.35 : 1,
+        borderColor: selected ? "var(--accent)" : overlay ? "var(--accent-40)" : undefined,
+        background: selected ? "var(--accent-10)" : overlay ? "var(--bg-card-3)" : undefined,
+        boxShadow: overlay ? "var(--shadow-md)" : undefined,
+        transform: overlay ? "scale(1.02)" : undefined,
+      }}
+    >
+      <Avatar initials={initials(p.name)} src={p.photoUrl} size={30} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span
+          className="truncate"
+          style={{ display: "block", fontSize: 13.5, fontWeight: 700, letterSpacing: "-0.01em" }}
+        >
+          {inSlot ? firstName(p.name) : p.name}
+        </span>
+        <span style={{ display: "block", marginTop: 1, fontSize: 11.5, color: "var(--text-faint)" }}>
+          {p.position}
+          {!p.active ? " · baja" : ""}
+        </span>
+      </span>
+      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+        {p.pts}
+      </span>
+    </div>
+  );
+}
+
+function DraggableChip({
+  p,
+  inSlot,
+  slot,
+  selected,
+  readOnly,
+  onTap,
+}: {
+  p: DbPlayer;
+  inSlot?: boolean;
+  slot?: Slot;
+  selected: boolean;
+  readOnly: boolean;
+  onTap: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: p.id,
+    data: { slot },
+    disabled: readOnly,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        outline: "none",
+        borderRadius: "var(--r-md)",
+      }}
+      {...attributes}
+      {...listeners}
+      role="button"
+      tabIndex={readOnly ? -1 : 0}
+      aria-pressed={selected}
+      aria-label={`${p.name}, ${p.position}, ${p.pts} puntos`}
+      onClick={onTap}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onTap();
+        }
+      }}
+    >
+      <PlayerChipView p={p} inSlot={inSlot} selected={selected} ghost={isDragging} readOnly={readOnly} />
+    </div>
+  );
+}
+
+/* ── Hueco de pista ───────────────────────────────────────────────── */
+function SlotBox({
+  slot,
+  player,
+  dragging,
+  selected,
+  readOnly,
+  onTapChip,
+  onTapEmpty,
+}: {
+  slot: Slot;
+  player: DbPlayer | null;
+  dragging: string | null;
+  selected: string | null;
+  readOnly: boolean;
+  onTapChip: (pid: string) => void;
+  onTapEmpty: () => void;
+}) {
+  const { isOver, setNodeRef } = useDroppable({ id: slotId(slot), disabled: readOnly });
+  const willSwap = isOver && !!player && player.id !== dragging;
+  const empty = !player;
+
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={() => {
+        if (empty) onTapEmpty();
+      }}
+      style={{
+        position: "relative",
+        borderRadius: "var(--r-md)",
+        minHeight: 50,
+        border: `1.5px ${empty ? "dashed" : "solid"} ${
+          isOver ? "var(--accent)" : empty ? "var(--line-strong)" : "transparent"
+        }`,
+        background: isOver && empty ? "var(--accent-10)" : "transparent",
+        display: "flex",
+        alignItems: "center",
+        cursor: empty && selected && !readOnly ? "pointer" : "default",
+        transition: "border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease)",
+      }}
+    >
+      {player ? (
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <DraggableChip
+            p={player}
+            inSlot
+            slot={slot}
+            selected={selected === player.id}
+            readOnly={readOnly}
+            onTap={() => onTapChip(player.id)}
+          />
+          {willSwap && (
+            <span
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                background: "color-mix(in srgb, var(--accent-16) 100%, var(--bg-card))",
+                border: "1.5px solid var(--accent)",
+                borderRadius: "var(--r-md)",
+                color: "var(--accent)",
+                fontSize: 12.5,
+                fontWeight: 700,
+                pointerEvents: "none",
+              }}
+            >
+              Intercambiar con {firstName(player.name)}
+            </span>
+          )}
+        </div>
+      ) : (
+        <span
+          style={{
+            flex: 1,
+            textAlign: "center",
+            fontSize: 12.5,
+            color: isOver ? "var(--accent)" : "var(--text-faint)",
+            fontWeight: isOver ? 700 : 500,
+          }}
+        >
+          {isOver ? "Suelta aquí" : selected ? "Colocar aquí" : "Hueco libre"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function BenchDrop({ children, readOnly }: { children: React.ReactNode; readOnly: boolean }) {
+  const { isOver, setNodeRef } = useDroppable({ id: BENCH_ID, disabled: readOnly });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        borderRadius: "var(--r-md)",
+        outline: isOver ? "1.5px dashed var(--accent)" : "1.5px dashed transparent",
+        outlineOffset: 4,
+        transition: "outline-color var(--dur-fast) var(--ease)",
+        minHeight: 80,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const { activeTeam, role } = useSession();
   const teamId = activeTeam?.id ?? null;
 
-  // `reloadKey` fuerza recarga tras cambiar la variante oficial o clonar
-  // parejas: esos cambios viven en servidor y no se pueden reflejar en local.
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
     () => fetchMatchdayBundle(id, teamId!),
@@ -78,39 +319,67 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   );
 
   const PLAYERS: DbPlayer[] = useMemo(() => data?.players ?? [], [data]);
-  const byId = useMemo(
-    () => new Map(PLAYERS.map((p) => [p.id, p])),
-    [PLAYERS]
+  const byId = useMemo(() => new Map(PLAYERS.map((p) => [p.id, p])), [PLAYERS]);
+  const playerById = useCallback(
+    (pid: string | null) => (pid ? (byId.get(pid) ?? null) : null),
+    [byId]
   );
-  const playerById = (pid: string | null) => (pid ? (byId.get(pid) ?? null) : null);
-  const pairPoints = (pair: Pair) =>
-    pair.reduce((sum, pid) => sum + (playerById(pid)?.pts ?? 0), 0);
+  const pairPoints = useCallback(
+    (pair: Pair) => pair.reduce((sum, pid) => sum + (playerById(pid)?.pts ?? 0), 0),
+    [playerById]
+  );
 
   /** Cinco pistas por defecto; si la alineación guardada tiene más, se respeta. */
   const courtCount = Math.max(5, ...(data?.lineup.map((l) => l.court) ?? [0]));
 
   const [variantId, setVariantId] = useState<string | null>(null);
   const [courts, setCourts] = useState<Pair[]>([]);
+  const [dirty, setDirty] = useState(false);
 
-  const variants = data?.variants ?? [];
+  const variants = useMemo(() => data?.variants ?? [], [data]);
   const variant = variants.find((v) => v.id === variantId) ?? variants[0] ?? null;
+
+  const buildCourts = useCallback(
+    (rows: { court: number; playerA: string | null; playerB: string | null }[]) => {
+      const next: Pair[] = Array.from({ length: courtCount }, () => [null, null]);
+      for (const l of rows) {
+        const i = l.court - 1;
+        if (i >= 0 && i < next.length) next[i] = [l.playerA, l.playerB];
+      }
+      return next;
+    },
+    [courtCount]
+  );
 
   // Al llegar los datos se monta el tablero con la variante activa.
   useEffect(() => {
     if (!data) return;
     const active = data.variants.find((v) => v.isActive) ?? data.variants[0];
     setVariantId(active?.id ?? null);
+    setCourts(buildCourts(data.lineup));
+    setDirty(false);
+  }, [data, buildCourts]);
 
-    const next: Pair[] = Array.from({ length: courtCount }, () => [null, null]);
-    for (const l of data.lineup) {
-      const i = l.court - 1;
-      if (i >= 0 && i < next.length) next[i] = [l.playerA, l.playerB];
+  // Cambiar de pestaña carga las parejas de ESA variante (cada una es una
+  // alineación distinta guardada en servidor).
+  const [switching, setSwitching] = useState(false);
+  async function switchVariant(vid: string) {
+    if (!data || vid === variantId) return;
+    setSwitching(true);
+    try {
+      const rows = await fetchLineup(id, vid);
+      setVariantId(vid);
+      setCourts(buildCourts(rows));
+      setDirty(false);
+      setSelected(null);
+    } catch {
+      setToast("No se pudo cargar esa variante");
+    } finally {
+      setSwitching(false);
     }
-    setCourts(next);
-  }, [data, courtCount]);
+  }
 
   const [dragId, setDragId] = useState<string | null>(null);
-  const [hover, setHover] = useState<Slot | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [genOpen, setGenOpen] = useState(false);
@@ -123,9 +392,15 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteVariant, setConfirmDeleteVariant] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [showUnavailable, setShowUnavailable] = useState(false);
 
-  /** Crea una alternativa más. El tope (5 por jornada) lo pone la base de
-   *  datos; aquí solo se enseña su motivo si se alcanza. */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+    useSensor(KeyboardSensor)
+  );
+
   async function addVariant() {
     if (variantBusy) return;
     setVariantBusy(true);
@@ -156,7 +431,6 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     } else setToast(res.reason);
   }
 
-  /** La oficial no se borra: la jornada se quedaría sin alineación que leer. */
   async function removeVariant() {
     if (!variant || variantBusy || variant.isActive) return;
     setVariantBusy(true);
@@ -172,7 +446,6 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     } else setToast(res.reason);
   }
 
-  /** Marca la variante mostrada como la oficial (la que ve la plantilla). */
   async function makeOfficial() {
     if (!variant || variantBusy || variant.isActive) return;
     setVariantBusy(true);
@@ -186,7 +459,6 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     } else setToast(res.reason);
   }
 
-  /** Copia las parejas de otra variante sobre la actual, para partir de algo. */
   async function copyFrom(sourceId: string, sourceLabel: string) {
     if (!variant || variantBusy) return;
     setVariantBusy(true);
@@ -200,7 +472,6 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     } else setToast(res.reason);
   }
 
-  // El bloqueo se deduce: no es capitán, acta cerrada, o forzado por props.
   const derivedLock: Lock =
     lock ??
     (role !== "capitan" && role !== "club"
@@ -215,15 +486,13 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     [courts]
   );
 
-  /** Disponible para esta jornada; si nadie se ha marcado, cae al flag general. */
-  const isAvailable = (p: DbPlayer) =>
-    data && p.id in data.availability
-      ? data.availability[p.id]
-      : p.available === true;
-
-  const bench = PLAYERS.filter(
-    (p) => !placed.has(p.id) && p.active && isAvailable(p)
+  const isAvailable = useCallback(
+    (p: DbPlayer) =>
+      data && p.id in data.availability ? data.availability[p.id] : p.available === true,
+    [data]
   );
+
+  const bench = PLAYERS.filter((p) => !placed.has(p.id) && p.active && isAvailable(p));
   const unavailable = PLAYERS.filter(
     (p) => !placed.has(p.id) && (!p.active || !isAvailable(p))
   );
@@ -231,20 +500,20 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const filtered = (list: DbPlayer[]) =>
     query.trim()
       ? list.filter((p) =>
-          (p.name + " " + (p.alias ?? ""))
-            .toLowerCase()
-            .includes(query.trim().toLowerCase())
+          (p.name + " " + (p.alias ?? "")).toLowerCase().includes(query.trim().toLowerCase())
         )
       : list;
 
   const points = courts.map((p) => pairPoints(p));
-  /** Una pista rompe el orden si suma más que la de arriba. */
+  const maxPoints = Math.max(1, ...points);
   const breaks = points.map((pt, i) => i > 0 && pt > points[i - 1]);
   const filledCourts = courts.filter((p) => p[0] && p[1]).length;
-  const complete = filledCourts === courts.length;
+  const complete = courts.length > 0 && filledCourts === courts.length;
+  const breakCount = breaks.filter(Boolean).length;
 
   function setPairs(next: Pair[]) {
     setCourts(next);
+    setDirty(true);
   }
 
   function slotOf(pid: string): Slot | null {
@@ -262,17 +531,13 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     const next = courts.map((p) => [...p] as Pair);
     const from = slotOf(pid);
     const occupant = next[target.court][target.idx];
-
+    if (occupant === pid) return;
     next[target.court][target.idx] = pid;
-    if (from) {
-      // Venía de otra pista: el ocupante hace el camino inverso.
-      next[from.court][from.idx] = occupant ?? null;
-    }
+    if (from) next[from.court][from.idx] = occupant ?? null;
     setPairs(next);
     setSelected(null);
   }
 
-  /** Devuelve al banquillo el jugador de ese hueco. */
   function clearSlot(target: Slot) {
     if (readOnly) return;
     const next = courts.map((p) => [...p] as Pair);
@@ -287,11 +552,43 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     setSelected(null);
   }
 
+  /** Tap sobre una ficha: selecciona, deselecciona o intercambia. */
+  function tapChip(pid: string, slot?: Slot) {
+    if (readOnly) return;
+    if (!selected) {
+      setSelected(pid);
+      return;
+    }
+    if (selected === pid) {
+      setSelected(null);
+      return;
+    }
+    const target = slot ?? slotOf(pid);
+    if (target) place(selected, target);
+    else benchDrop(selected);
+  }
+
+  function onDragStart(e: DragStartEvent) {
+    setDragId(String(e.active.id));
+    setSelected(null);
+  }
+
+  function onDragEnd(e: DragEndEvent) {
+    const pid = String(e.active.id);
+    setDragId(null);
+    if (!e.over) return;
+    const overId = String(e.over.id);
+    if (overId === BENCH_ID) {
+      benchDrop(pid);
+      return;
+    }
+    const target = parseSlot(overId);
+    if (target) place(pid, target);
+  }
+
   /** Genera parejas: ordena por puntos y, si procede, cruza drive con revés. */
   function generate() {
-    const pool = PLAYERS.filter((p) => p.active && isAvailable(p)).sort(
-      (a, b) => b.pts - a.pts
-    );
+    const pool = PLAYERS.filter((p) => p.active && isAvailable(p)).sort((a, b) => b.pts - a.pts);
     const next: Pair[] = [];
 
     if (mix && order === "Drive + Revés") {
@@ -308,20 +605,16 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         next.push([d?.id ?? null, r?.id ?? null]);
       }
     } else {
-      // Sólo por nivel: parejas consecutivas del pool ordenado.
       for (let c = 0; c < courts.length; c++) {
         next.push([pool[c * 2]?.id ?? null, pool[c * 2 + 1]?.id ?? null]);
       }
     }
 
-    // El orden de fuerza manda: pista 1 la pareja más fuerte.
     next.sort((a, b) => pairPoints(b) - pairPoints(a));
     setPairs(next);
     setGenOpen(false);
     setToast(
-      next.some((p) => !p[0] || !p[1])
-        ? "Alineación generada con avisos"
-        : "Alineación generada"
+      next.some((p) => !p[0] || !p[1]) ? "Alineación generada con huecos" : "Alineación generada"
     );
   }
 
@@ -335,656 +628,450 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
       saveLineupVariant(id, variantId, courts),
     );
     setConfirmOpen(false);
-    // El «avisar al equipo» (notificación push/in-app) es una escritura aparte
-    // que aún no está portada; por eso el mensaje solo confirma el guardado.
+    if (res.ok) setDirty(false);
     setToast(res.ok ? "Alineación guardada" : res.reason);
   }
 
   if (!teamId) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Sin equipo activo"
-          body="Entra con una cuenta que pertenezca a un equipo."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Sin equipo activo"
+            body="Entra con una cuenta que pertenezca a un equipo."
+          />
+        </Card>
+      </div>
     );
   }
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconAlert size={34} />}
-          title="No se pudo cargar la alineación"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconAlert size={24} />}
+            title="No se pudo cargar la alineación"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
   if (!data) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Jornada no encontrada"
-          body="Puede que se haya borrado o que no sea de tu equipo."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Jornada no encontrada"
+            body="Puede que se haya borrado o que no sea de tu equipo."
+          />
+        </Card>
+      </div>
     );
   }
   const m = data.matchday;
-
-  /* ── Ficha de jugador ─────────────────────────────────────────── */
-  function PlayerChip({
-    p,
-    inSlot,
-    slot,
-  }: {
-    p: DbPlayer;
-    inSlot?: boolean;
-    slot?: Slot;
-  }) {
-    const isSelected = selected === p.id;
-    return (
-      <div
-        role="button"
-        tabIndex={readOnly ? -1 : 0}
-        aria-pressed={isSelected}
-        aria-label={`${p.name}, ${p.position}, ${p.pts} puntos`}
-        draggable={!readOnly}
-        onDragStart={(e) => {
-          setDragId(p.id);
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", p.id);
-        }}
-        onDragEnd={() => {
-          setDragId(null);
-          setHover(null);
-        }}
-        onClick={() => {
-          if (readOnly) return;
-          if (!selected) {
-            setSelected(p.id);
-            return;
-          }
-          if (selected === p.id) {
-            setSelected(null);
-            return;
-          }
-          // Intercambio por tap: el seleccionado va al hueco de este.
-          const target = slot ?? slotOf(p.id);
-          if (target) place(selected, target);
-          else benchDrop(selected);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).click();
-          }
-        }}
-        className="tw-player-chip"
-        style={{
-          cursor: readOnly ? "default" : "grab",
-          opacity: dragId === p.id ? 0.4 : 1,
-          borderColor: isSelected ? "var(--accent)" : "var(--hair-strong)",
-          background: isSelected ? "var(--accent-10)" : "var(--bg-card-2)",
-        }}
-      >
-        <span
-          className="mono"
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 999,
-            background: "var(--primary-dim)",
-            color: "var(--accent)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 10.5,
-            fontWeight: 700,
-            flex: "none",
-          }}
-        >
-          {initials(p.name)}
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span
-            style={{
-              display: "block",
-              fontSize: 13.5,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {inSlot ? firstName(p.name) : p.name}
-          </span>
-          <span
-            className="mono"
-            style={{
-              display: "block",
-              marginTop: 2,
-              fontSize: 9.5,
-              letterSpacing: "0.14em",
-              color: "var(--text-faint)",
-            }}
-          >
-            {p.position.toUpperCase()}
-          </span>
-        </span>
-        <span
-          className="mono"
-          style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent)" }}
-        >
-          {p.pts}
-        </span>
-        {!p.active && <span className="chip chip-warning">Baja</span>}
-      </div>
-    );
-  }
-
-  /* ── Hueco de pista ───────────────────────────────────────────── */
-  function SlotBox({ court, idx }: Slot) {
-    const pid = courts[court][idx];
-    const p = playerById(pid);
-    const isHover =
-      hover?.court === court && hover?.idx === idx && dragId !== null;
-    const willSwap = isHover && !!pid && pid !== dragId;
-
-    return (
-      <div
-        onDragOver={(e) => {
-          if (readOnly) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          setHover({ court, idx });
-        }}
-        onDragLeave={() => setHover(null)}
-        onDrop={(e) => {
-          e.preventDefault();
-          const pid2 = e.dataTransfer.getData("text/plain") || dragId;
-          if (pid2) place(pid2, { court, idx });
-          setDragId(null);
-          setHover(null);
-        }}
-        onClick={() => {
-          if (readOnly || !selected) return;
-          place(selected, { court, idx });
-        }}
-        style={{
-          borderRadius: 12,
-          minHeight: 62,
-          border: `1.5px ${pid ? "solid" : "dashed"} ${
-            isHover ? "var(--accent)" : "var(--hair-strong)"
-          }`,
-          background: isHover ? "var(--accent-10)" : "transparent",
-          display: "flex",
-          alignItems: "center",
-          padding: pid ? 0 : 10,
-          transition: "all var(--dur-fast) var(--ease)",
-        }}
-      >
-        {p ? (
-          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-            <PlayerChip p={p} inSlot slot={{ court, idx }} />
-            {willSwap && (
-              <span
-                className="mono"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "var(--accent-10)",
-                  border: "1.5px solid var(--accent)",
-                  borderRadius: 12,
-                  color: "var(--accent)",
-                  fontSize: 10,
-                  letterSpacing: "0.14em",
-                  pointerEvents: "none",
-                }}
-              >
-                ⇄ INTERCAMBIAR CON {firstName(p.name).toUpperCase()}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span
-            style={{
-              flex: 1,
-              textAlign: "center",
-              fontSize: 12.5,
-              color: "var(--text-faint)",
-            }}
-          >
-            {isHover ? "Suelta aquí" : selected ? "Toca para colocar" : "Vacío"}
-          </span>
-        )}
-      </div>
-    );
-  }
+  const dragged = dragId ? playerById(dragId) : null;
+  const otherVariants = variant ? variants.filter((v) => v.id !== variant.id) : [];
 
   return (
     <div className="tw-lineup-wrap">
       {/* ══ Cabecera de herramienta ═══════════════════════════════ */}
       <div className="tw-lineup-head">
-        <div style={{ minWidth: 0 }}>
-          <Eyebrow>JORNADA · J·{m.round} · ALINEACIÓN</Eyebrow>
-          <h1 style={{ marginTop: 8, fontSize: 26 }}>vs {m.opponent}</h1>
+        <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+          <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 4 }}>
+            <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
+            Jornada {m.round}
+          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h1 className="tw-page-title" style={{ fontSize: 22 }}>
+              Alineación vs {m.opponent}
+            </h1>
+            <Chip tone={complete ? "accent" : "mute"} plain>
+              {filledCourts}/{courts.length} pistas
+            </Chip>
+            {dirty && !readOnly && (
+              <Chip tone="warning" plain>
+                Sin guardar
+              </Chip>
+            )}
+          </div>
         </div>
 
-        <div className="tw-variants" role="tablist" aria-label="Variantes">
-          {variants.map((v) => {
-            const on = v.id === variant.id;
-            return (
-              <button
-                key={v.id}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                onClick={() => setVariantId(v.id)}
-                className="btn"
-                style={{
-                  padding: "8px 14px",
-                  fontSize: 12.5,
-                  fontWeight: on ? 700 : 500,
-                  background: on ? "var(--accent-10)" : "transparent",
-                  color: on ? "var(--accent)" : "var(--text-muted)",
-                  border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                }}
-              >
-                {v.label}
-                {v.isActive && (
-                  <span
-                    className="mono"
-                    style={{
-                      marginLeft: 8,
-                      fontSize: 8.5,
-                      letterSpacing: "0.16em",
-                      color: "var(--accent)",
-                    }}
-                  >
-                    OFICIAL
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => void addVariant()}
-              disabled={variantBusy}
-              className="btn"
-              style={{
-                padding: "8px 14px",
-                fontSize: 12.5,
-                fontWeight: 600,
-                background: "transparent",
-                color: "var(--text-muted)",
-                border: "1px dashed var(--hair-strong)",
-              }}
-              title="Preparar otra alineación para esta jornada"
-            >
-              + Nueva
-            </button>
-          )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <Btn
+            variant="ghost"
+            disabled={readOnly}
+            onClick={() => setGenOpen(true)}
+            icon={<IconZap size={15} />}
+          >
+            Generar
+          </Btn>
+          <Btn
+            variant="quiet"
+            disabled={readOnly || placed.size === 0}
+            onClick={() => setPairs(courts.map(() => [null, null]))}
+          >
+            Vaciar
+          </Btn>
+          <Btn
+            variant="accent"
+            disabled={readOnly || !complete}
+            onClick={() => setConfirmOpen(true)}
+            icon={<IconCheck size={15} />}
+          >
+            Confirmar
+          </Btn>
         </div>
 
-        {variant && variants.length > 0 && !readOnly && (
+        {/* Variantes */}
+        {variants.length > 0 && (
           <div
             style={{
+              flexBasis: "100%",
               display: "flex",
               alignItems: "center",
               gap: 8,
               flexWrap: "wrap",
-              marginBottom: 12,
             }}
           >
-            {!variant.isActive && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={variantBusy}
-                onClick={() => void makeOfficial()}
-                style={{ padding: "9px 15px", fontSize: 12.5 }}
-              >
-                <IconCheck size={14} />
-                Hacer oficial esta alineación
-              </button>
+            <div className="seg" role="tablist" aria-label="Variantes de alineación">
+              {variants.map((v) => {
+                const on = variant?.id === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    disabled={switching}
+                    onClick={() => void switchVariant(v.id)}
+                    className={"seg-item" + (on ? " is-on" : "")}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    {v.label}
+                    {v.isActive && (
+                      <span
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 999,
+                          background: "var(--accent)",
+                        }}
+                        title="Alineación oficial"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => void addVariant()}
+                  disabled={variantBusy}
+                  className="seg-item"
+                  title="Preparar otra alineación para esta jornada"
+                >
+                  + Nueva
+                </button>
+              )}
+            </div>
+            {variant?.isActive ? (
+              <Chip plain>Oficial</Chip>
+            ) : (
+              !readOnly &&
+              variant && (
+                <Btn size="sm" variant="tint" disabled={variantBusy} onClick={() => void makeOfficial()}>
+                  Hacer oficial
+                </Btn>
+              )
             )}
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={variantBusy}
-              onClick={() => {
-                setRenameValue(variant.label);
-                setRenameOpen(true);
-              }}
-              style={{ padding: "9px 15px", fontSize: 12.5 }}
-            >
-              Renombrar
-            </button>
-            {!variant.isActive &&
-              (confirmDeleteVariant ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={variantBusy}
-                    onClick={() => setConfirmDeleteVariant(false)}
-                    style={{ padding: "9px 15px", fontSize: 12.5 }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    disabled={variantBusy}
-                    onClick={() => void removeVariant()}
-                    style={{ padding: "9px 15px", fontSize: 12.5 }}
-                  >
-                    Sí, borrarla
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={variantBusy}
-                  onClick={() => setConfirmDeleteVariant(true)}
-                  style={{ padding: "9px 15px", fontSize: 12.5 }}
-                  title="La alineación oficial no se puede borrar"
+            {!readOnly && variant && (
+              <div style={{ position: "relative" }}>
+                <Btn
+                  size="sm"
+                  variant="quiet"
+                  onClick={() => setMoreOpen((v) => !v)}
+                  aria-expanded={moreOpen}
+                  icon={<IconChevronDown size={14} />}
                 >
-                  Borrar
-                </button>
-              ))}
-            {variants
-              .filter((v) => v.id !== variant.id)
-              .map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={variantBusy}
-                  onClick={() => void copyFrom(v.id, v.label)}
-                  style={{ padding: "9px 15px", fontSize: 12.5 }}
-                >
-                  Copiar parejas de {v.label}
-                </button>
-              ))}
+                  Más
+                </Btn>
+                {moreOpen && (
+                  <div
+                    className="tw-popover"
+                    style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, width: 240, padding: 6 }}
+                  >
+                    <button
+                      type="button"
+                      className="tw-popitem"
+                      disabled={variantBusy}
+                      onClick={() => {
+                        setRenameValue(variant.label);
+                        setRenameOpen(true);
+                        setMoreOpen(false);
+                      }}
+                    >
+                      Renombrar «{variant.label}»
+                    </button>
+                    {otherVariants.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        className="tw-popitem"
+                        disabled={variantBusy}
+                        onClick={() => {
+                          setMoreOpen(false);
+                          void copyFrom(v.id, v.label);
+                        }}
+                      >
+                        Copiar parejas de «{v.label}»
+                      </button>
+                    ))}
+                    {!variant.isActive && (
+                      <>
+                        <div className="tw-pop-sep" />
+                        <button
+                          type="button"
+                          className="tw-popitem"
+                          style={{ color: "var(--error)" }}
+                          disabled={variantBusy}
+                          onClick={() => {
+                            setMoreOpen(false);
+                            setConfirmDeleteVariant(true);
+                          }}
+                        >
+                          Borrar esta variante
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={readOnly}
-            onClick={() => setGenOpen(true)}
-            style={{ padding: "11px 18px", fontSize: 13 }}
-          >
-            <IconZap size={15} />
-            Generar
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={readOnly}
-            onClick={() => setPairs(courts.map(() => [null, null]))}
-            style={{ padding: "11px 16px", fontSize: 13 }}
-          >
-            Vaciar
-          </button>
-          <button
-            type="button"
-            className="btn btn-accent"
-            disabled={readOnly || !complete}
-            onClick={() => setConfirmOpen(true)}
-            style={{ padding: "11px 20px", fontSize: 13 }}
-          >
-            Confirmar alineación
-          </button>
-        </div>
       </div>
 
-      {/* Banner de bloqueo */}
       {readOnly && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 12,
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--hair-strong)",
-            color: "var(--text-muted)",
-            marginBottom: 18,
-            fontSize: 13,
-          }}
-        >
-          <IconLock size={16} />
+        <Note icon={<IconLock size={15} />} style={{ marginBottom: 14 }}>
           {LOCK_COPY[derivedLock as Exclude<Lock, "none">]}
-        </div>
+        </Note>
       )}
 
       {selected && !readOnly && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "12px 18px",
-            borderRadius: 12,
-            background: "var(--accent-10)",
-            border: "1px solid var(--accent-25)",
-            color: "var(--accent)",
-            marginBottom: 18,
-            fontSize: 13,
-          }}
-        >
-          Toca otro jugador para intercambiar · o el banquillo
-        </div>
+        <Note tone="accent" style={{ marginBottom: 14 }}>
+          Toca otro jugador o un hueco para colocar a {firstName(playerById(selected)?.name ?? "")}.
+          Toca el banquillo para retirarlo.
+        </Note>
+      )}
+
+      {breakCount > 0 && !readOnly && (
+        <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 14 }}>
+          {breakCount === 1
+            ? "Una pista suma más puntos que la de arriba: el orden de fuerza no se cumple."
+            : `${breakCount} pistas suman más que la anterior: el orden de fuerza no se cumple.`}
+        </Note>
       )}
 
       {/* ══ Lienzo ════════════════════════════════════════════════ */}
-      <div className="tw-lineup-grid">
-        {/* Pistas */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {courts.map((pair, c) => (
-            <Card
-              key={c}
-              style={{
-                padding: 18,
-                border: `1.5px solid ${breaks[c] ? "var(--warning)" : "transparent"}`,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  marginBottom: 12,
-                }}
-              >
-                <span
-                  className="mono"
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setDragId(null)}
+      >
+        <div className="tw-lineup-grid">
+          {/* Pistas */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {courts.map((pair, c) => {
+              const a = playerById(pair[0]);
+              const b = playerById(pair[1]);
+              const full = !!a && !!b;
+              return (
+                <Card
+                  key={c}
                   style={{
-                    fontSize: 10.5,
-                    letterSpacing: "0.18em",
-                    color: "var(--text-faint)",
+                    padding: "14px 16px 16px",
+                    borderColor: breaks[c] ? "color-mix(in srgb, var(--warning) 55%, transparent)" : undefined,
                   }}
                 >
-                  PISTA {c + 1}
-                </span>
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    color: points[c] ? "var(--accent)" : "var(--text-faint)",
-                  }}
-                >
-                  {points[c]} PTS
-                </span>
-              </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      marginBottom: 10,
+                    }}
+                  >
+                    <span
+                      className="mono"
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 8,
+                        background: full ? "var(--accent-10)" : "var(--bg-card-2)",
+                        color: full ? "var(--accent)" : "var(--text-faint)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {c + 1}
+                    </span>
+                    <span style={{ fontSize: 13.5, fontWeight: 700 }}>Pista {c + 1}</span>
+                    {breaks[c] && (
+                      <Chip tone="warning" plain>
+                        Rompe el orden
+                      </Chip>
+                    )}
+                    <span style={{ flex: 1 }} />
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 700,
+                        color: points[c] ? "var(--text)" : "var(--text-faint)",
+                      }}
+                    >
+                      {points[c]}
+                      <span style={{ fontSize: 11.5, color: "var(--text-faint)", fontWeight: 500 }}> pts</span>
+                    </span>
+                  </div>
 
-              <div className="tw-slot-pair">
-                <SlotBox court={c} idx={0} />
-                <SlotBox court={c} idx={1} />
-              </div>
+                  <div className="tw-slot-pair">
+                    <SlotBox
+                      slot={{ court: c, idx: 0 }}
+                      player={a}
+                      dragging={dragId}
+                      selected={selected}
+                      readOnly={readOnly}
+                      onTapChip={(pid) => tapChip(pid, { court: c, idx: 0 })}
+                      onTapEmpty={() => selected && place(selected, { court: c, idx: 0 })}
+                    />
+                    <SlotBox
+                      slot={{ court: c, idx: 1 }}
+                      player={b}
+                      dragging={dragId}
+                      selected={selected}
+                      readOnly={readOnly}
+                      onTapChip={(pid) => tapChip(pid, { court: c, idx: 1 })}
+                      onTapEmpty={() => selected && place(selected, { court: c, idx: 1 })}
+                    />
+                  </div>
 
-              {breaks[c] && (
-                <div
-                  className="mono"
-                  style={{
-                    marginTop: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 9.5,
-                    letterSpacing: "0.16em",
-                    color: "var(--warning)",
-                  }}
-                >
-                  <IconAlert size={13} />
-                  ROMPE EL ORDEN POR PUNTOS
+                  {/* Fuerza relativa de la pareja respecto a la más fuerte */}
+                  <div
+                    className="progress"
+                    style={{ marginTop: 12, height: 3 }}
+                    aria-hidden="true"
+                  >
+                    <span
+                      style={{
+                        width: `${Math.round((points[c] / maxPoints) * 100)}%`,
+                        background: breaks[c] ? "var(--warning)" : "var(--accent)",
+                        opacity: points[c] ? 0.9 : 0,
+                      }}
+                    />
+                  </div>
+                </Card>
+              );
+            })}
+
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-faint)", textAlign: "center" }}>
+              La pista 1 es la pareja más fuerte: el orden se comprueba por puntos.
+            </p>
+          </div>
+
+          {/* Banquillo */}
+          <Card flush className="tw-bench">
+            <CardHead title="Banquillo" count={bench.length} />
+            <div style={{ padding: "12px 14px 0" }}>
+              <InputWrap icon={<IconSearch size={14} />}>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filtrar por nombre"
+                  aria-label="Filtrar jugadores"
+                />
+              </InputWrap>
+            </div>
+
+            <div style={{ padding: 14 }}>
+              <BenchDrop readOnly={readOnly}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {filtered(bench).map((p) => (
+                    <DraggableChip
+                      key={p.id}
+                      p={p}
+                      selected={selected === p.id}
+                      readOnly={readOnly}
+                      onTap={() => tapChip(p.id)}
+                    />
+                  ))}
+                  {filtered(bench).length === 0 && (
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 12.5,
+                        color: "var(--text-faint)",
+                        textAlign: "center",
+                        padding: "18px 0",
+                      }}
+                    >
+                      {bench.length === 0 ? "Todos los disponibles están en pista" : "Sin coincidencias"}
+                    </p>
+                  )}
+                </div>
+              </BenchDrop>
+
+              {unavailable.length > 0 && (
+                <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnavailable((v) => !v)}
+                    className="btn btn-quiet btn-sm"
+                    style={{ width: "100%", justifyContent: "space-between", padding: "0 8px" }}
+                    aria-expanded={showUnavailable}
+                  >
+                    <span>No disponibles · {unavailable.length}</span>
+                    <IconChevronDown
+                      size={14}
+                      style={{
+                        transform: showUnavailable ? "rotate(180deg)" : "none",
+                        transition: "transform var(--dur-base) var(--ease)",
+                      }}
+                    />
+                  </button>
+                  {showUnavailable && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, opacity: 0.6 }}>
+                      {filtered(unavailable).map((p) => (
+                        <DraggableChip
+                          key={p.id}
+                          p={p}
+                          selected={selected === p.id}
+                          readOnly={readOnly}
+                          onTap={() => tapChip(p.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </Card>
-          ))}
-
-          <p
-            style={{
-              margin: "4px 0 0",
-              fontSize: 12.5,
-              color: "var(--text-faint)",
-              textAlign: "center",
-            }}
-          >
-            Las parejas se ordenan por puntos automáticamente
-          </p>
+            </div>
+          </Card>
         </div>
 
-        {/* Banquillo */}
-        <Card
-          className="tw-bench"
-          style={{ padding: 18 }}
-          onDragOver={(e) => {
-            if (!readOnly) e.preventDefault();
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            const pid = e.dataTransfer.getData("text/plain") || dragId;
-            if (pid) benchDrop(pid);
-            setDragId(null);
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 14,
-            }}
-          >
-            <Eyebrow>BANQUILLO</Eyebrow>
-            <span
-              className="mono"
-              style={{ fontSize: 11, color: "var(--text-faint)" }}
-            >
-              {bench.length}
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "9px 12px",
-              borderRadius: 10,
-              border: "1px solid var(--hair-strong)",
-              background: "var(--bg-card-2)",
-              marginBottom: 14,
-            }}
-          >
-            <IconSearch size={14} />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filtra por nombre"
-              aria-label="Filtrar jugadores"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: "none",
-                background: "transparent",
-                color: "var(--text)",
-                fontSize: 13,
-                outline: "none",
-                fontFamily: "'Satoshi', sans-serif",
-              }}
-            />
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filtered(bench).map((p) => (
-              <PlayerChip key={p.id} p={p} />
-            ))}
-            {filtered(bench).length === 0 && (
-              <p
-                style={{
-                  fontSize: 12.5,
-                  color: "var(--text-faint)",
-                  textAlign: "center",
-                  padding: "18px 0",
-                }}
-              >
-                Sin coincidencias
-              </p>
-            )}
-          </div>
-
-          {unavailable.length > 0 && (
-            <>
-              <div
-                className="mono"
-                style={{
-                  marginTop: 20,
-                  marginBottom: 10,
-                  fontSize: 9.5,
-                  letterSpacing: "0.18em",
-                  color: "var(--text-faint)",
-                }}
-              >
-                NO DISPONIBLES
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  opacity: 0.5,
-                }}
-              >
-                {filtered(unavailable).map((p) => (
-                  <PlayerChip key={p.id} p={p} />
-                ))}
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
+        <DragOverlay dropAnimation={{ duration: 160, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }}>
+          {dragged ? <PlayerChipView p={dragged} overlay /> : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* ══ Generador ═════════════════════════════════════════════ */}
       <Modal
@@ -992,126 +1079,50 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         onClose={() => setGenOpen(false)}
         labelledBy="gen-titulo"
         width={520}
+        title="Generar alineación"
+        lede="Por puntos en un segundo. Luego ajusta pista a pista si hace falta."
+        footer={
+          <>
+            <Btn onClick={() => setGenOpen(false)}>Cancelar</Btn>
+            <Btn variant="accent" onClick={generate} icon={<IconZap size={15} />}>
+              Generar
+            </Btn>
+          </>
+        }
       >
-        <Eyebrow>GENERADOR</Eyebrow>
-        <h2 id="gen-titulo" style={{ margin: "14px 0 6px", fontSize: 24 }}>
-          Generar alineación
-        </h2>
-        <p
-          style={{
-            margin: "0 0 22px",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          Genérala por puntos FEP en un segundo, o colócala tú pista a pista.
-        </p>
-
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 16,
-            padding: 16,
-            borderRadius: 12,
+            padding: 14,
+            borderRadius: "var(--r-md)",
             background: "var(--bg-card-2)",
+            border: "1px solid var(--line)",
           }}
         >
           <span style={{ flex: 1 }}>
             <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
-              Emparejar Drive + Revés
+              Emparejar drive con revés
             </span>
-            <span
-              style={{
-                display: "block",
-                marginTop: 5,
-                fontSize: 12.5,
-                color: "var(--text-muted)",
-              }}
-            >
-              Si lo desactivas, empareja solo por nivel
+            <span style={{ display: "block", marginTop: 3, fontSize: 12.5, color: "var(--text-muted)" }}>
+              Si lo desactivas, empareja solo por nivel.
             </span>
           </span>
-          <Toggle
-            on={mix}
-            onChange={() => setMix((v) => !v)}
-            label="Emparejar Drive y Revés"
+          <Toggle on={mix} onChange={() => setMix((v) => !v)} label="Emparejar drive y revés" />
+        </div>
+
+        <Field label="Orden de parejas" style={{ marginTop: 16 }}>
+          <Segmented
+            label="Orden de parejas"
+            value={order}
+            onChange={setOrder}
+            options={[
+              { value: "Drive + Revés", label: "Drive + revés" },
+              { value: "Por fuerza", label: "Por fuerza" },
+            ]}
           />
-        </div>
-
-        <div style={{ marginTop: 18 }}>
-          <div
-            className="mono"
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.2em",
-              color: "var(--text-faint)",
-              marginBottom: 8,
-            }}
-          >
-            ORDEN DE PAREJAS
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 4,
-              padding: 4,
-              borderRadius: 12,
-              background: "var(--bg-card-2)",
-            }}
-          >
-            {(["Drive + Revés", "Por fuerza"] as const).map((o) => {
-              const on = order === o;
-              return (
-                <button
-                  key={o}
-                  type="button"
-                  onClick={() => setOrder(o)}
-                  style={{
-                    flex: 1,
-                    padding: "9px 12px",
-                    borderRadius: 9,
-                    border: "none",
-                    cursor: "pointer",
-                    fontFamily: "'Satoshi', sans-serif",
-                    fontSize: 13,
-                    fontWeight: on ? 700 : 500,
-                    background: on ? "var(--accent-10)" : "transparent",
-                    color: on ? "var(--accent)" : "var(--text-muted)",
-                    boxShadow: on ? "inset 0 0 0 1.5px var(--accent)" : "none",
-                  }}
-                >
-                  {o}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 24,
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-          }}
-        >
-          <button
-            className="btn btn-ghost"
-            onClick={() => setGenOpen(false)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-accent"
-            onClick={generate}
-            style={{ padding: "12px 24px", fontSize: 13.5 }}
-          >
-            Aplicar
-          </button>
-        </div>
+        </Field>
       </Modal>
 
       {/* ══ Confirmar ═════════════════════════════════════════════ */}
@@ -1120,55 +1131,34 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         onClose={() => setConfirmOpen(false)}
         labelledBy="conf-titulo"
         width={520}
+        title="Confirmar alineación"
+        lede={`Jornada ${m.round} vs ${m.opponent}. Revisa las parejas antes de publicarla.`}
+        footer={
+          <>
+            <Btn onClick={() => setConfirmOpen(false)}>Cancelar</Btn>
+            <Btn variant="accent" onClick={() => void confirmLineup()} icon={<IconCheck size={15} />}>
+              {notify ? "Guardar y avisar" : "Guardar"}
+            </Btn>
+          </>
+        }
       >
-        <Eyebrow>CONFIRMAR · J·{m.round}</Eyebrow>
-        <h2 id="conf-titulo" style={{ margin: "14px 0 6px", fontSize: 24 }}>
-          Confirmar alineación
-        </h2>
-        <p
-          style={{
-            margin: "0 0 20px",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          Revisa las cinco parejas antes de publicarla al equipo.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           {courts.map((pair, c) => {
             const a = playerById(pair[0]);
             const b = playerById(pair[1]);
             return (
               <div
                 key={c}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "11px 14px",
-                  borderRadius: 10,
-                  background: "var(--bg-card-2)",
-                }}
+                className="list-row"
+                style={{ minHeight: 44, padding: "8px 14px" }}
               >
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: "0.14em",
-                    color: "var(--text-faint)",
-                  }}
-                >
+                <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)", width: 22 }}>
                   P{c + 1}
                 </span>
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>
                   {a && b ? `${firstName(a.name)} · ${firstName(b.name)}` : "Vacío"}
                 </span>
-                <span
-                  className="mono"
-                  style={{ fontSize: 12, color: "var(--accent)" }}
-                >
+                <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
                   {points[c]}
                 </span>
               </div>
@@ -1178,140 +1168,94 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
 
         <div
           style={{
-            marginTop: 20,
+            marginTop: 14,
             display: "flex",
             alignItems: "center",
             gap: 16,
-            padding: 16,
-            borderRadius: 12,
+            padding: 14,
+            borderRadius: "var(--r-md)",
             background: "var(--bg-card-2)",
+            border: "1px solid var(--line)",
           }}
         >
           <span style={{ flex: 1 }}>
-            <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
-              Avisar al equipo
-            </span>
-            <span
-              style={{
-                display: "block",
-                marginTop: 5,
-                fontSize: 12.5,
-                color: "var(--text-muted)",
-              }}
-            >
-              Reciben un aviso con su pista y su pareja
+            <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>Avisar al equipo</span>
+            <span style={{ display: "block", marginTop: 3, fontSize: 12.5, color: "var(--text-muted)" }}>
+              Cada jugador recibe su pista y su pareja.
             </span>
           </span>
-          <Toggle
-            on={notify}
-            onChange={() => setNotify((v) => !v)}
-            label="Avisar al equipo"
-          />
-        </div>
-
-        <div
-          style={{
-            marginTop: 24,
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-          }}
-        >
-          <button
-            className="btn btn-ghost"
-            onClick={() => setConfirmOpen(false)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-accent"
-            onClick={() => void confirmLineup()}
-            style={{ padding: "12px 24px", fontSize: 13.5 }}
-          >
-            <IconCheck size={15} />
-            {notify ? "Guardar con aviso" : "Guardar igual"}
-          </button>
+          <Toggle on={notify} onChange={() => setNotify((v) => !v)} label="Avisar al equipo" />
         </div>
       </Modal>
 
       {renameOpen && variant && (
-        <Modal open onClose={() => setRenameOpen(false)} labelledBy="renombrar-variante">
-          <h2 id="renombrar-variante" style={{ fontSize: 22 }}>
-            Renombrar alineación
-          </h2>
-          <p style={{ margin: "10px 0 18px", fontSize: 13.5, color: "var(--text-muted)" }}>
-            Un nombre que te diga de un vistazo qué es: «Con Ana fuera», «Plan B».
-          </p>
-          <input
+        <Modal
+          open
+          onClose={() => setRenameOpen(false)}
+          labelledBy="renombrar-variante"
+          title="Renombrar alineación"
+          lede="Un nombre que diga de un vistazo qué es: «Con Ana fuera», «Plan B»."
+          footer={
+            <>
+              <Btn onClick={() => setRenameOpen(false)}>Cancelar</Btn>
+              <Btn
+                variant="accent"
+                disabled={variantBusy || !renameValue.trim()}
+                onClick={() => void saveVariantName()}
+              >
+                Guardar
+              </Btn>
+            </>
+          }
+        >
+          <Input
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void saveVariantName();
             }}
             autoFocus
-            style={{
-              width: "100%",
-              padding: "13px 15px",
-              borderRadius: 12,
-              border: "1px solid var(--hair-strong)",
-              background: "var(--bg-card)",
-              color: "var(--text)",
-              fontSize: 14,
-              outline: "none",
-            }}
+            large
+            aria-label="Nombre de la variante"
           />
-          <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setRenameOpen(false)}
-              style={{ padding: "12px 20px", fontSize: 13.5 }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-accent"
-              disabled={variantBusy || !renameValue.trim()}
-              onClick={() => void saveVariantName()}
-              style={{ padding: "12px 22px", fontSize: 13.5 }}
-            >
-              Guardar
-            </button>
-          </div>
         </Modal>
       )}
 
+      <Modal
+        open={confirmDeleteVariant}
+        onClose={() => setConfirmDeleteVariant(false)}
+        labelledBy="borrar-variante"
+        title={`¿Borrar «${variant?.label ?? ""}»?`}
+        lede="Se pierden sus parejas. La alineación oficial no se toca."
+        footer={
+          <>
+            <Btn onClick={() => setConfirmDeleteVariant(false)}>Cancelar</Btn>
+            <Btn variant="danger" disabled={variantBusy} onClick={() => void removeVariant()}>
+              Borrar
+            </Btn>
+          </>
+        }
+      >
+        <span />
+      </Modal>
+
       {toast && (
         <Toast
-          tone={toast.includes("avisos") ? "warning" : "success"}
+          tone={toast.includes("huecos") ? "warning" : "success"}
           title={toast}
           onClose={() => setToast(null)}
         />
       )}
 
-      <div style={{ marginTop: 24 }}>
-        <Link
-          href={`/jornada/${m.id}`}
-          className="btn btn-ghost"
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
-        >
+      <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <BtnLink href={`/jornada/${m.id}`} variant="quiet">
           Volver a la jornada
-        </Link>
+        </BtnLink>
+        <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+          {activeTeam?.name}
+          {activeTeam?.category ? ` · ${activeTeam.category}` : ""}
+        </span>
       </div>
-
-      <p
-        className="mono"
-        style={{
-          marginTop: 16,
-          fontSize: 9.5,
-          letterSpacing: "0.14em",
-          color: "var(--text-faint)",
-        }}
-      >
-        {activeTeam?.name} · {activeTeam?.category ?? ""} · {filledCourts}/{courts.length} PISTAS
-      </p>
     </div>
   );
 }

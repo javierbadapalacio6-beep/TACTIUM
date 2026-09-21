@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { CATEGORIES, GENDERS } from "@/lib/tournament-data";
-import { priceSignup } from "@/lib/tournament-signup-pricing";
+import { formatFee, priceSignup } from "@/lib/tournament-signup-pricing";
 import {
   checkCategoryEligibility,
   type CategoryRules,
@@ -19,9 +19,21 @@ import {
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { Card, Eyebrow } from "@/components/ui";
-import { SkeletonCard } from "@/components/states";
-import { IconCheck, IconSearch } from "@/components/Icon";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  Input,
+  Note,
+  PageHeader,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { SkeletonPage } from "@/components/states";
+import { IconAlert, IconCheck, IconSearch } from "@/components/Icon";
 import { GoogleLogo } from "@/components/GoogleLogo";
 
 /* Torneo real (RPC pública) y su forma normalizada para el formulario. */
@@ -215,7 +227,6 @@ function NoFedToggle({
         cursor: "pointer",
         fontSize: 12.5,
         color: "var(--text-muted)",
-        marginTop: 4,
       }}
     >
       <input
@@ -226,6 +237,56 @@ function NoFedToggle({
       />
       No está federado (sin puntos ni nivel de la FCP)
     </label>
+  );
+}
+
+/** Tarjeta-radio del panel: fondo `--bg-card-2`, y al activarse `--accent-10`
+ *  con borde `--accent-40`. Radio 10, igual que en el asistente de torneos. */
+function RadioCard({
+  on,
+  onClick,
+  children,
+  title,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children?: React.ReactNode;
+  title: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      onClick={onClick}
+      style={{
+        textAlign: "left",
+        padding: children ? "12px 14px" : "10px 14px",
+        borderRadius: 10,
+        cursor: "pointer",
+        background: on ? "var(--accent-10)" : "var(--bg-card-2)",
+        border: `1px solid ${on ? "var(--accent-40)" : "var(--line)"}`,
+        color: "var(--text)",
+        transition:
+          "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
+      }}
+    >
+      <span style={{ display: "block", fontSize: 13.5, fontWeight: on ? 700 : 600 }}>
+        {title}
+      </span>
+      {children && (
+        <span
+          style={{
+            display: "block",
+            marginTop: 3,
+            fontSize: 12.5,
+            color: "var(--text-muted)",
+          }}
+        >
+          {children}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -245,54 +306,28 @@ function FcpPicker({
   if (!hints.length) return null;
   if (confirmed) {
     return (
-      <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--accent)" }}>
-        ✓ {confirmed} · confirmado en la Federación.
-      </p>
+      <div style={{ marginTop: 8 }}>
+        <Chip>{confirmed} · confirmado en la Federación</Chip>
+      </div>
     );
   }
   const many = hints.length > 1;
   return (
     <div style={{ marginTop: 10 }}>
-      <div
-        className="mono"
-        style={{
-          fontSize: 9,
-          letterSpacing: "0.16em",
-          color: "var(--text-faint)",
-          marginBottom: 8,
-        }}
-      >
-        {many ? "VARIOS EN LA FEDERACIÓN · ¿CUÁL ERES?" : "DETECTADO EN LA FEDERACIÓN"}
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 8 }}>
+        {many ? "Hay varios con ese nombre en la Federación. ¿Cuál eres?" : "Detectado en la Federación"}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {hints.map((h, i) => (
           <button
             key={`${h.matched}-${i}`}
             type="button"
             onClick={() => onPick(h)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "10px 12px",
-              borderRadius: 10,
-              background: "var(--accent-10)",
-              border: "1px solid var(--accent-25)",
-              color: "var(--accent)",
-              cursor: "pointer",
-              width: "100%",
-              textAlign: "left",
-            }}
+            className="tw-fcp-chip"
+            style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{h.matched}</span>
-            <span
-              className="mono"
-              style={{
-                fontSize: 11,
-                marginLeft: "auto",
-                color: "var(--text-muted)",
-              }}
-            >
+            <span style={{ fontWeight: 600 }}>{h.matched}</span>
+            <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
               {h.soloCircuito ? "sin puntos de liga" : `${h.pts} pts`}
               {h.level ? ` · ${h.level}` : ""}
               {h.level && h.origen && h.origen !== "ambos" ? ` (${h.origen})` : ""}
@@ -301,55 +336,10 @@ function FcpPicker({
           </button>
         ))}
       </div>
-      <p
-        style={{
-          margin: "8px 0 0",
-          fontSize: 11,
-          color: "var(--text-faint)",
-          textWrap: "pretty",
-        }}
-      >
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-faint)" }}>
         ¿No eres ninguno? Marca «No está federado» o escribe tus puntos a mano.
       </p>
     </div>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="mono"
-      style={{
-        display: "block",
-        fontSize: 10,
-        letterSpacing: "0.18em",
-        color: "var(--text-faint)",
-        marginBottom: 8,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const { style, ...rest } = props;
-  return (
-    <input
-      {...rest}
-      style={{
-        width: "100%",
-        padding: "12px 14px",
-        borderRadius: 12,
-        border: "1px solid var(--hair-strong)",
-        background: "var(--bg-card-2)",
-        color: "var(--text)",
-        fontSize: 14,
-        outline: "none",
-        fontFamily: "'Satoshi', sans-serif",
-        ...style,
-      }}
-    />
   );
 }
 
@@ -373,7 +363,7 @@ export function SignupForm({ id }: { id: string }) {
         dates: fmtDates(real.starts_on, real.ends_on),
         fee:
           real.entry_fee != null
-            ? `${real.entry_fee} ${real.fee_currency ?? "€"}`
+            ? formatFee(real.entry_fee, real.fee_currency)
             : null,
         code: real.signup_code ?? "",
         categories: real.categories?.length
@@ -909,69 +899,49 @@ export function SignupForm({ id }: { id: string }) {
   }
 
   // Mientras se resuelve el torneo real, no se pinta la pantalla del código.
-  if (loading && !real) {
-    return (
-      <div style={{ maxWidth: 980, margin: "0 auto" }}>
-        <SkeletonCard />
-      </div>
-    );
-  }
+  if (loading && !real) return <SkeletonPage />;
 
   if (done) {
     return (
-      <div style={{ maxWidth: 560, margin: "0 auto" }}>
-        <Card style={{ textAlign: "center", padding: 40 }}>
+      <div className="tw-page-narrow">
+        <Card style={{ maxWidth: 560, margin: "0 auto", textAlign: "center", padding: "40px 24px" }}>
           <span
             style={{
-              width: 46,
-              height: 46,
+              width: 52,
+              height: 52,
               borderRadius: 14,
               background: "var(--accent-10)",
               color: "var(--accent)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              marginBottom: 18,
+              marginBottom: 16,
             }}
           >
-            <IconCheck size={22} />
+            <IconCheck size={24} />
           </span>
-          <h1 style={{ fontSize: 26 }}>¡Inscripción hecha!</h1>
-          <p
-            style={{
-              margin: "12px 0 0",
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
+          <h2 style={{ fontSize: 21 }}>Inscripción hecha</h2>
+          <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
             Te avisaremos cuando salga el cuadro y tu horario.
           </p>
 
           {doneCodes.length > 0 && (
             <div
               style={{
-                marginTop: 22,
-                padding: "16px 16px 14px",
-                borderRadius: 14,
-                border: "1px dashed var(--hair-strong)",
+                marginTop: 24,
+                padding: "14px 16px",
+                borderRadius: "var(--r-md)",
+                border: "1px solid var(--line)",
                 background: "var(--bg-card-2)",
                 textAlign: "left",
               }}
             >
-              <div
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.16em",
-                  color: "var(--accent)",
-                }}
-              >
-                CÓDIGO PARA TU COMPAÑERO
+              <div style={{ fontSize: 13, fontWeight: 700 }}>
+                Código para tu compañero
               </div>
               <p
                 style={{
-                  margin: "8px 0 12px",
+                  margin: "4px 0 10px",
                   fontSize: 12.5,
                   color: "var(--text-muted)",
                   textWrap: "pretty",
@@ -989,11 +959,10 @@ export function SignupForm({ id }: { id: string }) {
                     justifyContent: "space-between",
                     gap: 12,
                     padding: "8px 0",
-                    borderTop:
-                      i > 0 ? "1px solid var(--hair-strong)" : "none",
+                    borderTop: i > 0 ? "1px solid var(--line)" : "none",
                   }}
                 >
-                  <span style={{ fontSize: 13, color: "var(--text)" }}>
+                  <span style={{ fontSize: 13 }}>
                     {d.partner}
                     {d.category ? (
                       <span style={{ color: "var(--text-faint)" }}>
@@ -1002,15 +971,7 @@ export function SignupForm({ id }: { id: string }) {
                       </span>
                     ) : null}
                   </span>
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 700,
-                      letterSpacing: "0.14em",
-                      color: "var(--accent)",
-                    }}
-                  >
+                  <span className="code" style={{ fontWeight: 700, color: "var(--accent)" }}>
                     {d.code}
                   </span>
                 </div>
@@ -1018,233 +979,166 @@ export function SignupForm({ id }: { id: string }) {
             </div>
           )}
 
-          <a
-            href="/torneos/mios"
-            className="btn btn-accent"
+          <div
             style={{
-              display: "inline-flex",
-              marginTop: 22,
-              padding: "13px 24px",
-              fontSize: 14,
+              marginTop: 24,
+              display: "flex",
+              justifyContent: "center",
+              gap: 8,
+              flexWrap: "wrap",
             }}
           >
-            Ver mis torneos
-          </a>
-          <a
-            href="tactium://"
-            className="btn btn-ghost"
-            style={{
-              display: "inline-flex",
-              marginTop: 10,
-              padding: "12px 24px",
-              fontSize: 14,
-            }}
-          >
-            Volver a la app
-          </a>
+            <BtnLink href="/torneos/mios" variant="accent">
+              Ver mis torneos
+            </BtnLink>
+            <a href="tactium://" className="btn btn-ghost">
+              Volver a la app
+            </a>
+          </div>
         </Card>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto" }}>
+    <div className="tw-page-narrow">
       {/* Cabecera del torneo */}
       {t ? (
-        <Card style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
-          <div className="amb" style={{ padding: 26 }}>
-            <Eyebrow>TORNEO</Eyebrow>
-            <h1 style={{ margin: "12px 0 0", fontSize: 28 }}>{t.name}</h1>
-            <div
-              className="mono"
-              style={{
-                marginTop: 10,
-                fontSize: 11.5,
-                letterSpacing: "0.1em",
-                color: "var(--text-muted)",
-              }}
-            >
-              {t.club} · {t.place}
-            </div>
-            <div
-              style={{
-                marginTop: 18,
-                display: "flex",
-                gap: 24,
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <Label>FECHAS</Label>
-                <span className="mono" style={{ fontSize: 13 }}>
-                  {t.dates ?? "Por confirmar"}
-                </span>
-              </div>
-              <div>
-                <Label>CUOTA</Label>
-                <span
-                  className="mono"
-                  style={{ fontSize: 13, color: "var(--accent)", fontWeight: 700 }}
-                >
-                  {t.fee ?? "Gratis"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </Card>
-      ) : (
-        <Card style={{ marginBottom: 20 }}>
-          <Eyebrow>CÓDIGO DEL TORNEO</Eyebrow>
-          <p
-            style={{
-              margin: "14px 0 16px",
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-            }}
-          >
-            Busca primero el torneo con su código.
-          </p>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ABC123"
-              className="mono"
-              style={{ letterSpacing: "0.18em" }}
+        <>
+          <PageHeader
+            title={t.name}
+            lede="Apúntate con tu pareja. Rellena la ficha, marca tu disponibilidad y confirma."
+            meta={[t.club, t.place].filter(Boolean) as string[]}
+          />
+          <StatRow style={{ marginBottom: 16 }}>
+            <Stat label="Fechas" value={t.dates ?? "Por confirmar"} />
+            <Stat
+              label="Cuota"
+              value={t.fee ?? "Gratis"}
+              tone="accent"
+              sub="Por persona y categoría"
             />
-            <button
-              className="btn btn-accent"
-              disabled={code.trim().length < 4}
-              onClick={() => setFound(true)}
-              style={{ padding: "12px 20px", fontSize: 13.5, borderRadius: 12 }}
-            >
-              <IconSearch size={15} />
-              Buscar
-            </button>
-          </div>
-        </Card>
+          </StatRow>
+        </>
+      ) : (
+        <>
+          <PageHeader
+            title="Inscripción"
+            lede="Busca primero el torneo con su código."
+          />
+          <Card style={{ marginBottom: 16 }}>
+            <Field label="Código del torneo" htmlFor="signup-code">
+              <div style={{ display: "flex", gap: 8 }}>
+                <Input
+                  id="signup-code"
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="ABC123"
+                  className="mono"
+                  style={{ letterSpacing: "0.12em" }}
+                />
+                <Btn
+                  variant="accent"
+                  disabled={code.trim().length < 4}
+                  onClick={() => setFound(true)}
+                  icon={<IconSearch size={15} />}
+                >
+                  Buscar
+                </Btn>
+              </div>
+            </Field>
+          </Card>
+        </>
       )}
 
       {/* Gate de login: para inscribirse hay que iniciar sesión. */}
       {(found || t) && !checkingAuth && !authUser && (
-        <Card style={{ marginBottom: 20 }}>
-          <Eyebrow>INICIA SESIÓN PARA INSCRIBIRTE</Eyebrow>
-          <p
-            style={{
-              margin: "14px 0 20px",
-              fontSize: 14,
-              lineHeight: 1.5,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Entra con tu cuenta para apuntarte. Así tu inscripción queda en tu
-            perfil, con tus torneos y estadísticas. Tu compañero podrá vincularse
-            luego con su código, tenga o no club.
-          </p>
-          <button
-            className="btn btn-accent"
-            onClick={() => loginToSignup("google")}
-            style={{
-              width: "100%",
-              padding: 14,
-              fontSize: 15,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-            }}
-          >
-            <GoogleLogo />
-            Continuar con Google
-          </button>
-          <p
-            style={{
-              margin: "16px 0 0",
-              fontSize: 12,
-              color: "var(--text-faint)",
-              textAlign: "center",
-            }}
-          >
-            ¿Prefieres email?{" "}
-            <a
-              href={`/entrar?next=${encodeURIComponent(`/torneos/${id}/inscripcion`)}`}
-              style={{ color: "var(--accent)" }}
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead title="Inicia sesión para inscribirte" />
+          <div className="card-body">
+            <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)", textWrap: "pretty" }}>
+              Entra con tu cuenta para apuntarte. Así tu inscripción queda en tu
+              perfil, con tus torneos y estadísticas. Tu compañero podrá vincularse
+              luego con su código, tenga o no club.
+            </p>
+            <Btn
+              variant="accent"
+              block
+              size="lg"
+              onClick={() => loginToSignup("google")}
+              icon={<GoogleLogo />}
+              style={{ marginTop: 18 }}
             >
-              Inicia sesión aquí
-            </a>
-          </p>
+              Continuar con Google
+            </Btn>
+            <p
+              style={{
+                margin: "14px 0 0",
+                fontSize: 12.5,
+                color: "var(--text-faint)",
+                textAlign: "center",
+              }}
+            >
+              ¿Prefieres email?{" "}
+              <a href={`/entrar?next=${encodeURIComponent(`/torneos/${id}/inscripcion`)}`}>
+                Inicia sesión aquí
+              </a>
+            </p>
+          </div>
         </Card>
       )}
 
       {(found || t) && authUser && (
         <>
-          <Card style={{ marginBottom: 20 }}>
+          <Card style={{ marginBottom: 16 }}>
             <div className="tw-form-grid">
-              <div>
-                <Label>ELIGE TU CATEGORÍA</Label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {(t?.categories.length ? t.categories : CATEGORIES).map((c) => {
-                    const on = category === c;
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setCategory(c)}
-                        className="btn"
-                        style={{
-                          padding: "9px 16px",
-                          fontSize: 13,
-                          fontWeight: on ? 700 : 500,
-                          background: on ? "var(--accent-10)" : "transparent",
-                          color: on ? "var(--accent)" : "var(--text-muted)",
-                          border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                        }}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
+              <Field label="Tu categoría">
+                <div
+                  role="radiogroup"
+                  aria-label="Categoría"
+                  style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                >
+                  {(t?.categories.length ? t.categories : CATEGORIES).map((c) => (
+                    <RadioCard
+                      key={c}
+                      on={category === c}
+                      onClick={() => setCategory(c)}
+                      title={c}
+                    />
+                  ))}
                 </div>
-              </div>
-              <div>
-                <Label>ELIGE TU GÉNERO</Label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {(t?.genders.length ? t.genders : GENDERS).map((g) => {
-                    const on = gender === g;
-                    return (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setGender(g)}
-                        className="btn"
-                        style={{
-                          padding: "9px 16px",
-                          fontSize: 13,
-                          fontWeight: on ? 700 : 500,
-                          background: on ? "var(--accent-10)" : "transparent",
-                          color: on ? "var(--accent)" : "var(--text-muted)",
-                          border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                        }}
-                      >
-                        {g}
-                      </button>
-                    );
-                  })}
+              </Field>
+              <Field label="Tu género">
+                <div
+                  role="radiogroup"
+                  aria-label="Género"
+                  style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                >
+                  {(t?.genders.length ? t.genders : GENDERS).map((g) => (
+                    <RadioCard
+                      key={g}
+                      on={gender === g}
+                      onClick={() => setGender(g)}
+                      title={g}
+                    />
+                  ))}
                 </div>
-              </div>
+              </Field>
             </div>
           </Card>
 
-          <div className="tw-form-grid" style={{ marginBottom: 20 }}>
+          <div className="tw-form-grid" style={{ marginBottom: 16 }}>
             {/* Tú */}
-            <Card>
-              <Eyebrow>TU FICHA</Eyebrow>
-              <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <Label>TU NOMBRE Y APELLIDOS</Label>
+            <Card flush>
+              <CardHead title="Tu ficha" />
+              <div
+                className="card-body"
+                style={{ display: "flex", flexDirection: "column", gap: 16 }}
+              >
+                <Field label="Nombre y apellidos" htmlFor="sf-name">
                   <Input
+                    id="sf-name"
                     type="text"
                     value={name}
                     onChange={(e) => {
@@ -1267,7 +1161,7 @@ export function SignupForm({ id }: { id: string }) {
                       }}
                     />
                   )}
-                </div>
+                </Field>
 
                 <NoFedToggle
                   checked={noFed}
@@ -1283,9 +1177,9 @@ export function SignupForm({ id }: { id: string }) {
                 />
                 {!noFed && (
                   <div className="tw-form-grid">
-                    <div>
-                      <Label>TUS PUNTOS</Label>
+                    <Field label="Tus puntos" htmlFor="sf-pts">
                       <Input
+                        id="sf-pts"
                         type="text"
                         inputMode="numeric"
                         value={pts}
@@ -1294,56 +1188,54 @@ export function SignupForm({ id }: { id: string }) {
                         }
                         className="mono"
                       />
-                    </div>
-                    <div>
-                      <Label>TU NIVEL</Label>
+                    </Field>
+                    <Field label="Tu nivel" htmlFor="sf-level">
                       <Input
+                        id="sf-level"
                         type="text"
                         value={level}
                         onChange={(e) => setLevel(e.target.value)}
                       />
-                    </div>
+                    </Field>
                   </div>
                 )}
 
-                <div>
-                  <Label>TU EMAIL</Label>
+                <Field
+                  label="Tu email"
+                  hint="Te enviaremos la confirmación de la inscripción aquí."
+                  htmlFor="sf-email"
+                >
                   <Input
+                    id="sf-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="tu@email.com"
                   />
-                  <p
-                    style={{
-                      margin: "6px 0 0",
-                      fontSize: 11,
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    Te enviaremos la confirmación de la inscripción aquí.
-                  </p>
-                </div>
-                <div>
-                  <Label>TU TELÉFONO · OPCIONAL</Label>
+                </Field>
+                <Field label="Tu teléfono" hint="Opcional" htmlFor="sf-phone">
                   <Input
+                    id="sf-phone"
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="600 000 000"
                     className="mono"
                   />
-                </div>
+                </Field>
               </div>
             </Card>
 
             {/* Compañero */}
-            <Card>
-              <Eyebrow>TU COMPAÑERO/A</Eyebrow>
-              <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <Label>NOMBRE Y APELLIDOS DE TU PAREJA</Label>
+            <Card flush>
+              <CardHead title="Tu compañero" />
+              <div
+                className="card-body"
+                style={{ display: "flex", flexDirection: "column", gap: 16 }}
+              >
+                <Field label="Nombre y apellidos de tu pareja" htmlFor="sf-mate">
                   <Input
+                    id="sf-mate"
                     type="text"
                     value={mateName}
                     onChange={(e) => {
@@ -1366,7 +1258,7 @@ export function SignupForm({ id }: { id: string }) {
                       }}
                     />
                   )}
-                </div>
+                </Field>
 
                 <NoFedToggle
                   checked={mateNoFed}
@@ -1382,9 +1274,9 @@ export function SignupForm({ id }: { id: string }) {
                 />
                 {!mateNoFed && (
                   <div className="tw-form-grid">
-                    <div>
-                      <Label>SUS PUNTOS</Label>
+                    <Field label="Sus puntos" htmlFor="sf-mate-pts">
                       <Input
+                        id="sf-mate-pts"
                         type="text"
                         inputMode="numeric"
                         value={matePts}
@@ -1393,50 +1285,36 @@ export function SignupForm({ id }: { id: string }) {
                         }
                         className="mono"
                       />
-                    </div>
-                    <div>
-                      <Label>SU NIVEL</Label>
+                    </Field>
+                    <Field label="Su nivel" htmlFor="sf-mate-level">
                       <Input
+                        id="sf-mate-level"
                         type="text"
                         value={mateLevel}
                         onChange={(e) => setMateLevel(e.target.value)}
                       />
-                    </div>
+                    </Field>
                   </div>
                 )}
 
-                <div>
-                  <Label>EMAIL DE TU COMPAÑERO/A · OPCIONAL</Label>
+                <Field
+                  label="Email de tu compañero"
+                  hint="Opcional. Si lo pones, le llega también la confirmación."
+                  htmlFor="sf-mate-email"
+                >
                   <Input
+                    id="sf-mate-email"
                     type="email"
                     value={mateEmail}
                     onChange={(e) => setMateEmail(e.target.value)}
                     placeholder="pareja@email.com"
                   />
-                  <p
-                    style={{
-                      margin: "6px 0 0",
-                      fontSize: 11,
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    Si lo pones, le llega también la confirmación.
-                  </p>
-                </div>
+                </Field>
 
-                <div
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: 12,
-                    border: "1px dashed var(--hair-strong)",
-                    fontSize: 12.5,
-                    color: "var(--text-muted)",
-                    textWrap: "pretty",
-                  }}
-                >
+                <Note>
                   ¿Aún no sabes con quién juegas? Apúntate y comparte tu código
                   de compañero.
-                </div>
+                </Note>
               </div>
             </Card>
           </div>
@@ -1444,55 +1322,27 @@ export function SignupForm({ id }: { id: string }) {
           {/* 2ª categoría OPCIONAL (como en la app). Solo si el torneo tiene ≥2
               categorías. El compañero puede ser distinto. */}
           {hasTwoCats && (
-            <Card style={{ marginBottom: 20 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
+            <Card flush style={{ marginBottom: 16 }}>
+              <CardHead
+                title="Segunda categoría"
+                sub="Opcional. Puedes jugar otra categoría, con otro compañero si hace falta. Pagas la cuota de 2 categorías, no el doble."
               >
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <Eyebrow>2ª CATEGORÍA · OPCIONAL</Eyebrow>
-                  <p
-                    style={{
-                      margin: "8px 0 0",
-                      fontSize: 12.5,
-                      color: "var(--text-muted)",
-                      textWrap: "pretty",
-                    }}
-                  >
-                    Puedes jugar una segunda categoría, con otro compañero si
-                    hace falta. Pagas la cuota de 2 categorías (no el doble).
-                  </p>
-                </div>
                 {!category2 ? (
-                  <button
-                    type="button"
-                    className="btn"
+                  <Btn
+                    variant="tint"
+                    size="sm"
                     onClick={() =>
                       setCategory2(
                         (t?.categories ?? []).find((c) => c !== category) ??
                           null,
                       )
                     }
-                    style={{
-                      padding: "9px 16px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "var(--accent)",
-                      border: "1px solid var(--accent)",
-                      background: "var(--accent-10)",
-                    }}
                   >
-                    + Añadir
-                  </button>
+                    Añadir
+                  </Btn>
                 ) : (
-                  <button
-                    type="button"
-                    className="btn"
+                  <Btn
+                    size="sm"
                     onClick={() => {
                       setCategory2(null);
                       setMate2Name("");
@@ -1501,50 +1351,39 @@ export function SignupForm({ id }: { id: string }) {
                       setMate2Email("");
                       setMate2FedName(null);
                     }}
-                    style={{
-                      padding: "9px 16px",
-                      fontSize: 13,
-                      color: "var(--text-muted)",
-                      border: "1px solid var(--hair-strong)",
-                    }}
                   >
                     Quitar
-                  </button>
+                  </Btn>
                 )}
-              </div>
+              </CardHead>
 
               {category2 && (
-                <div style={{ marginTop: 18 }}>
-                  <Label>ELIGE LA 2ª CATEGORÍA</Label>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {(t?.categories ?? [])
-                      .filter((c) => c !== category)
-                      .map((c) => {
-                        const on = category2 === c;
-                        return (
-                          <button
+                <div
+                  className="card-body"
+                  style={{ display: "flex", flexDirection: "column", gap: 16 }}
+                >
+                  <Field label="Categoría">
+                    <div
+                      role="radiogroup"
+                      aria-label="Segunda categoría"
+                      style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                    >
+                      {(t?.categories ?? [])
+                        .filter((c) => c !== category)
+                        .map((c) => (
+                          <RadioCard
                             key={c}
-                            type="button"
+                            on={category2 === c}
                             onClick={() => setCategory2(c)}
-                            className="btn"
-                            style={{
-                              padding: "9px 16px",
-                              fontSize: 13,
-                              fontWeight: on ? 700 : 500,
-                              background: on ? "var(--accent-10)" : "transparent",
-                              color: on ? "var(--accent)" : "var(--text-muted)",
-                              border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                            }}
-                          >
-                            {c}
-                          </button>
-                        );
-                      })}
-                  </div>
+                            title={c}
+                          />
+                        ))}
+                    </div>
+                  </Field>
 
-                  <div style={{ marginTop: 18 }}>
-                    <Label>NOMBRE Y APELLIDOS DEL COMPAÑERO (2ª CATEGORÍA)</Label>
+                  <Field label="Nombre y apellidos del compañero" htmlFor="sf-mate2">
                     <Input
+                      id="sf-mate2"
                       type="text"
                       value={mate2Name}
                       onChange={(e) => {
@@ -1567,27 +1406,25 @@ export function SignupForm({ id }: { id: string }) {
                         }}
                       />
                     )}
-                  </div>
+                  </Field>
 
-                  <div style={{ marginTop: 16 }}>
-                    <NoFedToggle
-                      checked={mate2NoFed}
-                      onChange={(v) => {
-                        setMate2NoFed(v);
-                        if (v) {
-                          setMate2Pts("");
-                          setMate2Level("");
-                          setMate2FedName(null);
-                          setMate2FedGender(null);
-                        }
-                      }}
-                    />
-                  </div>
+                  <NoFedToggle
+                    checked={mate2NoFed}
+                    onChange={(v) => {
+                      setMate2NoFed(v);
+                      if (v) {
+                        setMate2Pts("");
+                        setMate2Level("");
+                        setMate2FedName(null);
+                        setMate2FedGender(null);
+                      }
+                    }}
+                  />
                   {!mate2NoFed && (
-                    <div className="tw-form-grid" style={{ marginTop: 16 }}>
-                      <div>
-                        <Label>SUS PUNTOS</Label>
+                    <div className="tw-form-grid">
+                      <Field label="Sus puntos" htmlFor="sf-mate2-pts">
                         <Input
+                          id="sf-mate2-pts"
                           type="text"
                           inputMode="numeric"
                           value={mate2Pts}
@@ -1596,27 +1433,27 @@ export function SignupForm({ id }: { id: string }) {
                           }
                           className="mono"
                         />
-                      </div>
-                      <div>
-                        <Label>SU NIVEL</Label>
+                      </Field>
+                      <Field label="Su nivel" htmlFor="sf-mate2-level">
                         <Input
+                          id="sf-mate2-level"
                           type="text"
                           value={mate2Level}
                           onChange={(e) => setMate2Level(e.target.value)}
                         />
-                      </div>
+                      </Field>
                     </div>
                   )}
 
-                  <div style={{ marginTop: 16 }}>
-                    <Label>EMAIL DEL COMPAÑERO (2ª) · OPCIONAL</Label>
+                  <Field label="Su email" hint="Opcional" htmlFor="sf-mate2-email">
                     <Input
+                      id="sf-mate2-email"
                       type="email"
                       value={mate2Email}
                       onChange={(e) => setMate2Email(e.target.value)}
                       placeholder="pareja2@email.com"
                     />
-                  </div>
+                  </Field>
                 </div>
               )}
             </Card>
@@ -1624,50 +1461,32 @@ export function SignupForm({ id }: { id: string }) {
 
           {/* Disponibilidad — solo si el torneo tiene fechas reales. */}
           {availDays.length > 0 && (
-          <Card style={{ marginBottom: 20 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
+          <Card flush style={{ marginBottom: 16 }}>
+            <CardHead
+              title="Disponibilidad"
+              sub="Marca las horas en las que no puedes jugar, en franjas de una hora. El club lo tendrá en cuenta al montar el horario."
             >
-              <Eyebrow>HORARIO · DISPONIBILIDAD · FRANJAS DE 1H</Eyebrow>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 10.5,
-                  letterSpacing: "0.12em",
-                  color:
-                    removeCap != null && blocked.size >= removeCap
-                      ? "var(--warning)"
-                      : "var(--text-faint)",
-                }}
+              <Chip
+                tone={
+                  removeCap != null && blocked.size >= removeCap ? "warning" : "mute"
+                }
+                plain
               >
-                {blocked.size} h marcadas
-                {removeCap != null ? ` · máx. ${removeCap} h` : ""}
-              </span>
-            </div>
+                <span className="mono">{blocked.size}</span> h marcadas
+                {removeCap != null ? (
+                  <>
+                    {" · máx. "}
+                    <span className="mono">{removeCap}</span> h
+                  </>
+                ) : null}
+              </Chip>
+            </CardHead>
 
-            <p
-              style={{
-                margin: "12px 0 18px",
-                fontSize: 12.5,
-                color: "var(--text-muted)",
-                textWrap: "pretty",
-              }}
-            >
-              Marca las horas en las que NO puedes jugar. El club lo tendrá en
-              cuenta al montar el horario.
-            </p>
-
-            <div style={{ overflowX: "auto", margin: "0 -4px", padding: "0 4px 4px" }}>
+            <div className="card-body" style={{ overflowX: "auto" }}>
             <div
               className="tw-avail-slots"
               style={{
-                gridTemplateColumns: `56px repeat(${signupHours.length}, minmax(38px, 1fr))`,
+                gridTemplateColumns: `58px repeat(${signupHours.length}, minmax(38px, 1fr))`,
                 minWidth: signupHours.length > 6 ? "max-content" : undefined,
               }}
             >
@@ -1677,8 +1496,7 @@ export function SignupForm({ id }: { id: string }) {
                   key={h}
                   className="mono"
                   style={{
-                    fontSize: 9.5,
-                    letterSpacing: "0.12em",
+                    fontSize: 11,
                     color: "var(--text-faint)",
                     textAlign: "center",
                   }}
@@ -1692,13 +1510,12 @@ export function SignupForm({ id }: { id: string }) {
                   <span
                     className="mono"
                     style={{
-                      fontSize: 10,
-                      letterSpacing: "0.14em",
+                      fontSize: 11.5,
                       color: "var(--text-faint)",
                       alignSelf: "center",
                     }}
                   >
-                    {d.toUpperCase()}
+                    {d}
                   </span>
                   {signupHours.map((h) => {
                     const key = `${d} ${h}`;
@@ -1711,14 +1528,19 @@ export function SignupForm({ id }: { id: string }) {
                         aria-label={`${d} a las ${h}${on ? " · no puedo" : ""}`}
                         onClick={() => toggleSlot(key)}
                         style={{
-                          padding: "12px 4px",
-                          borderRadius: 9,
-                          fontSize: 11,
+                          padding: "11px 4px",
+                          borderRadius: 10,
+                          fontSize: 12,
                           cursor: "pointer",
                           background: on ? "var(--error-soft)" : "var(--bg-card-2)",
                           color: on ? "var(--error)" : "var(--text-faint)",
-                          border: `1px solid ${on ? "var(--error)" : "transparent"}`,
-                          transition: "all var(--dur-fast) var(--ease)",
+                          border: `1px solid ${
+                            on
+                              ? "color-mix(in srgb, var(--error) 40%, transparent)"
+                              : "var(--line)"
+                          }`,
+                          transition:
+                            "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
                         }}
                       >
                         {on ? "✕" : "·"}
@@ -1735,257 +1557,200 @@ export function SignupForm({ id }: { id: string }) {
           {/* Género (división) + elegibilidad por categoría: avisos persistentes.
               Bloquean el botón. */}
           {(genderErr || elig1 || (category2 && elig2)) && (
-            <div
-              style={{
-                margin: "0 0 12px",
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid var(--warning)",
-                background: "rgba(242,201,76,0.10)",
-              }}
-            >
-              {genderErr && (
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--warning)",
-                    marginBottom: elig1 || (category2 && elig2) ? 4 : 0,
-                  }}
-                >
-                  {genderErr}
-                </div>
-              )}
-              {elig1 && (
-                <div style={{ fontSize: 12.5, color: "var(--warning)" }}>
-                  1ª categoría · {elig1}
-                </div>
-              )}
+            <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
+              {genderErr && <div>{genderErr}</div>}
+              {elig1 && <div style={{ marginTop: genderErr ? 4 : 0 }}>1ª categoría · {elig1}</div>}
               {category2 && elig2 && (
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--warning)",
-                    marginTop: elig1 ? 4 : 0,
-                  }}
-                >
+                <div style={{ marginTop: genderErr || elig1 ? 4 : 0 }}>
                   2ª categoría · {elig2}
                 </div>
               )}
-            </div>
+            </Note>
           )}
           {terms && (
-            <div
-              style={{
-                padding: "14px 16px",
-                marginBottom: 12,
-                borderRadius: 12,
-                border: "1px solid var(--hair-strong)",
-                background: "var(--bg-card-2)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: "0.06em",
-                  color: "var(--text-faint)",
-                  marginBottom: 8,
-                }}
-              >
-                CONDICIONES DEL TORNEO
-              </div>
-              <div
-                style={{
-                  fontSize: 12.5,
-                  lineHeight: 1.55,
-                  color: "var(--text-muted)",
-                  whiteSpace: "pre-line",
-                  maxHeight: termsOpen ? "none" : 78,
-                  overflow: "hidden",
-                }}
-              >
-                {terms}
-              </div>
-              <button
-                type="button"
-                onClick={() => setTermsOpen((v) => !v)}
-                style={{
-                  marginTop: 8,
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                  color: "var(--accent)",
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                }}
-              >
-                {termsOpen ? "Ocultar" : "Leer todas las condiciones"}
-              </button>
+            <div style={{ marginBottom: 12 }}>
+              <Note>
+                <span style={{ display: "block", fontWeight: 700, color: "var(--text)" }}>
+                  Condiciones del torneo
+                </span>
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: 6,
+                    whiteSpace: "pre-line",
+                    maxHeight: termsOpen ? "none" : 78,
+                    overflow: "hidden",
+                  }}
+                >
+                  {terms}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTermsOpen((v) => !v)}
+                  className="link-action"
+                  style={{
+                    marginTop: 8,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                  }}
+                >
+                  {termsOpen ? "Ocultar" : "Leer todas las condiciones"}
+                </button>
+              </Note>
               <label
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 9,
-                  marginTop: 14,
+                  marginTop: 12,
                   cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: 700,
+                  fontSize: 13.5,
+                  fontWeight: 600,
                 }}
               >
                 <input
                   type="checkbox"
                   checked={termsOk}
                   onChange={(e) => setTermsOk(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
                 />
                 He leído y acepto las condiciones
               </label>
             </div>
           )}
           {signErr && (
-            <p style={{ margin: "0 0 12px", color: "var(--error)", fontSize: 13 }}>
+            <Note tone="error" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
               {signErr}
-            </p>
+            </Note>
           )}
 
           {/* Desglose: la cuota es POR PERSONA (según cuántas categorías juega
               cada uno) y tú pagas por todos. */}
           {feePer > 0 && (
-            <div
-              style={{
-                padding: "12px 16px",
-                marginBottom: 12,
-                borderRadius: 12,
-                border: "1px solid var(--hair-strong)",
-                background: "var(--bg-card-2)",
-              }}
-            >
-              {pricing.persons.length > 0 ? (
-                <>
-                  {pricing.persons.map((p, i) => (
+            <Card flush style={{ marginBottom: 12 }}>
+              <CardHead
+                title="Cuota de inscripción"
+                sub="Al inscribirte pagas por todos los jugadores."
+              />
+              <div className="card-body">
+                {pricing.persons.length > 0 ? (
+                  <>
+                    <dl className="kv" style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}>
+                      {pricing.persons.map((p, i) => (
+                        <Fragment key={`${p.name}-${i}`}>
+                          <dt>
+                            {p.name}
+                            <span style={{ color: "var(--text-faint)" }}>
+                              {" · "}
+                              {p.categories >= 2 ? "2 categorías" : "1 categoría"}
+                            </span>
+                          </dt>
+                          <dd className="mono" style={{ textAlign: "right" }}>
+                            {formatFee(p.feeCents / 100, feeCur)}
+                          </dd>
+                        </Fragment>
+                      ))}
+                    </dl>
+                    <div className="divider" style={{ margin: "12px 0" }} />
                     <div
-                      key={`${p.name}-${i}`}
                       style={{
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
                         gap: 12,
-                        padding: "3px 0",
                       }}
                     >
-                      <span style={{ fontSize: 13, color: "var(--text)" }}>
-                        {p.name}
-                        <span style={{ color: "var(--text-faint)" }}>
-                          {" · "}
-                          {p.categories >= 2 ? "2 categorías" : "1 categoría"}
-                        </span>
+                      <span style={{ fontSize: 13.5, color: "var(--text-muted)" }}>
+                        Total · {pricing.persons.length} jugadores
                       </span>
-                      <span className="mono" style={{ fontSize: 13 }}>
-                        {p.feeCents / 100} {feeCur}
+                      <span
+                        className="mono"
+                        style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}
+                      >
+                        {formatFee(feeTotal, feeCur)}
                       </span>
                     </div>
-                  ))}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      marginTop: 8,
-                      paddingTop: 8,
-                      borderTop: "1px solid var(--hair-strong)",
-                    }}
-                  >
-                    <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                      Total · {pricing.persons.length} jugadores
-                    </span>
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 18,
-                        fontWeight: 700,
-                        color: "var(--accent)",
-                      }}
-                    >
-                      {feeTotal} {feeCur}
-                    </span>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13.5 }}>
+                    Cuota por persona:{" "}
+                    <span className="mono">
+                      {formatFee(feePer, feeCur)}
+                    </span>{" "}
+                    (1 categoría)
+                    {entryFee2 ? (
+                      <>
+                        {" · "}
+                        <span className="mono">
+                          {formatFee(entryFee2, feeCur)}
+                        </span>{" "}
+                        (2 categorías)
+                      </>
+                    ) : null}
                   </div>
-                </>
-              ) : (
-                <div style={{ fontSize: 13, color: "var(--text)" }}>
-                  Cuota por persona: {feePer} {feeCur} (1 categoría)
-                  {entryFee2 ? ` · ${entryFee2} ${feeCur} (2 categorías)` : ""}
-                </div>
-              )}
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 11.5,
-                  color: "var(--text-faint)",
-                }}
-              >
-                Al inscribirte pagas por todos los jugadores.
+                )}
               </div>
-            </div>
+            </Card>
           )}
           {(real?.entry_fee ?? 0) <= 0 ? (
             /* Torneo gratis: un único botón de inscripción. */
-            <button
-              className="btn btn-accent"
+            <Btn
+              variant="accent"
+              size="lg"
+              block
               disabled={busy || name.trim().length < 3 || eligBlocked}
               onClick={() => submitSignup(false)}
-              style={{ width: "100%", padding: 16, fontSize: 15 }}
             >
               {busy ? "Inscribiendo…" : "Apuntarme al torneo"}
-            </button>
+            </Btn>
           ) : payOnline === null ? (
             /* Comprobando si el club cobra online. */
-            <button
-              className="btn btn-accent"
-              disabled
-              style={{ width: "100%", padding: 16, fontSize: 15, opacity: 0.7 }}
-            >
+            <Btn variant="accent" size="lg" block disabled>
               Comprobando forma de pago…
-            </button>
+            </Btn>
           ) : payOnline ? (
             /* Club con pago online: Stripe (principal) + pagar en el club. */
             <>
-              <button
-                className="btn btn-accent"
+              <Btn
+                variant="accent"
+                size="lg"
+                block
                 disabled={busy || name.trim().length < 3 || eligBlocked}
                 onClick={() => submitSignup(false)}
-                style={{ width: "100%", padding: 16, fontSize: 15 }}
               >
                 {busy
                   ? "Inscribiendo…"
-                  : `Pagar inscripción · ${feeTotal} ${feeCur}`}
-              </button>
-              <button
-                className="btn btn-ghost"
+                  : `Pagar inscripción · ${formatFee(feeTotal, feeCur)}`}
+              </Btn>
+              <Btn
+                block
                 disabled={busy || name.trim().length < 3 || eligBlocked}
                 onClick={() => submitSignup(true)}
-                style={{ width: "100%", padding: 14, fontSize: 14, marginTop: 10 }}
+                style={{ marginTop: 8 }}
               >
                 Pagar en el club (efectivo)
-              </button>
+              </Btn>
             </>
           ) : (
             /* Club SIN pago online: solo se puede pagar en el club. */
             <>
-              <button
-                className="btn btn-accent"
+              <Btn
+                variant="accent"
+                size="lg"
+                block
                 disabled={busy || name.trim().length < 3 || eligBlocked}
                 onClick={() => submitSignup(true)}
-                style={{ width: "100%", padding: 16, fontSize: 15 }}
               >
                 {busy
                   ? "Inscribiendo…"
-                  : `Inscribirme · pago en el club (${feeTotal} ${feeCur})`}
-              </button>
+                  : `Inscribirme · pago en el club (${formatFee(feeTotal, feeCur)})`}
+              </Btn>
               <p
                 style={{
                   margin: "10px 0 0",
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: "var(--text-muted)",
                   textAlign: "center",
                   textWrap: "pretty",

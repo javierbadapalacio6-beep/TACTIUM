@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Btn } from "@/components/ui";
+
 /**
  * Botón de pago del torneo (organizador, web).
  *
@@ -59,19 +61,13 @@ export function PayTournamentButton({ tournamentId }: { tournamentId: string }) 
 
   return (
     <>
-      <button
-        type="button"
-        className="btn btn-accent"
-        onClick={pay}
-        disabled={busy}
-        style={{ padding: "11px 18px", fontSize: 13 }}
-      >
+      <Btn variant="accent" onClick={pay} disabled={busy}>
         {busy ? "Abriendo pago…" : "Pagar / publicar torneo"}
-      </button>
+      </Btn>
       {msg && (
         <span
           style={{
-            fontSize: 12,
+            fontSize: 12.5,
             color: "var(--text-muted)",
             textWrap: "pretty",
             maxWidth: 240,

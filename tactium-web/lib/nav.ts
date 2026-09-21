@@ -19,7 +19,17 @@ export type IconName =
   | "building"
   | "clock"
   | "receipt"
-  | "userPlus";
+  | "userPlus"
+  | "sun"
+  | "bell"
+  | "user"
+  | "creditCard"
+  | "info"
+  | "file"
+  | "alert"
+  | "settings"
+  | "lock"
+  | "search";
 
 export interface NavEntry {
   href: string;
@@ -203,4 +213,29 @@ export function routeMeta(pathname: string, role: Role) {
     eyebrow: role === "suelto" ? "TU PÁDEL" : "INICIO",
     title: role === "suelto" ? "Mi pádel" : "Inicio",
   };
+}
+
+export interface Crumb {
+  label: string;
+  href?: string;
+}
+
+/**
+ * Migas de pan de la barra superior: sección padre (enlazable) + pantalla.
+ * Sale de la propia navegación del rol, así el padre siempre es un destino
+ * real del menú y no un rótulo inventado.
+ */
+export function routeCrumbs(pathname: string, role: Role): Crumb[] {
+  const meta = routeMeta(pathname, role);
+  const nav = NAV_BY_ROLE[role];
+  // El ítem de menú cuyo href es prefijo más largo de la ruta.
+  const parent = nav
+    .filter((i) => i.href !== "/" && (pathname === i.href || pathname.startsWith(i.href + "/")))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+
+  if (!parent) return [{ label: meta.title }];
+  if (parent.href === pathname || parent.label === meta.title) {
+    return [{ label: parent.label }];
+  }
+  return [{ label: parent.label, href: parent.href }, { label: meta.title }];
 }

@@ -4,9 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { SETTINGS_SECTIONS } from "@/lib/account-data";
+import { ICONS } from "@/components/Icon";
 
 /** Navegación de secciones de Ajustes. Sticky en escritorio, scroll
- *  horizontal en móvil (no se apila: son 10 entradas). */
+ *  horizontal en móvil (no se apila: son 10 entradas).
+ *
+ *  La etiqueta y el icono salen de `SETTINGS_SECTIONS`: una sola fuente para
+ *  el menú, el título de cada sección y las migas. */
 export function SettingsNav() {
   const pathname = usePathname();
 
@@ -16,28 +20,19 @@ export function SettingsNav() {
         const href = `/ajustes/${s.slug}`;
         const active = pathname === href;
         const danger = s.slug === "peligro";
+        const Icon = ICONS[s.icon as keyof typeof ICONS];
         return (
           <Link
             key={s.slug}
             href={href}
             aria-current={active ? "page" : undefined}
-            className="mono"
-            style={{
-              padding: "11px 14px",
-              borderRadius: 10,
-              fontSize: 10.5,
-              letterSpacing: "0.18em",
-              whiteSpace: "nowrap",
-              color: active
-                ? "var(--accent)"
-                : danger
-                  ? "var(--error)"
-                  : "var(--text-muted)",
-              background: active ? "var(--accent-10)" : "transparent",
-              boxShadow: active ? "inset 2px 0 0 var(--accent-40)" : "none",
-              transition: "all var(--dur-fast) var(--ease)",
-            }}
+            className={
+              "tw-settings-link" +
+              (active ? " is-active" : "") +
+              (danger && !active ? " is-danger" : "")
+            }
           >
+            {Icon && <Icon size={16} />}
             {s.label}
           </Link>
         );

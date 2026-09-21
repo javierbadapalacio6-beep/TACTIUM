@@ -13,9 +13,28 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
-import { IconAlert, IconCalendar, IconCheck, IconLock, IconUpload } from "@/components/Icon";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  IconTile,
+  Modal,
+  Note,
+  PageHeader,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import {
+  IconAlert,
+  IconCalendar,
+  IconCheck,
+  IconLock,
+  IconUpload,
+  IconUsers,
+} from "@/components/Icon";
 
 /**
  * Jornada — datos reales.
@@ -81,21 +100,16 @@ export function MatchdayView({ id }: { id: string }) {
   async function removeMatchday() {
     if (deleting) return;
     setDeleting(true);
-    const res = await guardedWrite("eliminar la jornada", () =>
-      deleteMatchday(id),
-    );
+    const res = await guardedWrite("eliminar la jornada", () => deleteMatchday(id));
     setDeleting(false);
     if (!res.ok) {
       setConfirmDelete(false);
       setToast(res.reason);
       return;
     }
-    // La jornada ya no existe: quedarse aquí daría un 404 al recargar.
     window.location.href = "/temporadas";
   }
 
-  // Al llegar los datos se arma la tabla del acta: una fila por pista, con sus
-  // sets agrupados y la pareja de la alineación activa.
   useEffect(() => {
     if (!data) return;
     const byId = new Map(data.players.map((p) => [p.id, p]));
@@ -150,41 +164,47 @@ export function MatchdayView({ id }: { id: string }) {
 
   if (!teamId) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Sin equipo activo"
-          body="Entra con una cuenta que pertenezca a un equipo."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Sin equipo activo"
+            body="Entra con una cuenta que pertenezca a un equipo."
+          />
+        </Card>
+      </div>
     );
   }
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="No se pudo cargar la jornada"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="No se pudo cargar la jornada"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
   if (!data) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconCalendar size={34} />}
-          title="Sin jornada activa"
-          body="Abre una jornada del calendario para empezar."
-          action={
-            <Link href="/temporadas" className="btn btn-accent" style={{ padding: "13px 22px" }}>
-              Ver temporada
-            </Link>
-          }
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconCalendar size={24} />}
+            title="Sin jornada activa"
+            body="Abre una jornada del calendario para empezar."
+            action={
+              <BtnLink href="/temporadas" variant="accent">
+                Ver temporada
+              </BtnLink>
+            }
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -197,10 +217,10 @@ export function MatchdayView({ id }: { id: string }) {
     totals.us > totals.them ? "win" : totals.us < totals.them ? "lose" : "draw";
   const tone =
     outcome === "win"
-      ? { c: "var(--accent)", bg: "var(--accent-10)", b: "var(--accent-40)", l: "Ganada" }
+      ? { chip: "accent" as const, stat: "accent" as const, l: "Ganada" }
       : outcome === "lose"
-        ? { c: "var(--error)", bg: "var(--error-soft)", b: "var(--error)", l: "Perdida" }
-        : { c: "var(--warning)", bg: "var(--warning-soft)", b: "var(--warning)", l: "Empate" };
+        ? { chip: "error" as const, stat: "error" as const, l: "Perdida" }
+        : { chip: "warning" as const, stat: "warning" as const, l: "Empate" };
 
   function setScore(court: number, si: number, side: 0 | 1, v: string) {
     const n = Math.max(0, Math.min(9, Number(v.replace(/\D/g, "")) || 0));
@@ -251,438 +271,250 @@ export function MatchdayView({ id }: { id: string }) {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-      {/* ── Cabecera ─────────────────────────────────────────────── */}
-      <Card style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
-        <div className="amb" style={{ padding: 28 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 20,
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <Eyebrow>JORNADA · J·{m.round}</Eyebrow>
-              <h1 style={{ margin: "12px 0 0", fontSize: 32, lineHeight: 1.04 }}>
-                {activeTeam?.name} vs {m.opponent}
-              </h1>
-              <div
-                className="mono"
-                style={{
-                  marginTop: 10,
-                  fontSize: 12,
-                  letterSpacing: "0.1em",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {formatDate(m.date)}
-                {m.time ? ` · ${m.time.slice(0, 5)}` : ""}
-                {m.location ? ` · ${m.location}` : ""}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span className={"chip " + (m.isHome ? "" : "chip-mute")}>
-                {m.isHome ? "Local" : "Visitante"}
-              </span>
-              {closed && (
-                <span className="chip" style={{ color: tone.c, borderColor: tone.b }}>
-                  {tone.l}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {closed && (
-            <div
-              style={{
-                marginTop: 22,
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-                padding: "20px 24px",
-                borderRadius: 16,
-                background: tone.bg,
-                border: `1px solid ${tone.b}`,
-                color: tone.c,
-                flexWrap: "wrap",
-              }}
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: `/temporadas/${m.seasonId}`, label: "Temporada" }}
+        title={
+          <>
+            Jornada {m.round}
+            <span style={{ color: "var(--text-faint)", fontWeight: 500 }}> · </span>
+            vs {m.opponent}
+          </>
+        }
+        meta={[
+          formatDate(m.date),
+          m.time ? m.time.slice(0, 5) : null,
+          m.isHome ? "En casa" : "Fuera",
+          m.location ?? null,
+        ]}
+        actions={
+          <>
+            <Chip tone={closed ? tone.chip : m.status === "in_progress" ? "warning" : "mute"}>
+              {closed ? tone.l : m.status === "in_progress" ? "En juego" : "Pendiente"}
+            </Chip>
+            <BtnLink
+              href={`/jornada/${m.id}/alineacion`}
+              variant={closed ? "ghost" : "accent"}
+              icon={<IconUsers size={15} />}
             >
-              <IconLock size={18} />
-              <span
-                className="mono"
-                style={{ flex: 1, minWidth: 180, fontSize: 11, letterSpacing: "0.18em" }}
-              >
-                ACTA CERRADA · {tone.l.toUpperCase()}
-              </span>
-              <span className="mono" style={{ fontSize: 30, fontWeight: 700 }}>
-                {m.scoreFor ?? totals.us}–{m.scoreAgainst ?? totals.them}
-              </span>
-            </div>
-          )}
-        </div>
-      </Card>
+              {closed ? "Ver alineación" : "Editar alineación"}
+            </BtnLink>
+          </>
+        }
+      />
+
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat
+          label="Pistas"
+          value={`${closed ? (m.scoreFor ?? totals.us) : totals.us}–${closed ? (m.scoreAgainst ?? totals.them) : totals.them}`}
+          tone={closed ? tone.stat : undefined}
+          sub={closed ? `Acta cerrada · ${tone.l.toLowerCase()}` : allIn ? "Todas las pistas con resultado" : `${filled} de ${rows.length} con resultado`}
+        />
+        <Stat label="Juegos a favor" value={totals.gf} />
+        <Stat label="Juegos del rival" value={totals.ga} />
+        <Stat
+          label="Alineación"
+          value={rows.filter((r) => r.pair[0] && r.pair[1]).length}
+          unit={`/ ${Math.max(rows.length, 5)}`}
+          sub={rows.length === 0 ? "Sin parejas" : "parejas en pista"}
+        />
+      </StatRow>
 
       <div className="tw-jornada-grid">
         {/* ── Detalles ───────────────────────────────────────────── */}
-        <Card>
-          <Eyebrow>DETALLES DE LA JORNADA</Eyebrow>
-          <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-            {[
-              { label: "RIVAL", value: m.opponent },
-              { label: "FECHA", value: m.date ?? "—" },
-              { label: "HORA", value: m.time?.slice(0, 5) ?? "—" },
-              { label: "LUGAR", value: m.location ?? "—" },
-              { label: "DÓNDE SE JUEGA", value: m.isHome ? "En nuestras pistas" : "Fuera de casa" },
-            ].map((f) => (
-              <div key={f.label}>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: "0.2em",
-                    color: "var(--text-faint)",
-                    marginBottom: 7,
-                  }}
-                >
-                  {f.label}
-                </div>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1px solid var(--hair-strong)",
-                    background: "var(--bg-card-2)",
-                    fontSize: 14,
-                  }}
-                >
-                  {f.value}
-                </div>
-              </div>
-            ))}
-          </div>
+        <Card flush>
+          <CardHead title="Detalles" />
+          <div className="card-body">
+            <dl className="kv" style={{ margin: 0 }}>
+              <dt>Rival</dt>
+              <dd>{m.opponent}</dd>
+              <dt>Fecha</dt>
+              <dd>{m.date ? formatDate(m.date) : "—"}</dd>
+              <dt>Hora</dt>
+              <dd className="mono">{m.time?.slice(0, 5) ?? "—"}</dd>
+              <dt>Lugar</dt>
+              <dd>{m.location ?? "—"}</dd>
+              <dt>Dónde se juega</dt>
+              <dd>{m.isHome ? "En nuestras pistas" : "Fuera de casa"}</dd>
+            </dl>
 
-          <div style={{ height: 1, background: "var(--hair)", margin: "22px 0" }} />
+            <div className="divider" />
 
-          <Eyebrow style={{ marginBottom: 14 }}>FOTO DEL PARTIDO</Eyebrow>
-          {m.photoUrl ? (
-            <div
-              style={{
-                height: 150,
-                borderRadius: 12,
-                border: "1px solid var(--hair)",
-                backgroundImage: `url(${m.photoUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: 16,
-                borderRadius: 12,
-                border: "1px dashed var(--hair-strong)",
-                color: "var(--text-muted)",
-                fontSize: 13,
-              }}
-            >
-              <IconUpload size={19} />
-              Sin foto
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
+              Foto del partido
             </div>
-          )}
-
-          {isCaptain && (
-            <>
+            {m.photoUrl ? (
               <div
-                style={{ height: 1, background: "var(--hair)", margin: "22px 0" }}
-              />
-              <Eyebrow tone="error">ZONA DE PELIGRO</Eyebrow>
-              <p
                 style={{
-                  margin: "12px 0 14px",
-                  fontSize: 13,
+                  height: 150,
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--line)",
+                  backgroundImage: `url(${m.photoUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 14,
+                  borderRadius: "var(--r-md)",
+                  border: "1px dashed var(--line-strong)",
                   color: "var(--text-muted)",
-                  textWrap: "pretty",
+                  fontSize: 13,
                 }}
               >
-                Eliminar la jornada borra también su alineación, la
-                disponibilidad y los resultados. No se puede deshacer.
-              </p>
+                <IconUpload size={17} />
+                Sin foto todavía
+              </div>
+            )}
+          </div>
+
+          {isCaptain && (
+            <div className="card-foot" style={{ flexWrap: "wrap" }}>
+              <span style={{ flex: 1, minWidth: 160, fontSize: 12.5, color: "var(--text-muted)" }}>
+                Eliminar la jornada borra alineación, disponibilidad y resultados.
+              </span>
               {!confirmDelete ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => setConfirmDelete(true)}
-                  style={{ padding: "11px 18px", fontSize: 13 }}
-                >
+                <Btn size="sm" variant="danger-ghost" onClick={() => setConfirmDelete(true)}>
                   Eliminar jornada
-                </button>
+                </Btn>
               ) : (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setConfirmDelete(false)}
-                    disabled={deleting}
-                    style={{ padding: "11px 18px", fontSize: 13 }}
-                  >
+                <>
+                  <Btn size="sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>
                     Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => void removeMatchday()}
-                    disabled={deleting}
-                    style={{ padding: "11px 18px", fontSize: 13 }}
-                  >
+                  </Btn>
+                  <Btn size="sm" variant="danger" onClick={() => void removeMatchday()} disabled={deleting}>
                     {deleting ? "Eliminando…" : "Sí, eliminar"}
-                  </button>
-                </div>
+                  </Btn>
+                </>
               )}
-            </>
+            </div>
           )}
         </Card>
 
         {/* ── Marcador ───────────────────────────────────────────── */}
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div
-            style={{
-              padding: "22px 24px",
-              borderBottom: "1px solid var(--hair)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 14,
-              flexWrap: "wrap",
-            }}
-          >
-            <Eyebrow>{closed ? "MARCADOR · SOLO LECTURA" : "MARCADOR"}</Eyebrow>
-            <span
-              className="mono"
-              style={{
-                fontSize: 10.5,
-                letterSpacing: "0.16em",
-                color: allIn ? "var(--accent)" : "var(--warning)",
-              }}
-            >
-              {rows.length === 0
-                ? "SIN ALINEACIÓN"
-                : allIn
-                  ? "COMPLETO"
-                  : `${filled}/${rows.length} PISTAS`}
-            </span>
-          </div>
+        <Card flush>
+          <CardHead title={closed ? "Acta" : "Marcador"} count={rows.length ? `${filled}/${rows.length}` : undefined}>
+            {closed ? (
+              <Chip tone="mute" plain>
+                <IconLock size={12} /> Solo lectura
+              </Chip>
+            ) : rows.length > 0 ? (
+              <Chip tone={allIn ? "accent" : "warning"} plain>
+                {allIn ? "Completo" : "Faltan resultados"}
+              </Chip>
+            ) : null}
+          </CardHead>
 
           {rows.length === 0 ? (
             <EmptyState
-              icon={<IconAlert size={30} />}
+              compact
+              icon={<IconAlert size={22} />}
               title="Sin alineación"
               body="Aún no has decidido quién juega en cada pista."
               action={
-                <Link
-                  href={`/jornada/${m.id}/alineacion`}
-                  className="btn btn-accent"
-                  style={{ padding: "12px 20px" }}
-                >
+                <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent" size="sm">
                   Crear alineación
-                </Link>
+                </BtnLink>
               }
             />
           ) : (
             <>
               <div className="tw-score-wrap">
-              <div className="tw-score-head">
-                <span>Pista</span>
-                <span>Nosotros</span>
-                <span>Set 1</span>
-                <span>Set 2</span>
-                <span>Set 3</span>
-                <span>Veredicto</span>
-              </div>
+                <div className="tw-score-head">
+                  <span>Pista</span>
+                  <span>Pareja</span>
+                  <span>Set 1</span>
+                  <span>Set 2</span>
+                  <span>Set 3</span>
+                  <span style={{ textAlign: "right" }}>Resultado</span>
+                </div>
 
-              {rows.map((r) => {
-                const v = verdict(r);
-                const [a, b] = r.pair;
-                return (
-                  <div key={r.court} className="tw-score-row">
-                    <span
-                      className="mono"
-                      style={{ fontSize: 12, fontWeight: 700, color: "var(--text-faint)" }}
-                    >
-                      P{r.court}
-                    </span>
-
-                    <span style={{ minWidth: 0, fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {a && b ? `${shortName(a)} · ${shortName(b)}` : "Sin pareja"}
-                    </span>
-
-                    {[0, 1, 2].map((si) => (
-                      <span key={si} style={{ display: "flex", gap: 4 }}>
-                        {([0, 1] as const).map((side) => (
-                          <input
-                            key={side}
-                            type="text"
-                            inputMode="numeric"
-                            readOnly={closed}
-                            aria-label={`Pista ${r.court} set ${si + 1} ${side === 0 ? "nuestro" : "rival"}`}
-                            value={r.sets[si][side] || ""}
-                            placeholder="–"
-                            onChange={(e) => setScore(r.court, si, side, e.target.value)}
-                            className="mono tw-set-input"
-                          />
-                        ))}
+                {rows.map((r) => {
+                  const v = verdict(r);
+                  const [a, b] = r.pair;
+                  return (
+                    <div key={r.court} className="tw-score-row">
+                      <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-faint)" }}>
+                        P{r.court}
                       </span>
-                    ))}
 
-                    <span
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      {r.forfeit ? (
-                        <span className="chip chip-warning">
-                          W.O. {r.forfeitUs ? "a favor" : "en contra"}
-                        </span>
-                      ) : v === "none" ? (
-                        <span
-                          className="mono"
-                          style={{
-                            fontSize: 9.5,
-                            letterSpacing: "0.16em",
-                            color: "var(--text-faint)",
-                          }}
-                        >
-                          SIN RESULTADO
-                        </span>
-                      ) : (
-                        <span
-                          className="chip"
-                          style={{
-                            color: v === "win" ? "var(--accent)" : "var(--error)",
-                            borderColor: v === "win" ? "var(--accent-40)" : "var(--error)",
-                          }}
-                        >
-                          {v === "win" ? "Victoria" : "Derrota"}
-                        </span>
-                      )}
-                      {!closed && isCaptain && (
-                        <button
-                          type="button"
-                          onClick={() => setWoFor(r.court)}
-                          aria-label={`Marcar W.O. en la pista ${r.court}`}
-                          className="mono"
-                          style={{
-                            border: "1px solid var(--hair-strong)",
-                            background: "transparent",
-                            color: "var(--text-faint)",
-                            borderRadius: 8,
-                            padding: "5px 8px",
-                            fontSize: 9,
-                            letterSpacing: "0.12em",
-                            cursor: "pointer",
-                          }}
-                        >
-                          W.O.
-                        </button>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
+                      <span className="truncate" style={{ minWidth: 0, fontSize: 13.5, fontWeight: 700 }}>
+                        {a && b ? `${shortName(a)} · ${shortName(b)}` : "Sin pareja"}
+                      </span>
 
+                      {[0, 1, 2].map((si) => (
+                        <span key={si} style={{ display: "flex", gap: 4 }}>
+                          {([0, 1] as const).map((side) => (
+                            <input
+                              key={side}
+                              type="text"
+                              inputMode="numeric"
+                              readOnly={closed}
+                              aria-label={`Pista ${r.court} set ${si + 1} ${side === 0 ? "nuestro" : "rival"}`}
+                              value={r.sets[si][side] || ""}
+                              placeholder="–"
+                              onChange={(e) => setScore(r.court, si, side, e.target.value)}
+                              className="mono tw-set-input"
+                            />
+                          ))}
+                        </span>
+                      ))}
+
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                        {r.forfeit ? (
+                          <Chip tone="warning">W.O. {r.forfeitUs ? "a favor" : "en contra"}</Chip>
+                        ) : v === "none" ? (
+                          <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>Sin resultado</span>
+                        ) : (
+                          <Chip tone={v === "win" ? "accent" : "error"}>
+                            {v === "win" ? "Victoria" : "Derrota"}
+                          </Chip>
+                        )}
+                        {!closed && isCaptain && (
+                          <button
+                            type="button"
+                            onClick={() => setWoFor(r.court)}
+                            aria-label={`Marcar W.O. en la pista ${r.court}`}
+                            className="btn btn-quiet btn-sm"
+                            style={{ minHeight: 28, padding: "0 8px", fontSize: 12 }}
+                          >
+                            W.O.
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="tw-score-totals">
-                <div>
-                  <div className="mono tw-stat-label">JUEGOS A FAVOR</div>
-                  <div className="mono" style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>
-                    {totals.gf}
-                  </div>
-                </div>
-                <div>
-                  <div className="mono tw-stat-label">JUEGOS DEL RIVAL</div>
-                  <div className="mono" style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>
-                    {totals.ga}
-                  </div>
-                </div>
-                <div>
-                  <div className="mono tw-stat-label">PISTAS</div>
-                  <div
-                    className="mono"
-                    style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: tone.c }}
-                  >
-                    {totals.us}–{totals.them}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ padding: "18px 24px", borderTop: "1px solid var(--hair)" }}>
+              <div className="card-foot" style={{ flexWrap: "wrap" }}>
                 {closed ? (
-                  <div
-                    className="mono"
-                    style={{
-                      fontSize: 10.5,
-                      letterSpacing: "0.16em",
-                      color: "var(--text-faint)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
                     <IconLock size={14} />
-                    NO SE PUEDEN MODIFICAR RESULTADOS.
-                  </div>
+                    Los resultados ya no se pueden modificar.
+                  </span>
                 ) : (
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}
-                  >
+                  <>
                     {isCaptain && (
-                      <button
-                        type="button"
-                        className="btn btn-accent"
-                        onClick={() => setConfirmClose(true)}
-                        style={{ padding: "13px 22px", fontSize: 13.5 }}
-                      >
-                        Cerrar acta · manual
-                      </button>
+                      <Btn variant="accent" onClick={() => setConfirmClose(true)} icon={<IconCheck size={15} />}>
+                        Cerrar acta
+                      </Btn>
                     )}
                     {!allIn && (
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 10.5,
-                          letterSpacing: "0.14em",
-                          color: "var(--warning)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
+                      <span style={{ fontSize: 12.5, color: "var(--warning)", display: "flex", alignItems: "center", gap: 6 }}>
                         <IconAlert size={14} />
-                        SIN TODOS LOS RESULTADOS
+                        Faltan resultados en {rows.length - filled} {rows.length - filled === 1 ? "pista" : "pistas"}
                       </span>
                     )}
                     {!WRITES_ENABLED && (
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 9.5,
-                          letterSpacing: "0.14em",
-                          color: "var(--text-faint)",
-                        }}
-                      >
-                        SOLO LECTURA
-                      </span>
+                      <span style={{ fontSize: 12, color: "var(--text-faint)" }}>Solo lectura</span>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
             </>
@@ -690,62 +522,44 @@ export function MatchdayView({ id }: { id: string }) {
         </Card>
 
         {/* ── Alineación ─────────────────────────────────────────── */}
-        <Card>
-          <Eyebrow>ALINEACIÓN</Eyebrow>
+        <Card flush>
+          <CardHead title="Alineación">
+            <Link href={`/jornada/${m.id}/alineacion`} className="link-action">
+              {closed ? "Ver" : "Editar"}
+            </Link>
+          </CardHead>
           {rows.length === 0 ? (
-            <p style={{ margin: "18px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
+            <p style={{ margin: 0, padding: 18, fontSize: 13, color: "var(--text-muted)" }}>
               Sin alineación todavía.
             </p>
           ) : (
-            <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 8 }}>
-              {rows.map((r) => {
-                const [a, b] = r.pair;
-                if (!a || !b) return null;
-                return (
-                  <div
-                    key={r.court}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "11px 13px",
-                      borderRadius: 10,
-                      background: "var(--bg-card-2)",
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--text-faint)" }}
-                    >
-                      P{r.court}
-                    </span>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>
+            rows.map((r) => {
+              const [a, b] = r.pair;
+              if (!a || !b) return null;
+              return (
+                <div key={r.court} className="list-row" style={{ minHeight: 48, padding: "8px 18px" }}>
+                  <span className="mono" style={{ width: 24, fontSize: 12, color: "var(--text-faint)" }}>
+                    P{r.court}
+                  </span>
+                  <span className="list-row-main">
+                    <span className="list-row-title" style={{ fontSize: 13.5 }}>
                       {shortName(a)} · {shortName(b)}
                     </span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--accent)" }}>
-                      {a.pts + b.pts}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  </span>
+                  <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                    {a.pts + b.pts}
+                  </span>
+                </div>
+              );
+            })
           )}
-
-          <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-            <Link
-              href={`/jornada/${m.id}/alineacion`}
-              className="btn btn-ghost"
-              style={{ padding: "12px 18px", fontSize: 13.5 }}
-            >
-              {closed ? "Ver alineación" : "Editar alineación"}
-            </Link>
-            <Link
-              href={`/jornada/${m.id}/resultados`}
-              className="btn btn-ghost"
-              style={{ padding: "12px 18px", fontSize: 13.5 }}
-            >
-              Meter el resultado de tu partido
-            </Link>
+          <div className="card-foot" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+            <BtnLink href={`/jornada/${m.id}/disponibilidad`} variant="quiet" block>
+              Disponibilidad de la plantilla
+            </BtnLink>
+            <BtnLink href={`/jornada/${m.id}/resultados`} variant="ghost" block>
+              Meter el resultado de mi partido
+            </BtnLink>
           </div>
         </Card>
       </div>
@@ -755,44 +569,20 @@ export function MatchdayView({ id }: { id: string }) {
         open={woFor !== null}
         onClose={() => setWoFor(null)}
         labelledBy="wo-titulo"
-        width={420}
+        width={440}
+        title={`W.O. en la pista ${woFor}`}
+        lede="El equipo que sí se presenta suma el punto. Elige quién no se ha presentado."
       >
-        <h2 id="wo-titulo" style={{ fontSize: 22 }}>
-          W.O. en la pista {woFor}
-        </h2>
-        <p
-          style={{
-            margin: "10px 0 22px",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          El equipo que sí se presenta suma el punto. Elige quién no se ha
-          presentado.
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => woFor && applyWalkover(woFor, "us")}
-            style={{ padding: "13px 18px", fontSize: 13.5, justifyContent: "flex-start" }}
-          >
-            W.O. a favor · no se presenta el rival
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={() => woFor && applyWalkover(woFor, "them")}
-            style={{ padding: "13px 18px", fontSize: 13.5, justifyContent: "flex-start" }}
-          >
-            W.O. en contra · no nos presentamos
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={() => woFor && applyWalkover(woFor, null)}
-            style={{ padding: "13px 18px", fontSize: 13.5, justifyContent: "flex-start" }}
-          >
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Btn onClick={() => woFor && applyWalkover(woFor, "us")} style={{ justifyContent: "flex-start" }}>
+            W.O. a favor: no se presenta el rival
+          </Btn>
+          <Btn onClick={() => woFor && applyWalkover(woFor, "them")} style={{ justifyContent: "flex-start" }}>
+            W.O. en contra: no nos presentamos
+          </Btn>
+          <Btn variant="quiet" onClick={() => woFor && applyWalkover(woFor, null)} style={{ justifyContent: "flex-start" }}>
             Quitar el W.O.
-          </button>
+          </Btn>
         </div>
       </Modal>
 
@@ -801,54 +591,33 @@ export function MatchdayView({ id }: { id: string }) {
         open={confirmClose}
         onClose={() => setConfirmClose(false)}
         labelledBy="cerrar-titulo"
-      >
-        <h2 id="cerrar-titulo" style={{ fontSize: 22 }}>
-          ¿Cerrar el acta?
-        </h2>
-        <p
-          style={{
-            margin: "10px 0 0",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          {allIn
+        title="¿Cerrar el acta?"
+        lede={
+          allIn
             ? `Quedará ${totals.us}–${totals.them}. Después no se pueden modificar los resultados.`
-            : "Faltan resultados en alguna pista. Si cierras ahora, esas pistas quedan sin puntuar."}
-        </p>
-        {!WRITES_ENABLED && (
-          <p
-            style={{
-              margin: "16px 0 0",
-              padding: "12px 14px",
-              borderRadius: 10,
-              background: "var(--warning-soft)",
-              border: "1px solid var(--warning)",
-              color: "var(--warning)",
-              fontSize: 12.5,
-            }}
-          >
-            {READ_ONLY_MESSAGE}
-          </p>
+            : "Faltan resultados en alguna pista. Si cierras ahora, esas pistas quedan sin puntuar."
+        }
+        footer={
+          <>
+            <Btn onClick={() => setConfirmClose(false)}>Cancelar</Btn>
+            <Btn variant="accent" onClick={() => void closeActa()} icon={<IconCheck size={15} />}>
+              Cerrar acta
+            </Btn>
+          </>
+        }
+      >
+        {!WRITES_ENABLED ? (
+          <Note tone="warning">{READ_ONLY_MESSAGE}</Note>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <IconTile mute>
+              <IconLock size={15} />
+            </IconTile>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              El acta cerrada queda como resultado oficial de la jornada.
+            </span>
+          </div>
         )}
-        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => setConfirmClose(false)}
-            style={{ padding: "12px 20px", fontSize: 13.5 }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="btn btn-accent"
-            onClick={() => void closeActa()}
-            style={{ padding: "12px 22px", fontSize: 13.5 }}
-          >
-            <IconCheck size={15} />
-            Cerrar acta
-          </button>
-        </div>
       </Modal>
 
       {toast && (

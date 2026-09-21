@@ -9,6 +9,7 @@ import {
   fetchFcpGroupActas,
   fetchFcpGroups,
   fetchFcpLeagues,
+  fetchFcpGroupHeader,
   fetchFcpMatches,
   fetchFcpPlayerHistory,
   fetchFcpPlayerProfile,
@@ -27,9 +28,32 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Eyebrow, Modal } from "@/components/ui";
-import { EmptyState, Skeleton, SkeletonCard } from "@/components/states";
-import { IconChevronRight, IconFlag, IconSearch } from "@/components/Icon";
+import {
+  Avatar,
+  Btn,
+  Card,
+  CardHead,
+  Chip,
+  IconTile,
+  InputWrap,
+  ListRow,
+  Modal,
+  PageHeader,
+  SectionHead,
+  Segmented,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, Skeleton, SkeletonCard, SkeletonPage } from "@/components/states";
+import {
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconFlag,
+  IconSearch,
+  IconUser,
+  IconUsers,
+} from "@/components/Icon";
 
 /**
  * Federación — datos reales de las tablas `fcp_*`, con lectura pública
@@ -55,70 +79,52 @@ const FEDERATIONS = [
 /* ═══ 01 · SELECTOR ═══════════════════════════════════════════════ */
 export function FederationPicker() {
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Eyebrow>FEDERACIONES</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Elige federación</h1>
-        <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-          Clasificaciones, jornadas y jugadores federados.
-        </p>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        title="Elige federación"
+        lede="Clasificaciones, jornadas y jugadores federados."
+      />
 
       <div className="tw-club-teams">
         {FEDERATIONS.map((f) => {
           const inner = (
-            <Card style={{ padding: 22, height: "100%", opacity: f.active ? 1 : 0.5 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Card
+              hover={f.active}
+              style={{
+                height: "100%",
+                opacity: f.active ? 1 : 0.6,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <IconTile mute={!f.active}>
+                <IconFlag size={16} />
+              </IconTile>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
+                  {f.name}
+                </span>
                 <span
                   style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 11,
-                    background: f.active ? "var(--accent-10)" : "var(--bg-card-2)",
-                    color: f.active ? "var(--accent)" : "var(--text-faint)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flex: "none",
+                    display: "block",
+                    marginTop: 2,
+                    fontSize: 12.5,
+                    color: "var(--text-muted)",
                   }}
                 >
-                  <IconFlag size={18} />
+                  {f.short}
                 </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
-                    {f.name}
-                  </span>
-                  <span
-                    className="mono"
-                    style={{
-                      display: "block",
-                      marginTop: 4,
-                      fontSize: 10,
-                      letterSpacing: "0.16em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    {f.short}
-                  </span>
+              </span>
+              {f.active ? (
+                <span className="list-row-chev">
+                  <IconChevronRight size={16} />
                 </span>
-              </div>
-              <div style={{ marginTop: 18 }}>
-                {f.active ? (
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: "var(--accent)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                    }}
-                  >
-                    Explorar <IconChevronRight size={14} />
-                  </span>
-                ) : (
-                  <span className="chip chip-mute">Próximamente</span>
-                )}
-              </div>
+              ) : (
+                <Chip tone="mute" plain>
+                  Próximamente
+                </Chip>
+              )}
             </Card>
           );
           return f.active ? (
@@ -308,78 +314,52 @@ export function FederationExplore({ slug }: { slug: string }) {
     label: `${l.temporada ?? l.idLiga}${l.upcoming ? " · en inscripción" : ""}`,
   }));
 
+  // El contador habla de lo que hay debajo, no siempre de grupos.
+  const countLabel =
+    tab === "rankings"
+      ? `${(ranking.data ?? []).length} jugadores en el ranking`
+      : tab === "jugadores"
+        ? `${(players.data ?? []).length} jugadores`
+        : tab === "equipos"
+          ? `${(teams.data ?? []).length} equipos`
+          : groups.loading
+            ? "Cargando…"
+            : `${shownGroups.length} de ${allGroups.length} grupos`;
+
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>FEDERACIÓN CÁNTABRA</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>
-          Federación Cántabra de Pádel
-        </h1>
-        <p
-          className="mono"
-          style={{
-            margin: "8px 0 0",
-            fontSize: 10.5,
-            letterSpacing: "0.14em",
-            color: "var(--text-faint)",
-          }}
-        >
-          {/* El contador habla de lo que hay debajo, no siempre de grupos. */}
-          {tab === "rankings"
-            ? `${(ranking.data ?? []).length} JUGADORES EN EL RANKING`
-            : tab === "jugadores"
-              ? `${(players.data ?? []).length} JUGADORES`
-              : tab === "equipos"
-                ? `${(teams.data ?? []).length} EQUIPOS`
-                : groups.loading
-                  ? "CARGANDO…"
-                  : `${shownGroups.length} DE ${allGroups.length} GRUPOS`}
-        </p>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: "/federacion", label: "Federaciones" }}
+        title="Federación Cántabra de Pádel"
+        lede="Clasificaciones, jornadas y jugadores federados."
+        meta={[countLabel]}
+      />
 
-      <Card style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 12,
-            border: "1px solid var(--hair-strong)",
-            background: "var(--bg-card-2)",
-          }}
-        >
-          <IconSearch size={18} />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={
-              tab === "jugadores"
-                ? "Busca un jugador (3 letras)…"
-                : tab === "equipos"
-                  ? "Busca un equipo…"
-                  : tab === "rankings"
-                    ? "Busca en el ranking…"
-                    : "Busca un grupo…"
-            }
-            aria-label="Buscar en la federación"
-            style={{
-              flex: 1,
-              minWidth: 0,
-              border: "none",
-              background: "transparent",
-              color: "var(--text)",
-              fontSize: 15,
-              outline: "none",
-              fontFamily: "'Satoshi', sans-serif",
-            }}
+      <Card style={{ marginBottom: 16 }}>
+        <div className="tw-toolbar" style={{ marginBottom: 0 }}>
+          <InputWrap icon={<IconSearch size={15} />}>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={
+                tab === "jugadores"
+                  ? "Busca un jugador (3 letras)…"
+                  : tab === "equipos"
+                    ? "Busca un equipo…"
+                    : tab === "rankings"
+                      ? "Busca en el ranking…"
+                      : "Busca un grupo…"
+              }
+              aria-label="Buscar en la federación"
+            />
+          </InputWrap>
+          <Segmented
+            label="Sección"
+            value={tab}
+            onChange={setTab}
+            options={TABS.map(([v, l]) => ({ value: v, label: l }))}
           />
-        </div>
-
-        {/* Pestañas — mismo control segmentado (píldora mint) que la app. */}
-        <div style={{ marginTop: 14 }}>
-          <TabBar items={TABS} value={tab} onChange={setTab} />
         </div>
 
         {/* Filtros en línea. En Rankings el grupo no pinta nada: la lista es
@@ -437,7 +417,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : groups.error ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
+              icon={<IconFlag size={22} />}
               title="No se pudieron cargar los grupos"
               body={groups.error}
             />
@@ -445,7 +425,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : shownGroups.length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
+              icon={<IconFlag size={22} />}
               title="No hay grupos con esos filtros"
               body="Prueba a quitar la categoría o el género."
             />
@@ -458,21 +438,13 @@ export function FederationExplore({ slug }: { slug: string }) {
                 href={`/federacion/${slug}/grupo/${encodeURIComponent(g.idGrupo)}`}
                 style={{ color: "inherit" }}
               >
-                <Card style={{ padding: 20, height: "100%" }}>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>{g.nombre}</div>
-                  <div
-                    className="mono"
-                    style={{
-                      marginTop: 8,
-                      fontSize: 10,
-                      letterSpacing: "0.14em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
+                <Card hover style={{ height: "100%" }}>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{g.nombre}</div>
+                  <div style={{ marginTop: 4, fontSize: 12.5, color: "var(--text-muted)" }}>
                     {[
-                      g.genero === "F" ? "FEMENINO" : "MASCULINO",
+                      g.genero === "F" ? "Femenino" : "Masculino",
                       g.categoria,
-                      g.esPlayoff ? "FASE FINAL" : null,
+                      g.esPlayoff ? "Fase final" : null,
                       g.temporada,
                     ]
                       .filter(Boolean)
@@ -491,7 +463,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : teams.error ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
+              icon={<IconFlag size={22} />}
               title="Error en la búsqueda"
               body={teams.error}
             />
@@ -499,7 +471,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : (teams.data ?? []).length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconSearch size={34} />}
+              icon={<IconSearch size={22} />}
               title="Sin equipos"
               body="Escribe un nombre o acota por categoría y grupo."
             />
@@ -512,8 +484,19 @@ export function FederationExplore({ slug }: { slug: string }) {
                 href={`/federacion/${slug}/equipo/${t.idEquipo}`}
                 style={{ color: "inherit" }}
               >
-                <Card style={{ padding: 18, height: "100%" }}>
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>{t.equipo}</div>
+                <Card
+                  hover
+                  style={{ height: "100%", display: "flex", alignItems: "center", gap: 12 }}
+                >
+                  <IconTile small mute>
+                    <IconUsers size={14} />
+                  </IconTile>
+                  <span className="truncate" style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>
+                    {t.equipo}
+                  </span>
+                  <span className="list-row-chev">
+                    <IconChevronRight size={16} />
+                  </span>
                 </Card>
               </Link>
             ))}
@@ -525,7 +508,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         (term.length < 3 ? (
           <Card>
             <EmptyState
-              icon={<IconSearch size={34} />}
+              icon={<IconSearch size={22} />}
               title="Escribe el nombre de un jugador"
               body="Mínimo 3 letras. Hay más de 27.000 jugadores federados."
             />
@@ -535,48 +518,47 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : players.error ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
+              icon={<IconFlag size={22} />}
               title="Error en la búsqueda"
               body={players.error}
             />
           </Card>
         ) : (players.data ?? []).length === 0 ? (
           <Card>
-            <EmptyState icon={<IconSearch size={34} />} title="Sin coincidencias" />
+            <EmptyState icon={<IconSearch size={22} />} title="Sin coincidencias" />
           </Card>
         ) : (
-          <Card style={{ padding: 0, overflow: "hidden" }}>
-            {(players.data ?? []).map((p, i, arr) => (
+          <Card flush>
+            {(players.data ?? []).map((p, i) => (
               <Link
                 key={p.idJugador}
                 href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
+                className="tw-fcp-row"
                 style={{ color: "inherit" }}
               >
-                <div
-                  className="tw-fcp-row"
+                <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                  {i + 1}
+                </span>
+                <span className="truncate" style={{ fontSize: 14, fontWeight: 700 }}>
+                  {p.nombre}
+                </span>
+                <span className="truncate" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                  {p.nombreEquipo ?? "—"}
+                </span>
+                <span
+                  className="mono"
                   style={{
-                    borderBottom:
-                      i === arr.length - 1 ? "none" : "1px solid var(--hair)",
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    color: "var(--accent)",
+                    textAlign: "right",
                   }}
                 >
-                  <span
-                    className="mono"
-                    style={{ fontSize: 11, color: "var(--text-faint)" }}
-                  >
-                    {i + 1}
-                  </span>
-                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{p.nombre}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    {p.nombreEquipo ?? "—"}
-                  </span>
-                  <span
-                    className="mono"
-                    style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
-                  >
-                    {p.puntos}
-                  </span>
-                  <IconChevronRight size={15} />
-                </div>
+                  {p.puntos}
+                </span>
+                <span className="list-row-chev">
+                  <IconChevronRight size={16} />
+                </span>
               </Link>
             ))}
           </Card>
@@ -589,7 +571,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : ranking.error ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
+              icon={<IconFlag size={22} />}
               title="No se pudo cargar el ranking"
               body={ranking.error}
             />
@@ -597,46 +579,36 @@ export function FederationExplore({ slug }: { slug: string }) {
         ) : (ranking.data ?? []).length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
+              icon={<IconFlag size={22} />}
               title="No hay ranking para esa combinación"
               body="Cambia el género o la categoría."
             />
           </Card>
         ) : (
-          <Card style={{ padding: 0, overflow: "hidden" }}>
+          <Card flush>
             <div className="tw-fcp-rank-row tw-fcp-rank-head">
-              <span>#</span>
+              <span>Pos</span>
               <span>Jugador</span>
               <span style={{ textAlign: "right" }}>Puntos</span>
             </div>
-            {(ranking.data ?? []).map((r, i, arr) => (
-              <div
-                key={`${r.posicion}-${r.name}`}
-                className="tw-fcp-rank-row"
-                style={{
-                  borderBottom:
-                    i === arr.length - 1 ? "none" : "1px solid var(--hair)",
-                }}
-              >
+            {(ranking.data ?? []).map((r) => (
+              <div key={`${r.posicion}-${r.name}`} className="tw-fcp-rank-row">
                 <span
                   className="mono"
                   style={{
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: 700,
                     color: r.posicion <= 3 ? "var(--accent)" : "var(--text-faint)",
                   }}
                 >
                   {r.posicion}
                 </span>
-                <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
+                <span className="truncate" style={{ fontSize: 14, fontWeight: 600 }}>
+                  {r.name}
+                </span>
                 <span
                   className="mono"
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    textAlign: "right",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
+                  style={{ fontSize: 13.5, fontWeight: 700, textAlign: "right" }}
                 >
                   {r.puntos ?? "—"}
                 </span>
@@ -648,7 +620,7 @@ export function FederationExplore({ slug }: { slug: string }) {
   );
 }
 
-/* ═══ Primitivas compartidas del rediseño "scoreboard" ════════════ */
+/* ═══ Primitivas compartidas ══════════════════════════════════════ */
 
 const fmtInt = (n: number) => n.toLocaleString("es-ES");
 
@@ -672,11 +644,11 @@ function FormPips({ form, box = 18 }: { form: ("V" | "D")[]; box?: number }) {
           style={{
             width: box,
             height: box,
-            borderRadius: 5,
+            borderRadius: "var(--r-xs)",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 9.5,
+            fontSize: 11,
             fontWeight: 700,
             background: r === "V" ? "var(--accent-10)" : "var(--error-soft)",
             color: r === "V" ? "var(--accent)" : "var(--error)",
@@ -689,143 +661,6 @@ function FormPips({ form, box = 18 }: { form: ("V" | "D")[]; box?: number }) {
   );
 }
 
-/** Celda de estadística: valor mono grande + label mono con tracking. */
-function StatTile({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-      <span
-        className="mono"
-        style={{ fontSize: 19, fontWeight: 800, color: color ?? "var(--text)", lineHeight: 1 }}
-      >
-        {value}
-      </span>
-      <span
-        className="mono"
-        style={{ fontSize: 9.5, letterSpacing: "0.14em", color: "var(--text-faint)" }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
-/** Cabecera de lista: eyebrow mono a la izquierda + acción opcional a la derecha. */
-function ListHeader({
-  title,
-  action,
-  onAction,
-}: {
-  title: string;
-  action?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingBottom: 10,
-        borderBottom: "1px solid var(--hair)",
-        marginBottom: 12,
-      }}
-    >
-      <span
-        className="mono"
-        style={{ fontSize: 11, letterSpacing: "0.2em", color: "var(--text-muted)", fontWeight: 600 }}
-      >
-        {title}
-      </span>
-      {action ? (
-        <button
-          type="button"
-          onClick={onAction}
-          style={{
-            border: "none",
-            background: "transparent",
-            cursor: onAction ? "pointer" : "default",
-            fontFamily: "var(--font-mono), monospace",
-            fontSize: 11,
-            letterSpacing: "0.08em",
-            fontWeight: 600,
-            color: "var(--accent)",
-          }}
-        >
-          {action}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Control segmentado tipo "scoreboard" (píldora conectada). Espejo del
- * `Segmented` de la app (fcpUi.tsx): contenedor bgCard radio 999, y la pestaña
- * activa es MINT SÓLIDO con texto invertido — no un botón con borde. Es el
- * elemento de nav de todas las vistas de federación, así que iguala mucho el
- * aspecto respecto a la app.
- */
-function TabBar<T extends string>({
-  items,
-  value,
-  onChange,
-}: {
-  items: [T, string][];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 2,
-        background: "var(--bg-card)",
-        border: "1px solid var(--hair)",
-        borderRadius: 999,
-        padding: 4,
-      }}
-    >
-      {items.map(([k, label]) => {
-        const on = value === k;
-        return (
-          <button
-            key={k}
-            type="button"
-            onClick={() => onChange(k)}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              padding: "10px 8px",
-              borderRadius: 999,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 12.5,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              background: on ? "var(--accent)" : "transparent",
-              color: on ? "var(--text-inverse)" : "var(--text-muted)",
-              boxShadow: on ? "0 0 10px rgba(0, 223, 130, 0.28)" : "none",
-              transition: "background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease)",
-            }}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /* ═══ 03 · GRUPO ══════════════════════════════════════════════════ */
 
 // Columnas de la tabla de clasificación (comparte plantilla cabecera + filas).
@@ -835,14 +670,16 @@ const STAND_COLS =
 type GroupTab = "clasificacion" | "jornadas" | "cuadro";
 
 export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
-  const { user } = useSession();
+  const { user, activeTeam } = useSession();
   const esPlayoff = /^fase/i.test(decodeURIComponent(id));
   const [tab, setTab] = useState<GroupTab>(esPlayoff ? "cuadro" : "clasificacion");
 
   const standings = useAsync(() => fetchFcpStandings(id), [id, user?.id]);
   // Los partidos se cargan siempre: alimentan tanto las jornadas como la meta.
   const matches = useAsync(() => fetchFcpMatches(id), [id, user?.id]);
-  if (standings.loading) return <SkeletonCard />;
+  // El nombre legible del grupo: la URL sólo trae su identificador.
+  const header = useAsync(() => fetchFcpGroupHeader(id), [id]);
+  if (standings.loading) return <SkeletonPage />;
 
   const rows = standings.data ?? [];
   const mData = matches.data ?? [];
@@ -852,6 +689,9 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
   const jornadaTotal = mData.reduce((mx, m) => Math.max(mx, m.jornada ?? 0), 0);
   const jornadaActual = jugadas.length ? Math.max(...jugadas) : 0;
   const finalizada = jornadaTotal > 0 && jornadaActual >= jornadaTotal;
+
+  // El equipo propio (si hay sesión con equipo) se resalta en la tabla.
+  const myName = activeTeam?.name?.trim().toLowerCase() ?? null;
 
   const tabs: [GroupTab, string][] = esPlayoff
     ? [
@@ -865,29 +705,35 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
       ];
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ marginBottom: 18 }}>
-        <Eyebrow>FEDERACIÓN CÁNTABRA · GRUPO</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>{decodeURIComponent(id)}</h1>
-        {tab !== "cuadro" ? (
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            {rows.length > 0 ? (
-              <span className="chip chip-mute">{rows.length} equipos</span>
-            ) : null}
-            {jornadaTotal > 0 ? (
-              <span className="chip chip-mute">
-                J·{jornadaActual}/{jornadaTotal}
-              </span>
-            ) : null}
-            <span className={finalizada ? "chip" : "chip chip-mute"}>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: `/federacion/${slug}`, label: "Federación" }}
+        title={header.data?.nombre ?? decodeURIComponent(id)}
+        meta={
+          tab !== "cuadro"
+            ? [
+                header.data?.temporada ?? null,
+                rows.length > 0 ? `${rows.length} equipos` : null,
+                jornadaTotal > 0 ? `Jornada ${jornadaActual} de ${jornadaTotal}` : null,
+              ]
+            : undefined
+        }
+        actions={
+          tab !== "cuadro" ? (
+            <Chip tone={finalizada ? "accent" : "mute"}>
               {finalizada ? "Finalizada" : "En curso"}
-            </span>
-          </div>
-        ) : null}
-      </div>
+            </Chip>
+          ) : undefined
+        }
+      />
 
-      <div style={{ marginBottom: 18 }}>
-        <TabBar items={tabs} value={tab} onChange={setTab} />
+      <div style={{ marginBottom: 16 }}>
+        <Segmented
+          label="Vista del grupo"
+          value={tab}
+          onChange={setTab}
+          options={tabs.map(([v, l]) => ({ value: v, label: l }))}
+        />
       </div>
 
       {tab === "cuadro" ? (
@@ -896,27 +742,27 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
         standings.error ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
-              title="Sin clasificación disponible."
+              icon={<IconFlag size={22} />}
+              title="Sin clasificación disponible"
               body={standings.error}
             />
           </Card>
         ) : rows.length === 0 ? (
           <Card>
             <EmptyState
-              icon={<IconFlag size={34} />}
-              title="Sin clasificación disponible."
+              icon={<IconFlag size={22} />}
+              title="Sin clasificación disponible"
               body="Aún no hay datos federativos sincronizados para este grupo."
             />
           </Card>
         ) : (
-          <Card style={{ padding: 0, overflow: "hidden" }}>
+          <Card flush>
             <div className="tw-roster-scroll">
               <div
                 className="tw-fcp-head"
                 style={{ gridTemplateColumns: STAND_COLS, minWidth: 700 }}
               >
-                {["POS", "EQUIPO", "PJ", "PG", "DIF", "SETS +", "SETS −", "PTS", "RACHA"].map(
+                {["Pos", "Equipo", "PJ", "PG", "Dif", "Sets +", "Sets −", "Pts", "Racha"].map(
                   (h) => (
                     <span key={h}>{h}</span>
                   )
@@ -924,15 +770,33 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
               </div>
               {rows.map((t) => {
                 const dif = t.setsFavor - t.setsContra;
+                const mine = myName != null && t.equipo.trim().toLowerCase() === myName;
                 return (
                   <Link
                     key={t.idEquipo}
                     href={`/federacion/${slug}/equipo/${t.idEquipo}`}
                     className="tw-fcp-table-row"
-                    style={{ color: "inherit", gridTemplateColumns: STAND_COLS, minWidth: 700 }}
+                    style={{
+                      color: "inherit",
+                      gridTemplateColumns: STAND_COLS,
+                      minWidth: 700,
+                      background: mine ? "var(--accent-10)" : undefined,
+                    }}
                   >
-                    <span className="mono">{t.posicion}</span>
-                    <span style={{ fontWeight: 700 }}>{t.equipo}</span>
+                    <span className="mono" style={{ color: "var(--text-muted)" }}>
+                      {t.posicion}
+                    </span>
+                    <span
+                      className="truncate"
+                      style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <span className="truncate">{t.equipo}</span>
+                      {mine ? (
+                        <Chip plain style={{ flex: "none" }}>
+                          Tu equipo
+                        </Chip>
+                      ) : null}
+                    </span>
                     <span className="mono">{t.pj}</span>
                     <span className="mono">{t.pg}</span>
                     <span className="mono" style={{ color: "var(--text-muted)" }}>
@@ -962,7 +826,7 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
         <SkeletonCard />
       ) : mData.length === 0 ? (
         <Card>
-          <EmptyState icon={<IconFlag size={34} />} title="Sin jornadas registradas." />
+          <EmptyState icon={<IconFlag size={22} />} title="Sin jornadas registradas" />
         </Card>
       ) : (
         <FcpGroupSchedule idGrupo={id} matches={mData} />
@@ -1009,146 +873,128 @@ function FcpGroupSchedule({
   }, [matches]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {groups.map((g) => {
         const date = g.items.find((m) => m.fecha)?.fecha ?? null;
         return (
-          <div key={g.label}>
-            <div
-              style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}
-            >
-              <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.01em" }}>
-                {g.label}
-              </span>
-              <span style={{ flex: 1, height: 1, background: "var(--hair)" }} />
+          <Card flush key={g.label}>
+            <CardHead title={g.label} count={g.items.length}>
               {date ? (
-                <span
-                  className="mono"
-                  style={{ fontSize: 10.5, letterSpacing: "0.1em", color: "var(--text-faint)" }}
-                >
+                <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)" }}>
                   {date}
                 </span>
               ) : null}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {g.items.map((p) => {
-                const score = splitScore(p.resultado);
-                const localWon = p.ganador === "local";
-                const visitWon = p.ganador === "visitante";
-                const acta = (actaMap[p.idPartido] ?? []).slice(0, 3);
-                return (
-                  <Card key={p.idPartido} style={{ padding: 0, overflow: "hidden" }}>
+            </CardHead>
+            {g.items.map((p, i) => {
+              const score = splitScore(p.resultado);
+              const localWon = p.ganador === "local";
+              const visitWon = p.ganador === "visitante";
+              const acta = (actaMap[p.idPartido] ?? []).slice(0, 3);
+              return (
+                <div
+                  key={p.idPartido}
+                  style={{
+                    borderBottom: i === g.items.length - 1 ? "none" : "1px solid var(--line)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "12px 18px",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 6 }}>
+                      {[
+                        [p.local, localWon] as const,
+                        [p.visitante, visitWon] as const,
+                      ].map(([name, won], k) => (
+                        <div
+                          key={k}
+                          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+                        >
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 999,
+                              flex: "none",
+                              background: won ? "var(--accent)" : "var(--line-strong)",
+                            }}
+                          />
+                          <span
+                            className="truncate"
+                            style={{
+                              fontSize: 13.5,
+                              fontWeight: won ? 700 : 500,
+                              color: won ? "var(--text)" : "var(--text-muted)",
+                            }}
+                          >
+                            {name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "grid", gap: 6, textAlign: "center" }}>
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: localWon ? "var(--text)" : "var(--text-muted)",
+                        }}
+                      >
+                        {score ? score[0] : "·"}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: visitWon ? "var(--text)" : "var(--text-muted)",
+                        }}
+                      >
+                        {score ? score[1] : "·"}
+                      </span>
+                    </div>
+                    {!p.resultado ? <Chip tone="mute">Por jugar</Chip> : null}
+                  </div>
+                  {acta.length > 0 ? (
                     <div
                       style={{
                         display: "flex",
-                        alignItems: "center",
+                        flexWrap: "wrap",
                         gap: 14,
-                        padding: "14px 18px",
+                        padding: "8px 18px 10px",
+                        background: "var(--bg-card-2)",
                       }}
                     >
-                      <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 8 }}>
-                        {[
-                          [p.local, localWon] as const,
-                          [p.visitante, visitWon] as const,
-                        ].map(([name, won], i) => (
-                          <div
-                            key={i}
-                            style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
-                          >
-                            <span
-                              style={{
-                                width: 5,
-                                height: 5,
-                                borderRadius: 999,
-                                flex: "none",
-                                background: won ? "var(--accent)" : "var(--hair-strong)",
-                              }}
-                            />
-                            <span
-                              style={{
-                                fontSize: 13.5,
-                                fontWeight: won ? 700 : 500,
-                                color: won ? "var(--text)" : "var(--text-muted)",
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {name}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ display: "grid", gap: 8, textAlign: "center" }}>
+                      {acta.map((a) => (
                         <span
+                          key={a.partidoNum}
                           className="mono"
                           style={{
-                            fontSize: 16,
-                            fontWeight: 700,
-                            color: localWon ? "var(--text)" : "var(--text-muted)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontSize: 12,
                           }}
                         >
-                          {score ? score[0] : "·"}
-                        </span>
-                        <span
-                          className="mono"
-                          style={{
-                            fontSize: 16,
-                            fontWeight: 700,
-                            color: visitWon ? "var(--text)" : "var(--text-muted)",
-                          }}
-                        >
-                          {score ? score[1] : "·"}
-                        </span>
-                      </div>
-                      {!p.resultado ? (
-                        <span className="chip chip-mute">Por jugar</span>
-                      ) : null}
-                    </div>
-                    {acta.length > 0 ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 10,
-                          padding: "9px 18px",
-                          borderTop: "1px solid var(--hair)",
-                          background: "var(--bg-card-2)",
-                        }}
-                      >
-                        {acta.map((a) => (
-                          <span
-                            key={a.partidoNum}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                          >
-                            <span
-                              className="mono"
-                              style={{
-                                fontSize: 9,
-                                fontWeight: 700,
-                                padding: "2px 5px",
-                                borderRadius: 5,
-                                background: "var(--bg-raised)",
-                                color: "var(--text-muted)",
-                              }}
-                            >
-                              P{a.partidoNum}
-                            </span>
-                            <span
-                              className="mono"
-                              style={{ fontSize: 10.5, color: "var(--text-faint)" }}
-                            >
-                              {a.parciales || `${a.setsLocal ?? 0}-${a.setsVisit ?? 0}`}
-                            </span>
+                          <span style={{ fontWeight: 700, color: "var(--text-muted)" }}>
+                            P{a.partidoNum}
                           </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
+                          <span style={{ color: "var(--text-faint)" }}>
+                            {a.parciales || `${a.setsLocal ?? 0}-${a.setsVisit ?? 0}`}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </Card>
         );
       })}
     </div>
@@ -1168,8 +1014,8 @@ function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
     return (
       <Card>
         <EmptyState
-          icon={<IconFlag size={34} />}
-          title="El cuadro aún no está disponible."
+          icon={<IconFlag size={22} />}
+          title="El cuadro aún no está disponible"
           body={bracket.error ?? undefined}
         />
       </Card>
@@ -1182,40 +1028,33 @@ function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
     <div>
       {data.cuadros.length > 1 ? (
         <div style={{ marginBottom: 16 }}>
-          <TabBar
-            items={data.cuadros.map((q, i) => [String(i), q.label] as [string, string])}
+          <Segmented
+            label="Cuadro"
             value={String(selCuadro)}
             onChange={(v) => setSelCuadro(Number(v))}
+            options={data.cuadros.map((q, i) => ({ value: String(i), label: q.label }))}
           />
         </div>
       ) : null}
 
-      <div style={{ overflowX: "auto" }}>
-        <div style={{ display: "flex", gap: 16, paddingBottom: 6, minWidth: "min-content" }}>
-          {cuadro.rounds.map((r) => (
-            <div key={r.avance} style={{ width: 200, flex: "none" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: 10.5,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "var(--accent)",
-                  fontWeight: 700,
-                  marginBottom: 10,
-                }}
-              >
-                {r.label}
+      <Card flush>
+        <div className="tw-bracket-scroll">
+          <div className="tw-bracket">
+            {cuadro.rounds.map((r) => (
+              <div key={r.avance} className="tw-bracket-col">
+                <div className="grid-head" style={{ marginBottom: 10 }}>
+                  {r.label}
+                </div>
+                <div className="tw-bracket-ties">
+                  {r.ties.map((t) => (
+                    <TieCard key={t.idPartido} tie={t} onOpen={() => setOpenTie(t)} />
+                  ))}
+                </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {r.ties.map((t) => (
-                  <TieCard key={t.idPartido} tie={t} onOpen={() => setOpenTie(t)} />
-                ))}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      </Card>
 
       <TieActaModal tie={openTie} onClose={() => setOpenTie(null)} />
     </div>
@@ -1226,16 +1065,16 @@ function TieCard({ tie, onOpen }: { tie: FcpBracketTie; onOpen: () => void }) {
   const hasActa = tie.estado === "jugado" || tie.estado === "jugado_ida";
   const line = (name: string | null, won: boolean, muted?: boolean) => (
     <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <span style={{ width: 12, flex: "none", color: "var(--accent)" }}>{won ? "✓" : ""}</span>
+      <span style={{ width: 14, flex: "none", color: "var(--accent)", display: "flex" }}>
+        {won ? <IconCheck size={12} /> : null}
+      </span>
       <span
+        className="truncate"
         style={{
-          fontSize: 12.5,
-          fontWeight: won ? 800 : 600,
+          fontSize: 13,
+          fontWeight: won ? 700 : 500,
           color: won ? "var(--text)" : muted ? "var(--text-faint)" : "var(--text-muted)",
           fontStyle: muted ? "italic" : "normal",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
         }}
       >
         {name || "—"}
@@ -1247,35 +1086,33 @@ function TieCard({ tie, onOpen }: { tie: FcpBracketTie; onOpen: () => void }) {
       type="button"
       disabled={!hasActa}
       onClick={onOpen}
+      className="tw-tie"
       style={{
         textAlign: "left",
         width: "100%",
-        background: "var(--bg-card)",
-        border: "1px solid var(--hair-strong)",
-        borderRadius: 12,
-        padding: "8px 10px",
+        padding: "10px 12px",
         cursor: hasActa ? "pointer" : "default",
         display: "grid",
         gap: 6,
       }}
     >
       {line(tie.local, tie.ganador === "local")}
-      <div style={{ height: 1, background: "var(--hair)" }} />
+      <div className="divider" style={{ margin: 0 }} />
       {line(tie.visit || "Por determinar", tie.ganador === "visitante", !tie.visit)}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginTop: 3,
+          marginTop: 2,
         }}
       >
-        <span className="mono" style={{ fontSize: 13, fontWeight: 800 }}>
+        <span className="mono" style={{ fontSize: 13.5, fontWeight: 700 }}>
           {tie.marcador ? tie.marcador.replace("-", "–") : hasActa ? "—" : "pend."}
         </span>
         {hasActa ? (
-          <span className="mono" style={{ fontSize: 9.5, color: "var(--text-faint)" }}>
-            ver acta
+          <span className="link-action" style={{ fontSize: 12 }}>
+            Ver acta
           </span>
         ) : null}
       </div>
@@ -1295,14 +1132,11 @@ function TieActaModal({ tie, onClose }: { tie: FcpBracketTie | null; onClose: ()
 
   const leg = (title: string, partidos: FcpActaLeg) =>
     partidos.length === 0 ? null : (
-      <div style={{ marginTop: 16 }}>
-        <div
-          className="mono"
-          style={{ fontSize: 11, letterSpacing: "0.16em", color: "var(--accent)", fontWeight: 700 }}
-        >
+      <div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
           {title}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {partidos.map((g) => (
             <div
               key={g.partidoNum}
@@ -1311,41 +1145,46 @@ function TieActaModal({ tie, onClose }: { tie: FcpBracketTie | null; onClose: ()
                 alignItems: "center",
                 gap: 10,
                 padding: "9px 12px",
-                border: "1px solid var(--hair-strong)",
-                borderRadius: 10,
-                background: "var(--bg-card)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--r-md)",
+                background: "var(--bg-card-2)",
               }}
             >
-              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--text-faint)", width: 16, textAlign: "center" }}>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--text-faint)",
+                  width: 16,
+                  textAlign: "center",
+                }}
+              >
                 {g.partidoNum}
               </span>
-              <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 1 }}>
+              <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 2 }}>
                 <span
+                  className="truncate"
                   style={{
-                    fontSize: 12.5,
-                    fontWeight: g.ganador === "local" ? 800 : 600,
+                    fontSize: 13,
+                    fontWeight: g.ganador === "local" ? 700 : 500,
                     color: g.ganador === "local" ? "var(--text)" : "var(--text-muted)",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
                   }}
                 >
                   {[g.localJ1, g.localJ2].filter(Boolean).join(" / ") || "—"}
                 </span>
                 <span
+                  className="truncate"
                   style={{
-                    fontSize: 12.5,
-                    fontWeight: g.ganador === "visitante" ? 800 : 600,
+                    fontSize: 13,
+                    fontWeight: g.ganador === "visitante" ? 700 : 500,
                     color: g.ganador === "visitante" ? "var(--text)" : "var(--text-muted)",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
                   }}
                 >
                   {[g.visitJ1, g.visitJ2].filter(Boolean).join(" / ") || "—"}
                 </span>
               </div>
-              <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>
                 {g.parciales || `${g.setsLocal ?? 0}-${g.setsVisit ?? 0}`}
               </span>
             </div>
@@ -1355,25 +1194,30 @@ function TieActaModal({ tie, onClose }: { tie: FcpBracketTie | null; onClose: ()
     );
 
   return (
-    <Modal open={!!tie} onClose={onClose} labelledBy="tie-acta-title" width={520}>
-      <div id="tie-acta-title" style={{ marginBottom: 4 }}>
-        <span style={{ fontSize: 16, fontWeight: 800 }}>{tie.local || "—"}</span>
-        <span className="mono" style={{ margin: "0 8px", fontSize: 11, color: "var(--text-faint)" }}>
-          vs
-        </span>
-        <span style={{ fontSize: 16, fontWeight: 800 }}>{tie.visit || "Por determinar"}</span>
-      </div>
+    <Modal
+      open={!!tie}
+      onClose={onClose}
+      labelledBy="tie-acta-title"
+      width={520}
+      title={
+        <>
+          {tie.local || "—"}{" "}
+          <span style={{ color: "var(--text-faint)", fontWeight: 500 }}>vs</span>{" "}
+          {tie.visit || "Por determinar"}
+        </>
+      }
+    >
       {acta.loading ? (
-        <Skeleton h={80} style={{ marginTop: 16 }} />
+        <Skeleton h={80} />
       ) : empty ? (
-        <p style={{ marginTop: 16, fontSize: 13.5, color: "var(--text-muted)" }}>
+        <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
           Acta no disponible todavía.
         </p>
       ) : (
-        <>
-          {leg("IDA", data!.ida)}
-          {leg("VUELTA", data!.vuelta)}
-        </>
+        <div style={{ display: "grid", gap: 16 }}>
+          {leg("Ida", data!.ida)}
+          {leg("Vuelta", data!.vuelta)}
+        </div>
       )}
     </Modal>
   );
@@ -1391,19 +1235,19 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
     Number.isFinite(idEquipo)
   );
 
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
 
   if (error || !data) {
     return (
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        <div style={{ marginBottom: 22 }}>
-          <Eyebrow>FEDERACIÓN CÁNTABRA · EQUIPO</Eyebrow>
-          <h1 style={{ marginTop: 10, fontSize: 30 }}>Equipo {id}</h1>
-        </div>
+      <div className="tw-page">
+        <PageHeader
+          back={{ href: `/federacion/${slug}`, label: "Federación" }}
+          title={`Equipo ${id}`}
+        />
         <Card>
           <EmptyState
-            icon={<IconFlag size={34} />}
-            title="No se pudo cargar el equipo."
+            icon={<IconFlag size={22} />}
+            title="No se pudo cargar el equipo"
             body={error ?? "No hay datos sincronizados para este equipo."}
           />
         </Card>
@@ -1417,215 +1261,134 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
     sort === "nombre" ? a.name.localeCompare(b.name) : b.puntos - a.puntos
   );
 
-  const stats: { k: string; v: string; color?: string }[] = [
-    { k: "PJ", v: String(data.pj) },
-    { k: "PG", v: String(data.pg), color: "var(--accent)" },
-    { k: "PP", v: String(data.pp), color: "var(--error)" },
-    { k: "SETS", v: `${data.setsFavor}·${data.setsContra}` },
-    {
-      k: "DIF",
-      v: dif >= 0 ? `+${dif}` : String(dif),
-      color: dif > 0 ? "var(--accent)" : dif < 0 ? "var(--error)" : undefined,
-    },
-    { k: "% VIC", v: winRate != null ? String(winRate) : "—" },
-  ];
-
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <Eyebrow>FEDERACIÓN CÁNTABRA · EQUIPO</Eyebrow>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: `/federacion/${slug}`, label: "Federación" }}
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <Avatar initials={initials(data.equipo)} size={40} />
+            {data.equipo}
+          </span>
+        }
+        meta={[data.grupo ?? null]}
+        actions={
+          data.posicion != null ? <Chip>{data.posicion}º del grupo</Chip> : undefined
+        }
+      />
 
-      {/* Hero */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-        <span
-          className="mono"
-          style={{
-            width: 58,
-            height: 58,
-            borderRadius: 16,
-            flex: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--hair-strong)",
-            color: "var(--accent)",
-            fontSize: 16,
-            fontWeight: 700,
-          }}
-        >
-          {initials(data.equipo)}
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: 26, lineHeight: 1.1 }}>{data.equipo}</h1>
-          {data.grupo ? (
-            <p
-              className="mono"
-              style={{
-                margin: "6px 0 0",
-                fontSize: 10.5,
-                letterSpacing: "0.14em",
-                color: "var(--text-faint)",
-              }}
-            >
-              {data.grupo.toUpperCase()}
-            </p>
-          ) : null}
-        </div>
-        {data.posicion != null ? (
-          <div
-            style={{
-              flex: "none",
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: "var(--accent-10)",
-              border: "1px solid var(--accent-40)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span className="mono" style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
-              {data.posicion}º
-            </span>
-            <span className="mono" style={{ fontSize: 8, letterSpacing: "0.12em", color: "var(--accent)" }}>
-              GRUPO
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Bloque de estadística */}
-      <Card style={{ padding: 20, marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "stretch", gap: 18, flexWrap: "wrap" }}>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              gap: 4,
-              paddingRight: 18,
-              borderRight: "1px solid var(--hair)",
-            }}
-          >
-            <span className="mono" style={{ fontSize: 38, fontWeight: 800, color: "var(--accent)", lineHeight: 1 }}>
-              {data.puntos}
-            </span>
-            <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.18em", color: "var(--text-faint)" }}>
-              PUNTOS
-            </span>
-          </div>
-          <div
-            style={{
-              flex: 1,
-              minWidth: 220,
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 14,
-              alignContent: "center",
-            }}
-          >
-            {stats.map((s) => (
-              <StatTile key={s.k} label={s.k} value={s.v} color={s.color} />
-            ))}
-          </div>
-        </div>
-      </Card>
+      {/* Cifras de la temporada */}
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat label="Puntos" value={data.puntos} tone="accent" />
+        <Stat label="Jugados" value={data.pj} />
+        <Stat label="Ganados" value={data.pg} />
+        <Stat label="Perdidos" value={data.pp} />
+        <Stat label="Sets" value={`${data.setsFavor}–${data.setsContra}`} />
+        <Stat
+          label="Diferencia"
+          value={dif >= 0 ? `+${dif}` : String(dif)}
+          tone={dif > 0 ? "accent" : dif < 0 ? "error" : undefined}
+        />
+        <Stat
+          label="Victorias"
+          value={winRate != null ? winRate : "—"}
+          unit={winRate != null ? "%" : undefined}
+        />
+      </StatRow>
 
       {/* Racha de la temporada */}
       {data.form.length > 0 ? (
-        <Card style={{ padding: "14px 18px", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "var(--text-faint)" }}>
-              TEMPORADA
-            </span>
-            <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "flex-end", overflowX: "auto" }}>
-              <FormPips form={data.form} box={18} />
-            </div>
+        <Card
+          style={{
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>
+            Racha de la temporada
+          </span>
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              justifyContent: "flex-end",
+              overflowX: "auto",
+            }}
+          >
+            <FormPips form={data.form} box={18} />
           </div>
         </Card>
       ) : null}
 
       {/* Plantilla */}
-      <ListHeader
-        title={`PLANTILLA · ${data.roster.length}`}
-        action={sort === "puntos" ? "POR PUNTOS ▾" : "POR NOMBRE ▾"}
-        onAction={() => setSort((s) => (s === "puntos" ? "nombre" : "puntos"))}
-      />
-      {roster.length === 0 ? (
-        <Card>
+      <Card flush>
+        <CardHead title="Plantilla" count={data.roster.length}>
+          <Btn
+            size="sm"
+            variant="quiet"
+            onClick={() => setSort((s) => (s === "puntos" ? "nombre" : "puntos"))}
+          >
+            {sort === "puntos" ? "Por puntos" : "Por nombre"}
+            <IconChevronDown size={14} />
+          </Btn>
+        </CardHead>
+        {roster.length === 0 ? (
           <EmptyState
-            icon={<IconFlag size={34} />}
-            title="Sin plantilla sincronizada."
+            compact
+            icon={<IconUsers size={22} />}
+            title="Sin plantilla sincronizada"
             body="Aún no hay jugadores federados para este equipo."
           />
-        </Card>
-      ) : (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          {roster.map((p, i) => (
-            <Link
+        ) : (
+          roster.map((p, i) => (
+            <ListRow
               key={p.idJugador}
               href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
-              style={{
-                color: "inherit",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 18px",
-                borderBottom: i === roster.length - 1 ? "none" : "1px solid var(--hair)",
-              }}
-            >
-              <span
-                className="mono"
-                style={{ fontSize: 12, fontWeight: 700, color: "var(--text-faint)", width: 18, textAlign: "center" }}
-              >
-                {i + 1}
-              </span>
-              <span
-                className="mono"
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 999,
-                  flex: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "var(--bg-card-2)",
-                  border: "1px solid var(--hair-strong)",
-                  color: "var(--text-muted)",
-                  fontSize: 12,
-                  fontWeight: 700,
-                }}
-              >
-                {initials(p.name)}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {p.name}
-                </div>
-                {p.categoria ? (
-                  <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em", color: "var(--text-faint)", marginTop: 2 }}>
-                    {p.categoria.toUpperCase()}
-                  </div>
-                ) : null}
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)" }}>
+              icon={
+                <>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-faint)",
+                      width: 18,
+                      textAlign: "center",
+                      flex: "none",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <Avatar initials={initials(p.name)} size={32} />
+                </>
+              }
+              title={p.name}
+              sub={p.categoria ?? undefined}
+              right={
+                <span
+                  className="mono"
+                  style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)", flex: "none" }}
+                >
                   {fmtInt(p.puntos)}
-                </div>
-                <div className="mono" style={{ fontSize: 8.5, letterSpacing: "0.1em", color: "var(--text-faint)" }}>
-                  PTS FCP
-                </div>
-              </div>
-              <IconChevronRight size={15} />
-            </Link>
-          ))}
-        </Card>
-      )}
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "var(--text-faint)",
+                      marginLeft: 4,
+                    }}
+                  >
+                    pts
+                  </span>
+                </span>
+              }
+            />
+          ))
+        )}
+      </Card>
     </div>
   );
 }
@@ -1633,9 +1396,9 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
 /* ═══ 05 · JUGADOR FEDERADO ═══════════════════════════════════════ */
 type MatchFilter = "todos" | "victorias" | "derrotas";
 const MATCH_FILTER_LABEL: Record<MatchFilter, string> = {
-  todos: "TODOS ▾",
-  victorias: "VICTORIAS ▾",
-  derrotas: "DERROTAS ▾",
+  todos: "Todos",
+  victorias: "Victorias",
+  derrotas: "Derrotas",
 };
 
 export function FcpPlayerView({ id }: { id: string }) {
@@ -1668,18 +1431,16 @@ export function FcpPlayerView({ id }: { id: string }) {
     !!selYear?.idEquipo
   );
 
-  if (profile.loading) return <SkeletonCard />;
+  if (profile.loading) return <SkeletonPage />;
 
   const p = profile.data;
   if (profile.error || !p) {
     return (
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ marginBottom: 22 }}>
-          <Eyebrow>FEDERACIÓN CÁNTABRA · JUGADOR</Eyebrow>
-        </div>
+      <div className="tw-page">
+        <PageHeader back={{ href: "/federacion", label: "Federación" }} title="Jugador" />
         <Card>
           <EmptyState
-            icon={<IconFlag size={34} />}
+            icon={<IconUser size={22} />}
             title="Jugador no encontrado"
             body={profile.error ?? "Busca por nombre desde Explorar Federación."}
           />
@@ -1698,13 +1459,8 @@ export function FcpPlayerView({ id }: { id: string }) {
       ? history.data.find((h) => String(h.anio) === selYear.anio)?.variacion ?? null
       : null;
 
-  const stats: { k: string; v: string; color?: string }[] = [
-    { k: "PJ", v: String(yd?.pj ?? 0) },
-    { k: "PG", v: String(yd?.pg ?? 0), color: "var(--accent)" },
-    { k: "PP", v: String(yd?.pp ?? 0), color: "var(--error)" },
-    { k: "% VIC", v: wr != null ? String(wr) : "—" },
-    { k: "SETS", v: sd >= 0 ? `+${sd}` : String(sd) },
-  ];
+  const equipoLabel = selYear?.equipo || p.equipo || "Sin equipo";
+  const categoriaLabel = selYear?.categoria || p.categoria || null;
 
   // Partidos filtrados y agrupados por jornada.
   const dayGroups = (() => {
@@ -1718,7 +1474,7 @@ export function FcpPlayerView({ id }: { id: string }) {
       const key = isPlayoff ? "PLAYOFF" : `J${m.jornada}`;
       if (!map.has(key)) {
         map.set(key, {
-          label: isPlayoff ? "PLAYOFF" : `JORNADA ${m.jornada}`,
+          label: isPlayoff ? "Playoff" : `Jornada ${m.jornada}`,
           order: isPlayoff ? 9999 : m.jornada ?? 0,
           games: [],
         });
@@ -1729,204 +1485,137 @@ export function FcpPlayerView({ id }: { id: string }) {
   })();
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ marginBottom: 18 }}>
-        <Eyebrow>FEDERACIÓN CÁNTABRA · JUGADOR</Eyebrow>
-      </div>
-
-      {/* Hero */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
-        <span
-          style={{
-            width: 60,
-            height: 60,
-            borderRadius: 999,
-            flex: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--accent-40)",
-            color: "var(--accent)",
-            fontSize: 22,
-            fontWeight: 800,
-          }}
-        >
-          {initials(p.name)}
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: 25, lineHeight: 1.1 }}>{p.name}</h1>
-          <p
-            className="mono"
-            style={{ margin: "6px 0 0", fontSize: 10.5, letterSpacing: "0.14em", color: "var(--text-faint)" }}
-          >
-            {[selYear?.equipo || p.equipo, selYear?.categoria || p.categoria]
-              .filter(Boolean)
-              .join(" · ")
-              .toUpperCase() || "SIN EQUIPO"}
-          </p>
-        </div>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        back={{ href: "/federacion", label: "Federación" }}
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <Avatar initials={initials(p.name)} size={40} />
+            {p.name}
+          </span>
+        }
+        meta={[equipoLabel, categoriaLabel]}
+      />
 
       {/* Ranking FCP */}
-      <Card style={{ padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "grid", gap: 4 }}>
-            <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.18em", color: "var(--text-faint)" }}>
-              RANKING FCP
-            </span>
-            <span className="mono" style={{ fontSize: 26, fontWeight: 700, color: "var(--accent)", lineHeight: 1 }}>
-              {fmtInt(rankingPts)}
-            </span>
-          </div>
-          <div style={{ display: "grid", gap: 4, textAlign: "right" }}>
-            {rank && rank.rank > 0 ? (
-              <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em", color: "var(--text-faint)" }}>
-                Nº {rank.rank} EN EL EQUIPO
-              </span>
-            ) : null}
-            {variacion != null && variacion !== 0 ? (
-              <span
-                className="mono"
-                style={{ fontSize: 12, fontWeight: 600, color: variacion >= 0 ? "var(--accent)" : "var(--error)" }}
-              >
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat
+          label="Ranking FCP"
+          value={fmtInt(rankingPts)}
+          unit="pts"
+          tone="accent"
+          sub={
+            variacion != null && variacion !== 0 ? (
+              <span style={{ color: variacion >= 0 ? "var(--accent)" : "var(--error)" }}>
                 {variacion >= 0 ? "▲ +" : "▼ "}
                 {fmtInt(variacion)} esta temporada
               </span>
-            ) : null}
-          </div>
-        </div>
-      </Card>
+            ) : undefined
+          }
+        />
+        {rank && rank.rank > 0 ? (
+          <Stat label="En el equipo" value={`Nº ${rank.rank}`} sub={equipoLabel} />
+        ) : null}
+      </StatRow>
 
       {/* Selector de temporada */}
       {(years.data ?? []).length > 0 ? (
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16 }}>
-          {(years.data ?? []).map((y) => {
-            const on = y.idLiga === selLiga;
-            return (
-              <button
-                key={y.idLiga}
-                type="button"
-                onClick={() => setSelLiga(y.idLiga)}
-                className="btn"
-                style={{
-                  flex: "none",
-                  padding: "8px 16px",
-                  fontSize: 12.5,
-                  fontWeight: on ? 700 : 500,
-                  background: on ? "var(--accent)" : "transparent",
-                  color: on ? "var(--text-inverse)" : "var(--text-muted)",
-                  border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                }}
-              >
-                {y.anio}
-              </button>
-            );
-          })}
+        <div style={{ marginBottom: 16, overflowX: "auto" }}>
+          <Segmented
+            label="Temporada"
+            value={String(selLiga ?? "")}
+            onChange={(v) => setSelLiga(Number(v))}
+            options={(years.data ?? []).map((y) => ({
+              value: String(y.idLiga),
+              label: y.anio,
+            }))}
+          />
         </div>
       ) : null}
 
       {/* Stats del año */}
-      <Card style={{ padding: "16px 18px", marginBottom: 24 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
-            gap: 12,
-          }}
-        >
-          {stats.map((s) => (
-            <StatTile key={s.k} label={s.k} value={s.v} color={s.color} />
-          ))}
-        </div>
-      </Card>
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat label="Jugados" value={yd?.pj ?? 0} />
+        <Stat label="Ganados" value={yd?.pg ?? 0} tone="accent" />
+        <Stat label="Perdidos" value={yd?.pp ?? 0} tone="error" />
+        <Stat
+          label="Victorias"
+          value={wr != null ? wr : "—"}
+          unit={wr != null ? "%" : undefined}
+        />
+        <Stat label="Sets" value={sd >= 0 ? `+${sd}` : String(sd)} />
+      </StatRow>
 
       {/* Partidos */}
-      <ListHeader
-        title={`PARTIDOS · ${yd?.matches.length ?? 0}`}
-        action={MATCH_FILTER_LABEL[filter]}
-        onAction={() =>
-          setFilter((f) => (f === "todos" ? "victorias" : f === "victorias" ? "derrotas" : "todos"))
-        }
-      />
+      <SectionHead title="Partidos" count={yd?.matches.length ?? 0}>
+        <Btn
+          size="sm"
+          variant="quiet"
+          onClick={() =>
+            setFilter((f) => (f === "todos" ? "victorias" : f === "victorias" ? "derrotas" : "todos"))
+          }
+        >
+          {MATCH_FILTER_LABEL[filter]}
+          <IconChevronDown size={14} />
+        </Btn>
+      </SectionHead>
 
       {yearMatches.loading ? (
         <SkeletonCard />
       ) : !yd || (yd.matches.length === 0 && !yd.hasData) ? (
         <Card>
           <EmptyState
-            icon={<IconFlag size={34} />}
+            icon={<IconFlag size={22} />}
             title="Actas en sincronización"
             body={`Las actas de ${selYear?.anio ?? "esta temporada"} aún se están sincronizando con la Federación.`}
           />
         </Card>
       ) : yd.matches.length === 0 ? (
         <Card>
-          <EmptyState icon={<IconFlag size={34} />} title="Sin partidos disputados esta temporada." />
+          <EmptyState icon={<IconFlag size={22} />} title="Sin partidos disputados esta temporada" />
         </Card>
       ) : dayGroups.length === 0 ? (
         <Card>
-          <EmptyState icon={<IconFlag size={34} />} title="Sin partidos con ese filtro." />
+          <EmptyState icon={<IconFlag size={22} />} title="Sin partidos con ese filtro" />
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {dayGroups.map((d) => (
-            <div key={d.label}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                <span className="mono" style={{ fontSize: 10.5, letterSpacing: "0.16em", color: "var(--text-muted)", fontWeight: 600 }}>
-                  {d.label}
-                </span>
-                <span style={{ flex: 1, height: 1, background: "var(--hair)" }} />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {d.games.map((m, i) => (
-                  <div
-                    key={i}
+            <Card flush key={d.label}>
+              <CardHead title={d.label} count={d.games.length} />
+              {d.games.map((m, i) => (
+                <div key={i} className="list-row">
+                  <span
+                    className="mono"
                     style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "var(--r-sm)",
+                      flex: "none",
                       display: "flex",
                       alignItems: "center",
-                      gap: 12,
-                      padding: "11px 14px",
-                      border: "1px solid var(--hair)",
-                      borderRadius: 12,
-                      background: "var(--bg-card)",
+                      justifyContent: "center",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      background: m.won ? "var(--accent-10)" : "var(--error-soft)",
+                      color: m.won ? "var(--accent)" : "var(--error)",
                     }}
                   >
-                    <span
-                      className="mono"
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 9,
-                        flex: "none",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        background: m.won ? "var(--accent-10)" : "var(--error-soft)",
-                        color: m.won ? "var(--accent)" : "var(--error)",
-                      }}
-                    >
-                      {m.won ? "V" : "D"}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        vs {m.rivalPair}
-                      </div>
-                      {m.partner ? (
-                        <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.06em", color: "var(--text-faint)", marginTop: 2 }}>
-                          CON {m.partner.toUpperCase()}
-                        </div>
-                      ) : null}
-                    </div>
-                    <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                      {m.parciales || m.sets}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+                    {m.won ? "V" : "D"}
+                  </span>
+                  <span className="list-row-main">
+                    <span className="list-row-title truncate">vs {m.rivalPair}</span>
+                    {m.partner ? <span className="list-row-sub">con {m.partner}</span> : null}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 12.5, color: "var(--text-muted)", whiteSpace: "nowrap" }}
+                  >
+                    {m.parciales || m.sets}
+                  </span>
+                </div>
+              ))}
+            </Card>
           ))}
         </div>
       )}

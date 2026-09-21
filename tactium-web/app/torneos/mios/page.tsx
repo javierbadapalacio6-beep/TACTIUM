@@ -9,9 +9,21 @@ import {
   claimTournamentPartner,
   type MyTournament,
 } from "@/lib/queries";
-import { Card, Eyebrow } from "@/components/ui";
-import { SkeletonCard } from "@/components/states";
+import {
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  IconTile,
+  Input,
+  Note,
+  PageHeader,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { GoogleLogo } from "@/components/GoogleLogo";
+import { IconTrophy } from "@/components/Icon";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "Fecha por confirmar";
@@ -34,6 +46,13 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelado",
   canceled: "Cancelado",
 };
+
+/** Tono del chip de estado: sólo lo vivo va en acento. */
+function statusTone(status: string): "accent" | "warning" | "mute" {
+  if (status === "open" || status === "in_progress") return "accent";
+  if (status === "upcoming" || status === "draft") return "warning";
+  return "mute";
+}
 
 export default function MisTorneosPage() {
   const [authKnown, setAuthKnown] = useState(false);
@@ -89,7 +108,7 @@ export default function MisTorneosPage() {
     setClaimMsg(null);
     try {
       await claimTournamentPartner(c);
-      setClaimMsg({ ok: true, text: "¡Vinculado! Ya está en tus torneos." });
+      setClaimMsg({ ok: true, text: "Vinculado. Ya está en tus torneos." });
       setCode("");
       await load();
     } catch (e) {
@@ -120,209 +139,136 @@ export default function MisTorneosPage() {
     });
   };
 
-  if (!authKnown) {
-    return (
-      <div style={{ maxWidth: 820, margin: "0 auto" }}>
-        <SkeletonCard />
-      </div>
-    );
-  }
+  if (!authKnown) return <SkeletonPage />;
 
   if (!logged) {
     return (
-      <div style={{ maxWidth: 560, margin: "0 auto" }}>
-        <Card>
-          <Eyebrow>MIS TORNEOS</Eyebrow>
-          <p
-            style={{
-              margin: "14px 0 20px",
-              fontSize: 14,
-              lineHeight: 1.5,
-              color: "var(--text-muted)",
-            }}
-          >
-            Inicia sesión para ver los torneos en los que juegas y para
-            vincularte con el código que te ha pasado tu compañero.
-          </p>
-          <button
-            className="btn btn-accent"
-            onClick={login}
-            style={{
-              width: "100%",
-              padding: 14,
-              fontSize: 15,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-            }}
-          >
-            <GoogleLogo />
-            Continuar con Google
-          </button>
-          <p
-            style={{
-              margin: "16px 0 0",
-              fontSize: 12,
-              color: "var(--text-faint)",
-              textAlign: "center",
-            }}
-          >
-            ¿Prefieres email?{" "}
-            <a href="/entrar?next=/torneos/mios" style={{ color: "var(--accent)" }}>
-              Inicia sesión aquí
-            </a>
-          </p>
+      <div className="tw-page-narrow" style={{ maxWidth: 520 }}>
+        <Card flush>
+          <CardHead title="Mis torneos" />
+          <div className="card-body">
+            <p style={{ margin: "0 0 18px", fontSize: 13.5, color: "var(--text-muted)" }}>
+              Inicia sesión para ver los torneos en los que juegas y para
+              vincularte con el código que te ha pasado tu compañero.
+            </p>
+            <Btn variant="accent" size="lg" block onClick={login} icon={<GoogleLogo />}>
+              Continuar con Google
+            </Btn>
+            <p
+              style={{
+                margin: "14px 0 0",
+                fontSize: 12.5,
+                color: "var(--text-faint)",
+                textAlign: "center",
+              }}
+            >
+              ¿Prefieres email?{" "}
+              <Link href="/entrar?next=/torneos/mios" className="link-action">
+                Inicia sesión aquí
+              </Link>
+            </p>
+          </div>
         </Card>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto" }}>
+    <div className="tw-page-narrow">
+      <PageHeader
+        title="Mis torneos"
+        lede="Los torneos en los que juegas, con su cuadro y tu horario."
+        actions={<BtnLink href="/torneos">Explorar torneos</BtnLink>}
+      />
+
       {/* Vincularse con el código del compañero */}
-      <Card style={{ marginBottom: 20 }}>
-        <Eyebrow>¿TE HAN APUNTADO? VINCÚLATE CON TU CÓDIGO</Eyebrow>
-        <p
-          style={{
-            margin: "12px 0 14px",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-            textWrap: "pretty",
-          }}
-        >
-          Si tu compañero te ha inscrito, te habrá llegado un código. Mételo aquí
-          para que el torneo aparezca también en tu cuenta.
-        </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="CÓDIGO"
-            className="mono"
-            style={{
-              flex: 1,
-              minWidth: 160,
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid var(--hair-strong)",
-              background: "var(--bg-card-2)",
-              color: "var(--text)",
-              fontSize: 14,
-              letterSpacing: "0.18em",
-              outline: "none",
-            }}
-          />
-          <button
-            className="btn btn-accent"
-            disabled={claiming || code.trim().length < 4}
-            onClick={claim}
-            style={{ padding: "12px 22px", fontSize: 14, borderRadius: 12 }}
-          >
-            {claiming ? "Vinculando…" : "Vincularme"}
-          </button>
+      <Card flush style={{ marginBottom: 16 }}>
+        <CardHead
+          title="¿Te han apuntado?"
+          sub="Si tu compañero te ha inscrito, mete su código para que el torneo aparezca también en tu cuenta."
+        />
+        <div className="card-body">
+          <Field label="Código de la pareja" htmlFor="codigo-pareja">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Input
+                id="codigo-pareja"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="ABCD-12"
+                className="mono"
+                style={{ flex: 1, minWidth: 160, letterSpacing: "0.12em" }}
+              />
+              <Btn
+                variant="accent"
+                disabled={claiming || code.trim().length < 4}
+                onClick={claim}
+              >
+                {claiming ? "Vinculando…" : "Vincularme"}
+              </Btn>
+            </div>
+          </Field>
+          {claimMsg && !claimMsg.ok && (
+            <Note tone="error" style={{ marginTop: 12 }}>
+              {claimMsg.text}
+            </Note>
+          )}
         </div>
-        {claimMsg && (
-          <p
-            style={{
-              margin: "12px 0 0",
-              fontSize: 13,
-              color: claimMsg.ok ? "var(--accent)" : "var(--error)",
-            }}
-          >
-            {claimMsg.text}
-          </p>
-        )}
       </Card>
 
       {/* Lista de mis torneos */}
       {list === null ? (
-        <SkeletonCard />
+        <Card>
+          <EmptyState compact title="Cargando tus torneos…" />
+        </Card>
       ) : loadErr ? (
         <Card>
-          <p style={{ fontSize: 13.5, color: "var(--error)" }}>{loadErr}</p>
+          <EmptyState
+            icon={<IconTrophy size={22} />}
+            title="No se pudieron cargar tus torneos"
+            body={loadErr}
+          />
         </Card>
       ) : list.length === 0 ? (
-        <Card style={{ textAlign: "center", padding: 36 }}>
-          <h2 style={{ fontSize: 20, margin: 0 }}>Aún no juegas ningún torneo</h2>
-          <p
-            style={{
-              margin: "12px 0 20px",
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-              textWrap: "pretty",
-            }}
-          >
-            Cuando te inscribas a un torneo (o te vincules con un código),
-            aparecerá aquí con su cuadro y tu horario.
-          </p>
-          <Link
-            href="/torneos"
-            className="btn btn-accent"
-            style={{ display: "inline-flex", padding: "12px 22px", fontSize: 14 }}
-          >
-            Explorar torneos
-          </Link>
+        <Card>
+          <EmptyState
+            icon={<IconTrophy size={22} />}
+            title="Aún no juegas ningún torneo"
+            body="Cuando te inscribas a uno, o te vincules con un código, aparecerá aquí con su cuadro y tu horario."
+            action={
+              <BtnLink href="/torneos" variant="accent">
+                Explorar torneos
+              </BtnLink>
+            }
+          />
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <Card flush>
+          <CardHead title="Tus torneos" count={list.length} />
           {list.map((t) => (
-            <Link key={t.id} href={`/torneos/${t.id}`} style={{ textDecoration: "none" }}>
-              <Card style={{ padding: 18 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      className="mono"
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: "0.14em",
-                        color: "var(--accent)",
-                      }}
-                    >
-                      {STATUS_LABEL[t.status] ?? t.status}
-                    </div>
-                    <div
-                      style={{ marginTop: 6, fontSize: 17, fontWeight: 700, color: "var(--text)" }}
-                    >
-                      {t.name}
-                    </div>
-                    <div
-                      className="mono"
-                      style={{
-                        marginTop: 6,
-                        fontSize: 11.5,
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {[t.club_name, t.location].filter(Boolean).join(" · ")}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>
-                      {fmtDate(t.starts_on)}
-                    </div>
-                    {t.categories.length > 0 && (
-                      <div
-                        className="mono"
-                        style={{ marginTop: 6, fontSize: 10.5, color: "var(--text-faint)" }}
-                      >
-                        {t.categories.join(" · ")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Card>
+            <Link key={t.id} href={`/torneos/${t.id}`} className="list-row">
+              <IconTile>
+                <IconTrophy size={16} />
+              </IconTile>
+              <span className="list-row-main">
+                <span className="list-row-title truncate">{t.name}</span>
+                <span className="list-row-sub">
+                  {[t.club_name, t.location].filter(Boolean).join(" · ") || "Sin sede"}
+                  {t.categories.length > 0 ? ` · ${t.categories.join(", ")}` : ""}
+                </span>
+              </span>
+              <span style={{ fontSize: 12.5, color: "var(--text-muted)", flex: "none" }}>
+                {fmtDate(t.starts_on)}
+              </span>
+              <Chip tone={statusTone(t.status)}>
+                {STATUS_LABEL[t.status] ?? t.status}
+              </Chip>
             </Link>
           ))}
-        </div>
+        </Card>
+      )}
+
+      {claimMsg?.ok && (
+        <Toast title={claimMsg.text} onClose={() => setClaimMsg(null)} />
       )}
     </div>
   );

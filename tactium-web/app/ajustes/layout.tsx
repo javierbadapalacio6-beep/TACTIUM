@@ -13,9 +13,8 @@ export const metadata: Metadata = { title: "Ajustes" };
  */
 export default function AjustesLayout({ children }: { children: ReactNode }) {
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+    <div className="tw-page">
       <PageHeader
-        eyebrow="CUENTA · AJUSTES"
         title="Ajustes"
         lede="Tu cuenta, tus avisos y cómo se ve TACTIUM en este navegador."
       />

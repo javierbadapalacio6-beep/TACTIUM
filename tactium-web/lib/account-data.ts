@@ -7,17 +7,19 @@
  */
 
 // ── Ajustes · secciones ────────────────────────────────────────────
+// El icono se resuelve por nombre en `components/Icon.tsx` (`ICONS`), igual
+// que la navegación principal: este módulo no arrastra JSX.
 export const SETTINGS_SECTIONS = [
-  { slug: "apariencia", label: "APARIENCIA" },
-  { slug: "notificaciones", label: "NOTIFICACIONES" },
-  { slug: "jugador", label: "MI JUGADOR" },
-  { slug: "equipo", label: "EQUIPO ACTUAL" },
-  { slug: "invitaciones", label: "INVITACIONES" },
-  { slug: "suscripcion", label: "SUSCRIPCIÓN" },
-  { slug: "torneos", label: "TORNEOS" },
-  { slug: "soporte", label: "SOPORTE" },
-  { slug: "datos", label: "MIS DATOS" },
-  { slug: "peligro", label: "ZONA DE PELIGRO" },
+  { slug: "apariencia", label: "Apariencia", icon: "sun" },
+  { slug: "notificaciones", label: "Notificaciones", icon: "bell" },
+  { slug: "jugador", label: "Mi jugador", icon: "user" },
+  { slug: "equipo", label: "Equipo actual", icon: "shield" },
+  { slug: "invitaciones", label: "Invitaciones", icon: "userPlus" },
+  { slug: "suscripcion", label: "Suscripción", icon: "creditCard" },
+  { slug: "torneos", label: "Torneos", icon: "trophy" },
+  { slug: "soporte", label: "Soporte", icon: "info" },
+  { slug: "datos", label: "Mis datos", icon: "file" },
+  { slug: "peligro", label: "Zona de peligro", icon: "alert" },
 ] as const;
 
 export type SettingsSlug = (typeof SETTINGS_SECTIONS)[number]["slug"];
@@ -50,10 +52,10 @@ export interface FreePlayer {
 }
 
 export const FREE_PLAYERS: FreePlayer[] = [
-  { name: "Marco Bilbao", meta: "REVÉS · 4180 PTS" },
-  { name: "Iván Sáez", meta: "AMBOS · 3950 PTS" },
-  { name: "Nacho Vega", meta: "REVÉS · 3480 PTS" },
-  { name: "Hugo Palacio", meta: "AMBOS · 2610 PTS" },
+  { name: "Marco Bilbao", meta: "Revés · 4180 pts" },
+  { name: "Iván Sáez", meta: "Ambos · 3950 pts" },
+  { name: "Nacho Vega", meta: "Revés · 3480 pts" },
+  { name: "Hugo Palacio", meta: "Ambos · 2610 pts" },
 ];
 
 /** Iniciales para el avatar de respaldo. */
@@ -108,13 +110,13 @@ export interface Subscription {
 export function sourceLabel(source: SubscriptionSource): string {
   switch (source) {
     case "stripe":
-      return "STRIPE · WEB";
+      return "Stripe · web";
     case "app_store":
-      return "APP STORE";
+      return "App Store";
     case "play_store":
-      return "GOOGLE PLAY";
+      return "Google Play";
     default:
-      return "SIN ORIGEN";
+      return "Sin origen";
   }
 }
 

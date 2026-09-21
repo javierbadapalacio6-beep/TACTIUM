@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Eyebrow, Modal } from "@/components/ui";
+import { Btn, Field, Input, Modal } from "@/components/ui";
 import { Toast } from "@/components/states";
 import { FederationSelect } from "@/components/entry/start";
 import { updateClub } from "@/lib/queries";
@@ -61,88 +61,36 @@ export function EditClubModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} labelledBy="edit-club" width={520}>
-      <Eyebrow>EDITAR CLUB</Eyebrow>
-      <h2 id="edit-club" style={{ margin: "10px 0 6px", fontSize: 23 }}>
-        {initialName || "Club"}
-      </h2>
-      <p style={{ margin: "0 0 20px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        Cambia el nombre del club o su federación.
-      </p>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <label>
-          <span
-            className="mono"
-            style={{
-              display: "block",
-              fontSize: 10,
-              letterSpacing: "0.2em",
-              color: "var(--text-faint)",
-              marginBottom: 7,
-            }}
-          >
-            NOMBRE DEL CLUB
-          </span>
-          <input
+    <Modal
+      open={open}
+      onClose={onClose}
+      labelledBy="edit-club"
+      width={520}
+      title={initialName || "Club"}
+      lede="Cambia el nombre del club o su federación."
+      footer={
+        <>
+          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn variant="accent" disabled={busy || !valid} onClick={save}>
+            {busy ? "Guardando…" : "Guardar"}
+          </Btn>
+        </>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <Field label="Nombre del club" htmlFor="edit-club-name">
+          <Input
+            id="edit-club-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Club Halcones"
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid var(--hair-strong)",
-              background: "var(--bg-card)",
-              color: "var(--text)",
-              fontSize: 14,
-              outline: "none",
-              fontFamily: "'Satoshi', sans-serif",
-            }}
           />
-        </label>
+        </Field>
 
-        <div>
-          <span
-            className="mono"
-            style={{
-              display: "block",
-              fontSize: 10,
-              letterSpacing: "0.2em",
-              color: "var(--text-faint)",
-              marginBottom: 7,
-            }}
-          >
-            FEDERACIÓN
-          </span>
+        <Field label="Federación">
           <FederationSelect value={federation} onChange={setFederation} />
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginTop: 24,
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 10,
-        }}
-      >
-        <button
-          className="btn btn-ghost"
-          onClick={onClose}
-          style={{ padding: "12px 20px", fontSize: 13.5 }}
-        >
-          Cancelar
-        </button>
-        <button
-          className="btn btn-accent"
-          disabled={busy || !valid}
-          onClick={save}
-          style={{ padding: "12px 22px", fontSize: 13.5 }}
-        >
-          {busy ? "Guardando…" : "Guardar"}
-        </button>
+        </Field>
       </div>
 
       {toast && (

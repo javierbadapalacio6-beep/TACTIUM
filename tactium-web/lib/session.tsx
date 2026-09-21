@@ -36,11 +36,12 @@ export const ROLE_LABELS: Record<Role, string> = {
   suelto: "Jugador suelto",
 };
 
-const ROLE_EYEBROW: Record<Role, string> = {
-  capitan: "CAPITÁN",
-  club: "CLUB · ADMIN",
-  jugador: "JUGADOR",
-  suelto: "JUGADOR",
+/** Rótulo corto del rol, en frase normal (el panel ya no usa MAYÚSCULAS). */
+const ROLE_SHORT: Record<Role, string> = {
+  capitan: "Capitán",
+  club: "Club · admin",
+  jugador: "Jugador",
+  suelto: "Jugador",
 };
 
 export interface TeamRef {
@@ -219,7 +220,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       initials: initialsOf(name),
       email: profile?.email ?? authUser.email ?? null,
       avatarUrl: profile?.avatar_url ?? null,
-      roleLabel: ROLE_EYEBROW[derived],
+      roleLabel: ROLE_SHORT[derived],
       roleIsPrivileged: derived === "capitan" || derived === "club",
     });
     setDerivedRole(derived);
@@ -353,7 +354,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       user
         ? {
             ...user,
-            roleLabel: ROLE_EYEBROW[role],
+            roleLabel: ROLE_SHORT[role],
             roleIsPrivileged: role === "capitan" || role === "club",
           }
         : null,

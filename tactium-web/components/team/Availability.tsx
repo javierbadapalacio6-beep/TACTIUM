@@ -15,8 +15,19 @@ import {
   type DbMatchday,
 } from "@/lib/queries";
 import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import {
+  Avatar,
+  Btn,
+  Card,
+  Chip,
+  Note,
+  PageHeader,
+  Progress,
+  Segmented,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { IconCheck, IconUsers } from "@/components/Icon";
 
 type Filter = "todos" | "disp" | "bajas";
@@ -98,36 +109,42 @@ export function AvailabilityView({ id }: { id: string }) {
 
   if (!teamId) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconUsers size={34} />}
-          title="Sin equipo activo"
-          body="Entra con una cuenta que pertenezca a un equipo."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={24} />}
+            title="Sin equipo activo"
+            body="Entra con una cuenta que pertenezca a un equipo."
+          />
+        </Card>
+      </div>
     );
   }
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconUsers size={34} />}
-          title="No se pudo cargar la disponibilidad"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={24} />}
+            title="No se pudo cargar la disponibilidad"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
   if (!matchday) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconUsers size={34} />}
-          title="Jornada no encontrada"
-          body="Abre una jornada del calendario para ver la disponibilidad."
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={24} />}
+            title="Jornada no encontrada"
+            body="Abre una jornada del calendario para ver la disponibilidad."
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -182,123 +199,66 @@ export function AvailabilityView({ id }: { id: string }) {
     setToast(res.ok ? "Disponibilidad guardada" : res.reason);
   }
 
+  const noCount = active.filter((p) => state[p.id] === "no").length;
+
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Eyebrow>DISPONIBILIDAD</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>
-          {isCaptain ? "¿Quién está disponible?" : "¿Estás disponible?"}
-        </h1>
-        <p
-          style={{
-            margin: "10px 0 0",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-          }}
-        >
-          Jornada {matchday.round} · vs {matchday.opponent} · cierra el
-          jueves a las 20:00
-        </p>
-      </div>
-
-      <Card style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 24,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ minWidth: 150 }}>
-            <div className="mono tw-stat-label">DISPONIBLES</div>
-            <div className="mono tw-stat-value" style={{ color: "var(--accent)" }}>
-              {yes}/{active.length}
-            </div>
-          </div>
-
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div
-              style={{
-                height: 8,
-                borderRadius: 999,
-                background: "var(--hair-strong)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  width: `${pct}%`,
-                  height: "100%",
-                  background: "var(--accent)",
-                  transition: "width var(--dur-base) var(--ease)",
-                }}
-              />
-            </div>
-            {unset > 0 && (
-              <p
-                className="mono"
-                style={{
-                  margin: "10px 0 0",
-                  fontSize: 10,
-                  letterSpacing: "0.14em",
-                  color: "var(--warning)",
-                }}
-              >
-                {unset} SIN MARCAR
-              </p>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {(
-              [
-                ["todos", "Todos"],
-                ["disp", "Disp."],
-                ["bajas", "Bajas"],
-              ] as const
-            ).map(([k, label]) => {
-              const on = filter === k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setFilter(k)}
-                  className="btn"
-                  style={{
-                    padding: "9px 16px",
-                    fontSize: 12.5,
-                    fontWeight: on ? 700 : 500,
-                    background: on ? "var(--accent-10)" : "transparent",
-                    color: on ? "var(--accent)" : "var(--text-muted)",
-                    border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
-          {isCaptain && (
-            <button
-              type="button"
-              className="btn btn-accent"
-              onClick={markAll}
-              disabled={saving}
-              style={{ padding: "11px 20px", fontSize: 13 }}
-            >
+    <div className="tw-page">
+      <PageHeader
+        title={isCaptain ? "¿Quién está disponible?" : "¿Estás disponible?"}
+        meta={[
+          `Jornada ${matchday.round}`,
+          `vs ${matchday.opponent}`,
+          "Cierra el jueves a las 20:00",
+        ]}
+        actions={
+          isCaptain ? (
+            <Btn variant="accent" onClick={markAll} disabled={saving} icon={<IconCheck size={15} />}>
               {saving ? "Marcando…" : "Marcar todo"}
-            </button>
-          )}
-        </div>
-      </Card>
+            </Btn>
+          ) : undefined
+        }
+      />
+
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat
+          label="Disponibles"
+          value={yes}
+          unit={`/ ${active.length}`}
+          tone={active.length > 0 && pct >= 70 ? "accent" : undefined}
+        >
+          <Progress value={pct} style={{ marginTop: 10 }} tone={pct < 50 ? "warning" : undefined} />
+        </Stat>
+        <Stat
+          label="Sin marcar"
+          value={unset}
+          tone={unset > 0 ? "warning" : undefined}
+          sub={unset > 0 ? "Aún no han respondido" : "Todos han respondido"}
+        />
+        <Stat label="No pueden" value={noCount} sub={`${players.length - active.length} bajas en plantilla`} />
+      </StatRow>
+
+      <div className="tw-toolbar">
+        <Segmented
+          label="Filtrar jugadores"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "todos", label: "Todos" },
+            { value: "disp", label: "Disponibles" },
+            { value: "bajas", label: "Bajas" },
+          ]}
+        />
+        <span className="tw-toolbar-spacer" />
+        <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+          {sorted.length} de {players.length} jugadores
+        </span>
+      </div>
 
       {sorted.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconUsers size={34} />}
-            title="Nadie en este filtro."
+            icon={<IconUsers size={22} />}
+            title="Nadie en este filtro"
             body="Prueba con otro filtro o marca a alguien."
           />
         </Card>
@@ -306,62 +266,37 @@ export function AvailabilityView({ id }: { id: string }) {
         <div className="tw-avail-grid">
           {sorted.map((p) => {
             const v = state[p.id];
+            const locked = p.out || (!isCaptain && !p.isMe);
             return (
               <Card
                 key={p.id}
                 style={{
-                  padding: 18,
-                  border: `1.5px solid ${p.isMe ? "var(--accent)" : "transparent"}`,
+                  borderColor: p.isMe ? "var(--accent-40)" : undefined,
                   opacity: p.out ? 0.6 : 1,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span
-                    className="mono"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 999,
-                      background: "var(--primary-dim)",
-                      color: "var(--accent)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11.5,
-                      fontWeight: 700,
-                      flex: "none",
-                    }}
-                  >
-                    {initials(p.name)}
-                  </span>
+                  <Avatar initials={initials(p.name)} size={36} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span
-                      style={{
-                        display: "block",
-                        fontSize: 14,
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
+                      className="truncate"
+                      style={{ display: "block", fontSize: 14, fontWeight: 700 }}
                     >
                       {p.name}
                     </span>
                     <span
-                      className="mono"
                       style={{
                         display: "block",
-                        marginTop: 3,
-                        fontSize: 9.5,
-                        letterSpacing: "0.14em",
-                        color: "var(--text-faint)",
+                        marginTop: 2,
+                        fontSize: 12.5,
+                        color: "var(--text-muted)",
                       }}
                     >
-                      {p.pos.toUpperCase()} · {p.pts} PTS
+                      {p.pos} · <span className="mono">{p.pts}</span> pts
                     </span>
                   </span>
-                  {p.isMe && <span className="chip">Soy yo</span>}
-                  {p.out && <span className="chip chip-warning">Baja</span>}
+                  {p.isMe && <Chip plain>Soy yo</Chip>}
+                  {p.out && <Chip tone="warning">Baja</Chip>}
                 </div>
 
                 <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
@@ -377,22 +312,14 @@ export function AvailabilityView({ id }: { id: string }) {
                         key={k}
                         type="button"
                         aria-pressed={on}
-                        disabled={p.out || (!isCaptain && !p.isMe)}
+                        disabled={locked}
                         onClick={() => mark(p.id, k as Av)}
+                        className="btn btn-ghost btn-sm"
                         style={{
                           flex: 1,
-                          padding: "10px 8px",
-                          borderRadius: 10,
-                          cursor:
-                            p.out || (!isCaptain && !p.isMe) ? "default" : "pointer",
-                          fontFamily: "'Satoshi', sans-serif",
-                          fontSize: 12.5,
-                          fontWeight: on ? 700 : 500,
-                          background: on ? bg : "transparent",
-                          color: on ? color : "var(--text-muted)",
-                          border: `1.5px solid ${on ? color : "var(--hair-strong)"}`,
-                          opacity: p.out || (!isCaptain && !p.isMe) ? 0.5 : 1,
-                          transition: "all var(--dur-fast) var(--ease)",
+                          ...(on
+                            ? { background: bg, color, borderColor: color, fontWeight: 700 }
+                            : null),
                         }}
                       >
                         {label}
@@ -407,34 +334,15 @@ export function AvailabilityView({ id }: { id: string }) {
       )}
 
       {saving && (
-        <p
-          className="mono"
-          style={{
-            marginTop: 18,
-            fontSize: 10.5,
-            letterSpacing: "0.16em",
-            color: "var(--accent)",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <IconCheck size={14} /> MARCANDO…
-        </p>
+        <Note tone="accent" icon={<IconCheck size={15} />} style={{ marginTop: 16 }}>
+          Marcando a toda la plantilla…
+        </Note>
       )}
 
       {!WRITES_ENABLED && (
-        <p
-          className="mono"
-          style={{
-            marginTop: 18,
-            fontSize: 10.5,
-            letterSpacing: "0.12em",
-            color: "var(--text-faint)",
-          }}
-        >
-          MODO SOLO LECTURA · LOS CAMBIOS AÚN NO SE GUARDAN
-        </p>
+        <Note tone="warning" style={{ marginTop: 16 }}>
+          Modo solo lectura: los cambios aún no se guardan.
+        </Note>
       )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}

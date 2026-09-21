@@ -3,13 +3,23 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard } from "@/components/states";
+import {
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  IconTile,
+  ListRow,
+  PageHeader,
+  Stat,
+  StatRow,
+  Table,
+} from "@/components/ui";
+import { EmptyState, SkeletonPage } from "@/components/states";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { fetchCasualMatches, type DbCasual } from "@/lib/queries";
 import {
-  IconChevronRight,
   IconPlus,
   IconTicket,
   IconUserPlus,
@@ -17,13 +27,13 @@ import {
 } from "@/components/Icon";
 
 const KIND_LABEL: Record<string, string> = {
-  amistoso: "AMISTOSO",
-  entreno: "ENTRENO",
-  torneo: "TORNEO",
+  amistoso: "Amistoso",
+  entreno: "Entreno",
+  torneo: "Torneo",
 };
 
 const scoreOf = (sets: [number, number][]) =>
-  sets.map(([a, b]) => `${a}-${b}`).join(" ");
+  sets.map(([a, b]) => `${a}-${b}`).join("  ");
 
 const fmtDate = (iso: string | null) => {
   if (!iso) return "";
@@ -42,7 +52,7 @@ const START = [
   },
   {
     href: "/comunidad",
-    title: "Invita a tus colegas",
+    title: "Invitar a tus colegas",
     body: "Que apunten sus partidos y os midáis.",
     Icon: IconUserPlus,
   },
@@ -64,9 +74,6 @@ export function SoloHome() {
   );
   const matches: DbCasual[] = useMemo(() => data ?? [], [data]);
 
-  // Mismas reglas que /stats: el lado 0 es «nosotros» (así se guardan los
-  // amistosos creados desde la app). Las rachas se calculan sobre los partidos
-  // con resultado, que llegan más reciente primero.
   const stats = useMemo(() => {
     const played = matches.filter((m) => m.winnerSide !== null);
     const won = played.filter((m) => m.winnerSide === 0).length;
@@ -88,246 +95,130 @@ export function SoloHome() {
         run = 0;
       }
     }
-    return { matches: matches.length, winRate, streak, bestStreak: best };
+    return { matches: matches.length, played: played.length, won, winRate, streak, bestStreak: best };
   }, [matches]);
 
-  const recent = matches.slice(0, 4);
+  const recent = matches.slice(0, 6);
+
+  if (loading) return <SkeletonPage />;
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <Eyebrow>TU PÁDEL</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 32 }}>
-          {user?.name ?? "Tu pádel"}
-        </h1>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        title={user?.name ?? "Mi pádel"}
+        lede="Tus partidos, tu racha y tus números."
+        actions={
+          <BtnLink href="/amistosos/nuevo" variant="accent" icon={<IconPlus size={15} />}>
+            Registrar amistoso
+          </BtnLink>
+        }
+      />
 
-      <div className="tw-solo-stats">
-        {[
-          { label: "PARTIDOS", value: String(stats.matches) },
-          { label: "% DE VICTORIAS", value: `${stats.winRate}%`, accent: true },
-          { label: "RACHA", value: String(stats.streak) },
-          { label: "MEJOR RACHA", value: String(stats.bestStreak) },
-        ].map((k) => (
-          <Card key={k.label} style={{ padding: 22 }}>
-            <div className="mono tw-stat-label">{k.label}</div>
-            <div
-              className="mono tw-stat-value"
-              style={k.accent ? { color: "var(--accent)" } : undefined}
-            >
-              {k.value}
-            </div>
-          </Card>
-        ))}
-      </div>
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat label="Partidos" value={stats.matches} sub={`${stats.played} con resultado`} />
+        <Stat
+          label="Victorias"
+          value={stats.winRate}
+          unit="%"
+          tone={stats.played > 0 && stats.winRate >= 50 ? "accent" : undefined}
+          sub={`${stats.won} ganados`}
+        />
+        <Stat label="Racha actual" value={stats.streak} sub={stats.streak > 0 ? "victorias seguidas" : "sin racha"} />
+        <Stat label="Mejor racha" value={stats.bestStreak} />
+      </StatRow>
 
-      <section style={{ marginTop: 28 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 12,
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <Eyebrow>ÚLTIMOS PARTIDOS</Eyebrow>
-          <Link href="/stats" style={{ fontSize: 13 }}>
-            Ver todas mis stats →
-          </Link>
-        </div>
-
-        {loading ? (
-          <SkeletonCard />
-        ) : error ? (
-          <Card>
+      <div className="tw-home-grid">
+        <Card flush>
+          <CardHead title="Últimos partidos" count={matches.length}>
+            <Link href="/stats" className="link-action">
+              Ver estadísticas
+            </Link>
+          </CardHead>
+          {error ? (
             <EmptyState
-              icon={<IconUsers size={34} />}
+              compact
+              icon={<IconUsers size={22} />}
               title="No se pudieron cargar tus partidos"
               body={error}
             />
-          </Card>
-        ) : recent.length === 0 ? (
-          <Card>
+          ) : recent.length === 0 ? (
             <EmptyState
-              icon={<IconUsers size={34} />}
+              compact
+              icon={<IconUsers size={22} />}
               title="Sin partidos todavía"
               body="Registra tu primer amistoso y empieza a acumular números."
               action={
-                <Link
-                  href="/amistosos/nuevo"
-                  className="btn btn-accent"
-                  style={{ padding: "13px 22px" }}
-                >
+                <BtnLink href="/amistosos/nuevo" variant="accent" size="sm">
                   Registrar un amistoso
-                </Link>
+                </BtnLink>
               }
             />
-          </Card>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {recent.map((c) => {
-              const won = c.winnerSide === 0;
-              const decided = c.winnerSide !== null;
-              return (
-                <Link
-                  key={c.id}
-                  href={`/amistosos/${c.id}`}
-                  style={{ color: "inherit" }}
-                >
-                  <Card style={{ padding: 20 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 16,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 9.5,
-                          letterSpacing: "0.16em",
-                          color: "var(--text-faint)",
-                        }}
-                      >
-                        {KIND_LABEL[c.type] ?? c.type.toUpperCase()}
-                      </span>
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 11,
-                          letterSpacing: "0.1em",
-                          color: "var(--text-faint)",
-                        }}
-                      >
-                        {fmtDate(c.playedOn)}
-                      </span>
-                      <div style={{ flex: 1 }} />
-                      {decided && (
-                        <span
-                          className={"chip " + (won ? "" : "chip-error")}
-                          style={{
-                            color: won ? "var(--accent)" : "var(--error)",
-                            borderColor: won
-                              ? "var(--accent-40)"
-                              : "var(--error)",
-                          }}
-                        >
-                          {won ? "Victoria" : "Derrota"}
-                        </span>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 20,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 180 }}>
-                        <div style={{ fontSize: 14.5, fontWeight: 700 }}>
-                          {c.sideA.join(" / ") || "Nosotros"}
-                        </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: 13,
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          {c.sideB.join(" / ") || "Rivales"}
-                        </div>
-                      </div>
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 22,
-                          fontWeight: 700,
-                          letterSpacing: "0.04em",
-                        }}
-                      >
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <th>Partido</th>
+                  <th>Tipo</th>
+                  <th>Fecha</th>
+                  <th className="num">Resultado</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((c) => {
+                  const won = c.winnerSide === 0;
+                  const decided = c.winnerSide !== null;
+                  return (
+                    <tr key={c.id}>
+                      <td>
+                        <Link href={`/amistosos/${c.id}`} style={{ color: "inherit" }}>
+                          <span className="cell-main truncate" style={{ display: "block", maxWidth: 260 }}>
+                            {c.sideA.join(" / ") || "Nosotros"}
+                          </span>
+                          <span className="cell-sub truncate" style={{ maxWidth: 260 }}>
+                            vs {c.sideB.join(" / ") || "Rivales"}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="cell-muted">{KIND_LABEL[c.type] ?? c.type}</td>
+                      <td className="cell-muted">{fmtDate(c.playedOn)}</td>
+                      <td className="num" style={{ fontWeight: 700 }}>
                         {scoreOf(c.sets)}
-                      </span>
-                      {c.photoUrl && (
-                        <span
-                          className="mono"
-                          style={{
-                            fontSize: 9,
-                            letterSpacing: "0.16em",
-                            color: "var(--text-faint)",
-                            border: "1px solid var(--hair-strong)",
-                            borderRadius: 999,
-                            padding: "4px 9px",
-                          }}
-                        >
-                          FOTO
-                        </span>
-                      )}
-                      <span
-                        style={{ color: "var(--text-faint)", display: "flex" }}
-                      >
-                        <IconChevronRight size={16} />
-                      </span>
-                    </div>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                      </td>
+                      <td>
+                        <div className="tw-table-actions">
+                          {decided ? (
+                            <Chip tone={won ? "accent" : "error"}>{won ? "Victoria" : "Derrota"}</Chip>
+                          ) : (
+                            <Chip tone="mute">Sin resultado</Chip>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </Card>
 
-      <section style={{ marginTop: 28 }}>
-        <Eyebrow style={{ marginBottom: 12 }}>EMPEZAR</Eyebrow>
-        <div className="tw-shortcuts">
+        <Card flush>
+          <CardHead title="Empezar" />
           {START.map((x) => (
-            <Link key={x.href} href={x.href} style={{ color: "inherit" }}>
-              <Card style={{ padding: 20, height: "100%" }}>
-                <span
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
-                    background: "var(--accent-10)",
-                    color: "var(--accent)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <x.Icon size={17} />
-                </span>
-                <div
-                  style={{
-                    marginTop: 14,
-                    fontSize: 14.5,
-                    fontWeight: 700,
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {x.title}
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: 12.5,
-                    color: "var(--text-muted)",
-                    textWrap: "pretty",
-                  }}
-                >
-                  {x.body}
-                </div>
-              </Card>
-            </Link>
+            <ListRow
+              key={x.href}
+              href={x.href}
+              icon={
+                <IconTile>
+                  <x.Icon size={16} />
+                </IconTile>
+              }
+              title={x.title}
+              sub={x.body}
+            />
           ))}
-        </div>
-      </section>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { BtnLink } from "@/components/ui";
 
 /**
  * 404. Se renderiza dentro del marco que toque (público o de app) según haya
@@ -9,52 +9,35 @@ export default function NotFound() {
   return (
     <div
       style={{
-        maxWidth: 520,
+        maxWidth: 480,
         margin: "0 auto",
-        padding: "60px 0",
+        padding: "56px 0",
         textAlign: "center",
       }}
     >
       <div
         className="mono"
-        style={{ fontSize: 56, fontWeight: 700, color: "var(--accent)", lineHeight: 1 }}
+        style={{ fontSize: 48, fontWeight: 700, color: "var(--accent)", lineHeight: 1 }}
       >
         404
       </div>
-      <h1 style={{ marginTop: 14, fontSize: 24 }}>Esta página no existe</h1>
-      <p
-        style={{
-          marginTop: 10,
-          color: "var(--text-muted)",
-          fontSize: 14,
-          textWrap: "pretty",
-        }}
-      >
+      <h1 style={{ marginTop: 16 }}>Esta página no existe</h1>
+      <p style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 13.5 }}>
         El enlace puede estar roto o la página se ha movido.
       </p>
       <div
         style={{
-          marginTop: 26,
+          marginTop: 24,
           display: "flex",
-          gap: 10,
+          gap: 8,
           justifyContent: "center",
           flexWrap: "wrap",
         }}
       >
-        <Link
-          href="/torneos"
-          className="btn btn-accent"
-          style={{ padding: "12px 22px", fontSize: 14 }}
-        >
+        <BtnLink href="/torneos" variant="accent">
           Ir a torneos
-        </Link>
-        <Link
-          href="/"
-          className="btn btn-ghost"
-          style={{ padding: "12px 22px", fontSize: 14 }}
-        >
-          Inicio
-        </Link>
+        </BtnLink>
+        <BtnLink href="/">Inicio</BtnLink>
       </div>
     </div>
   );

@@ -32,10 +32,8 @@ export async function generateMetadata({
   const { seccion } = await params;
   const match = SETTINGS_SECTIONS.find((s) => s.slug === seccion);
   if (!match) return { title: "Ajustes" };
-  // El label va en mayúsculas para el eyebrow; en el <title> se ve mejor
-  // con la inicial en mayúscula y el resto tal cual.
-  const nice = match.label.charAt(0) + match.label.slice(1).toLowerCase();
-  return { title: `${nice} · Ajustes` };
+  // El label ya viene en frase normal, igual que en el menú lateral.
+  return { title: `${match.label} · Ajustes` };
 }
 
 const SECTION_VIEWS: Record<SettingsSlug, () => React.ReactElement> = {

@@ -16,10 +16,24 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
-import { Card, Eyebrow } from "@/components/ui";
-import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import {
+  Avatar,
+  Btn,
+  BtnLink,
+  Card,
+  CardHead,
+  Chip,
+  Field,
+  InputWrap,
+  ListRow,
+  PageHeader,
+  Segmented,
+  Stat,
+  StatRow,
+} from "@/components/ui";
+import { EmptyState, SkeletonCard, SkeletonPage, Toast } from "@/components/states";
 import { BarList, Ring, WonLostBar } from "@/components/charts";
-import { IconChevronRight, IconGlobe, IconSearch, IconUsers } from "@/components/Icon";
+import { IconGlobe, IconPlus, IconSearch, IconUsers } from "@/components/Icon";
 
 function initialsOf(name: string) {
   return (
@@ -30,52 +44,6 @@ function initialsOf(name: string) {
       .join("")
       .slice(0, 2)
       .toUpperCase() || "··"
-  );
-}
-
-function Avatar({
-  name,
-  url,
-  size = 40,
-}: {
-  name: string;
-  url?: string | null;
-  size?: number;
-}) {
-  if (url) {
-    return (
-      <span
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 999,
-          flex: "none",
-          backgroundImage: `url(${url})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
-    );
-  }
-  return (
-    <span
-      className="mono"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 999,
-        background: "var(--primary-dim)",
-        color: "var(--accent)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: size * 0.34,
-        fontWeight: 700,
-        flex: "none",
-      }}
-    >
-      {initialsOf(name)}
-    </span>
   );
 }
 
@@ -90,25 +58,36 @@ function formatDate(iso: string | null): string {
   });
 }
 
+const TYPE_LABEL: Record<string, string> = {
+  amistoso: "Amistoso",
+  entreno: "Entreno",
+  torneo: "Torneo",
+};
+
 /* ═══ FEED ════════════════════════════════════════════════════════ */
 export function Feed() {
   const { user } = useSession();
   const { data, loading, error } = useAsync(() => fetchFeed(30), [user?.id], !!user);
   const rows = data ?? [];
 
-  return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>NOVEDADES</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Novedades</h1>
-      </div>
+  if (loading) return <SkeletonPage />;
 
-      {loading ? (
-        <SkeletonCard />
-      ) : error ? (
+  return (
+    <div className="tw-page-narrow">
+      <PageHeader
+        title="Novedades"
+        lede="Lo que hacen los jugadores y los clubes a los que sigues."
+        actions={
+          <BtnLink href="/comunidad" icon={<IconSearch size={15} />}>
+            Buscar en la comunidad
+          </BtnLink>
+        }
+      />
+
+      {error ? (
         <Card>
           <EmptyState
-            icon={<IconGlobe size={34} />}
+            icon={<IconGlobe size={22} />}
             title="No se pudieron cargar las novedades"
             body={error}
           />
@@ -116,86 +95,77 @@ export function Feed() {
       ) : rows.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconGlobe size={34} />}
+            icon={<IconGlobe size={22} />}
             title="Aún no hay novedades"
-            body="El feed muestra lo que hacen los jugadores y clubes a los que sigues. Empieza siguiendo a alguien."
+            body="Aquí verás lo que hacen los jugadores y clubes a los que sigues. Empieza siguiendo a alguien."
             action={
-              <Link href="/comunidad" className="btn btn-accent" style={{ padding: "13px 22px" }}>
+              <BtnLink href="/comunidad" variant="accent" size="sm">
                 Buscar en la comunidad
-              </Link>
+              </BtnLink>
             }
           />
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <Card flush>
+          <CardHead title="Actividad reciente" count={rows.length} />
           {rows.map((n) => (
-            <Card key={`${n.kind}-${n.ref_id}`} style={{ padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar name={n.actor_name ?? "?"} url={n.avatar_url} size={36} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
-                    {n.title}
+            <ListRow
+              key={`${n.kind}-${n.ref_id}`}
+              icon={
+                <Avatar
+                  initials={initialsOf(n.actor_name ?? "?")}
+                  src={n.avatar_url}
+                  size={36}
+                />
+              }
+              title={n.title}
+              sub={
+                <>
+                  <span>
+                    {n.kind === "casual" ? "Amistoso" : "Jornada"}
+                    {n.occurred_on ? ` · ${formatDate(n.occurred_on)}` : ""}
                   </span>
-                  <span
-                    className="mono"
-                    style={{
-                      display: "block",
-                      marginTop: 3,
-                      fontSize: 10,
-                      letterSpacing: "0.12em",
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    {formatDate(n.occurred_on)}
-                  </span>
-                </span>
-                <span className="chip chip-mute">
-                  {n.kind === "casual" ? "Amistoso" : "Jornada"}
-                </span>
-              </div>
-
-              {n.subtitle && (
-                <div
-                  className="mono"
-                  style={{
-                    marginTop: 14,
-                    padding: "14px 16px",
-                    borderRadius: 12,
-                    background: "var(--bg-card-2)",
-                    fontSize: 12.5,
-                    color: "var(--text-muted)",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {n.subtitle}
-                </div>
-              )}
-
-              {n.positive !== null && (
-                <div style={{ marginTop: 12 }}>
-                  <span
-                    className="chip"
-                    style={{
-                      color: n.positive ? "var(--accent)" : "var(--text-faint)",
-                      borderColor: n.positive ? "var(--accent-40)" : "var(--hair-strong)",
-                    }}
-                  >
+                  {n.subtitle && (
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: 6,
+                        padding: "10px 12px",
+                        borderRadius: "var(--r-sm)",
+                        background: "var(--bg-card-2)",
+                        color: "var(--text-muted)",
+                        fontSize: 12.5,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {n.subtitle}
+                    </span>
+                  )}
+                </>
+              }
+              right={
+                n.positive !== null ? (
+                  <Chip tone={n.positive ? "accent" : "mute"}>
                     {n.positive ? "Victoria" : "Jugado"}
-                  </span>
-                </div>
-              )}
-            </Card>
+                  </Chip>
+                ) : undefined
+              }
+              style={{ alignItems: "flex-start", paddingTop: 14, paddingBottom: 14 }}
+            />
           ))}
-        </div>
+        </Card>
       )}
     </div>
   );
 }
 
 /* ═══ BUSCAR EN LA COMUNIDAD ══════════════════════════════════════ */
+type CommunityFilter = "todos" | "user" | "club";
+
 export function Community() {
   const { user } = useSession();
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<CommunityFilter>("todos");
   const { data, loading, error } = useAsync(
     () => searchCommunity(query),
     [query],
@@ -232,61 +202,52 @@ export function Community() {
     }
   }
 
-  return (
-    <div style={{ maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>COMUNIDAD</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Buscar en la comunidad</h1>
-      </div>
+  const sections = [
+    { key: "user" as const, title: "Jugadores", rows: people },
+    { key: "club" as const, title: "Clubes", rows: clubs },
+  ].filter((s) => s.rows.length > 0 && (filter === "todos" || filter === s.key));
 
-      <Card style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 12,
-            border: "1px solid var(--hair-strong)",
-            background: "var(--bg-card-2)",
-          }}
-        >
-          <IconSearch size={18} />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Busca jugadores o clubes"
-            aria-label="Buscar en la comunidad"
-            style={{
-              flex: 1,
-              minWidth: 0,
-              border: "none",
-              background: "transparent",
-              color: "var(--text)",
-              fontSize: 15,
-              outline: "none",
-              fontFamily: "'Satoshi', sans-serif",
-            }}
-          />
-        </div>
-        <p
-          className="mono"
-          style={{
-            margin: "12px 0 0",
-            fontSize: 9.5,
-            letterSpacing: "0.14em",
-            color: "var(--text-faint)",
-          }}
-        >
-          MÍNIMO 2 LETRAS
-        </p>
-      </Card>
+  return (
+    <div className="tw-page">
+      <PageHeader
+        title="Comunidad"
+        lede="Busca jugadores y clubes, y sigue a los que quieras tener a la vista."
+      />
+
+      <div className="tw-toolbar">
+        <Field hint="Escribe al menos dos letras">
+          <InputWrap icon={<IconSearch size={15} />}>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Busca jugadores o clubes"
+              aria-label="Buscar en la comunidad"
+            />
+          </InputWrap>
+        </Field>
+        <Segmented
+          label="Tipo de resultado"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "todos", label: "Todos" },
+            { value: "user", label: "Jugadores" },
+            { value: "club", label: "Clubes" },
+          ]}
+        />
+        <span className="tw-toolbar-spacer" />
+        {query.trim().length >= 2 && !loading && !error && (
+          <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+            {hits.length} {hits.length === 1 ? "resultado" : "resultados"}
+          </span>
+        )}
+      </div>
 
       {query.trim().length < 2 ? (
         <Card>
           <EmptyState
-            icon={<IconSearch size={34} />}
+            icon={<IconSearch size={22} />}
             title="Escribe para buscar"
             body="Busca por nombre de usuario, nombre real o nombre de club."
           />
@@ -295,92 +256,55 @@ export function Community() {
         <SkeletonCard />
       ) : error ? (
         <Card>
-          <EmptyState icon={<IconUsers size={34} />} title="Error en la búsqueda" body={error} />
+          <EmptyState icon={<IconUsers size={22} />} title="Error en la búsqueda" body={error} />
         </Card>
-      ) : hits.length === 0 ? (
+      ) : sections.length === 0 ? (
         <Card>
-          <EmptyState icon={<IconUsers size={34} />} title="Sin resultados" />
+          <EmptyState
+            icon={<IconUsers size={22} />}
+            title="Sin resultados"
+            body="Prueba con otro nombre o cambia el filtro."
+          />
         </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          {[
-            { title: "JUGADORES", rows: people },
-            { title: "CLUBES", rows: clubs },
-          ]
-            .filter((s) => s.rows.length > 0)
-            .map((s) => (
-              <section key={s.title}>
-                <Eyebrow style={{ marginBottom: 12 }}>{s.title}</Eyebrow>
-                <Card style={{ padding: 0, overflow: "hidden" }}>
-                  {s.rows.map((h, i) => (
-                    <div
-                      key={h.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "14px 20px",
-                        borderBottom:
-                          i === s.rows.length - 1 ? "none" : "1px solid var(--hair)",
-                      }}
+        sections.map((s, si) => (
+          <Card key={s.key} flush style={si > 0 ? { marginTop: 16 } : undefined}>
+            <CardHead title={s.title} count={s.rows.length} />
+            {s.rows.map((h) => {
+              const on = follow[h.id] ?? h.is_following;
+              return (
+                <ListRow
+                  key={h.id}
+                  icon={<Avatar initials={initialsOf(h.name)} src={h.avatar_url} size={36} />}
+                  // Los jugadores tienen perfil público (`/u/:id`); los clubes
+                  // aún no, así que su nombre no enlaza (evita el enlace muerto).
+                  title={
+                    h.type === "user" ? (
+                      <Link href={`/u/${h.id}`} style={{ color: "inherit" }}>
+                        {h.name}
+                      </Link>
+                    ) : (
+                      h.name
+                    )
+                  }
+                  sub={`${h.subtitle ?? (h.type === "club" ? "Club" : "Jugador")} · ${
+                    h.followers_count
+                  } ${h.followers_count === 1 ? "seguidor" : "seguidores"}`}
+                  right={
+                    <Btn
+                      size="sm"
+                      variant={on ? "ghost" : "accent"}
+                      disabled={busy === h.id}
+                      onClick={() => void toggleFollow(h)}
                     >
-                      <Avatar name={h.name} url={h.avatar_url} size={38} />
-                      {(() => {
-                        // Los jugadores tienen perfil público (`/u/:id`); los
-                        // clubes aún no, así que su fila no navega (evita el
-                        // enlace muerto a /comunidad).
-                        const inner = (
-                          <>
-                            <span
-                              style={{ display: "block", fontSize: 14, fontWeight: 700 }}
-                            >
-                              {h.name}
-                            </span>
-                            <span
-                              className="mono"
-                              style={{
-                                display: "block",
-                                marginTop: 3,
-                                fontSize: 10.5,
-                                color: "var(--text-faint)",
-                              }}
-                            >
-                              {h.subtitle ?? (h.type === "club" ? "Club" : "Jugador")} ·{" "}
-                              {h.followers_count} seguidores
-                            </span>
-                          </>
-                        );
-                        return h.type === "user" ? (
-                          <Link
-                            href={`/u/${h.id}`}
-                            style={{ flex: 1, minWidth: 0, color: "inherit" }}
-                          >
-                            {inner}
-                          </Link>
-                        ) : (
-                          <div style={{ flex: 1, minWidth: 0 }}>{inner}</div>
-                        );
-                      })()}
-                      {(() => {
-                        const on = follow[h.id] ?? h.is_following;
-                        return (
-                          <button
-                            type="button"
-                            disabled={busy === h.id}
-                            onClick={() => toggleFollow(h)}
-                            className={"chip " + (on ? "" : "chip-mute")}
-                            style={{ cursor: "pointer" }}
-                          >
-                            {on ? "Siguiendo" : "Seguir"}
-                          </button>
-                        );
-                      })()}
-                    </div>
-                  ))}
-                </Card>
-              </section>
-            ))}
-        </div>
+                      {on ? "Siguiendo" : "Seguir"}
+                    </Btn>
+                  }
+                />
+              );
+            })}
+          </Card>
+        ))
       )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
@@ -397,16 +321,18 @@ export function PublicProfileView({ username }: { username: string }) {
     true
   );
 
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error || !data) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconUsers size={34} />}
-          title="Perfil no disponible"
-          body={error ?? "Puede que el perfil no exista o no sea público."}
-        />
-      </Card>
+      <div className="tw-page-narrow">
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={22} />}
+            title="Perfil no disponible"
+            body={error ?? "Puede que el perfil no exista o no sea público."}
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -417,75 +343,32 @@ export function PublicProfileView({ username }: { username: string }) {
   const rate = played ? Math.round((won / played) * 100) : 0;
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <Card style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
-        <div className="amb" style={{ padding: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-            <Avatar name={name} url={p.avatar_url as string | null} size={72} />
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <h1 style={{ fontSize: 28 }}>{name}</h1>
-              {(p.username as string) && (
-                <div
-                  className="mono"
-                  style={{
-                    marginTop: 8,
-                    fontSize: 11,
-                    letterSpacing: "0.12em",
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  @{p.username as string}
-                  {p.home_club ? ` · ${(p.home_club as string).toUpperCase()}` : ""}
-                </div>
-              )}
-            </div>
-          </div>
+    <div className="tw-page-narrow">
+      <PageHeader
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <Avatar initials={initialsOf(name)} src={p.avatar_url as string | null} size={44} />
+            {name}
+          </span>
+        }
+        meta={[
+          (p.username as string) ? `@${p.username as string}` : null,
+          (p.home_club as string) ?? null,
+        ].filter(Boolean) as string[]}
+      />
 
-          <div style={{ marginTop: 22, display: "flex", gap: 28, flexWrap: "wrap" }}>
-            {[
-              { l: "SEGUIDORES", v: Number(p.followers_count ?? 0) },
-              { l: "SIGUIENDO", v: Number(p.following_count ?? 0) },
-              { l: "JUGADOS", v: played },
-            ].map((k) => (
-              <div key={k.l}>
-                <div className="mono" style={{ fontSize: 22, fontWeight: 700 }}>
-                  {k.v}
-                </div>
-                <div
-                  className="mono"
-                  style={{
-                    marginTop: 5,
-                    fontSize: 9.5,
-                    letterSpacing: "0.18em",
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  {k.l}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
+      <StatRow>
+        <Stat label="Seguidores" value={Number(p.followers_count ?? 0)} />
+        <Stat label="Siguiendo" value={Number(p.following_count ?? 0)} />
+        <Stat label="Partidos jugados" value={played} />
+      </StatRow>
 
       {played > 0 && (
-        <div className="tw-solo-stats">
-          {[
-            { l: "VICTORIAS", v: String(won), accent: true },
-            { l: "TASA V.", v: `${rate}%` },
-            { l: "NIVEL", v: String(p.level_display ?? "—") },
-          ].map((k) => (
-            <Card key={k.l} style={{ padding: 18 }}>
-              <div className="mono tw-stat-label">{k.l}</div>
-              <div
-                className="mono tw-stat-value"
-                style={{ fontSize: 24, ...(k.accent ? { color: "var(--accent)" } : null) }}
-              >
-                {k.v}
-              </div>
-            </Card>
-          ))}
-        </div>
+        <StatRow style={{ marginTop: 16 }}>
+          <Stat label="Victorias" value={won} tone="accent" />
+          <Stat label="Porcentaje de victorias" value={rate} unit="%" />
+          <Stat label="Nivel" value={String(p.level_display ?? "—")} />
+        </StatRow>
       )}
     </div>
   );
@@ -501,16 +384,18 @@ export function MyStats() {
   );
   const matches: DbCasual[] = data ?? [];
 
-  if (loading) return <SkeletonCard />;
+  if (loading) return <SkeletonPage />;
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          icon={<IconUsers size={34} />}
-          title="No se pudieron cargar tus partidos"
-          body={error}
-        />
-      </Card>
+      <div className="tw-page">
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={22} />}
+            title="No se pudieron cargar tus partidos"
+            body={error}
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -537,129 +422,130 @@ export function MyStats() {
     .slice(0, 6)
     .map(([label, value]) => ({ label, value }));
 
+  const photos = matches.filter((m) => m.photoUrl);
+
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ marginBottom: 22 }}>
-        <Eyebrow>MIS ESTADÍSTICAS</Eyebrow>
-        <h1 style={{ marginTop: 10, fontSize: 30 }}>Mis estadísticas</h1>
-        <p
-          className="mono"
-          style={{
-            margin: "8px 0 0",
-            fontSize: 10.5,
-            letterSpacing: "0.14em",
-            color: "var(--text-faint)",
-          }}
-        >
-          {matches.length} PARTIDOS · DATOS REALES
-        </p>
-      </div>
+    <div className="tw-page">
+      <PageHeader
+        title="Mis estadísticas"
+        lede="Tus partidos, con quién los juegas y cómo se te dan."
+        meta={[`${matches.length} ${matches.length === 1 ? "partido" : "partidos"}`]}
+        actions={
+          <BtnLink href="/amistosos/nuevo" variant="accent" icon={<IconPlus size={15} />}>
+            Registrar amistoso
+          </BtnLink>
+        }
+      />
 
       {matches.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<IconUsers size={34} />}
+            icon={<IconUsers size={22} />}
             title="Sin partidos todavía"
             body="Registra tu primer amistoso y empieza a acumular números."
             action={
-              <Link href="/amistosos/nuevo" className="btn btn-accent" style={{ padding: "13px 22px" }}>
+              <BtnLink href="/amistosos/nuevo" variant="accent" size="sm">
                 Registrar un amistoso
-              </Link>
+              </BtnLink>
             }
           />
         </Card>
       ) : (
         <>
-          <div className="tw-solo-stats" style={{ marginBottom: 20 }}>
-            {[
-              { l: "PARTIDOS", v: String(matches.length) },
-              { l: "CON RESULTADO", v: String(played.length) },
-              { l: "AMISTOSOS", v: String(matches.filter((m) => m.type === "amistoso").length) },
-              { l: "ENTRENOS", v: String(matches.filter((m) => m.type === "entreno").length) },
-            ].map((k) => (
-              <Card key={k.l} style={{ padding: 20 }}>
-                <div className="mono tw-stat-label">{k.l}</div>
-                <div className="mono tw-stat-value" style={{ fontSize: 26 }}>
-                  {k.v}
-                </div>
-              </Card>
-            ))}
-          </div>
+          <StatRow style={{ marginBottom: 16 }}>
+            <Stat label="Partidos" value={matches.length} />
+            <Stat label="Con resultado" value={played.length} />
+            <Stat
+              label="Amistosos"
+              value={matches.filter((m) => m.type === "amistoso").length}
+            />
+            <Stat
+              label="Entrenos"
+              value={matches.filter((m) => m.type === "entreno").length}
+            />
+          </StatRow>
 
-          <div className="tw-club-grid" style={{ marginBottom: 20 }}>
-            <Card>
-              <Eyebrow>% DE VICTORIAS</Eyebrow>
-              <div style={{ marginTop: 20 }}>
-                <Ring value={rate} label="DE VICTORIAS" />
+          <div className="tw-club-grid">
+            <Card flush>
+              <CardHead title="Porcentaje de victorias" />
+              <div className="card-body">
+                <Ring value={rate} label="de victorias" />
               </div>
             </Card>
 
-            <Card>
-              <Eyebrow>RESULTADOS</Eyebrow>
-              <div style={{ marginTop: 24 }}>
+            <Card flush>
+              <CardHead title="Resultados" sub={`${played.length} partidos con resultado`} />
+              <div className="card-body">
                 <WonLostBar won={won} lost={lost} />
               </div>
             </Card>
           </div>
 
-          <div className="tw-club-grid">
+          <div className="tw-club-grid" style={{ marginTop: 16 }}>
             {mates.length > 0 && (
-              <Card>
-                <Eyebrow>CON QUIÉN JUEGAS</Eyebrow>
-                <p style={{ margin: "12px 0 20px", fontSize: 12.5, color: "var(--text-muted)" }}>
-                  Nombres que más aparecen en tu lado
-                </p>
-                <BarList data={mates} valueLabel="partidos" />
+              <Card flush>
+                <CardHead
+                  title="Con quién juegas"
+                  sub="Nombres que más aparecen en tu lado"
+                />
+                <div className="card-body">
+                  <BarList data={mates} valueLabel="partidos" />
+                </div>
               </Card>
             )}
 
-            <Card>
-              <Eyebrow>POR TIPO</Eyebrow>
-              <p style={{ margin: "12px 0 20px", fontSize: 12.5, color: "var(--text-muted)" }}>
-                Reparto de tus partidos
-              </p>
-              <BarList data={byType} valueLabel="partidos" />
+            <Card flush>
+              <CardHead title="Por tipo" sub="Reparto de tus partidos" />
+              <div className="card-body">
+                <BarList data={byType} valueLabel="partidos" />
+              </div>
             </Card>
           </div>
 
-          <Card style={{ marginTop: 20 }}>
-            <Eyebrow>ÚLTIMOS PARTIDOS</Eyebrow>
-            <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-              {matches.slice(0, 8).map((c) => (
-                <Link key={c.id} href={`/amistosos/${c.id}`} style={{ color: "inherit" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 14,
-                      padding: "13px 16px",
-                      borderRadius: 12,
-                      background: "var(--bg-card-2)",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 9,
-                        letterSpacing: "0.14em",
-                        color: "var(--text-faint)",
-                      }}
-                    >
-                      {c.type.toUpperCase()}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 120, fontSize: 13, fontWeight: 700 }}>
-                      {c.sideA.join(" · ") || "—"}
-                    </span>
-                    <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
-                      {c.sets.map(([a, b]) => `${a}-${b}`).join(" ")}
-                    </span>
-                    <IconChevronRight size={15} />
-                  </div>
-                </Link>
-              ))}
-            </div>
+          <Card flush style={{ marginTop: 16 }}>
+            <CardHead title="Últimos partidos" count={matches.length} />
+            {matches.slice(0, 8).map((c) => (
+              <ListRow
+                key={c.id}
+                href={`/amistosos/${c.id}`}
+                title={c.sideA.join(" · ") || "—"}
+                sub={`${TYPE_LABEL[c.type] ?? c.type}${
+                  c.playedOn ? ` · ${formatDate(c.playedOn)}` : ""
+                }`}
+                right={
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
+                    {c.sets.map(([a, b]) => `${a}-${b}`).join(" ")}
+                  </span>
+                }
+              />
+            ))}
           </Card>
+
+          {photos.length > 0 && (
+            <Card flush style={{ marginTop: 16 }}>
+              <CardHead title="Fotos de tus partidos" count={photos.length} />
+              <div className="card-body">
+                <div className="tw-photo-grid">
+                  {photos.slice(0, 12).map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/amistosos/${c.id}`}
+                      aria-label={`Ver el partido del ${formatDate(c.playedOn)}`}
+                      style={{
+                        display: "block",
+                        aspectRatio: "1 / 1",
+                        borderRadius: "var(--r-md)",
+                        border: "1px solid var(--line)",
+                        backgroundImage: `url(${c.photoUrl})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
         </>
       )}
     </div>
