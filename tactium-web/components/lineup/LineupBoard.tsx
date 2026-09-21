@@ -5,7 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   cloneLineupVariantPairs,
+  createLineupVariant,
+  deleteLineupVariant,
   fetchMatchdayBundle,
+  renameLineupVariant,
   saveLineupVariant,
   setActiveLineupVariant,
   type DbPlayer,
@@ -117,6 +120,57 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const [notify, setNotify] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [variantBusy, setVariantBusy] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [confirmDeleteVariant, setConfirmDeleteVariant] = useState(false);
+
+  /** Crea una alternativa más. El tope (5 por jornada) lo pone la base de
+   *  datos; aquí solo se enseña su motivo si se alcanza. */
+  async function addVariant() {
+    if (variantBusy) return;
+    setVariantBusy(true);
+    const res = await guardedWrite("crear la variante", () =>
+      createLineupVariant(id, `Variante ${variants.length + 1}`),
+    );
+    setVariantBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setVariantId(res.data.id);
+      setToast(`«${res.data.label}» creada`);
+    } else setToast(res.reason);
+  }
+
+  async function saveVariantName() {
+    if (!variant || variantBusy) return;
+    const label = renameValue.trim();
+    if (!label) return;
+    setVariantBusy(true);
+    const res = await guardedWrite("renombrar la variante", () =>
+      renameLineupVariant(variant.id, label),
+    );
+    setVariantBusy(false);
+    setRenameOpen(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Variante renombrada");
+    } else setToast(res.reason);
+  }
+
+  /** La oficial no se borra: la jornada se quedaría sin alineación que leer. */
+  async function removeVariant() {
+    if (!variant || variantBusy || variant.isActive) return;
+    setVariantBusy(true);
+    const res = await guardedWrite("borrar la variante", () =>
+      deleteLineupVariant(variant.id),
+    );
+    setVariantBusy(false);
+    setConfirmDeleteVariant(false);
+    if (res.ok) {
+      setVariantId(null);
+      setReloadKey((k) => k + 1);
+      setToast("Variante borrada");
+    } else setToast(res.reason);
+  }
 
   /** Marca la variante mostrada como la oficial (la que ve la plantilla). */
   async function makeOfficial() {
@@ -561,6 +615,25 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
               </button>
             );
           })}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => void addVariant()}
+              disabled={variantBusy}
+              className="btn"
+              style={{
+                padding: "8px 14px",
+                fontSize: 12.5,
+                fontWeight: 600,
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "1px dashed var(--hair-strong)",
+              }}
+              title="Preparar otra alineación para esta jornada"
+            >
+              + Nueva
+            </button>
+          )}
         </div>
 
         {variant && variants.length > 0 && !readOnly && (
@@ -585,6 +658,52 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
                 Hacer oficial esta alineación
               </button>
             )}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={variantBusy}
+              onClick={() => {
+                setRenameValue(variant.label);
+                setRenameOpen(true);
+              }}
+              style={{ padding: "9px 15px", fontSize: 12.5 }}
+            >
+              Renombrar
+            </button>
+            {!variant.isActive &&
+              (confirmDeleteVariant ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={variantBusy}
+                    onClick={() => setConfirmDeleteVariant(false)}
+                    style={{ padding: "9px 15px", fontSize: 12.5 }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={variantBusy}
+                    onClick={() => void removeVariant()}
+                    style={{ padding: "9px 15px", fontSize: 12.5 }}
+                  >
+                    Sí, borrarla
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={variantBusy}
+                  onClick={() => setConfirmDeleteVariant(true)}
+                  style={{ padding: "9px 15px", fontSize: 12.5 }}
+                  title="La alineación oficial no se puede borrar"
+                >
+                  Borrar
+                </button>
+              ))}
             {variants
               .filter((v) => v.id !== variant.id)
               .map((v) => (
@@ -1115,6 +1234,54 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
           </button>
         </div>
       </Modal>
+
+      {renameOpen && variant && (
+        <Modal open onClose={() => setRenameOpen(false)} labelledBy="renombrar-variante">
+          <h2 id="renombrar-variante" style={{ fontSize: 22 }}>
+            Renombrar alineación
+          </h2>
+          <p style={{ margin: "10px 0 18px", fontSize: 13.5, color: "var(--text-muted)" }}>
+            Un nombre que te diga de un vistazo qué es: «Con Ana fuera», «Plan B».
+          </p>
+          <input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveVariantName();
+            }}
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "13px 15px",
+              borderRadius: 12,
+              border: "1px solid var(--hair-strong)",
+              background: "var(--bg-card)",
+              color: "var(--text)",
+              fontSize: 14,
+              outline: "none",
+            }}
+          />
+          <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setRenameOpen(false)}
+              style={{ padding: "12px 20px", fontSize: 13.5 }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={variantBusy || !renameValue.trim()}
+              onClick={() => void saveVariantName()}
+              style={{ padding: "12px 22px", fontSize: 13.5 }}
+            >
+              Guardar
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {toast && (
         <Toast

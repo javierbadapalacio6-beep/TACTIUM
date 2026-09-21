@@ -3376,3 +3376,48 @@ export async function togglePhaseDay(
     .eq("play_date", playDate);
   if (error) throw error;
 }
+
+/* ── Variantes de alineación ─────────────────────────────────────── */
+
+/**
+ * Crea una variante nueva para la jornada. El trigger `lineup_variants_max_5`
+ * corta en 5 por jornada con un mensaje legible, así que no se duplica aquí la
+ * regla: se deja hablar a la base de datos.
+ */
+export async function createLineupVariant(
+  matchdayId: string,
+  label: string,
+): Promise<{ id: string; label: string }> {
+  const { data, error } = await supabaseBrowser()
+    .from("lineup_variants")
+    .insert({ matchday_id: matchdayId, label })
+    .select("id, label")
+    .single();
+  if (error) throw error;
+  return data as { id: string; label: string };
+}
+
+/** Renombra una variante. */
+export async function renameLineupVariant(
+  id: string,
+  label: string,
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("lineup_variants")
+    .update({ label })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Borra una variante. La oficial NO se borra: la jornada se quedaría sin
+ * alineación que leer y el acta no sabría de dónde tirar. Esa regla la impone
+ * el cliente —igual que en la app—, porque la base de datos sí lo permitiría.
+ */
+export async function deleteLineupVariant(id: string): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("lineup_variants")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
