@@ -3269,3 +3269,63 @@ export async function setMatchSlot(
     .eq("id", matchId);
   if (error) throw error;
 }
+
+/**
+ * Días asignados a cada fase, como mapa "bracket:round" → fechas ISO.
+ *
+ * Misma clave y misma tabla que la app (`tournament_phase_days`): una fase
+ * puede repartirse en varios días —los grupos en tres, por ejemplo— y todos los
+ * cuadros (oro/plata/consolación) comparten los días de su ronda.
+ */
+export async function fetchPhaseDays(
+  tournamentId: string,
+): Promise<Record<string, string[]>> {
+  const { data, error } = await supabaseBrowser()
+    .from("tournament_phase_days")
+    .select("bracket, round, play_date")
+    .eq("tournament_id", tournamentId)
+    .order("play_date", { ascending: true });
+  if (error) throw error;
+  const map: Record<string, string[]> = {};
+  for (const r of (data ?? []) as {
+    bracket: string;
+    round: number;
+    play_date: string;
+  }[]) {
+    const k = `${r.bracket}:${r.round}`;
+    (map[k] ??= []).push(r.play_date);
+  }
+  return map;
+}
+
+/** Añade o quita un día de una fase. */
+export async function togglePhaseDay(
+  tournamentId: string,
+  bracket: string,
+  round: number,
+  playDate: string,
+  on: boolean,
+): Promise<void> {
+  const sb = supabaseBrowser();
+  if (on) {
+    const { error } = await sb.from("tournament_phase_days").upsert(
+      {
+        tournament_id: tournamentId,
+        bracket,
+        round,
+        play_date: playDate,
+      },
+      { onConflict: "tournament_id,bracket,round,play_date" },
+    );
+    if (error) throw error;
+    return;
+  }
+  const { error } = await sb
+    .from("tournament_phase_days")
+    .delete()
+    .eq("tournament_id", tournamentId)
+    .eq("bracket", bracket)
+    .eq("round", round)
+    .eq("play_date", playDate);
+  if (error) throw error;
+}

@@ -18,9 +18,11 @@ import {
   fetchTournamentMatches,
   fetchTournamentRegs,
   fetchRegsPayments,
+  fetchPhaseDays,
   mergeDivision,
   moveRegistration,
   setMatchSlot,
+  togglePhaseDay,
   setRegistrationPayment,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
@@ -565,6 +567,8 @@ function ScheduleGrid({
   startsOn,
   endsOn,
   readOnly,
+  phaseDays,
+  onTogglePhaseDay,
   onPersist,
 }: {
   matches: RealMatch[];
@@ -577,6 +581,14 @@ function ScheduleGrid({
   startsOn: string | null;
   endsOn: string | null;
   readOnly: boolean;
+  /** Días asignados a cada fase, por clave «bracket:round». */
+  phaseDays: Record<string, string[]>;
+  onTogglePhaseDay: (
+    bracket: string,
+    round: number,
+    day: string,
+    on: boolean,
+  ) => Promise<string | null>;
   /** Persiste el hueco. Devuelve el motivo si falla, para poder revertir. */
   onPersist: (
     matchId: string,
@@ -639,6 +651,27 @@ function ScheduleGrid({
 
   const activeDay = day && days.includes(day) ? day : days[0];
 
+  // Fases que existen de verdad (las que tienen partidos), no las teóricas.
+  const phases = useMemo(() => {
+    const maxRound = new Map<string, number>();
+    for (const m of matches) {
+      maxRound.set(m.bracket, Math.max(maxRound.get(m.bracket) ?? 0, m.round));
+    }
+    const seen = new Map<string, { bracket: string; round: number; label: string }>();
+    for (const m of matches) {
+      const key = `${m.bracket}:${m.round}`;
+      if (seen.has(key)) continue;
+      const label =
+        m.bracket === "group"
+          ? "GRUPOS"
+          : roundLabel(m.round, maxRound.get(m.bracket) ?? m.round);
+      seen.set(key, { bracket: m.bracket, round: m.round, label });
+    }
+    return [...seen.values()].sort(
+      (a, b) => a.bracket.localeCompare(b.bracket) || a.round - b.round,
+    );
+  }, [matches]);
+
   const posOf = (id: string): { ti: number; ci: number } | null => {
     const sl = slots[id];
     if (!sl?.at || !sl.court || dayKey(sl.at) !== activeDay) return null;
@@ -650,6 +683,16 @@ function ScheduleGrid({
 
   const placedIds = new Set(matches.filter((m) => posOf(m.id) !== null).map((m) => m.id));
   const unassigned = matches.filter((m) => !placedIds.has(m.id));
+
+  /**
+   * ¿Le toca a este partido jugarse el día que se está viendo? Si su fase no
+   * tiene días asignados, vale cualquiera. Sirve para no colocar por error un
+   * partido de semifinales el día de los grupos.
+   */
+  const fitsDay = (m: RealMatch): boolean => {
+    const asigned = phaseDays[`${m.bracket}:${m.round}`];
+    return !asigned || asigned.length === 0 || asigned.includes(activeDay);
+  };
 
   const regIdsOf = (m: RealMatch): string[] =>
     [m.home_reg, m.home_reg2, m.away_reg, m.away_reg2].filter((x): x is string => !!x);
@@ -720,7 +763,12 @@ function ScheduleGrid({
         }}
         title={readOnly ? undefined : "Arrastra para colocar · doble clic para quitar"}
         className="tw-match-card"
-        style={{ opacity: dragId === m.id ? 0.4 : 1, cursor: readOnly ? "default" : "grab" }}
+        style={{
+          // Atenuado si su fase se juega otro día: se puede colocar igual, pero
+          // el organizador ve de un vistazo cuáles tocan hoy.
+          opacity: dragId === m.id ? 0.4 : fitsDay(m) ? 1 : 0.45,
+          cursor: readOnly ? "default" : "grab",
+        }}
       >
         <span
           className="mono"
@@ -817,6 +865,79 @@ function ScheduleGrid({
           </button>
         )}
       </div>
+
+      {days.length > 1 && phases.length > 0 && !readOnly && (
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--hair)" }}>
+          <div className="mono tw-stat-label">DÍAS DE CADA FASE</div>
+          <p
+            style={{
+              margin: "8px 0 14px",
+              fontSize: 12.5,
+              color: "var(--text-muted)",
+              textWrap: "pretty",
+            }}
+          >
+            Marca en qué días se juega cada fase; puede ser más de uno. Los
+            partidos de las fases que no tocan hoy se ven atenuados abajo.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {phases.map((ph) => {
+              const key = `${ph.bracket}:${ph.round}`;
+              const sel = phaseDays[key] ?? [];
+              return (
+                <div key={key} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: "0.14em",
+                      color: "var(--text-faint)",
+                      minWidth: 110,
+                    }}
+                  >
+                    {ph.label}
+                  </span>
+                  {days.map((d) => {
+                    const on = sel.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          void (async () => {
+                            setBusy(true);
+                            const reason = await onTogglePhaseDay(
+                              ph.bracket,
+                              ph.round,
+                              d,
+                              !on,
+                            );
+                            setBusy(false);
+                            if (reason) setErr(reason);
+                          })();
+                        }}
+                        className="btn"
+                        style={{
+                          padding: "6px 10px",
+                          fontSize: 11.5,
+                          fontWeight: on ? 700 : 500,
+                          background: on ? "var(--accent-10)" : "transparent",
+                          color: on ? "var(--accent)" : "var(--text-muted)",
+                          border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                        }}
+                      >
+                        {on ? "✓ " : ""}
+                        {d.slice(8, 10)}/{d.slice(5, 7)}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {unassigned.length > 0 && (
         <div
@@ -1254,10 +1375,13 @@ export function TournamentDetail({
   // RPC públicas (funcionan también sin sesión, igual que en la app).
   const { data, loading, error } = useAsync(
     async () => {
-      const [tour, matches, regs] = await Promise.all([
+      const [tour, matches, regs, phaseDays] = await Promise.all([
         fetchTournament(id),
         fetchTournamentMatches(id),
         fetchTournamentRegs(id),
+        // Los días de cada fase son cosa del organizador; para el espectador
+        // no aportan nada y la RLS no tiene por qué dejárselos leer.
+        spectator ? Promise.resolve({}) : fetchPhaseDays(id).catch(() => ({})),
       ]);
       let regsTyped = regs as unknown as RealReg[];
       // El organizador ve el estado de cobro (la RPC pública no lo expone).
@@ -1276,6 +1400,7 @@ export function TournamentDetail({
         tour: (tour as RealTournament | null) ?? null,
         matches: matches as unknown as RealMatch[],
         regs: regsTyped,
+        phaseDays: phaseDays as Record<string, string[]>,
       };
     },
     [id, reloadKey],
@@ -1468,6 +1593,20 @@ export function TournamentDetail({
    * Guarda el hueco de un partido. Devuelve el motivo del fallo (o null si
    * fue bien) para que la rejilla pueda revertir la tarjeta a su sitio.
    */
+  /** Alterna un día de una fase. Devuelve el motivo si falla. */
+  async function flipPhaseDay(
+    bracket: string,
+    round: number,
+    day: string,
+    on: boolean,
+  ): Promise<string | null> {
+    const res = await guardedWrite("guardar los días de la fase", () =>
+      togglePhaseDay(id, bracket, round, day, on),
+    );
+    if (res.ok) setReloadKey((k) => k + 1);
+    return res.ok ? null : res.reason;
+  }
+
   async function persistSlot(
     matchId: string,
     at: string | null,
@@ -2277,6 +2416,8 @@ export function TournamentDetail({
               startsOn={t?.starts_on ?? null}
               endsOn={t?.ends_on ?? null}
               readOnly={!!spectator}
+              phaseDays={data?.phaseDays ?? {}}
+              onTogglePhaseDay={flipPhaseDay}
               onPersist={persistSlot}
             />
           </Card>
