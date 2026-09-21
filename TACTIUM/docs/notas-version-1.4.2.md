@@ -36,6 +36,9 @@ SUSCRIPCIÓN
 • Cuando pides la baja, la app lo dice claro: «No se renovará, tu acceso termina el…», en vez de anunciarte un cobro que no va a llegar.
 • Una suscripción ya caducada deja de aparecer como activa.
 
+PRECIOS
+• El plan Club Elite pasa a 49,99 €/mes y 479,99 €/año. Si ya estabas suscrito, mantienes el precio que tenías: la subida sólo afecta a altas nuevas. Los planes Capitán, Club Starter y Club Pro no cambian.
+
 ADEMÁS
 • Al borrar tu cuenta se borran también tus fotos y archivos, no solo tus datos.
 • Ajustes muestra el número de compilación real, también en Android.
@@ -48,9 +51,10 @@ ADEMÁS
 *(límite 500 caracteres)*
 
 ```
-La temporada que viene: explora la que aún está en inscripción y mira los fichajes antes de que empiece la liga. El club ve si sus equipos están apuntados, en qué categoría han quedado y su plantilla con la sede de local.
-Federación: temporadas como cursos (2025/2026) e importación de plantilla arreglada.
-Suscripción: cambia entre plan de club y de capitán sin cancelar, y la app reconoce sola tu compra.
+La temporada que viene: explora la que aún está en inscripción y mira los fichajes antes de que empiece la liga. El club ve si sus equipos están apuntados, en qué categoría y su plantilla con la sede de local.
+Federación: temporadas como cursos (2025/2026) e importación arreglada.
+Suscripción: cambia entre plan de club y de capitán sin cancelar.
+Club Elite pasa a 49,99 €/mes; si ya estabas suscrito mantienes tu precio.
 Al borrar la cuenta se borran también tus archivos.
 ```
 
@@ -58,11 +62,12 @@ Al borrar la cuenta se borran también tus archivos.
 
 ## Notas para quien publica
 
-- **El precio de Club Elite ha subido** a 49,99 €/mes y 479,99 €/año. No se
-  menciona en las notas a propósito: el precio lo enseña la propia ficha de la
-  suscripción, y anunciar una subida en «Novedades» sólo la hace más visible sin
-  aportar nada. No afecta a nadie: no hay ni una sola suscripción Elite viva, y
-  tanto Apple como Google respetan el precio viejo a quien ya pagaba.
+- **El precio de Club Elite ha subido** a 49,99 €/mes y 479,99 €/año, y se dice
+  en las notas de las dos tiendas. La frase importante es la segunda: quien ya
+  estuviera suscrito mantiene su precio. Es literalmente cierto —los dos scripts
+  de precio usan `preserveCurrentPrice` en Apple y en Google el cambio sólo rige
+  para altas nuevas— y además hoy no hay ni una sola suscripción Elite viva, así
+  que no afecta a ningún cliente real. Capitán, Starter y Pro no se han tocado.
 - **No mencionar** el cobro por torneo, que sigue siendo web: Apple no admite
   enlaces de compra externa en una app con compras integradas.
 - **Capturas**: siguen siendo las de la 1.3.0. Donde más se notaría una nueva es
