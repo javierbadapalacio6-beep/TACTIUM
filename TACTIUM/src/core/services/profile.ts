@@ -167,16 +167,20 @@ const OWN_FILE_BUCKETS: { bucket: string; dir: (userId: string) => string }[] = 
  * pueda completarse SIEMPRE es requisito de Apple 5.1.1(v).
  */
 async function purgeMyFiles(userId: string): Promise<void> {
-  for (const { bucket, dir } of OWN_FILE_BUCKETS) {
-    try {
-      const folder = dir(userId);
-      const { data } = await supabase.storage.from(bucket).list(folder);
-      const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
-      if (paths.length > 0) await supabase.storage.from(bucket).remove(paths);
-    } catch (e) {
-      console.warn('purgeMyFiles', bucket, e);
-    }
-  }
+  // En paralelo: en fila son cuatro idas y venidas a Storage y el user se
+  // queda esperando unos diez segundos.
+  await Promise.all(
+    OWN_FILE_BUCKETS.map(async ({ bucket, dir }) => {
+      try {
+        const folder = dir(userId);
+        const { data } = await supabase.storage.from(bucket).list(folder);
+        const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
+        if (paths.length > 0) await supabase.storage.from(bucket).remove(paths);
+      } catch (e) {
+        console.warn('purgeMyFiles', bucket, e);
+      }
+    }),
+  );
 }
 
 export async function deleteMyAccount(): Promise<void> {

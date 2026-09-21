@@ -2960,16 +2960,20 @@ const OWN_FILE_BUCKETS: { bucket: string; dir: (userId: string) => string }[] = 
  */
 async function purgeMyFiles(userId: string): Promise<void> {
   const sb = supabaseBrowser();
-  for (const { bucket, dir } of OWN_FILE_BUCKETS) {
-    try {
-      const folder = dir(userId);
-      const { data } = await sb.storage.from(bucket).list(folder);
-      const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
-      if (paths.length > 0) await sb.storage.from(bucket).remove(paths);
-    } catch {
-      /* nunca bloquea el borrado de la cuenta */
-    }
-  }
+  // En paralelo: en fila son cuatro idas y venidas a Storage y el usuario se
+  // queda mirando «Eliminando…» unos diez segundos.
+  await Promise.all(
+    OWN_FILE_BUCKETS.map(async ({ bucket, dir }) => {
+      try {
+        const folder = dir(userId);
+        const { data } = await sb.storage.from(bucket).list(folder);
+        const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
+        if (paths.length > 0) await sb.storage.from(bucket).remove(paths);
+      } catch {
+        /* nunca bloquea el borrado de la cuenta */
+      }
+    }),
+  );
 }
 
 /**
