@@ -186,3 +186,41 @@ escribiendo el nombre— y ninguna llamada detrás. Los dos conectados.
 **Lo que sigue fuera, a propósito:** compartir (tarjetas de imagen). La app
 tiene tres y la web ninguna. No es paridad de gestión, es crecimiento, y
 merece decidirse aparte.
+
+---
+
+## Cierre (2026-09-21)
+
+Cerrado también lo que apareció después de la primera pasada:
+
+- **La rejilla de horario del torneo era una maqueta** (constante `SCHEDULED`,
+  parejas inventadas) y `fetchTournamentMatches` ni pedía `scheduled_at` ni
+  `court`. Reescrita sobre datos reales, con arrastre y guardado, selector de
+  día y conflictos por id de inscripción. Escribe la hora en LOCAL y la pista
+  como «Pista N», igual que la app, para que los dos horarios se entiendan.
+- **Días de cada fase** (`tournament_phase_days`), sobre esa misma rejilla.
+- **La temporada en inscripción** (2026/2027) no salía en Explorar Federación:
+  el selector filtraba por `fcp_grupos` y una liga sin sorteo no tiene grupos.
+- **Cambio de rol** club ↔ capitán, que la jerarquía derivada impedía.
+
+### Estado final de la superficie
+
+RPCs sólo en la app: las cuatro de tiendas (`start_subscription_trial`,
+`sync_subscription_from_revenuecat`, `link_subscription_to_club`,
+`set_scheduled_plan_change`). Ninguna es un hueco.
+
+Tablas que toca la app y no la web:
+
+| Tabla | ¿Hueco? |
+|---|---|
+| `push_tokens` | No: las push son de la app por naturaleza. |
+| `lineup_pairs` | No: es una **vista** sobre `lineups`, que la web sí escribe. |
+| `casual_match_participants` | **Sí, pequeño**: la web no muestra quién jugó un amistoso. |
+
+### Lo que sigue pendiente
+
+1. **Probarlo.** Nada de lo implementado entre el 19 y el 21 lo ha pulsado un
+   humano. Compila, las RPC existen y las políticas de RLS cuadran, pero eso no
+   es lo mismo. Prioridad: las acciones destructivas y la subida de avatar.
+2. **Compartir** (tarjetas de imagen), fuera a propósito.
+3. Quién jugó un amistoso, en la web.
