@@ -12,7 +12,6 @@ import {
   type ScheduledMatch,
 } from "@/lib/tournament-data";
 import {
-  clearTournamentSchedule,
   deleteTournament,
   fetchTournament,
   fetchTournamentMatches,
@@ -1230,20 +1229,6 @@ export function TournamentDetail({
     } else setToast(res.reason);
   }
 
-  /** Vacía horas y pistas del horario para volver a generarlo desde cero. */
-  async function clearSchedule() {
-    if (busy) return;
-    setBusy(true);
-    const res = await guardedWrite("limpiar el horario", () =>
-      clearTournamentSchedule(id),
-    );
-    setBusy(false);
-    if (res.ok) {
-      setReloadKey((k) => k + 1);
-      setToast("Horario vaciado");
-    } else setToast(res.reason);
-  }
-
   /** Cambia de categoría o género una inscripción ya hecha, sin perderla. */
   async function doMoveReg(gender: string, category: string) {
     if (!moveReg || busy) return;
@@ -2045,25 +2030,31 @@ export function TournamentDetail({
 
       {curTab === "horario" && (
         <>
-          {!spectator && (
-            <div
+          {/* La rejilla de abajo es una MAQUETA: se monta sobre `SCHEDULED`,
+              una constante con parejas inventadas, y no lee ni escribe
+              `tournament_matches`. Hasta que se conecte de verdad, se avisa en
+              pantalla en vez de dejar que parezca el horario del torneo. */}
+          <Card
+            style={{
+              padding: "16px 20px",
+              marginBottom: 12,
+              borderColor: "var(--warning)",
+            }}
+          >
+            <Eyebrow tone="error">EN CONSTRUCCIÓN</Eyebrow>
+            <p
               style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                marginBottom: 12,
+                margin: "10px 0 0",
+                fontSize: 13.5,
+                color: "var(--text-muted)",
+                textWrap: "pretty",
               }}
             >
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => void clearSchedule()}
-                disabled={busy}
-                style={{ padding: "10px 16px", fontSize: 12.5 }}
-              >
-                Limpiar horario
-              </button>
-            </div>
-          )}
+              Esta rejilla es una demostración con datos de ejemplo: todavía no
+              muestra el horario real del torneo ni guarda los cambios. El
+              horario de verdad se monta desde la app.
+            </p>
+          </Card>
           <Card style={{ padding: 0, overflow: "hidden" }}>
             <ScheduleGrid />
           </Card>

@@ -72,7 +72,12 @@ export interface SessionUser {
 interface SessionValue {
   /** null = no hay sesión. */
   user: SessionUser | null;
+  /** Rol con el que se está usando la app (puede ser elegido, ver `setRole`). */
   role: Role;
+  /** Los roles que el usuario REALMENTE tiene, de más a menos privilegio. */
+  availableRoles: Role[];
+  /** Cambia de rol. Se ignora si el usuario no tiene ese rol de verdad. */
+  setRole: (role: Role) => void;
   teams: TeamRef[];
   activeTeam: TeamRef | null;
   setActiveTeam: (id: string) => void;
@@ -92,6 +97,7 @@ const SessionContext = createContext<SessionValue | null>(null);
 
 const ACTIVE_TEAM_KEY = "tactium-active-team";
 const ACTIVE_CLUB_KEY = "tactium-active-club";
+const ACTIVE_ROLE_KEY = "tactium-active-role";
 
 function initialsOf(name: string): string {
   return (
@@ -107,7 +113,9 @@ function initialsOf(name: string): string {
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [role, setRole] = useState<Role>("suelto");
+  const [derivedRole, setDerivedRole] = useState<Role>("suelto");
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
+  const [roleOverride, setRoleOverride] = useState<Role | null>(null);
   const [teams, setTeams] = useState<TeamRef[]>([]);
   const [clubs, setClubs] = useState<ClubRef[]>([]);
   const [activeClubId, setActiveClubId] = useState<string | null>(null);
@@ -119,7 +127,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     if (!authUser) {
       setUser(null);
-      setRole("suelto");
+      setDerivedRole("suelto");
+      setAvailableRoles([]);
+      setRoleOverride(null);
       setTeams([]);
       setClubs([]);
       setActiveClubId(null);
@@ -212,7 +222,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       roleLabel: ROLE_EYEBROW[derived],
       roleIsPrivileged: derived === "capitan" || derived === "club",
     });
-    setRole(derived);
+    setDerivedRole(derived);
+
+    // Quien administra un club Y es capitán de un equipo hace dos trabajos
+    // distintos; la jerarquía sola le dejaba encerrado en la vista de club.
+    const roles: Role[] = [];
+    if (myClubs.length > 0) roles.push("club");
+    if (isCaptain) roles.push("capitan");
+    if (myTeams.length > 0) roles.push("jugador");
+    if (roles.length === 0) roles.push("suelto");
+    setAvailableRoles(roles);
+
+    let storedRole: string | null = null;
+    try {
+      storedRole = localStorage.getItem(ACTIVE_ROLE_KEY);
+    } catch {
+      /* sin persistencia */
+    }
+    setRoleOverride(
+      storedRole && roles.includes(storedRole as Role)
+        ? (storedRole as Role)
+        : null
+    );
     setTeams(myTeams);
     setClubs(myClubs);
 
@@ -262,6 +293,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, [loadFor]);
 
+  const setRole = useCallback((next: Role) => {
+    setRoleOverride(next);
+    try {
+      localStorage.setItem(ACTIVE_ROLE_KEY, next);
+    } catch {
+      /* sin persistencia */
+    }
+  }, []);
+
   const setActiveClub = useCallback((id: string) => {
     setActiveClubId(id);
     try {
@@ -296,6 +336,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") window.location.href = "/?signedout=1";
   }, []);
 
+  // El override sólo vale si sigue siendo un rol suyo: si le quitan de capitán,
+  // no puede quedarse mirando una vista que ya no le corresponde.
+  const role: Role = useMemo(
+    () =>
+      roleOverride && availableRoles.includes(roleOverride)
+        ? roleOverride
+        : derivedRole,
+    [roleOverride, availableRoles, derivedRole]
+  );
+
   const clubId = useMemo(
     () =>
       clubs.find((c) => c.id === activeClubId)?.id ?? clubs[0]?.id ?? null,
@@ -312,6 +362,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         role,
+        availableRoles,
+        setRole,
         teams,
         activeTeam,
         setActiveTeam,

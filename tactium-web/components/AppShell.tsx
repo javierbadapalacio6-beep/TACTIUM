@@ -28,7 +28,7 @@ import {
   isPublicPath,
   routeMeta,
 } from "@/lib/nav";
-import { useSession } from "@/lib/session";
+import { ROLE_LABELS, useSession } from "@/lib/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useTheme } from "@/lib/theme";
 import { fetchNotifications, markNotificationsRead } from "@/lib/queries";
@@ -240,6 +240,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     clubs,
     clubId,
     setActiveClub,
+    availableRoles,
+    setRole,
     ready,
     signOut,
   } = useSession();
@@ -696,7 +698,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div style={{ flex: 1 }} />
 
-        {/* Bloque de usuario · el rol lo deriva la sesión, no se elige */}
+        {/* Bloque de usuario. El rol se DERIVA, pero quien tiene varios puede
+            elegir: administrar el club y ser capitán son dos trabajos y la
+            jerarquía sola dejaba al club encerrado en su vista. */}
         <div className="tw-side-user" ref={roleRef}>
           {roleOpen && (
             <div
@@ -704,6 +708,53 @@ export function AppShell({ children }: { children: ReactNode }) {
               style={{ marginBottom: 8, padding: 6 }}
               role="menu"
             >
+              {availableRoles.length > 1 && (
+                <>
+                  <span
+                    className="mono"
+                    style={{
+                      display: "block",
+                      padding: "8px 12px 6px",
+                      fontSize: 9.5,
+                      letterSpacing: "0.16em",
+                      color: "var(--text-faint)",
+                    }}
+                  >
+                    USAR TACTIUM COMO
+                  </span>
+                  {availableRoles.map((r) => {
+                    const on = r === role;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setRole(r);
+                          setRoleOpen(false);
+                        }}
+                        className="tw-popitem"
+                        style={{
+                          color: on ? "var(--accent)" : "var(--text-muted)",
+                          background: on ? "var(--accent-10)" : "transparent",
+                          fontWeight: on ? 700 : 500,
+                        }}
+                      >
+                        <span style={{ flex: 1, textAlign: "left" }}>
+                          {ROLE_LABELS[r]}
+                        </span>
+                        {on && <IconCheck size={14} />}
+                      </button>
+                    );
+                  })}
+                  <div
+                    style={{
+                      height: 1,
+                      background: "var(--hair)",
+                      margin: "4px 6px",
+                    }}
+                  />
+                </>
+              )}
               <Link href="/ajustes/apariencia" className="tw-popitem">
                 <span style={{ flex: 1, textAlign: "left" }}>Ajustes</span>
               </Link>

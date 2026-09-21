@@ -1474,29 +1474,39 @@ export interface FcpLeague {
   idLiga: number;
   nombre: string;
   temporada: string | null;
+  /** Aún sin sorteo: hay equipos inscritos pero no hay grupos. */
+  upcoming: boolean;
 }
 
 /**
  * Temporadas disponibles, de la más reciente a la más antigua.
  *
- * Sólo las ligas que TIENEN grupos scrapeados: la federación crea entradas de
- * liga que luego quedan vacías (en 2026 hay tres y sólo una con datos), y
- * ofrecerlas daría un filtro que devuelve cero. Mismo criterio que
+ * Se descartan las ligas VACÍAS —la federación crea entradas que luego no usa—
+ * pero una liga EN INSCRIPCIÓN no está vacía: no tiene grupos porque no se ha
+ * hecho el sorteo, y sí tiene equipos apuntados. Esconderla era esconder justo
+ * lo que interesa mientras se fichan jugadores. Mismo criterio que
  * `fetchFcpYears` en la app.
  */
 export async function fetchFcpLeagues(): Promise<FcpLeague[]> {
-  const [{ data: grupos }, { data: ligas, error }] = await Promise.all([
-    supabaseBrowser().from("fcp_grupos").select("id_liga"),
-    supabaseBrowser().from("fcp_ligas").select("id_liga, nombre, temporada"),
-  ]);
+  const [{ data: grupos }, { data: inscritas }, { data: ligas, error }] =
+    await Promise.all([
+      // El limit explícito importa: PostgREST corta en 1000 por defecto y los
+      // grupos crecen ~130 por temporada, así que sin esto las temporadas
+      // viejas irían desapareciendo del selector sin avisar.
+      supabaseBrowser().from("fcp_grupos").select("id_liga").limit(20000),
+      supabaseBrowser().from("fcp_inscripciones").select("id_liga").limit(20000),
+      supabaseBrowser().from("fcp_ligas").select("id_liga, nombre, temporada"),
+    ]);
   if (error) throw error;
-  const withData = new Set((grupos ?? []).map((g) => g.id_liga));
+  const conGrupos = new Set((grupos ?? []).map((g) => g.id_liga));
+  const conInscritos = new Set((inscritas ?? []).map((i) => i.id_liga));
   return (ligas ?? [])
-    .filter((l) => withData.has(l.id_liga))
+    .filter((l) => conGrupos.has(l.id_liga) || conInscritos.has(l.id_liga))
     .map((l) => ({
       idLiga: l.id_liga,
       nombre: l.nombre ?? String(l.id_liga),
       temporada: l.temporada,
+      upcoming: !conGrupos.has(l.id_liga),
     }))
     .sort((a, b) => (b.temporada ?? "").localeCompare(a.temporada ?? ""));
 }
@@ -1565,11 +1575,21 @@ export async function searchFcpTeams(opts: {
   query?: string;
   grupoIds?: string[];
   limit?: number;
+  /** Liga en inscripción: los equipos salen de `fcp_inscripciones`, no de la
+   *  clasificación, que todavía no existe. */
+  idLigaSinGrupos?: number | null;
 }): Promise<FcpTeamResult[]> {
-  const { query = "", grupoIds, limit = 60 } = opts;
-  let sel = supabaseBrowser()
-    .from("fcp_clasificacion")
-    .select("id_equipo, equipo, id_grupo");
+  const { query = "", grupoIds, limit = 60, idLigaSinGrupos = null } = opts;
+  // La misma forma de salida para las dos fuentes: la pantalla no tiene por qué
+  // saber si el sorteo está hecho.
+  let sel = idLigaSinGrupos
+    ? supabaseBrowser()
+        .from("fcp_inscripciones")
+        .select("id_equipo, equipo, id_grupo")
+        .eq("id_liga", idLigaSinGrupos)
+    : supabaseBrowser()
+        .from("fcp_clasificacion")
+        .select("id_equipo, equipo, id_grupo");
   const q = query.replace(/[%,()]/g, " ").trim();
   if (q.length >= 2) sel = sel.ilike("equipo", `%${q}%`);
   if (grupoIds?.length) sel = sel.in("id_grupo", grupoIds.slice(0, 200));

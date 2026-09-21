@@ -195,10 +195,21 @@ export function FederationExplore({ slug }: { slug: string }) {
 
   const leagues = useAsync(() => fetchFcpLeagues(), []);
 
-  // Por defecto, la temporada más reciente.
+  // Por defecto, la temporada que SE JUEGA, no la más reciente: la que está en
+  // inscripción ordena por delante ("2026/2027" > "2026") y aterrizar ahí sería
+  // aterrizar en una temporada sin clasificación ni resultados.
   useEffect(() => {
-    if (year == null && leagues.data?.length) setYear(leagues.data[0].idLiga);
+    if (year != null || !leagues.data?.length) return;
+    const jugando = leagues.data.find((l) => !l.upcoming);
+    setYear((jugando ?? leagues.data[0]).idLiga);
   }, [leagues.data, year]);
+
+  const selectedLeague = useMemo(
+    () => leagues.data?.find((l) => l.idLiga === year) ?? null,
+    [leagues.data, year]
+  );
+  /** Liga en inscripción: los equipos salen de las inscripciones. */
+  const upcomingLiga = selectedLeague?.upcoming ? selectedLeague.idLiga : null;
 
   const groups = useAsync(() => fetchFcpGroups(year), [year], year != null);
   const allGroups = useMemo(() => groups.data ?? [], [groups.data]);
@@ -261,9 +272,13 @@ export function FederationExplore({ slug }: { slug: string }) {
         query: term,
         grupoIds: term.length < 2 ? scopedGroupIds : undefined,
         limit: 60,
+        idLigaSinGrupos: upcomingLiga,
       }),
-    [term, scopedGroupIds.join(",")],
-    tab === "equipos" && (term.length >= 2 || scopedGroupIds.length > 0)
+    [term, scopedGroupIds.join(","), upcomingLiga],
+    // Sin sorteo no hay grupos que acotar, así que la condición de "hay algo
+    // que enseñar" no puede depender de ellos: si no, la pestaña sale vacía.
+    tab === "equipos" &&
+      (term.length >= 2 || scopedGroupIds.length > 0 || upcomingLiga != null)
   );
 
   const players = useAsync(
@@ -288,7 +303,9 @@ export function FederationExplore({ slug }: { slug: string }) {
 
   const yearOptions = (leagues.data ?? []).map((l) => ({
     value: String(l.idLiga),
-    label: l.temporada ?? String(l.idLiga),
+    // Se marca la que aún no ha empezado: si no, alguien mira la clasificación
+    // vacía y piensa que los datos están rotos.
+    label: `${l.temporada ?? l.idLiga}${l.upcoming ? " · en inscripción" : ""}`,
   }));
 
   return (
