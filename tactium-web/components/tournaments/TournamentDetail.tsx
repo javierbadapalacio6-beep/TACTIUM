@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useState, type CSSProperties } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import {
-  SCHEDULED,
-  SCHEDULE_CONFIG,
-  SCHEDULE_COURTS,
-  SCHEDULE_HOURS,
   type BracketTie,
-  type ScheduledMatch,
 } from "@/lib/tournament-data";
 import {
   deleteTournament,
@@ -19,6 +20,7 @@ import {
   fetchRegsPayments,
   mergeDivision,
   moveRegistration,
+  setMatchSlot,
   setRegistrationPayment,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
@@ -37,7 +39,13 @@ import {
 import { guardedWrite } from "@/lib/writes";
 import { Card, Eyebrow, Modal } from "@/components/ui";
 import { EmptyState, SkeletonCard, Toast } from "@/components/states";
-import { IconAlert, IconCopy, IconTrophy, IconZap } from "@/components/Icon";
+import {
+  IconAlert,
+  IconCalendar,
+  IconCopy,
+  IconTrophy,
+  IconZap,
+} from "@/components/Icon";
 import { PayTournamentButton } from "@/components/tournaments/PayTournamentButton";
 
 /* ── Formas de los datos reales (RPC públicas, espejo de la app) ──────
@@ -61,6 +69,12 @@ interface RealTournament {
   categories: string[] | null;
   match_format: string | null;
   phase_formats: Record<string, string> | null;
+  // Rejilla de horario: pistas y ventana de juego del torneo.
+  courts?: number | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  slot_minutes?: number | null;
+  rest_minutes?: number | null;
   // No siempre lo devuelve la RPC pública; se usa si viene.
   club_name?: string | null;
   billing_status?: string | null;
@@ -123,6 +137,9 @@ interface RealMatch {
   winner_reg: string | null;
   status: string;
   sets: number[][] | null;
+  /** Hueco en el horario. `court` es texto «Pista N», como en la app. */
+  scheduled_at: string | null;
+  court: string | null;
 }
 
 /* ── Etiquetas ───────────────────────────────────────────────────── */
@@ -486,49 +503,209 @@ function Bracket({
 }
 
 /* ── Rejilla de horario ────────────────────────────────────────── */
-function ScheduleGrid() {
-  const [matches, setMatches] = useState<ScheduledMatch[]>(SCHEDULED);
+/* ── Horario real ──────────────────────────────────────────────── */
+
+/** Fecha local "YYYY-MM-DD" de un ISO. Local a propósito: el horario se guarda
+ *  con la hora del club, no en UTC. */
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** ISO del hueco (día + minutos desde medianoche), construido en hora LOCAL,
+ *  igual que `autoScheduleTournament` en la app. Si aquí se usara UTC, los dos
+ *  horarios se desplazarían una o dos horas entre sí. */
+function slotIso(day: string, minutes: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return dt.toISOString();
+}
+
+function hhmmToMin(v: string | null | undefined, fallback: number): number {
+  const m = /^(\d{1,2}):(\d{2})/.exec(v ?? "");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : fallback;
+}
+
+function minToHhmm(min: number): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(Math.floor(min / 60))}:${p(min % 60)}`;
+}
+
+/** Días consecutivos entre dos fechas ISO (tope de 21, por sanidad). */
+function daysBetween(from: string, to: string | null): string[] {
+  const [y, m, d] = from.split("-").map(Number);
+  const cur = new Date(y, m - 1, d);
+  const end = to ? new Date(...(to.split("-").map(Number) as [number, number, number])) : null;
+  const endDate = end ? new Date(end.getFullYear(), end.getMonth() - 1, end.getDate()) : cur;
+  const out: string[] = [];
+  for (let i = 0; i < 21; i++) {
+    const p = (n: number) => String(n).padStart(2, "0");
+    out.push(`${cur.getFullYear()}-${p(cur.getMonth() + 1)}-${p(cur.getDate())}`);
+    if (cur >= endDate) break;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+interface GridSlot {
+  at: string | null;
+  court: string | null;
+}
+
+function ScheduleGrid({
+  matches,
+  nameById,
+  courtsCount,
+  startTime,
+  endTime,
+  slotMinutes,
+  restMinutes,
+  startsOn,
+  endsOn,
+  readOnly,
+  onPersist,
+}: {
+  matches: RealMatch[];
+  nameById: Map<string, string>;
+  courtsCount: number;
+  startTime: string | null;
+  endTime: string | null;
+  slotMinutes: number;
+  restMinutes: number;
+  startsOn: string | null;
+  endsOn: string | null;
+  readOnly: boolean;
+  /** Persiste el hueco. Devuelve el motivo si falla, para poder revertir. */
+  onPersist: (
+    matchId: string,
+    at: string | null,
+    court: string | null,
+  ) => Promise<string | null>;
+}) {
+  // Estado local de huecos: se pinta al instante y se revierte si el guardado
+  // falla. Sin esto, cada arrastre parpadearía esperando a la red.
+  const [slots, setSlots] = useState<Record<string, GridSlot>>({});
+  useEffect(() => {
+    const next: Record<string, GridSlot> = {};
+    for (const m of matches) {
+      next[m.id] = { at: m.scheduled_at ?? null, court: m.court ?? null };
+    }
+    setSlots(next);
+  }, [matches]);
+
   const [dragId, setDragId] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [clearOpen, setClearOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [day, setDay] = useState<string | null>(null);
 
-  const unassigned = matches.filter((m) => m.hour === null || m.court === null);
+  const courts = useMemo(
+    () => Array.from({ length: Math.max(1, courtsCount) }, (_, i) => `Pista ${i + 1}`),
+    [courtsCount],
+  );
 
-  /** Una pareja no puede jugar dos partidos a la misma hora. */
-  function conflictAt(hour: number, court: number, movingId: string): string | null {
+  // Franjas entre la apertura y el cierre del torneo, del tamaño de un partido.
+  //
+  // Se añaden además las horas que YA tienen partidos aunque no caigan en la
+  // rejilla teórica: con franjas de 90 min desde las 17:00 no existe la fila de
+  // las 19:00, y un partido puesto ahí desde la app se vería como «sin hora»
+  // teniéndola. Antes esconder, mejor enseñar la fila de más.
+  const times = useMemo(() => {
+    const step = Math.max(15, slotMinutes || 60);
+    const from = hhmmToMin(startTime, 9 * 60);
+    const to = hhmmToMin(endTime, 22 * 60);
+    const set = new Set<number>();
+    for (let t = from; t + step <= to && set.size < 40; t += step) set.add(t);
+    for (const sl of Object.values(slots)) {
+      if (!sl.at) continue;
+      const d = new Date(sl.at);
+      set.add(d.getHours() * 60 + d.getMinutes());
+    }
+    const out = [...set].sort((a, b) => a - b);
+    return out.length ? out : [from];
+  }, [startTime, endTime, slotMinutes, slots]);
+
+  // Días del torneo MÁS los que ya tengan partidos puestos: si el horario se
+  // montó desde la app en otras fechas, esconderlas sería perderlos de vista.
+  const days = useMemo(() => {
+    const set = new Set<string>(startsOn ? daysBetween(startsOn, endsOn) : []);
+    for (const sl of Object.values(slots)) if (sl.at) set.add(dayKey(sl.at));
+    const list = [...set].sort();
+    return list.length ? list : [dayKey(new Date().toISOString())];
+  }, [startsOn, endsOn, slots]);
+
+  const activeDay = day && days.includes(day) ? day : days[0];
+
+  const posOf = (id: string): { ti: number; ci: number } | null => {
+    const sl = slots[id];
+    if (!sl?.at || !sl.court || dayKey(sl.at) !== activeDay) return null;
+    const d = new Date(sl.at);
+    const ti = times.indexOf(d.getHours() * 60 + d.getMinutes());
+    const ci = courts.indexOf(sl.court);
+    return ti >= 0 && ci >= 0 ? { ti, ci } : null;
+  };
+
+  const placedIds = new Set(matches.filter((m) => posOf(m.id) !== null).map((m) => m.id));
+  const unassigned = matches.filter((m) => !placedIds.has(m.id));
+
+  const regIdsOf = (m: RealMatch): string[] =>
+    [m.home_reg, m.home_reg2, m.away_reg, m.away_reg2].filter((x): x is string => !!x);
+
+  /** Reglas duras: una pista no se parte en dos y una pareja no se duplica. */
+  function conflictAt(ti: number, ci: number, movingId: string): string | null {
     const moving = matches.find((m) => m.id === movingId);
     if (!moving) return null;
-    const occupied = matches.find(
-      (m) => m.hour === hour && m.court === court && m.id !== movingId
-    );
-    if (occupied) return `Pista ocupada por ${occupied.round.toLowerCase()}`;
-    const sameHour = matches.filter((m) => m.hour === hour && m.id !== movingId);
-    const clash = sameHour.find(
-      (m) => m.a === moving.a || m.b === moving.b || m.a === moving.b || m.b === moving.a
-    );
+    const occupied = matches.find((m) => {
+      if (m.id === movingId) return false;
+      const pos = posOf(m.id);
+      return pos !== null && pos.ti === ti && pos.ci === ci;
+    });
+    if (occupied) return "Pista ocupada";
+    const ids = new Set(regIdsOf(moving));
+    const clash = matches.find((m) => {
+      if (m.id === movingId) return false;
+      const p = posOf(m.id);
+      if (p?.ti !== ti) return false;
+      return regIdsOf(m).some((x) => ids.has(x));
+    });
     if (clash) return "Esa pareja ya juega a esa hora";
     return null;
   }
 
-  function drop(hour: number, court: number) {
-    if (!dragId) return;
-    if (conflictAt(hour, court, dragId)) {
-      setDragId(null);
-      setHover(null);
-      return;
+  async function place(matchId: string, at: string | null, court: string | null) {
+    const prev = slots[matchId] ?? { at: null, court: null };
+    setSlots((s) => ({ ...s, [matchId]: { at, court } }));
+    setBusy(true);
+    const reason = await onPersist(matchId, at, court);
+    setBusy(false);
+    if (reason) {
+      // Revertir: dejar la tarjeta donde no se ha guardado sería mentir.
+      setSlots((s) => ({ ...s, [matchId]: prev }));
+      setErr(reason);
     }
-    setMatches((ms) =>
-      ms.map((m) => (m.id === dragId ? { ...m, hour, court } : m))
-    );
+  }
+
+  function drop(ti: number, ci: number) {
+    if (!dragId || readOnly) return;
+    if (!conflictAt(ti, ci, dragId)) {
+      void place(dragId, slotIso(activeDay, times[ti]), courts[ci]);
+    }
     setDragId(null);
     setHover(null);
   }
 
-  function MatchCard({ m }: { m: ScheduledMatch }) {
+  function MatchCard({ m }: { m: RealMatch }) {
+    const home = m.home_reg ? (nameById.get(m.home_reg) ?? "—") : "Por determinar";
+    const away = m.away_reg ? (nameById.get(m.away_reg) ?? "—") : "Por determinar";
+    const label = [m.category, m.gender].filter(Boolean).join(" · ");
     return (
       <div
-        draggable
+        draggable={!readOnly}
         onDragStart={(e) => {
+          if (readOnly) return;
           setDragId(m.id);
           e.dataTransfer.effectAllowed = "move";
           e.dataTransfer.setData("text/plain", m.id);
@@ -537,39 +714,47 @@ function ScheduleGrid() {
           setDragId(null);
           setHover(null);
         }}
+        onDoubleClick={() => {
+          // Sacar del horario sin tener que arrastrarlo a ninguna parte.
+          if (!readOnly && posOf(m.id)) void place(m.id, null, null);
+        }}
+        title={readOnly ? undefined : "Arrastra para colocar · doble clic para quitar"}
         className="tw-match-card"
-        style={{ opacity: dragId === m.id ? 0.4 : 1 }}
+        style={{ opacity: dragId === m.id ? 0.4 : 1, cursor: readOnly ? "default" : "grab" }}
       >
         <span
           className="mono"
-          style={{
-            fontSize: 8.5,
-            letterSpacing: "0.16em",
-            color: "var(--accent)",
-          }}
+          style={{ fontSize: 8.5, letterSpacing: "0.16em", color: "var(--accent)" }}
         >
-          {m.round} · {m.category}
+          {m.bracket === "group" ? `GRUPO ${m.group_no ?? ""}` : `RONDA ${m.round}`}
+          {label ? ` · ${label}` : ""}
         </span>
         <span style={{ display: "block", marginTop: 5, fontSize: 11.5, fontWeight: 700 }}>
-          {m.a}
+          {home}
         </span>
         <span
-          style={{
-            display: "block",
-            marginTop: 2,
-            fontSize: 11,
-            color: "var(--text-muted)",
-          }}
+          style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--text-muted)" }}
         >
-          {m.b}
+          {away}
         </span>
+      </div>
+    );
+  }
+
+  if (matches.length === 0) {
+    return (
+      <div style={{ padding: 28 }}>
+        <EmptyState
+          icon={<IconCalendar size={30} />}
+          title="Todavía no hay partidos"
+          body="Genera el cuadro o los grupos y aquí podrás repartirlos por horas y pistas."
+        />
       </div>
     );
   }
 
   return (
     <>
-      {/* Configuración */}
       <div
         style={{
           display: "flex",
@@ -583,30 +768,56 @@ function ScheduleGrid() {
         <div>
           <div className="mono tw-stat-label">DURACIÓN POR PARTIDO</div>
           <div className="mono" style={{ marginTop: 6, fontSize: 16, fontWeight: 700 }}>
-            {SCHEDULE_CONFIG.minutesPerMatch} min
+            {slotMinutes || 60} min
           </div>
         </div>
         <div>
           <div className="mono tw-stat-label">DESCANSO ENTRE PARTIDOS</div>
           <div className="mono" style={{ marginTop: 6, fontSize: 16, fontWeight: 700 }}>
-            {SCHEDULE_CONFIG.restBetween} min
+            {restMinutes || 0} min
           </div>
         </div>
+        {days.length > 1 && (
+          <div>
+            <div className="mono tw-stat-label">DÍA</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+              {days.map((d) => {
+                const on = d === activeDay;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDay(d)}
+                    className="btn"
+                    style={{
+                      padding: "6px 10px",
+                      fontSize: 11.5,
+                      fontWeight: on ? 700 : 500,
+                      background: on ? "var(--accent-10)" : "transparent",
+                      color: on ? "var(--accent)" : "var(--text-muted)",
+                      border: `1px solid ${on ? "var(--accent)" : "var(--hair-strong)"}`,
+                    }}
+                  >
+                    {d.slice(8, 10)}/{d.slice(5, 7)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div style={{ flex: 1 }} />
-        <button className="btn btn-ghost" style={{ padding: "10px 16px", fontSize: 12.5 }}>
-          <IconZap size={14} />
-          Generar horario
-        </button>
-        <button
-          className="btn btn-danger-ghost"
-          onClick={() => setClearOpen(true)}
-          style={{ padding: "10px 16px", fontSize: 12.5 }}
-        >
-          Vaciar horario
-        </button>
+        {!readOnly && (
+          <button
+            className="btn btn-danger-ghost"
+            onClick={() => setClearOpen(true)}
+            disabled={busy}
+            style={{ padding: "10px 16px", fontSize: 12.5 }}
+          >
+            Vaciar horario
+          </button>
+        )}
       </div>
 
-      {/* Sin asignar */}
       {unassigned.length > 0 && (
         <div
           style={{
@@ -634,16 +845,13 @@ function ScheduleGrid() {
         </div>
       )}
 
-      {/* Rejilla horas × pistas */}
       <div className="tw-grid-scroll">
         <div
           className="tw-sched-canvas"
-          style={{
-            gridTemplateColumns: `70px repeat(${SCHEDULE_COURTS.length}, minmax(150px, 1fr))`,
-          }}
+          style={{ gridTemplateColumns: `70px repeat(${courts.length}, minmax(150px, 1fr))` }}
         >
           <span />
-          {SCHEDULE_COURTS.map((c) => (
+          {courts.map((c) => (
             <span
               key={c}
               className="mono"
@@ -659,8 +867,8 @@ function ScheduleGrid() {
             </span>
           ))}
 
-          {SCHEDULE_HOURS.map((h, hi) => (
-            <Fragment key={h}>
+          {times.map((min, ti) => (
+            <Fragment key={min}>
               <span
                 className="mono"
                 style={{
@@ -671,24 +879,28 @@ function ScheduleGrid() {
                   paddingTop: 12,
                 }}
               >
-                {h}
+                {minToHhmm(min)}
               </span>
-              {SCHEDULE_COURTS.map((_, ci) => {
-                const key = `${hi}-${ci}`;
-                const m = matches.find((x) => x.hour === hi && x.court === ci);
+              {courts.map((_, ci) => {
+                const key = `${ti}-${ci}`;
+                const m = matches.find((x) => {
+                  const pos = posOf(x.id);
+                  return pos !== null && pos.ti === ti && pos.ci === ci;
+                });
                 const isHover = hover === key && dragId !== null;
-                const conflict = dragId ? conflictAt(hi, ci, dragId) : null;
+                const conflict = dragId ? conflictAt(ti, ci, dragId) : null;
                 return (
                   <div
                     key={key}
                     onDragOver={(e) => {
+                      if (readOnly) return;
                       e.preventDefault();
                       setHover(key);
                     }}
                     onDragLeave={() => setHover(null)}
                     onDrop={(e) => {
                       e.preventDefault();
-                      drop(hi, ci);
+                      drop(ti, ci);
                     }}
                     className="tw-slot-cell"
                     style={{
@@ -738,7 +950,8 @@ function ScheduleGrid() {
           ¿Quitar todas las horas y pistas asignadas?
         </h2>
         <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-          Los partidos vuelven a la bandeja de «sin hora».
+          Los partidos vuelven a la bandeja de «sin hora». Afecta a todos los
+          días, no solo al que estás viendo.
         </p>
         <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <button
@@ -750,9 +963,14 @@ function ScheduleGrid() {
           </button>
           <button
             className="btn btn-danger"
+            disabled={busy}
             onClick={() => {
-              setMatches((ms) => ms.map((m) => ({ ...m, hour: null, court: null })));
               setClearOpen(false);
+              void (async () => {
+                for (const m of matches) {
+                  if (slots[m.id]?.at) await place(m.id, null, null);
+                }
+              })();
             }}
             style={{ padding: "12px 22px", fontSize: 13.5 }}
           >
@@ -760,6 +978,8 @@ function ScheduleGrid() {
           </button>
         </div>
       </Modal>
+
+      {err && <Toast tone="error" title={err} onClose={() => setErr(null)} />}
     </>
   );
 }
@@ -1242,6 +1462,21 @@ export function TournamentDetail({
       setReloadKey((k) => k + 1);
       setToast("Inscripción movida");
     } else setToast(res.reason);
+  }
+
+  /**
+   * Guarda el hueco de un partido. Devuelve el motivo del fallo (o null si
+   * fue bien) para que la rejilla pueda revertir la tarjeta a su sitio.
+   */
+  async function persistSlot(
+    matchId: string,
+    at: string | null,
+    court: string | null,
+  ): Promise<string | null> {
+    const res = await guardedWrite("guardar el horario", () =>
+      setMatchSlot(matchId, at, court),
+    );
+    return res.ok ? null : res.reason;
   }
 
   async function markRegPayment(regId: string, status: "paid" | "pending_club") {
@@ -2030,33 +2265,20 @@ export function TournamentDetail({
 
       {curTab === "horario" && (
         <>
-          {/* La rejilla de abajo es una MAQUETA: se monta sobre `SCHEDULED`,
-              una constante con parejas inventadas, y no lee ni escribe
-              `tournament_matches`. Hasta que se conecte de verdad, se avisa en
-              pantalla en vez de dejar que parezca el horario del torneo. */}
-          <Card
-            style={{
-              padding: "16px 20px",
-              marginBottom: 12,
-              borderColor: "var(--warning)",
-            }}
-          >
-            <Eyebrow tone="error">EN CONSTRUCCIÓN</Eyebrow>
-            <p
-              style={{
-                margin: "10px 0 0",
-                fontSize: 13.5,
-                color: "var(--text-muted)",
-                textWrap: "pretty",
-              }}
-            >
-              Esta rejilla es una demostración con datos de ejemplo: todavía no
-              muestra el horario real del torneo ni guarda los cambios. El
-              horario de verdad se monta desde la app.
-            </p>
-          </Card>
           <Card style={{ padding: 0, overflow: "hidden" }}>
-            <ScheduleGrid />
+            <ScheduleGrid
+              matches={matches}
+              nameById={nameById}
+              courtsCount={Number(t?.courts ?? 3)}
+              startTime={t?.start_time ?? null}
+              endTime={t?.end_time ?? null}
+              slotMinutes={Number(t?.slot_minutes ?? 60)}
+              restMinutes={Number(t?.rest_minutes ?? 0)}
+              startsOn={t?.starts_on ?? null}
+              endsOn={t?.ends_on ?? null}
+              readOnly={!!spectator}
+              onPersist={persistSlot}
+            />
           </Card>
         </>
       )}

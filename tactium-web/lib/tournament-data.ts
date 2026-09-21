@@ -229,17 +229,6 @@ export const CONSOLATION_ROUNDS: { round: string; ties: BracketTie[] }[] = [
 ];
 
 /* ── Horario: rejilla pistas × horas ────────────────────────────── */
-export const SCHEDULE_COURTS = ["Pista 1", "Pista 2", "Pista 3", "Pista 4"];
-export const SCHEDULE_HOURS = [
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "17:00",
-  "18:00",
-  "19:00",
-];
 
 export interface ScheduledMatch {
   id: string;
@@ -252,20 +241,7 @@ export interface ScheduledMatch {
   court: number | null;
 }
 
-export const SCHEDULED: ScheduledMatch[] = [
-  { id: "m1", round: "CUARTOS", a: "Diego · Marco", b: "Adrián · Óscar", category: "1ª M", hour: 0, court: 0 },
-  { id: "m2", round: "CUARTOS", a: "Rubén · Tomás", b: "Nacho · Luis", category: "1ª M", hour: 0, court: 1 },
-  { id: "m3", round: "CUARTOS", a: "Álvaro · Sergio", b: "Carlos · Bruno", category: "1ª M", hour: 1, court: 0 },
-  { id: "m4", round: "CUARTOS", a: "Iván · Pablo", b: "Jorge · Hugo", category: "1ª M", hour: 1, court: 1 },
-  { id: "m5", round: "SEMIS", a: "Diego · Marco", b: "Rubén · Tomás", category: "1ª M", hour: 3, court: 0 },
-  { id: "m6", round: "SEMIS", a: "Álvaro · Sergio", b: "Iván · Pablo", category: "1ª M", hour: null, court: null },
-  { id: "m7", round: "FINAL", a: "Por determinar", b: "Por determinar", category: "1ª M", hour: null, court: null },
-];
 
-export const SCHEDULE_CONFIG = {
-  minutesPerMatch: 60,
-  restBetween: 60,
-};
 
 /* ── Inscripciones ──────────────────────────────────────────────── */
 export interface Signup {

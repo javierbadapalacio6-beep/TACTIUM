@@ -991,7 +991,7 @@ export async function fetchTournament(id: string) {
   const { data: direct } = await sb
     .from("tournaments")
     .select(
-      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status",
+      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, courts, start_time, end_time, slot_minutes, rest_minutes",
     )
     .eq("id", id)
     .maybeSingle();
@@ -1142,7 +1142,7 @@ export async function fetchTournamentMatches(id: string) {
   const { data: direct } = await sb
     .from("tournament_matches")
     .select(
-      "id, gender, category, group_no, bracket, round, slot, home_reg, away_reg, home_reg2, away_reg2, home_score, away_score, winner_reg, status, sets",
+      "id, gender, category, group_no, bracket, round, slot, home_reg, away_reg, home_reg2, away_reg2, home_score, away_score, winner_reg, status, sets, scheduled_at, court",
     )
     .eq("tournament_id", id);
   return (direct ?? []) as Record<string, unknown>[];
@@ -3250,4 +3250,22 @@ export async function fetchTeamPairStats(
     wins: r.wins ?? 0,
     played: r.played ?? 0,
   }));
+}
+
+/**
+ * Coloca (o quita) un partido en el horario.
+ *
+ * `court` es TEXTO con el formato «Pista N», igual que escribe la app: si aquí
+ * se guardara un número, los dos horarios dejarían de entenderse.
+ */
+export async function setMatchSlot(
+  matchId: string,
+  scheduledAt: string | null,
+  court: string | null,
+): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("tournament_matches")
+    .update({ scheduled_at: scheduledAt, court })
+    .eq("id", matchId);
+  if (error) throw error;
 }
