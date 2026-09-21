@@ -3,7 +3,7 @@
  *
  * OJO: hasta ahora la web pintaba los precios desde `account-data.ts`, que son
  * datos de MAQUETA. No coincidían con los reales: el plan de 25 equipos pedía
- * 599,90 €/año cuando la app cobra 384,99 €. Una página de precios que miente
+ * 599,90 €/año cuando la app cobraba 384,99 €. Una página de precios que miente
  * no es un detalle estético — es lo que el cliente cree que va a pagar.
  *
  * Apple y Google son la fuente de verdad legal del importe cobrado en la app;
@@ -80,8 +80,8 @@ export const CLUB_PLANS: Plan[] = [
     tier: "club_elite",
     displayName: "Club Elite",
     audience: "Escuelas y academias",
-    priceMonthlyEur: 39.99,
-    priceYearlyEur: 384.99,
+    priceMonthlyEur: 49.99,
+    priceYearlyEur: 479.99,
     teamQuota: 25,
     tournamentPairCap: 128,
     features: [

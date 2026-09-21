@@ -39,7 +39,7 @@ Crea **4 suscripciones** (una por plan), cada una con **2 base plans** (mensual 
 | Capitán | `tactium_captain` | **4,99 €** | **47,99 €** |
 | Club Starter | `tactium_club_starter` | **11,99 €** | **115,99 €** |
 | Club Pro | `tactium_club_pro` | **24,99 €** | **239,99 €** |
-| Club Elite | `tactium_club_elite` | **39,99 €** | **384,99 €** |
+| Club Elite | `tactium_club_elite` | **49,99 €** | **479,99 €** |
 
 Fija el precio en **EUR como base** y revisa la conversión automática por país antes de guardar (Google no hace el "tier-snapping" de Apple, así que aquí los precios pueden quedar exactos).
 
@@ -95,7 +95,7 @@ Ruta: **Producción → Crear nueva versión** (o **Promover** la build ya aprob
 - `eas.json` usa `appVersionSource: "remote"`: EAS gestiona el `versionCode`, se auto-incrementa en cada build. No lo edites a mano en `app.json`.
 - Al subir un build nuevo, sube el `versionCode`; Google rechaza duplicados.
 - Tras crear el catálogo, **prueba una compra real en Internal Testing** (con una cuenta de tester y tarjeta de licencia) antes del rollout de producción.
-- Cuando toques `TACTIUM/src/core/subscriptions/plans.ts` o `tactium-landing/lib/plans.ts`, confirma que los precios anuales sean **47,99 / 115,99 / 239,99 / 384,99 €** (coinciden con Apple y Google).
+- Cuando toques `TACTIUM/src/core/subscriptions/plans.ts` o `tactium-landing/lib/plans.ts`, confirma que los precios anuales sean **47,99 / 115,99 / 239,99 / 479,99 €** (coinciden con Apple y Google).
 
 ---
 

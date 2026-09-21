@@ -37,7 +37,7 @@ Suscripción mensual o anual (-20%), 14 días de prueba gratis. Planes:
 | Capitán | 1 | 4,99 € |
 | Club Starter | 3 | 11,99 € |
 | Club Pro | 10 | 24,99 € |
-| Club Elite | 25 | 39,99 € |
+| Club Elite | 25 | 49,99 € |
 
 ---
 
