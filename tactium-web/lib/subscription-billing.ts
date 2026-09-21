@@ -9,6 +9,7 @@
  * nunca se confía en el cliente.
  */
 import { ALL_PLANS, type Plan } from "@/lib/plans";
+import { TAX_ENABLED, taxBehaviorFor } from "@/lib/tax";
 
 export type BillingCycle = "monthly" | "yearly";
 export type PlanTier = Plan["tier"];
@@ -39,6 +40,12 @@ export function subscriptionLineItem(plan: Plan, cycle: BillingCycle) {
       currency: "eur",
       unit_amount: priceCents(plan, cycle),
       recurring: { interval: stripeInterval(cycle) },
+      // Con el IVA apagado no se manda nada y Stripe cobra el importe tal
+      // cual, como hasta ahora. Encendido, el club paga «+ IVA» y el
+      // capitán lo lleva dentro (ver lib/tax.ts).
+      ...(TAX_ENABLED
+        ? { tax_behavior: taxBehaviorFor(plan.tier) }
+        : {}),
       product_data: {
         name: `TACTIUM ${plan.displayName}`,
         description:

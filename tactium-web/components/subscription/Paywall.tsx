@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { CAPTAIN_PLAN, CLUB_PLANS, formatEur } from "@/lib/plans";
+import { vatNote } from "@/lib/tax";
 import {
   TOURNAMENT_TIERS,
   TOURNAMENT_EXTRA_PAIR_EUR,
@@ -239,6 +240,7 @@ export function Paywall() {
                   }}
                 >
                   {yearly ? "/AÑO" : "/MES"}
+                  {vatNote(p.tier) ? ` · ${vatNote(p.tier)}` : ""}
                 </span>
               </div>
 
@@ -374,6 +376,7 @@ export function Paywall() {
               }}
             >
               {yearly ? "/AÑO" : "/MES"}
+              {vatNote(CAPTAIN_PLAN.tier) ? ` · ${vatNote(CAPTAIN_PLAN.tier)}` : ""}
             </span>
           </div>
           <button

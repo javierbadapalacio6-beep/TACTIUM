@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
+import { TAX_ENABLED } from "@/lib/tax";
 import {
   computeTournamentBilling,
   PLAN_TOURNAMENT_PAIR_CAP,
@@ -225,6 +226,15 @@ export async function POST(
   }
 
   const session = await stripe.checkout.sessions.create({
+    // Mismo interruptor que las suscripciones: esta cuota también es
+    // ingreso de TACTIUM. Las INSCRIPCIONES no llevan esto: ahí el
+    // comerciante es el club y su IVA es cosa suya.
+    ...(TAX_ENABLED
+      ? {
+          automatic_tax: { enabled: true },
+          tax_id_collection: { enabled: true },
+        }
+      : {}),
     mode: "payment",
     line_items: [
       {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
+import { TAX_ENABLED } from "@/lib/tax";
 import { webAppOrigin } from "@/lib/connect";
 import {
   planForTier,
@@ -143,6 +144,17 @@ export async function POST(req: Request) {
     success_url: `${origin}/suscripcion?sub=ok`,
     cancel_url: `${origin}/pro?sub=cancel`,
     allow_promotion_codes: true,
+    // Interruptor del IVA (lib/tax.ts). Apagado: sesión idéntica a la de
+    // siempre. Encendido: Stripe calcula el impuesto por país y permite al
+    // club meter su CIF — con NIF-IVA intracomunitario aplica inversión del
+    // sujeto pasivo y el cargo sale sin IVA, que es lo correcto.
+    ...(TAX_ENABLED
+      ? {
+          automatic_tax: { enabled: true },
+          tax_id_collection: { enabled: true },
+          customer_update: { name: "auto" as const, address: "auto" as const },
+        }
+      : {}),
   });
 
   return NextResponse.json({ url: session.url ?? "" });
