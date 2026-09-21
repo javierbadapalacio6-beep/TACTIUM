@@ -346,6 +346,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [roleOverride, availableRoles, derivedRole]
   );
 
+  // El rótulo tiene que seguir al rol ELEGIDO, no al derivado: si no, cambias a
+  // capitán, el menú cambia y el cartel sigue diciendo «CLUB · ADMIN».
+  const shownUser = useMemo(
+    () =>
+      user
+        ? {
+            ...user,
+            roleLabel: ROLE_EYEBROW[role],
+            roleIsPrivileged: role === "capitan" || role === "club",
+          }
+        : null,
+    [user, role]
+  );
+
   const clubId = useMemo(
     () =>
       clubs.find((c) => c.id === activeClubId)?.id ?? clubs[0]?.id ?? null,
@@ -360,7 +374,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider
       value={{
-        user,
+        user: shownUser,
         role,
         availableRoles,
         setRole,
