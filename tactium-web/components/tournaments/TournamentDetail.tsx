@@ -672,6 +672,12 @@ function ScheduleGrid({
     );
   }, [matches]);
 
+  /** Nombre de la fase de un partido. Misma fuente que el bloque de días: la
+   *  tarjeta decía «RONDA 1» donde el bloque decía «SEMIFINALES». */
+  const phaseLabel = (m: RealMatch): string =>
+    phases.find((p) => p.bracket === m.bracket && p.round === m.round)?.label ??
+    `RONDA ${m.round}`;
+
   const posOf = (id: string): { ti: number; ci: number } | null => {
     const sl = slots[id];
     if (!sl?.at || !sl.court || dayKey(sl.at) !== activeDay) return null;
@@ -774,7 +780,7 @@ function ScheduleGrid({
           className="mono"
           style={{ fontSize: 8.5, letterSpacing: "0.16em", color: "var(--accent)" }}
         >
-          {m.bracket === "group" ? `GRUPO ${m.group_no ?? ""}` : `RONDA ${m.round}`}
+          {phaseLabel(m)}
           {label ? ` · ${label}` : ""}
         </span>
         <span style={{ display: "block", marginTop: 5, fontSize: 11.5, fontWeight: 700 }}>
