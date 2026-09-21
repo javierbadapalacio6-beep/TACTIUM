@@ -146,7 +146,45 @@ export async function exportMyData(): Promise<Record<string, unknown>> {
   return (data ?? {}) as Record<string, unknown>;
 }
 
+/**
+ * Buckets donde el user guarda ficheros SUYOS, con el prefijo de su carpeta.
+ * `delete_my_account` borra filas de la BD pero no toca Storage: sin esto, la
+ * foto de alguien que pidió borrarlo todo se queda en el bucket. No se puede
+ * resolver dentro del RPC — borrar de `storage.objects` por SQL deja el fichero
+ * huérfano (Supabase lo bloquea justo por eso) y la API de Storage sólo se
+ * llama desde el cliente, con la sesión todavía viva.
+ */
+const OWN_FILE_BUCKETS: { bucket: string; dir: (userId: string) => string }[] = [
+  { bucket: 'avatars', dir: (u) => u },
+  { bucket: 'post-media', dir: (u) => u },
+  { bucket: 'venue-logos', dir: (u) => u },
+  { bucket: 'match-photos', dir: (u) => `casual/${u}` },
+];
+
+/**
+ * Borra los ficheros del user antes de eliminar su cuenta. Best-effort a
+ * propósito: si Storage falla, la cuenta se borra igual — que la eliminación
+ * pueda completarse SIEMPRE es requisito de Apple 5.1.1(v).
+ */
+async function purgeMyFiles(userId: string): Promise<void> {
+  for (const { bucket, dir } of OWN_FILE_BUCKETS) {
+    try {
+      const folder = dir(userId);
+      const { data } = await supabase.storage.from(bucket).list(folder);
+      const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
+      if (paths.length > 0) await supabase.storage.from(bucket).remove(paths);
+    } catch (e) {
+      console.warn('purgeMyFiles', bucket, e);
+    }
+  }
+}
+
 export async function deleteMyAccount(): Promise<void> {
+  // Primero los ficheros: después de borrar la cuenta ya no hay permiso para
+  // tocarlos (la RLS de Storage exige `auth.uid()` = su carpeta).
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user?.id) await purgeMyFiles(auth.user.id);
+
   // El RPC borra la cuenta SIEMPRE (Apple 5.1.1(v) exige que la eliminación
   // pueda completarse). Si había una sub activa de App Store/Google Play,
   // esa sigue viva y se cancela aparte — el cliente ya lo avisa antes de

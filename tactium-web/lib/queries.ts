@@ -2936,6 +2936,43 @@ export function fcpSameTeam(
 /* ── Cuenta ──────────────────────────────────────────────────────── */
 
 /**
+ * Buckets donde el usuario guarda ficheros SUYOS, con el prefijo de su carpeta.
+ * `delete_my_account` borra las filas de la base de datos pero no toca Storage,
+ * así que sin esto la foto de alguien que pidió borrarlo todo se queda en el
+ * bucket. No se puede hacer desde la RPC: borrar de `storage.objects` por SQL
+ * deja el fichero huérfano en el bucket (Supabase lo bloquea justo por eso), y
+ * la API de Storage sólo se puede llamar desde el cliente, mientras la sesión
+ * sigue viva.
+ */
+const OWN_FILE_BUCKETS: { bucket: string; dir: (userId: string) => string }[] = [
+  { bucket: "avatars", dir: (u) => u },
+  { bucket: "post-media", dir: (u) => u },
+  { bucket: "venue-logos", dir: (u) => u },
+  { bucket: "match-photos", dir: (u) => `casual/${u}` },
+];
+
+/**
+ * Borra los ficheros del usuario antes de eliminar su cuenta.
+ *
+ * Es best-effort a propósito: si Storage falla, la cuenta se borra igual. Que
+ * la eliminación pueda completarse SIEMPRE es requisito de Apple (5.1.1 v) y,
+ * sobre todo, es lo que el usuario ha pedido.
+ */
+async function purgeMyFiles(userId: string): Promise<void> {
+  const sb = supabaseBrowser();
+  for (const { bucket, dir } of OWN_FILE_BUCKETS) {
+    try {
+      const folder = dir(userId);
+      const { data } = await sb.storage.from(bucket).list(folder);
+      const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
+      if (paths.length > 0) await sb.storage.from(bucket).remove(paths);
+    } catch {
+      /* nunca bloquea el borrado de la cuenta */
+    }
+  }
+}
+
+/**
  * Elimina la cuenta del usuario logueado (RPC SECURITY DEFINER
  * `delete_my_account`, la misma que usa la app).
  *
@@ -2948,7 +2985,13 @@ export function fcpSameTeam(
  * memoria apuntando a un usuario que ya no existe.
  */
 export async function deleteMyAccount(): Promise<void> {
-  const { error } = await supabaseBrowser().rpc("delete_my_account");
+  const sb = supabaseBrowser();
+  // Primero los ficheros, que después de borrar la cuenta ya no hay permiso
+  // para tocarlos: la RLS de Storage exige `auth.uid()` = su carpeta.
+  const { data: auth } = await sb.auth.getUser();
+  if (auth.user?.id) await purgeMyFiles(auth.user.id);
+
+  const { error } = await sb.rpc("delete_my_account");
   if (error) throw error;
 }
 
