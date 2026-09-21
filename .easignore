@@ -13,7 +13,17 @@ node_modules/
 .git/
 
 # Otros subproyectos del repo: no hacen falta para el build de la app iOS.
+#
+# OJO: esta lista hay que MANTENERLA. Cada vez que nace un subproyecto en la
+# raiz hay que anadirlo aqui, o se va entero dentro del tarball del build. En
+# 2026-09-21 se colaban 3,7 GB (motion graphics, la web, video y AI) para un
+# build cuyo unico ingrediente son los 75 MB de TACTIUM/.
 /tactium-landing/
+/tactium-web/
+/TACTIUM-VIDEO/
+/TACTIUM-AI/
+/MOTION GRAPICHS TACTIUM/
+/Calcetines_Imagenes/
 /.design-extract/
 /analisis-video/
 /SCREENS/
@@ -21,6 +31,11 @@ node_modules/
 /bitacora.html
 *.MP4
 *.docx
+*.pdf
+
+# Capturas y material de tienda: pesan y no entran en el binario.
+/TACTIUM/assets/capturas/
+/TACTIUM/assets/store-shots/
 
 # TACTIUM: artefactos locales y nativos regenerables (no aportan al build).
 /TACTIUM/dist/
