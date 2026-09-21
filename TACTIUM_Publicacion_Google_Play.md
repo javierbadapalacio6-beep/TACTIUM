@@ -95,6 +95,35 @@ Ruta: **Producción → Crear nueva versión** (o **Promover** la build ya aprob
 - `eas.json` usa `appVersionSource: "remote"`: EAS gestiona el `versionCode`, se auto-incrementa en cada build. No lo edites a mano en `app.json`.
 - Al subir un build nuevo, sube el `versionCode`; Google rechaza duplicados.
 - Tras crear el catálogo, **prueba una compra real en Internal Testing** (con una cuenta de tester y tarjeta de licencia) antes del rollout de producción.
+### Cambiar un precio sin pelearse con las consolas
+
+Hay dos scripts en `TACTIUM/` que hacen el cambio por API en las dos tiendas,
+y los dos traen **modo en seco** (sin `--apply` no escriben nada):
+
+```
+node set-asc-prices.cjs  list                                  # qué hay hoy en Apple
+node set-asc-prices.cjs  points <productId> <eur>              # ¿es un precio válido?
+node set-asc-prices.cjs  set <productId> <eur> --apply         # Apple
+node set-play-prices.cjs <productId|all> --apply               # Google
+```
+
+Necesitan `jsonwebtoken` y `google-auth-library`, que **no** están en
+`package.json` (no son código de la app): instálalas sueltas y lanza node con
+`NODE_PATH` apuntando a ese `node_modules`.
+
+Tres cosas que se aprenden a golpes:
+
+- **Apple no acepta importes libres**, sólo sus «price points». Por eso existe
+  `points`: te dice si tu cifra es válida y, si no, cuáles son las de al lado.
+- Una suscripción **ya aprobada** no admite «precio inicial» otra vez (409
+  `STATE_ERROR`). Hay que programar el cambio con fecha, y Apple exige **dos
+  días de margen** en su huso horario, así que el script pone tres.
+- Los dos scripts dejan a los **suscriptores actuales en su precio viejo**
+  (`preserveCurrentPrice` en Apple; en Google el patch sólo rige para altas
+  nuevas). Eso evita el flujo de consentimiento y los correos a clientes. Si
+  algún día quieres subirle el precio a los que ya pagan, es otra operación
+  distinta y deliberada.
+
 - Cuando toques `TACTIUM/src/core/subscriptions/plans.ts` o `tactium-landing/lib/plans.ts`, confirma que los precios anuales sean **47,99 / 115,99 / 239,99 / 479,99 €** (coinciden con Apple y Google).
 
 ---
