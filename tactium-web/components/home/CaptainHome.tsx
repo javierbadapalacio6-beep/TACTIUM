@@ -286,13 +286,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
             <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 220 }}>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "color-mix(in srgb, var(--text-inverse) 82%, transparent)",
-                  }}
-                >
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}>
                   Jornada {m.round} · {m.isHome ? "En casa" : "Fuera"}
                 </div>
                 <div
@@ -306,13 +300,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 >
                   vs {m.opponent}
                 </div>
-                <div
-                  style={{
-                    marginTop: 10,
-                    fontSize: 13.5,
-                    color: "color-mix(in srgb, var(--text-inverse) 85%, transparent)",
-                  }}
-                >
+                <div style={{ marginTop: 10, fontSize: 13.5, color: "var(--text-muted)" }}>
                   {formatDate(m.date)}
                   {formatTime(m.time) ? ` · ${formatTime(m.time)}` : ""}
                   {m.location ? ` · ${m.location}` : ""}
@@ -325,9 +313,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 <div className="kpi-label">Disponibles</div>
                 <div className="kpi-num">
                   {availableCount}
-                  <span className="unit" style={{ color: "inherit", opacity: 0.7 }}>
-                    / {active.length}
-                  </span>
+                  <span className="unit">/ {active.length}</span>
                 </div>
               </div>
             </div>
@@ -337,43 +323,17 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 {/* Si ya se jugó, lo que toca es meter el resultado, no
                     preparar la alineación. */}
                 {dUntil !== null && dUntil < 0 ? (
-                  <Link
-                    href={`/jornada/${m.id}`}
-                    className="btn"
-                    style={{
-                      background: "var(--text-inverse)",
-                      color: "var(--accent)",
-                      border: "none",
-                      fontWeight: 700,
-                    }}
-                  >
+                  <Link href={`/jornada/${m.id}`} className="btn btn-accent">
                     <IconCheck size={15} />
                     Meter el resultado
                   </Link>
                 ) : (
-                  <Link
-                    href={`/jornada/${m.id}/alineacion`}
-                    className="btn"
-                    style={{
-                      background: "var(--text-inverse)",
-                      color: "var(--accent)",
-                      border: "none",
-                      fontWeight: 700,
-                    }}
-                  >
+                  <Link href={`/jornada/${m.id}/alineacion`} className="btn btn-accent">
                     <IconZap size={15} />
                     Crear alineación
                   </Link>
                 )}
-                <Link
-                  href={`/jornada/${m.id}`}
-                  className="btn"
-                  style={{
-                    background: "color-mix(in srgb, var(--text-inverse) 16%, transparent)",
-                    color: "var(--text-inverse)",
-                    border: "none",
-                  }}
-                >
+                <Link href={`/jornada/${m.id}`} className="btn btn-ghost">
                   Abrir jornada
                 </Link>
               </div>
@@ -419,17 +379,45 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           {/* Racha: una barra por jornada jugada, verde si se ganó. */}
           {form.length > 0 && (
             <div className="bcard-foot">
-              <div className="spark" aria-hidden="true">
-                {form.map((j) => (
-                  <i
-                    key={j.id}
-                    className={j.outcome === "win" ? "on" : j.outcome === "loss" ? "lost" : ""}
-                    style={{
-                      height:
-                        j.outcome === "win" ? "100%" : j.outcome === "loss" ? "38%" : "18%",
-                    }}
-                  />
-                ))}
+              <div className="spark">
+                {form.map((j) => {
+                  const won = j.outcome === "win";
+                  const lost = j.outcome === "loss";
+                  const hasScore = j.scoreFor != null && j.scoreAgainst != null;
+                  return (
+                    <i
+                      key={j.id}
+                      className={
+                        (won ? "on" : lost ? "lost" : "") + " has-tip"
+                      }
+                      style={{ height: won ? "100%" : lost ? "38%" : "18%" }}
+                      aria-label={`Jornada ${j.round} contra ${j.opponent}${
+                        hasScore ? `, ${j.scoreFor}-${j.scoreAgainst}` : ""
+                      }`}
+                    >
+                      <span className="tip" role="presentation">
+                        <span className="tip-round">Jornada {j.round}</span>
+                        <span className="tip-rival">{j.opponent}</span>
+                        {hasScore && (
+                          <span className="tip-score">
+                            <b style={{ color: won ? "var(--accent)" : "var(--error)" }}>
+                              {j.scoreFor}–{j.scoreAgainst}
+                            </b>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: won ? "var(--accent)" : "var(--error)",
+                              }}
+                            >
+                              {won ? "Ganada" : lost ? "Perdida" : "Empate"}
+                            </span>
+                          </span>
+                        )}
+                      </span>
+                    </i>
+                  );
+                })}
               </div>
               <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--text-faint)" }}>
                 Últimas {form.length} jornadas · temporada al {seasonPct}%
@@ -461,10 +449,13 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                   const won = (j.scoreFor ?? 0) > (j.scoreAgainst ?? 0);
                   const h = Math.max(8, ((j.scoreFor ?? 0) / maxCourts) * 100);
                   return (
-                    <span
+                    <Link
                       key={j.id}
-                      className="round-col"
-                      title={`Jornada ${j.round} vs ${j.opponent}: ${j.scoreFor}–${j.scoreAgainst}`}
+                      href={`/jornada/${j.id}`}
+                      className="round-col has-tip"
+                      aria-label={`Jornada ${j.round} contra ${j.opponent}, ${
+                        won ? "ganada" : "perdida"
+                      } ${j.scoreFor}-${j.scoreAgainst}`}
                     >
                       <span
                         className={"round-bar" + (won ? "" : " is-loss")}
@@ -473,13 +464,45 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                         <span style={{ height: `${h}%` }} />
                       </span>
                       <span className="round-num">{j.round}</span>
-                    </span>
+
+                      {/* El cartelito: jornada, rival y el marcador entero. */}
+                      <span className="tip" role="presentation">
+                        <span className="tip-round">
+                          Jornada {j.round} · {j.isHome ? "En casa" : "Fuera"}
+                        </span>
+                        <span className="tip-rival">{j.opponent}</span>
+                        <span className="tip-score">
+                          <b style={{ color: won ? "var(--accent)" : "var(--error)" }}>
+                            {j.scoreFor}–{j.scoreAgainst}
+                          </b>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: won ? "var(--accent)" : "var(--error)",
+                            }}
+                          >
+                            {won ? "Ganada" : "Perdida"}
+                          </span>
+                        </span>
+                        <span className="tip-meta">{formatDate(j.date)}</span>
+                      </span>
+                    </Link>
                   );
                 })}
                 {m && (
-                  <span className="round-col is-next" title={`Jornada ${m.round}, por jugar`}>
+                  <span className="round-col is-next has-tip">
                     <span className="round-bar is-next" style={{ height: "100%" }} />
                     <span className="round-num">{m.round}</span>
+                    <span className="tip" role="presentation">
+                      <span className="tip-round">
+                        Jornada {m.round} · {m.isHome ? "En casa" : "Fuera"}
+                      </span>
+                      <span className="tip-rival">{m.opponent}</span>
+                      <span className="tip-meta" style={{ marginTop: 8 }}>
+                        Por jugar · {formatDate(m.date)}
+                      </span>
+                    </span>
                   </span>
                 )}
               </div>

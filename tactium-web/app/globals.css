@@ -77,6 +77,19 @@
   --accent-deep: #00b268;
   --shadow-accent: 0 14px 34px -18px rgba(0, 223, 130, 0.55);
 
+  /* ── Tarjeta destacada ──────────────────────────────────────────
+     Verde PROFUNDO, no el acento a pleno. Una superficie entera del verde
+     brillante obliga a invertir el texto y deja el resto del panel
+     desparejado; así destaca igual —es la única con color— y el acento se
+     reserva para la cifra y el botón, que es donde tiene que mirar el ojo. */
+  --feature-from: #0c3c31;
+  --feature-to: #072a24;
+  --feature-line: rgba(0, 223, 130, 0.28);
+  /* Lo que va ENCIMA del verde profundo (chip, tesela, botón secundario).
+     Por debajo de 0.14 el contraste se pierde y el elemento se lava. */
+  --feature-soft: rgba(232, 245, 239, 0.14);
+  --shadow-feature: 0 16px 38px -22px rgba(0, 0, 0, 0.8);
+
   /* Sombras: en oscuro casi desaparecen (separa el hairline); sirven para
      capas flotantes (popovers, diálogos). */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -193,6 +206,16 @@
     --accent-deep: #00784a;
     --shadow-accent: 0 14px 30px -18px rgba(0, 153, 94, 0.5);
 
+    /* En claro la destacada es un verde muy suave: sobre tarjetas blancas
+       basta un tinte para que mande, sin invertir nada. */
+    --feature-from: #e4f5ec;
+    --feature-to: #d3eee0;
+    --feature-line: rgba(0, 153, 94, 0.3);
+    /* Blanco, no una tinta oscura: sobre el verde claro es lo único que
+       despega el chip y el botón secundario del fondo. */
+    --feature-soft: rgba(255, 255, 255, 0.78);
+    --shadow-feature: 0 14px 30px -20px rgba(14, 26, 20, 0.28);
+
     --shadow-sm: 0 1px 2px rgba(14, 26, 20, 0.06), 0 1px 1px rgba(14, 26, 20, 0.03);
     --shadow-md: 0 8px 24px -8px rgba(14, 26, 20, 0.16);
     --shadow-lg: 0 20px 50px -14px rgba(14, 26, 20, 0.22);
@@ -250,6 +273,12 @@
   --surface-lit: rgba(255, 255, 255, 0.9);
   --accent-deep: #00784a;
   --shadow-accent: 0 14px 30px -18px rgba(0, 153, 94, 0.5);
+
+  --feature-from: #e4f5ec;
+  --feature-to: #d3eee0;
+  --feature-line: rgba(0, 153, 94, 0.3);
+  --feature-soft: rgba(255, 255, 255, 0.78);
+  --shadow-feature: 0 14px 30px -20px rgba(14, 26, 20, 0.28);
 
   --shadow-sm: 0 1px 2px rgba(14, 26, 20, 0.06), 0 1px 1px rgba(14, 26, 20, 0.03);
   --shadow-md: 0 8px 24px -8px rgba(14, 26, 20, 0.16);
@@ -587,20 +616,41 @@ a.bcard:hover,
   padding-top: 16px;
 }
 
-/* La tarjeta que manda: verde sólido, tinta oscura. Una por pantalla. */
+/* La tarjeta que manda. Verde PROFUNDO, texto normal: es la única con
+   color de fondo, y eso ya la hace destacar. El acento se guarda para la
+   cifra y el botón. Una por pantalla. */
 .bcard-accent {
-  background: linear-gradient(150deg, var(--accent) 0%, var(--accent-deep) 100%);
-  border-color: transparent;
-  color: var(--text-inverse);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), var(--shadow-accent);
-}
-.bcard-accent .bcard-title,
-.bcard-accent .kpi-label,
-.bcard-accent .kpi-sub {
-  color: color-mix(in srgb, var(--text-inverse) 82%, transparent);
+  background: linear-gradient(150deg, var(--feature-from) 0%, var(--feature-to) 100%);
+  border-color: var(--feature-line);
+  box-shadow: inset 0 1px 0 var(--surface-lit), var(--shadow-feature);
 }
 .bcard-accent .kpi-num {
-  color: var(--text-inverse);
+  color: var(--accent);
+}
+/* Sobre el verde, el gris apagado desaparece: el chip va en tinta plena y
+   la tesela con el icono en acento, que es lo que se ve a un metro. */
+.bcard-accent .delta {
+  background: var(--feature-soft);
+  color: var(--text);
+  font-weight: 700;
+}
+.bcard-accent .tile-round {
+  background: var(--feature-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+.bcard-accent .bcard-title {
+  color: var(--text);
+}
+/* Botón secundario dentro de la destacada: el gris de `btn-ghost` sobre el
+   verde se lee como un parche, así que se apoya en el propio fondo. */
+.bcard-accent .btn-ghost {
+  background: var(--feature-soft);
+  border-color: transparent;
+}
+.bcard-accent .btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: transparent;
 }
 
 /* ── Cifra grande ─────────────────────────────────────────────── */
@@ -654,11 +704,6 @@ a.bcard:hover,
   background: var(--bg-card-2);
   color: var(--text-muted);
 }
-.bcard-accent .delta {
-  background: color-mix(in srgb, var(--text-inverse) 16%, transparent);
-  color: var(--text-inverse);
-}
-
 /* ── Tesela circular de icono ─────────────────────────────────── */
 .tile-round {
   width: 38px;
@@ -677,12 +722,6 @@ a.bcard:hover,
   border-color: transparent;
   color: var(--accent);
 }
-.bcard-accent .tile-round {
-  background: color-mix(in srgb, var(--text-inverse) 14%, transparent);
-  border-color: transparent;
-  color: var(--text-inverse);
-}
-
 /* ── Barras verticales redondeadas ────────────────────────────── */
 .spark {
   display: flex;
@@ -693,12 +732,16 @@ a.bcard:hover,
 .spark > i {
   /* Ancho acotado: con `flex: 1` a secas, ocho jornadas en una tarjeta ancha
      dan barras de 50px que parecen pastillas, no un gráfico. */
+  position: relative;
   flex: 1 1 14px;
   max-width: 26px;
   border-radius: 6px;
   background: var(--bg-card-3);
   min-height: 6px;
-  transition: background var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
+}
+.spark > i:hover {
+  filter: brightness(1.25);
 }
 .spark > i.on {
   background: var(--accent);
@@ -706,35 +749,27 @@ a.bcard:hover,
 .spark > i.lost {
   background: color-mix(in srgb, var(--error) 60%, transparent);
 }
-.bcard-accent .spark > i {
-  background: color-mix(in srgb, var(--text-inverse) 22%, transparent);
-}
-.bcard-accent .spark > i.on {
-  background: var(--text-inverse);
-}
 
 /* ── Marcadores por jornada ───────────────────────────────────────
    Una columna por jornada jugada: la altura es lo que se ganó, el color
    dice si se ganó o se perdió. Es el equivalente nuestro a la barra de
    ventas de un panel de negocio. */
+/* Sin `overflow: auto`: recortaría el cartelito que sale al pasar por
+   encima. Las columnas se comprimen hasta su mínimo en su lugar. */
 .rounds {
   display: flex;
   align-items: flex-end;
   gap: 10px;
   height: 150px;
-  overflow-x: auto;
   padding-bottom: 2px;
-  scrollbar-width: none;
-}
-.rounds::-webkit-scrollbar {
-  display: none;
 }
 .round-col {
   /* Columna acotada: una barra de jornada es una marca, no un bloque. Con
      `flex: 1` sin tope salían de 50px; con un tope fijo dejaban medio
      gráfico vacío cuando van pocas jornadas. Crece, pero hasta un límite. */
-  flex: 1 1 24px;
-  min-width: 20px;
+  position: relative;
+  flex: 1 1 18px;
+  min-width: 12px;
   max-width: 46px;
   height: 100%;
   display: flex;
@@ -781,6 +816,113 @@ a.bcard:hover,
 .round-bar.is-next {
   background: transparent;
   border: 1.5px dashed var(--surface-line-hi);
+}
+
+/* ── Cartelito al pasar por una marca ─────────────────────────────
+   El `title` del navegador tarda un segundo largo y no se puede dar
+   forma. Este sale al instante y cabe el marcador entero. */
+.has-tip {
+  position: relative;
+}
+.tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 25;
+  min-width: 132px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--surface-line-hi);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+/* Pico del bocadillo, para que se vea de qué barra habla. */
+.tip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: var(--bg-raised);
+}
+.has-tip:hover .tip,
+.has-tip:focus-visible .tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Los extremos se pegan al borde en vez de salirse de la tarjeta. */
+.round-col:first-child .tip {
+  left: 0;
+  transform: translate(0, 4px);
+}
+.round-col:first-child .tip::after {
+  left: 22px;
+}
+.has-tip.round-col:first-child:hover .tip {
+  transform: translate(0, 0);
+}
+.round-col:last-child .tip {
+  left: auto;
+  right: 0;
+  transform: translate(0, 4px);
+}
+.round-col:last-child .tip::after {
+  left: auto;
+  right: 17px;
+}
+.has-tip.round-col:last-child:hover .tip {
+  transform: translate(0, 0);
+}
+
+.tip-round {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.tip-rival {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+.tip-score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+}
+.tip-score b {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.tip-meta {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+@media (hover: none) {
+  /* En táctil no hay «pasar por encima»: el cartelito no aparece nunca y
+     el dato vive en el `aria-label` y en la ficha de la jornada. */
+  .tip {
+    display: none;
+  }
 }
 
 /* ── Calendario mensual de jornadas ───────────────────────────────
