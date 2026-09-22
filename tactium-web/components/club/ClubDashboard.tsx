@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import {
   coverTeam,
@@ -207,7 +207,10 @@ export function ClubDashboard() {
         />
       </StatRow>
 
-      <div className="tw-club-grid" style={{ gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)" }}>
+      <div
+        className="tw-club-grid"
+        style={{ "--cols": "minmax(0, 1.6fr) minmax(0, 1fr)" } as CSSProperties}
+      >
         {/* ── Equipos ─────────────────────────────────────────────── */}
         <Card flush>
           <CardHead title="Equipos" count={teams.length}>

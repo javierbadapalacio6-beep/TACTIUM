@@ -672,17 +672,7 @@ export function Modal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 95,
-        background: "var(--scrim)",
-        backdropFilter: "blur(4px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
+      className="tw-scrim"
     >
       <div
         ref={panelRef}
@@ -690,18 +680,8 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        style={{
-          width: "100%",
-          maxWidth: width,
-          maxHeight: "calc(100vh - 48px)",
-          overflowY: "auto",
-          borderRadius: "var(--r-xl)",
-          background: "var(--bg-raised)",
-          border: "1px solid var(--line-strong)",
-          boxShadow: "var(--shadow-lg)",
-          padding: 24,
-          outline: "none",
-        }}
+        className="tw-dialog"
+        style={{ maxWidth: width }}
       >
         {title && (
           <div style={{ marginBottom: 18 }}>
