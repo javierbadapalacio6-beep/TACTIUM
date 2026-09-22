@@ -653,7 +653,7 @@ export function ClubSchedule() {
                     aria-label={`${WEEKDAY[d]} ${h}${fav ? ", franja favorita" : ""}`}
                     aria-pressed={!!cur}
                     className={
-                      "tw-slot-cell" +
+                      "tw-hour-cell" +
                       (fav ? " is-fav" : "") +
                       (cur ? " is-on" : "")
                     }
@@ -666,7 +666,7 @@ export function ClubSchedule() {
           ))}
         </div>
 
-        <div className="tw-slot-legend">
+        <div className="tw-hour-legend">
           <span>
             <i className="tw-slot-dot is-fav">★</i> Franja favorita del equipo
           </span>

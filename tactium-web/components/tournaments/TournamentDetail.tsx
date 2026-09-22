@@ -623,6 +623,8 @@ function ScheduleGrid({
   }, [matches]);
 
   const [dragId, setDragId] = useState<string | null>(null);
+  /** Partido «cogido» con un toque, a la espera de que se toque el hueco. */
+  const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [clearOpen, setClearOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -752,13 +754,34 @@ function ScheduleGrid({
     }
   }
 
-  function drop(ti: number, ci: number) {
-    if (!dragId || readOnly) return;
-    if (!conflictAt(ti, ci, dragId)) {
-      void place(dragId, slotIso(activeDay, times[ti]), courts[ci]);
+  /** Coloca un partido en un hueco. Lo usan las dos formas de mover: soltarlo
+   *  encima y tocar el hueco con uno ya cogido. */
+  function putInSlot(matchId: string, ti: number, ci: number) {
+    if (readOnly) return;
+    if (!conflictAt(ti, ci, matchId)) {
+      void place(matchId, slotIso(activeDay, times[ti]), courts[ci]);
     }
     setDragId(null);
     setHover(null);
+    setPicked(null);
+  }
+
+  function drop(ti: number, ci: number) {
+    if (!dragId) return;
+    putInSlot(dragId, ti, ci);
+  }
+
+  /**
+   * Tocar para mover, además de arrastrar.
+   *
+   * El arrastre HTML5 no existe en táctil —en un móvil o una tablet no hay
+   * forma de mover un partido— y con trackpad es delicado. La app resolvió
+   * esto mismo con tap-para-mover; aquí faltaba. Se toca el partido, se toca
+   * el hueco, y ya.
+   */
+  function pick(id: string) {
+    if (readOnly) return;
+    setPicked((p) => (p === id ? null : id));
   }
 
   function MatchCard({ m }: { m: RealMatch }) {
@@ -778,16 +801,26 @@ function ScheduleGrid({
           setDragId(null);
           setHover(null);
         }}
+        onClick={() => pick(m.id)}
         onDoubleClick={() => {
           // Sacar del horario sin tener que arrastrarlo a ninguna parte.
+          setPicked(null);
           if (!readOnly && posOf(m.id)) void place(m.id, null, null);
         }}
-        title={readOnly ? undefined : "Arrastra para colocar · doble clic para quitar"}
+        title={
+          readOnly
+            ? undefined
+            : "Tócalo y luego toca el hueco · o arrástralo · doble clic para quitarlo"
+        }
         className="tw-match-card"
         style={{
           // Atenuado si su fase se juega otro día: se puede colocar igual, pero
           // el organizador ve de un vistazo cuáles tocan hoy.
           opacity: dragId === m.id ? 0.4 : fitsDay(m) ? 1 : 0.45,
+          // Cogido con un toque: se marca, que si no no hay forma de saber
+          // que el siguiente toque lo va a colocar.
+          outline: picked === m.id ? "2px solid var(--accent)" : undefined,
+          outlineOffset: picked === m.id ? 1 : undefined,
           cursor: readOnly ? "default" : "grab",
         }}
       >
@@ -1009,6 +1042,11 @@ function ScheduleGrid({
                     onDrop={(e) => {
                       e.preventDefault();
                       drop(ti, ci);
+                    }}
+                    onClick={() => {
+                      // Segundo toque: coloca el que estuviera cogido.
+                      if (readOnly || !picked) return;
+                      putInSlot(picked, ti, ci);
                     }}
                     className="tw-slot-cell"
                     style={{
