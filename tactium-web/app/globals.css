@@ -2154,6 +2154,13 @@ button.list-row:hover,
   position: relative;
   z-index: 1;
 }
+/* La barra, además, por encima del lienzo. Lleva `backdrop-filter`, que
+   crea contexto de apilado: sus menús —cuenta, avisos, secciones— no
+   pueden escapar solos, así que hay que elevar la BARRA entera o salen
+   por detrás del contenido, que va después en el documento. */
+.tw-topnav {
+  z-index: 30;
+}
 
 /* En móvil el marco se come una pantalla que ya va justa: va a sangre. */
 @media (max-width: 767px) {
@@ -2434,9 +2441,23 @@ button.list-row:hover,
   top: calc(100% + 8px);
   right: 0;
   width: min(360px, calc(100vw - 32px));
+  /* Treinta avisos sin tope se salían por debajo de la pantalla. */
+  max-height: min(460px, calc(100dvh - 90px));
   border-radius: 18px;
   overflow: hidden;
   gap: 0;
+}
+/* La cabecera se queda quieta mientras se desplaza la lista. */
+.tw-bell-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: inherit;
+  flex: none;
+}
+.tw-bell-list {
+  overflow-y: auto;
+  min-height: 0;
 }
 .tw-bell-head {
   display: flex;
@@ -2444,6 +2465,25 @@ button.list-row:hover,
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
+}
+.tw-bell-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass-chip);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.tw-bell-clear:hover {
+  color: var(--accent);
+  border-color: var(--accent-40);
 }
 .tw-bell-row {
   display: flex;
@@ -4100,6 +4140,11 @@ select.tw-cell-input {
 
 /* ── Barra de búsqueda y filtros ───────────────────────────────── */
 .tw-fcp-bar {
+  /* `backdrop-filter` crea contexto de apilado, así que el menú de un
+     filtro no puede salir por encima de las tarjetas de grupo —que también
+     lo llevan— subiendo su propio z-index: hay que elevar la BARRA. */
+  position: relative;
+  z-index: 20;
   margin-bottom: 14px;
   padding: 14px;
   border-radius: 20px;
@@ -4151,6 +4196,7 @@ select.tw-cell-input {
   margin-top: 12px;
 }
 .tw-fcp-field {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -4161,7 +4207,8 @@ select.tw-cell-input {
   border: 1px solid var(--glass-line);
   transition: border-color var(--dur-fast) var(--ease);
 }
-.tw-fcp-field:focus-within {
+.tw-fcp-field:focus-within,
+.tw-fcp-field.is-open {
   border-color: var(--accent-40);
 }
 .tw-fcp-field-tile {
@@ -4175,30 +4222,68 @@ select.tw-cell-input {
   background: var(--accent-10);
   color: var(--accent);
 }
-.tw-fcp-field-body {
-  min-width: 0;
+/* El botón ocupa la pastilla entera: se abre pinchando en cualquier sitio,
+   no sólo sobre el texto. */
+.tw-fcp-field-btn {
   flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: var(--font-ui);
+  color: inherit;
+  cursor: pointer;
+}
+.tw-fcp-field-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.tw-fcp-field-btn:focus-visible {
+  outline: none;
 }
 .tw-fcp-field-label {
   display: block;
   font-size: 11.5px;
   color: var(--text-faint);
 }
-/* El `select` va desnudo: el marco lo pone la pastilla. */
-.tw-fcp-field .tw-select {
-  width: 100%;
-  height: auto;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
+.tw-fcp-field-value {
+  display: block;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
 }
-.tw-fcp-field .tw-select:focus {
-  outline: none;
-  box-shadow: none;
+.tw-fcp-field-chev {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease);
+}
+
+/* El menú. Va por encima de las tarjetas de grupo, de ahí el z-index. */
+.tw-fcp-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  /* Opaco, no cristal: debajo hay una rejilla de tarjetas densa y por el
+     velo se leían los nombres de los grupos entre las opciones. */
+  background: var(--bg-raised);
+  backdrop-filter: none;
+}
+.tw-fcp-menu .tw-popitem {
+  width: 100%;
+  font-size: 13px;
+}
+.tw-fcp-menu .tw-popitem.is-on {
+  color: var(--accent);
+  background: var(--accent-10);
+  font-weight: 700;
 }
 
 /* ── Rejilla de grupos ─────────────────────────────────────────── */

@@ -32,6 +32,7 @@ import {
 } from "@/lib/nav";
 import { ROLE_LABELS, useSession } from "@/lib/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { useDismiss } from "@/lib/use-dismiss";
 import { useTheme } from "@/lib/theme";
 import { fetchNotifications, markNotificationsRead } from "@/lib/queries";
 import { WRITES_ENABLED } from "@/lib/writes";
@@ -162,31 +163,6 @@ function activeHref(pathname: string, hrefs: string[]): string | null {
     }
   }
   return best;
-}
-
-/** Cierra el popover al pulsar fuera o con Escape. */
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(close);
-  useEffect(() => {
-    closeRef.current = close;
-  });
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) closeRef.current();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  return ref;
 }
 
 /** Una píldora del nav superior: destino suelto o grupo desplegable. */
@@ -387,14 +363,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showCtx = clubs.length > 0 || hasTeamSwitcher(role);
 
   function toggleBell() {
-    setBellOpen((v) => {
-      const next = !v;
-      if (next && unread > 0) {
-        setNotices((ns) => ns.map((n) => ({ ...n, unread: false })));
-        if (WRITES_ENABLED) markNotificationsRead().catch(() => {});
-      }
-      return next;
-    });
+    setBellOpen((v) => !v);
+  }
+
+  function marcarTodasLeidas() {
+    setNotices((ns) => ns.map((n) => ({ ...n, unread: false })));
+    if (WRITES_ENABLED) markNotificationsRead().catch(() => {});
   }
 
   return (
@@ -559,10 +533,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <div className="tw-popover tw-bell">
                   <div className="tw-bell-head">
                     <span style={{ fontSize: 14, fontWeight: 700 }}>Avisos</span>
-                    <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                      {unread} sin leer
-                    </span>
+                    {unread > 0 ? (
+                      <button
+                        type="button"
+                        onClick={marcarTodasLeidas}
+                        className="tw-bell-clear"
+                      >
+                        <IconCheck size={13} />
+                        Marcar todas como leídas
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                        Al día
+                      </span>
+                    )}
                   </div>
+                  <div className="tw-bell-list">
                   {notices.length === 0 && (
                     <div
                       style={{
@@ -645,6 +631,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </div>

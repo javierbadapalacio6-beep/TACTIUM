@@ -33,6 +33,7 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { useDismiss } from "@/lib/use-dismiss";
 import {
   Avatar,
   Btn,
@@ -46,7 +47,6 @@ import {
   PageHeader,
   SectionHead,
   Segmented,
-  Select,
   Stat,
   StatRow,
 } from "@/components/ui";
@@ -219,25 +219,77 @@ function FilterField({
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const actual = options.find((o) => o.value === value) ?? options[0];
+
+  // El desplegable es NUESTRO, no el nativo: Chrome pinta el popup del
+  // `select` con el fondo del propio control, que aquí es transparente, y
+  // el texto claro del panel se perdía sobre blanco. No hay CSS que
+  // arregle eso, así que se dibuja con el mismo popover del resto.
+  function mover(paso: number) {
+    const i = options.findIndex((o) => o.value === value);
+    const siguiente = options[Math.min(Math.max(i + paso, 0), options.length - 1)];
+    if (siguiente) onChange(siguiente.value);
+  }
+
   if (options.length <= 1) return null;
-  const id = "fcp-f-" + label.toLowerCase();
   return (
-    <div className="tw-fcp-field">
+    <div className={"tw-fcp-field" + (open ? " is-open" : "")} ref={ref}>
       <span className="tw-fcp-field-tile" aria-hidden="true">
         {icon}
       </span>
-      <span className="tw-fcp-field-body">
-        <label className="tw-fcp-field-label" htmlFor={id}>
-          {label}
-        </label>
-        <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </Select>
-      </span>
+      <button
+        type="button"
+        className="tw-fcp-field-btn"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`${label}: ${actual?.label ?? ""}`}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault();
+            setOpen(true);
+          } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            mover(e.key === "ArrowDown" ? 1 : -1);
+          }
+        }}
+      >
+        <span className="tw-fcp-field-label">{label}</span>
+        <span className="tw-fcp-field-value truncate">{actual?.label ?? "—"}</span>
+      </button>
+      <IconChevronDown
+        size={15}
+        className="tw-fcp-field-chev"
+        style={{ transform: open ? "rotate(180deg)" : "none" }}
+      />
+
+      {open && (
+        <div className="tw-popover tw-fcp-menu" role="listbox" aria-label={label}>
+          {options.map((o) => {
+            const on = o.value === value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={on}
+                className={"tw-popitem" + (on ? " is-on" : "")}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="truncate" style={{ flex: 1, textAlign: "left" }}>
+                  {o.label}
+                </span>
+                {on && <IconCheck size={14} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1391,7 +1443,7 @@ function FcpActaModal({
           {acta.map((g) => (
             <div key={g.partidoNum} className="acta-punto">
               <div className="acta-punto-head">
-                <span className="acta-punto-num">Pista {g.partidoNum}</span>
+                <span className="acta-punto-num">Pareja {g.partidoNum}</span>
                 {g.parciales && <span className="acta-parciales mono">{g.parciales}</span>}
               </div>
               <ActaPair
