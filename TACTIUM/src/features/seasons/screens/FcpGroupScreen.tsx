@@ -34,6 +34,33 @@ const nombreBonito = (s: string | null | undefined): string =>
 const pareja = (a: string | null, b: string | null): string =>
   [nombreBonito(a), nombreBonito(b)].filter(Boolean).join(' · ') || '—';
 
+/**
+ * Parciales a dos filas alineadas.
+ *
+ * La Federación los publica como «6/3 - 4/6 - 6/2»: seguidos y con el
+ * marcador de las dos parejas mezclado en cada set. Así no se lee. Partidos
+ * en columnas, el 6 de una pareja queda justo encima del 3 de la otra, que
+ * es como se mira un acta de toda la vida.
+ *
+ * Si no hay parciales (acta sin detalle) se cae a los sets ganados, que es lo
+ * único que hay.
+ */
+const parcialesEnColumnas = (
+  parciales: string | null,
+  setsLocal: number | null,
+  setsVisit: number | null,
+): { local: string[]; visit: string[] } => {
+  const juegos = (parciales ?? '')
+    .split(/\s*[-–]\s*/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => t.split('/').map((x) => x.trim()));
+  if (juegos.length > 0 && juegos.every((j) => j.length === 2 && j[0] && j[1])) {
+    return { local: juegos.map((j) => j[0]), visit: juegos.map((j) => j[1]) };
+  }
+  return { local: [String(setsLocal ?? 0)], visit: [String(setsVisit ?? 0)] };
+};
+
 /** Puntos de ranking de la pareja, sumados. Llegan como string desde
  *  Postgres (numeric), de ahí el Number(). */
 const puntosPareja = (a: number | string | null, b: number | string | null): string => {
@@ -76,6 +103,9 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
   const [rows, setRows] = useState<FcpBrowseStanding[]>([]);
   const [schedule, setSchedule] = useState<FcpBrowseMatch[]>([]);
   const [tab, setTab] = useState<Tab>(esPlayoff ? 'cuadro' : 'clasif');
+  /** Partidos con el acta desplegada. Cerrada por defecto: una jornada son
+   *  ocho partidos por cinco puntos cada uno, y todo abierto es un muro. */
+  const [actaAbierta, setActaAbierta] = useState<Record<string, boolean>>({});
   const [selJ, setSelJ] = useState<number | null>(null);
   const [actas, setActas] = useState<Record<string, FcpActaPartido[]>>({});
   const stripRef = useRef<ScrollView>(null);
@@ -383,8 +413,16 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                 const acta = (actas[p.idPartido] ?? [])
                   .slice()
                   .sort((a, b) => a.partido_num - b.partido_num);
+                const abierta = !!actaAbierta[p.idPartido];
                 return (
-                  <View key={p.idPartido || i} style={styles.match}>
+                  <Pressable
+                    key={p.idPartido || i}
+                    onPress={() =>
+                      acta.length > 0 &&
+                      setActaAbierta((a) => ({ ...a, [p.idPartido]: !a[p.idPartido] }))
+                    }
+                    style={({ pressed }) => [styles.match, pressed && { opacity: 0.75 }]}
+                  >
                     <View style={styles.matchTop}>
                       <View style={{ flex: 1, minWidth: 0, gap: 9 }}>
                         <View style={styles.teamLine}>
@@ -405,51 +443,85 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                         <Text style={[styles.mScore, !visitWon && { color: c.textMuted }]}>{score ? score[1] : '·'}</Text>
                       </View>
                     </View>
-                    {acta.length > 0 ? (
+                    {acta.length > 0 && abierta ? (
                       <View style={styles.matchBottom}>
                         {acta.map((g) => {
                           // Quien ganó ese punto va en tinta plena; el otro,
-                          // apagado. Es lo que se busca al abrir un acta.
+                          // apagado. Es lo primero que se busca en un acta.
                           const ganoLocal = g.ganador === 'local';
                           const ganoVisit = g.ganador === 'visitante';
+                          const sets = parcialesEnColumnas(
+                            g.parciales,
+                            g.sets_local,
+                            g.sets_visit,
+                          );
+                          // Las dos filas tienen que medir lo MISMO o las
+                          // columnas de sets dejan de caer una encima de otra.
+                          // Así que la línea de puntos, o en las dos o en
+                          // ninguna: si falta en una, va un punto medio.
+                          const ptsLocal = puntosPareja(g.local_j1_pts, g.local_j2_pts);
+                          const ptsVisit = puntosPareja(g.visit_j1_pts, g.visit_j2_pts);
+                          const hayPts = !!(ptsLocal || ptsVisit);
                           return (
                             <View key={g.partido_num} style={styles.actaRow}>
                               <View style={styles.pairCode}>
                                 <Text style={styles.pairCodeText}>P{g.partido_num}</Text>
                               </View>
-                              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                                 <View style={styles.actaPair}>
-                                  <Text
-                                    style={[styles.actaName, !ganoLocal && styles.actaNameDim]}
-                                    numberOfLines={1}
-                                  >
-                                    {pareja(g.local_j1, g.local_j2)}
-                                  </Text>
-                                  <Text style={styles.actaPts}>
-                                    {puntosPareja(g.local_j1_pts, g.local_j2_pts)}
-                                  </Text>
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text
+                                      style={[styles.actaName, !ganoLocal && styles.actaNameDim]}
+                                      numberOfLines={1}
+                                    >
+                                      {pareja(g.local_j1, g.local_j2)}
+                                    </Text>
+                                    {/* Los puntos, debajo del nombre: entre el
+                                        nombre y el marcador desalineaban las
+                                        columnas de sets. */}
+                                    {hayPts ? (
+                                      <Text style={styles.actaPts}>{ptsLocal || '·'}</Text>
+                                    ) : null}
+                                  </View>
+                                  {sets.local.map((n, k) => (
+                                    <Text
+                                      key={k}
+                                      style={[styles.actaSet, !ganoLocal && styles.actaSetDim]}
+                                    >
+                                      {n}
+                                    </Text>
+                                  ))}
                                 </View>
                                 <View style={styles.actaPair}>
-                                  <Text
-                                    style={[styles.actaName, !ganoVisit && styles.actaNameDim]}
-                                    numberOfLines={1}
-                                  >
-                                    {pareja(g.visit_j1, g.visit_j2)}
-                                  </Text>
-                                  <Text style={styles.actaPts}>
-                                    {puntosPareja(g.visit_j1_pts, g.visit_j2_pts)}
-                                  </Text>
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text
+                                      style={[styles.actaName, !ganoVisit && styles.actaNameDim]}
+                                      numberOfLines={1}
+                                    >
+                                      {pareja(g.visit_j1, g.visit_j2)}
+                                    </Text>
+                                    {hayPts ? (
+                                      <Text style={styles.actaPts}>{ptsVisit || '·'}</Text>
+                                    ) : null}
+                                  </View>
+                                  {sets.visit.map((n, k) => (
+                                    <Text
+                                      key={k}
+                                      style={[styles.actaSet, !ganoVisit && styles.actaSetDim]}
+                                    >
+                                      {n}
+                                    </Text>
+                                  ))}
                                 </View>
                               </View>
-                              <Text style={styles.pairScore} numberOfLines={1}>
-                                {g.parciales || `${g.sets_local ?? 0}-${g.sets_visit ?? 0}`}
-                              </Text>
                             </View>
                           );
                         })}
                       </View>
+                    ) : acta.length > 0 ? (
+                      <Text style={styles.actaHint}>Toca para ver el acta</Text>
                     ) : null}
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>
@@ -573,7 +645,22 @@ const makeStyles = (c: Palette) =>
       paddingVertical: 5,
     },
     actaPair: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    actaName: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5, fontWeight: '600' },
+    // Sin `flex`: ahora el nombre vive dentro de una columna, y ahí un flex:1
+    // estiraría en vertical. Quien reparte el ancho es su contenedor.
+    actaName: { color: c.text, fontSize: 12.5, fontWeight: '600' },
     actaNameDim: { color: c.textMuted, fontWeight: '500' },
-    actaPts: { fontFamily: Fonts.mono, fontSize: 10.5, color: c.textFaint },
+    actaPts: { fontFamily: Fonts.mono, fontSize: 10, color: c.textFaint, marginTop: 1 },
+    // ANCHO FIJO: es lo único que hace que el 6 de una pareja caiga justo
+    // encima del 3 de la otra. Con ancho automático, cada set se movería.
+    actaSet: {
+      fontFamily: Fonts.mono,
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.text,
+      // 22 y no 20: un super tie-break es «10», de dos cifras.
+      width: 22,
+      textAlign: 'center',
+    },
+    actaSetDim: { color: c.textMuted, fontWeight: '500' },
+    actaHint: { fontFamily: Fonts.mono, fontSize: 9.5, color: c.textFaint, marginTop: 8 },
   });
