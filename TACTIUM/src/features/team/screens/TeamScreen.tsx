@@ -39,6 +39,11 @@ import { seasonUpdateAvailable, fcpSeasonStatus } from '@core/services/fcpSeason
 import { resyncFcpRoster } from '@core/services/fcpOnboarding';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FCP_ENABLED } from '@core/config/featureFlags';
+import {
+  fetchClubInscripciones,
+  refreshInscripcionRoster,
+} from '@core/services/fcpInscripciones';
+import type { FcpInscripcion } from '@core/services/fcpInscripciones';
 import { useTeamStore, type Player, type Side } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
@@ -89,6 +94,57 @@ export const TeamScreen = () => {
   // Estado respecto a la temporada de la Federación: si han publicado una liga
   // nueva hay que RE-VOLCAR (el vínculo caduca cada año), y mientras la ventana
   // de fichajes está abierta conviene re-sincronizar la plantilla.
+  // Inscripción del equipo a la temporada que VIENE. El club tiene esto en su
+  // panel desde hace tiempo; un capitán independiente no tenía dónde verlo, y
+  // es exactamente la misma pregunta: ¿estoy apuntado, me han confirmado y en
+  // qué categoría he quedado? El servicio ya era genérico —cruza por nombre y
+  // género, no por club—, así que aquí solo se le pasa un equipo.
+  const [inscripcion, setInscripcion] = useState<{
+    temporada: string;
+    fila: FcpInscripcion;
+  } | null>(null);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [refrescando, setRefrescando] = useState(false);
+
+  useEffect(() => {
+    if (!team?.id || !isFcpTeam) {
+      setInscripcion(null);
+      return;
+    }
+    let alive = true;
+    fetchClubInscripciones([
+      { id: team.id, name: team.name, gender: team.gender, category: team.category },
+    ])
+      .then((r) => {
+        if (!alive) return;
+        const fila = r?.rows[0];
+        setInscripcion(fila ? { temporada: r!.temporada, fila } : null);
+      })
+      .catch(() => alive && setInscripcion(null));
+    return () => {
+      alive = false;
+    };
+  }, [team?.id, team?.name, team?.gender, team?.category, isFcpTeam]);
+
+  /** Relee la plantilla en la web de la Federación, sin esperar al volcado
+   *  automático (martes y viernes). */
+  const refrescarInscripcion = async () => {
+    if (!team?.id || refrescando) return;
+    setRefrescando(true);
+    try {
+      await refreshInscripcionRoster(team.id);
+      const r = await fetchClubInscripciones([
+        { id: team.id, name: team.name, gender: team.gender, category: team.category },
+      ]);
+      const fila = r?.rows[0];
+      setInscripcion(fila ? { temporada: r!.temporada, fila } : null);
+    } catch {
+      /* el aviso de abajo ya dice de cuándo es la foto */
+    } finally {
+      setRefrescando(false);
+    }
+  };
+
   const [fcpStatus, setFcpStatus] = useState<{
     newSeason: boolean;
     signing: boolean;
@@ -412,6 +468,76 @@ export const TeamScreen = () => {
               <Text style={styles.fcpNoticeSkip}>Ahora no</Text>
             </Pressable>
           </View>
+        </View>
+      ) : null}
+
+      {inscripcion ? (
+        <View style={styles.fcpNotice}>
+          <Text style={styles.fcpNoticeTitle}>
+            Inscripción · {inscripcion.temporada}
+          </Text>
+          <Text style={styles.fcpNoticeText}>
+            {inscripcion.fila.confirmado
+              ? 'La Federación te tiene inscrito y confirmado.'
+              : 'Estás apuntado, pero la Federación todavía no lo ha confirmado.'}
+            {inscripcion.fila.categoriaActual &&
+            inscripcion.fila.categoria &&
+            inscripcion.fila.categoriaActual !== inscripcion.fila.categoria
+              ? ` Cambias de ${inscripcion.fila.categoriaActual} a ${inscripcion.fila.categoria}.`
+              : inscripcion.fila.categoria
+                ? ` Jugarás en ${inscripcion.fila.categoria}.`
+                : ''}
+            {inscripcion.fila.sede ? ` Sede de local: ${inscripcion.fila.sede}.` : ''}
+          </Text>
+          <Pressable
+            onPress={() => setRosterOpen((v) => !v)}
+            style={({ pressed }) => [styles.fcpNoticeRow, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.fcpNoticeSkip}>
+              {rosterOpen
+                ? 'Ocultar plantilla inscrita'
+                : `Ver plantilla inscrita (${inscripcion.fila.jugadores.length})`}
+            </Text>
+          </Pressable>
+          {rosterOpen ? (
+            <View style={{ marginTop: 10 }}>
+              {inscripcion.fila.jugadores.length === 0 ? (
+                <Text style={styles.fcpNoticeText}>
+                  La Federación todavía no publica jugadores en tu equipo.
+                </Text>
+              ) : (
+                inscripcion.fila.jugadores.map((j, i) => (
+                  <View key={j.idJugador} style={styles.inscripRosterRow}>
+                    <Text style={styles.inscripRosterNum}>{i + 1}</Text>
+                    <Text style={styles.inscripRosterName} numberOfLines={1}>
+                      {j.nombre}
+                    </Text>
+                    <Text style={styles.inscripRosterPts}>{j.puntos}</Text>
+                  </View>
+                ))
+              )}
+              <Pressable
+                onPress={refrescarInscripcion}
+                disabled={refrescando}
+                style={({ pressed }) => [
+                  styles.fcpNoticeBtn,
+                  { marginTop: 12, alignSelf: 'flex-start' },
+                  (pressed || refrescando) && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.fcpNoticeBtnText}>
+                  {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {/* Lo que la Federación NO dice: nadie publica «has ascendido».
+              Publica la categoría en la que te inscribe, y el cambio de arriba
+              es una comparación nuestra contra la temporada en curso. */}
+          <Text style={[styles.fcpNoticeText, { marginTop: 10 }]}>
+            Todavía no hay calendario. Cuando la Federación lo publique podrás
+            volcar la temporada con sus jornadas.
+          </Text>
         </View>
       ) : null}
 
@@ -1223,6 +1349,22 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   fcpNoticeBtnText: { color: c.textInverse, fontSize: 13, fontWeight: '800' },
   fcpNoticeSkip: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+  // Plantilla inscrita para la temporada que viene. Fila estrecha a
+  // proposito: es una lista de consulta, no algo que se edite aqui.
+  inscripRosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  inscripRosterNum: {
+    color: c.textFaint,
+    fontSize: 11,
+    width: 18,
+    textAlign: 'center',
+  },
+  inscripRosterName: { flex: 1, minWidth: 0, color: c.text, fontSize: 13.5 },
+  inscripRosterPts: { color: c.accent, fontSize: 13, fontWeight: '700' },
   searchWrap: {
     paddingHorizontal: 20,
     paddingTop: 16,
