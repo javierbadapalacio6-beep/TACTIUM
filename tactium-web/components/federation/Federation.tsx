@@ -2032,7 +2032,9 @@ export function FcpPlayerView({ id }: { id: string }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {dayGroups.map((d) => (
             <Card flush key={d.label}>
-              <CardHead title={d.label} count={d.games.length} />
+              {/* Sin contador: un jugador disputa UN partido por jornada, así
+                  que el número era un «1» repetido pantalla abajo. */}
+              <CardHead title={d.label} />
               {d.games.map((m, i) => (
                 <div key={i} className="list-row">
                   <span
