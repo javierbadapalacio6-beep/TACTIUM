@@ -1511,6 +1511,109 @@ export async function fetchFcpLeagues(): Promise<FcpLeague[]> {
     .sort((a, b) => (b.temporada ?? "").localeCompare(a.temporada ?? ""));
 }
 
+/* ── Inscripción del propio equipo a la temporada que viene ──────────── */
+
+export interface FcpTeamInscripcion {
+  temporada: string;
+  equipo: string;
+  categoria: string | null;
+  /** Su categoría de ahora, para ver de un vistazo si sube o baja. */
+  categoriaActual: string | null;
+  confirmado: boolean;
+  sede: string | null;
+  roster: FcpRosterPlayer[];
+}
+
+/** Quita patrocinador y letra de equipo para quedarse con el nombre del club.
+ *  Mismo criterio que `clubOf` en la app. */
+function clubBase(equipo: string): string {
+  let s = equipo.trim().replace(/\s+/g, " ");
+  s = s.replace(/\s*[-–]\s*[^-–]+$/, "").trim() || s;
+  s = s.replace(/\s+(G[º°]\.?|GRUPO)\s+.+$/i, "").trim() || s;
+  s = s.replace(/[\s\-–]+$/, "").trim() || equipo.trim();
+  s = s
+    .replace(
+      /\s+(MASCULINO|FEMENINO)?\s*([A-ZÑ]|\d{1,2}|I{2,3}|IV|VI{0,3}|IX|XI{0,2})$/i,
+      ""
+    )
+    .trim();
+  return s || equipo.trim();
+}
+
+const normTeam = (s: string | null | undefined) =>
+  (s ?? "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * ¿Está MI equipo apuntado a la temporada que viene?
+ *
+ * El club tenía esto en su panel desde hace tiempo; un capitán independiente no
+ * tenía dónde verlo, y es exactamente la misma pregunta: si está inscrito, si
+ * se lo han confirmado, en qué categoría ha quedado y con qué plantilla.
+ *
+ * El cruce va por NOMBRE + GÉNERO, no por id: el `id_equipo` de la Federación
+ * cambia cada temporada, así que el vínculo guardado apunta a la liga en curso
+ * y no sirve para encontrar al mismo equipo en la siguiente. El género hace
+ * falta porque «MEDIO CUDEYO A» existe dos veces, una masculina y otra
+ * femenina.
+ *
+ * Devuelve null si no hay liga en inscripción o si ese equipo no aparece: así
+ * la pantalla no pinta nada el resto del año.
+ */
+export async function fetchTeamInscripcion(team: {
+  name: string;
+  gender: string | null;
+  category: string | null;
+}): Promise<FcpTeamInscripcion | null> {
+  const nombre = (team.name ?? "").trim();
+  if (nombre.length < 2) return null;
+
+  const ligas = await fetchFcpLeagues();
+  const proxima = ligas.find((l) => l.upcoming);
+  if (!proxima) return null;
+
+  // `%` y `,` rompen los filtros de PostgREST; el nombre de un club no los
+  // lleva, pero no cuesta nada no fiarse.
+  const base = clubBase(nombre).replace(/[%,()]/g, " ").trim();
+  if (base.length < 2) return null;
+
+  const { data } = await supabaseBrowser()
+    .from("fcp_inscripciones")
+    .select("id_equipo, equipo, genero, grupo_nombre, confirmado, sede")
+    .eq("id_liga", proxima.idLiga)
+    .ilike("equipo", `${base}%`)
+    .limit(200);
+
+  const esFemenino = team.gender === "femenino";
+  const fila = ((data ?? []) as {
+    id_equipo: number;
+    equipo: string | null;
+    genero: string | null;
+    grupo_nombre: string | null;
+    confirmado: boolean | null;
+    sede: string | null;
+  }[]).find(
+    (r) =>
+      normTeam(r.equipo) === normTeam(nombre) &&
+      (r.genero === "F" ? esFemenino : !esFemenino)
+  );
+  if (!fila) return null;
+
+  return {
+    temporada: proxima.temporada ?? String(proxima.idLiga),
+    equipo: (fila.equipo ?? nombre).trim(),
+    categoria: catShort(fila.grupo_nombre ?? ""),
+    categoriaActual: team.category,
+    confirmado: fila.confirmado === true,
+    sede: fila.sede,
+    roster: await fetchFcpRoster(fila.id_equipo),
+  };
+}
+
 /**
  * Grupos de una liga, ORDENADOS: primero la fase regular y dentro por nombre.
  * Sin esto salen en el orden que devuelve la base de datos, que no es ninguno.

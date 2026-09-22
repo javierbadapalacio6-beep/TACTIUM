@@ -783,6 +783,161 @@ a.bcard:hover,
   border: 1.5px dashed var(--surface-line-hi);
 }
 
+/* ── Calendario mensual de jornadas ───────────────────────────────
+   Una rejilla de mes en la que cada jornada cae en su día, con el rival y
+   el icono de casa o de avión. Se lee de un vistazo cuándo toca jugar y
+   dónde, que en una lista hay que ir contando. */
+.cal-head {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.cal-dow {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  padding-bottom: 2px;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.cal-cell {
+  position: relative;
+  min-height: 62px;
+  border-radius: 12px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+/* Día de otro mes: se pinta para no romper la rejilla, pero calla. */
+.cal-cell.is-out {
+  background: transparent;
+}
+.cal-cell.is-out .cal-num {
+  opacity: 0.35;
+}
+.cal-num {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  line-height: 1;
+}
+.cal-cell.is-today .cal-num {
+  color: var(--text-inverse);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 3px 5px;
+  font-weight: 700;
+  align-self: flex-start;
+}
+
+/* La jornada dentro del día. En casa va en verde; fuera, en gris. */
+.cal-ev {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px 6px;
+  border-radius: 9px;
+  background: var(--bg-card-3);
+  color: var(--text);
+  text-decoration: none;
+  transition: filter var(--dur-fast) var(--ease);
+}
+.cal-ev:hover {
+  filter: brightness(1.25);
+  color: var(--text);
+}
+.cal-ev.is-home {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+.cal-ev.is-played {
+  background: var(--bg-card-2);
+  color: var(--text-muted);
+}
+.cal-ev-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+.cal-ev-rival {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.cal-ev-score {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Barra de mes: nombre + flechas. */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cal-month {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  min-width: 120px;
+  text-align: center;
+}
+
+/* En móvil no caben siete columnas con el nombre del rival: se queda el
+   icono y el número de jornada, que es lo que se lee de un vistazo. El
+   rival sigue en el `title` y a un toque de distancia. */
+@media (max-width: 620px) {
+  .cal-cell {
+    min-height: 52px;
+    padding: 4px;
+    gap: 3px;
+  }
+  .cal-grid,
+  .cal-head {
+    gap: 4px;
+  }
+  .cal-ev {
+    padding: 4px 2px;
+    align-items: center;
+    justify-content: center;
+  }
+  .cal-ev-rival {
+    display: none;
+  }
+  .cal-ev-top {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 9.5px;
+    opacity: 1;
+  }
+  .cal-ev-score {
+    font-size: 9.5px;
+    margin-left: 0 !important;
+  }
+}
+
 /* ── Ranking horizontal (plantilla, parejas…) ─────────────────── */
 .rank-row {
   display: grid;

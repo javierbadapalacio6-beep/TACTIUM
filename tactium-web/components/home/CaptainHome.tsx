@@ -14,8 +14,9 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Btn, BtnLink, Card, Chip } from "@/components/ui";
+import { BtnLink, Card, Chip } from "@/components/ui";
 import { EmptyState, SkeletonPage } from "@/components/states";
+import { SeasonCalendar } from "@/components/home/SeasonCalendar";
 import {
   IconCalendar,
   IconCheck,
@@ -69,17 +70,6 @@ function formatDate(iso: string | null): string {
     weekday: "long",
     day: "numeric",
     month: "long",
-  });
-}
-
-function formatDateShort(iso: string | null): string {
-  if (!iso) return "Sin fecha";
-  const d = new Date(iso + "T00:00:00");
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("es-ES", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
   });
 }
 
@@ -582,58 +572,11 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           </div>
         </div>
 
-        {/* ══ Calendario ═══════════════════════════════════════════ */}
-        <div className="bcard bcard-pad-0 col-7">
-          <div className="bcard-head" style={{ margin: 0, padding: "18px 20px 14px" }}>
-            <span className="bcard-title">Calendario</span>
-            <Link href={`/temporadas/${season.id}`} className="link-action">
-              Ver temporada
-            </Link>
-          </div>
-          {upcoming.length <= 1 ? (
-            <EmptyState compact title="No quedan más jornadas" />
-          ) : (
-            upcoming.slice(1, 6).map((j) => (
-              <Link
-                key={j.id}
-                href={`/jornada/${j.id}`}
-                className="list-row"
-                style={{ padding: "10px 20px" }}
-              >
-                <span
-                  className="mono"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
-                    background: "var(--bg-card-2)",
-                    color: "var(--text-muted)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    flex: "none",
-                  }}
-                >
-                  {j.round}
-                </span>
-                <span className="list-row-main">
-                  <span className="list-row-title truncate">vs {j.opponent}</span>
-                  <span className="list-row-sub">
-                    {formatDateShort(j.date)}
-                    {formatTime(j.time) ? ` · ${formatTime(j.time)}` : ""}
-                  </span>
-                </span>
-                <Chip tone={j.isHome ? "accent" : "mute"} plain>
-                  {j.isHome ? "En casa" : "Fuera"}
-                </Chip>
-                <span className="list-row-chev">
-                  <IconChevronRight size={16} />
-                </span>
-              </Link>
-            ))
-          )}
+        {/* ══ Calendario ═══════════════════════════════════════════
+            En rejilla de mes: se ve de un vistazo cuándo toca, contra quién
+            y si hay que desplazarse (casa o avión). */}
+        <div className="bcard col-7">
+          <SeasonCalendar matchdays={matchdays} seasonId={season.id} />
         </div>
 
         {/* ══ Plantilla por puntos ═════════════════════════════════

@@ -9,6 +9,7 @@ import {
   deletePlayer,
   fetchPlayers,
   updatePlayer,
+  fetchTeamInscripcion,
   fetchTeamInvitations,
   createInvitation,
   invitationActive,
@@ -65,6 +66,20 @@ function initials(n: string) {
 
 export function Roster() {
   const { activeTeam } = useSession();
+
+  // Inscripción a la temporada que viene: el club ya lo veía en su panel, un
+  // equipo independiente no tenía dónde. Devuelve null fuera del periodo de
+  // inscripción, así que la tarjeta se esconde sola el resto del año.
+  const inscripcion = useAsync(
+    () =>
+      fetchTeamInscripcion({
+        name: activeTeam!.name,
+        gender: activeTeam!.gender,
+        category: activeTeam!.category,
+      }),
+    [activeTeam?.id, activeTeam?.name, activeTeam?.gender, activeTeam?.category],
+    !!activeTeam?.name
+  );
   const teamId = activeTeam?.id ?? null;
 
   const [reloadKey, setReloadKey] = useState(0);
@@ -257,6 +272,101 @@ export function Roster() {
           sub={inactiveCount > 0 ? "Fuera del banquillo" : "Toda la plantilla activa"}
         />
       </StatRow>
+
+      {/* Inscripción a la temporada que viene. Sólo aparece mientras la
+          Federación tiene abierta la inscripción y este equipo figura en
+          ella; el resto del año no se pinta nada. */}
+      {inscripcion.data ? (
+        <Card style={{ marginBottom: 16 }}>
+          <CardHead title={`Inscripción · ${inscripcion.data.temporada}`}>
+            <Chip tone={inscripcion.data.confirmado ? "accent" : "warning"}>
+              {inscripcion.data.confirmado ? "Confirmado" : "Sin confirmar"}
+            </Chip>
+          </CardHead>
+          <div style={{ padding: "0 16px 16px" }}>
+            <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
+              {inscripcion.data.confirmado
+                ? "La Federación te tiene inscrito y confirmado."
+                : "Estás apuntado, pero la Federación todavía no lo ha confirmado."}{" "}
+              {inscripcion.data.categoriaActual &&
+              inscripcion.data.categoria &&
+              inscripcion.data.categoriaActual !== inscripcion.data.categoria
+                ? `Cambias de ${inscripcion.data.categoriaActual} a ${inscripcion.data.categoria}.`
+                : inscripcion.data.categoria
+                  ? `Jugarás en ${inscripcion.data.categoria}.`
+                  : ""}{" "}
+              Todavía no hay calendario: cuando la Federación lo publique podrás
+              volcar la temporada con sus jornadas.
+            </p>
+            <StatRow>
+              <Stat
+                label="Categoría"
+                value={inscripcion.data.categoria ?? "—"}
+                sub={
+                  inscripcion.data.categoriaActual &&
+                  inscripcion.data.categoria &&
+                  inscripcion.data.categoriaActual !== inscripcion.data.categoria
+                    ? `Ahora en ${inscripcion.data.categoriaActual}`
+                    : "Sin cambio"
+                }
+              />
+              <Stat label="Sede de local" value={inscripcion.data.sede ?? "Sin asignar"} />
+              <Stat
+                label="Plantilla inscrita"
+                value={inscripcion.data.roster.length}
+                sub="Según la Federación"
+              />
+            </StatRow>
+            {inscripcion.data.roster.length > 0 ? (
+              <details style={{ marginTop: 14 }}>
+                <summary
+                  style={{
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Ver la plantilla inscrita
+                </summary>
+                <div style={{ marginTop: 10 }}>
+                  {inscripcion.data.roster.map((j, i) => (
+                    <div
+                      key={j.idJugador}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "6px 0",
+                      }}
+                    >
+                      <span
+                        className="mono"
+                        style={{ fontSize: 12, color: "var(--text-faint)", width: 20 }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="truncate" style={{ flex: 1, fontSize: 13.5 }}>
+                        {j.name}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
+                      >
+                        {j.puntos}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : (
+              <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--text-faint)" }}>
+                La Federación todavía no publica jugadores en tu equipo.
+              </p>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       {/* Barra de acciones */}
       <div className="tw-toolbar">
