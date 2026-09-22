@@ -2110,8 +2110,10 @@ button.list-row:hover,
 
 /* Aurora del lienzo. No es decoración: es lo ÚNICO que hay detrás de las
    tarjetas, y sin ella el cristal se ve idéntico a un color plano. Va fija
-   —no scrollea con `tw-main`—, así el desenfoque cambia al desplazarse. */
-.tw-frame::before {
+   —no scrollea con `tw-main`—, así el desenfoque cambia al desplazarse.
+   La comparten el marco del panel y el marco público. */
+.tw-frame::before,
+.tw-pub::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -2122,6 +2124,9 @@ button.list-row:hover,
     radial-gradient(46% 40% at 96% -4%, var(--aurora-1), transparent 68%),
     radial-gradient(58% 50% at 78% 96%, var(--aurora-3), transparent 72%),
     radial-gradient(40% 34% at 34% 58%, var(--aurora-4), transparent 70%);
+}
+.tw-pub::before {
+  position: fixed;
 }
 /* El contenido va POR ENCIMA de la aurora, o quedaría tapado. */
 .tw-topnav,
@@ -3431,10 +3436,15 @@ select.tw-cell-input {
 
 /* ═══ MARCO PÚBLICO ═══════════════════════════════════════════════════ */
 .tw-pub {
+  position: relative;
   min-height: 100vh;
   background: var(--bg);
   display: flex;
   flex-direction: column;
+}
+.tw-pub > * {
+  position: relative;
+  z-index: 1;
 }
 
 .tw-pub-bar {
@@ -3447,9 +3457,9 @@ select.tw-cell-input {
   min-height: 60px;
   padding: 10px 16px;
   flex-wrap: wrap;
-  background: var(--blur-bg);
-  backdrop-filter: blur(14px) saturate(160%);
-  border-bottom: 1px solid var(--line);
+  background: var(--glass-bg-hi);
+  backdrop-filter: var(--glass-blur-lg);
+  border-bottom: 1px solid var(--glass-line);
 }
 .tw-pub-brand {
   color: var(--text);
@@ -3911,7 +3921,8 @@ select.tw-cell-input {
   .bcard::after {
     display: none;
   }
-  .tw-frame::before {
+  .tw-frame::before,
+  .tw-pub::before {
     opacity: 0.35;
   }
 }
