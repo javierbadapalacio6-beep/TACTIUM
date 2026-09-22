@@ -3209,6 +3209,86 @@ select.tw-cell-input {
   gap: 6px;
   align-items: center;
 }
+/* Cabecera de horas: a 11px y en gris muy apagado no se leía, y es la
+   mitad de la información que necesitas para elegir. */
+.tw-slot-hour {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* La casilla. Antes era un punto «·» de 36px de alto sin estado de hover:
+   ni parecía pulsable ni se distinguía una libre de una ocupada. */
+.tw-slot-cell {
+  min-height: 42px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-card-2);
+  color: var(--text-faint);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.tw-slot-cell:hover {
+  background: var(--bg-card-3);
+  border-color: var(--accent-40);
+  transform: translateY(-1px);
+}
+.tw-slot-cell.is-fav {
+  background: var(--accent-10);
+  border-color: var(--accent-40);
+  color: var(--accent);
+}
+.tw-slot-cell.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+.tw-slot-cell.is-on:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+/* Leyenda: sin ella, la estrella no significa nada. */
+.tw-slot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.tw-slot-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.tw-slot-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: var(--r-xs);
+  font-style: normal;
+  font-size: 11px;
+}
+.tw-slot-dot.is-fav {
+  background: var(--accent-10);
+  border: 1px solid var(--accent-40);
+  color: var(--accent);
+}
+.tw-slot-dot.is-on {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
 
 /* ── Torneos ───────────────────────────────────────────────────── */
 .tw-tourney-grid {

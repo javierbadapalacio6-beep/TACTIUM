@@ -9,6 +9,12 @@ import {
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
+import {
+  importFcpTeams,
+  searchFcpClubs,
+  type FcpClubGroup,
+  type FcpTeamOption,
+} from "@/lib/fcp-import";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
@@ -18,10 +24,11 @@ import {
   Chip,
   Input,
   Modal,
+  Note,
   PageHeader,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconCheck, IconClock } from "@/components/Icon";
+import { IconCheck, IconClock, IconPlus } from "@/components/Icon";
 
 /**
  * Horarios de local.
@@ -94,10 +101,35 @@ function dateForSlot(currentIso: string | null, day: number): string {
 const slotKey = (day: number, hour: string) => `${day}|${hour}`;
 const slotLabel = (day: number, hour: string) => `${WEEKDAY[day]} ${hour}`;
 
-/** Días por defecto de la liga (sábado y domingo), en orden de fin de semana. */
-const DEFAULT_DAYS = [6, 0];
-/** Horas por defecto cuando aún no hay ninguna franja declarada. */
-const DEFAULT_HOURS = ["10:00", "12:00", "16:00", "18:00"];
+/**
+ * Días que la rejilla ofrece SIEMPRE: viernes, sábado y domingo.
+ *
+ * El viernes no es un extra: media liga juega el viernes por la tarde, hasta
+ * el punto de que el agente de la Federación tiene una pasada a las 21:00 de
+ * los viernes «porque algunos ya han subido horarios». Faltaba.
+ */
+const DEFAULT_DAYS = [5, 6, 0];
+
+/**
+ * Horas que la rejilla ofrece SIEMPRE, mañana, tarde y noche.
+ *
+ * Antes esto era un respaldo que solo entraba `if (hours.size === 0)`, o sea
+ * cuando NINGÚN equipo había declarado franjas favoritas. En cuanto uno
+ * declaraba «sábado 10:00», la rejilla pasaba a ofrecer exclusivamente esa
+ * hora: el club no podía poner un partido a ninguna otra, y un viernes por la
+ * tarde era directamente inalcanzable. Ahora son una base que SIEMPRE está, y
+ * las favoritas se suman a ella.
+ */
+const DEFAULT_HOURS = [
+  "10:00",
+  "12:00",
+  "16:00",
+  "18:00",
+  "19:00",
+  "20:00",
+  "21:00",
+  "22:00",
+];
 
 /** Un partido de local, de un equipo propio o de uno invitado. */
 type Fixture = DbClubHomeMatch & { is_guest: boolean };
@@ -158,6 +190,53 @@ export function ClubSchedule() {
       return next;
     });
   }, [fixtures]);
+
+  // Dar de alta un equipo INVITADO sin salir de esta pantalla. Se puede hacer
+  // desde el importador del club, pero el sitio natural es este: aquí es donde
+  // te das cuenta de que falta un equipo al repartir las pistas.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addQuery, setAddQuery] = useState("");
+  const [addResults, setAddResults] = useState<FcpClubGroup[]>([]);
+  const [addLoading, setAddLoading] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!addOpen || addQuery.trim().length < 2) {
+      setAddResults([]);
+      return;
+    }
+    let alive = true;
+    setAddLoading(true);
+    const id = setTimeout(() => {
+      searchFcpClubs(addQuery)
+        .then((r) => alive && setAddResults(r))
+        .catch(() => alive && setAddResults([]))
+        .finally(() => alive && setAddLoading(false));
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(id);
+    };
+  }, [addOpen, addQuery]);
+
+  async function altaInvitado(t: FcpTeamOption) {
+    if (!clubId || addBusy) return;
+    setAddBusy(true);
+    setAddErr(null);
+    const res = await guardedWrite("dar de alta el equipo invitado", () =>
+      importFcpTeams(clubId, [t], "venue"),
+    );
+    setAddBusy(false);
+    if (!res.ok) {
+      setAddErr(res.reason);
+      return;
+    }
+    setAddOpen(false);
+    setAddQuery("");
+    setReloadKey((k) => k + 1);
+    setToast(`«${t.equipo}» añadido como invitado. Ya puedes ponerle horario.`);
+  }
 
   const [picking, setPicking] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -221,11 +300,12 @@ export function ClubSchedule() {
         hours.add(s.hour);
       }
     }
-    if (hours.size === 0) DEFAULT_HOURS.forEach((h) => hours.add(h));
+    DEFAULT_HOURS.forEach((h) => hours.add(h));
     return {
-      // Sábado y domingo primero, el resto detrás en orden natural.
+      // Fin de semana en su orden natural de calendario (viernes, sábado,
+      // domingo) y el resto detrás.
       gridDays: [...days].sort((a, b) => {
-        const rank = (d: number) => (d === 6 ? -2 : d === 0 ? -1 : d);
+        const rank = (d: number) => (d === 5 ? -3 : d === 6 ? -2 : d === 0 ? -1 : d);
         return rank(a) - rank(b);
       }),
       gridHours: [...hours].sort(),
@@ -240,6 +320,12 @@ export function ClubSchedule() {
     setPicking(null);
   }
 
+  /** Deja el partido sin hora. Antes había que salir, y no había forma. */
+  function unassign(matchdayId: string) {
+    setSlots((s) => ({ ...s, [matchdayId]: null }));
+    setPicking(null);
+  }
+
   function setCourt(matchdayId: string, court: string) {
     setSlots((s) => ({
       ...s,
@@ -248,12 +334,22 @@ export function ClubSchedule() {
   }
 
   const favSlots = picking ? (favByMatch[picking] ?? []) : [];
+  // `picking` es ahora un id de jornada, no un nombre: hay que traducirlo o el
+  // título del selector sale siendo un UUID.
+  const pickingFixture = picking
+    ? (fixtures.find((f) => f.matchday_id === picking) ?? null)
+    : null;
   const favKeys = new Set(favSlots.map((s) => slotKey(s.day, s.hour)));
 
   const header = (
     <PageHeader
       title="Horarios de local"
-      lede="Asigna día, hora y pista a los equipos que juegan en casa esta jornada."
+      lede="Asigna día, hora y pista a los equipos que juegan en casa, sean tuyos o invitados."
+      actions={
+        <Btn onClick={() => setAddOpen(true)} icon={<IconPlus size={15} />}>
+          Añadir equipo invitado
+        </Btn>
+      }
     />
   );
 
@@ -423,30 +519,118 @@ export function ClubSchedule() {
       </div>
 
       {/* ── Selector día × hora ──────────────────────────────────── */}
+      {/* ── Alta de equipo invitado ──────────────────────────────── */}
+      {addOpen && (
+        <Modal
+          open
+          onClose={() => setAddOpen(false)}
+          labelledBy="alta-invitado"
+          width={560}
+          title="Añadir equipo invitado"
+          lede="Equipos de otros clubes que juegan en tus pistas. Les pondrás día, hora y pista, y nada más."
+        >
+          <Input
+            type="text"
+            placeholder="Busca el club del equipo"
+            value={addQuery}
+            onChange={(e) => setAddQuery(e.target.value)}
+            autoFocus
+          />
+          {addErr && (
+            <Note tone="error" style={{ marginTop: 10 }}>
+              {addErr}
+            </Note>
+          )}
+          <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--text-faint)" }}>
+            No consumen cuota de tu plan y no verás su plantilla: de un invitado
+            solo se gestiona el horario.
+          </p>
+          <div style={{ marginTop: 12, maxHeight: 360, overflowY: "auto" }}>
+            {addLoading && (
+              <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Buscando…</p>
+            )}
+            {!addLoading && addQuery.trim().length >= 2 && addResults.length === 0 && (
+              <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+                Sin resultados para «{addQuery.trim()}».
+              </p>
+            )}
+            {addResults.map((cg) => (
+              <div key={cg.club} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{cg.club}</div>
+                <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                  {cg.teams.map((t) => (
+                    <button
+                      key={t.id_equipo}
+                      type="button"
+                      disabled={addBusy}
+                      onClick={() => void altaInvitado(t)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "10px 12px",
+                        borderRadius: "var(--r-md)",
+                        border: "1px solid var(--line)",
+                        background: "var(--bg-card-2)",
+                        color: "var(--text)",
+                        cursor: addBusy ? "default" : "pointer",
+                        opacity: addBusy ? 0.6 : 1,
+                        textAlign: "left",
+                        fontFamily: "var(--font-ui)",
+                      }}
+                    >
+                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>
+                        {t.equipo}
+                      </span>
+                      <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                        {[t.category, t.gender].filter(Boolean).join(" · ")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
       <Modal
         open={picking !== null}
         onClose={() => setPicking(null)}
         labelledBy="elige-hora"
-        width={560}
-        title={picking ?? ""}
+        width={700}
+        title={
+          pickingFixture
+            ? `${pickingFixture.team_name}${
+                pickingFixture.jornada_number != null
+                  ? ` · Jornada ${pickingFixture.jornada_number}`
+                  : ""
+              }`
+            : ""
+        }
         lede={
           favSlots.length > 0
-            ? "Sus franjas favoritas van resaltadas. También puedes elegir otro día y hora."
-            : "Este equipo no ha marcado franjas favoritas."
+            ? "Pulsa una casilla para darle día y hora. Las que el equipo ha marcado como favoritas llevan estrella."
+            : "Pulsa una casilla para darle día y hora. Este equipo no ha marcado franjas favoritas."
         }
-        footer={<Btn onClick={() => setPicking(null)}>Cancelar</Btn>}
+        footer={
+          <>
+            {picking && slots[picking] && (
+              <Btn variant="quiet" onClick={() => unassign(picking)}>
+                Quitar la hora
+              </Btn>
+            )}
+            <Btn onClick={() => setPicking(null)}>Cerrar</Btn>
+          </>
+        }
       >
         <div
           className="tw-slot-grid"
-          style={{ gridTemplateColumns: `52px repeat(${gridHours.length}, 1fr)` }}
+          style={{ gridTemplateColumns: `56px repeat(${gridHours.length}, 1fr)` }}
         >
           <span />
           {gridHours.map((h) => (
-            <span
-              key={h}
-              className="mono"
-              style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}
-            >
+            <span key={h} className="mono tw-slot-hour">
               {h}
             </span>
           ))}
@@ -468,34 +652,27 @@ export function ClubSchedule() {
                     onClick={() => picking && assign(picking, d, h)}
                     aria-label={`${WEEKDAY[d]} ${h}${fav ? ", franja favorita" : ""}`}
                     aria-pressed={!!cur}
-                    style={{
-                      minHeight: 36,
-                      padding: 0,
-                      borderRadius: "var(--r-sm)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                      background: cur
-                        ? "var(--accent)"
-                        : fav
-                          ? "var(--accent-10)"
-                          : "var(--bg-card-2)",
-                      color: cur
-                        ? "var(--text-inverse)"
-                        : fav
-                          ? "var(--accent)"
-                          : "var(--text-faint)",
-                      border: `1px solid ${
-                        cur ? "var(--accent)" : fav ? "var(--accent-40)" : "var(--line)"
-                      }`,
-                      transition: "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
-                    }}
+                    className={
+                      "tw-slot-cell" +
+                      (fav ? " is-fav" : "") +
+                      (cur ? " is-on" : "")
+                    }
                   >
-                    {cur ? <IconCheck size={14} /> : fav ? "★" : "·"}
+                    {cur ? <IconCheck size={15} /> : fav ? "★" : ""}
                   </button>
                 );
               })}
             </Fragment>
           ))}
+        </div>
+
+        <div className="tw-slot-legend">
+          <span>
+            <i className="tw-slot-dot is-fav">★</i> Franja favorita del equipo
+          </span>
+          <span>
+            <i className="tw-slot-dot is-on" /> Hora asignada
+          </span>
         </div>
       </Modal>
 
