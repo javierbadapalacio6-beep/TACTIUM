@@ -8,6 +8,7 @@ import {
   fetchFcpBracketTieActa,
   fetchFcpGroupActas,
   fetchFcpGroupMetas,
+  fetchFcpGroupPlayerIndex,
   fetchFcpGroups,
   fetchFcpLeagues,
   fetchFcpGroupHeader,
@@ -22,6 +23,9 @@ import {
   fetchFcpTeamProfile,
   searchFcpPlayers,
   searchFcpTeams,
+  fcpNameKey,
+  type FcpActaPartido,
+  type FcpActaPlayerInfo,
   type FcpBracketTie,
   type FcpGroup,
   type FcpPlayerMatch,
@@ -1026,6 +1030,10 @@ function FcpGroupSchedule({
   const { user } = useSession();
   const actas = useAsync(() => fetchFcpGroupActas(idGrupo), [idGrupo, user?.id]);
   const actaMap = actas.data ?? {};
+  // Caras y puntos de quien juega cada punto. Una consulta por grupo, no
+  // por partido: son los mismos sesenta jugadores toda la temporada.
+  const players = useAsync(() => fetchFcpGroupPlayerIndex(idGrupo), [idGrupo, user?.id]);
+  const [abierto, setAbierto] = useState<(typeof matches)[number] | null>(null);
 
   // Agrupar por jornada (ronda de playoff = 9999 al final).
   const groups = useMemo(() => {
@@ -1114,7 +1122,11 @@ function FcpGroupSchedule({
               const score = splitScore(p.resultado);
               const localWon = p.ganador === "local";
               const visitWon = p.ganador === "visitante";
-              const acta = (actaMap[p.idPartido] ?? []).slice(0, 3);
+              const actaCompleta = actaMap[p.idPartido] ?? [];
+              const acta = actaCompleta.slice(0, 3);
+              // Sin acta publicada no hay nada que abrir: la fila se queda
+              // como estaba en vez de prometer un panel vacío.
+              const abrible = actaCompleta.length > 0;
               return (
                 <div
                   key={p.idPartido}
@@ -1123,6 +1135,21 @@ function FcpGroupSchedule({
                   }}
                 >
                   <div
+                    role={abrible ? "button" : undefined}
+                    tabIndex={abrible ? 0 : undefined}
+                    onClick={abrible ? () => setAbierto(p) : undefined}
+                    onKeyDown={
+                      abrible
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setAbierto(p);
+                            }
+                          }
+                        : undefined
+                    }
+                    className={abrible ? "acta-row" : undefined}
+                    aria-label={abrible ? `Ver el acta de ${p.local} contra ${p.visitante}` : undefined}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1183,7 +1210,13 @@ function FcpGroupSchedule({
                         {score ? score[1] : "·"}
                       </span>
                     </div>
-                    {!p.resultado ? <Chip tone="mute">Por jugar</Chip> : null}
+                    {!p.resultado ? (
+                      <Chip tone="mute">Por jugar</Chip>
+                    ) : abrible ? (
+                      <span className="acta-row-go" aria-hidden="true">
+                        <IconChevronRight size={15} />
+                      </span>
+                    ) : null}
                   </div>
                   {acta.length > 0 ? (
                     <div
@@ -1220,7 +1253,121 @@ function FcpGroupSchedule({
           );
         })}
       </Card>
+
+      <FcpActaModal
+        partido={abierto}
+        acta={abierto ? (actaMap[abierto.idPartido] ?? []) : []}
+        index={players.data ?? {}}
+        onClose={() => setAbierto(null)}
+      />
     </div>
+  );
+}
+
+/* ── Acta de un partido ──────────────────────────────────────────────
+   Una eliminatoria de liga son cinco puntos, y cada punto lo juegan dos
+   parejas. Esto abre el acta entera: quién jugó cada punto, con su cara y
+   sus puntos de ranking, y cómo acabó.
+
+   La cara sale de `profiles.avatar_url` de quien ha reclamado su ficha
+   federativa. La RLS sólo deja ver la propia y la de compañeros de equipo
+   o club, así que el resto se queda en iniciales. ─────────────────────── */
+
+function paresDe(j1: string | null, j2: string | null): string[] {
+  return [j1, j2].map((x) => (x ?? "").trim()).filter(Boolean);
+}
+
+function ActaPair({
+  jugadores,
+  index,
+  won,
+  sets,
+}: {
+  jugadores: string[];
+  index: Record<string, FcpActaPlayerInfo>;
+  won: boolean;
+  sets: number | null;
+}) {
+  const info = jugadores.map((n) => index[fcpNameKey(n)] ?? null);
+  const puntos = info.filter(Boolean).map((i) => i!.puntos);
+  return (
+    <div className={"acta-pair" + (won ? " is-won" : "")}>
+      <span className="acta-faces">
+        {jugadores.map((n, i) => (
+          <Avatar key={n + i} initials={initials(n)} src={info[i]?.avatarUrl} size={30} />
+        ))}
+      </span>
+      <span className="acta-who">
+        <span className="acta-names truncate">{jugadores.join(" / ") || "—"}</span>
+        {puntos.length > 0 && (
+          <span className="acta-pts mono">{puntos.map(fmtInt).join(" · ")} pts</span>
+        )}
+      </span>
+      <span className="acta-sets mono">{sets ?? "—"}</span>
+    </div>
+  );
+}
+
+function FcpActaModal({
+  partido,
+  acta,
+  index,
+  onClose,
+}: {
+  partido: { local: string | null; visitante: string | null; resultado: string | null } | null;
+  acta: FcpActaPartido[];
+  index: Record<string, FcpActaPlayerInfo>;
+  onClose: () => void;
+}) {
+  if (!partido) return null;
+  const marcador = splitScore(partido.resultado);
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy="acta-title"
+      width={560}
+      title={
+        <span className="acta-head" id="acta-title">
+          <span className="truncate">{partido.local ?? "—"}</span>
+          <span className="acta-score mono">
+            {marcador ? `${marcador[0]} — ${marcador[1]}` : "vs"}
+          </span>
+          <span className="truncate" style={{ textAlign: "right" }}>
+            {partido.visitante ?? "—"}
+          </span>
+        </span>
+      }
+    >
+      {acta.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
+          La federación todavía no ha publicado el acta de este partido.
+        </p>
+      ) : (
+        <div className="acta-list">
+          {acta.map((g) => (
+            <div key={g.partidoNum} className="acta-punto">
+              <div className="acta-punto-head">
+                <span className="acta-punto-num">Pista {g.partidoNum}</span>
+                {g.parciales && <span className="acta-parciales mono">{g.parciales}</span>}
+              </div>
+              <ActaPair
+                jugadores={paresDe(g.localJ1, g.localJ2)}
+                index={index}
+                won={g.ganador === "local"}
+                sets={g.setsLocal}
+              />
+              <ActaPair
+                jugadores={paresDe(g.visitJ1, g.visitJ2)}
+                index={index}
+                won={g.ganador === "visitante"}
+                sets={g.setsVisit}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }
 

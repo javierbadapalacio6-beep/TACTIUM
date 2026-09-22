@@ -3119,6 +3119,89 @@ export async function fetchFcpGroupActas(
   return out;
 }
 
+/* ── Quién juega cada punto del acta ─────────────────────────────────
+   El acta guarda los nombres como TEXTO («JULIA ROJO»), no el id del
+   jugador, así que para poner cara y puntos a cada pareja hay que cruzar
+   ese texto con `fcp_jugadores`. Se cruza SÓLO contra los equipos del
+   grupo: el mismo jugador tiene una ficha por equipo y temporada, y sin
+   acotar saldrían los puntos de otro año. ────────────────────────────── */
+
+export interface FcpActaPlayerInfo {
+  idJugador: string;
+  puntos: number;
+  /** Foto de su cuenta TACTIUM, si ha reclamado su ficha federativa. */
+  avatarUrl: string | null;
+}
+
+/** Clave de cruce: el acta escribe «NOMBRE APELLIDO1», sin tildes ni orden
+ *  fijo de espacios. Se normaliza a mayúsculas sin acentos. */
+export function fcpNameKey(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function fetchFcpGroupPlayerIndex(
+  idGrupo: string
+): Promise<Record<string, FcpActaPlayerInfo>> {
+  const sb = supabaseBrowser();
+  const { data: cls } = await sb
+    .from("fcp_clasificacion")
+    .select("id_equipo")
+    .eq("id_grupo", idGrupo);
+  const equipos = [...new Set(((cls ?? []) as { id_equipo: number }[]).map((c) => c.id_equipo))];
+  if (equipos.length === 0) return {};
+
+  const { data: jug } = await sb
+    .from("fcp_jugadores")
+    .select("id_jugador, nombre_pila, apellido1, puntos")
+    .in("id_equipo", equipos);
+
+  const rows = (jug ?? []) as {
+    id_jugador: string;
+    nombre_pila: string | null;
+    apellido1: string | null;
+    puntos: number | null;
+  }[];
+
+  const out: Record<string, FcpActaPlayerInfo> = {};
+  for (const r of rows) {
+    if (!r.nombre_pila || !r.apellido1) continue;
+    const key = fcpNameKey(`${r.nombre_pila} ${r.apellido1}`);
+    // Con dos fichas del mismo nombre en el grupo manda la de más puntos:
+    // es la del equipo con el que está jugando esta temporada.
+    const prev = out[key];
+    if (prev && prev.puntos >= (r.puntos ?? 0)) continue;
+    out[key] = { idJugador: r.id_jugador, puntos: r.puntos ?? 0, avatarUrl: null };
+  }
+
+  // Fotos. La RLS de `profiles` sólo deja ver la propia y la de los
+  // compañeros de equipo o club, así que esto rellena las que el que mira
+  // tiene derecho a ver y deja el resto en iniciales. Para enseñar la de
+  // todos haría falta un RPC `SECURITY DEFINER`, que es una decisión de
+  // privacidad, no un detalle de pantalla.
+  const ids = Object.values(out).map((v) => v.idJugador);
+  if (ids.length > 0) {
+    const { data: prof } = await sb
+      .from("profiles")
+      .select("fcp_id_jugador, avatar_url")
+      .in("fcp_id_jugador", ids);
+    const byId = new Map(
+      ((prof ?? []) as { fcp_id_jugador: string | null; avatar_url: string | null }[])
+        .filter((p) => p.fcp_id_jugador)
+        .map((p) => [p.fcp_id_jugador as string, p.avatar_url])
+    );
+    for (const v of Object.values(out)) {
+      v.avatarUrl = byId.get(v.idJugador) ?? null;
+    }
+  }
+
+  return out;
+}
+
 /* ── Cuadro de playoff (bracket) ────────────────────────────────────── */
 export interface FcpBracketTie {
   idPartido: string;
