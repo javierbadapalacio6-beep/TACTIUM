@@ -3178,22 +3178,25 @@ export async function fetchFcpGroupPlayerIndex(
     out[key] = { idJugador: r.id_jugador, puntos: r.puntos ?? 0, avatarUrl: null };
   }
 
-  // Fotos. La RLS de `profiles` sólo deja ver la propia y la de los
-  // compañeros de equipo o club, así que esto rellena las que el que mira
-  // tiene derecho a ver y deja el resto en iniciales. Para enseñar la de
-  // todos haría falta un RPC `SECURITY DEFINER`, que es una decisión de
-  // privacidad, no un detalle de pantalla.
+  // Fotos, por RPC y no leyendo `profiles`: la RLS de esa tabla sólo deja
+  // ver la propia y la de compañeros de equipo o club, así que en un grupo
+  // ajeno salían todos con iniciales. `fcp_player_avatars` devuelve SÓLO el
+  // par (ficha federativa → foto), y sólo de quien ha vinculado su ficha.
+  // Tiene tope de 300 por llamada, de ahí el troceado.
   const ids = Object.values(out).map((v) => v.idJugador);
   if (ids.length > 0) {
-    const { data: prof } = await sb
-      .from("profiles")
-      .select("fcp_id_jugador, avatar_url")
-      .in("fcp_id_jugador", ids);
-    const byId = new Map(
-      ((prof ?? []) as { fcp_id_jugador: string | null; avatar_url: string | null }[])
-        .filter((p) => p.fcp_id_jugador)
-        .map((p) => [p.fcp_id_jugador as string, p.avatar_url])
-    );
+    const byId = new Map<string, string | null>();
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data: fotos } = await sb.rpc("fcp_player_avatars", {
+        p_ids: ids.slice(i, i + 300),
+      });
+      for (const f of (fotos ?? []) as {
+        fcp_id_jugador: string;
+        avatar_url: string | null;
+      }[]) {
+        byId.set(f.fcp_id_jugador, f.avatar_url);
+      }
+    }
     for (const v of Object.values(out)) {
       v.avatarUrl = byId.get(v.idJugador) ?? null;
     }
