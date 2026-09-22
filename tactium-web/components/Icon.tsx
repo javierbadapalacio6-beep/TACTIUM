@@ -300,6 +300,18 @@ export const IconSliders = (p: Props) => (
   </Svg>
 );
 
+export const IconX = (p: Props) => (
+  <Svg {...p}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </Svg>
+);
+
+export const IconTrash = (p: Props) => (
+  <Svg {...p}>
+    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+  </Svg>
+);
+
 /* Símbolos de género. Los usa la rejilla de grupos de la Federación, que se
    organiza en masculino / femenino / mixto. */
 export const IconVenus = (p: Props) => (

@@ -16,6 +16,8 @@ import {
   IconSearch,
   IconShield,
   IconSun,
+  IconTrash,
+  IconX,
 } from "./Icon";
 import { LogoMark } from "./LogoMark";
 import { LogoSpinner } from "./TactiumLogo3D";
@@ -34,7 +36,12 @@ import { ROLE_LABELS, useSession } from "@/lib/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useDismiss } from "@/lib/use-dismiss";
 import { useTheme } from "@/lib/theme";
-import { fetchNotifications, markNotificationsRead } from "@/lib/queries";
+import {
+  deleteAllNotifications,
+  deleteNotification,
+  fetchNotifications,
+  markNotificationsRead,
+} from "@/lib/queries";
 import { WRITES_ENABLED } from "@/lib/writes";
 
 /**
@@ -116,11 +123,14 @@ function SignedOut() {
 /* ── Avisos (campanita) ── datos reales de la tabla `notifications` ──── */
 type NoticeTone = "accent" | "warning" | "muted";
 interface Notice {
+  id: string;
   icon: keyof typeof ICONS;
   text: string;
   time: string;
   unread: boolean;
   tone: NoticeTone;
+  /** A dónde lleva. Null si ese tipo no tiene destino. */
+  href: string | null;
 }
 
 function iconForNotif(type: string): keyof typeof ICONS {
@@ -147,6 +157,16 @@ function timeAgo(iso: string): string {
   if (w < 5) return `hace ${w} sem`;
   const mo = Math.floor(d / 30);
   return `hace ${mo} ${mo === 1 ? "mes" : "meses"}`;
+}
+
+/** Envuelve el contenido de un aviso en un enlace si tiene destino. */
+function cuerpoDe(n: Notice, contenido: ReactNode, alPulsar: () => void) {
+  if (!n.href) return <span className="tw-bell-body">{contenido}</span>;
+  return (
+    <Link href={n.href} className="tw-bell-body" onClick={alPulsar}>
+      {contenido}
+    </Link>
+  );
 }
 
 function matchesHref(pathname: string, href: string) {
@@ -298,6 +318,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (!alive) return;
         setNotices(
           rows.map((n) => ({
+            id: n.id,
+            href: n.href,
             icon: iconForNotif(n.type),
             text: n.title,
             time: timeAgo(n.created_at),
@@ -369,6 +391,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   function marcarTodasLeidas() {
     setNotices((ns) => ns.map((n) => ({ ...n, unread: false })));
     if (WRITES_ENABLED) markNotificationsRead().catch(() => {});
+  }
+
+  // Se quita de la lista antes de que conteste el servidor: si fallara, el
+  // aviso vuelve al recargar, que es mejor que una campana que no responde.
+  function borrarAviso(id: string) {
+    setNotices((ns) => ns.filter((n) => n.id !== id));
+    if (WRITES_ENABLED) deleteNotification(id).catch(() => {});
+  }
+
+  function borrarTodos() {
+    setNotices([]);
+    setBellOpen(false);
+    if (WRITES_ENABLED) deleteAllNotifications().catch(() => {});
   }
 
   return (
@@ -533,20 +568,35 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <div className="tw-popover tw-bell">
                   <div className="tw-bell-head">
                     <span style={{ fontSize: 14, fontWeight: 700 }}>Avisos</span>
-                    {unread > 0 ? (
-                      <button
-                        type="button"
-                        onClick={marcarTodasLeidas}
-                        className="tw-bell-clear"
-                      >
-                        <IconCheck size={13} />
-                        Marcar todas como leídas
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                        Al día
-                      </span>
-                    )}
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {unread > 0 ? (
+                        <button
+                          type="button"
+                          onClick={marcarTodasLeidas}
+                          className="tw-bell-clear"
+                          title="Marcar todas como leídas"
+                        >
+                          <IconCheck size={13} />
+                          Leídas
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                          Al día
+                        </span>
+                      )}
+                      {notices.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={borrarTodos}
+                          className="tw-bell-clear is-danger"
+                          title="Borrar todos los avisos"
+                          aria-label="Borrar todos los avisos"
+                        >
+                          <IconTrash size={13} />
+                          Vaciar
+                        </button>
+                      )}
+                    </span>
                   </div>
                   <div className="tw-bell-list">
                   {notices.length === 0 && (
@@ -571,13 +621,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                           : "var(--text-muted)";
                     return (
                       <div
-                        key={i}
-                        className="tw-bell-row"
+                        key={n.id}
+                        className={"tw-bell-row" + (n.href ? " is-link" : "")}
                         style={{
                           borderBottom:
                             i === notices.length - 1 ? "none" : "1px solid var(--line)",
                         }}
                       >
+                        {/* Cuerpo pinchable cuando el aviso lleva a algún
+                            sitio; si no, texto suelto. El botón de borrar va
+                            FUERA: un `button` dentro de un `Link` no es HTML
+                            válido. */}
+                        {cuerpoDe(
+                          n,
+                          <>
                         <span
                           style={{
                             width: 30,
@@ -628,6 +685,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                             }}
                           />
                         )}
+                          </>,
+                          () => setBellOpen(false)
+                        )}
+                        <button
+                          type="button"
+                          className="tw-bell-del"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            borrarAviso(n.id);
+                          }}
+                          aria-label="Borrar este aviso"
+                          title="Borrar"
+                        >
+                          <IconX size={14} />
+                        </button>
                       </div>
                     );
                   })}

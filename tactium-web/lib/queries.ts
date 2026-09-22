@@ -973,16 +973,116 @@ export interface DbNotification {
   body: string | null;
   read_at: string | null;
   created_at: string;
+  /** A dónde lleva el aviso. Null si no hay destino para ese tipo. */
+  href: string | null;
+}
+
+/**
+ * A dónde lleva cada aviso.
+ *
+ * OJO con las claves de `data`: los triggers de Postgres escriben en
+ * snake_case (`team_id`, `tournament_id`) y las edge functions en camelCase
+ * (`matchdayId`, `tournamentId`). Se aceptan las dos o la mitad de los
+ * avisos se quedan sin enlace.
+ */
+function notifHref(type: string, data: Record<string, unknown> | null): string | null {
+  const g = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = data?.[k];
+      if (typeof v === "string" && v) return v;
+    }
+    return null;
+  };
+  const jornada = g("matchdayId", "matchday_id");
+  const torneo = g("tournamentId", "tournament_id");
+
+  switch (type) {
+    case "availability_reminder":
+      return jornada ? `/jornada/${jornada}/disponibilidad` : null;
+    case "lineup_reminder":
+      return jornada ? `/jornada/${jornada}/alineacion` : null;
+    case "lineup_published":
+    case "matchday_created":
+      return jornada ? `/jornada/${jornada}` : null;
+    case "tournament_schedule":
+      return torneo ? `/torneos/${torneo}` : null;
+    case "tournament_signup":
+      return torneo ? `/torneos/${torneo}` : "/club/torneos";
+    case "joined_team":
+    case "member_joined":
+    case "player_claimed":
+      return "/equipo";
+    case "schedule_set":
+      return "/club/horarios";
+    default:
+      return null;
+  }
 }
 
 export async function fetchNotifications(): Promise<DbNotification[]> {
   const { data, error } = await supabaseBrowser()
     .from("notifications")
-    .select("id, type, title, body, read_at, created_at")
+    .select("id, type, title, body, data, read_at, created_at")
     .order("created_at", { ascending: false })
     .limit(30);
   if (error) throw error;
-  return (data ?? []) as DbNotification[];
+  const rows = (data ?? []) as (Omit<DbNotification, "href"> & {
+    data: Record<string, unknown> | null;
+  })[];
+
+  const out: DbNotification[] = rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    body: r.body,
+    read_at: r.read_at,
+    created_at: r.created_at,
+    href: notifHref(r.type, r.data),
+  }));
+
+  // «X te ha empezado a seguir» sólo trae el uuid, y el perfil público va
+  // por nombre de usuario. Se resuelven aparte, que suelen ser pocos.
+  const seguidores = rows.filter(
+    (r) => r.type === "new_follower" && typeof r.data?.actor_id === "string"
+  );
+  if (seguidores.length > 0) {
+    const ids = [...new Set(seguidores.map((r) => r.data!.actor_id as string))];
+    const perfiles = await Promise.all(
+      ids.map(async (id) => {
+        const { data: p } = await supabaseBrowser().rpc("get_public_user_profile", {
+          target: id,
+        });
+        const u = (p as { username?: string } | null)?.username;
+        return [id, u ?? null] as const;
+      })
+    );
+    const byId = new Map(perfiles);
+    for (const r of out) {
+      if (r.type !== "new_follower") continue;
+      const actor = rows.find((x) => x.id === r.id)?.data?.actor_id;
+      const user = typeof actor === "string" ? byId.get(actor) : null;
+      r.href = user ? `/u/${user}` : "/comunidad";
+    }
+  }
+
+  return out;
+}
+
+/** Borra un aviso. La RLS acota a los tuyos. */
+export async function deleteNotification(id: string): Promise<void> {
+  const { error } = await supabaseBrowser().from("notifications").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Vacía la campana entera. */
+export async function deleteAllNotifications(): Promise<void> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return;
+  const { error } = await sb.from("notifications").delete().eq("user_id", user.id);
+  if (error) throw error;
 }
 
 /** Marca como leídos todos los avisos del usuario (RLS acota a los suyos). Es
