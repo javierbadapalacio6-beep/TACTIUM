@@ -9,6 +9,7 @@ import {
   deletePlayer,
   fetchPlayers,
   updatePlayer,
+  fetchSubscription,
   fetchTeamInscripcion,
   fetchTeamInvitations,
   createInvitation,
@@ -19,6 +20,12 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
+import {
+  importFcpRosterIntoTeam,
+  searchFcpClubs,
+  type FcpClubGroup,
+  type FcpTeamOption,
+} from "@/lib/fcp-import";
 import {
   Avatar,
   Btn,
@@ -97,6 +104,60 @@ export function Roster() {
   const [editTeamOpen, setEditTeamOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+
+  // Importar de la Federación al equipo QUE YA EXISTE. Antes este botón era un
+  // enlace a /federacion: te dejaba en el explorador y no importaba nada.
+  const [fcpOpen, setFcpOpen] = useState(false);
+  const [fcpQuery, setFcpQuery] = useState("");
+  const [fcpResults, setFcpResults] = useState<FcpClubGroup[]>([]);
+  const [fcpLoading, setFcpLoading] = useState(false);
+  const [fcpBusy, setFcpBusy] = useState(false);
+  const [fcpErr, setFcpErr] = useState<string | null>(null);
+
+  // El volcado masivo es premium en las cinco superficies; aquí no iba a ser
+  // la excepción. Se consulta al abrir, no en cada render.
+  const sub = useAsync(() => fetchSubscription(), [fcpOpen], fcpOpen);
+
+  useEffect(() => {
+    if (!fcpOpen || fcpQuery.trim().length < 2) {
+      setFcpResults([]);
+      return;
+    }
+    let alive = true;
+    setFcpLoading(true);
+    const id = setTimeout(() => {
+      searchFcpClubs(fcpQuery)
+        .then((r) => alive && setFcpResults(r))
+        .catch(() => alive && setFcpResults([]))
+        .finally(() => alive && setFcpLoading(false));
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(id);
+    };
+  }, [fcpOpen, fcpQuery]);
+
+  async function importarPlantilla(t: FcpTeamOption) {
+    if (!teamId || fcpBusy) return;
+    setFcpBusy(true);
+    setFcpErr(null);
+    const res = await guardedWrite("importar de la Federación", () =>
+      importFcpRosterIntoTeam(teamId, t),
+    );
+    setFcpBusy(false);
+    if (!res.ok) {
+      setFcpErr(res.reason);
+      return;
+    }
+    setFcpOpen(false);
+    setFcpQuery("");
+    setReloadKey((k) => k + 1);
+    setToast(
+      res.data > 0
+        ? `${res.data} ${res.data === 1 ? "jugador añadido" : "jugadores añadidos"} desde la Federación`
+        : "Ya tenías a toda la plantilla de la Federación",
+    );
+  }
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -397,9 +458,9 @@ export function Roster() {
         <BtnLink href="/temporadas" variant="quiet" icon={<IconCalendar size={15} />}>
           Escanear calendario
         </BtnLink>
-        <BtnLink href="/federacion" icon={<IconFlag size={15} />}>
+        <Btn onClick={() => setFcpOpen(true)} icon={<IconFlag size={15} />}>
           Importar de la Federación
-        </BtnLink>
+        </Btn>
         <Btn
           variant="accent"
           icon={<IconUserPlus size={15} />}
@@ -774,6 +835,102 @@ export function Roster() {
           </Btn>
         </div>
       </Modal>
+
+      {/* ── Importar de la Federación ────────────────────────────── */}
+      {fcpOpen && (
+        <Modal
+          open
+          onClose={() => setFcpOpen(false)}
+          labelledBy="tw-fcp-roster"
+          width={560}
+          title="Importar de la Federación"
+          lede="Busca tu club, elige tu equipo y traemos su plantilla con los puntos oficiales."
+        >
+          {sub.loading ? (
+            <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Comprobando tu plan…</p>
+          ) : !sub.data ? (
+            /* Mismo criterio que el importador del club y que la app: el
+               volcado masivo es la acción de más valor y va tras el plan. */
+            <>
+              <Note tone="accent">
+                Traer la plantilla entera con sus puntos oficiales es una función
+                premium. Con suscripción es un clic; sin ella puedes añadir
+                jugadores a mano.
+              </Note>
+              <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+                <BtnLink href="/pro" variant="accent">
+                  Ver planes
+                </BtnLink>
+              </div>
+            </>
+          ) : (
+            <>
+              <Input
+                type="text"
+                placeholder="Busca tu club"
+                value={fcpQuery}
+                onChange={(e) => setFcpQuery(e.target.value)}
+                autoFocus
+              />
+              {fcpErr && (
+                <Note tone="error" style={{ marginTop: 10 }}>
+                  {fcpErr}
+                </Note>
+              )}
+              <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--text-faint)" }}>
+                Se añaden los que falten: si repites la importación no se duplica
+                nadie.
+              </p>
+              <div style={{ marginTop: 12, maxHeight: 380, overflowY: "auto" }}>
+                {fcpLoading && (
+                  <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Buscando…</p>
+                )}
+                {!fcpLoading && fcpQuery.trim().length >= 2 && fcpResults.length === 0 && (
+                  <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+                    Sin resultados para «{fcpQuery.trim()}».
+                  </p>
+                )}
+                {fcpResults.map((club) => (
+                  <div key={club.club} style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{club.club}</div>
+                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                      {club.teams.map((t) => (
+                        <button
+                          key={t.id_equipo}
+                          type="button"
+                          disabled={fcpBusy}
+                          onClick={() => void importarPlantilla(t)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "10px 12px",
+                            borderRadius: "var(--r-md)",
+                            border: "1px solid var(--line)",
+                            background: "var(--bg-card-2)",
+                            color: "var(--text)",
+                            cursor: fcpBusy ? "default" : "pointer",
+                            opacity: fcpBusy ? 0.6 : 1,
+                            textAlign: "left",
+                            fontFamily: "var(--font-ui)",
+                          }}
+                        >
+                          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>
+                            {t.equipo}
+                          </span>
+                          <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                            {[t.category, t.gender].filter(Boolean).join(" · ")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
 
       {/* ── Escanear ranking ─────────────────────────────────────── */}
       <Modal

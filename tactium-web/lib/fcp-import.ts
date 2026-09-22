@@ -139,3 +139,42 @@ export async function importFcpTeams(
   }
   return out;
 }
+
+/**
+ * Vuelca la plantilla federativa en un equipo QUE YA EXISTE.
+ *
+ * Distinto de `importFcpTeams`, que CREA equipos: esto es para el capitán que
+ * ya tiene su equipo montado en TACTIUM y quiere traerse los jugadores con sus
+ * puntos oficiales en vez de teclearlos uno a uno. Hasta ahora la web no tenía
+ * forma de hacerlo —el botón «Importar de la Federación» de la plantilla era
+ * un enlace al explorador y no importaba nada— mientras que la app sí.
+ *
+ * La RPC `import_fcp_roster` hace el trabajo y es la misma que usa el
+ * importador del club: comprueba permisos (dueño del equipo o del club),
+ * SALTA a los jugadores ya vinculados —así que repetir la importación no
+ * duplica a nadie— y devuelve cuántos ha añadido.
+ */
+export async function importFcpRosterIntoTeam(
+  teamId: string,
+  team: FcpTeamOption,
+): Promise<number> {
+  const sb = supabaseBrowser();
+
+  // El vínculo es (fcp_id_equipo, team_id), así que un equipo acumula un
+  // vínculo por temporada: es historial, no un duplicado. `upsert` para que
+  // reimportar no reviente con clave repetida.
+  const { error: linkErr } = await sb
+    .from("fcp_team_links")
+    .upsert(
+      { fcp_id_equipo: team.id_equipo, team_id: teamId },
+      { onConflict: "fcp_id_equipo,team_id" },
+    );
+  if (linkErr) throw linkErr;
+
+  const { data, error } = await sb.rpc("import_fcp_roster", {
+    p_team_id: teamId,
+    p_fcp_id_equipo: team.id_equipo,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
