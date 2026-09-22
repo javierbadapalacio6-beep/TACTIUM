@@ -2305,6 +2305,21 @@ export interface FcpRosterPlayer {
   puntos: number;
   categoria: string | null;
 }
+/**
+ * Un equipo de una temporada EN INSCRIPCIÓN. No tiene clasificación ni
+ * partidos —el sorteo no está hecho— pero sí tiene todo lo que de verdad se
+ * quiere mirar mientras dura la inscripción: en qué categoría le han
+ * encuadrado, si el club ya lo confirmó, dónde jugará de local y, sobre todo,
+ * su plantilla, que es donde se ven los fichajes.
+ */
+export interface FcpPreseason {
+  categoria: string | null;
+  genero: string | null;
+  confirmado: boolean;
+  sede: string | null;
+  temporada: string | null;
+}
+
 export interface FcpTeamProfile {
   idEquipo: number;
   equipo: string;
@@ -2319,13 +2334,103 @@ export interface FcpTeamProfile {
   setsContra: number;
   form: ("V" | "D")[];
   roster: FcpRosterPlayer[];
+  /** No null ⇒ la temporada aún no ha empezado y las cifras de arriba son 0
+   *  porque no existen, no porque el equipo vaya mal. */
+  preseason: FcpPreseason | null;
+}
+
+/** Plantilla de un equipo, por id de la Federación. */
+async function fetchFcpRoster(idEquipo: number): Promise<FcpRosterPlayer[]> {
+  const { data } = await supabaseBrowser()
+    .from("fcp_jugadores")
+    .select("id_jugador, nombre_pila, apellido1, apellido2, nombre, puntos, categoria")
+    .eq("id_equipo", idEquipo)
+    .order("puntos", { ascending: false, nullsFirst: false });
+  return ((data ?? []) as {
+    id_jugador: string;
+    puntos: number | null;
+    categoria: string | null;
+    nombre_pila: string | null;
+    apellido1: string | null;
+    apellido2: string | null;
+    nombre: string | null;
+  }[]).map((r) => ({
+    idJugador: r.id_jugador,
+    name: fcpDisplayName(r),
+    puntos: r.puntos ?? 0,
+    categoria: r.categoria ?? null,
+  }));
+}
+
+/**
+ * Ficha de un equipo que todavía no tiene calendario.
+ *
+ * Existe porque la ficha normal arranca resolviendo el grupo desde la
+ * CLASIFICACIÓN, y una liga en inscripción no tiene ninguna: la pantalla decía
+ * «no hay datos sincronizados» para los 323 equipos de la temporada que viene,
+ * cuando en realidad teníamos su categoría, su sede y su plantilla.
+ */
+async function fetchFcpPreseasonTeam(
+  idEquipo: number
+): Promise<FcpTeamProfile | null> {
+  const { data } = await supabaseBrowser()
+    .from("fcp_inscripciones")
+    .select("id_liga, equipo, genero, grupo_nombre, confirmado, sede")
+    .eq("id_equipo", idEquipo)
+    .order("id_liga", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const r = data as {
+    id_liga: number;
+    equipo: string | null;
+    genero: string | null;
+    grupo_nombre: string | null;
+    confirmado: boolean | null;
+    sede: string | null;
+  } | null;
+  if (!r) return null;
+
+  const [{ data: liga }, roster] = await Promise.all([
+    supabaseBrowser()
+      .from("fcp_ligas")
+      .select("temporada, nombre")
+      .eq("id_liga", r.id_liga)
+      .maybeSingle(),
+    fetchFcpRoster(idEquipo),
+  ]);
+
+  return {
+    idEquipo,
+    equipo: (r.equipo ?? "").trim() || "—",
+    grupo: r.grupo_nombre,
+    idGrupo: null,
+    posicion: null,
+    puntos: 0,
+    pj: 0,
+    pg: 0,
+    pp: 0,
+    setsFavor: 0,
+    setsContra: 0,
+    form: [],
+    roster,
+    preseason: {
+      categoria: r.grupo_nombre,
+      genero: r.genero,
+      confirmado: r.confirmado === true,
+      sede: r.sede,
+      temporada:
+        (liga as { temporada: string | null } | null)?.temporada ?? null,
+    },
+  };
 }
 
 export async function fetchFcpTeamProfile(
   idEquipo: number
 ): Promise<FcpTeamProfile | null> {
   const main = await resolveFcpMainGroup(idEquipo);
-  if (!main) return null;
+  // Sin clasificación no tiene por qué ser un equipo desconocido: puede estar
+  // apuntado a la temporada que viene, que aún no tiene sorteo ni calendario.
+  if (!main) return fetchFcpPreseasonTeam(idEquipo);
   const sb = supabaseBrowser();
   const [{ data: cls }, { data: partidos }, { data: g }, { data: jug }] =
     await Promise.all([
@@ -2398,6 +2503,7 @@ export async function fetchFcpTeamProfile(
     setsFavor: c?.sets_favor ?? 0,
     setsContra: c?.sets_contra ?? 0,
     form,
+    preseason: null,
     roster,
   };
 }

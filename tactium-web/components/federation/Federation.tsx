@@ -1277,10 +1277,45 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
         }
         meta={[data.grupo ?? null]}
         actions={
-          data.posicion != null ? <Chip>{data.posicion}º del grupo</Chip> : undefined
+          data.preseason ? (
+            <Chip tone={data.preseason.confirmado ? "accent" : "warning"}>
+              {data.preseason.confirmado ? "Confirmado" : "Sin confirmar"}
+            </Chip>
+          ) : data.posicion != null ? (
+            <Chip>{data.posicion}º del grupo</Chip>
+          ) : undefined
         }
       />
 
+      {/* Temporada en inscripción: sin sorteo no hay clasificación ni
+          partidos. Pintar la fila de cifras a cero sería mentir —parecería un
+          equipo que ha jugado y ha perdido todo—, así que se sustituye por lo
+          que sí sabemos. */}
+      {data.preseason ? (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <IconFlag size={16} />
+            <span style={{ fontSize: 14, fontWeight: 700 }}>
+              Temporada {data.preseason.temporada ?? "siguiente"} · en inscripción
+            </span>
+          </div>
+          <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
+            La Federación todavía no ha hecho el sorteo, así que este equipo aún
+            no tiene grupo, calendario ni clasificación. Lo que sí hay es dónde
+            le han encuadrado y su plantilla: ahí es donde se ven los fichajes.
+          </p>
+          {/* Ni categoría ni género: los dos van ya en la cabecera, y el
+              nombre de la categoría («5ª CATEGORIA MASCULINA») lleva el género
+              dentro. Repetirlos aquí solo hacía la fila más alta. Sin `unit`
+              en la plantilla: su margen de 2px es para «%» y con una palabra
+              entera el número queda pegado. */}
+          <StatRow>
+            <Stat label="Sede de local" value={data.preseason.sede ?? "Sin asignar"} />
+            <Stat label="Plantilla" value={data.roster.length} />
+          </StatRow>
+        </Card>
+      ) : (
+      <>
       {/* Cifras de la temporada */}
       <StatRow style={{ marginBottom: 16 }}>
         <Stat label="Puntos" value={data.puntos} tone="accent" />
@@ -1327,6 +1362,8 @@ export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
           </div>
         </Card>
       ) : null}
+      </>
+      )}
 
       {/* Plantilla */}
       <Card flush>
