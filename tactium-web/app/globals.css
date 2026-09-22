@@ -4006,6 +4006,11 @@ select.tw-cell-input {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
+}
+.tw-fcp-hero-txt {
+  min-width: 0;
+  flex: 1;
 }
 .tw-fcp-hero-title {
   margin: 0;
@@ -4245,5 +4250,81 @@ select.tw-cell-input {
   .tw-fcp-crest {
     width: 42px;
     height: 42px;
+  }
+  /* A 375px, escudo + título + estado en una fila dejan al título unos
+     150px y parte el nombre del grupo en cuatro líneas. El texto se baja
+     entero y arriba quedan sólo el escudo y el estado. */
+  .tw-fcp-hero-txt {
+    flex: 1 1 100%;
+    order: 2;
+  }
+}
+
+/* ── Paginador de jornadas ─────────────────────────────────────────
+   Una jornada cada vez. Catorce apiladas eran metro y medio de scroll
+   para mirar una sola. ──────────────────────────────────────────── */
+.tw-pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur-sm);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-lit), var(--shadow-card);
+}
+.tw-pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass-chip);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+.tw-pager-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--text-inverse);
+}
+/* Tope de calendario: se apaga, no se esconde, o los botones bailan. */
+.tw-pager-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tw-pager-mid {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.tw-pager-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.tw-pager-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.tw-pager-count {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 520px) {
+  .tw-pager-count {
+    display: none;
   }
 }

@@ -408,7 +408,7 @@ export function FederationExplore({ slug }: { slug: string }) {
         </Link>
         <div className="tw-fcp-hero-top">
           <FedCrest logo="/federations/fcantp-mark.png" alt="" />
-          <div style={{ minWidth: 0 }}>
+          <div className="tw-fcp-hero-txt">
             <h1 className="tw-fcp-hero-title">Federación Cántabra de Pádel</h1>
             <p className="tw-fcp-hero-sub">
               Clasificaciones, jornadas y jugadores federados.
@@ -873,7 +873,7 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
         </Link>
         <div className="tw-fcp-hero-top">
           <FedCrest logo="/federations/fcantp-mark.png" alt="" />
-          <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="tw-fcp-hero-txt">
             <h1 className="tw-fcp-hero-title">
               {header.data?.nombre ?? decodeURIComponent(id)}
             </h1>
@@ -1034,20 +1034,71 @@ function FcpGroupSchedule({
     return [...map.values()].sort((a, b) => a.order - b.order);
   }, [matches]);
 
+  // Una jornada cada vez. Catorce jornadas apiladas son metro y medio de
+  // scroll para mirar una sola, así que se pasan con los botones.
+  const [idx, setIdx] = useState<number | null>(null);
+  // Se aterriza en la última jugada, no en la primera: quien entra viene a
+  // ver lo de ayer, no la jornada 1 de una liga acabada.
+  const initial = useMemo(() => {
+    for (let i = groups.length - 1; i >= 0; i--) {
+      if (groups[i].items.some((m) => m.resultado)) return i;
+    }
+    return 0;
+  }, [groups]);
+  const cur = Math.min(idx ?? initial, Math.max(groups.length - 1, 0));
+
+  if (groups.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconCalendar size={22} />}
+          title="Sin jornadas"
+          body="La federación aún no ha publicado el calendario de este grupo."
+        />
+      </Card>
+    );
+  }
+
+  const g = groups[cur];
+  const date = g.items.find((m) => m.fecha)?.fecha ?? null;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {groups.map((g) => {
-        const date = g.items.find((m) => m.fecha)?.fecha ?? null;
-        return (
-          <Card flush key={g.label}>
-            <CardHead title={g.label} count={g.items.length}>
-              {date ? (
-                <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                  {date}
-                </span>
-              ) : null}
-            </CardHead>
-            {g.items.map((p, i) => {
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="tw-pager">
+        <button
+          type="button"
+          className="tw-pager-btn"
+          onClick={() => setIdx(cur - 1)}
+          disabled={cur === 0}
+          aria-label="Jornada anterior"
+        >
+          <IconChevronRight size={17} style={{ transform: "rotate(180deg)" }} />
+        </button>
+
+        <span className="tw-pager-mid">
+          <span className="tw-pager-title">{g.label}</span>
+          <span className="tw-pager-sub">
+            {[date, `${g.items.length} partidos`].filter(Boolean).join(" · ")}
+          </span>
+        </span>
+
+        <span className="tw-pager-count mono">
+          {cur + 1} / {groups.length}
+        </span>
+
+        <button
+          type="button"
+          className="tw-pager-btn"
+          onClick={() => setIdx(cur + 1)}
+          disabled={cur === groups.length - 1}
+          aria-label="Jornada siguiente"
+        >
+          <IconChevronRight size={17} />
+        </button>
+      </div>
+
+      <Card flush key={g.label}>
+        {g.items.map((p, i) => {
               const score = splitScore(p.resultado);
               const localWon = p.ganador === "local";
               const visitWon = p.ganador === "visitante";
@@ -1152,13 +1203,11 @@ function FcpGroupSchedule({
                         </span>
                       ))}
                     </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </Card>
-        );
-      })}
+              ) : null}
+            </div>
+          );
+        })}
+      </Card>
     </div>
   );
 }
