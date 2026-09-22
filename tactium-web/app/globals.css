@@ -1146,15 +1146,17 @@ a.bcard:hover,
   margin-bottom: 18px;
 }
 .greet-hi {
-  font-size: 13.5px;
-  color: var(--text-faint);
+  font-size: clamp(17px, 1.6vw, 22px);
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
 }
 .greet-name {
-  margin: 4px 0 0;
-  font-size: clamp(28px, 3.4vw, 38px);
+  margin: 6px 0 0;
+  font-size: clamp(34px, 4.6vw, 56px);
   font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
 }
 
 /* ── Página ───────────────────────────────────────────────────── */
@@ -1163,7 +1165,7 @@ a.bcard:hover,
    sin esto la pantalla se encogía al ancho de su contenido. */
 .tw-page {
   width: 100%;
-  max-width: 1240px;
+  max-width: 1680px;
   margin: 0 auto;
 }
 .tw-page-narrow {
@@ -2003,9 +2005,9 @@ button.list-row:hover,
 
 /* ══ Shell de la aplicación ═════════════════════════════════════
    El panel NO llega al borde de la ventana: flota dentro de un marco
-   redondeado sobre un lienzo más oscuro. Eso obliga a mover el scroll
-   dentro del marco — si scrollara el body, la barra superior se
-   despegaría por arriba y el redondeo se perdería. ═══════════════════ */
+   redondeado sobre un lienzo más oscuro, y la navegación va ARRIBA en
+   píldoras. El scroll vive dentro del marco — si scrollara el body, la
+   barra se despegaría por arriba y el redondeo se perdería. ══════════ */
 .tw-shell {
   height: 100dvh;
   padding: 10px;
@@ -2017,6 +2019,7 @@ button.list-row:hover,
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   border-radius: 24px;
   overflow: hidden;
   background: var(--bg);
@@ -2037,113 +2040,176 @@ button.list-row:hover,
   }
 }
 
-/* ── Barra lateral ─────────────────────────────────────────────── */
-.tw-sidebar {
-  display: none;
-}
-.tw-side-brand {
-  height: 60px;
-  padding: 0 18px;
+/* ── Barra de navegación superior ──────────────────────────────── */
+.tw-topnav {
   display: flex;
   align-items: center;
+  gap: 8px;
+  height: 64px;
+  padding: 0 12px;
   flex: none;
-}
-.tw-side-brand-mini {
-  display: none;
-}
-.tw-side-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 10px 8px;
-}
-.tw-side-eyebrow {
-  padding: 12px 12px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-.tw-side-team {
-  padding: 0 10px 10px;
-  position: relative;
-}
-.tw-side-user {
-  margin-top: auto;
-  padding: 10px;
-  position: relative;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
 }
 
-/* Ítem de menú: píldora ancha. El activo se ELEVA a la superficie de
-   tarjeta con el icono en acento; así se lee sin robarle el verde a la
-   tarjeta destacada del contenido. */
-.tw-navitem {
+.tw-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 42px;
-  padding: 0 12px;
-  border-radius: 14px;
-  font-size: 13.5px;
-  font-weight: 500;
+  flex: none;
+  color: inherit;
+  text-decoration: none;
+  padding: 0 6px;
+}
+.tw-brand-mini {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--primary);
+  align-items: center;
+  justify-content: center;
+}
+.tw-brand-full {
+  display: none;
+}
+
+/* Botón de inicio: el único destino que está siempre a mano. */
+.tw-homebtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
+  background: var(--bg-card-2);
+  border: 1px solid transparent;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
-.tw-navitem svg {
-  flex: none;
-  opacity: 0.9;
+.tw-homebtn:hover {
+  color: var(--text);
+  background: var(--bg-card-3);
 }
-.tw-navitem:hover {
+.tw-homebtn.is-active {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+/* Píldoras de sección. Scroll horizontal cuando no caben, sin barra. */
+.tw-pills {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+.tw-pills::-webkit-scrollbar {
+  display: none;
+}
+.tw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.tw-pill:hover {
   background: var(--bg-card-2);
   color: var(--text);
 }
-.tw-navitem.is-active {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 700;
-  box-shadow: inset 0 1px 0 var(--surface-lit), 0 1px 2px rgba(0, 0, 0, 0.18);
+/* El icono solo acompaña a la píldora ACTIVA, como en la referencia: con
+   icono en las siete, la fila no cabe y el último destino sale cortado. */
+.tw-pill-ico {
+  display: none;
 }
-.tw-navitem.is-active svg {
-  color: var(--accent);
-  opacity: 1;
+.tw-pill.is-active .tw-pill-ico {
+  display: block;
 }
-/* Punto a la derecha: remata la píldora sin colorearla entera. */
-.tw-navitem.is-active::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
+.tw-pill.is-active {
   background: var(--accent);
-  margin-left: auto;
-  flex: none;
+  color: var(--text-inverse);
+  font-weight: 700;
+}
+.tw-pill.is-active:hover {
+  background: var(--accent-dim);
+  color: var(--text-inverse);
 }
 
-.tw-teambtn,
-.tw-userbtn {
-  width: 100%;
+.tw-topnav-right {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 14px;
+  gap: 8px;
+  flex: none;
+  margin-left: auto;
+}
+
+/* Píldora de contexto: qué club y qué equipo se está mirando. */
+.tw-ctx {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  max-width: 210px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid var(--surface-line);
   background: var(--surface);
   color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  text-align: left;
-  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  transition: border-color var(--dur-fast) var(--ease);
 }
-.tw-userbtn {
-  border-color: transparent;
-  background: var(--bg-card-2);
-}
-.tw-teambtn:hover,
-.tw-userbtn:hover {
+.tw-ctx:hover,
+.tw-ctx[aria-expanded="true"] {
   border-color: var(--surface-line-hi);
 }
-.tw-teambtn[aria-expanded="true"] {
-  border-color: var(--accent-40);
+.tw-ctx-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-16);
+  color: var(--accent);
+  flex: none;
+}
+.tw-ctx-name {
+  min-width: 0;
+  max-width: 130px;
+}
+
+.tw-avatarbtn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 999px;
+  display: flex;
+  box-shadow: 0 0 0 2px var(--surface-line);
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+.tw-avatarbtn:hover,
+.tw-avatarbtn[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* ── Popovers ──────────────────────────────────────────────────── */
@@ -2190,88 +2256,7 @@ button.list-row:hover,
   margin: 4px 6px;
 }
 
-/* ── Barra superior ────────────────────────────────────────────── */
-.tw-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 60px;
-  padding: 0 16px;
-  background: var(--blur-bg);
-  backdrop-filter: blur(14px) saturate(160%);
-  border-bottom: 1px solid var(--line);
-  flex: none;
-}
-.tw-topbar-title {
-  display: none;
-}
-.tw-crumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  min-width: 0;
-  white-space: nowrap;
-}
-.tw-crumbs a {
-  color: var(--text-muted);
-}
-.tw-crumbs a:hover {
-  color: var(--text);
-}
-.tw-crumbs .sep {
-  color: var(--text-faint);
-  display: flex;
-}
-.tw-crumbs .cur {
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tw-topbar-brand {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-}
-.tw-search {
-  display: none;
-}
-/* Buscador en píldora, como los paneles de referencia. */
-.tw-searchbox {
-  width: 100%;
-  max-width: 380px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 999px;
-  border: 1px solid var(--surface-line);
-  background: var(--surface);
-  color: var(--text-faint);
-  font-size: 13px;
-  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-}
-.tw-searchbox:hover {
-  border-color: var(--surface-line-hi);
-  color: var(--text-muted);
-}
-.tw-kbd {
-  font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
-  border: 1px solid var(--surface-line-hi);
-  border-radius: 6px;
-  padding: 1px 6px;
-  flex: none;
-  color: var(--text-faint);
-}
-
-/* Controles de la derecha: círculos, no cuadrados. */
+/* Controles circulares de la derecha. */
 .tw-iconbtn {
   position: relative;
   width: 38px;
@@ -2315,7 +2300,7 @@ button.list-row:hover,
 
 .tw-bell {
   position: absolute;
-  top: 48px;
+  top: calc(100% + 8px);
   right: 0;
   width: min(360px, calc(100vw - 32px));
   border-radius: 18px;
@@ -2385,143 +2370,36 @@ button.list-row:hover,
   background: var(--accent-10);
 }
 
-/* ── Tablet: barra lateral colapsada a 76px ────────────────────── */
+/* ── Tablet: aparecen las píldoras; la tab bar se retira ───────── */
 @media (min-width: 768px) {
-  .tw-sidebar {
-    position: relative;
-    flex: none;
-    width: 76px;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-raised);
-    border-right: 1px solid var(--line);
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
   .tw-tabbar {
     display: none;
   }
-  .tw-topbar-brand {
-    display: none;
-  }
-  .tw-topbar-title {
+  .tw-pills {
     display: flex;
-    min-width: 0;
-    flex: 1;
   }
   .tw-content {
     padding: 22px 22px 40px;
   }
-
-  .tw-navitem-label,
-  .tw-side-eyebrow,
-  .tw-side-brand > span:first-child {
-    display: none;
-  }
-  .tw-side-brand {
-    justify-content: center;
-    padding: 0;
-  }
-  .tw-side-brand-mini {
-    display: flex;
-  }
-  .tw-side-nav {
-    padding: 10px 8px;
-    align-items: center;
-  }
-  .tw-navitem {
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-    padding: 0;
-    gap: 0;
-  }
-  .tw-navitem.is-active::after {
-    display: none;
-  }
-  .tw-side-team,
-  .tw-side-user {
-    padding: 8px;
-  }
-  .tw-teambtn,
-  .tw-userbtn {
-    justify-content: center;
-    padding: 8px;
-    gap: 0;
-  }
-  .tw-popover {
-    position: absolute;
-    left: calc(100% + 8px);
-    bottom: 0;
-    width: 220px;
-  }
 }
 
-/* ── Escritorio: barra lateral completa ────────────────────────── */
+/* ── Escritorio: marca completa y píldora de contexto ──────────── */
 @media (min-width: 1024px) {
-  .tw-sidebar {
-    width: 248px;
+  .tw-topnav {
+    padding: 0 16px;
+    gap: 10px;
   }
-  .tw-topbar {
-    padding: 0 24px;
-    gap: 20px;
-  }
-  .tw-topbar-title {
-    flex: 0 1 auto;
-    min-width: 200px;
-  }
-  .tw-search {
+  .tw-brand-full {
     display: flex;
-    flex: 1;
-    justify-content: flex-start;
+  }
+  .tw-brand-mini {
+    display: none;
+  }
+  .tw-ctx {
+    display: inline-flex;
   }
   .tw-content {
     padding: 26px 26px 48px;
-  }
-
-  .tw-navitem-label,
-  .tw-side-eyebrow {
-    display: block;
-  }
-  .tw-side-brand {
-    justify-content: flex-start;
-    padding: 0 18px;
-  }
-  .tw-side-brand > span:first-child {
-    display: flex;
-  }
-  .tw-side-brand-mini {
-    display: none;
-  }
-  .tw-side-nav {
-    padding: 6px 10px 8px;
-    align-items: stretch;
-  }
-  .tw-navitem {
-    width: auto;
-    height: 42px;
-    justify-content: flex-start;
-    padding: 0 12px;
-    gap: 12px;
-  }
-  .tw-navitem.is-active::after {
-    display: block;
-  }
-  .tw-side-team {
-    padding: 0 10px 10px;
-  }
-  .tw-side-user {
-    padding: 10px;
-  }
-  .tw-teambtn,
-  .tw-userbtn {
-    justify-content: flex-start;
-    padding: 9px 10px;
-    gap: 10px;
-  }
-  .tw-popover {
-    position: static;
-    width: auto;
   }
 }
 

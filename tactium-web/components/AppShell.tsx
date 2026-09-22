@@ -10,7 +10,7 @@ import {
   IconBuilding,
   IconCheck,
   IconChevronDown,
-  IconChevronRight,
+  IconHome,
   IconMoon,
   IconPlus,
   IconSearch,
@@ -23,12 +23,12 @@ import { PublicShell } from "./PublicShell";
 import { Wordmark } from "./Wordmark";
 import { Avatar } from "./ui";
 import {
-  NAV_BY_ROLE,
   TABS_BY_ROLE,
   hasTeamSwitcher,
   isKnownRoute,
   isPublicPath,
-  routeCrumbs,
+  topNav,
+  type NavGroup,
 } from "@/lib/nav";
 import { ROLE_LABELS, useSession } from "@/lib/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -39,13 +39,12 @@ import { WRITES_ENABLED } from "@/lib/writes";
 /**
  * Shell persistente del panel.
  *
- *  - Escritorio (>=1024px): barra lateral 240px + barra superior 56px con
- *    migas de pan, buscador y avisos.
- *  - Tablet (768–1023px): barra lateral colapsada a 72px, sólo iconos.
- *  - Móvil (<768px): sin barra lateral; tab bar inferior flotante.
+ * La navegación va ARRIBA, en píldoras, dentro de un marco redondeado que
+ * flota sobre un lienzo más oscuro. A la izquierda la marca y el botón de
+ * inicio; a la derecha el contexto (club y equipo) y los controles.
  *
- * Las pantallas de entrada (`/entrar`, `/empezar`…) van a pantalla completa y
- * se saltan el shell — ver `BARE_ROUTES`.
+ * El scroll vive en `tw-main`, no en el body: es lo que mantiene el marco
+ * quieto y el redondeo intacto.
  */
 
 /** Rutas sin shell: onboarding y acceso ocupan toda la pantalla. */
@@ -83,12 +82,7 @@ function SignedOut() {
   return (
     <div
       className="amb"
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: 24,
-      }}
+      style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}
     >
       <div style={{ textAlign: "center", maxWidth: 400 }}>
         <span
@@ -106,13 +100,7 @@ function SignedOut() {
           <LogoMark size={28} color="var(--accent)" />
         </span>
         <h1 style={{ fontSize: 26 }}>Entra para ver tu equipo</h1>
-        <p
-          style={{
-            margin: "10px 0 22px",
-            fontSize: 14,
-            color: "var(--text-muted)",
-          }}
-        >
+        <p style={{ margin: "10px 0 22px", fontSize: 14, color: "var(--text-muted)" }}>
           Tus jornadas, alineaciones y plantilla están protegidas. Sólo tú y tu
           equipo podéis verlas.
         </p>
@@ -186,8 +174,7 @@ function useDismiss(open: boolean, close: () => void) {
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        closeRef.current();
+      if (ref.current && !ref.current.contains(e.target as Node)) closeRef.current();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeRef.current();
@@ -202,139 +189,82 @@ function useDismiss(open: boolean, close: () => void) {
   return ref;
 }
 
-/** Selector de contexto (club / equipo) de la barra lateral. */
-function ContextPicker({
-  label,
-  icon,
-  title,
-  sub,
-  open,
-  onToggle,
-  children,
-  refEl,
+/** Una píldora del nav superior: destino suelto o grupo desplegable. */
+function NavPill({
+  group,
+  active,
+  pathname,
 }: {
-  label: string;
-  icon: ReactNode;
-  title: string;
-  sub: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-  refEl: React.RefObject<HTMLDivElement | null>;
+  group: NavGroup;
+  active: boolean;
+  pathname: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const Icon = ICONS[group.icon];
+  // Dentro del desplegable, igual: sólo la opción más específica se marca.
+  const itemActiveHref = activeHref(pathname, group.items?.map((i) => i.href) ?? []);
+
+  useEffect(() => setOpen(false), [pathname]);
+
+  if (!group.items) {
+    return (
+      <Link
+        href={group.href}
+        aria-current={active ? "page" : undefined}
+        className={"tw-pill" + (active ? " is-active" : "")}
+      >
+        <Icon size={16} className="tw-pill-ico" />
+        <span>{group.label}</span>
+      </Link>
+    );
+  }
+
   return (
-    <div className="tw-side-team" ref={refEl}>
-      <div className="tw-side-eyebrow">{label}</div>
+    <div ref={ref} style={{ position: "relative", flex: "none" }}>
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="tw-teambtn"
-        title={title}
+        className={"tw-pill" + (active ? " is-active" : "")}
       >
-        <span
+        <Icon size={16} className="tw-pill-ico" />
+        <span>{group.label}</span>
+        <IconChevronDown
+          size={14}
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            background: "var(--tile-bg)",
-            color: "var(--tile-fg)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flex: "none",
-          }}
-        >
-          {icon}
-        </span>
-        <span className="tw-navitem-label" style={{ flex: 1, minWidth: 0 }}>
-          <span
-            className="truncate"
-            style={{
-              display: "block",
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {title}
-          </span>
-          <span
-            className="truncate"
-            style={{
-              display: "block",
-              fontSize: 11.5,
-              color: "var(--text-faint)",
-              marginTop: 1,
-            }}
-          >
-            {sub}
-          </span>
-        </span>
-        <span
-          className="tw-navitem-label"
-          style={{
-            color: "var(--text-faint)",
-            display: "flex",
             transform: open ? "rotate(180deg)" : "none",
             transition: "transform var(--dur-base) var(--ease)",
           }}
-        >
-          <IconChevronDown size={15} />
-        </span>
+        />
       </button>
       {open && (
-        <div className="tw-popover" style={{ marginTop: 6, padding: 6 }}>
-          {children}
+        <div
+          className="tw-popover"
+          style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, width: 220, padding: 6 }}
+        >
+          {group.items.map((it) => {
+            const ItemIcon = ICONS[it.icon];
+            const on = it.href === itemActiveHref;
+            return (
+              <Link
+                key={it.href}
+                href={it.href}
+                className="tw-popitem"
+                style={{
+                  color: on ? "var(--accent)" : undefined,
+                  background: on ? "var(--accent-10)" : undefined,
+                  fontWeight: on ? 700 : 500,
+                }}
+              >
+                <ItemIcon size={15} />
+                <span style={{ flex: 1 }}>{it.label}</span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
-  );
-}
-
-function PopItem({
-  on,
-  icon,
-  label,
-  onClick,
-}: {
-  on: boolean;
-  icon?: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="tw-popitem"
-      style={{
-        color: on ? "var(--accent)" : undefined,
-        background: on ? "var(--accent-10)" : undefined,
-        fontWeight: on ? 700 : 500,
-      }}
-    >
-      {icon && (
-        <span
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            background: on ? "var(--tile-bg)" : "var(--bg-card-2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flex: "none",
-          }}
-        >
-          {icon}
-        </span>
-      )}
-      <span className="truncate" style={{ flex: 1, textAlign: "left" }}>
-        {label}
-      </span>
-      {on && <IconCheck size={14} />}
-    </button>
   );
 }
 
@@ -356,21 +286,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   } = useSession();
   const { resolved, toggle } = useTheme();
 
-  const [teamOpen, setTeamOpen] = useState(false);
-  const [clubOpen, setClubOpen] = useState(false);
+  const [ctxOpen, setCtxOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
-  const [roleOpen, setRoleOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
 
-  const teamRef = useDismiss(teamOpen, () => setTeamOpen(false));
-  const clubRef = useDismiss(clubOpen, () => setClubOpen(false));
+  const ctxRef = useDismiss(ctxOpen, () => setCtxOpen(false));
   const bellRef = useDismiss(bellOpen, () => setBellOpen(false));
-  const roleRef = useDismiss(roleOpen, () => setRoleOpen(false));
+  const userRef = useDismiss(userOpen, () => setUserOpen(false));
 
   useEffect(() => {
-    setTeamOpen(false);
-    setClubOpen(false);
+    setCtxOpen(false);
     setBellOpen(false);
-    setRoleOpen(false);
+    setUserOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -440,13 +367,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <SignedOut />;
   }
 
-  const nav = NAV_BY_ROLE[role];
+  const { home, groups } = topNav(role);
+  const pillActiveHref = activeHref(
+    pathname,
+    groups.flatMap((g) => [g.href, ...(g.items?.map((i) => i.href) ?? [])]),
+  );
   const tabs = TABS_BY_ROLE[role];
-  const navActiveHref = activeHref(pathname, nav.map((i) => i.href));
   const tabsActiveHref = activeHref(pathname, tabs.map((t) => t.href));
-  const crumbs = routeCrumbs(pathname, role);
   const unread = notices.filter((n) => n.unread).length;
   const activeClub = clubs.find((c) => c.id === clubId) ?? null;
+  const atHome = matchesHref(pathname, home.href);
+
+  // Qué contexto se enseña en la píldora: el club manda cuando se usa como
+  // club; si no, el equipo, que es sobre lo que actúan las pantallas.
+  const ctxLabel =
+    role === "club"
+      ? (activeClub?.name ?? "Sin club")
+      : (activeTeam?.name ?? "Sin equipo");
+  const showCtx = clubs.length > 0 || hasTeamSwitcher(role);
 
   function toggleBell() {
     setBellOpen((v) => {
@@ -461,275 +399,255 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     // El panel no llega al borde: `tw-shell` es el lienzo de fuera y
-    // `tw-frame` el marco redondeado que lo contiene todo. El scroll vive
-    // dentro, en `tw-main`, para que el marco no se mueva.
+    // `tw-frame` el marco redondeado que lo contiene todo.
     <div className="tw-shell">
       <div className="tw-frame">
-      {/* ══ Barra lateral ══════════════════════════════════════════ */}
-      <aside className="tw-sidebar">
-        <Link
-          href={role === "club" ? "/club" : "/"}
-          className="tw-side-brand"
-          aria-label="TACTIUM · Inicio"
-          style={{ textDecoration: "none", color: "inherit" }}
-        >
-          <Wordmark size={15} />
-          <span className="tw-side-brand-mini">
-            <span
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: "var(--primary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+        {/* ══ Navegación superior ═══════════════════════════════════ */}
+        <header className="tw-topnav">
+          <Link href={home.href} className="tw-brand" aria-label="TACTIUM">
+            <span className="tw-brand-full">
+              <Wordmark size={15} />
+            </span>
+            <span className="tw-brand-mini">
               <LogoMark size={20} color="var(--accent)" />
             </span>
-          </span>
-        </Link>
-
-        <nav className="tw-side-nav" aria-label="Navegación principal">
-          {nav.map((item) => {
-            const active = item.href === navActiveHref;
-            const Icon = ICONS[item.icon];
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                title={item.label}
-                className={"tw-navitem" + (active ? " is-active" : "")}
-              >
-                <Icon size={17} />
-                <span className="tw-navitem-label">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Selector de club */}
-        {clubs.length > 0 && (
-          <ContextPicker
-            label="Club"
-            icon={<IconBuilding size={15} />}
-            title={activeClub?.name ?? "Sin club"}
-            sub={clubs.length > 1 ? `${clubs.length} clubes` : "Club activo"}
-            open={clubOpen}
-            onToggle={() => setClubOpen((v) => !v)}
-            refEl={clubRef}
-          >
-            {clubs.map((c) => (
-              <PopItem
-                key={c.id}
-                on={c.id === clubId}
-                icon={<IconBuilding size={12} />}
-                label={c.name}
-                onClick={() => {
-                  setActiveClub(c.id);
-                  setClubOpen(false);
-                }}
-              />
-            ))}
-          </ContextPicker>
-        )}
-
-        {/* Selector de equipo — el jugador suelto no tiene plantilla */}
-        {hasTeamSwitcher(role) && (
-          <ContextPicker
-            label="Equipo"
-            icon={<IconShield size={15} />}
-            title={activeTeam?.name ?? "Sin equipo"}
-            sub={
-              [activeTeam?.category, activeTeam?.gender].filter(Boolean).join(" · ") ||
-              "Sin categoría"
-            }
-            open={teamOpen}
-            onToggle={() => setTeamOpen((v) => !v)}
-            refEl={teamRef}
-          >
-            {teams.map((t) => (
-              <PopItem
-                key={t.id}
-                on={t.id === activeTeam?.id}
-                icon={<IconShield size={12} />}
-                label={t.name}
-                onClick={() => {
-                  setActiveTeam(t.id);
-                  setTeamOpen(false);
-                }}
-              />
-            ))}
-            {teams.length === 0 && (
-              <span
-                style={{
-                  padding: "10px 12px",
-                  fontSize: 12.5,
-                  color: "var(--text-faint)",
-                }}
-              >
-                Sin equipos
-              </span>
-            )}
-            <div className="tw-pop-sep" />
-            <Link href="/empezar" className="tw-popitem" style={{ color: "var(--accent)", fontWeight: 600 }}>
-              <span style={{ width: 22, display: "flex", justifyContent: "center", flex: "none" }}>
-                <IconPlus size={14} />
-              </span>
-              <span style={{ flex: 1, textAlign: "left" }}>Crear equipo</span>
-            </Link>
-          </ContextPicker>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        {/* Bloque de usuario: rol elegido + ajustes + salir */}
-        <div className="tw-side-user" ref={roleRef}>
-          {roleOpen && (
-            <div
-              className="tw-popover"
-              style={{ marginBottom: 8, padding: 6 }}
-              role="menu"
-            >
-              {availableRoles.length > 1 && (
-                <>
-                  <span className="tw-pop-label">Usar TACTIUM como</span>
-                  {availableRoles.map((r) => (
-                    <PopItem
-                      key={r}
-                      on={r === role}
-                      label={ROLE_LABELS[r]}
-                      onClick={() => {
-                        setRole(r);
-                        setRoleOpen(false);
-                      }}
-                    />
-                  ))}
-                  <div className="tw-pop-sep" />
-                </>
-              )}
-              <Link href="/ajustes/apariencia" className="tw-popitem">
-                <span style={{ flex: 1, textAlign: "left" }}>Ajustes</span>
-              </Link>
-              <Link href="/ajustes/datos" className="tw-popitem">
-                <span style={{ flex: 1, textAlign: "left" }}>Mis datos</span>
-              </Link>
-              <Link href="/suscripcion" className="tw-popitem">
-                <span style={{ flex: 1, textAlign: "left" }}>Mi suscripción</span>
-              </Link>
-              <div className="tw-pop-sep" />
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="tw-popitem"
-                style={{ color: "var(--error)" }}
-              >
-                <span style={{ flex: 1, textAlign: "left" }}>Cerrar sesión</span>
-              </button>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setRoleOpen((v) => !v)}
-            aria-expanded={roleOpen}
-            className="tw-userbtn"
-            title="Tu cuenta"
-          >
-            <Avatar initials={user.initials} src={user.avatarUrl} size={30} />
-            <span
-              className="tw-navitem-label"
-              style={{ flex: 1, minWidth: 0, textAlign: "left" }}
-            >
-              <span
-                className="truncate"
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {user.name}
-              </span>
-              <span
-                className="truncate"
-                style={{
-                  display: "block",
-                  fontSize: 11.5,
-                  marginTop: 1,
-                  color: user.roleIsPrivileged ? "var(--accent)" : "var(--text-faint)",
-                }}
-              >
-                {ROLE_LABELS[role]}
-              </span>
-            </span>
-            <span
-              className="tw-navitem-label"
-              style={{ color: "var(--text-faint)", display: "flex" }}
-            >
-              <IconChevronDown size={15} />
-            </span>
-          </button>
-        </div>
-      </aside>
-
-      {/* ══ Contenido ══════════════════════════════════════════════ */}
-      <div className="tw-main">
-        <header className="tw-topbar">
-          <nav className="tw-topbar-title" aria-label="Migas de pan">
-            <div className="tw-crumbs">
-              {crumbs.map((c, i) => (
-                <span key={i} style={{ display: "contents" }}>
-                  {i > 0 && (
-                    <span className="sep" aria-hidden="true">
-                      <IconChevronRight size={13} />
-                    </span>
-                  )}
-                  {c.href ? (
-                    <Link href={c.href}>{c.label}</Link>
-                  ) : (
-                    <span className="cur">{c.label}</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          </nav>
-
-          <Link
-            href="/"
-            className="tw-topbar-brand"
-            aria-label="TACTIUM · Inicio"
-            style={{ textDecoration: "none", color: "inherit" }}
-          >
-            <Wordmark size={14} />
           </Link>
 
-          <div className="tw-search">
-            <Link href="/comunidad" className="tw-searchbox">
-              <IconSearch size={15} />
-              <span style={{ flex: 1, textAlign: "left" }}>
-                Buscar jugadores, equipos o torneos
-              </span>
-              <span className="tw-kbd">⌘K</span>
-            </Link>
-          </div>
-
-          <div
-            style={{ display: "flex", alignItems: "center", gap: 4, flex: "none", position: "relative" }}
-            ref={bellRef}
+          {/* Botón de inicio: siempre a la vista, vuelve a la portada del rol. */}
+          <Link
+            href={home.href}
+            className={"tw-homebtn" + (atHome ? " is-active" : "")}
+            aria-label={`Ir a ${home.label}`}
+            aria-current={atHome ? "page" : undefined}
+            title={home.label}
           >
-            <button
-              type="button"
-              onClick={toggleBell}
-              aria-expanded={bellOpen}
-              aria-label={`Avisos${unread ? ` · ${unread} sin leer` : ""}`}
-              className="tw-iconbtn"
-            >
-              <IconBell size={17} />
-              {unread > 0 && <span className="tw-badge">{unread}</span>}
-            </button>
+            <IconHome size={17} />
+          </Link>
+
+          <nav className="tw-pills" aria-label="Navegación principal">
+            {groups.map((g) => {
+              const hrefs = [g.href, ...(g.items?.map((i) => i.href) ?? [])];
+              // Sólo la píldora MÁS específica se enciende: `/club/equipos`
+              // empieza por `/club`, así que con un `some` se marcaban las dos.
+              const active = pillActiveHref !== null && hrefs.includes(pillActiveHref);
+              return <NavPill key={g.href} group={g} active={active} pathname={pathname} />;
+            })}
+          </nav>
+
+          <div className="tw-topnav-right">
+            {/* Contexto: club y equipo activos. */}
+            {showCtx && (
+              <div ref={ctxRef} style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={() => setCtxOpen((v) => !v)}
+                  aria-expanded={ctxOpen}
+                  className="tw-ctx"
+                  title="Club y equipo activos"
+                >
+                  <span className="tw-ctx-icon">
+                    {role === "club" ? <IconBuilding size={14} /> : <IconShield size={14} />}
+                  </span>
+                  <span className="tw-ctx-name truncate">{ctxLabel}</span>
+                  <IconChevronDown size={14} style={{ flex: "none", opacity: 0.7 }} />
+                </button>
+
+                {ctxOpen && (
+                  <div
+                    className="tw-popover"
+                    style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 250, padding: 6 }}
+                  >
+                    {clubs.length > 0 && (
+                      <>
+                        <span className="tw-pop-label">Club</span>
+                        {clubs.map((c) => {
+                          const on = c.id === clubId;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setActiveClub(c.id);
+                                setCtxOpen(false);
+                              }}
+                              className="tw-popitem"
+                              style={{
+                                color: on ? "var(--accent)" : undefined,
+                                background: on ? "var(--accent-10)" : undefined,
+                                fontWeight: on ? 700 : 500,
+                              }}
+                            >
+                              <IconBuilding size={14} />
+                              <span className="truncate" style={{ flex: 1, textAlign: "left" }}>
+                                {c.name}
+                              </span>
+                              {on && <IconCheck size={14} />}
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+
+                    {hasTeamSwitcher(role) && (
+                      <>
+                        {clubs.length > 0 && <div className="tw-pop-sep" />}
+                        <span className="tw-pop-label">Equipo</span>
+                        {teams.map((t) => {
+                          const on = t.id === activeTeam?.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                setActiveTeam(t.id);
+                                setCtxOpen(false);
+                              }}
+                              className="tw-popitem"
+                              style={{
+                                color: on ? "var(--accent)" : undefined,
+                                background: on ? "var(--accent-10)" : undefined,
+                                fontWeight: on ? 700 : 500,
+                              }}
+                            >
+                              <IconShield size={14} />
+                              <span className="truncate" style={{ flex: 1, textAlign: "left" }}>
+                                {t.name}
+                              </span>
+                              {on && <IconCheck size={14} />}
+                            </button>
+                          );
+                        })}
+                        {teams.length === 0 && (
+                          <span
+                            style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--text-faint)" }}
+                          >
+                            Sin equipos
+                          </span>
+                        )}
+                        <Link
+                          href="/empezar"
+                          className="tw-popitem"
+                          style={{ color: "var(--accent)", fontWeight: 600 }}
+                        >
+                          <IconPlus size={14} />
+                          <span style={{ flex: 1, textAlign: "left" }}>Crear equipo</span>
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Link href="/comunidad" className="tw-iconbtn" aria-label="Buscar">
+              <IconSearch size={17} />
+            </Link>
+
+            <div ref={bellRef} style={{ position: "relative", display: "flex" }}>
+              <button
+                type="button"
+                onClick={toggleBell}
+                aria-expanded={bellOpen}
+                aria-label={`Avisos${unread ? ` · ${unread} sin leer` : ""}`}
+                className="tw-iconbtn"
+              >
+                <IconBell size={17} />
+                {unread > 0 && <span className="tw-badge">{unread}</span>}
+              </button>
+
+              {bellOpen && (
+                <div className="tw-popover tw-bell">
+                  <div className="tw-bell-head">
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>Avisos</span>
+                    <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                      {unread} sin leer
+                    </span>
+                  </div>
+                  {notices.length === 0 && (
+                    <div
+                      style={{
+                        padding: "22px 16px",
+                        textAlign: "center",
+                        fontSize: 13,
+                        color: "var(--text-faint)",
+                      }}
+                    >
+                      No tienes avisos.
+                    </div>
+                  )}
+                  {notices.map((n, i) => {
+                    const Icon = ICONS[n.icon as keyof typeof ICONS];
+                    const color =
+                      n.tone === "accent"
+                        ? "var(--accent)"
+                        : n.tone === "warning"
+                          ? "var(--warning)"
+                          : "var(--text-muted)";
+                    return (
+                      <div
+                        key={i}
+                        className="tw-bell-row"
+                        style={{
+                          borderBottom:
+                            i === notices.length - 1 ? "none" : "1px solid var(--line)",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 999,
+                            background:
+                              n.tone === "accent" ? "var(--accent-10)" : "var(--bg-card-2)",
+                            color,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flex: "none",
+                          }}
+                        >
+                          <Icon size={15} />
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 13.5,
+                              lineHeight: 1.35,
+                              color: n.unread ? "var(--text)" : "var(--text-muted)",
+                            }}
+                          >
+                            {n.text}
+                          </span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 12,
+                              color: "var(--text-faint)",
+                              marginTop: 4,
+                            }}
+                          >
+                            {n.time}
+                          </span>
+                        </span>
+                        {n.unread && (
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: 999,
+                              background: "var(--accent)",
+                              marginTop: 6,
+                              flex: "none",
+                            }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
@@ -743,107 +661,88 @@ export function AppShell({ children }: { children: ReactNode }) {
               {resolved === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
             </button>
 
-            <Link href="/ajustes" aria-label="Tu cuenta" style={{ marginLeft: 6, display: "flex" }}>
-              <Avatar initials={user.initials} src={user.avatarUrl} size={32} />
-            </Link>
+            {/* Cuenta: rol, ajustes y salir. */}
+            <div ref={userRef} style={{ position: "relative", display: "flex" }}>
+              <button
+                type="button"
+                onClick={() => setUserOpen((v) => !v)}
+                aria-expanded={userOpen}
+                className="tw-avatarbtn"
+                title={user.name}
+                aria-label="Tu cuenta"
+              >
+                <Avatar initials={user.initials} src={user.avatarUrl} size={34} />
+              </button>
 
-            {bellOpen && (
-              <div className="tw-popover tw-bell">
-                <div className="tw-bell-head">
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>Avisos</span>
-                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                    {unread} sin leer
-                  </span>
-                </div>
-                {notices.length === 0 && (
-                  <div
-                    style={{
-                      padding: "22px 16px",
-                      textAlign: "center",
-                      fontSize: 13,
-                      color: "var(--text-faint)",
-                    }}
-                  >
-                    No tienes avisos.
-                  </div>
-                )}
-                {notices.map((n, i) => {
-                  const Icon = ICONS[n.icon as keyof typeof ICONS];
-                  const color =
-                    n.tone === "accent"
-                      ? "var(--accent)"
-                      : n.tone === "warning"
-                        ? "var(--warning)"
-                        : "var(--text-muted)";
-                  return (
-                    <div
-                      key={i}
-                      className="tw-bell-row"
-                      style={{
-                        borderBottom:
-                          i === notices.length - 1 ? "none" : "1px solid var(--line)",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 30,
-                          height: 30,
-                          borderRadius: 9,
-                          background:
-                            n.tone === "accent" ? "var(--accent-10)" : "var(--bg-card-2)",
-                          color,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flex: "none",
-                        }}
-                      >
-                        <Icon size={15} />
-                      </span>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 13.5,
-                            lineHeight: 1.35,
-                            color: n.unread ? "var(--text)" : "var(--text-muted)",
-                          }}
-                        >
-                          {n.text}
-                        </span>
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 12,
-                            color: "var(--text-faint)",
-                            marginTop: 4,
-                          }}
-                        >
-                          {n.time}
-                        </span>
-                      </span>
-                      {n.unread && (
-                        <span
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: 999,
-                            background: "var(--accent)",
-                            marginTop: 6,
-                            flex: "none",
-                          }}
-                        />
-                      )}
+              {userOpen && (
+                <div
+                  className="tw-popover"
+                  style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 230, padding: 6 }}
+                  role="menu"
+                >
+                  <div style={{ padding: "8px 10px 10px" }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{user.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
+                      {ROLE_LABELS[role]}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  </div>
+                  {availableRoles.length > 1 && (
+                    <>
+                      <div className="tw-pop-sep" />
+                      <span className="tw-pop-label">Usar TACTIUM como</span>
+                      {availableRoles.map((r) => {
+                        const on = r === role;
+                        return (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => {
+                              setRole(r);
+                              setUserOpen(false);
+                            }}
+                            className="tw-popitem"
+                            style={{
+                              color: on ? "var(--accent)" : undefined,
+                              background: on ? "var(--accent-10)" : undefined,
+                              fontWeight: on ? 700 : 500,
+                            }}
+                          >
+                            <span style={{ flex: 1, textAlign: "left" }}>{ROLE_LABELS[r]}</span>
+                            {on && <IconCheck size={14} />}
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
+                  <div className="tw-pop-sep" />
+                  <Link href="/ajustes/apariencia" className="tw-popitem">
+                    <span style={{ flex: 1, textAlign: "left" }}>Ajustes</span>
+                  </Link>
+                  <Link href="/ajustes/datos" className="tw-popitem">
+                    <span style={{ flex: 1, textAlign: "left" }}>Mis datos</span>
+                  </Link>
+                  <Link href="/suscripcion" className="tw-popitem">
+                    <span style={{ flex: 1, textAlign: "left" }}>Mi suscripción</span>
+                  </Link>
+                  <div className="tw-pop-sep" />
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="tw-popitem"
+                    style={{ color: "var(--error)" }}
+                  >
+                    <span style={{ flex: 1, textAlign: "left" }}>Cerrar sesión</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        <main className="tw-content">{children}</main>
-      </div>
+        {/* ══ Contenido ═════════════════════════════════════════════ */}
+        <main className="tw-main">
+          <div className="tw-content">{children}</div>
+        </main>
       </div>
 
       {/* ══ Tab bar · móvil ════════════════════════════════════════ */}

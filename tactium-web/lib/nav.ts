@@ -220,6 +220,45 @@ export interface Crumb {
   href?: string;
 }
 
+/** Un destino del nav superior. Con `items`, es un desplegable. */
+export interface NavGroup extends NavEntry {
+  items?: NavEntry[];
+}
+
+/**
+ * Navegación superior: el botón de inicio va SIEMPRE a `/` —la portada, sea
+ * cual sea el rol— y el resto de destinos se reparte en píldoras. Los que
+ * cuelgan de otro —«Mis torneos» dentro de «Torneos»— se agrupan en un
+ * desplegable, que es lo que permite que quepan en una sola fila.
+ *
+ * La pantalla de aterrizaje del rol (`/club` para el club) nunca actúa de
+ * padre: si lo hiciera se tragaría su propio menú entero en un desplegable.
+ */
+export function topNav(role: Role): { home: NavEntry; groups: NavGroup[] } {
+  const entries = NAV_BY_ROLE[role];
+  const landing = entries[0];
+  const home: NavEntry =
+    entries.find((e) => e.href === "/") ?? { href: "/", label: "Inicio", icon: "home" };
+  const groups: NavGroup[] = [];
+
+  for (const item of entries) {
+    if (item.href === "/") continue; // ése es ya el botón de inicio
+    const parent = groups.find(
+      (g) => g.href !== landing.href && item.href.startsWith(g.href + "/"),
+    );
+    if (parent) {
+      // Al abrir el grupo, el propio padre pasa a ser su primera opción.
+      if (!parent.items) {
+        parent.items = [{ ...parent, label: `Explorar ${parent.label.toLowerCase()}` }];
+      }
+      parent.items.push(item);
+    } else {
+      groups.push({ ...item });
+    }
+  }
+  return { home, groups };
+}
+
 /**
  * Migas de pan de la barra superior: sección padre (enlazable) + pantalla.
  * Sale de la propia navegación del rol, así el padre siempre es un destino

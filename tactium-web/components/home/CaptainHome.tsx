@@ -705,8 +705,10 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           </div>
         </div>
 
-        {/* ══ Atajos ═══════════════════════════════════════════════ */}
-        <div className="bcard col-12">
+        {/* ══ Atajos ═══════════════════════════════════════════════
+            Ocupa las 7 columnas que deja la disponibilidad: si fuera de 12
+            la fila anterior se quedaba medio vacía. */}
+        <div className="bcard col-7">
           <div
             style={{
               display: "grid",
