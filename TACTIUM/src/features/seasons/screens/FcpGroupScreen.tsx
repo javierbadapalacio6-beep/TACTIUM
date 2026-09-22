@@ -20,6 +20,26 @@ import { FcpBracketView } from '../components/FcpBracketView';
 import type { SeasonsStackScreenProps } from '@navigation/types';
 
 type Tab = 'clasif' | 'jornadas' | 'cuadro';
+
+/** La Federación publica los nombres EN MAYÚSCULAS. A pantalla completa
+ *  gritan, así que se bajan a capital inicial. */
+const nombreBonito = (s: string | null | undefined): string =>
+  (s ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase());
+
+/** «Julia Rojo · Ana Pérez». Si falta uno, se enseña el que haya. */
+const pareja = (a: string | null, b: string | null): string =>
+  [nombreBonito(a), nombreBonito(b)].filter(Boolean).join(' · ') || '—';
+
+/** Puntos de ranking de la pareja, sumados. Llegan como string desde
+ *  Postgres (numeric), de ahí el Number(). */
+const puntosPareja = (a: number | string | null, b: number | string | null): string => {
+  const n = Number(a ?? 0) + Number(b ?? 0);
+  return n > 0 ? String(Math.round(n)) : '';
+};
 const DAY = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 const MON = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
@@ -357,7 +377,12 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                 const localWon = p.ganador === 'local';
                 const visitWon = p.ganador === 'visitante';
                 const score = splitScore(p.resultado);
-                const acta = (actas[p.idPartido] ?? []).slice().sort((a, b) => a.partido_num - b.partido_num).slice(0, 3);
+                // El acta ENTERA: una eliminatoria de liga son cuatro o
+                // cinco puntos y antes se cortaba a tres, así que faltaba
+                // justo el que solía decidirla.
+                const acta = (actas[p.idPartido] ?? [])
+                  .slice()
+                  .sort((a, b) => a.partido_num - b.partido_num);
                 return (
                   <View key={p.idPartido || i} style={styles.match}>
                     <View style={styles.matchTop}>
@@ -382,16 +407,46 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                     </View>
                     {acta.length > 0 ? (
                       <View style={styles.matchBottom}>
-                        {acta.map((g) => (
-                          <View key={g.partido_num} style={styles.pairChunk}>
-                            <View style={styles.pairCode}>
-                              <Text style={styles.pairCodeText}>P{g.partido_num}</Text>
+                        {acta.map((g) => {
+                          // Quien ganó ese punto va en tinta plena; el otro,
+                          // apagado. Es lo que se busca al abrir un acta.
+                          const ganoLocal = g.ganador === 'local';
+                          const ganoVisit = g.ganador === 'visitante';
+                          return (
+                            <View key={g.partido_num} style={styles.actaRow}>
+                              <View style={styles.pairCode}>
+                                <Text style={styles.pairCodeText}>P{g.partido_num}</Text>
+                              </View>
+                              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                                <View style={styles.actaPair}>
+                                  <Text
+                                    style={[styles.actaName, !ganoLocal && styles.actaNameDim]}
+                                    numberOfLines={1}
+                                  >
+                                    {pareja(g.local_j1, g.local_j2)}
+                                  </Text>
+                                  <Text style={styles.actaPts}>
+                                    {puntosPareja(g.local_j1_pts, g.local_j2_pts)}
+                                  </Text>
+                                </View>
+                                <View style={styles.actaPair}>
+                                  <Text
+                                    style={[styles.actaName, !ganoVisit && styles.actaNameDim]}
+                                    numberOfLines={1}
+                                  >
+                                    {pareja(g.visit_j1, g.visit_j2)}
+                                  </Text>
+                                  <Text style={styles.actaPts}>
+                                    {puntosPareja(g.visit_j1_pts, g.visit_j2_pts)}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={styles.pairScore} numberOfLines={1}>
+                                {g.parciales || `${g.sets_local ?? 0}-${g.sets_visit ?? 0}`}
+                              </Text>
                             </View>
-                            <Text style={styles.pairScore} numberOfLines={1}>
-                              {g.parciales || `${g.sets_local ?? 0}-${g.sets_visit ?? 0}`}
-                            </Text>
-                          </View>
-                        ))}
+                          );
+                        })}
                       </View>
                     ) : null}
                   </View>
@@ -508,4 +563,17 @@ const makeStyles = (c: Palette) =>
     pairCode: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, backgroundColor: c.bgCard2 },
     pairCodeText: { fontFamily: Fonts.mono, fontSize: 9.5, fontWeight: '700', color: c.textMuted },
     pairScore: { fontFamily: Fonts.mono, fontSize: 10.5, color: c.textFaint },
+    // Una fila por punto del acta: código, las dos parejas con sus puntos, y
+    // los parciales a la derecha.
+    actaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      width: '100%',
+      paddingVertical: 5,
+    },
+    actaPair: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    actaName: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5, fontWeight: '600' },
+    actaNameDim: { color: c.textMuted, fontWeight: '500' },
+    actaPts: { fontFamily: Fonts.mono, fontSize: 10.5, color: c.textFaint },
   });
