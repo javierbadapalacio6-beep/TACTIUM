@@ -277,7 +277,11 @@ export function FederationExplore({ slug }: { slug: string }) {
       searchFcpTeams({
         query: term,
         grupoIds: term.length < 2 ? scopedGroupIds : undefined,
-        limit: 60,
+        // Una liga EN JUEGO se mira por grupos, y un grupo son ~10 equipos: 60
+        // sobra. Una liga en INSCRIPCIÓN no tiene sorteo, así que «todas las
+        // categorías» es la temporada entera —323 equipos este año— y con 60
+        // el club no encontraba los suyos.
+        limit: upcomingLiga ? 500 : 60,
         idLigaSinGrupos: upcomingLiga,
       }),
     [term, scopedGroupIds.join(","), upcomingLiga],

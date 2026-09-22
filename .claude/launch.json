@@ -4,14 +4,21 @@
     {
       "name": "tactium-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "tactium-web",
-      "port": 3000
+      "port": 3000,
+      "autoPort": true
     },
     {
       "name": "tactium-web-produccion",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
+      "runtimeArgs": [
+        "run",
+        "start"
+      ],
       "cwd": "tactium-web",
       "port": 3000
     }
