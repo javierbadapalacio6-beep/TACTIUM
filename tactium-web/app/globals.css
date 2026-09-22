@@ -3444,6 +3444,27 @@ select.tw-cell-input {
   cursor: grabbing;
 }
 
+/* Los partidos aún sin hora. La tarjeta es `width: 100%`, así que en un
+   flex con `wrap` salía UNA POR FILA: dieciocho partidos eran un scroll
+   eterno con el ancho desaprovechado. En rejilla caben dos o tres. */
+.tw-unassigned {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+/* Lo mismo con los días de cada fase: siete filas en columna. */
+.tw-phase-days {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+@media (min-width: 900px) {
+  .tw-phase-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 24px;
+  }
+}
+
 /* ── Federación · tablas densas ────────────────────────────────── */
 .tw-fcp-head,
 .tw-fcp-table-row {

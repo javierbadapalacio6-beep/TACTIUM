@@ -885,7 +885,7 @@ function ScheduleGrid({
             Marca en qué días se juega cada fase; puede ser más de uno. Los
             partidos de las fases que no tocan hoy se ven atenuados abajo.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="tw-phase-days">
             {phases.map((ph) => {
               const key = `${ph.bracket}:${ph.round}`;
               const sel = phaseDays[key] ?? [];
@@ -947,7 +947,7 @@ function ScheduleGrid({
             <span style={{ fontSize: 14, fontWeight: 700 }}>Sin hora</span>
             <span className="card-head-count">{unassigned.length}</span>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div className="tw-unassigned">
             {unassigned.map((m) => (
               <MatchCard key={m.id} m={m} />
             ))}
