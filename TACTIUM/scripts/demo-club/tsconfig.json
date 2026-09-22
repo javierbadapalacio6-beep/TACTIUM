@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "@core/supabase/client": ["scripts/demo-club/shimClient.ts"],
+      "@core/*": ["src/core/*"],
+      "@/*": ["src/*"],
+      "@features/*": ["src/features/*"],
+      "@components/*": ["src/components/*"],
+      "@store/*": ["src/store/*"]
+    }
+  }
+}

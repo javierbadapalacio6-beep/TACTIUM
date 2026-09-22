@@ -55,3 +55,10 @@ analisis-video/
 # Native build artifacts (regenerados por expo prebuild)
 TACTIUM/ios/
 TACTIUM/android/
+
+# Material de vídeo y motion graphics: 3,9 GB en tres carpetas. No va a git —
+# GitHub rechaza ficheros de más de 100 MB y el historial se queda con el peso
+# para siempre. Ya estaban excluidas del build en `.easignore`.
+/MOTION GRAPICHS TACTIUM/
+/SCREENS/MOTION GRAPICHS TACTIUM/
+/TACTIUM-AI/

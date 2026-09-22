@@ -52,6 +52,69 @@ Van en **todas** las piezas, son la identidad del nicho:
 
 ---
 
+# TANDA 0 — **El primero que se publica** · la vuelta
+
+> `V1-vuelta.mp4` · ~34s · en casa, palas de fondo
+
+## Por qué el gancho NO es «hemos vuelto»
+
+A quien ya te seguía, «hemos vuelto» le dice algo. Al que llega nuevo —que van a ser casi
+todos— no le dice nada, y el vídeo se le cae en el segundo uno. Por eso el gancho es **«vuelve
+la liga»**, que le importa a los dos: al que estaba y al que no sabe quién eres. La vuelta del
+verano queda como contexto, no como titular.
+
+## «He» y no «hemos»
+
+Lo has escrito en plural y lo he pasado a primera persona. Eres uno. Y en el R1 vas a decir
+«esta aplicación la he construido yo solo»: si aquí dices «hemos», una de las dos frases suena
+falsa. El «yo» además es tu diferencial — nadie más en el pádel federado puede decirlo.
+Si aun así lo prefieres en plural, se cambia en un minuto.
+
+## El guion
+
+> **[GANCHO, a cámara]**
+> Se acabó el verano. Vuelve la liga.
+> Y yo no he parado.
+>
+> **[EL DATO — entra un «300» en pantalla]**
+> Tres meses. Muchos cambios en la app.
+>
+> **[REPASO 1 — tapo con la pantalla de alineación]**
+> Tu equipo: quién puede jugar, la alineación según la normativa de tu federación,
+> y la temporada entera registrada.
+>
+> **[REPASO 2 — tapo con el cuadro de un torneo]**
+> Torneos: grupos, eliminatoria y consolación, con horarios pista a pista.
+> Se inscriben con un código y pagan por la web.
+>
+> **[REPASO 3 — tapo con la pantalla de federación]**
+> Y la Federación Cántabra dentro de la app: tus puntos, las clasificaciones
+> y los cuadros. Sin buscarte en un PDF.
+>
+> **[CIERRE — cortinilla con «2026/2027»]**
+> La temporada 2026/2027 ya está cargada. Empezamos.
+
+## De dónde sale el «trescientos»
+
+Del historial de git entre el 15 de junio y el 15 de septiembre: **303 commits de producto**
+(201 de ellos funcionalidad nueva) repartidos en **45 días con trabajo**. El número es real y
+está respaldado.
+
+**El número no se dice: se ve.** La voz dice «muchos cambios» y en pantalla entra el **300**.
+Es mejor que decirlo: el understatement hace el trabajo, y además tú no te comprometes con una
+cifra hablando — el dato lo sostiene el gráfico, respaldado por el historial de git.
+
+> ⚠️ Por eso el gráfico pone **«300 · cambios»**, no «mejoras». Un commit no es una mejora que
+> el usuario note: hay arreglos internos y cosas que nadie ve. «Cambios» es literal y defendible.
+
+## Lo que se enseña, y por qué esos tres
+
+No es un repaso de funcionalidades sueltas —eso aburre y el sistema lo prohíbe—, son **los tres
+bloques por los que alguien paga**: su equipo, sus torneos y su federación. Cada uno con una
+pantalla real detrás mientras lo cuentas.
+
+---
+
 # TANDA 1 — Carril capitán · conversión
 
 Las tres van **la misma semana**. Se queda el ángulo ganador y de ese se hacen 10 variantes.

@@ -8,7 +8,7 @@
 // al 62%. Por eso el ancla vertical por defecto es el 38% de la altura.
 
 import React from "react";
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { T, ms } from "./tokens";
 
 const EASE = Easing.bezier(0.25, 1, 0.5, 1);
@@ -22,6 +22,39 @@ const entrada = (frame: number, durMs = T.motion.base) =>
   });
 
 const ANCLA_Y = 0.38;
+
+/**
+ * Los gráficos se anclan al lienzo completo cuando se superponen al plano, y
+ * se centran cuando viven dentro del panel del layout `motion`. Va por contexto
+ * para que ni las piezas ni los propios gráficos tengan que enterarse.
+ */
+export const EnPanel = React.createContext(false);
+
+const useAnclaje = () => {
+  const enPanel = React.useContext(EnPanel);
+  return enPanel
+    ? ({ justifyContent: "center", paddingTop: 0 } as const)
+    : ({ justifyContent: "flex-start", paddingTop: T.canvas.h * ANCLA_Y } as const);
+};
+
+/**
+ * Placa de marca bajo un gráfico de dato. Sin ella, el verde y el mono se
+ * diluyen sobre un plano claro — y los planos ahora son una pared beige, no
+ * una pista de noche.
+ */
+const Placa: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div
+    style={{
+      background: T.placa.fondo,
+      borderRadius: T.placa.radio,
+      padding: `${T.space[6]}px ${T.space[8]}px`,
+      textAlign: "center",
+      maxWidth: T.sub.maxWidth,
+    }}
+  >
+    {children}
+  </div>
+);
 
 const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div
@@ -49,17 +82,18 @@ export const NumeroGrande: React.FC<{
   const frame = useCurrentFrame();
   const t = entrada(frame, 600);
   const n = Math.round(interpolate(t, [0, 1], [0, valor]));
+  const ancla = useAnclaje();
   return (
     <AbsoluteFill
       style={{
         alignItems: "center",
-        justifyContent: "flex-start",
-        paddingTop: T.canvas.h * ANCLA_Y,
+        ...ancla,
         paddingLeft: T.safe.sides,
         paddingRight: T.safe.sides,
         textAlign: "center",
       }}
     >
+      <Placa>
       {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
       <div
         style={{
@@ -91,6 +125,7 @@ export const NumeroGrande: React.FC<{
           {pie}
         </div>
       ) : null}
+      </Placa>
     </AbsoluteFill>
   );
 };
@@ -164,15 +199,16 @@ export const Contador: React.FC<{
   });
   const n = Math.round(interpolate(t, [0, 1], [de, a]));
   const llegado = t >= 1;
+  const ancla = useAnclaje();
   return (
     <AbsoluteFill
       style={{
         alignItems: "center",
-        justifyContent: "flex-start",
-        paddingTop: T.canvas.h * ANCLA_Y,
+        ...ancla,
         textAlign: "center",
       }}
     >
+      <Placa>
       {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
       <div
         style={{
@@ -198,6 +234,7 @@ export const Contador: React.FC<{
       >
         {unidad}
       </div>
+      </Placa>
     </AbsoluteFill>
   );
 };
@@ -212,16 +249,18 @@ export const ListaTicks: React.FC<{ items: ItemTick[]; pasoMs?: number }> = ({
   pasoMs = 450,
 }) => {
   const frame = useCurrentFrame();
+  const enPanel = React.useContext(EnPanel);
   return (
     <AbsoluteFill
       style={{
-        alignItems: "flex-start",
-        justifyContent: "flex-start",
-        paddingTop: T.canvas.h * 0.3,
+        alignItems: "center",
+        justifyContent: enPanel ? "center" : "flex-start",
+        paddingTop: enPanel ? 0 : T.canvas.h * 0.34,
         paddingLeft: T.safe.sides + T.space[6],
         paddingRight: T.safe.sides,
       }}
     >
+      <Placa>
       {items.map((item, i) => {
         // `enMs` cuando el ítem tiene que caer sobre una palabra concreta de la
         // locución; el paso uniforme solo sirve si se enumeran de corrido.
@@ -270,6 +309,7 @@ export const ListaTicks: React.FC<{ items: ItemTick[]; pasoMs?: number }> = ({
           </div>
         );
       })}
+      </Placa>
     </AbsoluteFill>
   );
 };
@@ -319,6 +359,46 @@ export const Cortinilla: React.FC<{ cifra: string; pie?: string }> = ({ cifra, p
           {pie}
         </div>
       ) : null}
+    </AbsoluteFill>
+  );
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6 · Mockup de móvil — la pantalla de la app dentro de un teléfono, flotando
+//     sobre tu plano. Enseña el producto sin robarte el encuadre.
+// ─────────────────────────────────────────────────────────────────────────────
+export const Mockup: React.FC<{ src: string; lado?: "izq" | "der" }> = ({ src, lado = "der" }) => {
+  const frame = useCurrentFrame();
+  const t = entrada(frame, T.motion.slow);
+  const ancho = 390;
+  const alto = Math.round(ancho * 19.5 / 9); // proporción de un móvil real
+  const derecha = lado === "der";
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <div
+        style={{
+          position: "absolute",
+          // Arriba y asomando por el borde: así no te tapa la cara -que ocupa
+          // el centro- ni pisa el subtítulo, que va al 62%.
+          top: T.canvas.h * 0.14,
+          [derecha ? "right" : "left"]: -40,
+          width: ancho,
+          height: alto,
+          borderRadius: T.radius.phone,
+          overflow: "hidden",
+          background: T.color.bg,
+          // El marco es un borde grueso del color de la marca, no un PNG de
+          // teléfono: así hereda el tema y no envejece con el iPhone de turno.
+          border: `10px solid ${T.color.card}`,
+          boxShadow: `0 40px 80px -20px rgba(0,0,0,0.65)`,
+          // Entra desde el borde y se endereza. Sin rebote (§7).
+          transform: `translateX(${(1 - t) * (derecha ? 140 : -140)}px) rotate(${(1 - t) * (derecha ? 6 : -6) + (derecha ? -3 : 3)}deg)`,
+          opacity: t,
+        }}
+      >
+        <Img src={staticFile(src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
+      </div>
     </AbsoluteFill>
   );
 };

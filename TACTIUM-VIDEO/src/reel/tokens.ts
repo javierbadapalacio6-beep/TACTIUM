@@ -48,6 +48,23 @@ export const T = {
     subBaseline: px(video.tutorial.subBaseline) / 100,
   },
 
+  // Cara arriba + panel de marca abajo donde viven los gráficos.
+  // Se llama `panel` y no `motion` porque `T.motion` son las curvas y duraciones
+  // del sistema: dos cosas distintas que en el JSON sí pueden llamarse igual.
+  panel: {
+    caraAlto: px(video.motion.caraAlto) / 100,
+    subBaseline: px(video.motion.subBaseline) / 100,
+    panelFondo: video.motion.panelFondo,
+    panelBorde: video.motion.panelBorde,
+  },
+
+  // Placa oscura bajo los gráficos de dato: el accent nace para lienzo #030F0F
+  // y sobre un plano claro se apaga. La placa le devuelve su fondo.
+  placa: {
+    fondo: video.graficoPlaca.fondo,
+    radio: px(video.graficoPlaca.radio),
+  },
+
   pip: {
     lado: px(video.pip.lado),
     radio: px(video.pip.radio),
@@ -80,6 +97,9 @@ export const T = {
     outQuart: raw.motion.ease.outQuart,
     fast: px(raw.motion.duration.fast),
     base: px(raw.motion.duration.base),
+    // El panel que se abre y se cierra mueve el 55% del lienzo: necesita más
+    // recorrido que una entrada de texto, o el salto se lee como un glitch.
+    slow: px(raw.motion.duration.slow),
   },
 
   radius: {

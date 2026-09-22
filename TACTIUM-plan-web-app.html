@@ -1,0 +1,1258 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TACTIUM · Plan de la aplicación web + prompts para Claude Design</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+  --bg:#030F0F; --bg-raised:#081818; --bg-card:#0C2222; --bg-card-2:#0F2A28;
+  --primary:#03624C; --primary-dim:#02463A; --accent:#00DF82; --accent-dim:#00B86B;
+  --text:#E8F5EF; --text-muted:rgba(232,245,239,.70); --text-faint:rgba(232,245,239,.50); --text-inverse:#001810;
+  --hair:rgba(232,245,239,.06); --hair-strong:rgba(232,245,239,.10);
+  --warning:#F2C94C; --error:#FF6B6B;
+  --accent-10:rgba(0,223,130,.10); --accent-25:rgba(0,223,130,.25); --accent-40:rgba(0,223,130,.40);
+  --shadow-card:0 20px 50px -15px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.04);
+  --glow:0 0 80px rgba(0,223,130,.14);
+}
+:root[data-theme="light"]{
+  --bg:#F4F7F5; --bg-raised:#FFFFFF; --bg-card:#FFFFFF; --bg-card-2:#EEF3F0;
+  --primary:#03624C; --primary-dim:#024A39; --accent:#00995E; --accent-dim:#007D4D;
+  --text:#0E1A14; --text-muted:rgba(14,26,20,.64); --text-faint:rgba(14,26,20,.42); --text-inverse:#FFFFFF;
+  --hair:rgba(14,26,20,.08); --hair-strong:rgba(14,26,20,.14);
+  --warning:#B7791F; --error:#D93B41;
+  --accent-10:rgba(0,153,94,.10); --accent-25:rgba(0,153,94,.22); --accent-40:rgba(0,153,94,.38);
+  --shadow-card:0 10px 30px -12px rgba(14,26,20,.14), inset 0 0 0 1px rgba(14,26,20,.05);
+  --glow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Satoshi",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  transition:background .3s cubic-bezier(.25,1,.5,1), color .3s cubic-bezier(.25,1,.5,1);
+}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* header */
+header.top{
+  position:sticky;top:0;z-index:50;
+  background:color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter:blur(14px) saturate(180%);
+  border-bottom:1px solid var(--hair);
+}
+.topin{max-width:1080px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.mark{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:-.02em;font-size:17px}
+.tile{width:26px;height:26px;border-radius:7px;background:var(--primary);display:grid;place-items:center;color:var(--accent);font-weight:900;font-size:15px}
+.dotsq{width:6px;height:6px;background:var(--accent);display:inline-block;margin-bottom:9px}
+nav.pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+nav.pills a{
+  font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-faint);text-decoration:none;padding:6px 10px;border-radius:999px;border:1px solid transparent;
+  transition:all .14s cubic-bezier(.25,1,.5,1);
+}
+nav.pills a:hover{color:var(--accent);border-color:var(--accent-40);background:var(--accent-10)}
+.tgl{
+  border:1px solid var(--hair-strong);background:transparent;color:var(--text);
+  border-radius:999px;padding:7px 14px;cursor:pointer;font-family:"JetBrains Mono",monospace;
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;transition:all .14s cubic-bezier(.25,1,.5,1);
+}
+.tgl:hover{border-color:var(--accent-40);background:var(--accent-10);color:var(--accent)}
+
+/* hero */
+.hero{padding:72px 0 40px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(60% 55% at 50% 0%, var(--accent-10), transparent 70%)}
+.eyebrow{font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:500;letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(34px,5.4vw,60px);font-weight:900;letter-spacing:-.03em;line-height:1.02;margin:0 0 18px}
+.lede{font-size:18px;color:var(--text-muted);max-width:64ch;margin:0}
+
+/* sections */
+section{padding:52px 0;border-top:1px solid var(--hair)}
+h2{font-size:clamp(24px,3.2vw,36px);font-weight:900;letter-spacing:-.025em;line-height:1.1;margin:0 0 8px}
+h2 .num{font-family:"JetBrains Mono",monospace;font-size:.42em;color:var(--accent);letter-spacing:.14em;vertical-align:super;margin-right:10px;font-weight:500}
+h3{font-size:19px;font-weight:700;letter-spacing:-.015em;margin:34px 0 10px}
+h4{font-size:15px;font-weight:700;margin:22px 0 8px}
+p{color:var(--text-muted);margin:0 0 14px}
+.sub{color:var(--text-faint);margin:0 0 26px;font-size:15px}
+ul,ol{color:var(--text-muted);padding-left:20px;margin:0 0 16px}
+li{margin-bottom:6px}
+strong{color:var(--text);font-weight:700}
+code{font-family:"JetBrains Mono",monospace;font-size:.87em;background:var(--accent-10);color:var(--accent);padding:2px 6px;border-radius:5px}
+
+/* cards + grid */
+.card{background:var(--bg-card);border-radius:16px;box-shadow:var(--shadow-card);padding:20px 22px;margin-bottom:14px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.kicker{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--text-faint);margin:0 0 8px}
+.big{font-family:"JetBrains Mono",monospace;font-size:30px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-.02em}
+
+/* table */
+.tw{overflow-x:auto;border-radius:14px;box-shadow:var(--shadow-card);background:var(--bg-card);margin-bottom:18px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+th{
+  font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--text-faint);text-align:left;padding:12px 14px;border-bottom:1px solid var(--hair-strong);white-space:nowrap;font-weight:500;
+}
+td{padding:11px 14px;border-bottom:1px solid var(--hair);color:var(--text-muted);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--bg-card-2)}
+td.n{font-family:"JetBrains Mono",monospace;color:var(--text-faint);font-size:11px;white-space:nowrap}
+td.s{color:var(--text);font-weight:600}
+
+/* badges */
+.b{display:inline-flex;align-items:center;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;padding:4px 8px;border-radius:6px;white-space:nowrap;
+  color:var(--accent);border:1px solid var(--accent-40);background:var(--accent-10)}
+.b.w{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 40%,transparent);background:color-mix(in srgb,var(--warning) 10%,transparent)}
+.b.e{color:var(--error);border-color:color-mix(in srgb,var(--error) 40%,transparent);background:color-mix(in srgb,var(--error) 10%,transparent)}
+.b.m{color:var(--text-faint);border-color:var(--hair-strong);background:transparent}
+
+/* swatches */
+.sw{border-radius:12px;overflow:hidden;box-shadow:var(--shadow-card);background:var(--bg-card)}
+.sw .chip{height:64px}
+.sw .lbl{padding:9px 11px;font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.08em;color:var(--text-faint);line-height:1.5}
+.sw .lbl b{display:block;color:var(--text);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px}
+
+/* prompt blocks */
+.pb{border-radius:16px;background:var(--bg-card);box-shadow:var(--shadow-card);margin:0 0 22px;overflow:hidden}
+.pbh{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.pbh .tag{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);
+  border:1px solid var(--accent-40);background:var(--accent-10);padding:4px 9px;border-radius:6px}
+.pbh .ttl{font-weight:700;font-size:15px;letter-spacing:-.01em;color:var(--text)}
+.cp{margin-left:auto;border:1px solid var(--hair-strong);background:transparent;color:var(--text-muted);border-radius:999px;
+  padding:6px 14px;cursor:pointer;font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  transition:all .14s cubic-bezier(.25,1,.5,1)}
+.cp:hover{border-color:var(--accent-40);background:var(--accent-10);color:var(--accent)}
+.cp.ok{color:var(--accent);border-color:var(--accent)}
+pre{margin:0;padding:18px;overflow-x:auto;font-family:"JetBrains Mono",monospace;font-size:11.8px;line-height:1.72;
+  color:var(--text-muted);white-space:pre-wrap;word-wrap:break-word;max-height:520px;overflow-y:auto}
+pre::-webkit-scrollbar{width:8px;height:8px}
+pre::-webkit-scrollbar-thumb{background:var(--hair-strong);border-radius:4px}
+
+.note{border-left:2px solid var(--accent);background:var(--accent-10);border-radius:0 12px 12px 0;padding:14px 18px;margin:0 0 18px}
+.note p:last-child{margin-bottom:0}
+.note.w{border-left-color:var(--warning);background:color-mix(in srgb,var(--warning) 8%,transparent)}
+footer{padding:40px 0 64px;border-top:1px solid var(--hair);color:var(--text-faint);font-size:13px}
+@media(max-width:720px){nav.pills{display:none}.hero{padding:48px 0 28px}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="topin">
+    <div class="mark"><span class="tile">T</span>TACT<span class="dotsq"></span>UM</div>
+    <nav class="pills">
+      <a href="#inventario">Inventario</a>
+      <a href="#delta">Móvil→Web</a>
+      <a href="#ia">Arquitectura</a>
+      <a href="#ds">Design system</a>
+      <a href="#tandas">Tandas</a>
+      <a href="#prompts">Prompts</a>
+      <a href="#produccion">Producción</a>
+    </nav>
+    <button class="tgl" id="tgl">☾ Oscuro</button>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">PLAN DE PRODUCTO · WEB APP · 2026-08-10</p>
+    <h1>TACTIUM en el navegador</h1>
+    <p class="lede">Inventario completo de las <strong>43 pantallas</strong> de la app móvil, cómo se traducen a una web profesional con modo claro y oscuro, y los <strong>14 prompts</strong> listos para pegar en Claude Design.</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ══════════ DECISIONES ══════════ -->
+<section id="decisiones">
+  <h2><span class="num">01</span>Decisiones tomadas</h2>
+  <p class="sub">Las tres que condicionan todo lo demás.</p>
+  <div class="grid g3">
+    <div class="card">
+      <p class="kicker">Layout</p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">Híbrido: shell + lienzos densos</p>
+      <p style="font-size:13.5px;margin:0">Sidebar fija en desktop, tab bar en móvil. Las pantallas-herramienta (alineación, horario de torneo, cuadro KO) usan lienzos anchos con drag &amp; drop real: es la razón de existir de la web.</p>
+    </div>
+    <div class="card">
+      <p class="kicker">Tipografía</p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">Satoshi + JetBrains Mono</p>
+      <p style="font-size:13.5px;margin:0">Satoshi ya está declarada como fuente oficial en <code>fonts.ts</code> pero nunca se cargó en la app (cae a fuente de sistema). La web la estrena de verdad. Mono para datos, marcadores y eyebrows.</p>
+    </div>
+    <div class="card">
+      <p class="kicker">Alcance</p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">Paridad total menos pagos nativos</p>
+      <p style="font-size:13.5px;margin:0">Las 43 pantallas. El paywall se rediseña para Stripe web (el IAP de Apple/Google no existe en navegador) y el escáner de cámara pasa a subida de archivo.</p>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:20px">
+    <p><strong>Hallazgo:</strong> ya existe <code>tactium-landing/CLAUDE DESIGN/</code> — un skill de marca TACTIUM con tokens, UI kits y 18 capturas reales de la app. Es una base excelente, pero es <strong>dark-only</strong> («No light mode» aparece como no-negociable) y usa Inter. Este plan lo <strong>extiende</strong>: mismos tokens oscuros, más la paleta clara real de <code>colors.ts</code>, más Satoshi. Los prompts de abajo ya llevan el sistema completo embebido, así que funcionan tanto si le pasas la carpeta a Claude Design como si no.</p>
+  </div>
+</section>
+
+<!-- ══════════ INVENTARIO ══════════ -->
+<section id="inventario">
+  <h2><span class="num">02</span>Qué ofrece hoy la app</h2>
+  <p class="sub">43 pantallas agrupadas por bloque funcional, con lo que hace cada una. Extraído del código, no de memoria.</p>
+
+  <div class="grid g4" style="margin-bottom:26px">
+    <div class="card"><p class="kicker">Pantallas</p><div class="big">43</div></div>
+    <div class="card"><p class="kicker">Roles</p><div class="big">4</div></div>
+    <div class="card"><p class="kicker">Bloques</p><div class="big">9</div></div>
+    <div class="card"><p class="kicker">Tandas de diseño</p><div class="big">13</div></div>
+  </div>
+
+  <h3>A · Entrada y alta <span class="b m">7 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th><th>Rol</th></tr></thead>
+    <tbody>
+      <tr><td class="n">A1</td><td class="s">Welcome</td><td>Carrusel de 4 slides: «Crea parejas que ganan» · «Sabe quién juega en segundos» · «Lleva el control de la liga» · «Tus partidos, tus números». Eyebrows <code>CREATE · ANALYZE · ELEVATE</code> y <code>PADEL FIRST · SPORTS ALWAYS</code>.</td><td>Público</td></tr>
+      <tr><td class="n">A2</td><td class="s">Login / Registro</td><td>Email + contraseña, Sign in with Apple, recuperar contraseña. Dos modos en la misma pantalla.</td><td>Público</td></tr>
+      <tr><td class="n">A3</td><td class="s">OnboardingChoice</td><td>4 caminos: Equipo independiente (RÁPIDO) · Club con varios equipos (ESCALABLE) · Me han invitado a un equipo · Juego por mi cuenta (GRATIS PARA JUGADORES).</td><td>Nuevo</td></tr>
+      <tr><td class="n">A4</td><td class="s">CreateTeam</td><td>Alta de equipo independiente: nombre, género, categoría, competición, partidos por jornada, orden de fuerza.</td><td>Capitán</td></tr>
+      <tr><td class="n">A5</td><td class="s">CreateClub</td><td>Alta de club: nombre, ciudad, escudo.</td><td>Club</td></tr>
+      <tr><td class="n">A6</td><td class="s">CreateTeamsForClub</td><td>Alta de varios equipos en lote bajo el club recién creado.</td><td>Club</td></tr>
+      <tr><td class="n">A7</td><td class="s">AddPlayers</td><td>Plantilla inicial: nombre, puntos FEP, posición. Manual o escaneando el ranking.</td><td>Capitán</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>B · Día a día del capitán <span class="b">6 pantallas · el corazón del producto</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th><th>Peso</th></tr></thead>
+    <tbody>
+      <tr><td class="n">B1</td><td class="s">Home</td><td>Jornada pendiente (rival, fecha, local/visitante), contador de disponibles, estado de la alineación, atajos: escanear calendario, explorar torneos, explorar Federación, invitar a un capitán. Estados vacíos: «Aún no hay jornadas», «Crea una temporada activa».</td><td class="n">1026 L</td></tr>
+      <tr><td class="n">B2</td><td class="s">Jornada</td><td>Ficha completa: fecha, hora, lugar, rival, local/visitante, alineación, marcador obligatorio, cerrar acta (manual), foto del partido, compartir resultado, avisar al equipo, eliminar jornada. Estados: acta cerrada ganada/perdida/empate.</td><td class="n">2713 L</td></tr>
+      <tr><td class="n">B3</td><td class="s">Alineación</td><td><strong>La pantalla estrella.</strong> Parejas por pista ordenadas por puntos, banquillo, intercambio tocando dos jugadores, generador automático (emparejar Drive+Revés / por fuerza), variantes guardadas con una oficial, confirmar y avisar, compartir alineación como imagen. Bloqueos: solo capitán, acta cerrada, temporada archivada.</td><td class="n">2649 L</td></tr>
+      <tr><td class="n">B4</td><td class="s">Disponibilidad</td><td>«¿Quién está disponible?» con filtros Todos / Disp. / Bajas, marcar todo, «Soy yo». Vista jugador: «¿Estás disponible?».</td><td class="n">406 L</td></tr>
+      <tr><td class="n">B5</td><td class="s">Resultados</td><td>Marcador pista por pista, juegos a favor / del rival, victoria / derrota, W.O. a favor y en contra, acta cerrada en solo lectura. Los jugadores pueden meter el resultado de su propio partido.</td><td class="n">1338 L</td></tr>
+      <tr><td class="n">B6</td><td class="s">Equipo / Plantilla</td><td>Jugadores con nombre, alias, posición (Drive / Revés / Ambos), puntos FEP, baja, foto. Añadir, editar, buscar. Escanear calendario, escanear ranking, importar desde la Federación Cántabra, invitar con código, editar equipo.</td><td class="n">1376 L</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>C · Temporadas <span class="b m">2 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td class="n">C1</td><td class="s">Temporadas</td><td>Lista con activa e histórico. Crear temporada eligiendo formato: Liga regular · Liga + Playoff · Eliminatorias, con número de jornadas y de eliminatorias. «Cerrar y crear nueva».</td></tr>
+      <tr><td class="n">C2</td><td class="s">Detalle de temporada</td><td>Todas las jornadas en orden, crear jornada (rival, fecha, hora, local/visitante, lugar), acta, cuadro de playoff, métricas: jugadas, pendientes, tasa V. Estado «Temporada archivada».</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>D · Club admin <span class="b m">6 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td class="n">D1</td><td class="s">Club · Dashboard</td><td>Eyebrow <code>CLUB · ADMIN</code>. Equipos del club, próximas jornadas, últimos resultados, crear nuevo equipo, horarios de local, importar de la Federación Cántabra, zona de peligro con borrar club (bloqueado si hay suscripción activa).</td></tr>
+      <tr><td class="n">D2</td><td class="s">Equipos del club</td><td>Rejilla de equipos con estado, categoría y configuración.</td></tr>
+      <tr><td class="n">D3</td><td class="s">Preview de equipo</td><td>Vista de solo lectura de un equipo: V / E / D, jugadas, próxima jornada, plantilla desplegable, «Mi grupo» en la Federación, preparar nueva temporada desde plantilla federativa.</td></tr>
+      <tr><td class="n">D4</td><td class="s">Crear equipo desde club</td><td>Nombre, género (Masculino / Femenino / Mixto), categoría, competición, federación y grupo, partidos por jornada, orden de fuerza (Se valida / Libre).</td></tr>
+      <tr><td class="n">D5</td><td class="s">Horarios de local</td><td>Día y hora de cada jornada como local, pista / lugar, franjas favoritas por equipo, «Guardar y avisar al equipo».</td></tr>
+      <tr><td class="n">D6</td><td class="s">Facturación del club</td><td>Plan activo, equipos incluidos vs no cubiertos, planes disponibles, mejorar / cambiar plan, próxima renovación, cambio programado.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>E · Torneos <span class="b">5 pantallas · el módulo más grande</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th><th>Peso</th></tr></thead>
+    <tbody>
+      <tr><td class="n">E1</td><td class="s">Explorar torneos</td><td>Pestañas Explorar / Mis torneos. Búsqueda por nombre, club o lugar. Estados: Inscripción abierta · Próximos · En juego · Finalizado · Jugados. Vincular con código de compañero.</td><td class="n">516 L</td></tr>
+      <tr><td class="n">E2</td><td class="s">Club · Torneos</td><td>Asistente de creación: nombre, tipo (Americano · Cuadro KO · Grupos + KO · KO con consolación), categorías múltiples, géneros múltiples, fechas inicio/fin, días de cada fase, cuota por 1 o 2 categorías, foto de portada, lugar, límites por categoría (puntos ≤ / nivel ≥), siembra, horas que un jugador puede quitar.</td><td class="n">1338 L</td></tr>
+      <tr><td class="n">E3</td><td class="s">Detalle de torneo</td><td><strong>La pantalla más compleja del producto.</strong> Hero con portada, grupos, clasificación por puntos/sets/juegos, cuadro KO (principal + consolación, Cuartos / Semis / Final / Campeones), configuración de horario (duración por partido, descanso extra entre partidos de una pareja, días de cada fase), rejilla manual de huecos con tap-para-mover, generar eliminatorias, código de inscripción, alta manual, guardar resultado, editar y borrar torneo.</td><td class="n">4566 L</td></tr>
+      <tr><td class="n">E4</td><td class="s">Ficha de inscripción</td><td>Código del torneo, elegir categoría y género, tu nombre / email / teléfono / nivel de liga / puntos, compañero (email opcional, su nivel, sus puntos, autodetección desde la Federación), disponibilidad en franjas de 1 h, cuota.</td><td class="n">1356 L</td></tr>
+      <tr><td class="n">E5</td><td class="s">Seguir torneo</td><td>Vista de espectador / participante: tus partidos, cuadro, grupos, clasificación, rondas, apuntarme.</td><td class="n">439 L</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>F · Federación (datos FCP) <span class="b m">5 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td class="n">F1</td><td class="s">Selector de federación</td><td>Lista de federaciones. La Cántabra está activa; el resto se muestran como «Próximamente».</td></tr>
+      <tr><td class="n">F2</td><td class="s">Explorar Federación</td><td>Buscador con pestañas Todo / Equipos / Jugadores / Grupos y filtros inline de temporada, categoría, género y grupo. Sección PLAY OFF.</td></tr>
+      <tr><td class="n">F3</td><td class="s">Grupo</td><td>Clasificación, jornadas y cuadro de playoff del grupo. Tap en un acta para verla.</td></tr>
+      <tr><td class="n">F4</td><td class="s">Equipo federado</td><td>Puntos, sets +/−, pts/part, posición en la clasificación, jugadores.</td></tr>
+      <tr><td class="n">F5</td><td class="s">Jugador federado</td><td>Temporada, partidos disputados, playoff.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>G · Social <span class="b m">3 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td class="n">G1</td><td class="s">Novedades (feed)</td><td>Actividad de a quién sigues: amistosos, resultados, altas.</td></tr>
+      <tr><td class="n">G2</td><td class="s">Buscar en la comunidad</td><td>Buscador de jugadores y clubes, lista de «Siguiendo».</td></tr>
+      <tr><td class="n">G3</td><td class="s">Perfil público</td><td>Estilo Instagram: seguidores / siguiendo, equipos, amistosos, fotos de partidos, jugados, victorias, tasa V. Para clubes: «El club» y miembros.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>H · Jugador y estadísticas <span class="b m">4 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td class="n">H1</td><td class="s">Inicio jugador suelto</td><td>«TU PÁDEL», últimos partidos, registrar un amistoso, invitar a tus colegas, canjear invitación, ver todas mis stats.</td></tr>
+      <tr><td class="n">H2</td><td class="s">Registrar amistoso</td><td>Tres modos: Equipos (equipo vs equipo) · Colegas · Entreno. Parejas, sets por partido, foto del partido, guardar y compartir foto + resultado.</td></tr>
+      <tr><td class="n">H3</td><td class="s">Detalle de amistoso</td><td>Sets, foto, código del partido para que otros lo reclamen, compartir.</td></tr>
+      <tr><td class="n">H4</td><td class="s">Mis estadísticas</td><td>Partidos, racha, mejor racha, % de victorias, mejor compañero, mis colegas, por pista, amistosos y entrenos. Reclamar partido por código. Compartir mis números.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>I · Cuenta <span class="b m">5 pantallas</span></h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Pantalla</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td class="n">I1</td><td class="s">Perfil</td><td>Avatar, seguidores / siguiendo, ganado / perdido, amistosos, editar perfil, compartir perfil, buscar en la comunidad, ajustes.</td></tr>
+      <tr><td class="n">I2</td><td class="s">Ajustes</td><td>APARIENCIA (modo claro / oscuro / sistema) · NOTIFICACIONES · MI JUGADOR (vincularte) · EQUIPO ACTUAL · INVITACIONES (invitar jugadores, unirme con código) · SUSCRIPCIÓN · TORNEOS · SOPORTE · ZONA DE PELIGRO (cerrar sesión, eliminar cuenta con doble confirmación).</td></tr>
+      <tr><td class="n">I3</td><td class="s">Mis datos</td><td>RGPD: resumen de todos tus datos, exportar como JSON, políticas de privacidad y términos.</td></tr>
+      <tr><td class="n">I4</td><td class="s">Mi suscripción</td><td>Plan y facturación, estados (Activa · En prueba · Cancelada · Expirada · Pago pendiente), cambiar plan, restaurar compras, canjear código, cancelar.</td></tr>
+      <tr><td class="n">I5</td><td class="s">Paywall</td><td>TACTIUM PRO. Planes por número de equipos (3 / 10 / 25), mensual y anual, prueba de 14 días, lista de beneficios, canjear código, continuar gratis.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Transversales</h3>
+  <p>No son pantallas pero hay que diseñarlos: <strong>selector de equipo</strong> (TeamSwitcher), <strong>campanita de avisos in-app</strong> con contador de no leídos, <strong>hojas inferiores</strong> (BottomSheet → modal/drawer en web), <strong>hoja de escaneo</strong> (ScanSheet), <strong>toasts</strong>, <strong>banner de prueba a punto de expirar</strong>, <strong>banner de sin conexión</strong>, <strong>botón con puerta premium</strong> (PremiumGateButton), <strong>anillo de progreso</strong>, <strong>fondo ambiental</strong> con dos gradientes radiales.</p>
+</section>
+
+<!-- ══════════ DELTA ══════════ -->
+<section id="delta">
+  <h2><span class="num">03</span>Qué cambia al pasar a web</h2>
+  <p class="sub">Lo que no se puede copiar tal cual, y en qué se convierte.</p>
+  <div class="tw"><table>
+    <thead><tr><th>En móvil</th><th>En web</th><th>Impacto</th></tr></thead>
+    <tbody>
+      <tr><td class="s">Compra dentro de la app (Apple / Google)</td><td>Stripe Checkout en el navegador. Si la suscripción se compró en el móvil, la web la muestra en solo lectura con «Gestionar en App Store / Google Play».</td><td><span class="b e">Rediseño</span></td></tr>
+      <tr><td class="s">Restaurar compras</td><td>No existe. Se sustituye por «Ver mi suscripción» que lee el estado real de la base de datos.</td><td><span class="b e">Se elimina</span></td></tr>
+      <tr><td class="s">Escanear calendario / ranking con la cámara</td><td>Zona de arrastrar y soltar imagen o PDF, más pegar desde el portapapeles. Misma edge function <code>parse-image</code> por detrás.</td><td><span class="b w">Adaptación</span></td></tr>
+      <tr><td class="s">Foto del partido desde la galería</td><td>Input de archivo con recorte, mismo bucket de Storage.</td><td><span class="b w">Adaptación</span></td></tr>
+      <tr><td class="s">Compartir nativo (expo-sharing)</td><td>Web Share API donde exista, con descarga de PNG como alternativa. La tarjeta se genera en canvas en vez de view-shot.</td><td><span class="b w">Adaptación</span></td></tr>
+      <tr><td class="s">Notificaciones push de Expo</td><td>Web Push opcional. La campanita in-app funciona igual porque ya es server-side.</td><td><span class="b w">Adaptación</span></td></tr>
+      <tr><td class="s">Hojas inferiores (BottomSheet)</td><td>Modal centrado en desktop, drawer inferior en móvil. Mismo contenido.</td><td><span class="b m">Equivalente</span></td></tr>
+      <tr><td class="s">Tab bar inferior con blur</td><td>Sidebar en desktop; en móvil se conserva la tab bar tal cual.</td><td><span class="b m">Equivalente</span></td></tr>
+      <tr><td class="s">Tocar dos jugadores para intercambiar</td><td>Drag &amp; drop real entre pistas y banquillo, más el modo tap como alternativa accesible.</td><td><span class="b">Mejora</span></td></tr>
+      <tr><td class="s">Rejilla de horario de torneo apretada</td><td>Rejilla completa pistas × horas visible de una vez, arrastrar partidos entre huecos.</td><td><span class="b">Mejora</span></td></tr>
+      <tr><td class="s">Cuadro KO con scroll incómodo</td><td>Cuadro completo con líneas conectoras y zoom.</td><td><span class="b">Mejora</span></td></tr>
+      <tr><td class="s">Listas de clasificación</td><td>Tablas densas ordenables por columna, con filtros persistentes en la URL.</td><td><span class="b">Mejora</span></td></tr>
+      <tr><td class="s">Sign in with Apple nativo</td><td>Sign in with Apple JS. Google OAuth ya funciona vía <code>login.tactium.io</code> — hay que añadir la URL de la web a los redirect URIs.</td><td><span class="b w">Config</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note w">
+    <p><strong>Regla de oro para no romper el negocio:</strong> la web <strong>no</strong> puede cobrar suscripciones de usuarios que ya pagan por App Store o Google Play, ni al revés. El estado de la suscripción vive en la base de datos y ya se reconcilia con RevenueCat; la web solo lee ese estado y, si no hay ninguna suscripción, ofrece Stripe. Cualquier otra cosa genera suscripciones duplicadas.</p>
+  </div>
+</section>
+
+<!-- ══════════ IA ══════════ -->
+<section id="ia">
+  <h2><span class="num">04</span>Arquitectura de información</h2>
+  <p class="sub">Rutas de la web y navegación por rol. Una URL por pantalla: eso es lo que la app móvil no puede dar y la web sí.</p>
+
+  <h4>Navegación de la barra lateral, según rol</h4>
+  <div class="grid g2">
+    <div class="card">
+      <p class="kicker">Capitán / jugador de equipo</p>
+      <p class="mono" style="font-size:12.5px;color:var(--text-muted);margin:0">Inicio · Temporadas · Equipo · Torneos · Federación · Stats · Comunidad · Perfil</p>
+    </div>
+    <div class="card">
+      <p class="kicker">Admin de club</p>
+      <p class="mono" style="font-size:12.5px;color:var(--text-muted);margin:0">Club · Equipos · Torneos · Horarios · Federación · Facturación · Comunidad · Perfil</p>
+    </div>
+    <div class="card">
+      <p class="kicker">Jugador suelto</p>
+      <p class="mono" style="font-size:12.5px;color:var(--text-muted);margin:0">Mi pádel · Amistosos · Stats · Torneos · Comunidad · Perfil</p>
+    </div>
+    <div class="card">
+      <p class="kicker">Público (sin sesión)</p>
+      <p class="mono" style="font-size:12.5px;color:var(--text-muted);margin:0">Perfiles públicos · Torneos abiertos · Federación · Login</p>
+    </div>
+  </div>
+
+  <h4>Mapa de rutas</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Ruta</th><th>Pantalla</th><th>Acceso</th></tr></thead>
+    <tbody>
+      <tr><td class="n mono">/</td><td>Inicio (capitán) o Mi pádel (suelto)</td><td>Sesión</td></tr>
+      <tr><td class="n mono">/entrar · /alta · /recuperar</td><td>Login · Registro · Recuperar contraseña</td><td>Público</td></tr>
+      <tr><td class="n mono">/empezar</td><td>OnboardingChoice y altas</td><td>Nuevo</td></tr>
+      <tr><td class="n mono">/temporadas · /temporadas/[id]</td><td>Temporadas · Detalle</td><td>Equipo</td></tr>
+      <tr><td class="n mono">/jornada/[id]</td><td>Jornada</td><td>Equipo</td></tr>
+      <tr><td class="n mono">/jornada/[id]/alineacion</td><td>Alineación · lienzo ancho</td><td>Equipo</td></tr>
+      <tr><td class="n mono">/jornada/[id]/disponibilidad</td><td>Disponibilidad</td><td>Equipo</td></tr>
+      <tr><td class="n mono">/jornada/[id]/resultados</td><td>Resultados</td><td>Equipo</td></tr>
+      <tr><td class="n mono">/equipo · /equipo/ajustes</td><td>Plantilla · Editar equipo</td><td>Equipo</td></tr>
+      <tr><td class="n mono">/club · /club/equipos · /club/equipos/[id]</td><td>Dashboard · Equipos · Preview</td><td>Club</td></tr>
+      <tr><td class="n mono">/club/horarios · /club/facturacion</td><td>Horarios de local · Facturación</td><td>Club</td></tr>
+      <tr><td class="n mono">/torneos · /torneos/[id]</td><td>Explorar · Detalle</td><td>Público / Club</td></tr>
+      <tr><td class="n mono">/torneos/[id]/inscripcion</td><td>Ficha de inscripción</td><td>Público</td></tr>
+      <tr><td class="n mono">/torneos/[id]/horario</td><td>Rejilla de horario · lienzo ancho</td><td>Club</td></tr>
+      <tr><td class="n mono">/torneos/[id]/cuadro</td><td>Cuadro KO · lienzo ancho</td><td>Público</td></tr>
+      <tr><td class="n mono">/federacion · /federacion/[fed]</td><td>Selector · Explorar</td><td>Público</td></tr>
+      <tr><td class="n mono">/federacion/[fed]/grupo|equipo|jugador/[id]</td><td>Grupo · Equipo · Jugador</td><td>Público</td></tr>
+      <tr><td class="n mono">/comunidad · /u/[username]</td><td>Buscar · Perfil público</td><td>Público</td></tr>
+      <tr><td class="n mono">/novedades</td><td>Feed</td><td>Sesión</td></tr>
+      <tr><td class="n mono">/amistosos · /amistosos/[id] · /amistosos/nuevo</td><td>Lista · Detalle · Registrar</td><td>Sesión</td></tr>
+      <tr><td class="n mono">/stats</td><td>Mis estadísticas</td><td>Sesión</td></tr>
+      <tr><td class="n mono">/ajustes · /ajustes/datos · /ajustes/suscripcion</td><td>Ajustes · Mis datos · Suscripción</td><td>Sesión</td></tr>
+      <tr><td class="n mono">/pro</td><td>Paywall web (Stripe)</td><td>Sesión</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ══════════ DS ══════════ -->
+<section id="ds">
+  <h2><span class="num">05</span>Sistema de diseño web</h2>
+  <p class="sub">Los valores exactos de <code>colors.ts</code>, ya traducidos a variables CSS. Esta página los usa: dale al toggle de arriba.</p>
+
+  <h4>Modo oscuro</h4>
+  <div class="grid g4">
+    <div class="sw"><div class="chip" style="background:#030F0F"></div><div class="lbl"><b>bg</b>#030F0F</div></div>
+    <div class="sw"><div class="chip" style="background:#081818"></div><div class="lbl"><b>bg-raised</b>#081818</div></div>
+    <div class="sw"><div class="chip" style="background:#0C2222"></div><div class="lbl"><b>bg-card</b>#0C2222</div></div>
+    <div class="sw"><div class="chip" style="background:#0F2A28"></div><div class="lbl"><b>bg-card-2</b>#0F2A28</div></div>
+    <div class="sw"><div class="chip" style="background:#00DF82"></div><div class="lbl"><b>accent</b>#00DF82</div></div>
+    <div class="sw"><div class="chip" style="background:#03624C"></div><div class="lbl"><b>primary</b>#03624C</div></div>
+    <div class="sw"><div class="chip" style="background:#E8F5EF"></div><div class="lbl"><b>text</b>#E8F5EF</div></div>
+    <div class="sw"><div class="chip" style="background:#001810"></div><div class="lbl"><b>text-inverse</b>#001810</div></div>
+  </div>
+
+  <h4>Modo claro</h4>
+  <div class="grid g4">
+    <div class="sw"><div class="chip" style="background:#F4F7F5"></div><div class="lbl"><b>bg</b>#F4F7F5</div></div>
+    <div class="sw"><div class="chip" style="background:#FFFFFF"></div><div class="lbl"><b>bg-card</b>#FFFFFF</div></div>
+    <div class="sw"><div class="chip" style="background:#EEF3F0"></div><div class="lbl"><b>bg-card-2</b>#EEF3F0</div></div>
+    <div class="sw"><div class="chip" style="background:#00995E"></div><div class="lbl"><b>accent</b>#00995E</div></div>
+    <div class="sw"><div class="chip" style="background:#03624C"></div><div class="lbl"><b>primary</b>#03624C</div></div>
+    <div class="sw"><div class="chip" style="background:#0E1A14"></div><div class="lbl"><b>text</b>#0E1A14</div></div>
+    <div class="sw"><div class="chip" style="background:#B7791F"></div><div class="lbl"><b>warning</b>#B7791F</div></div>
+    <div class="sw"><div class="chip" style="background:#D93B41"></div><div class="lbl"><b>error</b>#D93B41</div></div>
+  </div>
+
+  <div class="note" style="margin-top:22px">
+    <p><strong>El detalle que hace o rompe la fidelidad:</strong> en modo claro el verde de marca <em>no</em> es <code>#00DF82</code> — no pasa contraste sobre blanco. Es <code>#00995E</code>. Y los glows verdes, que en oscuro son la firma visual, <strong>desaparecen</strong> en claro: el modo claro se sostiene con sombras neutras suaves y hairlines, no con resplandor. Si Claude Design te devuelve un modo claro con halos verdes, está mal.</p>
+  </div>
+
+  <h4>Tipografía</h4>
+  <div class="grid g2">
+    <div class="card">
+      <p class="kicker">Satoshi · titulares y UI</p>
+      <div style="font-size:34px;font-weight:900;letter-spacing:-.03em;line-height:1.05;color:var(--text)">Jornada 14<br>vs CD Norte</div>
+      <p style="margin-top:12px;font-size:13.5px">400 cuerpo · 500 chrome · 700 títulos · 900 display. Tracking −0.02em en titulares, line-height 1.02–1.1.</p>
+    </div>
+    <div class="card">
+      <p class="kicker">JetBrains Mono · datos</p>
+      <div class="mono" style="font-size:13px;letter-spacing:.10em;color:var(--accent);line-height:2">JORNADA · J·14 · ALINEACIÓN<br>4600 PTS · 6-3 6-4 · 12/16<br>4,99 €/MES · 100% · 2ª</div>
+      <p style="margin-top:12px;font-size:13.5px">Eyebrows a 11px con 0.25em de tracking. Datos inline a 0.10em. Siempre <code>tabular-nums</code>.</p>
+    </div>
+  </div>
+
+  <h4>Escala, radios y movimiento</h4>
+  <div class="grid g3">
+    <div class="card"><p class="kicker">Radios</p><p class="mono" style="font-size:12px;margin:0;color:var(--text-muted)">sm 8 · md 12 · lg 16 · xl 24 · pill ∞</p></div>
+    <div class="card"><p class="kicker">Espaciado</p><p class="mono" style="font-size:12px;margin:0;color:var(--text-muted)">4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96</p></div>
+    <div class="card"><p class="kicker">Movimiento</p><p class="mono" style="font-size:12px;margin:0;color:var(--text-muted)">140 / 220 / 460 ms<br>cubic-bezier(.25,1,.5,1)</p></div>
+  </div>
+</section>
+
+<!-- ══════════ TANDAS ══════════ -->
+<section id="tandas">
+  <h2><span class="num">06</span>Plan de tandas</h2>
+  <p class="sub">13 tandas + el prompt de sistema. Cada tanda es una conversación con Claude Design, en este orden. No las mezcles: Claude Design rinde mucho mejor con un objetivo por conversación.</p>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Tanda</th><th>Pantallas</th><th>Por qué en este orden</th></tr></thead>
+    <tbody>
+      <tr><td class="n">0</td><td class="s">Contexto de sistema</td><td class="n">—</td><td>Se pega al principio de <strong>todas</strong> las conversaciones.</td></tr>
+      <tr><td class="n">1</td><td class="s">Shell + estados</td><td class="n">Base</td><td>Define el marco: sidebar, topbar, tab móvil, vacíos, skeletons, toasts. Todo lo demás vive dentro.</td></tr>
+      <tr><td class="n">2</td><td class="s">Entrada y alta</td><td class="n">A1–A7</td><td>Es lo primero que ve un usuario nuevo y donde se fija el tono.</td></tr>
+      <tr><td class="n">3</td><td class="s">Inicio</td><td class="n">B1, H1</td><td>El panel principal de los dos perfiles.</td></tr>
+      <tr><td class="n">4</td><td class="s">Jornada y resultados</td><td class="n">B2, B5</td><td>El flujo con más uso real.</td></tr>
+      <tr><td class="n">5</td><td class="s">Alineación</td><td class="n">B3</td><td>Pantalla estrella. Merece una conversación entera.</td></tr>
+      <tr><td class="n">6</td><td class="s">Disponibilidad y plantilla</td><td class="n">B4, B6</td><td>Cierra el ciclo del capitán.</td></tr>
+      <tr><td class="n">7</td><td class="s">Temporadas</td><td class="n">C1, C2</td><td>Estructura sobre la que cuelga todo.</td></tr>
+      <tr><td class="n">8</td><td class="s">Club</td><td class="n">D1–D5</td><td>Segundo rol completo.</td></tr>
+      <tr><td class="n">9</td><td class="s">Torneos · entrada</td><td class="n">E1, E2, E4</td><td>Explorar, crear e inscribirse.</td></tr>
+      <tr><td class="n">10</td><td class="s">Torneos · lienzos</td><td class="n">E3, E5</td><td>Cuadro KO y rejilla de horario: el mayor salto frente al móvil.</td></tr>
+      <tr><td class="n">11</td><td class="s">Federación</td><td class="n">F1–F5</td><td>Tablas densas y buscador. Mucho SEO público.</td></tr>
+      <tr><td class="n">12</td><td class="s">Social, perfil y stats</td><td class="n">G1–G3, H2–H4, I1</td><td>La capa que engancha.</td></tr>
+      <tr><td class="n">13</td><td class="s">Cuenta y facturación</td><td class="n">I2–I5, D6</td><td>Lo último porque depende de decidir Stripe.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ══════════ PROMPTS ══════════ -->
+<section id="prompts">
+  <h2><span class="num">07</span>Los prompts</h2>
+  <p class="sub">Copia y pega. El 0 va siempre primero; después, el de la tanda que toque.</p>
+
+<!-- P0 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Prompt 0</span><span class="ttl">Contexto de sistema · pegar SIEMPRE primero</span><button class="cp">Copiar</button></div>
+  <pre>Vas a diseñar la APLICACIÓN WEB de TACTIUM. Te paso el sistema completo. Síguelo al pie de la letra: no inventes colores, fuentes ni componentes fuera de lo descrito.
+
+═══ QUÉ ES TACTIUM ═══
+App de gestión de equipos de pádel federado en España, ya en producción en iOS y Android. Ahora la llevamos a navegador. Resuelve un problema concreto: montar la alineación oficial de cada jornada respetando el orden por puntos FEP y comunicarla al equipo. Encima tiene: temporadas y actas, administración de clubes con varios equipos, horarios de pista, torneos completos (grupos, cuadros, horarios), datos en vivo de la Federación Cántabra de Pádel, partidos amistosos, estadísticas personales y una capa social de seguir/feed/perfil público.
+
+Cuatro roles: jugador suelto · jugador de equipo · capitán · administrador de club.
+
+═══ ARQUETIPO Y TONO ═══
+"The Strategist". Mission control deportivo, no un SaaS genérico.
+Referencias visuales: Linear, Vercel, Raycast, Stripe Dashboard, Framer.
+Palabras clave que siempre deben sentirse: Preciso · Táctico · Moderno · Competitivo · Minimal · Alto rendimiento · Estructurado · Premium-tech.
+
+PROHIBIDO: estética gamer · casual · corporativa aburrida · emojis (jamás, en ningún sitio) · glassmorphism · fotografía de stock · gradientes arcoíris · animaciones con rebote o spring.
+
+═══ IDIOMA Y COPY ═══
+Español de España, tuteo (nunca "usted").
+Glosario obligatorio, usa exactamente estas palabras: pista (nunca cancha), pareja (nunca dupla), jornada (nunca "fecha de partido"), capitán/capitana, federación, alineación, plantilla, temporada, puntos FEP.
+
+Reglas de casing:
+- EYEBROWS siempre en MAYÚSCULAS, en mono, tracking 0.25em, con punto medio como separador:
+  "JORNADA · J·14 · ALINEACIÓN", "CLUB · ADMIN", "PRÓXIMA JORNADA", "ZONA DE PELIGRO", "TU PÁDEL"
+- Titulares en frase: "¿Cómo vas a empezar?", "Aún no hay jornadas", "vs CD Norte"
+- Botones = verbo en frase: "Confirmar alineación", "Crear temporada", "Cerrar acta", "Empezar"
+- Números y datos SIEMPRE en mono con tabular-nums: 4600 PTS · 6-3 6-4 · 12/16 · 4,99 € · 100%
+- Separador "·" (punto medio) en vez de comas o barras verticales
+- Microcopy de estado diminuto y exacto: LOCAL · VISITANTE · VALIDADA · PENDIENTE · Acta cerrada · Sin alineación · Sin temporada activa
+- Los párrafos descriptivos van en color muted, nunca a blanco pleno
+- Números con convención española: coma decimal, espacio antes del símbolo de euro
+
+═══ COLOR · DOBLE TEMA OBLIGATORIO ═══
+TACTIUM tiene modo claro y oscuro reales, seleccionables por el usuario. Diseña CADA pantalla pensando en los dos. Muéstrame el oscuro por defecto e incluye un toggle funcional que cambie el atributo data-theme del elemento raíz.
+
+MODO OSCURO (por defecto):
+  --bg:            #030F0F   fondo base, verdoso-negro (NUNCA #000 puro)
+  --bg-raised:     #081818   superficie elevada
+  --bg-card:       #0C2222   tarjetas y módulos
+  --bg-card-2:     #0F2A28   hover de tarjeta / segunda elevación
+  --primary:       #03624C   verde institucional, rellenos tranquilos
+  --primary-dim:   #02463A
+  --accent:        #00DF82   ⭐ verde TACTIUM: CTAs, eyebrows, números clave, focus
+  --accent-dim:    #00B86B
+  --text:          #E8F5EF   (NUNCA #FFF puro)
+  --text-muted:    rgba(232,245,239,0.70)
+  --text-faint:    rgba(232,245,239,0.50)
+  --text-inverse:  #001810   texto sobre botón verde
+  --hair:          rgba(232,245,239,0.06)
+  --hair-strong:   rgba(232,245,239,0.10)
+  --warning:       #F2C94C
+  --error:         #FF6B6B
+  --accent-10/25/40: rgba(0,223,130, .10 / .25 / .40)
+
+MODO CLARO (mismas claves, otros valores):
+  --bg:            #F4F7F5
+  --bg-raised:     #FFFFFF
+  --bg-card:       #FFFFFF
+  --bg-card-2:     #EEF3F0
+  --primary:       #03624C
+  --primary-dim:   #024A39
+  --accent:        #00995E   ⚠️ NO es #00DF82: ese verde no pasa contraste en claro
+  --accent-dim:    #007D4D
+  --text:          #0E1A14
+  --text-muted:    rgba(14,26,20,0.64)
+  --text-faint:    rgba(14,26,20,0.42)
+  --text-inverse:  #FFFFFF
+  --hair:          rgba(14,26,20,0.08)
+  --hair-strong:   rgba(14,26,20,0.14)
+  --warning:       #B7791F
+  --error:         #D93B41
+  --accent-10/25/40: rgba(0,153,94, .10 / .22 / .38)
+
+REGLAS DE COLOR INNEGOCIABLES:
+1. Un solo elemento accent dominante por viewport. Nunca dos tonos compitiendo.
+2. warning y error solo donde sea semánticamente obligatorio (empate, W.O., error de validación, zona de peligro).
+3. Los GLOWS verdes son la firma del modo oscuro y DESAPARECEN en modo claro. El modo claro se sostiene con sombras neutras suaves y hairlines. Un modo claro con halos verdes está mal hecho.
+4. Nada de gradientes salvo, muy sutil, accent → primary.
+
+═══ TIPOGRAFÍA ═══
+- Satoshi (400, 500, 700, 900) para UI, titulares y cuerpo.
+  Cárgala así: https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap
+- JetBrains Mono (400, 500, 700) para eyebrows, datos tabulares, marcadores, puntos, códigos y precios.
+  Cárgala de Google Fonts.
+- Titulares: peso 700–900, letter-spacing −0.02em, line-height 1.02–1.1.
+- Eyebrows mono: 11px, letter-spacing 0.25em, uppercase, color accent.
+- Datos mono inline: letter-spacing 0.10em, font-variant-numeric: tabular-nums.
+- Sin serifas. Sin fuentes decorativas. Solo estas dos familias.
+
+═══ SUPERFICIES, SOMBRAS, HAIRLINES ═══
+Radios: sm 8px (chips) · md 12px (píldoras, segmentados) · lg 16px (tarjetas) · xl 24px (paneles, modales) · pill 999px (CTAs, tabs).
+Espaciado, múltiplos de 4: 4 8 12 16 24 32 48 64 96.
+
+Una tarjeta TACTIUM en oscuro:
+  background: var(--bg-card); border-radius: 16px; padding: 16–24px;
+  box-shadow: 0 20px 50px -15px rgba(0,0,0,.60), inset 0 0 0 1px rgba(255,255,255,.04);
+La misma en claro:
+  box-shadow: 0 10px 30px -12px rgba(14,26,20,.14), inset 0 0 0 1px rgba(14,26,20,.05);
+
+Estado seleccionado: el hairline interior pasa a borde accent de 1.5px.
+Hover: sube el fondo a --bg-card-2, el hairline pasa a accent-40, la tarjeta se eleva 1–2px.
+Press: vuelve a plano, sin encogerse (nada de "tap shrink").
+Disabled: 40% de opacidad, sin cursor pointer.
+Focus: anillo de 2px del accent con 2px de offset. Obligatorio y visible: mucha gente usará la web con teclado.
+
+CTA primario: relleno accent, texto --text-inverse, peso 700, radio pill, sombra 0 8px 24px -6px del accent al 40%.
+CTA secundario: solo borde hairline-strong, fondo transparente; al hover el borde pasa a accent-40 y el fondo a accent-10.
+
+═══ LAYOUT DE LA WEB · HÍBRIDO ═══
+Shell persistente:
+- ESCRITORIO (≥1024px): barra lateral fija de 240px a la izquierda con logo arriba, navegación según rol, selector de equipo, y perfil abajo. Barra superior de 64px con el título de la sección, buscador (atajo ⌘K), campanita de avisos con contador de no leídos, toggle de tema y avatar. Contenido con ancho máximo de 1280px sobre rejilla de 12 columnas.
+- TABLET (640–1023px): la barra lateral colapsa a 72px, solo iconos con tooltip.
+- MÓVIL (menos de 640px): sin barra lateral. Tab bar inferior flotante idéntica a la de la app: forma de píldora, fondo con blur, halo accent detrás del elemento activo que engloba icono y etiqueta. Barra superior compacta.
+
+Las PANTALLAS-HERRAMIENTA usan lienzos anchos que en móvil no caben. Es la razón de existir de la web:
+- Alineación: pistas a la izquierda, banquillo a la derecha, arrastrar y soltar de verdad.
+- Horario de torneo: rejilla pistas × horas visible entera, arrastrar partidos entre huecos.
+- Cuadro eliminatorio: columnas por ronda con líneas conectoras.
+- Clasificaciones: tablas densas ordenables por columna.
+
+═══ ICONOGRAFÍA ═══
+Solo Lucide. Grosor de trazo 1.5–2, tamaños 16–24px, terminaciones redondeadas.
+Color: accent si está activo o es CTA; text-muted si es cromo. NUNCA blanco puro, nunca multicolor.
+Cero emoji. Los separadores decorativos son "·", úsalo con generosidad.
+
+═══ MOVIMIENTO ═══
+Easing cubic-bezier(0.25, 1, 0.5, 1). Duraciones: 140ms hover · 220ms base · 460ms revelados.
+Sin rebote, sin spring, sin overshoot. Movimiento de laboratorio: limpio y seguro.
+Respeta siempre prefers-reduced-motion: reduce.
+
+═══ QUÉ QUIERO QUE ME ENTREGUES ═══
+HTML estático autocontenido por pantalla, con todos los tokens como custom properties de CSS y un toggle real de tema que cambie data-theme entre "light" y "dark". Sin dependencias externas más allá de las dos fuentes y los iconos de Lucide.
+
+Para CADA pantalla, incluye siempre estos tres estados:
+1. Con datos reales (usa exactamente los que te dé en cada tanda)
+2. Estado vacío, con el texto exacto que te indique
+3. Estado de carga con skeletons
+
+Y muéstrame cada pantalla en escritorio y en móvil.
+
+Confirma que lo has entendido con una frase y espera a que te pase la primera tanda de pantallas.</pre>
+</div>
+
+<!-- P1 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 1</span><span class="ttl">Shell de la aplicación y estados base</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 1 · EL MARCO. Todo lo demás vivirá dentro de esto, así que quiero cerrarlo primero.
+
+Diseña:
+
+1) BARRA LATERAL (escritorio, 240px)
+   - Arriba: marca TACTIUM. Logotipo = cuadrado redondeado de 26px con fondo --primary y una "T" en --accent, junto al texto "TACTIUM" en Satoshi 900. Detalle de marca: el punto de la "I" es un CUADRADO en color accent. Es el único acento dentro del logotipo.
+   - Navegación por rol. Genera las cuatro variantes:
+     · Capitán: Inicio · Temporadas · Equipo · Torneos · Federación · Stats · Comunidad
+     · Club: Club · Equipos · Torneos · Horarios · Federación · Facturación · Comunidad
+     · Jugador suelto: Mi pádel · Amistosos · Stats · Torneos · Comunidad
+     · Jugador de equipo: Inicio · Equipo · Stats · Torneos · Federación · Comunidad
+   - Elemento activo: fondo accent-10, hairline accent-40 a la izquierda, icono y texto en accent.
+   - SELECTOR DE EQUIPO justo debajo de la navegación: botón con el escudo del equipo, su nombre y un chevron. Al abrirlo, lista de equipos con el activo marcado y opción "Crear equipo".
+   - Abajo del todo: avatar + nombre + rol ("Capitán" / "Jugador" / "Club · Admin") y acceso a Ajustes.
+
+2) BARRA SUPERIOR (64px)
+   - Título de la sección a la izquierda con su eyebrow encima.
+   - Buscador central con placeholder "Busca jugadores, equipos o torneos" y la pista de atajo ⌘K a la derecha del campo.
+   - A la derecha: campanita con contador de no leídos (punto accent con número en mono), toggle de tema (sol/luna), avatar.
+
+3) TAB BAR MÓVIL
+   Flotante sobre el contenido, forma de píldora, fondo con blur, hairline superior. Máximo 5 destinos con icono y etiqueta debajo. El activo lleva un halo accent redondeado que engloba icono Y etiqueta (no solo el icono). Etiquetas: Inicio · Temporadas · Equipo · Stats · Perfil.
+
+4) PANEL DE AVISOS (al pulsar la campanita)
+   Popover en escritorio, drawer inferior en móvil. Título "AVISOS". Cada aviso: icono, texto, tiempo relativo en mono ("hace 2 h"), punto accent si no está leído. Ejemplos reales:
+   - "Marco se ha unido a Halcones A"
+   - "El capitán ha publicado la alineación de la J14"
+   - "Quedan 3 días para crear la alineación"
+   - "Sara ha empezado a seguirte"
+   Estado vacío: "Aún no hay avisos".
+
+5) ESTADOS TRANSVERSALES, uno de cada:
+   - Estado vacío genérico: icono grande en text-faint, titular en frase, una línea muted, un CTA. Ejemplo: "Aún no hay jornadas" / "El capitán todavía no ha planificado jornadas." / botón "Crear temporada".
+   - Skeleton de carga: barras con el fondo a --bg-card-2 y un barrido suave. Nada de spinners salvo en botones.
+   - Toast: aparece abajo a la derecha en escritorio, arriba en móvil. Tres variantes: éxito ("Alineación confirmada"), aviso ("Algunos no se marcaron"), error ("No se pudo guardar · Inténtalo de nuevo.").
+   - Banner de sin conexión: barra fina fija arriba, "Sin conexión · algunos datos pueden estar desactualizados".
+   - Banner de prueba a punto de expirar: "Tu prueba termina en 3 días" con CTA "Ver planes".
+   - Modal de confirmación destructiva: título "¿Eliminar jornada?", cuerpo muted, botón "Cancelar" secundario y "Eliminar" en --error.
+
+6) FONDO AMBIENTAL
+   Reproduce el de la app: dos gradientes radiales sobre el fondo base, uno de --primary al 55% de opacidad centrado arriba (50% 22%, radio 60%) y otro de --accent al 18% abajo a la izquierda (22% 86%, radio 55%), ambos desvaneciendo a transparente. En MODO CLARO redúcelos a la cuarta parte de intensidad o quítalos: en claro el fondo es liso.
+
+Entrégame el shell completo montado, con contenido de ejemplo dentro, en escritorio y en móvil, y con el toggle de tema funcionando.</pre>
+</div>
+
+<!-- P2 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 2</span><span class="ttl">Entrada y alta · 7 pantallas</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 2 · ENTRADA Y ALTA. Estas pantallas NO llevan el shell: son a pantalla completa, centradas, con el fondo ambiental a máxima intensidad. Es donde se fija el tono de la marca.
+
+1) BIENVENIDA — carrusel de 4 slides, con paginación de puntos y botones "Saltar" y "Continuar" (el último dice "Empezar").
+   Eyebrow superior fijo: "CREATE · ANALYZE · ELEVATE". Pie: "PADEL FIRST · SPORTS ALWAYS".
+   Titulares, uno por slide, a dos líneas y en Satoshi 900:
+     · "El laboratorio táctico de tu equipo"
+     · "Crea parejas que ganan"
+     · "Sabe quién juega en segundos"
+     · "Lleva el control de la liga"
+     · "Tus partidos, tus números"
+   Cada slide lleva a la derecha una ilustración de interfaz abstracta hecha solo con los tokens (nada de fotos): tarjetas de pareja apiladas con "Jugador 01 · Drive · 2400", un anillo de progreso con "68% DE VICTORIAS", una barra de disponibilidad "12/16", un chip "TEMPORADA 25/26". En escritorio, dos columnas: texto a la izquierda, visual a la derecha; en móvil apilado.
+
+2) ACCESO — una sola pantalla con dos modos, iniciar sesión y crear cuenta, alternables con un enlace inferior.
+   Iniciar sesión: eyebrow "INICIAR SESIÓN", titular "Accede a tu equipo y planifica la próxima jornada.", campos Email y Contraseña, enlace "¿Olvidaste?" a la derecha del campo de contraseña, CTA "Iniciar sesión", separador con hairline, botones "Continuar con Apple" y "Continuar con Google" en estilo secundario, y abajo "¿Nuevo aquí? Crea una cuenta".
+   Crear cuenta: eyebrow "CREAR CUENTA", titular "Configura tu cuenta y empieza a gestionar tu equipo.", campos Nombre (placeholder "Carlos Pérez"), Email y Contraseña (nota "Mínimo 6 caracteres"), CTA "Crear cuenta", y "¿Ya tienes cuenta? Inicia sesión".
+   Incluye los estados de error inline: "Email inválido", "Mínimo 6 caracteres", "No se pudo iniciar sesión".
+   Incluye también el modal "Recuperar contraseña" con un campo de email, CTA "Enviar" y estado de éxito "Email enviado".
+
+3) ¿CÓMO VAS A EMPEZAR? — eyebrow "BIENVENIDO", titular "¿Cómo vas a empezar?", subtítulo "Crea tu equipo o tu club".
+   Cuatro tarjetas grandes, seleccionables, cada una con su etiqueta en la esquina:
+     · "Equipo independiente" — etiqueta "RÁPIDO" — "Tú gestionas, tú alineas. Listo en 2 minutos." — pie "Tras prueba: 4,99 €/mes"
+     · "Club con varios equipos" — etiqueta "ESCALABLE" — "Para clubes con múltiples equipos y capitanes." — pie "Tras prueba: desde 11,99 €/mes"
+     · "Me han invitado a un equipo" — etiqueta "SOY JUGADOR" — campo para el código de invitación
+     · "Juego por mi cuenta" — etiqueta "GRATIS" — "Registra tus partidos y mira tus números."
+   Al seleccionar una, borde accent de 1.5px. CTA inferior "Empezar". Abajo, discreto, "Cerrar sesión".
+
+4) CREAR EQUIPO — formulario: Nombre del equipo, Género (segmentado Masculino / Femenino / Mixto), Categoría, Competición (con opción "Liga por equipos absoluta" y campo libre "Liga interempresas, liga del club…"), Federación y Grupo (desplegables, con estado "Sin grupos"), Partidos por jornada (stepper numérico), Orden de fuerza (segmentado "Se valida" / "Libre", con nota "Podrás alinear las parejas en el orden que quieras."). CTA "Crear equipo".
+
+5) CREAR CLUB — Nombre del club, Ciudad, subida de escudo (zona de arrastrar y soltar circular con "Añadir foto"). CTA "Crear club".
+
+6) CREAR EQUIPOS DEL CLUB — alta en lote: filas repetibles con Nombre, Género y Categoría, botón "Añadir otro equipo", contador "3 equipos". CTA "Crear equipos".
+
+7) AÑADIR JUGADORES — tabla editable con columnas NOMBRE · PUNTOS FEP · POSICIÓN (Drive / Revés / Ambos), fila para añadir al final, contador "8 jugadores". A la derecha, tarjeta destacada: "Escanear ranking" con zona de arrastrar y soltar — "Arrastra una imagen o un PDF del ranking FEP, o pega desde el portapapeles" — más "Importar desde la Federación Cántabra". CTA "Continuar". Estado vacío: "Plantilla vacía".
+
+Dame las 7 en escritorio y en móvil, en los dos temas.</pre>
+</div>
+
+<!-- P3 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 3</span><span class="ttl">Inicio · capitán y jugador suelto</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 3 · LOS DOS PANELES DE INICIO. Con el shell de la tanda 1.
+
+1) INICIO DEL CAPITÁN — rejilla de 12 columnas.
+   Eyebrow "INICIO". Titular con el nombre del equipo: "Halcones A".
+
+   Bloque principal, 8 columnas: TARJETA DE JORNADA PENDIENTE.
+     Eyebrow "JORNADA PENDIENTE". Titular "Jornada 14 · vs CD Pádel Norte".
+     Metadatos en mono: "sáb 12 jul · 10:00 · LOCAL · Club Smash, Pista Central".
+     Tres indicadores en fila, con etiqueta mono arriba y número grande en mono:
+       DISPONIBLES 12/16 (con barra de progreso accent)
+       ESTADO · Alineación pendiente (chip warning)
+       PARTIDOS 5 pistas
+     Dos CTAs: "Crear alineación" (primario) y "Abrir jornada" (secundario).
+
+   Columna lateral, 4 columnas: MI DISPONIBILIDAD.
+     Eyebrow "MI DISPONIBILIDAD". Texto "Marca si puedes jugar la próxima jornada".
+     Dos botones grandes tipo toggle: "Disponible" y "No puedo". El seleccionado con borde accent.
+     Debajo: "Juegas la P2 con Marco" cuando ya hay alineación publicada.
+
+   Segunda fila: ATAJOS. Eyebrow "ATAJOS". Cuatro tarjetas horizontales con icono, título y una línea muted:
+     · "Escanear calendario" — "Sube la imagen del calendario de tu liga"
+     · "Explorar torneos" — "Busca por zona, club o fecha · o entra con tu código"
+     · "Explorar la Federación" — "Clasificaciones y jornadas de toda la liga"
+     · "Invita a un capitán" — "¿Conoces a otro capitán? Regálale dejar el Excel"
+
+   Tercera fila: PRÓXIMAS JORNADAS, lista compacta de 3 con rival, fecha, chip LOCAL/VISITANTE y estado.
+
+   ESTADOS VACÍOS, diseña los dos:
+     · Sin temporada: "Aún no hay jornadas" / "Crea una temporada activa desde la pestaña Temporadas." / CTA "Crear temporada"
+     · Temporada acabada: "No hay más jornadas programadas" / "Has disputado todas las jornadas del calendario." / CTA "Ver temporada"
+
+2) MI PÁDEL — inicio del jugador suelto.
+   Eyebrow "TU PÁDEL". Titular con el nombre del usuario.
+   Fila de cuatro indicadores en mono grande: PARTIDOS 24 · % DE VICTORIAS 67% · RACHA 3 · MEJOR RACHA 7.
+   Bloque "ÚLTIMOS PARTIDOS": lista de tarjetas de amistoso, cada una con chip de tipo ("AMISTOSO · ENTRE COLEGAS" / "· ENTRENAMIENTO" / "· EQUIPO VS EQUIPO"), resultado en mono grande "6-3 6-4", chip VICTORIA en accent o DERROTA en error, la pareja y la pareja rival, y miniatura de la foto del partido si la hay.
+   Bloque "EMPEZAR": tres tarjetas — "Registrar un amistoso" · "Invita a tus colegas" · "Canjear invitación".
+   Enlace "Ver todas mis stats →".
+   Estado vacío: "Sin partidos todavía" con CTA "Registrar un amistoso".</pre>
+</div>
+
+<!-- P4 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 4</span><span class="ttl">Jornada y resultados</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 4 · JORNADA Y ACTA. Es el flujo con más uso real del producto.
+
+1) JORNADA — cabecera ancha + tres columnas.
+   CABECERA: si hay foto del partido, se usa como fondo con degradado oscuro encima; si no, fondo ambiental.
+   Eyebrow "JORNADA · J·14". Titular "Halcones A vs CD Pádel Norte". Chip LOCAL en accent. Fecha y hora en mono: "sáb 12 jul · 10:00".
+   Acciones en la esquina: "Cambiar foto", "Compartir resultado", menú de más opciones con "Eliminar jornada".
+
+   COLUMNA IZQUIERDA — "Detalles de la jornada", tarjeta con campos editables inline:
+     RIVAL (texto, placeholder "Club Visitante") · FECHA (selector, "Seleccionar fecha") · HORA (selector, "Seleccionar hora") · DÓNDE SE JUEGA (segmentado "En nuestras pistas" / "Fuera de casa") · LUGAR (texto, placeholder "Ej. Club Pádel Indoor, Pista 3").
+     CTA "Guardar cambios". Debajo, botón secundario "Avisa al equipo".
+
+   COLUMNA CENTRAL — "MARCADOR · OBLIGATORIO":
+     Tabla de 5 pistas. Por fila: número de pista en mono, NOSOTROS (nuestra pareja) vs RIVAL, campos de sets, resultado en mono grande.
+     Botones por fila: "Marcar W.O." con submenú "W.O. a favor" / "W.O. en contra".
+     Total abajo: juegos a favor y del rival, y el veredicto.
+     CTA principal "CERRAR ACTA · MANUAL". Aviso si faltan resultados: "Sin todos los resultados".
+     Estados de acta cerrada, diseña los tres: "Acta cerrada · ganada" (accent), "Acta cerrada · perdida" (error), "Acta cerrada · empate" (warning). Con acta cerrada, todo pasa a solo lectura con un candado.
+
+   COLUMNA DERECHA — "Alineación":
+     Vista previa compacta de las 5 parejas con sus puntos en mono. Botones "Ver alineación", "Editar/Crear alineación" y "COMPARTIR ALINEACIÓN".
+     Si no hay: estado vacío "Sin alineación" con CTA "Crear alineación".
+
+   Estados vacíos globales: "Sin jornada activa", "Aún no se pueden cargar resultados", "Aún sin resultados".
+
+2) RESULTADOS — vista dedicada, pensada también para que un JUGADOR meta el resultado de SU partido.
+   Cabecera con "Jornada 14", chips LOCAL y VISITANTE, y los dos nombres de equipo.
+   Lista de pistas. La pista del usuario aparece resaltada arriba con borde accent y el rótulo "TU PARTIDO".
+   Por pista: nuestra pareja, la pareja rival, tres casillas de set con dos campos numéricos cada una, y el veredicto automático VICTORIA/DERROTA.
+   Botones "Listo" y "Cancelar". Estados: "Sin resultado", "Añade los marcadores", "Aún no disponible", "No se pueden modificar resultados.".
+   Tabla resumen al pie: Juegos a favor · Juegos del rival · Tasa V.
+
+Diseña ambas en escritorio y en móvil, y con acta abierta y acta cerrada.</pre>
+</div>
+
+<!-- P5 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 5</span><span class="ttl">Alineación · la pantalla estrella</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 5 · ALINEACIÓN. Esta es LA pantalla de TACTIUM y el mayor motivo para tener versión web: en el móvil se hace tocando dos jugadores; aquí se arrastra de verdad, con todo a la vista. Dedícale todo el cuidado.
+
+LIENZO ANCHO, sin límite de 1280px: que respire hasta 1600px.
+
+CABECERA DE LA HERRAMIENTA (fija al hacer scroll)
+  Eyebrow "JORNADA · J·14 · ALINEACIÓN". Titular "vs CD Pádel Norte".
+  A la derecha: selector de VARIANTES (píldoras "Variante 1", "Variante 2", "+"), con la oficial marcada con un chip accent "OFICIAL". Menú por variante: "Usar", "Eliminar variante".
+  Botones: "GENERAR" (con icono de rayo, primario) · "Vaciar" · "Confirmar alineación" (primario, verde).
+
+ZONA PRINCIPAL, dos columnas 70/30:
+
+  IZQUIERDA — LAS PISTAS
+    Una tarjeta por pista, apiladas. Cabecera de tarjeta: "PISTA 1" en mono, y a la derecha la suma de puntos de la pareja en mono ("4600 PTS").
+    Dentro, dos huecos de jugador uno al lado del otro. Cada hueco ocupado muestra: avatar circular, nombre, posición ("Drive" o "Revés") y puntos en mono. Cada hueco vacío muestra un contorno discontinuo con "Vacío" y "Arrastra un jugador aquí".
+    La pareja de la pista 1 es la más fuerte; el orden se valida por puntos. Si el usuario coloca una pareja que rompe el orden, la tarjeta muestra un hairline warning y el texto "Rompe el orden por puntos".
+    Nota bajo las pistas: "Las parejas se ordenan por puntos automáticamente".
+
+  DERECHA — BANQUILLO
+    Panel fijo con título "BANQUILLO" y contador. Buscador para filtrar por nombre. Lista de jugadores disponibles: avatar, nombre, alias entre paréntesis, posición y puntos en mono. Los no disponibles aparecen abajo, atenuados, con chip "BAJA".
+    Cada tarjeta de jugador es arrastrable: cursor grab, y al arrastrar se eleva con sombra fuerte y una ligera rotación.
+
+INTERACCIÓN, diséñala explícitamente y muéstrame los estados:
+  - Arrastrar sobre un hueco vacío: el hueco se ilumina con fondo accent-10 y borde accent.
+  - Arrastrar sobre un hueco ocupado: se propone INTERCAMBIO, con una flecha doble y el texto "Intercambiar con Marco".
+  - Modo alternativo por teclado y tap: al hacer clic en un jugador, se selecciona con borde accent y aparece el aviso "Toca otro jugador para intercambiar · o el banquillo".
+  - Al soltar, transición de 220ms sin rebote.
+
+PANEL DEL GENERADOR (se abre con "GENERAR") — modal en escritorio, drawer en móvil:
+  Título "Generar alineación".
+  Opción con interruptor: "Emparejar Drive + Revés" con la ayuda "Si lo desactivas, empareja solo por nivel".
+  Opción "Orden de parejas": segmentado "Drive + Revés · por fuerza".
+  Vista previa del resultado propuesto antes de aplicar.
+  Botones "APLICAR" y "Cancelar".
+  Estado de aviso: "Alineación generada con avisos" listando qué no ha podido respetar.
+
+DIÁLOGO DE CONFIRMACIÓN al pulsar "Confirmar alineación":
+  Resumen de las 5 parejas, interruptor "Avisar al equipo", botones "Guardar con aviso" y "Guardar igual".
+
+ESTADOS DE BLOQUEO, los tres, como banner sobre la cabecera:
+  - "Solo el capitán puede editar la alineación." (solo lectura)
+  - "Acta cerrada · solo lectura."
+  - "Temporada archivada · alineación en solo lectura."
+
+ESTADO VACÍO: las 5 pistas vacías, banquillo lleno, y un panel central invitando: "Elige una alineación" con los botones "GENERAR" y "Empezar de cero".
+
+VERSIÓN MÓVIL: pistas apiladas a ancho completo, banquillo en un drawer inferior que se despliega, y el modo tap-para-intercambiar como interacción principal.
+
+Además, diseña la TARJETA PARA COMPARTIR que genera "COMPARTIR ALINEACIÓN": formato cuadrado 1080×1080, fondo oscuro con el fondo ambiental, cabecera con el escudo y el nombre del equipo, "JORNADA 14 · vs CD PÁDEL NORTE", las 5 parejas con sus puntos, y la marca TACTIUM discreta abajo. Esta tarjeta va SIEMPRE en oscuro aunque la app esté en claro.</pre>
+</div>
+
+<!-- P6 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 6</span><span class="ttl">Disponibilidad y plantilla</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 6 · DISPONIBILIDAD Y PLANTILLA.
+
+1) DISPONIBILIDAD
+   Eyebrow "DISPONIBILIDAD". Titular "¿Quién está disponible?" para el capitán, "¿Estás disponible?" para el jugador.
+   Barra superior con: contador grande en mono "12/16" y barra de progreso accent, filtros segmentados "Todos" / "Disp." / "Bajas", y botón "Marcar todo".
+   Rejilla de jugadores (4 columnas en escritorio, 1 en móvil). Cada tarjeta: avatar, nombre, alias, puntos en mono, y un control de tres estados — Disponible (accent) / No puedo (error) / Sin marcar (hairline). El jugador que eres tú lleva el chip "SOLO TÚ" o "Soy yo" y su tarjeta va primera con borde accent.
+   Estados: "Marcando…" durante el guardado, aviso "Algunos no se marcaron", error "Revisa la conexión e inténtalo de nuevo.".
+   Estado vacío del filtro: "Nadie en este filtro.". Estado sin vínculo: "Aún no estás vinculado" con CTA "Vincúlate a un jugador".
+
+2) PLANTILLA DEL EQUIPO
+   Eyebrow "EQUIPO". Titular con el nombre. Fila de indicadores: Jugadores 16 · Media 3850 PTS · Victorias 8 · Derrotas 3 · Empates 1 · Tasa V 67%.
+   Barra de acciones: buscador "Buscar jugador" con botón "Limpiar búsqueda", y botones "Añadir jugador", "Escanear calendario", "Escanear ranking", "Importar desde la Federación Cántabra", "Invitar jugadores con código", "Editar equipo".
+   TABLA DENSA ORDENABLE, columnas: NOMBRE · ALIAS · POSICIÓN · PUNTOS FEP · DISPONIBILIDAD · estado. Ordenable por puntos por defecto, descendente. Fila con avatar, chip de posición (Drive / Revés / Ambos), puntos en mono, chip "BAJA" o "NUEVO" cuando toque, y acciones EDITAR / Eliminar al pasar el ratón.
+   PANEL DE EDICIÓN DE JUGADOR (modal / drawer): título "Editar jugador", campos NOMBRE, ALIAS (OPCIONAL) con la ayuda "Cómo le llaman en el equipo", POSICIÓN (segmentado Drive / Revés / Ambos), PUNTOS FEP, foto ("Añadir foto" / "Cambiar foto"), interruptor de baja. Botones "Guardar", "Cancelar" y "Eliminar" en rojo.
+   PANEL DE INVITACIÓN: código grande en mono con botón de copiar, enlace para compartir, y explicación "Comparte el código para que se unan desde la app.".
+   PANEL DE ESCANEO: zona de arrastrar y soltar amplia — "Arrastra una imagen o un PDF, o pega desde el portapapeles" — con vista previa, indicador de análisis, y tabla de resultados detectados que se pueden corregir antes de importar.
+   Estados vacíos: "Plantilla vacía" con CTA "Añadir jugador"; búsqueda sin resultados: "Sin coincidencias".</pre>
+</div>
+
+<!-- P7 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 7</span><span class="ttl">Temporadas</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 7 · TEMPORADAS.
+
+1) TEMPORADAS — lista.
+   Eyebrow "TEMPORADAS". Titular "Temporadas". CTA "Crear nueva temporada".
+   Sección "NUEVA / ACTIVA": tarjeta destacada con borde accent — nombre de la temporada, chip de formato, indicadores en mono (Jornadas 14 · Jugadas 9 · Pendientes 5 · Tasa V 67%), barra de progreso, CTA "Abrir temporada".
+   Sección "HISTÓRICO": tarjetas atenuadas con chip "Archivada" y su balance final.
+   MODAL DE CREACIÓN: campos NOMBRE, FORMATO (tres tarjetas seleccionables: "Liga regular" — "Jornadas en orden"; "Liga + Playoff" — "Formato completo"; "Eliminatorias" — "Playoff"), "NÚMERO DE JORNADAS · OPCIONAL", "NÚMERO DE ELIMINATORIAS · OPCIONAL". Botones "Crear temporada" y "Cancelar". Si ya hay una activa, aviso con la opción "Cerrar y crear nueva".
+   Estados: vacío "Sin temporadas" con CTA "Crear primera temporada"; error "No se pudieron cargar las temporadas" / "Comprueba tu conexión." con botón "Reintentar".
+
+2) DETALLE DE TEMPORADA
+   Cabecera con el nombre, chip de formato y los indicadores: Jornadas · Jugadas · Pendientes/Jugadas · Tasa V.
+   Pestañas: "Jornadas" y "Cuadro" (esta última solo si el formato incluye playoff).
+   JORNADAS: línea temporal vertical. Cada jornada es una fila-tarjeta: número en mono ("J·14"), rival, fecha y hora, chip LOCAL/VISITANTE, lugar, resultado en mono si está cerrada con chip de victoria/derrota/empate, y estado "PRÓXIMA" con borde accent en la siguiente. Acciones EDITAR y Eliminar al pasar el ratón, y enlace "ACTA".
+   MODAL "Crear nueva jornada": RIVAL (placeholder "Club Visitante"), FECHA DEL PARTIDO con selector, HORA DEL PARTIDO con selector, LOCALIZACIÓN (segmentado "En nuestras pistas" / "Fuera de casa"), LUGAR (OPCIONAL). Botones "Crear jornada" y "Cancelar".
+   CUADRO: eliminatorias en columnas por ronda con líneas conectoras.
+   Banner si está archivada: "Temporada archivada" y todo en solo lectura.
+   Estado vacío: "Aún no hay jornadas" con CTA "Añadir jornada".</pre>
+</div>
+
+<!-- P8 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 8</span><span class="ttl">Club · 5 pantallas</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 8 · CLUB. Segundo rol completo. Todo con el eyebrow "CLUB · ADMIN".
+
+1) PANEL DEL CLUB
+   Cabecera con el escudo, el nombre del club y su ciudad. Indicadores: Equipos 6 · Jugadores 84 · Jornadas esta semana 4 · Plan actual.
+   Bloque "EQUIPOS": rejilla de tarjetas de equipo con escudo, nombre, categoría y género, capitán asignado, balance V/E/D en mono, y estado "Sin configurar" cuando falte. Enlace "Gestionar →". CTA "Crear nuevo equipo".
+   Bloque "PRÓXIMAS JORNADAS": tabla compacta con equipo, rival, fecha, chip LOCAL/VISITANTE y estado del horario.
+   Bloque "ÚLTIMOS RESULTADOS": lista con equipo, rival, marcador en mono y chip de victoria/derrota/empate.
+   Accesos: "Horarios de local" e "Importar de la Federación Cántabra".
+   Al final, "ZONA DE PELIGRO": tarjeta con hairline en color error, "Borrar club", explicación de que se elimina todo el contenido, y botón "Borrar club" en error. Estado bloqueado: "Cancela primero la suscripción". El modal de confirmación exige teclear el nombre del club.
+   Estados vacíos: "Aún no hay equipos" con CTA "Crear nuevo equipo"; "Sin club activo.".
+
+2) EQUIPOS DEL CLUB — rejilla ampliada de todos los equipos con filtros por categoría y género, y buscador.
+
+3) VISTA DE EQUIPO (solo lectura para el club)
+   Cabecera del equipo con escudo y datos. Indicadores: Jugadas · Victorias · Empates · Derrotas.
+   Bloque "PRÓXIMA JORNADA" con rival, fecha, chip LOCAL/VISITANTE. Si no hay: "Sin jornadas configuradas" / "El capitán de este equipo añadirá las jornadas.". Si no hay temporada: "Sin temporada activa" / "El capitán debe crear una temporada para empezar.".
+   Plantilla plegable con "Ocultar jugadores" / "Ver jugadores".
+   Enlaces: "Mi grupo (Federación · clasificación y jornadas)" y "Preparar nueva temporada (Federación · plantilla)".
+   Nota permanente: el club administra la estructura, las jornadas y resultados los gestiona el capitán.
+
+4) CREAR EQUIPO DESDE EL CLUB — mismo formulario que la tanda 2 punto 4, en dos columnas: Nombre del equipo (placeholder "Equipo A") · Género · Categoría · Competición · Federación · Grupo · Partidos por jornada · Orden de fuerza. Titular "Configura el equipo", CTA "Crear equipo".
+
+5) HORARIOS DE LOCAL — es un lienzo, no un formulario.
+   Eyebrow "HORARIOS DE LOCAL". Selector de jornada arriba con "Jornada actual" y filtro "Todas".
+   Tabla: una fila por equipo que juega como local. Columnas EQUIPO · DÍA Y HORA (celda editable con formato "D|HH:MM", vacío muestra "Sin fecha · HH:MM") · PISTA / LUGAR · OPCIONAL (placeholder "Pista 1, Central…") · estado.
+   Panel lateral "FRANJAS FAVORITAS POR EQUIPO": por equipo, chips de franjas horarias preferidas; vacío muestra "Sin franjas favoritas". Al asignar una hora, las franjas favoritas del equipo se resaltan en accent y las demás quedan atenuadas, con el rótulo "O ELIGE OTRO DÍA Y HORA".
+   Selector "ELIGE DÍA Y HORA": rejilla de días × horas donde se pincha una celda.
+   CTA "Guardar y avisar al equipo". Éxito: "Horario enviado al equipo". Errores: "No se pudieron cargar", "No se pudo guardar".</pre>
+</div>
+
+<!-- P9 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 9</span><span class="ttl">Torneos · explorar, crear e inscribirse</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 9 · TORNEOS, PRIMERA PARTE.
+
+1) EXPLORAR TORNEOS
+   Eyebrow "TORNEOS". Pestañas "Explorar" y "Mis torneos".
+   Buscador "Busca por nombre, club o lugar" y filtros por estado: Inscripción abierta · Próximos · En juego · Finalizado · Jugados.
+   Rejilla de tarjetas de torneo (3 columnas en escritorio): imagen de portada arriba con degradado, nombre del torneo, club y lugar ("Club Smash · Santander"), fechas en mono ("Sáb 15 – Dom 16 ago" o "Fecha por confirmar"), chips de categorías y géneros, cuota en mono ("15 €"), chip de estado en la esquina superior, y contador de parejas inscritas.
+   Panel lateral "Tengo un código": campo "Ej. K7P2QX" con botón "Vincular". Y bloque "COMPAÑERO/A" con "Tengo un código de compañero" y "Introduce el código de compañero". Éxito: "¡Vinculado!" / "Ya puedes ver el torneo en Mis torneos.". Error: "Revisa el código.".
+   Estados vacíos: "No hay torneos abiertos" / "Prueba con otra búsqueda."; en Mis torneos, "Aún no te has apuntado a ningún torneo".
+
+2) CREAR TORNEO — asistente de 4 pasos con indicador de progreso arriba.
+   PASO 1 · BÁSICOS: NOMBRE (placeholder "Torneo de primavera"), TIPO DE TORNEO (cuatro tarjetas seleccionables con su descripción: "Americano" — "Clasificación por puntos, sets y juegos"; "Cuadro" — "Cuadro a una vida hasta la final, con cabezas de serie"; "Grupos + Cuadro"; "Cuadro con consolación" — "El perdedor de la primera ronda pasa al cuadro de consolación"), LUGAR · OPCIONAL, FOTO DE PORTADA · OPCIONAL con zona de arrastrar y soltar ("Añadir foto del torneo").
+   PASO 2 · CATEGORÍAS Y GÉNEROS: "CATEGORÍAS · ELIGE UNA O VARIAS" y "GÉNERO · ELIGE UNO O VARIOS" (Masculino / Femenino / Mixto / Libre) como chips multiselección. Nota: "Cada categoría tendrá su propio cuadro.". Bloque "LÍMITES POR CATEGORÍA · OPCIONAL": por categoría, dos campos, "PUNTOS ≤" y "NIVEL ≥", para restringir quién puede inscribirse.
+   PASO 3 · FECHAS: FECHA INICIO · OPCIONAL, FECHA FIN · OPCIONAL ("Fin (si dura varios días)"), "DÍAS DE CADA FASE · OPCIONAL" — matriz donde cada fase (grupos, octavos, cuartos, semis, final) se asigna a uno o varios días.
+   PASO 4 · CUOTA Y REGLAS: "CUOTA DE INSCRIPCIÓN (€) · OPCIONAL" con dos campos, "CUOTA · 1 CATEGORÍA (€)" y "CUOTA · 2 CATEGORÍAS (€)". "FORMATO DE PARTIDO". "SIEMBRA" (interruptor de cabezas de serie). "HORAS QUE UN JUGADOR PUEDE QUITAR · OPCIONAL".
+   Botones "Atrás" y "Siguiente"; en el último paso, "Crear torneo".
+   Al crearlo, panel de éxito con el "CÓDIGO DE INSCRIPCIÓN" en mono grande y "Compártelo para que se apunten desde la app.".
+   Lista de torneos del club con chips de estado: Borrador · Inscripción abierta · En juego · Finalizado · Cancelado. Estado vacío: "Aún no hay torneos".
+
+3) FICHA DE INSCRIPCIÓN — formulario público, dos columnas.
+   Cabecera con la portada del torneo, nombre, club, "FECHAS" y "CUOTA" en mono.
+   Si se llega sin contexto: bloque "CÓDIGO DEL TORNEO" con campo "ABC123", botón "Buscar" y la nota "Busca primero el torneo con su código".
+   Columna izquierda: "ELIGE TU CATEGORÍA" y "ELIGE TU GÉNERO" (chips). "TU NOMBRE", "TU EMAIL", "TU TELÉFONO", "TU NIVEL DE LIGA", "TUS PUNTOS".
+   Detalle importante: un chip sugerencia con el rótulo "DETECTADO EN LA FEDERACIÓN" que aparece al escribir el nombre y, al pulsarlo, rellena puntos y nivel. Texto de ayuda: "Toca para rellenar puntos y nivel. Puedes editarlos.".
+   Columna derecha: "TU COMPAÑERO/A" — "Nombre de tu pareja", "EMAIL DE TU COMPAÑERO/A · OPCIONAL", "SU NIVEL DE LIGA", "SUS PUNTOS", con el mismo chip de autodetección. Alternativa: "Tengo un código de compañero".
+   Bloque "HORARIO · DISPONIBILIDAD · FRANJAS DE 1H": rejilla de días × franjas horarias donde marcas cuándo puedes ("Vie 24 18:00–21:00", "Sáb 18:00–21:00"), con contador de horas marcadas y el tope permitido.
+   CTA "Apuntarme al torneo". Éxito: "¡Inscripción hecha!".
+   Si la categoría no admite al jugador por los límites de puntos o nivel, mensaje inline explicando por qué.</pre>
+</div>
+
+<!-- P10 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 10</span><span class="ttl">Torneos · cuadro y rejilla de horario</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 10 · TORNEOS, LIENZOS ANCHOS. Es la pantalla más compleja del producto y donde la web gana por goleada al móvil. Sin límite de 1280px.
+
+DETALLE DE TORNEO — cabecera + pestañas.
+
+CABECERA HERO: imagen de portada a ancho completo con degradado oscuro hacia abajo. Encima: eyebrow "TORNEO · GRUPOS + CUADRO", nombre en Satoshi 900, club y lugar, fechas en mono, chips de categorías y géneros, chip de estado, y la cuota. A la derecha, acciones del organizador: "Editar", "Configurar horario", "Generar eliminatorias", menú con "Borrar torneo". Y el "CÓDIGO DE INSCRIPCIÓN" en mono con botón de copiar.
+
+PESTAÑAS: Inscripciones · Grupos · Clasificación · Cuadro · Horario · Configuración.
+
+1) INSCRIPCIONES — tabla densa: pareja, categoría, género, puntos combinados en mono, estado de pago de la cuota, teléfono y email. Botones "Alta manual" y "Ficha de inscripción". Filtro por categoría.
+
+2) GRUPOS — una tarjeta por grupo, en rejilla. Dentro, la lista de parejas y sus enfrentamientos con marcador editable. Botón "Guardar resultado" por partido.
+
+3) CLASIFICACIÓN — tabla ordenable por columna: POS · PAREJA · PJ · PG · PP · SETS + · SETS − · JUEGOS + · JUEGOS − · PTS. Todo en mono con tabular-nums. Las plazas que clasifican llevan un hairline accent a la izquierda. Indicador de desempate por enfrentamiento directo cuando aplique.
+
+4) CUADRO — el lienzo estrella.
+   Columnas por ronda de izquierda a derecha, con cabecera mono: "OCTAVOS" · "CUARTOS" · "SEMIS" · "FINAL" · "CAMPEONES".
+   Cada enfrentamiento es una tarjeta compacta de dos filas (una por pareja) con nombres, puntos en mono y el marcador a la derecha. La ganadora en texto normal con un hairline accent a la izquierda; la perdedora atenuada.
+   Líneas conectoras finas en color hairline entre rondas, con el ángulo recto clásico de cuadro.
+   Enfrentamientos aún sin definir muestran "Por determinar" (nunca "BYE").
+   Bloque final "CAMPEONES" con la pareja ganadora destacada en accent.
+   Si el torneo es de tipo consolación, muestra DOS cuadros apilados con las cabeceras "CUADRO PRINCIPAL" y "CUADRO DE CONSOLACIÓN".
+   Controles: zoom con más y menos, "Ajustar a la pantalla", y desplazamiento horizontal. Al pulsar un enfrentamiento se abre el acta en un panel lateral.
+   En móvil: desplazamiento horizontal con las cabeceras de ronda fijas.
+
+5) HORARIO — rejilla manual, el segundo lienzo.
+   Configuración arriba en una barra: "DURACIÓN POR PARTIDO (MIN)", "DESCANSO EXTRA ENTRE PARTIDOS DE UNA PAREJA", "DÍAS DE CADA FASE", y botones "Guardar y generar horario" y "Configurar horario".
+   REJILLA: filas = horas (de 09:00 a 22:00 en pasos de la duración configurada), columnas = pistas. Cada celda es un hueco. Los partidos asignados aparecen como tarjetas dentro de su hueco: ronda en mono ("CUARTOS"), las dos parejas, categoría, y la hora ("Sáb 15 · 10:00").
+   Se pueden ARRASTRAR entre huecos. Al arrastrar, los huecos válidos se iluminan en accent-10 y los que generan conflicto (una pareja jugando dos veces a la vez, o sin el descanso mínimo) se marcan con hairline error y el aviso del conflicto.
+   Pestañas por día si el torneo dura varios. Huecos libres muestran un contorno discontinuo.
+   Botón destructivo "Vaciar horario" con confirmación "¿Quitar todas las horas y pistas asignadas?".
+   Estado sin hora asignada: "Hora por confirmar".
+
+6) CONFIGURACIÓN — el formulario de edición del torneo con todos los campos de la tanda 9.
+
+7) SEGUIR TORNEO — la vista del jugador o espectador, mucho más ligera.
+   Cabecera hero igual pero sin acciones de organizador, con un botón "Seguido" tipo toggle.
+   Bloque destacado arriba: "TUS PARTIDOS" — tarjetas con tu próxima hora, pista, rival y ronda.
+   Pestañas de solo lectura: Grupos · Clasificación · Cuadro · Rondas.
+   Si no estás inscrito: CTA "Apuntarme a este torneo".
+   Estado de error: "Torneo no disponible." / "No se pudo cargar el torneo".</pre>
+</div>
+
+<!-- P11 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 11</span><span class="ttl">Federación · datos públicos</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 11 · FEDERACIÓN. Son datos públicos con mucho valor de posicionamiento en buscadores: aquí la densidad de tabla y la legibilidad mandan sobre el efecto visual. Estas pantallas se ven SIN sesión.
+
+1) SELECTOR DE FEDERACIÓN
+   Eyebrow "FEDERACIONES". Rejilla de tarjetas, una por federación autonómica, con su escudo y su nombre. La Cántabra está activa y lleva CTA "Explorar"; el resto llevan el chip atenuado "Próximamente" y no son pulsables.
+
+2) EXPLORAR FEDERACIÓN — es un buscador, no un índice.
+   Eyebrow "FEDERACIÓN CÁNTABRA". Buscador ancho y protagonista: "Busca equipos o jugadores…".
+   Pestañas debajo: Todo · Equipos · Jugadores · Grupos.
+   Filtros inline en una barra: Temporada · Categoría · Género (Masculino / Femenino / Ambos) · Grupo, cada uno un desplegable compacto. Botón "Restablecer filtros".
+   Resultados por sección con su cabecera mono ("EQUIPOS", "JUGADORES", "GRUPOS") y enlace "Ver todo".
+     · Equipo: escudo, nombre, grupo, posición en mono, puntos.
+     · Jugador: avatar, nombre, equipo, partidos, victorias.
+     · Grupo: nombre, categoría, número de equipos, jornada actual.
+   Sección "PLAY OFF" aparte, con acceso a los cuadros.
+   Estados: "No hay grupos con esos filtros.", "Escribe el nombre de un jugador o elige un grupo.", "Aún no hay datos federativos sincronizados.".
+
+3) GRUPO
+   Cabecera con el nombre del grupo, categoría, género y temporada.
+   Pestañas: Clasificación · Jornadas · Cuadro.
+   CLASIFICACIÓN: tabla densa ordenable — POS · EQUIPO · PJ · PG · PE · PP · SETS + · SETS − · PUNTOS · PTS/PART. En mono, tabular-nums. Filas alternas con un fondo apenas perceptible. Al pasar el ratón, la fila se ilumina. Las plazas de playoff con hairline accent y las de descenso con hairline error.
+   JORNADAS: lista por jornada con los enfrentamientos, marcador en mono y enlace al acta.
+   CUADRO: columnas por ronda con líneas conectoras, principal y consolación.
+   Estados: "Sin clasificación disponible.", "Sin jornadas registradas.", "Acta no disponible.".
+
+4) EQUIPO FEDERADO
+   Cabecera con escudo, nombre, grupo y posición. Cuatro indicadores grandes en mono con etiqueta encima: PUNTOS · SETS + · SETS − · PTS/PART.
+   Su fila resaltada dentro de la clasificación del grupo.
+   Lista de jugadores con la nota "Toca un jugador para ver sus estadísticas".
+   Error: "No se pudo cargar el equipo.".
+
+5) JUGADOR FEDERADO
+   Cabecera con avatar, nombre y equipo. Eyebrow "TEMPORADA" con el selector de temporada.
+   Tabla de partidos disputados: jornada, rival, pareja, marcador en mono, resultado. Chip "Playoff" en los de playoff.
+   Estado vacío: "Sin partidos disputados esta temporada.".
+
+Nota de diseño para toda esta tanda: prioriza que se lean 20 filas de un vistazo. Altura de fila compacta, tipografía mono para todo lo numérico, hairlines en vez de bordes, y cero sombras dentro de las tablas.</pre>
+</div>
+
+<!-- P12 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 12</span><span class="ttl">Social, perfil, amistosos y estadísticas</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 12 · LA CAPA QUE ENGANCHA. Aquí el producto se relaja un poco: más imagen, más celebración, sin perder el rigor de la marca.
+
+1) NOVEDADES (feed)
+   Eyebrow "NOVEDADES". Columna central de 640px en escritorio, con una columna lateral de "A quién seguir".
+   Cada entrada es una tarjeta: avatar y nombre del autor, tiempo relativo en mono, chip de tipo ("AMISTOSO", "JORNADA", "TORNEO"), el contenido (resultado en mono grande, parejas, foto del partido si la hay), y acciones discretas.
+   Estado vacío: "Aún no hay novedades" con CTA "Buscar en la comunidad".
+
+2) BUSCAR EN LA COMUNIDAD
+   Eyebrow "COMUNIDAD". Buscador "Busca jugadores o clubes" protagonista.
+   Resultados en dos secciones, jugadores y clubes, cada fila con avatar, nombre, nombre de usuario en mono, equipo o ciudad, y botón "Seguir" / "Siguiendo" tipo toggle.
+   Sección "SIGUIENDO" con quienes ya sigues. Estado vacío: "Sin resultados".
+
+3) PERFIL PÚBLICO — estilo Instagram pero con la sobriedad de TACTIUM. Es público, se ve sin sesión.
+   Cabecera: avatar grande, nombre, nombre de usuario en mono, chip de rol ("Capitán" / "Jugador"), club, y tres contadores en mono — Seguidores · Siguiendo · Jugados. Botón "Seguir" o, si es tu perfil, chip "ESTE ERES TÚ" y botón "Editar perfil".
+   Fila de indicadores: Victorias · Tasa V · Amistosos · Equipos.
+   Bloque "EQUIPOS": tarjetas de los equipos a los que pertenece.
+   Bloque "AMISTOSOS": lista de sus últimos amistosos con resultado.
+   Bloque "FOTOS DE PARTIDOS": mosaico cuadrado de fotos, estilo rejilla de Instagram, que abre un visor a pantalla completa.
+   Variante CLUB: mismo formato pero con "EL CLUB" (descripción, ciudad) y "Miembros" en vez de equipos.
+
+4) REGISTRAR AMISTOSO
+   Selector de tipo arriba, tres tarjetas: "Equipos" ("AMISTOSO · EQUIPO VS EQUIPO"), "Colegas" ("AMISTOSO · ENTRE COLEGAS"), "Entreno" ("AMISTOSO · ENTRENAMIENTO").
+   Según el tipo, el formulario cambia:
+     · Equipos: "Nuestro equipo" vs "EQUIPO RIVAL" (placeholder "CD Rival Pádel"), y varios "PARTIDOS", cada uno con "PAREJA A" y "PAREJA B".
+     · Colegas: "TU PAREJA (TÚ Y TU COMPAÑERO)" con "Jugador 1" y "Jugador 2", y "PAREJA RIVAL" con "Rival 1" y "Rival 2".
+     · Entreno: formato libre.
+   Bloque "RESULTADO": tres casillas de set con dos campos numéricos cada una, y el veredicto automático VICTORIA (accent) o DERROTA (error).
+   Bloque foto: "Añadir foto del partido" con zona de arrastrar y soltar.
+   CTAs "Guardar amistoso" y "Compartir foto + resultado".
+   Errores: "Falta el resultado" / "Introduce al menos un set completo en algún partido.". Éxito: "¡Amistoso guardado!".
+
+5) DETALLE DE AMISTOSO
+   Cabecera con la foto del partido a ancho completo. Chip de tipo, "Nosotros" vs "Rival", resultado enorme en mono.
+   Bloque "SETS" con el desglose. Bloque "CÓDIGO DEL PARTIDO": código en mono con botón de copiar, y la explicación de que quien salga en el partido puede reclamarlo con él.
+   Acciones "Compartir foto", "Cambiar foto", "Quitar foto". Estado vacío: "Sin sets registrados.".
+
+6) MIS ESTADÍSTICAS
+   Eyebrow "MIS ESTADÍSTICAS". Pestañas "Liga" y "Amistosos".
+   Fila superior de cuatro indicadores enormes en mono: PARTIDOS · % DE VICTORIAS (con anillo de progreso) · RACHA · MEJOR RACHA.
+   Bloque "RESULTADOS": barra apilada de ganados y perdidos, con la leyenda en mono.
+   Bloque "MEJOR COMPAÑERO": tarjeta destacada con avatar, nombre y el balance juntos.
+   Bloque "MIS COLEGAS": lista de con quién más juegas y con qué resultado.
+   Bloque "POR PISTA": distribución de en qué pista sueles jugar, en barras horizontales.
+   Bloque "AMISTOSOS" y "ENTRENOS" con sus contadores.
+   Acción "Compartir mis números" que genera una tarjeta cuadrada 1080×1080 SIEMPRE en oscuro, con los indicadores clave y la marca discreta.
+   Modal "Reclamar partido": "Introduce el código que te pasaron (p. ej. K7M2XQ)", y después "¿Quién eres tú?" / "Elige tu nombre en ese partido:" con la lista de jugadores. Éxito "¡Partido reclamado!". Error: "El código no es válido o el partido ya fue reclamado.".
+   Estados vacíos: "Sin partidos todavía", "Sin amistosos todavía", "Aún no estás vinculado".
+
+7) PERFIL PROPIO
+   Cabecera con avatar, nombre, nombre de usuario en mono, chip de rol, y contadores Seguidores / Siguiendo.
+   Indicadores GANADO / PERDIDO y Amistosos.
+   Accesos: "Editar perfil", "Compartir perfil", "Buscar en la comunidad", "Ajustes".</pre>
+</div>
+
+<!-- P13 -->
+<div class="pb">
+  <div class="pbh"><span class="tag">Tanda 13</span><span class="ttl">Cuenta, suscripción y facturación</span><button class="cp">Copiar</button></div>
+  <pre>TANDA 13 · CUENTA Y DINERO. Va la última porque es donde la web se separa de verdad del móvil.
+
+CONTEXTO IMPORTANTE QUE DEBES RESPETAR: en el móvil se cobra por compra dentro de la app (Apple y Google). En el navegador eso no existe: se cobra por Stripe. Y una misma cuenta puede tener ya una suscripción comprada en el móvil. Así que la web tiene que distinguir tres situaciones y diseñarlas todas:
+  A. Sin suscripción → puede contratar con Stripe.
+  B. Suscripción comprada en la web (Stripe) → puede gestionarla aquí.
+  C. Suscripción comprada en App Store o Google Play → SOLO LECTURA, con el aviso "Gestionas tu plan desde la App Store" y un enlace de ayuda. No debe aparecer ningún botón de contratar.
+
+1) AJUSTES — página con navegación lateral secundaria por secciones y contenido a la derecha.
+   Secciones, con estos títulos exactos como eyebrow:
+     · APARIENCIA — "MODO" con tres opciones: Claro · Oscuro · Sistema. Muestra una miniatura de vista previa de cada uno. Es la pantalla donde se demuestra el doble tema, cuídala.
+     · NOTIFICACIONES — interruptor maestro con la ayuda "Activar o desactivar las notificaciones del equipo", y debajo los tipos: jornada publicada, alineación publicada, recordatorio de disponibilidad, recordatorio de crear alineación. Añade una opción propia de la web: "Avisos del navegador" con su permiso.
+     · MI JUGADOR — si no estás vinculado, "Vincúlate a un jugador" con la lista de jugadores del equipo sin dueño.
+     · EQUIPO ACTUAL — el equipo activo con su selector y "Sin temporada activa" cuando toque.
+     · INVITACIONES — "Invitar jugadores" (genera código) y "Unirme con código".
+     · SUSCRIPCIÓN — resumen con chip de estado y "Activa · Gestionar plan".
+     · TORNEOS — accesos.
+     · SOPORTE — contacto, y enlaces a "Términos del servicio" y "Política de privacidad".
+     · ZONA DE PELIGRO — tarjeta con hairline error: "Cerrar sesión" y "Eliminar mi cuenta". Eliminar cuenta pide DOBLE confirmación: primero "¿Estás seguro?" y luego "¿Seguro al 100%?" con el correo tecleado a mano.
+   Añade también "Crear un equipo o club" para quien aún no tenga.
+
+2) MIS DATOS (RGPD)
+   Eyebrow "MIS DATOS". Bloque "RESUMEN DE TUS DATOS": tabla de dos columnas con Nombre · Email · ID interno (en mono) · Registro · Equipos que diriges · Equipos a los que perteneces · Clubes que diriges · Clubes a los que perteneces · Jugadores vinculados a ti · Invitaciones creadas · Suscripciones.
+   Bloque "EXPORTAR": botón "Descargar mis datos como JSON".
+   Bloque "POLÍTICAS": enlaces a Términos del servicio y Política de privacidad.
+
+3) MI SUSCRIPCIÓN
+   Eyebrow "MI SUSCRIPCIÓN". Tarjeta grande del plan actual: nombre del plan, chip de estado (Activa · En prueba · Cancelada · Expirada · Pago pendiente), importe en mono, periodicidad, "Próxima renovación" o "Prueba termina" con la fecha.
+   Si hay un cambio de plan diferido, banner persistente: "Pasarás a [Plan] el [fecha]".
+   Botones según el caso: "Cambiar plan" · "Cancelar suscripción" · "Canjear código".
+   Caso C (comprada en el móvil): todo el bloque en solo lectura, con el aviso "Gestionas tu plan desde la App Store" o "…desde Google Play" y "No se renovará al expirar" cuando aplique.
+   Sin plan: "Plan gratuito" con CTA "Hazte Pro · Prueba 14 días".
+
+4) PLANES · PAYWALL WEB
+   Eyebrow "TACTIUM PRO". Titular potente y una línea de posicionamiento.
+   Selector mensual/anual con el ahorro anual destacado en un chip.
+   TRES TARJETAS DE PLAN, la del medio destacada con borde accent y chip "RECOMENDADO":
+     · "Hasta 3 equipos · clubes pequeños"
+     · "Hasta 10 equipos · la mayoría de clubes federados"
+     · "Hasta 25 equipos · escuelas y academias"
+   Precio EN GRANDE y en mono: el importe realmente facturado es el más prominente; si muestras el equivalente mensual de un plan anual, va en pequeño y debajo. Esta jerarquía es una restricción firme, no una preferencia de diseño.
+   Lista de beneficios con iconos, usando estos textos:
+     · "Convocatorias en 1 toque, sin chats de 80 mensajes"
+     · "Calendario y rankings escaneados desde la federación"
+     · "Alineaciones ordenadas por puntos automáticamente"
+     · "Torneos completos: grupos, cuadros y horarios"
+   Bloque de línea temporal de la prueba: día 0 empieza · día 11 aviso · día 14 primer cobro.
+   CTA "Empezar prueba 14 días". Secundarios: "Canjear código" y "Continuar gratis".
+   Pie con "Términos de uso" y "Política de privacidad".
+
+5) FACTURACIÓN DEL CLUB
+   Eyebrow "CLUB · FACTURACIÓN". Tarjeta del plan con estado, importe y renovación.
+   Bloque "EQUIPOS": lista de todos los equipos del club con un chip por equipo — "INCLUIDO" en accent para los que entran dentro del plan y "NO CUBIERTO" en warning para los que exceden el límite. Contador claro arriba: "8 de 10 equipos incluidos".
+   Bloque "PLANES DISPONIBLES" con las opciones y los botones "Mejorar plan" y "Cambiar plan".
+   Estados: "Sin plan activo", "SIN CLUB", "Sin configurar".</pre>
+</div>
+
+</section>
+
+<!-- ══════════ PRODUCCION ══════════ -->
+<section id="produccion">
+  <h2><span class="num">08</span>De Claude Design a producción</h2>
+  <p class="sub">Claude Design te devuelve HTML. Esto es lo que hace falta para convertirlo en una web funcionando.</p>
+
+  <h4>Stack recomendado</h4>
+  <ul>
+    <li><strong>Next.js 16 + Tailwind v4</strong> — exactamente el mismo stack que <code>tactium-landing</code>, así que reutilizas configuración, tokens y el conocimiento ya adquirido.</li>
+    <li><strong>Supabase JS</strong> — la web habla con <em>la misma base de datos</em> que la app. Las RLS ya están escritas y probadas: no hay que tocar backend prácticamente nada.</li>
+    <li><strong>Proyecto aparte</strong>, en <code>tactium-web/</code>, desplegado en <code>app.tactium.io</code>. La landing se queda donde está, en <code>tactium.io</code>.</li>
+    <li><strong>Motion</strong> (ya está en la landing) para las transiciones, y <strong>dnd-kit</strong> para el arrastrar y soltar de alineación y horarios.</li>
+  </ul>
+
+  <h4>Lo que hay que tocar fuera del diseño</h4>
+  <ol>
+    <li><strong>Auth</strong> — añadir la URL de <code>app.tactium.io</code> a los redirect URIs de Google y a la configuración de Supabase. El custom domain <code>login.tactium.io</code> ya está montado, así que el login con Google seguirá mostrando el dominio propio.</li>
+    <li><strong>Stripe</strong> — es lo único genuinamente nuevo: productos, checkout, portal de cliente y webhook que escriba en la misma tabla de suscripciones que ya alimenta RevenueCat, con la lógica de no duplicar por <code>payer + tier</code>.</li>
+    <li><strong>Subida de imágenes</strong> — la edge function <code>parse-image</code> ya acepta una imagen; solo cambia el origen (archivo en vez de cámara).</li>
+    <li><strong>Tarjetas para compartir</strong> — reimplementar en canvas o como imagen generada en el servidor lo que en móvil hace <code>react-native-view-shot</code>.</li>
+  </ol>
+
+  <h4>Orden de construcción sugerido</h4>
+  <p>Tras tener los diseños: shell y auth → inicio y jornada → alineación → temporadas → equipo → club → federación (que además trae tráfico de buscadores) → torneos → social → facturación. Publicable en abierto a partir de la federación: son datos públicos y buen anzuelo de captación.</p>
+</section>
+
+<!-- ══════════ RIESGOS ══════════ -->
+<section id="riesgos">
+  <h2><span class="num">09</span>Riesgos y decisiones abiertas</h2>
+  <div class="grid g2">
+    <div class="card">
+      <p class="kicker"><span class="b e">Riesgo</span></p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">Suscripciones duplicadas</p>
+      <p style="font-size:13.5px;margin:0">Si la web deja contratar por Stripe a alguien que ya paga por la App Store, acabas con dos cobros. La web debe leer el estado real antes de mostrar nada de contratar. Es el punto donde hay que ser más rigurosos.</p>
+    </div>
+    <div class="card">
+      <p class="kicker"><span class="b w">Decisión</span></p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">¿Se puede usar la web sin pagar?</p>
+      <p style="font-size:13.5px;margin:0">La app usa un reverse trial: entras gratis y el paywall salta en las acciones productivas. Hay que decidir si en web es igual, o si la web es un extra solo para quienes ya pagan. Recomendación: igual que en móvil, para no crear dos productos.</p>
+    </div>
+    <div class="card">
+      <p class="kicker"><span class="b w">Decisión</span></p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">Alcance público y buscadores</p>
+      <p style="font-size:13.5px;margin:0">Los perfiles públicos, los torneos abiertos y los datos de la Federación pueden indexarse y traer tráfico gratis. Hay que decidir cuánto se abre y comprobar que la RLS anónima lo permite sin filtrar nada más.</p>
+    </div>
+    <div class="card">
+      <p class="kicker"><span class="b">Oportunidad</span></p>
+      <p style="color:var(--text);font-weight:700;margin-bottom:6px">Actualizar el skill de marca</p>
+      <p style="font-size:13.5px;margin:0">El skill <code>tactium-design</code> dice «Dark mode only. No light mode» e «Inter». Ambas cosas han quedado desfasadas. Merece la pena actualizarlo con la paleta clara y con Satoshi para que todo lo que generes a partir de ahora salga coherente a la primera.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <span class="mark" style="font-size:14px"><span class="tile" style="width:22px;height:22px;font-size:13px">T</span>TACTIUM</span>
+    <span class="mono" style="font-size:11px;letter-spacing:.14em;color:var(--text-faint)">PLAN WEB APP · 2026-08-10 · 43 PANTALLAS · 14 PROMPTS</span>
+  </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, b=document.getElementById('tgl');
+  function set(t){ root.setAttribute('data-theme',t); b.textContent = t==='dark' ? '☾ Oscuro' : '☀ Claro'; }
+  b.addEventListener('click',function(){ set(root.getAttribute('data-theme')==='dark'?'light':'dark'); });
+
+  document.querySelectorAll('.cp').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var pre=btn.closest('.pb').querySelector('pre');
+      navigator.clipboard.writeText(pre.innerText).then(function(){
+        var old=btn.textContent; btn.textContent='Copiado'; btn.classList.add('ok');
+        setTimeout(function(){ btn.textContent=old; btn.classList.remove('ok'); },1600);
+      });
+    });
+  });
+
+  document.querySelectorAll('nav.pills a').forEach(function(a){
+    a.addEventListener('click',function(e){
+      e.preventDefault();
+      var t=document.querySelector(a.getAttribute('href'));
+      if(t) window.scrollTo({top:t.offsetTop-80,behavior:'smooth'});
+    });
+  });
+})();
+</script>
+</body>
+</html>

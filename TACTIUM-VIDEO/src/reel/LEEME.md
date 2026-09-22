@@ -18,6 +18,48 @@ npx remotion still src/index.ts reel-A1-federaciones renders/p.png --frame=100 -
 
 Las guías de zona segura se activan en el studio poniendo `guias: true` en los props.
 
+## El panel respira
+
+En `motion` el panel de abajo **no está siempre**. Se abre cuando hay un gráfico que
+enseñar y se cierra cuando no, y mientras está cerrado el plano ocupa el lienzo entero.
+
+Antes el panel estaba fijo y en los huecos se rellenaba con el wordmark: eso convertía
+el 55% del lienzo en un logo durante buena parte de la pieza, y en el gancho —los tres
+segundos que deciden el vídeo— lo primero que se veía era una marca. La firma se reserva
+al cierre, que para eso está.
+
+Dos gráficos separados por menos de dos transiciones se fusionan en un solo tramo
+abierto, o el panel rebotaría entre uno y el siguiente. El subtítulo acompaña a la
+juntura: al 62% con el panel cerrado, al 46% cuando está abierto.
+
+**El panel mantiene su altura de token (45% de cara / 55% de panel) aunque el gráfico
+sea pequeño.** Se probó a encogerlo al contenido y no sale: los 420px de abajo son zona
+muerta por la interfaz de la plataforma, así que un panel más bajo dejaría el dato fuera
+de la zona segura. La consecuencia es que en los huecos de medio segundo entre gráficos
+el panel se ve vacío. Es preferible a un logo.
+
+## Campos nuevos de `Pieza`
+
+| Campo | Para qué |
+|---|---|
+| `gancho` | Rótulo de apertura a pantalla completa, a 1,5× el tamaño del subtítulo. Mientras está, el subtítulo calla. Es la promesa que para el scroll. |
+| `zoom` | Punch-in del plano, `[inicio, fin]`. Por defecto `[1, 1.07]`. Un plano fijo deja de retener a los tres segundos; el empuje lo sostiene sin cortar. `[1, 1]` lo desactiva. |
+| `planoDesdeMs` | Por qué segundo del plano entra la pieza. Permite sacar varias piezas de una misma grabación sin recortar el mp4 otra vez. |
+
+## Sacar piezas cortas de una larga
+
+`derivar(base, { id, titulo, desdeMs, hastaMs })` corta una pieza ya montada. Desplaza
+solo los tiempos de frases, coberturas y gráficos, y recorta al borde lo que se queda a
+caballo. De `V1-vuelta` salen así `V1a-equipo`, `V1b-torneos` y `V1c-federacion`.
+
+Por qué: 35 segundos enumerando tres bloques es un vídeo de producto, no un reel. Quien
+entra buscando alineaciones aguanta veinte segundos de torneos que no le interesan. Cada
+corte persigue a una persona distinta — el capitán, el club, el jugador federado.
+
+**Los tres arrancan en frío**, a media frase, porque el gancho de la grabación está en
+los primeros seis segundos y allí se queda. Para publicarlos hay que grabar dos segundos
+de gancho propio para cada uno; el campo `gancho` ya está listo.
+
 ## Anatomía de una pieza
 
 1. **Plano** — tú a cámara. No se le corrige el color ni se le mete LUT: el sistema dice que
