@@ -2940,7 +2940,10 @@ select.tw-cell-input {
 }
 .tw-lineup-head {
   position: sticky;
-  top: 60px;
+  /* `top: 0` y no 60: el scroll vive dentro de `.tw-main`, que ya empieza
+     debajo de la barra. Con 60 quedaba un hueco de 60px por el que las
+     tarjetas pasaban POR ENCIMA de la cabecera. */
+  top: 0;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -2970,7 +2973,8 @@ select.tw-cell-input {
   }
   .tw-bench {
     position: sticky;
-    top: 136px;
+    /* Justo debajo de la cabecera pegajosa, que mide ~115 + 12 de margen. */
+    top: 127px;
     /* Se descuenta TODO lo que hay por encima: el aire del marco (20), la
        barra (64), el relleno del lienzo (26) y la cabecera pegajosa de la
        alineación (~130), más un respiro abajo. Con `100dvh - 190` el
@@ -3523,7 +3527,7 @@ select.tw-cell-input {
   }
   .tw-settings-nav {
     position: sticky;
-    top: 76px;
+    top: 0;
     flex-direction: column;
     gap: 1px;
     padding: 8px;
