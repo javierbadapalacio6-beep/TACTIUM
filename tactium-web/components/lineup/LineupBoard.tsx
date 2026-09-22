@@ -885,8 +885,10 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         onDragCancel={() => setDragId(null)}
       >
         <div className="tw-lineup-grid">
-          {/* Pistas */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Pistas. En pantalla ancha van a dos columnas: apiladas, cinco
+              pistas no caben sin scroll, y montar una alineación obliga a
+              ver el banquillo y el hueco a la vez. */}
+          <div className="tw-courts">
             {courts.map((pair, c) => {
               const a = playerById(pair[0]);
               const b = playerById(pair[1]);

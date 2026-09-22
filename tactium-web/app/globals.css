@@ -2971,8 +2971,28 @@ select.tw-cell-input {
   .tw-bench {
     position: sticky;
     top: 136px;
-    max-height: calc(100dvh - 190px);
+    /* Se descuenta TODO lo que hay por encima: el aire del marco (20), la
+       barra (64), el relleno del lienzo (26) y la cabecera pegajosa de la
+       alineación (~130), más un respiro abajo. Con `100dvh - 190` el
+       banquillo se pasaba de largo y era él, no las pistas, el que obligaba
+       a hacer scroll. */
+    max-height: calc(100dvh - 350px);
     overflow-y: auto;
+  }
+}
+
+/* Las pistas. A partir de 1240 caben dos por fila —con el banquillo
+   ocupando 320, la columna de pistas se queda en ~820 y cada una en ~405,
+   que es de sobra para las dos fichas— y las cinco entran sin scroll. */
+.tw-courts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+@media (min-width: 1240px) {
+  .tw-courts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
