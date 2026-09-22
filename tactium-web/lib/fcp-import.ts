@@ -123,6 +123,48 @@ export interface FcpImportResult {
  */
 export type FcpImportMode = "owned" | "venue";
 
+/**
+ * ¿Ya tengo un equipo vinculado a este id federado, del tipo que toca?
+ *
+ * Sin esto, dar de alta dos veces el mismo equipo crea DOS equipos, y es un
+ * clic que se da solo: el club busca «ZINK», lo añade, no ve el cambio y
+ * vuelve a pulsar. Port de `findMyLinkedTeam` de la app.
+ *
+ * La búsqueda no puede ser global: al mismo equipo federado lo importan varios
+ * clubes, así que hay que quedarse con el que sea MÍO —del club, o invitado de
+ * mi sede— o acabaríamos editando el equipo de otro.
+ */
+async function findMyLinkedTeam(
+  fcpIdEquipo: number,
+  clubId: string | null,
+  guest: boolean,
+): Promise<string | null> {
+  const sb = supabaseBrowser();
+  const { data: links } = await sb
+    .from("fcp_team_links")
+    .select("team_id")
+    .eq("fcp_id_equipo", fcpIdEquipo)
+    .limit(200);
+  const ids = ((links ?? []) as { team_id: string | null }[])
+    .map((l) => l.team_id)
+    .filter((x): x is string => !!x);
+  if (ids.length === 0) return null;
+
+  const { data: teams } = await sb
+    .from("teams")
+    .select("id, club_id, venue_club_id")
+    .in("id", ids);
+  const rows = (teams ?? []) as {
+    id: string;
+    club_id: string | null;
+    venue_club_id: string | null;
+  }[];
+  const mine = rows.find((t) =>
+    guest ? t.venue_club_id === clubId : t.club_id === clubId,
+  );
+  return mine?.id ?? null;
+}
+
 export async function importFcpTeams(
   clubId: string | null,
   selected: FcpTeamOption[],
@@ -132,6 +174,22 @@ export async function importFcpTeams(
   const guest = mode === "venue";
   const out: FcpImportResult[] = [];
   for (const t of selected) {
+    // Reimportar no duplica: si ya es mío, se reutiliza.
+    const yaEsMio = await findMyLinkedTeam(t.id_equipo, clubId, guest);
+    if (yaEsMio) {
+      try {
+        await sb.rpc("import_fcp_season", {
+          p_team_id: yaEsMio,
+          p_fcp_id_equipo: t.id_equipo,
+          p_season_name: FCP_LEAGUE,
+        });
+      } catch {
+        /* no bloqueante */
+      }
+      out.push({ teamId: yaEsMio, equipo: t.equipo, players: 0 });
+      continue;
+    }
+
     const teamId = await createTeam({
       name: t.equipo,
       federation: FCP_FEDERATION_CODE,
@@ -151,18 +209,35 @@ export async function importFcpTeams(
       });
     if (linkErr) throw linkErr;
 
-    if (guest) {
-      // Sin plantilla: de un invitado solo se gestiona el horario.
-      out.push({ teamId, equipo: t.equipo, players: 0 });
-      continue;
+    // La plantilla SOLO para equipos propios: en un invitado estaríamos
+    // metiendo jugadores de otro club en esta cuenta.
+    let players = 0;
+    if (!guest) {
+      const { data: added, error } = await sb.rpc("import_fcp_roster", {
+        p_team_id: teamId,
+        p_fcp_id_equipo: t.id_equipo,
+      });
+      if (error) throw error;
+      players = (added as number) ?? 0;
     }
 
-    const { data: added, error } = await sb.rpc("import_fcp_roster", {
-      p_team_id: teamId,
-      p_fcp_id_equipo: t.id_equipo,
-    });
-    if (error) throw error;
-    out.push({ teamId, equipo: t.equipo, players: (added as number) ?? 0 });
+    // El CALENDARIO sí, y también para los invitados: sin jornadas el equipo
+    // se da de alta y no aparece por ningún lado, porque no hay partido que
+    // colocar. Es justo lo que el club viene a hacer aquí.
+    //
+    // No bloquea el alta si falla: el equipo ya está vinculado y la temporada
+    // se puede rehacer.
+    try {
+      await sb.rpc("import_fcp_season", {
+        p_team_id: teamId,
+        p_fcp_id_equipo: t.id_equipo,
+        p_season_name: FCP_LEAGUE,
+      });
+    } catch {
+      /* no bloqueante */
+    }
+
+    out.push({ teamId, equipo: t.equipo, players });
   }
   return out;
 }
