@@ -111,11 +111,25 @@ export interface FcpImportResult {
 
 /** Crea un equipo TACTIUM por cada equipo federativo elegido, con su vínculo y
  *  su plantilla real volcada (nombre + puntos vía RPC import_fcp_roster). */
+/**
+ * Modo de importación, igual que en la app:
+ *
+ *  · `owned` → equipos DEL club: `club_id`, con su plantilla. Gestión completa
+ *    y consumen cuota del plan.
+ *  · `venue` → equipos INVITADOS: juegan en sus pistas sin ser suyos. Se
+ *    guarda `venue_club_id`, que da permiso de horario y nada más, y NO se
+ *    vuelca la plantilla — son jugadores de otro club y sus datos no pintan
+ *    nada en esta cuenta.
+ */
+export type FcpImportMode = "owned" | "venue";
+
 export async function importFcpTeams(
   clubId: string | null,
   selected: FcpTeamOption[],
+  mode: FcpImportMode = "owned",
 ): Promise<FcpImportResult[]> {
   const sb = supabaseBrowser();
+  const guest = mode === "venue";
   const out: FcpImportResult[] = [];
   for (const t of selected) {
     const teamId = await createTeam({
@@ -124,12 +138,25 @@ export async function importFcpTeams(
       league: FCP_LEAGUE,
       category: t.category ?? undefined,
       gender: t.gender,
-      clubId: clubId ?? undefined,
+      // Excluyente a propósito: un invitado NO es del club.
+      clubId: guest ? undefined : (clubId ?? undefined),
+      venueClubId: guest ? clubId : undefined,
     });
     const { error: linkErr } = await sb
       .from("fcp_team_links")
-      .insert({ fcp_id_equipo: t.id_equipo, team_id: teamId, club_id: clubId });
+      .insert({
+        fcp_id_equipo: t.id_equipo,
+        team_id: teamId,
+        club_id: guest ? null : clubId,
+      });
     if (linkErr) throw linkErr;
+
+    if (guest) {
+      // Sin plantilla: de un invitado solo se gestiona el horario.
+      out.push({ teamId, equipo: t.equipo, players: 0 });
+      continue;
+    }
+
     const { data: added, error } = await sb.rpc("import_fcp_roster", {
       p_team_id: teamId,
       p_fcp_id_equipo: t.id_equipo,

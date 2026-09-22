@@ -210,6 +210,10 @@ export async function createTeam(input: {
   category?: string | null;
   group?: string | null;
   clubId?: string | null;
+  /** Equipo INVITADO: juega en las pistas de este club sin ser suyo. Da
+   *  permiso de horario y nada más, y NO consume cuota del plan. Excluyente
+   *  con `clubId`: si fuera del club, sería del club. */
+  venueClubId?: string | null;
 }): Promise<string> {
   const sb = supabaseBrowser();
   const {
@@ -227,6 +231,7 @@ export async function createTeam(input: {
       category: input.category || null,
       group_name: input.group || null,
       club_id: input.clubId ?? null,
+      venue_club_id: input.venueClubId ?? null,
     })
     .select("id")
     .single();
@@ -848,6 +853,101 @@ export async function fetchClubHomeSchedule(
     ...m,
     preferred_home_slots: m.preferred_home_slots ?? [],
   }));
+}
+
+/**
+ * Equipos INVITADOS: juegan en las pistas del club sin ser suyos
+ * (`teams.venue_club_id`). El club les pone día, hora y pista, y nada más —ni
+ * plantilla ni alineaciones—, así que no consumen cuota del plan.
+ */
+export interface DbVenueTeam {
+  team_id: string;
+  team_name: string;
+  category: string | null;
+  gender: string | null;
+  group_name: string | null;
+  preferred_home_slots: string[];
+}
+
+export async function fetchVenueTeams(clubId: string): Promise<DbVenueTeam[]> {
+  const { data, error } = await supabaseBrowser().rpc("get_venue_teams", {
+    target_club: clubId,
+  });
+  if (error) throw error;
+  return ((data ?? []) as DbVenueTeam[]).map((t) => ({
+    ...t,
+    preferred_home_slots: t.preferred_home_slots ?? [],
+  }));
+}
+
+/** Partidos de local de los equipos INVITADOS. Misma forma que los propios
+ *  para que la pantalla pueda mezclarlos sin saber de cuál es cada uno. */
+export async function fetchVenueHomeSchedule(
+  clubId: string,
+): Promise<DbClubHomeMatch[]> {
+  const { data, error } = await supabaseBrowser().rpc("get_venue_home_schedule", {
+    target_club: clubId,
+  });
+  if (error) throw error;
+  return ((data ?? []) as DbClubHomeMatch[]).map((m) => ({
+    ...m,
+    preferred_home_slots: m.preferred_home_slots ?? [],
+  }));
+}
+
+/**
+ * Día, hora y pista de un partido.
+ *
+ * Son DOS caminos y no es un capricho:
+ *
+ *  · Equipo PROPIO → se escribe en `matchdays` y se manda push. Poner
+ *    día/hora/pista ES confirmar que se juega aquí, así que se levanta
+ *    `home_unconfirmed`.
+ *  · Equipo INVITADO → el club no es su administrador y la RLS no le deja
+ *    tocar la jornada. Va por `set_venue_matchday_slot`, que abre sólo esos
+ *    tres campos y avisa al CAPITÁN del invitado por la campana. Por push no
+ *    puede: la edge `send-push` autoriza por club del equipo, y ese equipo no
+ *    es de este club.
+ */
+export async function setHomeMatchSlot(input: {
+  matchdayId: string;
+  isGuest: boolean;
+  matchDate: string | null;
+  matchTime: string | null;
+  location: string | null;
+}): Promise<void> {
+  const sb = supabaseBrowser();
+  if (input.isGuest) {
+    const { error } = await sb.rpc("set_venue_matchday_slot", {
+      p_matchday_id: input.matchdayId,
+      p_match_date: input.matchDate,
+      p_match_time: input.matchTime,
+      p_location: input.location,
+    });
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await sb
+    .from("matchdays")
+    .update({
+      ...(input.matchDate ? { match_date: input.matchDate } : {}),
+      match_time: input.matchTime,
+      location: input.location,
+      home_unconfirmed: false,
+    })
+    .eq("id", input.matchdayId);
+  if (error) throw error;
+
+  // El aviso no puede tumbar el guardado: si la push falla, el horario ya
+  // está puesto y eso es lo que importa.
+  try {
+    await sb.functions.invoke("send-push", {
+      body: { type: "schedule_set", matchdayId: input.matchdayId },
+    });
+  } catch {
+    /* el horario ya está guardado */
+  }
 }
 
 /* ── Suscripción ───────────────────────────────────────────────── */

@@ -4,8 +4,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchClubHomeSchedule,
+  fetchVenueHomeSchedule,
+  setHomeMatchSlot,
   type DbClubHomeMatch,
 } from "@/lib/queries";
+import { guardedWrite } from "@/lib/writes";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
@@ -28,9 +31,10 @@ import { IconCheck, IconClock } from "@/components/Icon";
  * marcó como favoritas se resaltan; las demás quedan atenuadas pero siguen
  * siendo elegibles.
  *
- * Datos REALES (solo lectura): los partidos de local, sus horas/pistas actuales
- * y las franjas favoritas salen de la RPC `get_club_home_schedule`. Asignar y
- * «guardar y avisar» siguen en estado local — la escritura llega en la fase 2.
+ * Incluye los equipos INVITADOS: los que juegan en estas pistas sin ser del
+ * club (`teams.venue_club_id`). Se mezclan con los propios porque para quien
+ * reparte pistas son lo mismo —un partido que colocar—, pero se guardan por
+ * caminos distintos y por eso llevan su marca.
  */
 interface Slot {
   /** Índice de día de la semana, como `Date.getDay()` (0 = domingo). */
@@ -60,6 +64,33 @@ function parseSlot(raw: string): { day: number; hour: string } | null {
   return { day, hour: h.slice(0, 5) };
 }
 
+/**
+ * Fecha que toca guardar al elegir un día de la semana.
+ *
+ * Si la jornada ya tiene fecha, se MUEVE a ese día dentro de su propia semana
+ * —no se inventa otra—; si no la tiene, se coge la próxima vez que caiga ese
+ * día. Puerto de `snapToDow` de la app: sin esto, elegir «sábado» en una
+ * jornada sin fecha dejaría «Sin fecha · 10:00», que no le sirve a nadie.
+ *
+ * Todo en hora local y montando la cadena a mano: `toISOString()` pasa por
+ * UTC y en España puede devolver el día anterior.
+ */
+function dateForSlot(currentIso: string | null, day: number): string {
+  const fmt = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+      dt.getDate(),
+    ).padStart(2, "0")}`;
+  if (currentIso) {
+    const [y, m, d] = currentIso.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + (day - dt.getDay()));
+    return fmt(dt);
+  }
+  const dt = new Date();
+  dt.setDate(dt.getDate() + ((day - dt.getDay() + 7) % 7));
+  return fmt(dt);
+}
+
 const slotKey = (day: number, hour: string) => `${day}|${hour}`;
 const slotLabel = (day: number, hour: string) => `${WEEKDAY[day]} ${hour}`;
 
@@ -68,20 +99,39 @@ const DEFAULT_DAYS = [6, 0];
 /** Horas por defecto cuando aún no hay ninguna franja declarada. */
 const DEFAULT_HOURS = ["10:00", "12:00", "16:00", "18:00"];
 
+/** Un partido de local, de un equipo propio o de uno invitado. */
+type Fixture = DbClubHomeMatch & { is_guest: boolean };
+
 export function ClubSchedule() {
   const { clubId } = useSession();
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Propios e invitados en la misma lista. Las dos RPC devuelven la misma
+  // forma justamente para poder hacer esto.
   const { data, loading, error } = useAsync(
-    () => fetchClubHomeSchedule(clubId!),
-    [clubId],
+    async () => {
+      const [propios, invitados] = await Promise.all([
+        fetchClubHomeSchedule(clubId!),
+        fetchVenueHomeSchedule(clubId!).catch(() => [] as DbClubHomeMatch[]),
+      ]);
+      return [
+        ...propios.map((m) => ({ ...m, is_guest: false })),
+        ...invitados.map((m) => ({ ...m, is_guest: true })),
+      ] as Fixture[];
+    },
+    [clubId, reloadKey],
     !!clubId,
   );
-  const fixtures: DbClubHomeMatch[] = useMemo(() => data ?? [], [data]);
+  const fixtures: Fixture[] = useMemo(() => data ?? [], [data]);
 
-  // Franjas favoritas reales por equipo, ya interpretadas.
-  const favByTeam = useMemo(() => {
+  // Franjas favoritas por JORNADA. Antes se indexaba por NOMBRE de equipo, y
+  // el nombre no identifica a nadie: «MEDIO CUDEYO A» existe masculino y
+  // femenino, y un mismo equipo juega varias jornadas en casa — todas
+  // compartían el mismo hueco y se pisaban entre ellas.
+  const favByMatch = useMemo(() => {
     const m: Record<string, { day: number; hour: string }[]> = {};
     for (const f of fixtures) {
-      m[f.team_name] = (f.preferred_home_slots ?? [])
+      m[f.matchday_id] = (f.preferred_home_slots ?? [])
         .map(parseSlot)
         .filter((s): s is { day: number; hour: string } => s !== null);
     }
@@ -97,10 +147,10 @@ export function ClubSchedule() {
     setSlots((prev) => {
       const next = { ...prev };
       for (const f of fixtures) {
-        if (initedFor.current.has(f.team_name)) continue;
-        initedFor.current.add(f.team_name);
+        if (initedFor.current.has(f.matchday_id)) continue;
+        initedFor.current.add(f.matchday_id);
         const day = dayOf(f.match_date);
-        next[f.team_name] =
+        next[f.matchday_id] =
           f.match_time && day !== null
             ? { day, hour: f.match_time.slice(0, 5), court: f.location ?? "" }
             : null;
@@ -110,9 +160,47 @@ export function ClubSchedule() {
   }, [fixtures]);
 
   const [picking, setPicking] = useState<string | null>(null);
-  const [toast, setToast] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const assigned = fixtures.filter((f) => slots[f.team_name]).length;
+  const assigned = fixtures.filter((f) => slots[f.matchday_id]).length;
+
+  /**
+   * Guarda de verdad. Antes este botón solo enseñaba el aviso de éxito: el
+   * club creía que había puesto los horarios y avisado a su gente, y no había
+   * pasado nada.
+   *
+   * Jornada a jornada, porque cada una puede ir por un camino distinto
+   * (propia o invitada) y porque así un fallo en una no tumba a las demás.
+   */
+  async function guardar() {
+    if (saving) return;
+    setSaving(true);
+    let ok = 0;
+    const fallos: string[] = [];
+    for (const f of fixtures) {
+      const s = slots[f.matchday_id];
+      if (!s) continue;
+      const res = await guardedWrite("guardar el horario", () =>
+        setHomeMatchSlot({
+          matchdayId: f.matchday_id,
+          isGuest: f.is_guest,
+          matchDate: dateForSlot(f.match_date, s.day),
+          matchTime: `${s.hour}:00`,
+          location: s.court.trim() || null,
+        }),
+      );
+      if (res.ok) ok += 1;
+      else fallos.push(`${f.team_name}: ${res.reason}`);
+    }
+    setSaving(false);
+    setReloadKey((k) => k + 1);
+    setToast(
+      fallos.length === 0
+        ? `${ok} ${ok === 1 ? "horario guardado y avisado" : "horarios guardados y avisados"}`
+        : `Guardados ${ok}. Sin guardar → ${fallos[0]}`,
+    );
+  }
 
   // La rejilla del selector se DERIVA de los datos: los días y horas que los
   // equipos han marcado como favoritos, más el fin de semana y unas horas
@@ -121,7 +209,7 @@ export function ClubSchedule() {
   const { gridDays, gridHours } = useMemo(() => {
     const days = new Set<number>(DEFAULT_DAYS);
     const hours = new Set<string>();
-    for (const list of Object.values(favByTeam)) {
+    for (const list of Object.values(favByMatch)) {
       for (const s of list) {
         days.add(s.day);
         hours.add(s.hour);
@@ -142,24 +230,24 @@ export function ClubSchedule() {
       }),
       gridHours: [...hours].sort(),
     };
-  }, [favByTeam, slots]);
+  }, [favByMatch, slots]);
 
-  function assign(team: string, day: number, hour: string) {
+  function assign(matchdayId: string, day: number, hour: string) {
     setSlots((s) => ({
       ...s,
-      [team]: { day, hour, court: s[team]?.court ?? "" },
+      [matchdayId]: { day, hour, court: s[matchdayId]?.court ?? "" },
     }));
     setPicking(null);
   }
 
-  function setCourt(team: string, court: string) {
+  function setCourt(matchdayId: string, court: string) {
     setSlots((s) => ({
       ...s,
-      [team]: s[team] ? { ...s[team]!, court } : null,
+      [matchdayId]: s[matchdayId] ? { ...s[matchdayId]!, court } : null,
     }));
   }
 
-  const favSlots = picking ? (favByTeam[picking] ?? []) : [];
+  const favSlots = picking ? (favByMatch[picking] ?? []) : [];
   const favKeys = new Set(favSlots.map((s) => slotKey(s.day, s.hour)));
 
   const header = (
@@ -220,12 +308,30 @@ export function ClubSchedule() {
             </div>
 
             {fixtures.map((f) => {
-              const s = slots[f.team_name];
+              const s = slots[f.matchday_id];
               return (
                 <div key={f.matchday_id} className="tw-sched-row">
                   <span style={{ minWidth: 0 }}>
-                    <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>
-                      {f.team_name}
+                    <span
+                      className="truncate"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      <span className="truncate">{f.team_name}</span>
+                      {/* El club no administra a un invitado: solo le pone
+                          hora. Decirlo evita que alguien espere aquí su
+                          plantilla o su alineación. */}
+                      {f.is_guest && (
+                        <Chip tone="mute" plain>
+                          Invitado
+                        </Chip>
+                      )}
                     </span>
                     <span
                       style={{
@@ -243,7 +349,7 @@ export function ClubSchedule() {
                   <Btn
                     size="sm"
                     variant={s ? "tint" : "ghost"}
-                    onClick={() => setPicking(f.team_name)}
+                    onClick={() => setPicking(f.matchday_id)}
                     aria-label={`Elegir día y hora para ${f.team_name}`}
                     style={{ justifyContent: "flex-start" }}
                   >
@@ -254,7 +360,7 @@ export function ClubSchedule() {
                     type="text"
                     value={s?.court ?? ""}
                     disabled={!s}
-                    onChange={(e) => setCourt(f.team_name, e.target.value)}
+                    onChange={(e) => setCourt(f.matchday_id, e.target.value)}
                     placeholder="Pista 1, Central…"
                     aria-label={`Pista para ${f.team_name}`}
                   />
@@ -268,11 +374,17 @@ export function ClubSchedule() {
           </div>
 
           <div className="card-foot">
-            <Btn variant="accent" onClick={() => setToast(true)} icon={<IconCheck size={15} />}>
-              Guardar y avisar
+            <Btn
+              variant="accent"
+              onClick={() => void guardar()}
+              disabled={saving || assigned === 0}
+              icon={<IconCheck size={15} />}
+            >
+              {saving ? "Guardando…" : "Guardar y avisar"}
             </Btn>
             <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
-              Los jugadores reciben el día, la hora y la pista.
+              Los jugadores reciben el día, la hora y la pista. En los equipos
+              invitados el aviso va a su capitán.
             </span>
           </div>
         </Card>
@@ -281,7 +393,7 @@ export function ClubSchedule() {
         <Card flush>
           <CardHead title="Franjas favoritas" sub="Las que cada equipo ha marcado" />
           {fixtures.map((f) => {
-            const list = favByTeam[f.team_name] ?? [];
+            const list = favByMatch[f.matchday_id] ?? [];
             return (
               <div
                 key={f.matchday_id}
@@ -389,9 +501,9 @@ export function ClubSchedule() {
 
       {toast && (
         <Toast
-          title="Horario enviado al equipo"
-          body="Los jugadores reciben un aviso con el día, la hora y la pista."
-          onClose={() => setToast(false)}
+          title="Horarios guardados"
+          body={toast}
+          onClose={() => setToast(null)}
         />
       )}
     </div>

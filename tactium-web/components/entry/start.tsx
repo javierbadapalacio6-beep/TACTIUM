@@ -4,7 +4,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
 
 import { EntryFrame, Field, Input, Segmented } from "./EntryFrame";
-import { Btn, Card, CardHead, Modal, Note } from "@/components/ui";
+import {
+  Btn,
+  Card,
+  CardHead,
+  Modal,
+  Note,
+  // El `Segmented` de EntryFrame solo admite opciones de texto plano
+  // (`readonly T[]`), y aqui la etiqueta no es el valor: «Equipos del
+  // club» guarda "owned". Por eso se tira del de ui.
+  Segmented as UiSegmented,
+} from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import {
   IconBuilding,
@@ -38,6 +48,7 @@ import {
   searchFcpClubs,
   importFcpTeams,
   type FcpClubGroup,
+  type FcpImportMode,
   type FcpTeamOption,
 } from "@/lib/fcp-import";
 import { useSession } from "@/lib/session";
@@ -860,6 +871,9 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
   const [selected, setSelected] = useState<Record<number, FcpTeamOption>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Propios o INVITADOS: equipos que juegan en estas pistas sin ser del club.
+  // La app lo tiene desde hace tiempo; la web no lo tenía en absoluto.
+  const [mode, setMode] = useState<FcpImportMode>("owned");
 
   useEffect(() => {
     let alive = true;
@@ -890,7 +904,7 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
     setBusy(true);
     setErr(null);
     const res = await guardedWrite("importar los equipos", () =>
-      importFcpTeams(clubId, Object.values(selected)),
+      importFcpTeams(clubId, Object.values(selected), mode),
     );
     setBusy(false);
     if (res.ok) window.location.href = "/club";
@@ -900,10 +914,27 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
   return (
     <EntryFrame wide>
       <h1>Importa los equipos de {clubName}</h1>
-      <p style={{ margin: "8px 0 20px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        Busca tu club en la Federación Cántabra y crea todos sus equipos con su
-        plantilla y sus puntos oficiales.
+      <p style={{ margin: "8px 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
+        {mode === "owned"
+          ? "Busca tu club en la Federación Cántabra y crea todos sus equipos con su plantilla y sus puntos oficiales."
+          : "Equipos de OTROS clubes que juegan en tus pistas. Les pondrás día, hora y pista, y nada más: ni plantilla ni alineaciones. No consumen cuota de tu plan."}
       </p>
+
+      <div style={{ marginBottom: 18 }}>
+        <UiSegmented
+          label="Qué equipos vas a importar"
+          value={mode}
+          onChange={(v) => {
+            setMode(v as FcpImportMode);
+            // Lo elegido en un modo no vale para el otro: se crean distinto.
+            setSelected({});
+          }}
+          options={[
+            { value: "owned", label: "Equipos del club" },
+            { value: "venue", label: "Equipos invitados" },
+          ]}
+        />
+      </div>
 
       <Input
         type="text"
