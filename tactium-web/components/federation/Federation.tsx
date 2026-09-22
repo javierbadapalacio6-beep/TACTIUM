@@ -747,31 +747,74 @@ export function FederationExplore({ slug }: { slug: string }) {
             <div className="tw-fcp-rank-row tw-fcp-rank-head">
               <span>Pos</span>
               <span>Jugador</span>
+              <span style={{ textAlign: "right" }}>Año</span>
               <span style={{ textAlign: "right" }}>Puntos</span>
             </div>
-            {(ranking.data ?? []).map((r) => (
-              <div key={`${r.posicion}-${r.name}`} className="tw-fcp-rank-row">
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    color: r.posicion <= 3 ? "var(--accent)" : "var(--text-faint)",
-                  }}
+            {(ranking.data ?? []).map((r) => {
+              const cuerpo = (
+                <>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: r.posicion <= 3 ? "var(--accent)" : "var(--text-faint)",
+                    }}
+                  >
+                    {r.posicion}
+                  </span>
+                  <span className="tw-fcp-rank-who">
+                    <Avatar initials={initials(r.name)} src={r.avatarUrl} size={30} />
+                    <span className="truncate" style={{ fontSize: 14, fontWeight: 600 }}>
+                      {r.name}
+                    </span>
+                  </span>
+                  {/* Lo ganado en el año. Sólo lo tenemos de 138 jugadores;
+                      del resto no se pinta nada, que es más honesto que un
+                      «+0» que parecería que no ha ganado. */}
+                  <span className="tw-fcp-rank-var mono">
+                    {r.puntosAnio == null ? (
+                      <span style={{ color: "var(--text-faint)" }}>·</span>
+                    ) : (
+                      <span
+                        style={{
+                          color:
+                            r.puntosAnio > 0
+                              ? "var(--accent)"
+                              : r.puntosAnio < 0
+                                ? "var(--error)"
+                                : "var(--text-faint)",
+                        }}
+                      >
+                        {r.puntosAnio > 0 ? `+${fmtInt(r.puntosAnio)}` : fmtInt(r.puntosAnio)}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 13.5, fontWeight: 700, textAlign: "right" }}
+                  >
+                    {r.puntos ?? "—"}
+                  </span>
+                </>
+              );
+              // El nombre del ranking no siempre cruza con el censo (96%);
+              // el que no cruza se queda sin enlace en vez de llevar a la
+              // ficha equivocada.
+              return r.idJugador ? (
+                <Link
+                  key={`${r.posicion}-${r.name}`}
+                  href={`/federacion/${slug}/jugador/${encodeURIComponent(r.idJugador)}`}
+                  className="tw-fcp-rank-row is-link"
                 >
-                  {r.posicion}
-                </span>
-                <span className="truncate" style={{ fontSize: 14, fontWeight: 600 }}>
-                  {r.name}
-                </span>
-                <span
-                  className="mono"
-                  style={{ fontSize: 13.5, fontWeight: 700, textAlign: "right" }}
-                >
-                  {r.puntos ?? "—"}
-                </span>
-              </div>
-            ))}
+                  {cuerpo}
+                </Link>
+              ) : (
+                <div key={`${r.posicion}-${r.name}`} className="tw-fcp-rank-row">
+                  {cuerpo}
+                </div>
+              );
+            })}
           </Card>
         ))}
     </div>
@@ -1897,7 +1940,7 @@ export function FcpPlayerView({ id }: { id: string }) {
         back={{ href: "/federacion", label: "Federación" }}
         title={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-            <Avatar initials={initials(p.name)} size={40} />
+            <Avatar initials={initials(p.name)} src={p.avatarUrl} size={40} />
             {p.name}
           </span>
         }

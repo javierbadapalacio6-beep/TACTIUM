@@ -1850,6 +1850,48 @@ export interface FcpRankingRow {
   posicion: number;
   name: string;
   puntos: number | null;
+  /** Ficha del jugador, para enlazar. Null si el nombre no cruza. */
+  idJugador: string | null;
+  avatarUrl: string | null;
+  /** Lo ganado en el año, del histórico. Null si no lo tenemos. */
+  puntosAnio: number | null;
+}
+
+/**
+ * Pone ficha y cara a las filas del ranking.
+ *
+ * `fcp_rankings` NO trae el id real del jugador —su `id_jugador` es una
+ * clave sintética de la propia fila y `id_fcp` está a null—, así que lo
+ * único que comparten ranking y censo es el nombre. El cruce se hace en el
+ * servidor (`fcp_ranking_identities`) porque implica normalizar 32.000
+ * fichas, y de paso trae la foto en la misma llamada.
+ */
+async function conIdentidad(rows: FcpRankingRow[]): Promise<FcpRankingRow[]> {
+  const nombres = [...new Set(rows.map((r) => r.name).filter((n) => n && n !== "—"))];
+  if (nombres.length === 0) return rows;
+
+  const found = new Map<
+    string,
+    { idJugador: string; avatarUrl: string | null; puntosAnio: number | null }
+  >();
+  for (let i = 0; i < nombres.length; i += 300) {
+    const { data } = await supabaseBrowser().rpc("fcp_ranking_identities", {
+      p_nombres: nombres.slice(i, i + 300),
+    });
+    for (const d of (data ?? []) as {
+      nombre: string;
+      id_jugador: string;
+      avatar_url: string | null;
+      puntos_anio: number | null;
+    }[]) {
+      found.set(d.nombre, {
+        idJugador: d.id_jugador,
+        avatarUrl: d.avatar_url,
+        puntosAnio: d.puntos_anio,
+      });
+    }
+  }
+  return rows.map((r) => ({ ...r, ...(found.get(r.name) ?? {}) }));
 }
 
 /** Ranking FCP por género/categoría. Con término, filtra por nombre. */
@@ -1879,11 +1921,16 @@ export async function fetchFcpRanking(opts: {
       .order("puntos", { ascending: false, nullsFirst: false })
       .limit(limit);
     if (error) throw error;
-    return (data ?? []).map((r, i) => ({
-      posicion: i + 1,
-      name: r.nombre ?? "—",
-      puntos: r.puntos == null ? null : Number(r.puntos),
-    }));
+    return conIdentidad(
+      (data ?? []).map((r, i) => ({
+        posicion: i + 1,
+        name: r.nombre ?? "—",
+        puntos: r.puntos == null ? null : Number(r.puntos),
+        idJugador: null,
+        avatarUrl: null,
+        puntosAnio: null,
+      }))
+    );
   }
 
   let sel = supabaseBrowser()
@@ -1895,11 +1942,16 @@ export async function fetchFcpRanking(opts: {
     .order("posicion", { ascending: true })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []).map((r) => ({
-    posicion: r.posicion,
-    name: r.nombre ?? "—",
-    puntos: r.puntos == null ? null : Number(r.puntos),
-  }));
+  return conIdentidad(
+    (data ?? []).map((r) => ({
+      posicion: r.posicion,
+      name: r.nombre ?? "—",
+      puntos: r.puntos == null ? null : Number(r.puntos),
+      idJugador: null,
+      avatarUrl: null,
+      puntosAnio: null,
+    }))
+  );
 }
 
 export interface FcpStanding {
@@ -2735,6 +2787,8 @@ export interface FcpPlayerProfile {
   equipo: string | null;
   categoria: string | null;
   puntos: number;
+  /** De `fcp_player_photos`, la tabla que se carga a mano. */
+  avatarUrl: string | null;
 }
 
 export async function fetchFcpPlayerProfile(
@@ -2757,12 +2811,21 @@ export async function fetchFcpPlayerProfile(
       }
     | null;
   if (!j) return null;
+  // La cara, de la tabla de fotos federativas. Mismo RPC que el acta.
+  let avatarUrl: string | null = null;
+  const { data: fotos } = await supabaseBrowser().rpc("fcp_player_avatars", {
+    p_ids: [idJugador],
+  });
+  const f = ((fotos ?? []) as { avatar_url: string | null }[])[0];
+  if (f) avatarUrl = f.avatar_url;
+
   return {
     idJugador,
     name: fcpDisplayName(j),
     equipo: j.nombre_equipo ?? null,
     categoria: j.categoria ?? null,
     puntos: j.puntos ?? 0,
+    avatarUrl,
   };
 }
 

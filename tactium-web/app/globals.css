@@ -3857,7 +3857,8 @@ select.tw-cell-input {
 
 .tw-fcp-rank-row {
   display: grid;
-  grid-template-columns: 46px 1fr 88px;
+  /* Pos · jugador · ganado en el año · total */
+  grid-template-columns: 46px 1fr 76px 88px;
   gap: 12px;
   align-items: center;
   padding: 10px 18px;
@@ -3865,6 +3866,43 @@ select.tw-cell-input {
 }
 .tw-fcp-rank-row:last-child {
   border-bottom: none;
+}
+/* Fila enlazable: lleva a la ficha del jugador. */
+.tw-fcp-rank-row.is-link {
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-fcp-rank-row.is-link:hover {
+  background: var(--bg-card-2);
+}
+/* La cara, pegada al nombre. `min-width: 0` para que el nombre recorte en
+   vez de estirar la columna. */
+.tw-fcp-rank-var {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 560px) {
+  .tw-fcp-rank-row {
+    grid-template-columns: 34px 1fr 72px;
+  }
+  /* A 375px no caben las dos cifras: manda el total. */
+  .tw-fcp-rank-var,
+  .tw-fcp-rank-head span:nth-child(3) {
+    display: none;
+  }
+}
+.tw-fcp-rank-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+/* La cabecera no lleva avatar: se alinea su rótulo con los nombres. */
+.tw-fcp-rank-head span:nth-child(2) {
+  padding-left: 40px;
 }
 .tw-fcp-rank-head {
   border-bottom: 1px solid var(--line-strong);
