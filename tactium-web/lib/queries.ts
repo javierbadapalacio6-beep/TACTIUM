@@ -1615,7 +1615,17 @@ export async function searchFcpTeams(opts: {
   const q = query.replace(/[%,()]/g, " ").trim();
   if (q.length >= 2) sel = sel.ilike("equipo", `%${q}%`);
   if (grupoIds?.length) sel = sel.in("id_grupo", grupoIds.slice(0, 200));
-  const { data, error } = await sel.limit(limit * 4);
+
+  // Ordenar en la BASE, no solo en JS. Sin ORDER BY, el `limit` se lleva filas
+  // arbitrarias y el orden alfabético de después solo ordena el trozo que haya
+  // tocado: con los 323 equipos de una liga en inscripción salían 60 «al azar»
+  // y no había forma de dar con el tuyo.
+  sel = sel.order("equipo", { ascending: true });
+
+  // La clasificación repite equipo por grupo, así que hay que pedir de más
+  // para que el dedup no deje la lista corta. Las inscripciones son una fila
+  // por equipo: pedir de más solo gastaría ancho de banda.
+  const { data, error } = await sel.limit(idLigaSinGrupos ? limit : limit * 4);
   if (error) throw error;
 
   // Un equipo aparece una vez por grupo: nos quedamos con una fila por equipo.

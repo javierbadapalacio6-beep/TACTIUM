@@ -14,21 +14,11 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import {
-  BtnLink,
-  Card,
-  CardHead,
-  Chip,
-  IconTile,
-  ListRow,
-  PageHeader,
-  Progress,
-  Stat,
-  StatRow,
-} from "@/components/ui";
+import { Btn, BtnLink, Card, Chip } from "@/components/ui";
 import { EmptyState, SkeletonPage } from "@/components/states";
 import {
   IconCalendar,
+  IconCheck,
   IconChevronRight,
   IconFlag,
   IconSearch,
@@ -36,31 +26,36 @@ import {
   IconUpload,
   IconUserPlus,
   IconUsers,
+  IconZap,
 } from "@/components/Icon";
+
+/**
+ * Inicio del capitán — capa «bento».
+ *
+ * Primera pantalla del lenguaje nuevo: tarjetas de tamaños distintos, cifras
+ * grandes, una superficie entera en verde para lo que de verdad importa (la
+ * próxima jornada) y el resto en silencio alrededor.
+ */
 
 const SHORTCUTS = [
   {
     href: "/equipo",
     title: "Escanear calendario",
-    body: "Sube la imagen del calendario de tu liga",
     Icon: IconUpload,
   },
   {
     href: "/torneos",
     title: "Explorar torneos",
-    body: "Por zona, club o fecha, o con tu código",
     Icon: IconSearch,
   },
   {
     href: "/federacion",
-    title: "Explorar la Federación",
-    body: "Clasificaciones y jornadas de toda la liga",
+    title: "Ver la Federación",
     Icon: IconFlag,
   },
   {
     href: "/ajustes/invitaciones",
     title: "Invitar a un capitán",
-    body: "Regálale dejar el Excel",
     Icon: IconUserPlus,
   },
 ];
@@ -68,6 +63,17 @@ const SHORTCUTS = [
 /** dd mmm en español a partir de la fecha ISO de la base. */
 function formatDate(iso: string | null): string {
   if (!iso) return "Fecha por confirmar";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "Sin fecha";
   const d = new Date(iso + "T00:00:00");
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("es-ES", {
@@ -91,6 +97,16 @@ function daysUntil(iso: string | null): number | null {
   return Math.round((d - today.getTime()) / 86400000);
 }
 
+/** Cuándo se juega, en una línea: «Mañana», «En 5 días», «Hace 3 días». */
+function whenLabel(d: number | null): string {
+  if (d === null) return "Fecha por confirmar";
+  if (d === 0) return "Hoy";
+  if (d === 1) return "Mañana";
+  if (d > 1) return `En ${d} días`;
+  if (d === -1) return "Ayer";
+  return `Hace ${Math.abs(d)} días`;
+}
+
 interface HomeData {
   season: DbSeason | null;
   matchdays: DbMatchday[];
@@ -100,7 +116,7 @@ interface HomeData {
 
 /** Panel del capitán / jugador de equipo, con datos reales del equipo activo. */
 export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
-  const { activeTeam } = useSession();
+  const { activeTeam, user } = useSession();
   const teamId = activeTeam?.id ?? null;
   const [avail, setAvail] = useState<"yes" | "no" | null>(null);
 
@@ -174,30 +190,74 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const m = upcoming[0] ?? null;
   const dUntil = m ? daysUntil(m.date) : null;
 
-  const header = (
-    <PageHeader
-      title={activeTeam?.name ?? "Inicio"}
-      meta={[
-        [activeTeam?.category, activeTeam?.gender].filter(Boolean).join(" · ") || null,
-        season?.name ?? null,
-      ]}
-      actions={
-        <>
-          <BtnLink href="/equipo" icon={<IconUsers size={15} />}>
-            Plantilla
-          </BtnLink>
-          <BtnLink href="/temporadas" variant="quiet" icon={<IconCalendar size={15} />}>
-            Temporadas
-          </BtnLink>
-        </>
-      }
-    />
+  // Racha: las últimas jornadas jugadas, de la más antigua a la más reciente.
+  const form = played.slice(-8);
+  const totalRounds = season?.totalMatchdays ?? matchdays.length;
+  const seasonPct = totalRounds ? Math.round((played.length / totalRounds) * 100) : 0;
+
+  // Jornadas con acta cerrada: alimentan el gráfico de marcadores.
+  const scored = played.filter(
+    (j) => j.scoreFor != null && j.scoreAgainst != null,
+  );
+  // Pistas por eliminatoria: normalmente 5, pero se deduce del acta más alta
+  // para no dar por hecho un formato que el club puede tener distinto.
+  const maxCourts = Math.max(
+    5,
+    ...scored.map((j) => (j.scoreFor ?? 0) + (j.scoreAgainst ?? 0)),
+  );
+  const courtsFor = scored.reduce((s, j) => s + (j.scoreFor ?? 0), 0);
+  const courtsAgainst = scored.reduce((s, j) => s + (j.scoreAgainst ?? 0), 0);
+
+  // Los que más puntos suman de la plantilla activa: es el orden con el que
+  // se monta la alineación, así que verlo de un vistazo tiene valor.
+  const topPlayers = [...active].sort((a, b) => b.pts - a.pts).slice(0, 6);
+  const topMax = topPlayers[0]?.pts || 1;
+  const avgPts = active.length
+    ? Math.round(active.reduce((s, p) => s + p.pts, 0) / active.length)
+    : 0;
+
+  const greeting = (
+    <div className="greet">
+      <div style={{ minWidth: 0 }}>
+        <div className="greet-hi">Hola, {(user?.name ?? "").split(" ")[0] || "capitán"}</div>
+        <h1 className="greet-name">{activeTeam?.name}</h1>
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          {activeTeam?.category && (
+            <Chip tone="mute" plain>
+              {activeTeam.category}
+              {activeTeam.gender ? ` · ${activeTeam.gender}` : ""}
+            </Chip>
+          )}
+          {season && (
+            <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+              {season.name}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <BtnLink href="/equipo" icon={<IconUsers size={15} />}>
+          Plantilla
+        </BtnLink>
+        <BtnLink href="/temporadas" variant="quiet" icon={<IconCalendar size={15} />}>
+          Temporadas
+        </BtnLink>
+      </div>
+    </div>
   );
 
   if (!season) {
     return (
       <div className="tw-page">
-        {header}
+        {greeting}
         <Card>
           <EmptyState
             icon={<IconCalendar size={24} />}
@@ -216,216 +276,512 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
   return (
     <div className="tw-page">
-      {header}
+      {greeting}
 
-      <StatRow style={{ marginBottom: 16 }}>
-        <Stat
-          label="Disponibles para la próxima"
-          value={availableCount}
-          unit={`/ ${active.length}`}
-          tone={active.length > 0 && pct >= 70 ? "accent" : active.length > 0 && pct < 50 ? "warning" : undefined}
-        >
-          <Progress value={pct} style={{ marginTop: 10 }} tone={pct < 50 ? "warning" : undefined} />
-        </Stat>
-        <Stat
-          label="Plantilla"
-          value={players.length}
-          sub={`${players.length - active.length} ${players.length - active.length === 1 ? "baja" : "bajas"}`}
-        />
-        <Stat
-          label="Balance"
-          value={`${wins}–${losses}`}
-          sub={`${played.length} de ${season.totalMatchdays ?? matchdays.length} jugadas`}
-        />
-        <Stat
-          label="Próxima jornada"
-          value={m ? `J${m.round}` : "—"}
-          sub={
-            m
-              ? dUntil === null
-                ? "Fecha por confirmar"
-                : dUntil === 0
-                  ? "Hoy"
-                  : dUntil === 1
-                    ? "Mañana"
-                    : dUntil > 1
-                      ? `En ${dUntil} días`
-                      : "Pendiente de cerrar"
-              : "Calendario completado"
-          }
-        />
-      </StatRow>
+      <div className="bento">
+        {/* ══ La tarjeta que manda: la próxima jornada ══════════════ */}
+        {m ? (
+          <div className="bcard bcard-accent col-7">
+            <div className="bcard-head">
+              <span className="tile-round">
+                <IconCalendar size={17} />
+              </span>
+              {/* Si la fecha ya pasó no es «la próxima»: está sin cerrar, y
+                  decir las dos cosas a la vez se lee como un error. */}
+              <span className="bcard-title">
+                {dUntil !== null && dUntil < 0 ? "Jornada sin cerrar" : "Próxima jornada"}
+              </span>
+              <span className="delta">{whenLabel(dUntil)}</span>
+            </div>
 
-      {m ? (
-        <div className="tw-home-grid">
-          {/* ── Jornada pendiente ────────────────────────────────── */}
-          <Card flush>
-            <CardHead title="Próxima jornada">
-              <Chip tone={m.status === "in_progress" ? "warning" : "mute"}>
-                {m.status === "in_progress" ? "En juego" : "Pendiente"}
-              </Chip>
-            </CardHead>
-            <div className="card-body">
-              <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 220 }}>
-                  <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                    Jornada {m.round} · {m.isHome ? "En casa" : "Fuera"}
-                  </div>
-                  <h2 style={{ fontSize: 22, marginTop: 4 }}>vs {m.opponent}</h2>
-                  <div style={{ marginTop: 8, fontSize: 13.5, color: "var(--text-muted)", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span>{formatDate(m.date)}</span>
-                    {formatTime(m.time) && (
-                      <>
-                        <span style={{ color: "var(--text-faint)" }}>·</span>
-                        <span className="mono">{formatTime(m.time)}</span>
-                      </>
-                    )}
-                    {m.location && (
-                      <>
-                        <span style={{ color: "var(--text-faint)" }}>·</span>
-                        <span>{m.location}</span>
-                      </>
-                    )}
-                  </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "color-mix(in srgb, var(--text-inverse) 82%, transparent)",
+                  }}
+                >
+                  Jornada {m.round} · {m.isHome ? "En casa" : "Fuera"}
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Disponibles</div>
-                  <div className="mono" style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.1, marginTop: 2 }}>
-                    {availableCount}
-                    <span style={{ fontSize: 14, color: "var(--text-faint)", fontWeight: 500 }}>
-                      {" "}/ {active.length}
-                    </span>
-                  </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: "clamp(22px, 2.6vw, 30px)",
+                    fontWeight: 700,
+                    letterSpacing: "-0.025em",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  vs {m.opponent}
+                </div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 13.5,
+                    color: "color-mix(in srgb, var(--text-inverse) 85%, transparent)",
+                  }}
+                >
+                  {formatDate(m.date)}
+                  {formatTime(m.time) ? ` · ${formatTime(m.time)}` : ""}
+                  {m.location ? ` · ${m.location}` : ""}
+                </div>
+              </div>
+
+              {/* Disponibles, dentro de la tarjeta que manda: es el dato que
+                  decide si el capitán puede hacer su trabajo hoy. */}
+              <div style={{ flex: "none" }}>
+                <div className="kpi-label">Disponibles</div>
+                <div className="kpi-num">
+                  {availableCount}
+                  <span className="unit" style={{ color: "inherit", opacity: 0.7 }}>
+                    / {active.length}
+                  </span>
                 </div>
               </div>
             </div>
-            {isCaptain && (
-              <div className="card-foot">
-                <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent">
-                  Crear alineación
-                </BtnLink>
-                <BtnLink href={`/jornada/${m.id}`}>Abrir jornada</BtnLink>
-                <BtnLink href={`/jornada/${m.id}/disponibilidad`} variant="quiet">
-                  Disponibilidad
-                </BtnLink>
-              </div>
-            )}
-          </Card>
 
-          {/* ── Mi disponibilidad ────────────────────────────────── */}
-          <Card flush>
-            <CardHead title="Mi disponibilidad" sub="¿Puedes jugar la próxima jornada?" />
-            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(
-                [
-                  { key: "yes", label: "Disponible", c: "var(--accent)", bg: "var(--accent-10)" },
-                  { key: "no", label: "No puedo", c: "var(--error)", bg: "var(--error-soft)" },
-                ] as const
-              ).map((o) => {
-                const on = avail === o.key;
-                return (
-                  <button
-                    key={o.key}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => setAvail(on ? null : o.key)}
+            {isCaptain && (
+              <div className="bcard-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* Si ya se jugó, lo que toca es meter el resultado, no
+                    preparar la alineación. */}
+                {dUntil !== null && dUntil < 0 ? (
+                  <Link
+                    href={`/jornada/${m.id}`}
+                    className="btn"
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      minHeight: 44,
-                      padding: "0 14px",
-                      borderRadius: 10,
-                      cursor: "pointer",
-                      fontSize: 14,
-                      fontWeight: on ? 700 : 500,
-                      textAlign: "left",
-                      background: on ? o.bg : "var(--bg-card-2)",
-                      color: on ? o.c : "var(--text-muted)",
-                      border: `1px solid ${on ? o.c : "var(--line)"}`,
-                      transition: "all var(--dur-fast) var(--ease)",
+                      background: "var(--text-inverse)",
+                      color: "var(--accent)",
+                      border: "none",
+                      fontWeight: 700,
                     }}
                   >
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 999,
-                        background: on ? o.c : "var(--text-faint)",
-                      }}
-                    />
-                    {o.label}
-                  </button>
-                );
-              })}
-              <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-faint)" }}>
-                Modo solo lectura · no se guarda
-              </p>
-            </div>
-          </Card>
-        </div>
-      ) : (
-        <Card>
-          <EmptyState
-            icon={<IconTrophy size={24} />}
-            title="No hay más jornadas programadas"
-            body="Has disputado todas las jornadas del calendario."
-            action={
-              <BtnLink href={`/temporadas/${season.id}`}>Ver temporada</BtnLink>
-            }
-          />
-        </Card>
-      )}
+                    <IconCheck size={15} />
+                    Meter el resultado
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/jornada/${m.id}/alineacion`}
+                    className="btn"
+                    style={{
+                      background: "var(--text-inverse)",
+                      color: "var(--accent)",
+                      border: "none",
+                      fontWeight: 700,
+                    }}
+                  >
+                    <IconZap size={15} />
+                    Crear alineación
+                  </Link>
+                )}
+                <Link
+                  href={`/jornada/${m.id}`}
+                  className="btn"
+                  style={{
+                    background: "color-mix(in srgb, var(--text-inverse) 16%, transparent)",
+                    color: "var(--text-inverse)",
+                    border: "none",
+                  }}
+                >
+                  Abrir jornada
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bcard col-7">
+            <EmptyState
+              compact
+              icon={<IconTrophy size={22} />}
+              title="No quedan jornadas"
+              body="Has disputado todas las del calendario."
+              action={<BtnLink href={`/temporadas/${season.id}`}>Ver temporada</BtnLink>}
+            />
+          </div>
+        )}
 
-      <div className="tw-home-grid" style={{ marginTop: 16 }}>
-        {/* ── Próximas jornadas ────────────────────────────────────── */}
-        <Card flush>
-          <CardHead title="Calendario" count={upcoming.length}>
+        {/* ══ Balance de la temporada ══════════════════════════════ */}
+        <div className="bcard col-5">
+          <div className="bcard-head">
+            <span className="tile-round tile-round-accent">
+              <IconTrophy size={17} />
+            </span>
+            <span className="bcard-title">Balance</span>
+            <span className="delta delta-flat">
+              {played.length} de {totalRounds}
+            </span>
+          </div>
+
+          <div className="kpi-num">
+            {wins}
+            <span style={{ color: "var(--text-faint)", fontWeight: 500 }}>–</span>
+            {losses}
+          </div>
+          <div className="kpi-sub">
+            {wins === losses
+              ? "Tantas ganadas como perdidas"
+              : wins > losses
+                ? `${wins - losses} ${wins - losses === 1 ? "victoria" : "victorias"} de ventaja`
+                : `${losses - wins} por debajo`}
+          </div>
+
+          {/* Racha: una barra por jornada jugada, verde si se ganó. */}
+          {form.length > 0 && (
+            <div className="bcard-foot">
+              <div className="spark" aria-hidden="true">
+                {form.map((j) => (
+                  <i
+                    key={j.id}
+                    className={j.outcome === "win" ? "on" : j.outcome === "loss" ? "lost" : ""}
+                    style={{
+                      height:
+                        j.outcome === "win" ? "100%" : j.outcome === "loss" ? "38%" : "18%",
+                    }}
+                  />
+                ))}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--text-faint)" }}>
+                Últimas {form.length} jornadas · temporada al {seasonPct}%
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ══ Marcador por jornada ═════════════════════════════════
+            El equivalente nuestro a la barra de ventas de un panel de
+            negocio: cada columna es una jornada y su altura, las pistas
+            ganadas de cinco. */}
+        <div className="bcard col-8">
+          <div className="bcard-head">
+            <span className="bcard-title">Cómo va la temporada</span>
+            <span className="delta delta-flat">Pistas ganadas de 5</span>
+          </div>
+
+          {scored.length === 0 ? (
+            <EmptyState
+              compact
+              title="Todavía sin actas"
+              body="Cuando cierres la primera jornada verás aquí el marcador de cada una."
+            />
+          ) : (
+            <>
+              <div className="rounds">
+                {scored.map((j) => {
+                  const won = (j.scoreFor ?? 0) > (j.scoreAgainst ?? 0);
+                  const h = Math.max(8, ((j.scoreFor ?? 0) / maxCourts) * 100);
+                  return (
+                    <span
+                      key={j.id}
+                      className="round-col"
+                      title={`Jornada ${j.round} vs ${j.opponent}: ${j.scoreFor}–${j.scoreAgainst}`}
+                    >
+                      <span
+                        className={"round-bar" + (won ? "" : " is-loss")}
+                        style={{ height: "100%" }}
+                      >
+                        <span style={{ height: `${h}%` }} />
+                      </span>
+                      <span className="round-num">{j.round}</span>
+                    </span>
+                  );
+                })}
+                {m && (
+                  <span className="round-col is-next" title={`Jornada ${m.round}, por jugar`}>
+                    <span className="round-bar is-next" style={{ height: "100%" }} />
+                    <span className="round-num">{m.round}</span>
+                  </span>
+                )}
+              </div>
+              <div
+                className="bcard-foot"
+                style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12.5 }}
+              >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <i
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 3,
+                      background: "var(--accent)",
+                    }}
+                  />
+                  <span style={{ color: "var(--text-muted)" }}>Ganadas {wins}</span>
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <i
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 3,
+                      background: "color-mix(in srgb, var(--error) 70%, transparent)",
+                    }}
+                  />
+                  <span style={{ color: "var(--text-muted)" }}>Perdidas {losses}</span>
+                </span>
+                <span style={{ color: "var(--text-faint)" }}>
+                  {courtsFor} pistas a favor, {courtsAgainst} en contra
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ══ Disponibilidad del equipo ════════════════════════════ */}
+        <div className="bcard col-4">
+          <div className="bcard-head">
+            <span className="tile-round tile-round-accent">
+              <IconCheck size={17} />
+            </span>
+            <span className="bcard-title">Disponibilidad</span>
+          </div>
+          <div className="kpi-num">
+            {pct}
+            <span className="unit">%</span>
+          </div>
+          <div className="kpi-sub">
+            {availableCount} de {active.length} para la próxima jornada
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <div
+              className="progress"
+              style={{ height: 8 }}
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span
+                style={{
+                  width: `${pct}%`,
+                  background: pct < 50 ? "var(--warning)" : "var(--accent)",
+                }}
+              />
+            </div>
+          </div>
+          <div
+            className="bcard-foot"
+            style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}
+          >
+            <span className="tile-round" style={{ width: 32, height: 32 }}>
+              <IconUsers size={15} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
+              <span style={{ display: "block", fontWeight: 700 }}>
+                {players.length} en plantilla
+              </span>
+              <span style={{ color: "var(--text-faint)", fontSize: 12.5 }}>
+                {players.length - active.length === 0
+                  ? "Toda activa"
+                  : `${players.length - active.length} de baja`}
+              </span>
+            </span>
+            <Link href="/equipo" className="link-action">
+              Ver <IconChevronRight size={13} />
+            </Link>
+          </div>
+        </div>
+
+        {/* ══ Calendario ═══════════════════════════════════════════ */}
+        <div className="bcard bcard-pad-0 col-7">
+          <div className="bcard-head" style={{ margin: 0, padding: "18px 20px 14px" }}>
+            <span className="bcard-title">Calendario</span>
             <Link href={`/temporadas/${season.id}`} className="link-action">
               Ver temporada
             </Link>
-          </CardHead>
+          </div>
           {upcoming.length <= 1 ? (
-            <EmptyState compact title="No quedan más jornadas" body="El calendario está completo." />
+            <EmptyState compact title="No quedan más jornadas" />
           ) : (
             upcoming.slice(1, 6).map((j) => (
-              <Link key={j.id} href={`/jornada/${j.id}`} className="tw-md-row">
-                <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                  J{j.round}
+              <Link
+                key={j.id}
+                href={`/jornada/${j.id}`}
+                className="list-row"
+                style={{ padding: "10px 20px" }}
+              >
+                <span
+                  className="mono"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 10,
+                    background: "var(--bg-card-2)",
+                    color: "var(--text-muted)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    flex: "none",
+                  }}
+                >
+                  {j.round}
                 </span>
-                <span style={{ fontSize: 14, fontWeight: 700 }}>vs {j.opponent}</span>
-                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                  {formatDate(j.date)}
-                  {formatTime(j.time) ? ` · ${formatTime(j.time)}` : ""}
+                <span className="list-row-main">
+                  <span className="list-row-title truncate">vs {j.opponent}</span>
+                  <span className="list-row-sub">
+                    {formatDateShort(j.date)}
+                    {formatTime(j.time) ? ` · ${formatTime(j.time)}` : ""}
+                  </span>
                 </span>
-                <Chip tone={j.isHome ? "accent" : "mute"} plain style={{ justifySelf: "start" }}>
+                <Chip tone={j.isHome ? "accent" : "mute"} plain>
                   {j.isHome ? "En casa" : "Fuera"}
                 </Chip>
-                <span style={{ color: "var(--text-faint)", display: "flex" }}>
+                <span className="list-row-chev">
                   <IconChevronRight size={16} />
                 </span>
               </Link>
             ))
           )}
-        </Card>
+        </div>
 
-        {/* ── Atajos ───────────────────────────────────────────────── */}
-        <Card flush>
-          <CardHead title="Atajos" />
-          {SHORTCUTS.map((s) => (
-            <ListRow
-              key={s.href}
-              href={s.href}
-              icon={
-                <IconTile>
-                  <s.Icon size={16} />
-                </IconTile>
+        {/* ══ Plantilla por puntos ═════════════════════════════════
+            El orden por puntos ES el orden de la alineación, así que verlo
+            de un vistazo es trabajo, no adorno. */}
+        <div className="bcard col-5">
+          <div className="bcard-head">
+            <span className="bcard-title">Plantilla por puntos</span>
+            <span className="delta delta-flat">Media {avgPts}</span>
+          </div>
+
+          {topPlayers.length === 0 ? (
+            <EmptyState
+              compact
+              title="Sin jugadores todavía"
+              body="Añade tu plantilla para verla ordenada por puntos."
+              action={
+                <BtnLink href="/equipo" variant="accent" size="sm">
+                  Añadir jugadores
+                </BtnLink>
               }
-              title={s.title}
-              sub={s.body}
             />
-          ))}
-        </Card>
+          ) : (
+            <>
+              {topPlayers.map((p, i) => (
+                <div key={p.id} className="rank-row">
+                  <span className="rank-pos">{i + 1}</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span className="rank-name">{p.name}</span>
+                    <span className="rank-track">
+                      <span style={{ width: `${Math.round((p.pts / topMax) * 100)}%` }} />
+                    </span>
+                  </span>
+                  <span className="rank-val">{p.pts}</span>
+                </div>
+              ))}
+              {active.length > topPlayers.length && (
+                <div className="bcard-foot">
+                  <Link href="/equipo" className="link-action">
+                    Ver los {active.length} <IconChevronRight size={14} />
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* ══ Mi disponibilidad ════════════════════════════════════ */}
+        <div className="bcard col-5">
+          <div className="bcard-head">
+            <span className="bcard-title">¿Puedes jugar la próxima jornada?</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {(
+              [
+                { key: "yes", label: "Sí, cuenta conmigo", c: "var(--accent)", bg: "var(--accent-10)" },
+                { key: "no", label: "No puedo", c: "var(--error)", bg: "var(--error-soft)" },
+              ] as const
+            ).map((o) => {
+              const on = avail === o.key;
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setAvail(on ? null : o.key)}
+                  style={{
+                    flex: "1 1 160px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    minHeight: 52,
+                    padding: "0 16px",
+                    borderRadius: 14,
+                    cursor: "pointer",
+                    fontSize: 14,
+                    fontWeight: on ? 700 : 500,
+                    textAlign: "left",
+                    background: on ? o.bg : "var(--bg-card-2)",
+                    color: on ? o.c : "var(--text-muted)",
+                    border: `1.5px solid ${on ? o.c : "transparent"}`,
+                    transition: "all var(--dur-fast) var(--ease)",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 999,
+                      background: on ? o.c : "var(--text-faint)",
+                      flex: "none",
+                    }}
+                  />
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="bcard-foot">
+            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+              Modo solo lectura · no se guarda
+            </span>
+          </div>
+        </div>
+
+        {/* ══ Atajos ═══════════════════════════════════════════════ */}
+        <div className="bcard col-12">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 10,
+            }}
+          >
+            {SHORTCUTS.map((s) => (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="bcard bcard-hover"
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  background: "var(--bg-card-2)",
+                  boxShadow: "none",
+                  gap: 11,
+                }}
+              >
+                <span className="tile-round" style={{ width: 32, height: 32 }}>
+                  <s.Icon size={15} />
+                </span>
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {s.title}
+                </span>
+                <IconChevronRight size={15} style={{ color: "var(--text-faint)", flex: "none" }} />
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

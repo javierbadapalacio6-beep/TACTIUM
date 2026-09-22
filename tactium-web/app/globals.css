@@ -65,6 +65,18 @@
   --tile-bg: var(--primary-dim);
   --tile-fg: var(--accent);
 
+  /* ── Superficie de la capa bento ────────────────────────────────
+     Más separada del lienzo que `--bg-card`: en este lenguaje la tarjeta
+     tiene que leerse como un objeto que flota, no como una zona. */
+  --surface: #0d2523;
+  --surface-line: rgba(232, 245, 239, 0.08);
+  --surface-line-hi: rgba(232, 245, 239, 0.18);
+  --surface-lit: rgba(255, 255, 255, 0.05);
+  /* Fondo del verde sólido: un degradado corto hacia un verde más hondo,
+     para que la tarjeta que manda tenga volumen y no sea un rectángulo. */
+  --accent-deep: #00b268;
+  --shadow-accent: 0 14px 34px -18px rgba(0, 223, 130, 0.55);
+
   /* Sombras: en oscuro casi desaparecen (separa el hairline); sirven para
      capas flotantes (popovers, diálogos). */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -174,6 +186,13 @@
     --tile-bg: var(--lt-accent-16);
     --tile-fg: var(--lt-primary);
 
+    --surface: #ffffff;
+    --surface-line: rgba(14, 26, 20, 0.08);
+    --surface-line-hi: rgba(14, 26, 20, 0.18);
+    --surface-lit: rgba(255, 255, 255, 0.9);
+    --accent-deep: #00784a;
+    --shadow-accent: 0 14px 30px -18px rgba(0, 153, 94, 0.5);
+
     --shadow-sm: 0 1px 2px rgba(14, 26, 20, 0.06), 0 1px 1px rgba(14, 26, 20, 0.03);
     --shadow-md: 0 8px 24px -8px rgba(14, 26, 20, 0.16);
     --shadow-lg: 0 20px 50px -14px rgba(14, 26, 20, 0.22);
@@ -224,6 +243,13 @@
 
   --tile-bg: var(--lt-accent-16);
   --tile-fg: var(--lt-primary);
+
+  --surface: #ffffff;
+  --surface-line: rgba(14, 26, 20, 0.08);
+  --surface-line-hi: rgba(14, 26, 20, 0.18);
+  --surface-lit: rgba(255, 255, 255, 0.9);
+  --accent-deep: #00784a;
+  --shadow-accent: 0 14px 30px -18px rgba(0, 153, 94, 0.5);
 
   --shadow-sm: 0 1px 2px rgba(14, 26, 20, 0.06), 0 1px 1px rgba(14, 26, 20, 0.03);
   --shadow-md: 0 8px 24px -8px rgba(14, 26, 20, 0.16);
@@ -479,6 +505,350 @@ a .card {
 /* Lienzo con fondo ambiental */
 .amb {
   background: var(--amb), var(--bg);
+}
+
+/* ══ CAPA «BENTO» ═══════════════════════════════════════════════════
+   Lenguaje visual del panel nuevo. Frente a la capa base —sobria, densa,
+   hairlines— aquí las superficies se despegan del lienzo, el radio crece,
+   las cifras mandan y el verde deja de ser un detalle para ocupar
+   superficies enteras.
+
+   Convive con la capa base a propósito: se aplica pantalla a pantalla
+   (`.bento`), no de golpe. Misma paleta, mismos tokens. ══════════════ */
+
+/* Rejilla de 12 columnas: cada tarjeta declara cuánto ocupa. Es lo que
+   permite que NO todas midan lo mismo, que es de donde sale el ritmo. */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+.bento > * {
+  grid-column: span 12;
+  min-width: 0;
+}
+@media (min-width: 720px) {
+  .bento > .col-3 { grid-column: span 6; }
+  .bento > .col-4 { grid-column: span 6; }
+  .bento > .col-5 { grid-column: span 6; }
+}
+@media (min-width: 1080px) {
+  .bento > .col-3 { grid-column: span 3; }
+  .bento > .col-4 { grid-column: span 4; }
+  .bento > .col-5 { grid-column: span 5; }
+  .bento > .col-6 { grid-column: span 6; }
+  .bento > .col-7 { grid-column: span 7; }
+  .bento > .col-8 { grid-column: span 8; }
+  .bento > .col-9 { grid-column: span 9; }
+}
+
+/* ── Tarjeta del lenguaje bento ────────────────────────────────── */
+.bcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border-radius: 22px;
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  /* Filo de luz arriba: la superficie deja de ser plana sin necesidad de
+     una sombra que ensucie el lienzo. */
+  box-shadow: inset 0 1px 0 var(--surface-lit), var(--shadow-sm);
+  transition: transform var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+  color: inherit;
+}
+.bcard-pad-0 {
+  padding: 0;
+  overflow: hidden;
+}
+a.bcard:hover,
+.bcard-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--surface-line-hi);
+}
+.bcard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.bcard-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+.bcard-foot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+/* La tarjeta que manda: verde sólido, tinta oscura. Una por pantalla. */
+.bcard-accent {
+  background: linear-gradient(150deg, var(--accent) 0%, var(--accent-deep) 100%);
+  border-color: transparent;
+  color: var(--text-inverse);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), var(--shadow-accent);
+}
+.bcard-accent .bcard-title,
+.bcard-accent .kpi-label,
+.bcard-accent .kpi-sub {
+  color: color-mix(in srgb, var(--text-inverse) 82%, transparent);
+}
+.bcard-accent .kpi-num {
+  color: var(--text-inverse);
+}
+
+/* ── Cifra grande ─────────────────────────────────────────────── */
+.kpi-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.kpi-num {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 10px;
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(32px, 4vw, 46px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+}
+.kpi-num .unit {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.kpi-sub {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+/* Variación al alza o a la baja, junto a la cifra. */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  background: var(--accent-10);
+  color: var(--accent);
+}
+.delta-down {
+  background: var(--error-soft);
+  color: var(--error);
+}
+.delta-flat {
+  background: var(--bg-card-2);
+  color: var(--text-muted);
+}
+.bcard-accent .delta {
+  background: color-mix(in srgb, var(--text-inverse) 16%, transparent);
+  color: var(--text-inverse);
+}
+
+/* ── Tesela circular de icono ─────────────────────────────────── */
+.tile-round {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--bg-card-2);
+  border: 1px solid var(--surface-line);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.tile-round-accent {
+  background: var(--accent-16);
+  border-color: transparent;
+  color: var(--accent);
+}
+.bcard-accent .tile-round {
+  background: color-mix(in srgb, var(--text-inverse) 14%, transparent);
+  border-color: transparent;
+  color: var(--text-inverse);
+}
+
+/* ── Barras verticales redondeadas ────────────────────────────── */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 56px;
+}
+.spark > i {
+  /* Ancho acotado: con `flex: 1` a secas, ocho jornadas en una tarjeta ancha
+     dan barras de 50px que parecen pastillas, no un gráfico. */
+  flex: 1 1 14px;
+  max-width: 26px;
+  border-radius: 6px;
+  background: var(--bg-card-3);
+  min-height: 6px;
+  transition: background var(--dur-fast) var(--ease);
+}
+.spark > i.on {
+  background: var(--accent);
+}
+.spark > i.lost {
+  background: color-mix(in srgb, var(--error) 60%, transparent);
+}
+.bcard-accent .spark > i {
+  background: color-mix(in srgb, var(--text-inverse) 22%, transparent);
+}
+.bcard-accent .spark > i.on {
+  background: var(--text-inverse);
+}
+
+/* ── Marcadores por jornada ───────────────────────────────────────
+   Una columna por jornada jugada: la altura es lo que se ganó, el color
+   dice si se ganó o se perdió. Es el equivalente nuestro a la barra de
+   ventas de un panel de negocio. */
+.rounds {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 150px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.rounds::-webkit-scrollbar {
+  display: none;
+}
+.round-col {
+  /* Columna acotada: una barra de jornada es una marca, no un bloque. Con
+     `flex: 1` sin tope salían de 50px; con un tope fijo dejaban medio
+     gráfico vacío cuando van pocas jornadas. Crece, pero hasta un límite. */
+  flex: 1 1 24px;
+  min-width: 20px;
+  max-width: 46px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: default;
+  color: inherit;
+}
+.round-bar {
+  width: 100%;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  position: relative;
+  overflow: hidden;
+  transition: filter var(--dur-fast) var(--ease);
+}
+.round-col:hover .round-bar {
+  filter: brightness(1.18);
+}
+.round-bar > span {
+  position: absolute;
+  inset: auto 0 0 0;
+  border-radius: 8px;
+  background: var(--accent);
+}
+.round-bar.is-loss > span {
+  background: color-mix(in srgb, var(--error) 70%, transparent);
+}
+.round-num {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.round-col.is-next .round-num {
+  color: var(--accent);
+  font-weight: 700;
+}
+.round-bar.is-next {
+  background: transparent;
+  border: 1.5px dashed var(--surface-line-hi);
+}
+
+/* ── Ranking horizontal (plantilla, parejas…) ─────────────────── */
+.rank-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+.rank-pos {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.rank-name {
+  /* `display: block` no sobra: son `<span>`, y un span en línea ignora la
+     altura, así que la barra de debajo no se pintaba. */
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rank-track {
+  display: block;
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-card-3);
+  overflow: hidden;
+}
+.rank-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.rank-val {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Saludo de cabecera ───────────────────────────────────────── */
+.greet {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.greet-hi {
+  font-size: 13.5px;
+  color: var(--text-faint);
+}
+.greet-name {
+  margin: 4px 0 0;
+  font-size: clamp(28px, 3.4vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
 /* ── Página ───────────────────────────────────────────────────── */
@@ -2960,6 +3330,19 @@ select.tw-cell-input {
   animation: tw-court-in 900ms var(--ease) 60ms forwards;
   -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+/* La pista se dibuja centrada en su lienzo: si el lienzo ocupa todo el ancho,
+   a tamaños intermedios cae justo encima del titular. A partir de tablet se
+   queda en la mitad derecha, que es el hueco libre. */
+@media (min-width: 760px) {
+  .tw-pub-hero-3d {
+    left: 42%;
+  }
+}
+@media (min-width: 1100px) {
+  .tw-pub-hero-3d {
+    left: 48%;
+  }
 }
 @keyframes tw-court-in {
   to {

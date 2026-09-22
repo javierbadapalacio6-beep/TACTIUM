@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tactium-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "tactium-web",
+      "port": 3000
+    },
+    {
+      "name": "tactium-web-produccion",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "cwd": "tactium-web",
+      "port": 3000
+    }
+  ]
+}
