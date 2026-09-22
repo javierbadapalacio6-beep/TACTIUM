@@ -72,6 +72,11 @@
   --surface-line: rgba(232, 245, 239, 0.08);
   --surface-line-hi: rgba(232, 245, 239, 0.18);
   --surface-lit: rgba(255, 255, 255, 0.05);
+
+  /* Lienzo de FUERA del marco. El panel no llega al borde de la ventana:
+     flota dentro de un marco redondeado, y esto es lo que se ve detrás. */
+  --shell-bg: #010707;
+  --shell-line: rgba(232, 245, 239, 0.07);
   /* Fondo del verde sólido: un degradado corto hacia un verde más hondo,
      para que la tarjeta que manda tenga volumen y no sea un rectángulo. */
   --accent-deep: #00b268;
@@ -203,6 +208,8 @@
     --surface-line: rgba(14, 26, 20, 0.08);
     --surface-line-hi: rgba(14, 26, 20, 0.18);
     --surface-lit: rgba(255, 255, 255, 0.9);
+    --shell-bg: #d7ded9;
+    --shell-line: rgba(14, 26, 20, 0.1);
     --accent-deep: #00784a;
     --shadow-accent: 0 14px 30px -18px rgba(0, 153, 94, 0.5);
 
@@ -271,6 +278,8 @@
   --surface-line: rgba(14, 26, 20, 0.08);
   --surface-line-hi: rgba(14, 26, 20, 0.18);
   --surface-lit: rgba(255, 255, 255, 0.9);
+  --shell-bg: #d7ded9;
+  --shell-line: rgba(14, 26, 20, 0.1);
   --accent-deep: #00784a;
   --shadow-accent: 0 14px 30px -18px rgba(0, 153, 94, 0.5);
 
@@ -1992,18 +2001,51 @@ button.list-row:hover,
   }
 }
 
-/* ══ Shell de la aplicación ═════════════════════════════════════ */
+/* ══ Shell de la aplicación ═════════════════════════════════════
+   El panel NO llega al borde de la ventana: flota dentro de un marco
+   redondeado sobre un lienzo más oscuro. Eso obliga a mover el scroll
+   dentro del marco — si scrollara el body, la barra superior se
+   despegaría por arriba y el redondeo se perdería. ═══════════════════ */
+.tw-shell {
+  height: 100dvh;
+  padding: 10px;
+  background: var(--shell-bg);
+  display: flex;
+  overflow: hidden;
+}
+.tw-frame {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.6);
+}
+
+/* En móvil el marco se come una pantalla que ya va justa: va a sangre. */
+@media (max-width: 767px) {
+  .tw-shell {
+    padding: 0;
+    background: var(--bg);
+  }
+  .tw-frame {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
 
 /* ── Barra lateral ─────────────────────────────────────────────── */
 .tw-sidebar {
   display: none;
 }
 .tw-side-brand {
-  height: 56px;
-  padding: 0 16px;
+  height: 60px;
+  padding: 0 18px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--line);
   flex: none;
 }
 .tw-side-brand-mini {
@@ -2012,11 +2054,11 @@ button.list-row:hover,
 .tw-side-nav {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 12px 10px 8px;
+  gap: 3px;
+  padding: 6px 10px 8px;
 }
 .tw-side-eyebrow {
-  padding: 4px 10px 8px;
+  padding: 12px 12px 6px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -2024,22 +2066,25 @@ button.list-row:hover,
   color: var(--text-faint);
 }
 .tw-side-team {
-  padding: 6px 10px 10px;
+  padding: 0 10px 10px;
   position: relative;
 }
 .tw-side-user {
-  border-top: 1px solid var(--line);
+  margin-top: auto;
   padding: 10px;
   position: relative;
 }
 
+/* Ítem de menú: píldora ancha. El activo se ELEVA a la superficie de
+   tarjeta con el icono en acento; así se lee sin robarle el verde a la
+   tarjeta destacada del contenido. */
 .tw-navitem {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: var(--r-sm);
+  gap: 12px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 14px;
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-muted);
@@ -2047,23 +2092,31 @@ button.list-row:hover,
 }
 .tw-navitem svg {
   flex: none;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 .tw-navitem:hover {
   background: var(--bg-card-2);
   color: var(--text);
 }
 .tw-navitem.is-active {
-  color: var(--accent);
-  background: var(--accent-10);
-  font-weight: 600;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 var(--surface-lit), 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 .tw-navitem.is-active svg {
+  color: var(--accent);
   opacity: 1;
 }
-.tw-navitem.is-active:hover {
-  color: var(--accent);
-  background: var(--accent-16);
+/* Punto a la derecha: remata la píldora sin colorearla entera. */
+.tw-navitem.is-active::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  margin-left: auto;
+  flex: none;
 }
 
 .tw-teambtn,
@@ -2072,23 +2125,22 @@ button.list-row:hover,
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: var(--bg-card);
+  padding: 9px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--surface-line);
+  background: var(--surface);
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .tw-userbtn {
   border-color: transparent;
-  background: transparent;
+  background: var(--bg-card-2);
 }
 .tw-teambtn:hover,
 .tw-userbtn:hover {
-  background: var(--bg-card-2);
-  border-color: var(--line-strong);
+  border-color: var(--surface-line-hi);
 }
 .tw-teambtn[aria-expanded="true"] {
   border-color: var(--accent-40);
@@ -2096,9 +2148,9 @@ button.list-row:hover,
 
 /* ── Popovers ──────────────────────────────────────────────────── */
 .tw-popover {
-  border-radius: var(--r-lg);
+  border-radius: 16px;
   background: var(--bg-raised);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--surface-line-hi);
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
@@ -2110,7 +2162,7 @@ button.list-row:hover,
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: var(--r-sm);
+  border-radius: 10px;
   border: none;
   background: transparent;
   font-family: var(--font-ui);
@@ -2146,11 +2198,12 @@ button.list-row:hover,
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 56px;
+  height: 60px;
   padding: 0 16px;
   background: var(--blur-bg);
   backdrop-filter: blur(14px) saturate(160%);
   border-bottom: 1px solid var(--line);
+  flex: none;
 }
 .tw-topbar-title {
   display: none;
@@ -2188,59 +2241,62 @@ button.list-row:hover,
 .tw-search {
   display: none;
 }
+/* Buscador en píldora, como los paneles de referencia. */
 .tw-searchbox {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line);
-  background: var(--bg-card);
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--surface-line);
+  background: var(--surface);
   color: var(--text-faint);
   font-size: 13px;
   transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .tw-searchbox:hover {
-  border-color: var(--line-strong);
+  border-color: var(--surface-line-hi);
   color: var(--text-muted);
 }
 .tw-kbd {
   font-family: var(--font-mono), monospace;
   font-size: 10.5px;
-  border: 1px solid var(--line-strong);
-  border-radius: 5px;
+  border: 1px solid var(--surface-line-hi);
+  border-radius: 6px;
   padding: 1px 6px;
   flex: none;
   color: var(--text-faint);
 }
 
+/* Controles de la derecha: círculos, no cuadrados. */
 .tw-iconbtn {
   position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--r-sm);
-  border: 1px solid transparent;
-  background: transparent;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--surface-line);
+  background: var(--surface);
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex: none;
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 .tw-iconbtn:hover,
 .tw-iconbtn[aria-expanded="true"] {
-  background: var(--bg-card-2);
+  border-color: var(--surface-line-hi);
   color: var(--text);
 }
 .tw-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 1px;
+  right: 1px;
   min-width: 15px;
   height: 15px;
   padding: 0 3px;
@@ -2254,8 +2310,7 @@ button.list-row:hover,
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Aro del color de la barra para que el número se despegue del icono. */
-  box-shadow: 0 0 0 2px var(--blur-bg);
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
 .tw-bell {
@@ -2263,7 +2318,7 @@ button.list-row:hover,
   top: 48px;
   right: 0;
   width: min(360px, calc(100vw - 32px));
-  border-radius: var(--r-lg);
+  border-radius: 18px;
   overflow: hidden;
   gap: 0;
 }
@@ -2286,8 +2341,18 @@ button.list-row:hover,
 }
 
 /* ── Lienzo y tab bar ──────────────────────────────────────────── */
+/* El scroll vive AQUÍ, no en el body: es lo que mantiene el marco fijo. */
+.tw-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 .tw-content {
   padding: 20px 16px 120px;
+  flex: 1;
 }
 .tw-tabbar {
   position: fixed;
@@ -2298,10 +2363,10 @@ button.list-row:hover,
   display: flex;
   gap: 2px;
   padding: 6px;
-  border-radius: 18px;
+  border-radius: 22px;
   background: var(--blur-bg);
   backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--surface-line-hi);
   box-shadow: var(--shadow-md);
 }
 .tw-tab {
@@ -2311,7 +2376,7 @@ button.list-row:hover,
   align-items: center;
   gap: 4px;
   padding: 8px 4px;
-  border-radius: 12px;
+  border-radius: 16px;
   color: var(--text-faint);
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
@@ -2320,24 +2385,18 @@ button.list-row:hover,
   background: var(--accent-10);
 }
 
-/* ── Tablet: barra lateral colapsada a 72px ────────────────────── */
+/* ── Tablet: barra lateral colapsada a 76px ────────────────────── */
 @media (min-width: 768px) {
   .tw-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 72px;
+    position: relative;
+    flex: none;
+    width: 76px;
     display: flex;
     flex-direction: column;
     background: var(--bg-raised);
     border-right: 1px solid var(--line);
-    z-index: 45;
     overflow-y: auto;
     overflow-x: hidden;
-  }
-  .tw-main {
-    margin-left: 72px;
   }
   .tw-tabbar {
     display: none;
@@ -2351,7 +2410,7 @@ button.list-row:hover,
     flex: 1;
   }
   .tw-content {
-    padding: 24px 24px 56px;
+    padding: 22px 22px 40px;
   }
 
   .tw-navitem-label,
@@ -2371,11 +2430,14 @@ button.list-row:hover,
     align-items: center;
   }
   .tw-navitem {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     justify-content: center;
     padding: 0;
     gap: 0;
+  }
+  .tw-navitem.is-active::after {
+    display: none;
   }
   .tw-side-team,
   .tw-side-user {
@@ -2398,13 +2460,10 @@ button.list-row:hover,
 /* ── Escritorio: barra lateral completa ────────────────────────── */
 @media (min-width: 1024px) {
   .tw-sidebar {
-    width: 240px;
-  }
-  .tw-main {
-    margin-left: 240px;
+    width: 248px;
   }
   .tw-topbar {
-    padding: 0 28px;
+    padding: 0 24px;
     gap: 20px;
   }
   .tw-topbar-title {
@@ -2417,7 +2476,7 @@ button.list-row:hover,
     justify-content: flex-start;
   }
   .tw-content {
-    padding: 28px 32px 64px;
+    padding: 26px 26px 48px;
   }
 
   .tw-navitem-label,
@@ -2435,18 +2494,21 @@ button.list-row:hover,
     display: none;
   }
   .tw-side-nav {
-    padding: 12px 10px 8px;
+    padding: 6px 10px 8px;
     align-items: stretch;
   }
   .tw-navitem {
     width: auto;
-    height: 36px;
+    height: 42px;
     justify-content: flex-start;
-    padding: 0 10px;
-    gap: 10px;
+    padding: 0 12px;
+    gap: 12px;
+  }
+  .tw-navitem.is-active::after {
+    display: block;
   }
   .tw-side-team {
-    padding: 6px 10px 10px;
+    padding: 0 10px 10px;
   }
   .tw-side-user {
     padding: 10px;
@@ -2454,7 +2516,7 @@ button.list-row:hover,
   .tw-teambtn,
   .tw-userbtn {
     justify-content: flex-start;
-    padding: 8px 10px;
+    padding: 9px 10px;
     gap: 10px;
   }
   .tw-popover {
@@ -2771,7 +2833,7 @@ select.tw-cell-input {
 }
 .tw-lineup-head {
   position: sticky;
-  top: 56px;
+  top: 60px;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -2801,8 +2863,8 @@ select.tw-cell-input {
   }
   .tw-bench {
     position: sticky;
-    top: 132px;
-    max-height: calc(100vh - 160px);
+    top: 136px;
+    max-height: calc(100dvh - 190px);
     overflow-y: auto;
   }
 }
@@ -3331,7 +3393,7 @@ select.tw-cell-input {
   }
   .tw-settings-nav {
     position: sticky;
-    top: 84px;
+    top: 76px;
     flex-direction: column;
     gap: 1px;
     padding: 8px;

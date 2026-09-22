@@ -460,7 +460,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    // El panel no llega al borde: `tw-shell` es el lienzo de fuera y
+    // `tw-frame` el marco redondeado que lo contiene todo. El scroll vive
+    // dentro, en `tw-main`, para que el marco no se mueva.
+    <div className="tw-shell">
+      <div className="tw-frame">
       {/* ══ Barra lateral ══════════════════════════════════════════ */}
       <aside className="tw-sidebar">
         <Link
@@ -839,6 +843,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main className="tw-content">{children}</main>
+      </div>
       </div>
 
       {/* ══ Tab bar · móvil ════════════════════════════════════════ */}
