@@ -161,13 +161,23 @@ export async function importFcpRosterIntoTeam(
   const sb = supabaseBrowser();
 
   // El vínculo es (fcp_id_equipo, team_id), así que un equipo acumula un
-  // vínculo por temporada: es historial, no un duplicado. `upsert` para que
-  // reimportar no reviente con clave repetida.
+  // vínculo por temporada: es historial, no un duplicado.
+  //
+  // `ignoreDuplicates` NO es un detalle de estilo: `fcp_team_links` sólo tiene
+  // políticas de INSERT y SELECT, ninguna de UPDATE. Un upsert normal hace
+  // `ON CONFLICT DO UPDATE`, y ese UPDATE se estrella contra la RLS en cuanto
+  // el vínculo ya existe — o sea, la segunda vez que alguien importa:
+  //
+  //     new row violates row-level security policy (USING expression)
+  //
+  // Con `ignoreDuplicates` sale `ON CONFLICT DO NOTHING`, que no necesita
+  // política de UPDATE. Y es la semántica correcta: la fila es el par de
+  // claves, aquí no hay nada que actualizar.
   const { error: linkErr } = await sb
     .from("fcp_team_links")
     .upsert(
       { fcp_id_equipo: team.id_equipo, team_id: teamId },
-      { onConflict: "fcp_id_equipo,team_id" },
+      { onConflict: "fcp_id_equipo,team_id", ignoreDuplicates: true },
     );
   if (linkErr) throw linkErr;
 
