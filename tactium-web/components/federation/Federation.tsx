@@ -821,12 +821,16 @@ function FormPips({ form, box = 18 }: { form: ("V" | "D")[]; box?: number }) {
 const STAND_COLS =
   "38px minmax(150px, 1.7fr) 34px 34px 46px 46px 46px 52px minmax(104px, auto)";
 
-type GroupTab = "clasificacion" | "jornadas" | "cuadro";
+/* Clasificación y jornadas ya no son dos pestañas: se miran a la vez, que
+   es como se mira una liga —«voy tercero, ¿contra quién juego?»—. En un
+   grupo normal no queda nada que elegir, así que no hay pestañas; sólo el
+   playoff conserva el cuadro como vista aparte. */
+type GroupTab = "tabla" | "cuadro";
 
 export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
   const { user, activeTeam } = useSession();
   const esPlayoff = /^fase/i.test(decodeURIComponent(id));
-  const [tab, setTab] = useState<GroupTab>(esPlayoff ? "cuadro" : "clasificacion");
+  const [tab, setTab] = useState<GroupTab>(esPlayoff ? "cuadro" : "tabla");
 
   const standings = useAsync(() => fetchFcpStandings(id), [id, user?.id]);
   // Los partidos se cargan siempre: alimentan tanto las jornadas como la meta.
@@ -847,16 +851,10 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
   // El equipo propio (si hay sesión con equipo) se resalta en la tabla.
   const myName = activeTeam?.name?.trim().toLowerCase() ?? null;
 
-  const tabs: [GroupTab, string][] = esPlayoff
-    ? [
-        ["cuadro", "Cuadro"],
-        ["clasificacion", "Clasificación"],
-        ["jornadas", "Jornadas"],
-      ]
-    : [
-        ["clasificacion", "Clasificación"],
-        ["jornadas", "Jornadas"],
-      ];
+  const tabs: [GroupTab, string][] = [
+    ["cuadro", "Cuadro"],
+    ["tabla", "Clasificación y jornadas"],
+  ];
 
   const groupMeta = [
     header.data?.temporada ?? null,
@@ -889,36 +887,43 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
         </div>
       </header>
 
-      <div style={{ marginBottom: 16 }}>
-        <Segmented
-          label="Vista del grupo"
-          value={tab}
-          onChange={setTab}
-          options={tabs.map(([v, l]) => ({ value: v, label: l }))}
-        />
-      </div>
+      {/* El selector sólo aparece en el playoff, que es el único grupo con
+          algo que elegir: el cuadro. */}
+      {esPlayoff && (
+        <div style={{ marginBottom: 16 }}>
+          <Segmented
+            label="Vista del grupo"
+            value={tab}
+            onChange={setTab}
+            options={tabs.map(([v, l]) => ({ value: v, label: l }))}
+          />
+        </div>
+      )}
 
       {tab === "cuadro" ? (
         <FcpBracketPanel idGrupo={id} />
-      ) : tab === "clasificacion" ? (
-        standings.error ? (
-          <Card>
-            <EmptyState
-              icon={<IconFlag size={22} />}
-              title="Sin clasificación disponible"
-              body={standings.error}
-            />
-          </Card>
-        ) : rows.length === 0 ? (
-          <Card>
-            <EmptyState
-              icon={<IconFlag size={22} />}
-              title="Sin clasificación disponible"
-              body="Aún no hay datos federativos sincronizados para este grupo."
-            />
-          </Card>
-        ) : (
-          <Card flush>
+      ) : (
+        <div className="tw-fcp-split">
+          <section style={{ minWidth: 0 }}>
+            <SectionHead title="Clasificación" style={{ margin: "0 0 10px" }} />
+            {standings.error ? (
+              <Card>
+                <EmptyState
+                  icon={<IconFlag size={22} />}
+                  title="Sin clasificación disponible"
+                  body={standings.error}
+                />
+              </Card>
+            ) : rows.length === 0 ? (
+              <Card>
+                <EmptyState
+                  icon={<IconFlag size={22} />}
+                  title="Sin clasificación disponible"
+                  body="Aún no hay datos federativos sincronizados para este grupo."
+                />
+              </Card>
+            ) : (
+              <Card flush>
             <div className="tw-roster-scroll">
               <div
                 className="tw-fcp-head"
@@ -981,17 +986,24 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
                   </Link>
                 );
               })}
-            </div>
-          </Card>
-        )
-      ) : matches.loading ? (
-        <SkeletonCard />
-      ) : mData.length === 0 ? (
-        <Card>
-          <EmptyState icon={<IconFlag size={22} />} title="Sin jornadas registradas" />
-        </Card>
-      ) : (
-        <FcpGroupSchedule idGrupo={id} matches={mData} />
+                </div>
+              </Card>
+            )}
+          </section>
+
+          <section style={{ minWidth: 0 }}>
+            <SectionHead title="Jornadas" style={{ margin: "0 0 10px" }} />
+            {matches.loading ? (
+              <SkeletonCard />
+            ) : mData.length === 0 ? (
+              <Card>
+                <EmptyState icon={<IconFlag size={22} />} title="Sin jornadas registradas" />
+              </Card>
+            ) : (
+              <FcpGroupSchedule idGrupo={id} matches={mData} />
+            )}
+          </section>
+        </div>
       )}
     </div>
   );
