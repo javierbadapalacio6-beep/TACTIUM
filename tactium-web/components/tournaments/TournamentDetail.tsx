@@ -18,6 +18,7 @@ import {
   togglePhaseDay,
   setRegistrationPayment,
 } from "@/lib/queries";
+import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
   generateKoBracket,
@@ -91,6 +92,10 @@ interface RealTournament {
   // No siempre lo devuelve la RPC pública; se usa si viene.
   club_name?: string | null;
   billing_status?: string | null;
+  /** Club organizador. Llega solo si la RLS deja leer la fila, o sea a quien
+   *  puede ver el torneo como suyo. Sirve para decidir si ESTE usuario lo
+   *  organiza, no si organiza torneos en general. */
+  club_id?: string | null;
 }
 
 /* ── Formato de partido (espejo de formatConfig/resolveMatchFormat de la app) ─ */
@@ -1304,6 +1309,7 @@ export function TournamentDetail({
   /** Vista de jugador/espectador: sin acciones de organizador. */
   spectator?: boolean;
 }) {
+  const { clubs } = useSession();
   const [tab, setTab] = useState<Tab>(spectator ? "cuadro" : "inscripciones");
   const [followed, setFollowed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1390,8 +1396,22 @@ export function TournamentDetail({
     [id, reloadKey],
   );
 
+  /**
+   * ¿Organiza ESTE torneo quien lo está mirando?
+   *
+   * La página pasaba `spectator={role !== "club"}`, o sea «soy admin de ALGÚN
+   * club». Con eso, el admin del club A veía los controles de organizador en
+   * un torneo del club B: pulsaba los días de cada fase y la base le
+   * respondía «new row violates row-level security policy». La RLS hacía su
+   * trabajo; la pantalla no hacía el suyo, que es no ofrecer lo que no se
+   * puede hacer.
+   */
+  const miembroDelClub =
+    !!data?.tour?.club_id && clubs.some((c) => c.id === data.tour!.club_id);
+  const esEspectador = spectator || !miembroDelClub;
+
   const backLink = {
-    href: spectator ? "/torneos" : "/club/torneos",
+    href: esEspectador ? "/torneos" : "/club/torneos",
     label: "Torneos",
   };
 
@@ -1449,7 +1469,7 @@ export function TournamentDetail({
   const visibleTabs = TABS.filter(([k]) => {
     // Las parejas inscritas son públicas (la RPC no expone contacto a anónimos).
     // Solo la configuración del torneo queda para el organizador.
-    if (spectator && k === "config") return false;
+    if (esEspectador && k === "config") return false;
     if (k === "grupos") return showGrupos;
     if (k === "clasificacion") return showClasificacion;
     if (k === "cuadro") return showCuadro;
@@ -1500,7 +1520,7 @@ export function TournamentDetail({
   // Motor de cuadros: despacha la generación por formato, recorriendo TODAS las
   // divisiones (género × categoría). Espejo de TournamentDetailScreen (app).
   // Todo pasa por `guardedWrite`, así que queda inerte en modo solo lectura.
-  const organizer = !spectator;
+  const organizer = !esEspectador;
   const koFormat = t.format === "ko" || t.format === "ko_consolation";
   const isRR = t.format === "round_robin";
   const isGroupsKo = t.format === "groups_ko";
@@ -1840,7 +1860,7 @@ export function TournamentDetail({
           dateStr || "Fecha por confirmar",
         ]}
         actions={
-          spectator ? (
+          esEspectador ? (
             <>
               {/* Apuntarse es la acción principal: seguir el torneo es
                   secundario y no puede competir con ella en el acento. */}
@@ -1871,7 +1891,7 @@ export function TournamentDetail({
       >
         <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
           <Chip tone={statusTone}>{statusLabel}</Chip>
-          {!spectator && t.status !== "draft" && (
+          {!esEspectador && t.status !== "draft" && (
             <Chip plain>
               {t.billing_status === "paid" ? "Publicado y pagado" : "Publicado"}
             </Chip>
@@ -1889,14 +1909,14 @@ export function TournamentDetail({
         </div>
       </PageHeader>
 
-      {!spectator && t.status === "draft" && (
+      {!esEspectador && t.status === "draft" && (
         <Note tone="warning" icon={<IconInfo size={16} />} style={{ marginBottom: 16 }}>
           Publica el torneo para abrir las inscripciones. Hasta entonces nadie
           puede unirse ni añadirse.
         </Note>
       )}
 
-      {!spectator && t.signup_code && (
+      {!esEspectador && t.signup_code && (
         <Card
           style={{
             marginBottom: 16,
@@ -1957,7 +1977,7 @@ export function TournamentDetail({
           sub={matches.length > 0 ? `${playedCount} jugados` : "Aún sin generar"}
         />
         <Stat label="Cuota" value={feeLabel} icon={<IconTicket size={14} />} />
-        {!spectator && (
+        {!esEspectador && (
           <Stat
             label="Cobradas"
             value={paidCount}
@@ -2008,7 +2028,7 @@ export function TournamentDetail({
               title="Parejas inscritas"
               count={regs.length}
               sub={
-                spectator
+                esEspectador
                   ? undefined
                   : "Toca la categoría de una pareja para moverla de cuadro."
               }
@@ -2027,7 +2047,7 @@ export function TournamentDetail({
                   <span className="truncate" style={{ fontSize: 13.5, fontWeight: 700 }}>
                     {pairName(r)}
                   </span>
-                  {spectator ? (
+                  {esEspectador ? (
                     <span style={{ fontSize: 13 }}>{r.category ?? "—"}</span>
                   ) : (
                     <Btn
@@ -2058,7 +2078,7 @@ export function TournamentDetail({
                         {r.payment_method === "stripe" ? "Online" : "En club"}
                       </Chip>
                     ) : r.payment_status === "pending_club" ? (
-                      !spectator ? (
+                      !esEspectador ? (
                         <button
                           type="button"
                           className="chip chip-warning"
@@ -2338,7 +2358,7 @@ export function TournamentDetail({
               restMinutes={Number(t?.rest_minutes ?? 0)}
               startsOn={t?.starts_on ?? null}
               endsOn={t?.ends_on ?? null}
-              readOnly={!!spectator}
+              readOnly={!!esEspectador}
               phaseDays={data?.phaseDays ?? {}}
               onTogglePhaseDay={flipPhaseDay}
               onPersist={persistSlot}

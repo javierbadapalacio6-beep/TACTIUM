@@ -1175,15 +1175,20 @@ export async function fetchTournament(id: string) {
     // La RPC pública no trae billing_status; el organizador lo necesita para
     // saber si el torneo ya está pagado/publicado. Lectura directa best-effort
     // (RLS: solo la devuelve al dueño; el espectador recibe null y no la usa).
+    // `club_id` va aquí y no en la RPC pública a propósito: sirve para saber
+    // si QUIEN MIRA organiza ESTE torneo. La RLS solo devuelve la fila a quien
+    // puede verla, así que un espectador recibe null y la pantalla le da la
+    // vista de espectador.
     const { data: b } = await sb
       .from("tournaments")
-      .select("billing_status")
+      .select("billing_status, club_id")
       .eq("id", id)
       .maybeSingle();
+    const own = b as { billing_status?: string; club_id?: string } | null;
     return {
       ...row,
-      billing_status:
-        (b as { billing_status?: string } | null)?.billing_status ?? null,
+      billing_status: own?.billing_status ?? null,
+      club_id: own?.club_id ?? null,
     };
   }
   // Borrador / no publicado: la RPC pública lo oculta. Lectura directa — la RLS
@@ -1191,7 +1196,7 @@ export async function fetchTournament(id: string) {
   const { data: direct } = await sb
     .from("tournaments")
     .select(
-      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, courts, start_time, end_time, slot_minutes, rest_minutes",
+      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, club_id, courts, start_time, end_time, slot_minutes, rest_minutes",
     )
     .eq("id", id)
     .maybeSingle();
