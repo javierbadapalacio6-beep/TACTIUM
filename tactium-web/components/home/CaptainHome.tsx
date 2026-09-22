@@ -284,15 +284,15 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               <span className="delta">{whenLabel(dUntil)}</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}>
                   Jornada {m.round} · {m.isHome ? "En casa" : "Fuera"}
                 </div>
                 <div
                   style={{
-                    marginTop: 6,
-                    fontSize: "clamp(22px, 2.6vw, 30px)",
+                    marginTop: 5,
+                    fontSize: "clamp(18px, 1.9vw, 24px)",
                     fontWeight: 700,
                     letterSpacing: "-0.025em",
                     lineHeight: 1.1,
@@ -300,7 +300,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 >
                   vs {m.opponent}
                 </div>
-                <div style={{ marginTop: 10, fontSize: 13.5, color: "var(--text-muted)" }}>
+                <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-muted)" }}>
                   {formatDate(m.date)}
                   {formatTime(m.time) ? ` · ${formatTime(m.time)}` : ""}
                   {m.location ? ` · ${m.location}` : ""}
@@ -671,9 +671,9 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                     display: "flex",
                     alignItems: "center",
                     gap: 10,
-                    minHeight: 52,
-                    padding: "0 16px",
-                    borderRadius: 14,
+                    minHeight: 46,
+                    padding: "0 14px",
+                    borderRadius: 12,
                     cursor: "pointer",
                     fontSize: 14,
                     fontWeight: on ? 700 : 500,
