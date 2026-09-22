@@ -300,6 +300,22 @@ export const IconSliders = (p: Props) => (
   </Svg>
 );
 
+/* Símbolos de género. Los usa la rejilla de grupos de la Federación, que se
+   organiza en masculino / femenino / mixto. */
+export const IconVenus = (p: Props) => (
+  <Svg {...p}>
+    <circle cx="12" cy="9" r="5" />
+    <path d="M12 14v7M9 18h6" />
+  </Svg>
+);
+
+export const IconMars = (p: Props) => (
+  <Svg {...p}>
+    <circle cx="10" cy="14" r="5" />
+    <path d="M14 10l6-6M15 4h5v5" />
+  </Svg>
+);
+
 /** Resolutor por nombre — lo usan `lib/nav.ts` y `lib/account-data.ts`, que no
  *  pueden traer JSX. */
 export const ICONS = {

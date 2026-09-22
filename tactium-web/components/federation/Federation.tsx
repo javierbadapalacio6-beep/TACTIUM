@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   fetchFcpBracket,
   fetchFcpBracketTieActa,
   fetchFcpGroupActas,
+  fetchFcpGroupMetas,
   fetchFcpGroups,
   fetchFcpLeagues,
   fetchFcpGroupHeader,
@@ -41,18 +42,26 @@ import {
   PageHeader,
   SectionHead,
   Segmented,
+  Select,
   Stat,
   StatRow,
 } from "@/components/ui";
 import { EmptyState, Skeleton, SkeletonCard, SkeletonPage } from "@/components/states";
 import {
+  IconCalendar,
+  IconChart,
   IconCheck,
   IconChevronDown,
   IconChevronRight,
   IconFlag,
+  IconMars,
   IconSearch,
+  IconShield,
+  IconSliders,
+  IconTrophy,
   IconUser,
   IconUsers,
+  IconVenus,
 } from "@/components/Icon";
 
 /**
@@ -66,11 +75,50 @@ import {
  */
 
 const FEDERATIONS = [
-  { slug: "cantabra", name: "Federación Cántabra de Pádel", short: "FCP", active: true },
+  {
+    slug: "cantabra",
+    name: "Federación Cántabra de Pádel",
+    short: "FCP",
+    active: true,
+    logo: "/federations/fcantp-mark.png",
+  },
   { slug: "asturiana", name: "Federación Asturiana de Pádel", short: "FAP", active: false },
   { slug: "vasca", name: "Federación Vasca de Pádel", short: "FVP", active: false },
   { slug: "madrilena", name: "Federación Madrileña de Pádel", short: "FMP", active: false },
 ];
+
+/**
+ * Escudo de la federación.
+ *
+ * El logo oficial es un lockup horizontal —emblema + «Federación Cántabra
+ * de Pádel»—, y dentro de un disco queda ilegible; lo que se usa aquí es
+ * el emblema recortado (`fcantp-mark.png`). Va en rojo sobre blanco, así
+ * que necesita su propio disco claro o se recorta contra el panel oscuro.
+ * Las federaciones que aún no tienen logo caen en la bandera genérica.
+ */
+function FedCrest({
+  logo,
+  size = 52,
+  alt = "",
+}: {
+  logo?: string;
+  size?: number;
+  alt?: string;
+}) {
+  if (!logo) {
+    return (
+      <span className="tw-fcp-crest" style={{ width: size, height: size }} aria-hidden="true">
+        <IconFlag size={Math.round(size * 0.46)} />
+      </span>
+    );
+  }
+  return (
+    <span className="tw-fcp-crest is-logo" style={{ width: size, height: size }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={logo} alt={alt} width={size} height={size} />
+    </span>
+  );
+}
 
 /* Estas pantallas ya NO piden sesión: las tablas `fcp_*` tienen lectura
    pública (migración 20260811c). Son datos que la federación publica en
@@ -98,9 +146,7 @@ export function FederationPicker() {
                 gap: 12,
               }}
             >
-              <IconTile mute={!f.active}>
-                <IconFlag size={16} />
-              </IconTile>
+              <FedCrest logo={f.logo} size={40} alt="" />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
                   {f.name}
@@ -141,45 +187,53 @@ export function FederationPicker() {
 }
 
 type Tab = "todo" | "equipos" | "jugadores" | "rankings";
-const TABS: [Tab, string][] = [
-  ["todo", "Todo"],
-  ["equipos", "Equipos"],
-  ["jugadores", "Jugadores"],
-  ["rankings", "Rankings"],
+const TABS: [Tab, string, (p: { size?: number }) => React.ReactElement][] = [
+  ["todo", "Todo", IconSliders],
+  ["equipos", "Equipos", IconUsers],
+  ["jugadores", "Jugadores", IconUser],
+  ["rankings", "Rankings", IconChart],
 ];
 
-/** Una fila de filtro: etiqueta + chips en una línea que hace scroll. */
-function FilterRow({
+/**
+ * Un filtro: tesela redonda + etiqueta + desplegable.
+ *
+ * Antes era una fila de chips con scroll horizontal. Con 138 grupos esa
+ * fila no había quien la usara —y además es el patrón que se rompe en
+ * Safari de iOS—, así que va en un `select` nativo, que en el móvil abre
+ * la rueda del sistema.
+ */
+function FilterField({
   label,
+  icon,
   value,
   options,
   onChange,
 }: {
   label: string;
+  icon: ReactNode;
   value: string;
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
 }) {
   if (options.length <= 1) return null;
+  const id = "fcp-f-" + label.toLowerCase();
   return (
-    <div className="tw-fcp-filter">
-      <span className="tw-fcp-filter-label">{label}</span>
-      <div className="tw-fcp-filter-chips">
-        {options.map((o) => {
-          const on = o.value === value;
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onChange(o.value)}
-              aria-pressed={on}
-              className={"tw-fcp-chip" + (on ? " is-on" : "")}
-            >
+    <div className="tw-fcp-field">
+      <span className="tw-fcp-field-tile" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="tw-fcp-field-body">
+        <label className="tw-fcp-field-label" htmlFor={id}>
+          {label}
+        </label>
+        <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
               {o.label}
-            </button>
-          );
-        })}
-      </div>
+            </option>
+          ))}
+        </Select>
+      </span>
     </div>
   );
 }
@@ -265,6 +319,18 @@ export function FederationExplore({ slug }: { slug: string }) {
     });
   }, [allGroups, gender, cat, grupo, term]);
 
+  // Equipos y estado de cada grupo: es lo que va en el pie de la tarjeta.
+  // Se pide sólo de los grupos que se están viendo.
+  const metaIds = useMemo(
+    () => shownGroups.slice(0, 200).map((g) => g.idGrupo),
+    [shownGroups]
+  );
+  const groupMetas = useAsync(
+    () => fetchFcpGroupMetas(metaIds),
+    [metaIds.join(",")],
+    tab === "todo" && metaIds.length > 0
+  );
+
   const scopedGroupIds = useMemo(
     () =>
       grupo !== "all" ? [grupo] : grupoOptions.map((g) => g.idGrupo),
@@ -332,15 +398,31 @@ export function FederationExplore({ slug }: { slug: string }) {
 
   return (
     <div className="tw-page">
-      <PageHeader
-        back={{ href: "/federacion", label: "Federaciones" }}
-        title="Federación Cántabra de Pádel"
-        lede="Clasificaciones, jornadas y jugadores federados."
-        meta={[countLabel]}
-      />
+      {/* ══ Cabecera ══════════════════════════════════════════════
+          Sobre una pista de noche dibujada con gradientes: la
+          federación es la cara pública de la aplicación. */}
+      <header className="tw-fcp-hero">
+        <Link href="/federacion" className="tw-back" style={{ marginBottom: 12 }}>
+          <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
+          Federaciones
+        </Link>
+        <div className="tw-fcp-hero-top">
+          <FedCrest logo="/federations/fcantp-mark.png" alt="" />
+          <div style={{ minWidth: 0 }}>
+            <h1 className="tw-fcp-hero-title">Federación Cántabra de Pádel</h1>
+            <p className="tw-fcp-hero-sub">
+              Clasificaciones, jornadas y jugadores federados.
+            </p>
+          </div>
+        </div>
+        <span className="tw-fcp-hero-meta">
+          <IconCalendar size={14} />
+          {countLabel}
+        </span>
+      </header>
 
-      <Card style={{ marginBottom: 16 }}>
-        <div className="tw-toolbar" style={{ marginBottom: 0 }}>
+      <div className="tw-fcp-bar">
+        <div className="tw-fcp-bar-top">
           <InputWrap icon={<IconSearch size={15} />}>
             <input
               type="search"
@@ -362,21 +444,31 @@ export function FederationExplore({ slug }: { slug: string }) {
             label="Sección"
             value={tab}
             onChange={setTab}
-            options={TABS.map(([v, l]) => ({ value: v, label: l }))}
+            options={TABS.map(([v, l, Ico]) => ({
+              value: v,
+              label: (
+                <>
+                  <Ico size={15} />
+                  {l}
+                </>
+              ),
+            }))}
           />
         </div>
 
         {/* Filtros en línea. En Rankings el grupo no pinta nada: la lista es
             por género y categoría, no por grupo. */}
-        <div className="tw-fcp-filters">
-          <FilterRow
+        <div className="tw-fcp-fields">
+          <FilterField
             label="Temporada"
+            icon={<IconCalendar size={15} />}
             value={String(year ?? "")}
             options={yearOptions}
             onChange={(v) => setYear(Number(v))}
           />
-          <FilterRow
+          <FilterField
             label="Género"
+            icon={<IconUser size={15} />}
             value={gender}
             options={[
               { value: "all", label: "Ambos" },
@@ -385,15 +477,17 @@ export function FederationExplore({ slug }: { slug: string }) {
             ]}
             onChange={(v) => setGender(v as "all" | "M" | "F")}
           />
-          <FilterRow
+          <FilterField
             label="Categoría"
+            icon={<IconTrophy size={15} />}
             value={cat}
             options={catOptions}
             onChange={setCat}
           />
           {tab !== "rankings" && (
-            <FilterRow
+            <FilterField
               label="Grupo"
+              icon={<IconUsers size={15} />}
               value={grupo}
               options={[
                 { value: "all", label: "Todos" },
@@ -405,14 +499,19 @@ export function FederationExplore({ slug }: { slug: string }) {
               onChange={setGrupo}
             />
           )}
-
-          {filtersOn && (
-            <button type="button" onClick={reset} className="tw-fcp-reset">
-              Restablecer filtros
-            </button>
-          )}
         </div>
-      </Card>
+
+        {filtersOn && (
+          <button
+            type="button"
+            onClick={reset}
+            className="tw-fcp-reset"
+            style={{ marginTop: 10 }}
+          >
+            Restablecer filtros
+          </button>
+        )}
+      </div>
 
       {/* ── TODO · grupos ─────────────────────────────────────────── */}
       {tab === "todo" &&
@@ -435,28 +534,79 @@ export function FederationExplore({ slug }: { slug: string }) {
             />
           </Card>
         ) : (
-          <div className="tw-club-teams">
-            {shownGroups.map((g: FcpGroup) => (
-              <Link
-                key={g.idGrupo}
-                href={`/federacion/${slug}/grupo/${encodeURIComponent(g.idGrupo)}`}
-                style={{ color: "inherit" }}
-              >
-                <Card hover style={{ height: "100%" }}>
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>{g.nombre}</div>
-                  <div style={{ marginTop: 4, fontSize: 12.5, color: "var(--text-muted)" }}>
-                    {[
-                      g.genero === "F" ? "Femenino" : "Masculino",
-                      g.categoria,
-                      g.esPlayoff ? "Fase final" : null,
-                      g.temporada,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
-                </Card>
-              </Link>
-            ))}
+          <div className="tw-fcp-groups">
+            {shownGroups.map((g: FcpGroup) => {
+              const meta = groupMetas.data?.[g.idGrupo];
+              const GenIcon =
+                g.genero === "F" ? IconVenus : g.genero === "M" ? IconMars : IconUsers;
+              // El estado sale del dato, no de un rótulo fijo: una liga sin
+              // sorteo no está «en juego», está esperando.
+              const estado = meta?.estado;
+              const chip =
+                estado === "finalizada"
+                  ? { label: "Finalizada", tone: "mute" as const }
+                  : estado === "en_curso"
+                    ? {
+                        label: `Jornada ${meta!.jornadaActual} de ${meta!.jornadaTotal}`,
+                        tone: "accent" as const,
+                      }
+                    : selectedLeague?.upcoming
+                      ? { label: "En inscripción", tone: "accent" as const }
+                      : meta
+                        ? // Hay equipos pero la federación aún no ha
+                          // publicado el calendario del grupo.
+                          { label: "Sin jornadas", tone: "mute" as const }
+                        : null;
+              return (
+                <Link
+                  key={g.idGrupo}
+                  href={`/federacion/${slug}/grupo/${encodeURIComponent(g.idGrupo)}`}
+                  className="tw-fcp-group"
+                >
+                  <span className="tw-fcp-group-top">
+                    <span className="tw-fcp-field-tile" aria-hidden="true">
+                      <GenIcon size={15} />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="tw-fcp-group-name">{g.nombre}</span>
+                      <span className="tw-fcp-group-meta">
+                        {[
+                          g.genero === "F"
+                            ? "Femenino"
+                            : g.genero === "M"
+                              ? "Masculino"
+                              : "Mixto",
+                          g.categoria,
+                          g.esPlayoff ? "Fase final" : null,
+                          g.temporada,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                  </span>
+
+                  <span className="tw-fcp-group-foot">
+                    <span className="tw-fcp-group-count">
+                      {meta && meta.equiposCount > 0 && (
+                        <>
+                          <IconUsers size={13} />
+                          {meta.equiposCount} equipos
+                        </>
+                      )}
+                    </span>
+                    {chip && (
+                      <Chip tone={chip.tone} plain>
+                        {chip.label}
+                      </Chip>
+                    )}
+                    <span className="tw-fcp-group-go" aria-hidden="true">
+                      <IconChevronRight size={15} />
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         ))}
 
@@ -708,28 +858,36 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
         ["jornadas", "Jornadas"],
       ];
 
+  const groupMeta = [
+    header.data?.temporada ?? null,
+    rows.length > 0 ? `${rows.length} equipos` : null,
+    jornadaTotal > 0 ? `Jornada ${jornadaActual} de ${jornadaTotal}` : null,
+  ].filter(Boolean);
+
   return (
     <div className="tw-page">
-      <PageHeader
-        back={{ href: `/federacion/${slug}`, label: "Federación" }}
-        title={header.data?.nombre ?? decodeURIComponent(id)}
-        meta={
-          tab !== "cuadro"
-            ? [
-                header.data?.temporada ?? null,
-                rows.length > 0 ? `${rows.length} equipos` : null,
-                jornadaTotal > 0 ? `Jornada ${jornadaActual} de ${jornadaTotal}` : null,
-              ]
-            : undefined
-        }
-        actions={
-          tab !== "cuadro" ? (
+      <header className="tw-fcp-hero">
+        <Link href={`/federacion/${slug}`} className="tw-back" style={{ marginBottom: 12 }}>
+          <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
+          Federación
+        </Link>
+        <div className="tw-fcp-hero-top">
+          <FedCrest logo="/federations/fcantp-mark.png" alt="" />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1 className="tw-fcp-hero-title">
+              {header.data?.nombre ?? decodeURIComponent(id)}
+            </h1>
+            {tab !== "cuadro" && groupMeta.length > 0 && (
+              <p className="tw-fcp-hero-sub">{groupMeta.join(" · ")}</p>
+            )}
+          </div>
+          {tab !== "cuadro" && (
             <Chip tone={finalizada ? "accent" : "mute"}>
               {finalizada ? "Finalizada" : "En curso"}
             </Chip>
-          ) : undefined
-        }
-      />
+          )}
+        </div>
+      </header>
 
       <div style={{ marginBottom: 16 }}>
         <Segmented
