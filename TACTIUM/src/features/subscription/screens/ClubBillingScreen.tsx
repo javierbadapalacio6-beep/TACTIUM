@@ -96,6 +96,16 @@ export const ClubBillingScreen = ({
   const overQuota = currentPlan ? teamCount > currentPlan.teamQuota : false;
   const recommended = recommendClubPlanForTeams(teamCount);
 
+  /** La sub del club se compró en la WEB: la tienda no puede reemplazarla y
+   *  comprar aquí serían dos cobros. Ver SubscriptionScreen. */
+  const subWeb = clubSub?.platform === 'web';
+
+  const openWebBilling = () => {
+    Linking.openURL('https://app.tactium.io/suscripcion').catch(() =>
+      toast.error('No se pudo abrir', 'Entra en app.tactium.io desde el navegador.'),
+    );
+  };
+
   const openStoreSubscriptions = () => {
     const url =
       Platform.OS === 'ios'
@@ -348,6 +358,16 @@ export const ClubBillingScreen = ({
             <Text style={styles.ctaPrimaryLabel}>Mejorar plan</Text>
             <IconArrowRight size={16} color={c.textInverse} />
           </Pressable>
+        ) : subWeb ? (
+          <Pressable
+            onPress={openWebBilling}
+            style={({ pressed }) => [
+              styles.ctaSecondary,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={styles.ctaSecondaryLabel}>Cambiar plan en la web</Text>
+          </Pressable>
         ) : (
           <Pressable
             onPress={() =>
@@ -419,17 +439,20 @@ export const ClubBillingScreen = ({
           </Pressable>
 
           <Pressable
-            onPress={openStoreSubscriptions}
+            onPress={subWeb ? openWebBilling : openStoreSubscriptions}
             style={({ pressed }) => [
               styles.actionRow,
               pressed && { opacity: 0.85 },
             ]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.actionLabel}>Gestionar en Ajustes</Text>
+              <Text style={styles.actionLabel}>
+                {subWeb ? 'Gestionar en la web' : 'Gestionar en Ajustes'}
+              </Text>
               <Text style={styles.actionSub}>
-                Cancelar o cambiar plan en{' '}
-                {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}
+                {subWeb
+                  ? 'La contrataste en app.tactium.io'
+                  : `Cancelar o cambiar plan en ${Platform.OS === 'ios' ? 'App Store' : 'Google Play'}`}
               </Text>
             </View>
             <IconArrowRight size={14} color={c.textFaint} />

@@ -412,6 +412,29 @@ export const PaywallScreen = ({
       await handleApplyPaidPlan();
       return;
     }
+
+    // Suscripción comprada en la WEB (Stripe): la tienda NO puede
+    // reemplazarla —son dos comercios distintos— así que comprar aquí
+    // dejaría DOS suscripciones vivas y DOS cobros. La base no lo impide: su
+    // única unicidad es por transacción, no por sujeto. Este es el ÚLTIMO
+    // filtro, el que pilla cualquier camino que se salte los botones.
+    const subjectTypeAhora = showClubPlans ? 'club' : 'user';
+    const subjectIdAhora = showClubPlans ? (club?.id as string) : userId;
+    const subDeWeb = subscriptions.find(
+      (sb) =>
+        sb.subject_type === subjectTypeAhora &&
+        sb.subject_id === subjectIdAhora &&
+        sb.platform === 'web' &&
+        isLiveSub(sb),
+    );
+    if (subDeWeb) {
+      toast.error(
+        'Tu suscripción es de la web',
+        'Cámbiala o cancélala en app.tactium.io; si compras aquí pagarías dos veces.',
+      );
+      return;
+    }
+
     setPurchasing(true);
     try {
       const subjectType = showClubPlans ? 'club' : 'user';

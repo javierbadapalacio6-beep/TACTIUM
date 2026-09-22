@@ -109,6 +109,32 @@ export const SubscriptionScreen = ({
   const plan = mySub ? PLAN_BY_TIER[mySub.plan_tier] : null;
   const status = mySub?.status ?? null;
 
+  /**
+   * ¿La suscripción viva se compró en la WEB (Stripe) y no en la tienda?
+   *
+   * Importa mucho más de lo que parece. Esta pantalla daba por hecho que todo
+   * venía de App Store o Google Play, y con una sub de Stripe eso llevaba a
+   * dos sitios malos:
+   *
+   *  · «Cambiar plan», «Mejorar» y el salto club↔capitán mandaban a la
+   *    pasarela de la TIENDA. Comprar allí no sustituye a la de Stripe —son
+   *    dos comercios distintos— asi que te quedabas con DOS suscripciones
+   *    vivas y DOS cobros. Nada lo impedía: la única unicidad en la base es
+   *    por transacción, no por sujeto.
+   *  · «Gestionar suscripción» abría la ficha de la tienda, donde no hay nada
+   *    tuyo que gestionar.
+   *
+   * La web ya hace lo simétrico: su checkout devuelve 409 si ya tienes una
+   * sub de tienda. Esto cierra el otro lado.
+   */
+  const subWeb = (activeSub ?? mySub)?.platform === 'web';
+
+  const openWebBilling = () => {
+    Linking.openURL('https://app.tactium.io/suscripcion').catch(() =>
+      toast.error('No se pudo abrir', 'Entra en app.tactium.io desde el navegador.'),
+    );
+  };
+
   const openStoreSubscriptions = () => {
     const url =
       Platform.OS === 'ios'
@@ -330,6 +356,16 @@ export const SubscriptionScreen = ({
             </Text>
             <IconArrowRight size={16} color={c.textInverse} />
           </Pressable>
+        ) : subWeb ? (
+          <Pressable
+            onPress={openWebBilling}
+            style={({ pressed }) => [
+              styles.ctaSecondary,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={styles.ctaSecondaryLabel}>Cambiar plan en la web</Text>
+          </Pressable>
         ) : (
           <Pressable
             onPress={() => navigation.navigate('Paywall', { intent: 'change' })}
@@ -347,7 +383,7 @@ export const SubscriptionScreen = ({
             así que saltar de uno a otro es un cambio de plan, no cancelar y
             volver a comprar: nadie pierde lo pagado. Bajar de nivel lo difiere
             la tienda a la renovación. */}
-        {activeSub && switchTarget ? (
+        {activeSub && switchTarget && !subWeb ? (
           <View style={styles.switchBlock}>
             <Text style={styles.switchTitle}>
               {switchTarget === 'captain'
@@ -389,11 +425,13 @@ export const SubscriptionScreen = ({
           <ActionRow
             label="Gestionar suscripción"
             sub={
-              Platform.OS === 'ios'
-                ? 'Cancelar o cambiar plan en App Store'
-                : 'Cancelar o cambiar plan en Google Play'
+              subWeb
+                ? 'La contrataste en la web: gestiónala en app.tactium.io'
+                : Platform.OS === 'ios'
+                  ? 'Cancelar o cambiar plan en App Store'
+                  : 'Cancelar o cambiar plan en Google Play'
             }
-            onPress={openStoreSubscriptions}
+            onPress={subWeb ? openWebBilling : openStoreSubscriptions}
           />
           <ActionRow
             label={restoring ? 'Restaurando…' : 'Restaurar compras'}
