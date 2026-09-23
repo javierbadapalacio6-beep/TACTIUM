@@ -468,13 +468,21 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                         <Text style={[styles.mScore, !localWon && { color: c.textMuted }]}>{score ? score[0] : '·'}</Text>
                         <Text style={[styles.mScore, !visitWon && { color: c.textMuted }]}>{score ? score[1] : '·'}</Text>
                       </View>
-                      {/* La pista de que esto se abre vivía en una línea suya
-                          debajo del marcador, y una línea de texto por partido
-                          en una jornada de ocho es mucho ruido para decir algo
-                          que un chevron dice solo. Aquí, donde se toca. */}
+                      {/* La pista de que esto se abre estaba en una línea
+                          suelta colgando de `match`, que lleva `overflow:
+                          hidden` y borde redondeado pero NO tiene padding
+                          horizontal —el padding vive en `matchTop` y
+                          `matchBottom`—, así que el texto arrancaba pegado al
+                          borde y la esquina se comía la primera letra. Aquí
+                          dentro sí hay padding, y no se corta. */}
                       {acta.length > 0 ? (
-                        <View style={{ transform: [{ rotate: abierta ? '270deg' : '90deg' }] }}>
-                          <IconChevron size={14} color={c.textFaint} />
+                        <View style={styles.actaToggle}>
+                          <Text style={styles.actaToggleText}>ACTA</Text>
+                          <View
+                            style={{ transform: [{ rotate: abierta ? '270deg' : '90deg' }] }}
+                          >
+                            <IconChevron size={13} color={c.accent} />
+                          </View>
                         </View>
                       ) : null}
                     </View>
@@ -697,4 +705,14 @@ const makeStyles = (c: Palette) =>
       textAlign: 'center',
     },
     actaSetDim: { color: c.textMuted, fontWeight: '500' },
+    // Va DENTRO de `matchTop`, que sí tiene padding horizontal. Suelto en
+    // `match` lo recortaba el `overflow: hidden` del borde redondeado.
+    actaToggle: { alignItems: 'center', gap: 2, flexShrink: 0 },
+    actaToggleText: {
+      fontFamily: Fonts.mono,
+      fontSize: 8.5,
+      letterSpacing: 1,
+      fontWeight: '700',
+      color: c.accent,
+    },
   });
