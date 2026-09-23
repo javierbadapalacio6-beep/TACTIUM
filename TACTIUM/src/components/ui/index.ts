@@ -57,6 +57,7 @@ export { TeamSwitcher } from './TeamSwitcher';
 export { ScanSheet } from './ScanSheet';
 export { ToastHost } from './Toast';
 export { OfflineBanner } from './OfflineBanner';
+export { UpdateBanner } from './UpdateBanner';
 export { PremiumGateButton } from './PremiumGateButton';
 export { TrialExpiringBanner } from './TrialExpiringBanner';
 export { ResponsiveFrame } from './ResponsiveFrame';

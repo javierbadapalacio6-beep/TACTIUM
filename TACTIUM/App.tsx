@@ -26,7 +26,12 @@ import { useNotificationStore } from './src/store/notificationStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
 import { syncStorePurchases } from './src/core/services/storeSync';
 import { maybePromptForPush } from './src/core/push';
-import { ToastHost, OfflineBanner, ResponsiveFrame } from './src/components/ui';
+import {
+  ToastHost,
+  OfflineBanner,
+  UpdateBanner,
+  ResponsiveFrame,
+} from './src/components/ui';
 import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
 
 function makeNavTheme(c: Palette, isDark: boolean) {
@@ -239,6 +244,7 @@ export default function App() {
                 al render, sí al stacking entre ellos (Toast queda encima
                 porque su zIndex es mayor). */}
             <OfflineBanner />
+            <UpdateBanner />
             <ToastHost />
             {/* Modal one-shot que da la bienvenida al trial al detectar
                 una sub trialing nueva (auto-creada por trigger DB tras
