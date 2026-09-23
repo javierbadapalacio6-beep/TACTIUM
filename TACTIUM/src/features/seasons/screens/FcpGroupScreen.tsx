@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack } from '@components/ui';
+import { IconBack, IconChevron } from '@components/ui';
+import { CommunityAvatar } from '../../social/components/social-ui';
 import { Segmented, MetaChip, FormChips } from '../components/fcpUi';
 import {
   fetchGroupStandings,
@@ -29,6 +30,31 @@ const nombreBonito = (s: string | null | undefined): string =>
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase());
+
+/**
+ * Los dos avatares de una pareja, solapados.
+ *
+ * Hoy salen con iniciales sobre gradiente porque la Federación no publica
+ * fotos. Se usa `CommunityAvatar`, que YA pinta la foto cuando se le pasa
+ * una: el día que se enganche `profiles.avatar_url` por `fcp_id_jugador`,
+ * esta pantalla no hay que tocarla, solo pasarle la url.
+ */
+const AvataresPareja: React.FC<{ j1: string | null; j2: string | null }> = ({
+  j1,
+  j2,
+}) => {
+  const nombres = [j1, j2].map(nombreBonito).filter(Boolean);
+  if (nombres.length === 0) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {nombres.map((n, i) => (
+        <View key={i} style={i > 0 ? { marginLeft: -7 } : undefined}>
+          <CommunityAvatar name={n} size={22} />
+        </View>
+      ))}
+    </View>
+  );
+};
 
 /** «Julia Rojo · Ana Pérez». Si falta uno, se enseña el que haya. */
 const pareja = (a: string | null, b: string | null): string =>
@@ -442,6 +468,15 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                         <Text style={[styles.mScore, !localWon && { color: c.textMuted }]}>{score ? score[0] : '·'}</Text>
                         <Text style={[styles.mScore, !visitWon && { color: c.textMuted }]}>{score ? score[1] : '·'}</Text>
                       </View>
+                      {/* La pista de que esto se abre vivía en una línea suya
+                          debajo del marcador, y una línea de texto por partido
+                          en una jornada de ocho es mucho ruido para decir algo
+                          que un chevron dice solo. Aquí, donde se toca. */}
+                      {acta.length > 0 ? (
+                        <View style={{ transform: [{ rotate: abierta ? '270deg' : '90deg' }] }}>
+                          <IconChevron size={14} color={c.textFaint} />
+                        </View>
+                      ) : null}
                     </View>
                     {acta.length > 0 && abierta ? (
                       <View style={styles.matchBottom}>
@@ -469,6 +504,7 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                               </View>
                               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                                 <View style={styles.actaPair}>
+                                  <AvataresPareja j1={g.local_j1} j2={g.local_j2} />
                                   <View style={{ flex: 1, minWidth: 0 }}>
                                     <Text
                                       style={[styles.actaName, !ganoLocal && styles.actaNameDim]}
@@ -493,6 +529,7 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                                   ))}
                                 </View>
                                 <View style={styles.actaPair}>
+                                  <AvataresPareja j1={g.visit_j1} j2={g.visit_j2} />
                                   <View style={{ flex: 1, minWidth: 0 }}>
                                     <Text
                                       style={[styles.actaName, !ganoVisit && styles.actaNameDim]}
@@ -518,8 +555,6 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                           );
                         })}
                       </View>
-                    ) : acta.length > 0 ? (
-                      <Text style={styles.actaHint}>Toca para ver el acta</Text>
                     ) : null}
                   </Pressable>
                 );
@@ -662,5 +697,4 @@ const makeStyles = (c: Palette) =>
       textAlign: 'center',
     },
     actaSetDim: { color: c.textMuted, fontWeight: '500' },
-    actaHint: { fontFamily: Fonts.mono, fontSize: 9.5, color: c.textFaint, marginTop: 8 },
   });
