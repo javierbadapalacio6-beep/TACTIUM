@@ -382,6 +382,31 @@ export async function fcpSeasonStatus(teamId: string): Promise<FcpSeasonStatus> 
       if (g.id_liga != null && (out.linkedLiga == null || g.id_liga > out.linkedLiga))
         out.linkedLiga = g.id_liga;
     }
+  } else {
+    // Sin clasificación: el vínculo apunta a una INSCRIPCIÓN. Desde que
+    // «Preparar temporada» ofrece los equipos de la liga que viene, un equipo
+    // puede quedar vinculado a una temporada que aún no tiene ni grupos, y por
+    // ahí el aviso se quedaba mudo para siempre: `linkedLiga` salía null y
+    // `newSeasonPublished` nunca se cumplía.
+    const { data: ins } = await rawFrom('fcp_inscripciones')
+      .select('id_liga')
+      .eq('id_equipo', idEquipo)
+      .limit(1);
+    const insLiga = ((ins ?? []) as { id_liga: number | null }[])[0]?.id_liga ?? null;
+    if (insLiga != null) {
+      out.linkedLiga = insLiga;
+      // Si esa liga YA tiene grupos publicados y nosotros seguimos sin salir en
+      // su clasificación, es que el calendario llegó con otros identificadores
+      // y el nuestro se quedó obsoleto: hay que volver a volcar. No damos por
+      // hecho que la Federación conserve el id de la inscripción.
+      const { count } = await rawFrom('fcp_grupos')
+        .select('id_grupo', { count: 'exact', head: true })
+        .eq('id_liga', insLiga);
+      if ((count ?? 0) > 0) {
+        out.newSeasonPublished = true;
+        return out;
+      }
+    }
   }
   out.newSeasonPublished =
     out.linkedLiga != null && out.latestLiga != null && out.latestLiga > out.linkedLiga;

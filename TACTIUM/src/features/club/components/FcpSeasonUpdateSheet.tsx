@@ -7,11 +7,8 @@ import { Radius } from '@core/theme/spacing';
 import { BottomSheet } from '@components/ui';
 import { toast } from '@store/toastStore';
 import { useTeamStore } from '@store/teamStore';
-import {
-  searchFcpClubs,
-  type FcpClubGroup,
-  type FcpTeamOption,
-} from '@core/services/fcpOnboarding';
+import { searchFcpClubs, type FcpTeamOption } from '@core/services/fcpOnboarding';
+import { fetchFcpPreseasonTeams } from '@core/services/fcpInscripciones';
 import {
   computeSeasonDiff,
   applySeasonUpdate,
@@ -22,7 +19,20 @@ import {
  * Prepara una NUEVA temporada de la Federación: el capitán busca su equipo en la
  * liga nueva, ve el diff (nuevos / siguen / se van / vuelven / manuales) y
  * confirma. Nunca borra: a los que se van los desactiva (recuperables).
+ *
+ * Los candidatos salen de DOS sitios, y los dos hacen falta:
+ *
+ *  · `searchFcpClubs` → la liga que se está jugando. Es la buena para el equipo
+ *    que se une a la app a mitad de temporada.
+ *  · `fetchFcpPreseasonTeams` → las inscripciones de la temporada siguiente,
+ *    que la FCP publica meses antes del calendario. Es la buena en el momento
+ *    en que esta pantalla tiene sentido: al acabar la liga.
+ *
+ * Con solo la primera, preparar la temporada nueva comparaba tu plantilla con
+ * la de tu propio equipo del año pasado y el resumen salía siempre a cero.
  */
+/** Candidato federativo, venga de la liga en juego o de la inscripción. */
+type Candidato = FcpTeamOption & { temporada?: string };
 const normName = (s: string | null | undefined) =>
   (s ?? '')
     .toLowerCase()
@@ -47,9 +57,9 @@ export const FcpSeasonUpdateSheet: React.FC<{
   const loadForUser = useTeamStore((s) => s.loadForUser);
 
   const [loading, setLoading] = useState(false);
-  const [allGroups, setAllGroups] = useState<FcpClubGroup[]>([]);
+  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
   const [query, setQuery] = useState('');
-  const [picked, setPicked] = useState<FcpTeamOption | null>(null);
+  const [picked, setPicked] = useState<Candidato | null>(null);
   const [diff, setDiff] = useState<SeasonDiff | null>(null);
   const [computing, setComputing] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -66,13 +76,17 @@ export const FcpSeasonUpdateSheet: React.FC<{
     setPicked(null);
     setDiff(null);
     setLoading(true);
-    searchFcpClubs('')
-      .then((groups) => {
-        setAllGroups(groups);
+    // Las inscripciones no siempre existen (solo durante el alta de la
+    // temporada siguiente): si esa consulta falla, seguimos con el catálogo de
+    // la liga en juego en vez de dejar la pantalla vacía.
+    Promise.all([searchFcpClubs(''), fetchFcpPreseasonTeams().catch(() => [])])
+      .then(([groups, preseason]) => {
+        // La inscripción primero: es la temporada que se está preparando.
+        const flat: Candidato[] = [...preseason, ...groups.flatMap((gr) => gr.teams)];
+        setCandidatos(flat);
         // Heredar: auto-detecta tu equipo por nombre Y género (prefiere la liga
         // más nueva). Sin el filtro de género, un homónimo del otro género
         // (p. ej. "MEDIO CUDEYO C" masc vs fem) podía auto-seleccionarse mal.
-        const flat = groups.flatMap((gr) => gr.teams);
         const matches = flat.filter(
           (t) =>
             normName(t.equipo) === normName(teamName) &&
@@ -90,14 +104,13 @@ export const FcpSeasonUpdateSheet: React.FC<{
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const flat = allGroups
-      .flatMap((g) => g.teams)
+    const flat = candidatos
       // Solo candidatos del mismo género que el equipo (evita mezclar masc/fem).
       .filter((t) => !wantGender || t.gender === wantGender);
     return (q ? flat.filter((t) => t.equipo.toLowerCase().includes(q)) : flat).slice(0, 60);
-  }, [allGroups, query, wantGender]);
+  }, [candidatos, query, wantGender]);
 
-  const pick = async (t: FcpTeamOption) => {
+  const pick = async (t: Candidato) => {
     setPicked(t);
     setDiff(null);
     setComputing(true);
@@ -153,6 +166,12 @@ export const FcpSeasonUpdateSheet: React.FC<{
     >
       <Text style={styles.eyebrow}>NUEVA TEMPORADA · FEDERACIÓN</Text>
       <Text style={styles.title}>{picked ? picked.equipo : 'Preparar temporada'}</Text>
+      {picked ? (
+        <Text style={styles.teamMeta}>
+          {picked.temporada ? `Temporada ${picked.temporada}` : 'Temporada en juego'}
+          {picked.category ? ` · ${picked.category}` : ''}
+        </Text>
+      ) : null}
 
       {!picked ? (
         <>
@@ -176,7 +195,7 @@ export const FcpSeasonUpdateSheet: React.FC<{
             </View>
           ) : filtered.length === 0 ? (
             <Text style={styles.empty}>
-              {allGroups.length === 0
+              {candidatos.length === 0
                 ? 'Aún no hay datos de la Federación cargados.'
                 : 'Sin resultados. Prueba otro nombre.'}
             </Text>
@@ -191,7 +210,11 @@ export const FcpSeasonUpdateSheet: React.FC<{
                   >
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.teamName} numberOfLines={1}>{t.equipo}</Text>
+                      {/* La temporada, delante: el mismo equipo aparece dos
+                          veces (la liga que acaba y la que viene) y sin el año
+                          no hay forma de saber cuál estás eligiendo. */}
                       <Text style={styles.teamMeta} numberOfLines={1}>
+                        {t.temporada ? `${t.temporada} · ` : ''}
                         {t.gender === 'femenino' ? 'Femenino' : 'Masculino'}
                         {t.category ? ` · ${t.category}` : ''}
                         {t.grupo ? ` · ${t.grupo}` : ''}

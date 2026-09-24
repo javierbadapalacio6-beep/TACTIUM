@@ -9,6 +9,8 @@
 import { supabase } from '@core/supabase/client';
 import { catShort } from './fcpSearch';
 import { fetchCurrentLiga, seasonLabel } from './fcpBrowse';
+import type { FcpTeamOption } from './fcpOnboarding';
+import type { TeamGender } from '@core/data/federations';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -228,4 +230,70 @@ export async function fetchClubInscripciones(
     confirmados: rows.filter((r) => r.confirmado).length,
     rows,
   };
+}
+
+/**
+ * Los equipos de la temporada que VIENE, con la forma que usa el buscador de
+ * equipos federativos (`FcpTeamOption`), para poder ofrecerlos como candidatos.
+ *
+ * POR QUÉ. «Preparar temporada» compara tu plantilla con la del equipo que
+ * elijas, y hasta ahora solo podía elegir entre los equipos de la liga EN
+ * JUEGO (`searchFcpClubs` filtra por `fetchCurrentLiga`). Justo cuando toca
+ * preparar la temporada nueva, esa liga es la vieja: el único candidato con tu
+ * nombre era tu propio equipo del año pasado, así que el diff se calculaba
+ * contra sí mismo y salía «15 siguen, 0 nuevos, 0 vuelven, 0 se van» — una
+ * pantalla que siempre dice que no cambia nada. Los datos buenos ya estaban
+ * espejados, pero en `fcp_inscripciones`, que ese buscador no mira.
+ *
+ * Una liga en inscripción no tiene grupos ni clasificación todavía, así que la
+ * categoría sale de `grupo_nombre` («1ª CATEGORIA MASCULINA») y no hay grupo
+ * que enseñar.
+ */
+export interface FcpPreseasonTeam extends FcpTeamOption {
+  /** "2026/2027", para poder distinguirlo del mismo equipo del año pasado. */
+  temporada: string;
+}
+
+export async function fetchFcpPreseasonTeams(): Promise<FcpPreseasonTeam[]> {
+  const currentLiga = await fetchCurrentLiga();
+  const { data } = await rawFrom('fcp_inscripciones')
+    .select('id_liga, id_equipo, equipo, genero, grupo_nombre')
+    // Una temporada entera de la FCP ronda las 350 inscripciones; el límite por
+    // defecto de PostgREST (1000) daría de sobra, pero es el tipo de tope que
+    // se come equipos en silencio cuando la liga crece.
+    .limit(3000);
+
+  const rows = ((data ?? []) as {
+    id_liga: number;
+    id_equipo: number;
+    equipo: string | null;
+    genero: string | null;
+    grupo_nombre: string | null;
+  }[]).filter((r) => r.equipo && (currentLiga == null || r.id_liga > currentLiga));
+  if (rows.length === 0) return [];
+
+  // Etiqueta de temporada, una consulta para todas las ligas implicadas.
+  const ligas = [...new Set(rows.map((r) => r.id_liga))];
+  const { data: ligasRaw } = await rawFrom('fcp_ligas')
+    .select('id_liga, temporada')
+    .in('id_liga', ligas);
+  const labelPorLiga = new Map<number, string>(
+    ((ligasRaw ?? []) as { id_liga: number; temporada: string | null }[]).map((l) => [
+      l.id_liga,
+      seasonLabel(l.temporada),
+    ]),
+  );
+
+  return rows
+    .map((r) => ({
+      id_equipo: r.id_equipo,
+      id_liga: r.id_liga,
+      equipo: (r.equipo ?? '').trim(),
+      club: clubOf(r.equipo ?? ''),
+      grupo: '', // aún no hay grupos: la liga está en inscripción
+      gender: (r.genero === 'F' ? 'femenino' : 'masculino') as TeamGender,
+      category: catShort(r.grupo_nombre),
+      temporada: labelPorLiga.get(r.id_liga) ?? '',
+    }))
+    .sort((a, b) => a.equipo.localeCompare(b.equipo));
 }
