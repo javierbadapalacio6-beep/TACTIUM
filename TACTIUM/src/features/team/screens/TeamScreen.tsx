@@ -479,76 +479,6 @@ export const TeamScreen = () => {
         </View>
       ) : null}
 
-      {inscripcion ? (
-        <View style={styles.fcpNotice}>
-          <Text style={styles.fcpNoticeTitle}>
-            Inscripción · {inscripcion.temporada}
-          </Text>
-          <Text style={styles.fcpNoticeText}>
-            {inscripcion.fila.confirmado
-              ? 'La Federación te tiene inscrito y confirmado.'
-              : 'Estás apuntado, pero la Federación todavía no lo ha confirmado.'}
-            {inscripcion.fila.categoriaActual &&
-            inscripcion.fila.categoria &&
-            inscripcion.fila.categoriaActual !== inscripcion.fila.categoria
-              ? ` Cambias de ${inscripcion.fila.categoriaActual} a ${inscripcion.fila.categoria}.`
-              : inscripcion.fila.categoria
-                ? ` Jugarás en ${inscripcion.fila.categoria}.`
-                : ''}
-            {inscripcion.fila.sede ? ` Sede de local: ${inscripcion.fila.sede}.` : ''}
-          </Text>
-          <Pressable
-            onPress={() => setRosterOpen((v) => !v)}
-            style={({ pressed }) => [styles.fcpNoticeRow, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.fcpNoticeSkip}>
-              {rosterOpen
-                ? 'Ocultar plantilla inscrita'
-                : `Ver plantilla inscrita (${inscripcion.fila.jugadores.length})`}
-            </Text>
-          </Pressable>
-          {rosterOpen ? (
-            <View style={{ marginTop: 10 }}>
-              {inscripcion.fila.jugadores.length === 0 ? (
-                <Text style={styles.fcpNoticeText}>
-                  La Federación todavía no publica jugadores en tu equipo.
-                </Text>
-              ) : (
-                inscripcion.fila.jugadores.map((j, i) => (
-                  <View key={j.idJugador} style={styles.inscripRosterRow}>
-                    <Text style={styles.inscripRosterNum}>{i + 1}</Text>
-                    <Text style={styles.inscripRosterName} numberOfLines={1}>
-                      {j.nombre}
-                    </Text>
-                    <Text style={styles.inscripRosterPts}>{j.puntos}</Text>
-                  </View>
-                ))
-              )}
-              <Pressable
-                onPress={refrescarInscripcion}
-                disabled={refrescando}
-                style={({ pressed }) => [
-                  styles.fcpNoticeBtn,
-                  { marginTop: 12, alignSelf: 'flex-start' },
-                  (pressed || refrescando) && { opacity: 0.6 },
-                ]}
-              >
-                <Text style={styles.fcpNoticeBtnText}>
-                  {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-          {/* Lo que la Federación NO dice: nadie publica «has ascendido».
-              Publica la categoría en la que te inscribe, y el cambio de arriba
-              es una comparación nuestra contra la temporada en curso. */}
-          <Text style={[styles.fcpNoticeText, { marginTop: 10 }]}>
-            Todavía no hay calendario. Cuando la Federación lo publique podrás
-            volcar la temporada con sus jornadas.
-          </Text>
-        </View>
-      ) : null}
-
       <View style={styles.searchWrap}>
         <View style={styles.search}>
           <IconSearch size={14} color={c.textFaint} />
@@ -577,6 +507,79 @@ export const TeamScreen = () => {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {/* La tarjeta va DENTRO del ScrollView. Estuvo en la cabecera
+            fija y ahí no se podía desplazar: ocupaba media pantalla y,
+            con la plantilla inscrita abierta, sus quince nombres
+            quedaban fuera de alcance. */}
+        {inscripcion ? (
+          <View style={styles.fcpNotice}>
+            <Text style={styles.fcpNoticeTitle}>
+              Inscripción · {inscripcion.temporada}
+            </Text>
+            <Text style={styles.fcpNoticeText}>
+              {inscripcion.fila.confirmado
+                ? 'La Federación te tiene inscrito y confirmado.'
+                : 'Estás apuntado, pero la Federación todavía no lo ha confirmado.'}
+              {inscripcion.fila.categoriaActual &&
+              inscripcion.fila.categoria &&
+              inscripcion.fila.categoriaActual !== inscripcion.fila.categoria
+                ? ` Cambias de ${inscripcion.fila.categoriaActual} a ${inscripcion.fila.categoria}.`
+                : inscripcion.fila.categoria
+                  ? ` Jugarás en ${inscripcion.fila.categoria}.`
+                  : ''}
+              {inscripcion.fila.sede ? ` Sede de local: ${inscripcion.fila.sede}.` : ''}
+            </Text>
+            <Pressable
+              onPress={() => setRosterOpen((v) => !v)}
+              style={({ pressed }) => [styles.fcpNoticeRow, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.fcpNoticeSkip}>
+                {rosterOpen
+                  ? 'Ocultar plantilla inscrita'
+                  : `Ver plantilla inscrita (${inscripcion.fila.jugadores.length})`}
+              </Text>
+            </Pressable>
+            {rosterOpen ? (
+              <View style={{ marginTop: 10 }}>
+                {inscripcion.fila.jugadores.length === 0 ? (
+                  <Text style={styles.fcpNoticeText}>
+                    La Federación todavía no publica jugadores en tu equipo.
+                  </Text>
+                ) : (
+                  inscripcion.fila.jugadores.map((j, i) => (
+                    <View key={j.idJugador} style={styles.inscripRosterRow}>
+                      <Text style={styles.inscripRosterNum}>{i + 1}</Text>
+                      <Text style={styles.inscripRosterName} numberOfLines={1}>
+                        {j.nombre}
+                      </Text>
+                      <Text style={styles.inscripRosterPts}>{j.puntos}</Text>
+                    </View>
+                  ))
+                )}
+                <Pressable
+                  onPress={refrescarInscripcion}
+                  disabled={refrescando}
+                  style={({ pressed }) => [
+                    styles.fcpNoticeBtn,
+                    { marginTop: 12, alignSelf: 'flex-start' },
+                    (pressed || refrescando) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.fcpNoticeBtnText}>
+                    {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {/* Lo que la Federación NO dice: nadie publica «has ascendido».
+                Publica la categoría en la que te inscribe, y el cambio de arriba
+                es una comparación nuestra contra la temporada en curso. */}
+            <Text style={[styles.fcpNoticeText, { marginTop: 10 }]}>
+              Todavía no hay calendario. Cuando la Federación lo publique podrás
+              volcar la temporada con sus jornadas.
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.list}>
           {shown.length === 0 ? (
             players.length === 0 ? (
