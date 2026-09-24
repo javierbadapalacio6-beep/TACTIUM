@@ -512,11 +512,11 @@ export const TeamScreen = () => {
             con la plantilla inscrita abierta, sus quince nombres
             quedaban fuera de alcance. */}
         {inscripcion ? (
-          <View style={styles.fcpNotice}>
-            <Text style={styles.fcpNoticeTitle}>
+          <View style={[styles.fcpNotice, styles.inscripCard]}>
+            <Text style={[styles.fcpNoticeTitle, styles.inscripCardTitle]}>
               Inscripción · {inscripcion.temporada}
             </Text>
-            <Text style={styles.fcpNoticeText}>
+            <Text style={[styles.fcpNoticeText, styles.inscripCardText]}>
               {inscripcion.fila.confirmado
                 ? 'La Federación te tiene inscrito y confirmado.'
                 : 'Estás apuntado, pero la Federación todavía no lo ha confirmado.'}
@@ -574,7 +574,7 @@ export const TeamScreen = () => {
             {/* Lo que la Federación NO dice: nadie publica «has ascendido».
                 Publica la categoría en la que te inscribe, y el cambio de arriba
                 es una comparación nuestra contra la temporada en curso. */}
-            <Text style={[styles.fcpNoticeText, { marginTop: 10 }]}>
+            <Text style={[styles.fcpNoticeText, styles.inscripCardText]}>
               Todavía no hay calendario. Cuando la Federación lo publique podrás
               volcar la temporada con sus jornadas.
             </Text>
@@ -1347,6 +1347,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.accent40,
     backgroundColor: c.accent10,
   },
+  // La tarjeta de inscripcion lleva mas texto que los otros dos avisos —dos
+  // parrafos y una lista desplegable— asi que respira con su propio aire en
+  // vez de engordar la clase que comparten los tres.
+  inscripCard: { padding: 18, marginTop: 16, marginBottom: 6 },
+  inscripCardTitle: { fontSize: 15, marginBottom: 2 },
+  inscripCardText: { fontSize: 13, lineHeight: 20, marginTop: 10 },
   fcpNoticeTitle: { color: c.text, fontSize: 14, fontWeight: '800' },
   fcpNoticeText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 5 },
   fcpNoticeRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12 },
