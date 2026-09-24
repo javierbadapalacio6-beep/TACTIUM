@@ -49,10 +49,66 @@ export async function getFcpIdEquipo(teamId: string): Promise<number | null> {
   return data ? ((data as { fcp_id_equipo: number }).fcp_id_equipo ?? null) : null;
 }
 
+/**
+ * El mismo equipo, en la última temporada que SÍ tenga clasificación.
+ *
+ * Solo hace falta cuando el id apunta a una INSCRIPCIÓN: la liga que viene
+ * trae equipos meses antes que grupos, así que ese id no está en ninguna
+ * clasificación. El cruce va por NOMBRE + GÉNERO porque el `id_equipo` cambia
+ * cada temporada —hasta dos veces al año, por los grupos de playoff— y es lo
+ * único que se conserva entre una y otra.
+ */
+async function idEquipoTemporadaAnterior(fcpIdEquipo: number): Promise<number | null> {
+  const { data: ins } = await rawFrom('fcp_inscripciones')
+    .select('equipo, genero')
+    .eq('id_equipo', fcpIdEquipo)
+    .limit(1);
+  const insc = ((ins ?? []) as { equipo: string | null; genero: string | null }[])[0];
+  const nombre = (insc?.equipo ?? '').trim();
+  if (!nombre) return null;
+  const esFem = (insc?.genero ?? '').toUpperCase().startsWith('F');
+
+  const { data: cl } = await rawFrom('fcp_clasificacion')
+    .select('id_equipo, equipo, id_grupo')
+    .ilike('equipo', nombre)
+    .limit(500);
+  const rows = ((cl ?? []) as {
+    id_equipo: number | null;
+    equipo: string | null;
+    id_grupo: string | null;
+  }[]).filter((r) => r.id_equipo != null && r.id_grupo && norm(r.equipo) === norm(nombre));
+  if (rows.length === 0) return null;
+
+  const { data: gr } = await rawFrom('fcp_grupos')
+    .select('id_grupo, id_liga, genero')
+    .in('id_grupo', [...new Set(rows.map((r) => r.id_grupo as string))]);
+  const gById = new Map(
+    ((gr ?? []) as { id_grupo: string; id_liga: number | null; genero: string | null }[]).map(
+      (g) => [g.id_grupo, g],
+    ),
+  );
+
+  let best: { id: number; liga: number } | null = null;
+  for (const r of rows) {
+    const g = gById.get(r.id_grupo as string);
+    if (!g || g.id_liga == null) continue;
+    // El género separa homónimos: "MEDIO CUDEYO A" existe masculino y femenino.
+    if ((g.genero ?? '').toUpperCase().startsWith('F') !== esFem) continue;
+    if (!best || g.id_liga > best.liga) best = { id: r.id_equipo as number, liga: g.id_liga };
+  }
+  return best?.id ?? null;
+}
+
 /** Grupo principal (liga regular) de un id_equipo federativo. Muchos equipos
  * aparecen en 2+ grupos (liga regular + playoff ORO/PLATA), así que un
  * `maybeSingle` fallaría; elegimos el grupo con MÁS partidos, que es la liga
- * regular (donde vive el calendario y la clasificación completa). */
+ * regular (donde vive el calendario y la clasificación completa).
+ *
+ * Devuelve null si ese equipo no está en ninguna clasificación, y ese null
+ * significa algo: quien lo llama con un id cualquiera —la ficha de un equipo
+ * del buscador— lo usa para saber que es una INSCRIPCIÓN y enseñar la ficha de
+ * inscrito. Para el grupo de MI equipo, que sí quiere caer a la temporada
+ * anterior, está `resolveMainGroupOrPrevious`. */
 export async function resolveMainGroup(
   fcpIdEquipo: number,
 ): Promise<{ id_grupo: string; equipo: string } | null> {
@@ -76,6 +132,37 @@ export async function resolveMainGroup(
   return best;
 }
 
+/**
+ * El grupo de MI equipo, con respaldo en la temporada anterior.
+ *
+ * Desde que «Preparar temporada» permite volcar la liga que viene, el vínculo
+ * puede apuntar a una inscripción: una liga con equipos pero sin grupos, así
+ * que sin clasificación. La temporada activa en TACTIUM sigue siendo la que
+ * acaba —conserva sus jornadas y sus resultados, que viven aquí— y su tabla,
+ * que se pide a la Federación, se quedaba en blanco de golpe.
+ *
+ * Solo para lo que es «mi equipo» (clasificación y cuadro de la temporada
+ * activa). Un id suelto del buscador debe seguir dando null: ahí el null es la
+ * señal de que ese equipo aún no juega nada.
+ */
+export async function resolveMainGroupOrPrevious(fcpIdEquipo: number): Promise<{
+  id_grupo: string;
+  equipo: string;
+  /** El id que de verdad sale en esa clasificación: el de la temporada a la que
+   *  pertenece la tabla, que NO es el del vínculo cuando hemos tirado de
+   *  respaldo. Quien marca «este soy yo» tiene que comparar con este. */
+  idEquipo: number;
+} | null> {
+  const propio = await resolveMainGroup(fcpIdEquipo);
+  if (propio) return { ...propio, idEquipo: fcpIdEquipo };
+  const anterior = await idEquipoTemporadaAnterior(fcpIdEquipo);
+  if (anterior == null) return null;
+  // `anterior` sale de la clasificación, así que aquí ya no hay más respaldo
+  // que buscar: o tiene grupo o no lo tiene.
+  const previo = await resolveMainGroup(anterior);
+  return previo ? { ...previo, idEquipo: anterior } : null;
+}
+
 export interface FcpStandingRow {
   posicion: number | null;
   equipo: string;
@@ -92,9 +179,9 @@ export interface FcpStandingRow {
 export async function fetchFcpGroupStandings(
   fcpIdEquipo: number,
 ): Promise<{ grupo: string | null; rows: FcpStandingRow[] }> {
-  const main = await resolveMainGroup(fcpIdEquipo);
-  const grupo = main?.id_grupo ?? null;
-  if (!grupo) return { grupo: null, rows: [] };
+  const main = await resolveMainGroupOrPrevious(fcpIdEquipo);
+  if (!main) return { grupo: null, rows: [] };
+  const grupo = main.id_grupo;
   const { data } = await rawFrom('fcp_clasificacion')
     .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
     .eq('id_grupo', grupo)
@@ -129,7 +216,7 @@ export async function fetchFcpGroupStandings(
     (data ?? []) as Omit<FcpStandingRow, 'isMe' | 'pj' | 'pg'>[]
   ).map((r) => {
     const s = stats.get(r.equipo) ?? { pj: 0, pg: 0 };
-    return { ...r, pj: s.pj, pg: s.pg, isMe: r.id_equipo === fcpIdEquipo };
+    return { ...r, pj: s.pj, pg: s.pg, isMe: r.id_equipo === main.idEquipo };
   });
   const { data: g } = await rawFrom('fcp_grupos').select('nombre').eq('id_grupo', grupo).maybeSingle();
   return { grupo: g ? ((g as { nombre: string }).nombre ?? null) : null, rows };
@@ -154,7 +241,7 @@ export interface FcpScheduleRow {
 export async function fetchFcpGroupSchedule(
   fcpIdEquipo: number,
 ): Promise<{ grupo: string | null; myName: string | null; rows: FcpScheduleRow[] }> {
-  const main = await resolveMainGroup(fcpIdEquipo);
+  const main = await resolveMainGroupOrPrevious(fcpIdEquipo);
   const grupo = main?.id_grupo ?? null;
   const myName = main?.equipo ?? null;
   if (!grupo) return { grupo: null, myName, rows: [] };

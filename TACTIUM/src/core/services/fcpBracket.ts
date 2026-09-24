@@ -8,7 +8,7 @@ import { supabase } from '@core/supabase/client';
 import {
   fetchFcpActa,
   getFcpIdEquipo,
-  resolveMainGroup,
+  resolveMainGroupOrPrevious,
   type FcpActaPartido,
 } from './fcpSeason';
 import * as SeasonsApi from './seasons';
@@ -296,7 +296,7 @@ export async function importPlayoffMatchdays(
 ): Promise<PlayoffImportResult> {
   const fcpId = await getFcpIdEquipo(teamId);
   if (!fcpId) throw new Error('Este equipo no está vinculado a la Federación.');
-  const main = await resolveMainGroup(fcpId);
+  const main = await resolveMainGroupOrPrevious(fcpId);
   if (!main) throw new Error('No encuentro tu equipo en la Federación.');
 
   const { data: g } = await rawFrom('fcp_grupos')
@@ -465,7 +465,7 @@ export interface FcpTeamPlayoff {
 export async function fetchTeamPlayoff(teamId: string): Promise<FcpTeamPlayoff | null> {
   const fcpId = await getFcpIdEquipo(teamId);
   if (!fcpId) return null;
-  const main = await resolveMainGroup(fcpId);
+  const main = await resolveMainGroupOrPrevious(fcpId);
   if (!main) return null;
   const { data: g } = await rawFrom('fcp_grupos')
     .select('id_liga, genero')
