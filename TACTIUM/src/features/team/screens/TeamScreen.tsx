@@ -117,7 +117,13 @@ export const TeamScreen = () => {
     ])
       .then((r) => {
         if (!alive) return;
-        const fila = r?.rows[0];
+        // NO `rows[0]`: el servicio esta pensado para un CLUB y devuelve
+        // todas las inscripciones cuyo nombre empieza igual, asi que
+        // «MEDIO CUDEYO A» trae la masculina Y la femenina. Coger la
+        // primera le enseñaba al equipo masculino la categoria del
+        // femenino. `teamId` lo pone el servicio cruzando nombre + genero
+        // contra el equipo que le pasamos: esa es la fila mia.
+        const fila = r?.rows.find((x) => x.teamId === team.id);
         setInscripcion(fila ? { temporada: r!.temporada, fila } : null);
       })
       .catch(() => alive && setInscripcion(null));
@@ -136,7 +142,9 @@ export const TeamScreen = () => {
       const r = await fetchClubInscripciones([
         { id: team.id, name: team.name, gender: team.gender, category: team.category },
       ]);
-      const fila = r?.rows[0];
+      // Misma razon que arriba: la fila mia es la que el servicio ha
+      // casado con este equipo por nombre + genero.
+      const fila = r?.rows.find((x) => x.teamId === team.id);
       setInscripcion(fila ? { temporada: r!.temporada, fila } : null);
     } catch {
       /* el aviso de abajo ya dice de cuándo es la foto */
