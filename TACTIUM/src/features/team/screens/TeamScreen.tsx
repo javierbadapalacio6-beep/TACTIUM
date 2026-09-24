@@ -433,14 +433,25 @@ export const TeamScreen = () => {
           <Text style={styles.fcpNoticeText}>
             Ya han publicado la liga nueva. Vuelve a volcar tu equipo: los
             identificadores cambian cada temporada, así que los datos del año
-            pasado no valen para esta.
+            pasado no valen para esta. Son dos cosas: la plantilla y el
+            calendario.
           </Text>
+          {/* Los DOS pasos, aquí. Este aviso es el relevo de la tarjeta de
+              inscripción —que desaparece en cuanto la liga nueva tiene
+              partidos y deja de ser una inscripción—, y hasta ahora solo
+              ofrecía la plantilla: el calendario estaba escondido tras el
+              icono del grupo, que no es un sitio evidente si no lo conoces.
+              Es la puerta para un equipo que se une a la app a mitad de
+              temporada y necesita traerse sus jornadas y su clasificación. */}
           <View style={styles.fcpNoticeRow}>
             <Pressable
               onPress={() => setSeasonOpen(true)}
               style={({ pressed }) => [styles.fcpNoticeBtn, pressed && { opacity: 0.85 }]}
             >
-              <Text style={styles.fcpNoticeBtnText}>Preparar temporada</Text>
+              <Text style={styles.fcpNoticeBtnText}>Traer la plantilla</Text>
+            </Pressable>
+            <Pressable onPress={() => setGroupOpen(true)} hitSlop={8}>
+              <Text style={styles.fcpNoticeAlt}>Volcar jornadas</Text>
             </Pressable>
             <Pressable onPress={() => hideNotice('season')} hitSlop={8}>
               <Text style={styles.fcpNoticeSkip}>Ahora no</Text>
@@ -1366,6 +1377,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   fcpNoticeBtnText: { color: c.textInverse, fontSize: 13, fontWeight: '800' },
   fcpNoticeSkip: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+  fcpNoticeAlt: { color: c.accent, fontSize: 13, fontWeight: '700' },
   // Plantilla inscrita para la temporada que viene. Fila estrecha a
   // proposito: es una lista de consulta, no algo que se edite aqui.
   inscripRosterRow: {
