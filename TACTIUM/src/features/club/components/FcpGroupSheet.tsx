@@ -131,9 +131,12 @@ export const FcpGroupSheet: React.FC<{
     setImporting(true);
     try {
       const res = await importFcpSeason(teamId, fcpId, 'Liga Cántabra');
+      // Decir cuándo ha empezado temporada nueva: se cierra la anterior y pasa
+      // al histórico, y eso el capitán tiene que saberlo sin ir a buscarlo.
       toast.success(
-        'Temporada volcada',
-        `${res.created} jornadas creadas${res.updated ? ` · ${res.updated} actualizadas` : ''}.`,
+        res.new_season ? 'Temporada nueva creada' : 'Temporada volcada',
+        `${res.created} jornadas creadas${res.updated ? ` · ${res.updated} actualizadas` : ''}` +
+          (res.new_season ? '. La anterior queda cerrada en el histórico.' : '.'),
       );
       onImported?.();
     } catch (e: any) {

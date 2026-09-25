@@ -357,23 +357,39 @@ export async function fetchFcpRivalRoster(rivalIdEquipo: number): Promise<FcpRiv
   }[]).map((r) => ({ name: fcpDisplayName(r), puntos: r.puntos ?? 0 }));
 }
 
-/** Volcado de temporada (Nivel 1): crea/usa la temporada activa y vuelca el
- * calendario del grupo (jornadas con rival, resultado, local/visitante…). */
+/**
+ * Volcado de temporada (Nivel 1): vuelca el calendario del grupo (jornadas con
+ * rival, resultado, local/visitante…) en la temporada que le corresponde.
+ *
+ * `new_season` dice si ha hecho una temporada nueva. La hace cuando el
+ * calendario es de OTRO grupo federativo que el de la temporada activa: cierra
+ * la vigente —como «cerrar temporada» en la app— y empieza otra. Antes metía
+ * las jornadas nuevas en la temporada vieja, encajándolas por número, y se
+ * llevaba por delante los resultados del año anterior. Ver la migración
+ * `20260925_import_fcp_season_no_pisa`.
+ */
 export async function importFcpSeason(
   teamId: string,
   fcpIdEquipo: number,
   seasonName?: string,
-): Promise<{ season_id: string; created: number; updated: number }> {
+): Promise<{ season_id: string; created: number; updated: number; new_season: boolean }> {
   const { data, error } = await rawRpc('import_fcp_season', {
     p_team_id: teamId,
     p_fcp_id_equipo: fcpIdEquipo,
     p_season_name: seasonName ?? 'Liga Cántabra',
   });
   if (error) throw new Error(error.message);
-  return (data as { season_id: string; created: number; updated: number }) ?? {
-    season_id: '',
-    created: 0,
-    updated: 0,
+  const r = (data ?? {}) as {
+    season_id?: string;
+    created?: number;
+    updated?: number;
+    new_season?: boolean;
+  };
+  return {
+    season_id: r.season_id ?? '',
+    created: r.created ?? 0,
+    updated: r.updated ?? 0,
+    new_season: !!r.new_season,
   };
 }
 
