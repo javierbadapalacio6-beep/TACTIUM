@@ -31,6 +31,7 @@ import {
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
 import * as LineupsApi from '@core/services/lineups';
+import { importSeasonLineupsFromActas } from '@core/services/fcpActaLineup';
 import { matchdayState, type MatchdayVisualState } from '@core/utils/matchday';
 import { tandasOptions } from '@core/utils/tandas';
 import { getCourtsForCompetition } from '@core/data/federations';
@@ -217,6 +218,42 @@ export const SeasonDetailScreen = ({
       reload();
     }, [reload]),
   );
+
+  /**
+   * Traer las alineaciones de TODA la temporada desde las actas.
+   *
+   * Una a una no es realista: una temporada federada son 14 jornadas de liga
+   * más las eliminatorias, y el capitán no va a entrar en cada una. El acta
+   * dice quién jugó en cada pista, así que el histórico se puede reconstruir
+   * de golpe. No pisa las parejas que ya estén puestas.
+   */
+  const [trayendoAlineaciones, setTrayendoAlineaciones] = useState(false);
+  const traerAlineaciones = async () => {
+    if (!season?.id || trayendoAlineaciones) return;
+    setTrayendoAlineaciones(true);
+    try {
+      const r = await importSeasonLineupsFromActas(season.id);
+      if (r.pairs === 0) {
+        toast.info(
+          'Nada que traer',
+          'Las jornadas con acta ya tienen su alineación.',
+        );
+      } else {
+        toast.success(
+          `${r.pairs} ${r.pairs === 1 ? 'pareja' : 'parejas'} en ${r.matchdays} ${r.matchdays === 1 ? 'jornada' : 'jornadas'}`,
+          r.unresolved.length > 0
+            ? `${r.unresolved.join(', ')} ya no están en la plantilla: sus huecos quedan vacíos.`
+            : 'Las que jugaron de verdad, según la Federación.',
+        );
+      }
+      await reload();
+    } catch (e: any) {
+      toast.error('No se pudieron traer', e?.message ?? '');
+    } finally {
+      setTrayendoAlineaciones(false);
+    }
+  };
+
 
   // Cuadro de playoff del equipo (solo ligas FCP): si existe fase eliminatoria
   // con este equipo, habilitamos la pestaña "Cuadro" con su recorrido resaltado.
@@ -573,6 +610,31 @@ export const SeasonDetailScreen = ({
           </View>
         ) : (
           <>
+        {/* Reconstruir el histórico de alineaciones desde las actas. Las
+            jornadas que llegan de la Federación traen resultado pero nadie
+            teclea a mano 19 × 5 parejas para completarlas. */}
+        {isFcp && isCaptain && matchdays.length > 0 ? (
+          <Pressable
+            onPress={traerAlineaciones}
+            disabled={trayendoAlineaciones}
+            accessibilityRole="button"
+            accessibilityLabel="Traer las alineaciones desde las actas de la Federación"
+            style={({ pressed }) => [
+              styles.playoffImportBtn,
+              trayendoAlineaciones && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {trayendoAlineaciones ? (
+              <ActivityIndicator size="small" color={c.accent} />
+            ) : (
+              <Text style={styles.playoffImportText}>
+                Traer las alineaciones de las actas
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
+
         {/* ── Filter tabs ── */}
         <View style={styles.filterWrap}>
           {([

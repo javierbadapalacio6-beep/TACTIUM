@@ -45,6 +45,8 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { fetchActaForMatchday, type FcpMatchdayActa } from '@core/services/fcpSeason';
+import { importLineupFromActa } from '@core/services/fcpActaLineup';
+import { toast } from '@store/toastStore';
 import * as MatchdayPhotoApi from '@core/services/matchdayPhoto';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
 import {
@@ -208,6 +210,7 @@ export const JornadaScreen = ({
   const [pairs, setPairs] = useState<LineupsApi.LineupPair[]>([]);
   const [results, setResults] = useState<MatchResultsApi.MatchResult[]>([]);
   const [acta, setActa] = useState<FcpMatchdayActa | null>(null);
+  const [trayendoActa, setTrayendoActa] = useState(false);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -389,6 +392,43 @@ export const JornadaScreen = ({
   const seasonClosed = season ? !season.active : false;
   const canEditLineup = !closed && !seasonClosed && isCaptain;
   const navigateToLineup = !closed && (canEditLineup || lineupReady);
+
+  /**
+   * Rellenar la alineación con la del acta.
+   *
+   * Se ofrece aunque la jornada esté cerrada —de hecho ES el caso: son las
+   * jornadas que llegan de la Federación ya jugadas, con el acta delante y la
+   * alineación en blanco. No pisa lo que el capitán haya puesto.
+   */
+  const puedeTraerAlineacion =
+    !!matchday && !!acta && !lineupReady && isCaptain && !seasonClosed;
+  const traerAlineacionDelActa = async () => {
+    if (!matchday || trayendoActa) return;
+    setTrayendoActa(true);
+    try {
+      const r = await importLineupFromActa(matchday.id);
+      if (!r || r.pairs === 0) {
+        toast.info(
+          'No se ha podido completar',
+          r && r.unresolved.length > 0
+            ? `${r.unresolved.join(', ')} no están en la plantilla.`
+            : 'El acta no dice quién jugó por tu equipo.',
+        );
+      } else {
+        toast.success(
+          `${r.pairs} ${r.pairs === 1 ? 'pareja' : 'parejas'} del acta`,
+          r.unresolved.length > 0
+            ? `${r.unresolved.join(', ')} ya no están en la plantilla: su hueco queda vacío.`
+            : 'La que jugó de verdad, según la Federación.',
+        );
+      }
+      await load();
+    } catch (e: any) {
+      toast.error('No se pudo traer', e?.message ?? '');
+    } finally {
+      setTrayendoActa(false);
+    }
+  };
 
   const status: Status = useMemo(() => {
     if (closed) {
@@ -854,6 +894,29 @@ export const JornadaScreen = ({
             </Text>
           </View>
         </View>
+
+        {/* Traer la alineación del acta. Aparece donde duele: jornada federada,
+            acta publicada y alineación en blanco. */}
+        {puedeTraerAlineacion ? (
+          <Pressable
+            onPress={traerAlineacionDelActa}
+            disabled={trayendoActa}
+            accessibilityRole="button"
+            accessibilityLabel="Traer la alineación del acta de la Federación"
+            style={({ pressed }) => [
+              styles.actaLineupBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {trayendoActa ? (
+              <ActivityIndicator size="small" color={c.accent} />
+            ) : (
+              <Text style={styles.actaLineupBtnText}>
+                Traer la alineación del acta
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
 
         {/* === PAIR + RESULT INLINE LIST === */}
         <View style={{ gap: 8 }}>
@@ -2314,6 +2377,22 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.textMuted,
     textAlign: 'center',
     letterSpacing: 0.4,
+  },
+  actaLineupBtn: {
+    marginBottom: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.accent15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actaLineupBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.accent,
   },
   ruleBox: {
     marginTop: 16,
