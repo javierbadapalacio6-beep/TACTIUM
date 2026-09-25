@@ -79,11 +79,10 @@ export const SeasonDetailScreen = ({
   const [playoff, setPlayoff] = useState<FcpTeamPlayoff | null>(null);
   const [selPlayoffGroup, setSelPlayoffGroup] = useState<string | null>(null);
   const [importingPlayoff, setImportingPlayoff] = useState(false);
-  // Trae los cruces del playoff al calendario del equipo. Las jugadas entran
-  // cerradas, con su marcador y su sede sacados del acta; las que no se han
-  // jugado entran sin fecha —la Federación no publica el día de los playoffs,
-  // ni uno de los 2.489 cruces la trae— y con la sede como PROPUESTA según la
-  // normativa (ida en casa del peor clasificado). Repetirlo no duplica: repara.
+  // Trae los cruces del playoff al calendario del equipo, con el día, la hora y
+  // la pista que publica la Federación en la ficha del cruce. Las jugadas entran
+  // cerradas, con su marcador y su sede sacados del acta. Repetirlo no duplica:
+  // repara, y respeta el día que hubiera puesto el club a mano.
   const importPlayoff = async () => {
     if (!team?.id || importingPlayoff) return;
     setImportingPlayoff(true);
@@ -97,14 +96,14 @@ export const SeasonDetailScreen = ({
       } else if (r.created === 0) {
         toast.success(
           `${r.updated} ${r.updated === 1 ? 'eliminatoria al día' : 'eliminatorias al día'}`,
-          'Les hemos puesto el resultado del acta.',
+          'Les hemos puesto su resultado, su día y su pista.',
         );
       } else {
         toast.success(
           `${r.created} ${r.created === 1 ? 'jornada añadida' : 'jornadas añadidas'}`,
           r.updated > 0
             ? `${r.updated} actualizada${r.updated === 1 ? '' : 's'} con su resultado.`
-            : 'Las jugadas con su resultado; las de más adelante, sin fecha.',
+            : 'Con su día, su hora y su pista; las jugadas, con resultado.',
         );
       }
     } catch (e: any) {

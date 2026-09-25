@@ -312,7 +312,7 @@ export async function importPlayoffMatchdays(
   if (groups.length === 0) return { created: 0, updated: 0, skipped: 0 };
 
   const { data: rows } = await rawFrom('fcp_partidos')
-    .select('id_partido, id_grupo, equipo_local, equipo_visit, avance, ronda, cuadro, estado')
+    .select('id_partido, id_grupo, equipo_local, equipo_visit, avance, ronda, cuadro, estado, fecha_ida, fecha_vuelta, lugar_ida, lugar_vuelta')
     .in('id_grupo', groups.map((x) => x.idGrupo))
     .like('id_partido', 'fcp_playoff_%');
 
@@ -325,6 +325,10 @@ export async function importPlayoffMatchdays(
     ronda: string | null;
     cuadro: string | null;
     estado: string | null;
+    fecha_ida: string | null;
+    fecha_vuelta: string | null;
+    lugar_ida: string | null;
+    lugar_vuelta: string | null;
   }[]).filter(
     (r) => normTeam(r.equipo_local) === me || normTeam(r.equipo_visit) === me,
   );
@@ -398,10 +402,19 @@ export async function importPlayoffMatchdays(
   }
 
   const existing = await MatchdaysApi.fetchMatchdays(season.id);
-  const yaEstan = new Map<string, { id: string; finished: boolean }>();
+  const yaEstan = new Map<
+    string,
+    { id: string; finished: boolean; conFecha: boolean; conSitio: boolean }
+  >();
   for (const m of existing) {
     const key = (m as { fcp_id_partido?: string | null }).fcp_id_partido;
-    if (key) yaEstan.set(key, { id: m.id, finished: m.outcome != null });
+    if (key)
+      yaEstan.set(key, {
+        id: m.id,
+        finished: m.outcome != null,
+        conFecha: !!m.match_date,
+        conSitio: !!m.location,
+      });
   }
   const already = new Set(yaEstan.keys());
   let jornada = existing.reduce((mx, m) => Math.max(mx, m.jornada_number ?? 0), 0);
@@ -445,7 +458,15 @@ export async function importPlayoffMatchdays(
       const míos = acta ? (soyLocal ? acta.local : acta.visit) : null;
       const suyos = acta ? (soyLocal ? acta.visit : acta.local) : null;
 
-      const datos = {
+      // Día, hora y pista de ESA manga. La Federación los publica en la ficha
+      // del cruce y el scraper los guarda ahí desde siempre; la jornada entraba
+      // sin fecha porque el volcado no los leía.
+      const { fecha, hora } = parseFechaLarga(
+        leg.suffix === 'ida' ? t.fecha_ida : t.fecha_vuelta,
+      );
+      const lugar = (leg.suffix === 'ida' ? t.lugar_ida : t.lugar_vuelta) || null;
+
+      const resultado = {
         // Si hay acta, la sede ya no es una propuesta: es un hecho.
         home_unconfirmed: !jugada,
         status: jugada ? 'finished' : 'upcoming',
@@ -461,14 +482,25 @@ export async function importPlayoffMatchdays(
                 ? 'loss'
                 : 'draw',
       };
+      const datos = { ...resultado, match_date: fecha, match_time: hora, location: lugar };
 
       // Ya estaba: volver a volcar REPARA. Es como llegó este error —las
       // eliminatorias entraban como próximas— y saltárselas dejaría a todo el
       // que ya las importó sin forma de arreglarlo desde la app.
       const previa = yaEstan.get(fcpPartido);
       if (previa) {
-        if (jugada && !previa.finished) {
-          await rawFrom('matchdays').update(datos).eq('id', previa.id);
+        // El resultado lo manda el acta, pero el día y la pista SOLO se
+        // rellenan si están vacíos: puede haberlos puesto el club a mano
+        // mientras la Federación no los publicaba, y eso no se pisa.
+        const parche: Record<string, unknown> = {};
+        if (jugada && !previa.finished) Object.assign(parche, resultado);
+        if (fecha && !previa.conFecha) {
+          parche.match_date = fecha;
+          if (hora) parche.match_time = hora;
+        }
+        if (lugar && !previa.conSitio) parche.location = lugar;
+        if (Object.keys(parche).length > 0) {
+          await rawFrom('matchdays').update(parche).eq('id', previa.id);
           updated++;
         } else {
           skipped++;
@@ -508,6 +540,38 @@ export async function fetchFcpBracketTieActa(tieId: string): Promise<FcpBracketT
     fetchFcpActa(`${tieId}_vuelta`),
   ]);
   return { ida, vuelta };
+}
+
+const MESES: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+};
+
+/**
+ * «domingo, 17 de mayo de 2026 - 17:00» → { fecha: '2026-05-17', hora: '17:00' }
+ *
+ * La Federación publica la fecha de los playoffs en castellano y en texto
+ * largo, no en formato fecha como la de liga, y por manga: `fecha_ida` y
+ * `fecha_vuelta`. Comprobado sobre los 3.167 valores que hay: todos siguen
+ * este patrón.
+ */
+function parseFechaLarga(s: string | null | undefined): {
+  fecha: string | null;
+  hora: string | null;
+} {
+  const t = (s ?? '').trim().toLowerCase();
+  if (!t) return { fecha: null, hora: null };
+  const h = t.match(/(\d{1,2}):(\d{2})/);
+  const hora = h ? `${h[1].padStart(2, '0')}:${h[2]}` : null;
+  const m = t.match(/(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(\d{4})/);
+  if (!m) return { fecha: null, hora };
+  const mes = MESES[m[2]];
+  if (!mes) return { fecha: null, hora };
+  return {
+    fecha: `${m[3]}-${String(mes).padStart(2, '0')}-${m[1].padStart(2, '0')}`,
+    hora,
+  };
 }
 
 const normTeam = (s: string | null | undefined) =>
