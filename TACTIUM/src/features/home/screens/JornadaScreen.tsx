@@ -45,7 +45,10 @@ import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as MatchResultsApi from '@core/services/matchResults';
 import { fetchActaForMatchday, type FcpMatchdayActa } from '@core/services/fcpSeason';
-import { importLineupFromActa } from '@core/services/fcpActaLineup';
+import {
+  importLineupFromActa,
+  importResultsFromActa,
+} from '@core/services/fcpActaLineup';
 import { toast } from '@store/toastStore';
 import * as MatchdayPhotoApi from '@core/services/matchdayPhoto';
 import { getCourtsForCompetition, getPointsScheme } from '@core/data/federations';
@@ -393,33 +396,55 @@ export const JornadaScreen = ({
   const canEditLineup = !closed && !seasonClosed && isCaptain;
   const navigateToLineup = !closed && (canEditLineup || lineupReady);
 
+  // Pistas que ya tienen resultado set a set. `score` no sirve para esto:
+  // cuando la jornada trae marcador agregado (las federadas lo traen) devuelve
+  // ese número aunque no haya ni un set guardado.
+  const pistasConResultado = useMemo(
+    () => new Set(results.map((r) => r.court_number)).size,
+    [results],
+  );
+
   /**
-   * Rellenar la alineación con la del acta.
+   * Traer del acta la alineación Y los resultados.
    *
    * Se ofrece aunque la jornada esté cerrada —de hecho ES el caso: son las
-   * jornadas que llegan de la Federación ya jugadas, con el acta delante y la
-   * alineación en blanco. No pisa lo que el capitán haya puesto.
+   * jornadas que llegan de la Federación ya jugadas, con el acta delante, la
+   * alineación en blanco y ni un set guardado. No pisa nada de lo que ya haya.
    */
-  const puedeTraerAlineacion =
-    !!matchday && !!acta && !lineupReady && isCaptain && !seasonClosed;
-  const traerAlineacionDelActa = async () => {
+  const puedeTraerActa =
+    !!matchday &&
+    !!acta &&
+    isCaptain &&
+    !seasonClosed &&
+    (!lineupReady || pistasConResultado < courts);
+  const traerDelActa = async () => {
     if (!matchday || trayendoActa) return;
     setTrayendoActa(true);
     try {
-      const r = await importLineupFromActa(matchday.id);
-      if (!r || r.pairs === 0) {
+      const [ali, res] = await Promise.all([
+        importLineupFromActa(matchday.id),
+        importResultsFromActa(matchday.id),
+      ]);
+      const partes: string[] = [];
+      if (ali && ali.pairs > 0)
+        partes.push(`${ali.pairs} ${ali.pairs === 1 ? 'pareja' : 'parejas'}`);
+      if (res && res.sets > 0) partes.push(`${res.sets} sets`);
+      if (res && res.walkovers > 0)
+        partes.push(`${res.walkovers} W.O.`);
+
+      if (partes.length === 0) {
         toast.info(
-          'No se ha podido completar',
-          r && r.unresolved.length > 0
-            ? `${r.unresolved.join(', ')} no están en la plantilla.`
-            : 'El acta no dice quién jugó por tu equipo.',
+          'Nada que traer',
+          ali && ali.unresolved.length > 0
+            ? `${ali.unresolved.join(', ')} no están en la plantilla.`
+            : 'Esta jornada ya está completa.',
         );
       } else {
         toast.success(
-          `${r.pairs} ${r.pairs === 1 ? 'pareja' : 'parejas'} del acta`,
-          r.unresolved.length > 0
-            ? `${r.unresolved.join(', ')} ya no están en la plantilla: su hueco queda vacío.`
-            : 'La que jugó de verdad, según la Federación.',
+          partes.join(' · '),
+          ali && ali.unresolved.length > 0
+            ? `${ali.unresolved.join(', ')} ya no están en la plantilla: su hueco queda vacío.`
+            : 'Tal como lo registró la Federación.',
         );
       }
       await load();
@@ -895,14 +920,14 @@ export const JornadaScreen = ({
           </View>
         </View>
 
-        {/* Traer la alineación del acta. Aparece donde duele: jornada federada,
-            acta publicada y alineación en blanco. */}
-        {puedeTraerAlineacion ? (
+        {/* Traer el acta. Aparece donde duele: jornada federada, acta publicada
+            y la alineación o los resultados en blanco. */}
+        {puedeTraerActa ? (
           <Pressable
-            onPress={traerAlineacionDelActa}
+            onPress={traerDelActa}
             disabled={trayendoActa}
             accessibilityRole="button"
-            accessibilityLabel="Traer la alineación del acta de la Federación"
+            accessibilityLabel="Traer la alineación y los resultados del acta de la Federación"
             style={({ pressed }) => [
               styles.actaLineupBtn,
               pressed && { opacity: 0.85 },
@@ -912,7 +937,7 @@ export const JornadaScreen = ({
               <ActivityIndicator size="small" color={c.accent} />
             ) : (
               <Text style={styles.actaLineupBtnText}>
-                Traer la alineación del acta
+                Traer el acta: alineación y resultados
               </Text>
             )}
           </Pressable>

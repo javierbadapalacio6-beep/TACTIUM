@@ -14,6 +14,7 @@
 import { supabase } from '@core/supabase/client';
 import * as LineupsApi from './lineups';
 import * as LineupVariantsApi from './lineupVariants';
+import * as MatchResultsApi from './matchResults';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -263,4 +264,178 @@ export async function importSeasonLineupsFromActas(
     }
   }
   return { matchdays, pairs, unresolved: [...unresolved] };
+}
+
+// ─── RESULTADOS ──────────────────────────────────────────────────────────────
+
+export interface ActaResultsResult {
+  /** Pistas con resultado escrito. */
+  courts: number;
+  /** Sets escritos (no cuenta los W.O.). */
+  sets: number;
+  /** Pistas que ya tenían resultado y no se han tocado. */
+  kept: number;
+  /** Pistas cerradas como W.O. */
+  walkovers: number;
+}
+
+/**
+ * Sets de la cadena `parciales` del acta: «6/3 - 4/6 - 6/2».
+ *
+ * Se buscan los pares «N/N» donde caigan en vez de partir la cadena, porque la
+ * Federación le cuelga texto al final cuando el partido no acabó: «6/0 - 6/0 y
+ * Lesion», «6/3 - 3/0 y Lesion», «6/0 - 6/0 y Abandono». Los sets de delante
+ * son buenos y el resto se ignora.
+ *
+ * Un W.O. no trae ningún set: «W.O. y WO». De los 67.076 registros de actas que
+ * hay, 66.608 son la forma limpia y los 468 restantes son estos dos casos.
+ *
+ * Los 0/0 se descartan: aparecen cuando alguien se retira antes de jugar
+ * («0/0 - 0/0 y Lesion») y un set que no se jugó no es un set.
+ */
+function parseParciales(s: string | null | undefined): {
+  sets: [number, number][];
+  walkover: boolean;
+} {
+  const txt = (s ?? '').toString();
+  const sets: [number, number][] = [];
+  for (const m of txt.matchAll(/(\d+)\s*\/\s*(\d+)/g)) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    if (a === 0 && b === 0) continue;
+    sets.push([a, b]);
+  }
+  return { sets, walkover: sets.length === 0 && /w\.?\s*o\.?/i.test(txt) };
+}
+
+/**
+ * Vuelca los resultados del acta en una jornada: los parciales de cada pareja,
+ * set a set, y los W.O.
+ *
+ * Es el compañero de `importLineupFromActa`, y hace falta por lo mismo: sin
+ * esto la jornada federada tenía su marcador global (3-2) pero ni un set, así
+ * que las estadísticas de jugador y de pareja daban cero en toda la temporada
+ * — se calculan desde `match_results`, no desde el acta.
+ *
+ * Tampoco pisa nada: una pista que ya tenga resultado se queda como está,
+ * porque lo habrá metido alguien del equipo.
+ */
+export async function importResultsFromActa(
+  matchdayId: string,
+): Promise<ActaResultsResult | null> {
+  const { data: mdRaw } = await rawFrom('matchdays')
+    .select('id, season_id, fcp_id_partido')
+    .eq('id', matchdayId)
+    .maybeSingle();
+  const md = mdRaw as { id: string; season_id: string; fcp_id_partido: string | null } | null;
+  if (!md?.fcp_id_partido) return null;
+
+  const { data: actaRaw } = await rawFrom('fcp_actas')
+    .select('partido_num, equipo_local, parciales, ganador')
+    .eq('id_partido', md.fcp_id_partido)
+    .order('partido_num', { ascending: true });
+  const filas = (actaRaw ?? []) as {
+    partido_num: number | null;
+    equipo_local: string | null;
+    parciales: string | null;
+    ganador: string | null;
+  }[];
+  if (filas.length === 0) return null;
+
+  const { data: seasonRaw } = await rawFrom('seasons')
+    .select('team_id')
+    .eq('id', md.season_id)
+    .maybeSingle();
+  const teamId = (seasonRaw as { team_id: string } | null)?.team_id;
+  if (!teamId) return null;
+  const { data: teamRaw } = await rawFrom('teams')
+    .select('name')
+    .eq('id', teamId)
+    .maybeSingle();
+  const miNombre = norm((teamRaw as { name: string | null } | null)?.name);
+
+  const yaHay = await MatchResultsApi.fetchResults(matchdayId);
+  const conResultado = new Set(yaHay.map((r) => r.court_number));
+
+  let courts = 0;
+  let sets = 0;
+  let kept = 0;
+  let walkovers = 0;
+
+  for (const fila of filas) {
+    const court = fila.partido_num;
+    if (court == null) continue;
+    if (conResultado.has(court)) {
+      kept++;
+      continue;
+    }
+
+    const soyLocal = miNombre ? norm(fila.equipo_local) === miNombre : true;
+    const { sets: parciales, walkover } = parseParciales(fila.parciales);
+
+    if (walkover) {
+      // Dirección del W.O.: `forfeit_us` significa que NO nos presentamos
+      // nosotros. Sin ganador no sabemos hacia dónde va, así que se deja sin
+      // tocar en vez de adivinar quién perdió.
+      const gano = fila.ganador;
+      if (gano !== 'local' && gano !== 'visitante') continue;
+      const ganeYo = (gano === 'local') === soyLocal;
+      await MatchResultsApi.setCourtForfeit(matchdayId, court, true, !ganeYo, 3);
+      courts++;
+      walkovers++;
+      continue;
+    }
+
+    if (parciales.length === 0) continue;
+    for (let i = 0; i < parciales.length; i++) {
+      const [local, visit] = parciales[i];
+      // `us`/`them` son SIEMPRE nuestros juegos y los suyos; el acta viene en
+      // local/visitante y quien pinta ya le da la vuelta si jugamos fuera.
+      const us = soyLocal ? local : visit;
+      const them = soyLocal ? visit : local;
+      await MatchResultsApi.upsertSet(matchdayId, court, i + 1, us, them);
+      sets++;
+    }
+    courts++;
+  }
+
+  return { courts, sets, kept, walkovers };
+}
+
+export interface SeasonActaResultsResult {
+  matchdays: number;
+  courts: number;
+  sets: number;
+  walkovers: number;
+}
+
+/** Los resultados de TODA la temporada, igual que las alineaciones. */
+export async function importSeasonResultsFromActas(
+  seasonId: string,
+): Promise<SeasonActaResultsResult> {
+  const { data } = await rawFrom('matchdays')
+    .select('id, jornada_number')
+    .eq('season_id', seasonId)
+    .not('fcp_id_partido', 'is', null)
+    .order('jornada_number', { ascending: true });
+  const ids = ((data ?? []) as { id: string }[]).map((m) => m.id);
+
+  let matchdays = 0;
+  let courts = 0;
+  let sets = 0;
+  let walkovers = 0;
+  for (const id of ids) {
+    try {
+      const r = await importResultsFromActa(id);
+      if (!r || r.courts === 0) continue;
+      matchdays++;
+      courts += r.courts;
+      sets += r.sets;
+      walkovers += r.walkovers;
+    } catch {
+      /* una jornada que falle no tumba el resto */
+    }
+  }
+  return { matchdays, courts, sets, walkovers };
 }

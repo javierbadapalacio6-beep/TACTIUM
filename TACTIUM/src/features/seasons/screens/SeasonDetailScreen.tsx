@@ -31,7 +31,10 @@ import {
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
 import * as LineupsApi from '@core/services/lineups';
-import { importSeasonLineupsFromActas } from '@core/services/fcpActaLineup';
+import {
+  importSeasonLineupsFromActas,
+  importSeasonResultsFromActas,
+} from '@core/services/fcpActaLineup';
 import { matchdayState, type MatchdayVisualState } from '@core/utils/matchday';
 import { tandasOptions } from '@core/utils/tandas';
 import { getCourtsForCompetition } from '@core/data/federations';
@@ -220,30 +223,45 @@ export const SeasonDetailScreen = ({
   );
 
   /**
-   * Traer las alineaciones de TODA la temporada desde las actas.
+   * Traer las ACTAS de toda la temporada: alineaciones y resultados.
    *
    * Una a una no es realista: una temporada federada son 14 jornadas de liga
    * más las eliminatorias, y el capitán no va a entrar en cada una. El acta
-   * dice quién jugó en cada pista, así que el histórico se puede reconstruir
-   * de golpe. No pisa las parejas que ya estén puestas.
+   * dice quién jugó en cada pista y con qué parciales, así que el histórico se
+   * puede reconstruir de golpe. No pisa nada de lo que ya esté puesto.
+   *
+   * Los resultados importan más de lo que parece: las estadísticas de jugador y
+   * de pareja se calculan desde `match_results`, no desde el acta, así que sin
+   * esto una temporada entera contaba como cero partidos jugados.
    */
   const [trayendoAlineaciones, setTrayendoAlineaciones] = useState(false);
   const traerAlineaciones = async () => {
     if (!season?.id || trayendoAlineaciones) return;
     setTrayendoAlineaciones(true);
     try {
-      const r = await importSeasonLineupsFromActas(season.id);
-      if (r.pairs === 0) {
+      // En serie: las dos escriben sobre las mismas jornadas y no gana nada
+      // solapándolas.
+      const ali = await importSeasonLineupsFromActas(season.id);
+      const res = await importSeasonResultsFromActas(season.id);
+      const partes: string[] = [];
+      if (ali.pairs > 0)
+        partes.push(`${ali.pairs} ${ali.pairs === 1 ? 'pareja' : 'parejas'}`);
+      if (res.sets > 0) partes.push(`${res.sets} sets`);
+      if (res.walkovers > 0) partes.push(`${res.walkovers} W.O.`);
+
+      if (partes.length === 0) {
         toast.info(
           'Nada que traer',
-          'Las jornadas con acta ya tienen su alineación.',
+          'Las jornadas con acta ya están completas.',
         );
       } else {
+        const jornadas = Math.max(ali.matchdays, res.matchdays);
         toast.success(
-          `${r.pairs} ${r.pairs === 1 ? 'pareja' : 'parejas'} en ${r.matchdays} ${r.matchdays === 1 ? 'jornada' : 'jornadas'}`,
-          r.unresolved.length > 0
-            ? `${r.unresolved.join(', ')} ya no están en la plantilla: sus huecos quedan vacíos.`
-            : 'Las que jugaron de verdad, según la Federación.',
+          partes.join(' · '),
+          (ali.unresolved.length > 0
+            ? `${ali.unresolved.join(', ')} ya no están en la plantilla. `
+            : '') +
+            `En ${jornadas} ${jornadas === 1 ? 'jornada' : 'jornadas'}, tal como lo registró la Federación.`,
         );
       }
       await reload();
@@ -610,15 +628,15 @@ export const SeasonDetailScreen = ({
           </View>
         ) : (
           <>
-        {/* Reconstruir el histórico de alineaciones desde las actas. Las
-            jornadas que llegan de la Federación traen resultado pero nadie
-            teclea a mano 19 × 5 parejas para completarlas. */}
+        {/* Reconstruir el histórico desde las actas. Las jornadas que llegan de
+            la Federación traen el marcador global, pero ni las parejas ni los
+            sets, y nadie teclea a mano 19 × 5 partidos para completarlas. */}
         {isFcp && isCaptain && matchdays.length > 0 ? (
           <Pressable
             onPress={traerAlineaciones}
             disabled={trayendoAlineaciones}
             accessibilityRole="button"
-            accessibilityLabel="Traer las alineaciones desde las actas de la Federación"
+            accessibilityLabel="Traer alineaciones y resultados desde las actas de la Federación"
             style={({ pressed }) => [
               styles.playoffImportBtn,
               trayendoAlineaciones && { opacity: 0.5 },
@@ -629,7 +647,7 @@ export const SeasonDetailScreen = ({
               <ActivityIndicator size="small" color={c.accent} />
             ) : (
               <Text style={styles.playoffImportText}>
-                Traer las alineaciones de las actas
+                Traer las actas: alineaciones y resultados
               </Text>
             )}
           </Pressable>
