@@ -261,7 +261,8 @@ export async function fetchFcpBracketFamily(parts: FcpPlayoffPart[]): Promise<Fc
 
 export interface PlayoffImportResult {
   created: number;
-  skipped: number; // ya estaban
+  updated: number; // ya estaban y se les ha puesto el resultado
+  skipped: number; // ya estaban y no había nada que cambiar
 }
 
 /** Posición en la fase REGULAR de cada equipo de la liga (por nombre). */
@@ -308,10 +309,10 @@ export async function importPlayoffMatchdays(
   if (idLiga == null) throw new Error('No encuentro la temporada de tu equipo.');
 
   const groups = await fetchTeamPlayoffGroups(idLiga, main.equipo, genero);
-  if (groups.length === 0) return { created: 0, skipped: 0 };
+  if (groups.length === 0) return { created: 0, updated: 0, skipped: 0 };
 
   const { data: rows } = await rawFrom('fcp_partidos')
-    .select('id_partido, id_grupo, equipo_local, equipo_visit, avance, ronda, cuadro')
+    .select('id_partido, id_grupo, equipo_local, equipo_visit, avance, ronda, cuadro, estado')
     .in('id_grupo', groups.map((x) => x.idGrupo))
     .like('id_partido', 'fcp_playoff_%');
 
@@ -323,23 +324,91 @@ export async function importPlayoffMatchdays(
     avance: number | null;
     ronda: string | null;
     cuadro: string | null;
+    estado: string | null;
   }[]).filter(
     (r) => normTeam(r.equipo_local) === me || normTeam(r.equipo_visit) === me,
   );
-  if (ties.length === 0) return { created: 0, skipped: 0 };
+  if (ties.length === 0) return { created: 0, updated: 0, skipped: 0 };
+
+  /**
+   * ¿Cuántas mangas tiene un cruce?
+   *
+   * No lo dice el reglamento y no se puede deducir de la ronda: de las 348
+   * finales que hay en la Federación, 180 se jugaron a ida y vuelta y 153 a
+   * partido único. Lo dice el estado del cruce, que es lo que el scraper sabe
+   * de verdad: `jugado` = las dos mangas, `jugado_ida` = solo una.
+   *
+   * Mientras está pendiente no hay forma de saberlo, así que se crea la ida y,
+   * si aparece una vuelta, entra en el siguiente volcado (el import no duplica:
+   * se salta lo que ya tiene `fcp_id_partido`). Para las rondas normales se
+   * siguen creando las dos, que es lo que había y le sirve al club para
+   * reservar pista.
+   *
+   * El sufijo SIEMPRE es `ida`/`vuelta`. Antes las finales se guardaban como
+   * `_unica`, y ese identificador no existe en ningún sitio: no hay una sola
+   * acta con ese sufijo en toda la Federación, así que el acta de la final no
+   * llegaba a aparecer nunca.
+   */
+  const mangasDe = (t: { estado: string | null; avance: number | null }): ('ida' | 'vuelta')[] => {
+    if (t.estado === 'jugado') return ['ida', 'vuelta'];
+    if (t.estado === 'jugado_ida') return ['ida'];
+    return t.avance === 1 ? ['ida'] : ['ida', 'vuelta'];
+  };
+
+  // Las actas de todas las mangas de golpe: de ahí sale el marcador, quién fue
+  // local y si está jugada. `fcp_partidos.resultado` no sirve para esto — en la
+  // final del usuario dice "3-2" y el acta dice 5-0.
+  const legIds = ties.flatMap((t) => mangasDe(t).map((m) => `${t.id_partido}_${m}`));
+  const { data: actasRaw } = await rawFrom('fcp_actas')
+    .select('id_partido, equipo_local, ganador')
+    .in('id_partido', legIds)
+    .limit(4000);
+  const actaPorManga = new Map<string, { equipoLocal: string | null; local: number; visit: number }>();
+  for (const a of (actasRaw ?? []) as {
+    id_partido: string;
+    equipo_local: string | null;
+    ganador: string | null;
+  }[]) {
+    const acc = actaPorManga.get(a.id_partido) ?? {
+      equipoLocal: a.equipo_local,
+      local: 0,
+      visit: 0,
+    };
+    if (a.ganador === 'local') acc.local += 1;
+    else if (a.ganador === 'visitante') acc.visit += 1;
+    acc.equipoLocal = acc.equipoLocal ?? a.equipo_local;
+    actaPorManga.set(a.id_partido, acc);
+  }
 
   const season = await SeasonsApi.fetchActiveSeason(teamId);
   if (!season) throw new Error('El equipo no tiene temporada activa.');
+
+  // Las finales volcadas antes de arreglar esto quedaron con la clave `_unica`,
+  // que no existe en la Federación. Se renombran a `_ida` en vez de dejarlas
+  // huérfanas: así se reconocen abajo y se reparan, en lugar de crear una
+  // jornada duplicada al lado de la que ya había.
+  const { data: antiguas } = await rawFrom('matchdays')
+    .select('id, fcp_id_partido')
+    .eq('season_id', season.id)
+    .like('fcp_id_partido', 'fcp_playoff_%_unica');
+  for (const a of (antiguas ?? []) as { id: string; fcp_id_partido: string }[]) {
+    await rawFrom('matchdays')
+      .update({ fcp_id_partido: a.fcp_id_partido.replace(/_unica$/, '_ida') })
+      .eq('id', a.id);
+  }
+
   const existing = await MatchdaysApi.fetchMatchdays(season.id);
-  const already = new Set(
-    existing
-      .map((m) => (m as { fcp_id_partido?: string | null }).fcp_id_partido)
-      .filter((x): x is string => !!x),
-  );
+  const yaEstan = new Map<string, { id: string; finished: boolean }>();
+  for (const m of existing) {
+    const key = (m as { fcp_id_partido?: string | null }).fcp_id_partido;
+    if (key) yaEstan.set(key, { id: m.id, finished: m.outcome != null });
+  }
+  const already = new Set(yaEstan.keys());
   let jornada = existing.reduce((mx, m) => Math.max(mx, m.jornada_number ?? 0), 0);
 
   const pos = await regularPositions(idLiga);
   let created = 0;
+  let updated = 0;
   let skipped = 0;
 
   for (const t of ties) {
@@ -352,39 +421,78 @@ export async function importPlayoffMatchdays(
     const iAmWorse =
       myPos != null && rivalPos != null ? myPos > rivalPos : null;
 
-    // Final (avance 1) → SEDE ÚNICA según la normativa: una sola jornada.
-    const legs: { suffix: string; isHome: boolean }[] =
-      t.avance === 1
-        ? [{ suffix: 'unica', isHome: true }]
-        : [
-            { suffix: 'ida', isHome: iAmWorse ?? true },
-            { suffix: 'vuelta', isHome: iAmWorse == null ? true : !iAmWorse },
-          ];
+    const mangas = mangasDe(t);
+    const legs: { suffix: 'ida' | 'vuelta'; isHome: boolean }[] = mangas.map((suffix) => ({
+      suffix,
+      // La ida se juega en casa del PEOR clasificado (normativa IV). Solo es
+      // una propuesta: si la manga ya se jugó, manda el acta.
+      isHome:
+        suffix === 'ida' ? (iAmWorse ?? true) : iAmWorse == null ? true : !iAmWorse,
+    }));
 
     for (const leg of legs) {
       const fcpPartido = `${t.id_partido}_${leg.suffix}`;
-      if (already.has(fcpPartido)) {
-        skipped++;
-        continue;
-      }
-      jornada += 1;
-      const label = [t.ronda?.trim() || 'Playoff', leg.suffix === 'unica' ? null : leg.suffix]
+      const acta = actaPorManga.get(fcpPartido);
+      // Un cruce de una sola manga no lleva «· ida»: es el partido, sin más.
+      const label = [t.ronda?.trim() || 'Playoff', mangas.length > 1 ? leg.suffix : null]
         .filter(Boolean)
         .join(' · ');
+
+      // Jugada: el acta dice quién fue local y cuántos partidos ganó cada uno
+      // (el marcador de un enfrentamiento es «partidos ganados», de 5).
+      const jugada = !!acta;
+      const soyLocal = acta?.equipoLocal ? normTeam(acta.equipoLocal) === me : leg.isHome;
+      const míos = acta ? (soyLocal ? acta.local : acta.visit) : null;
+      const suyos = acta ? (soyLocal ? acta.visit : acta.local) : null;
+
+      const datos = {
+        // Si hay acta, la sede ya no es una propuesta: es un hecho.
+        home_unconfirmed: !jugada,
+        status: jugada ? 'finished' : 'upcoming',
+        is_home: jugada ? soyLocal : leg.isHome,
+        score_for: míos,
+        score_against: suyos,
+        outcome:
+          míos == null || suyos == null
+            ? null
+            : míos > suyos
+              ? 'win'
+              : míos < suyos
+                ? 'loss'
+                : 'draw',
+      };
+
+      // Ya estaba: volver a volcar REPARA. Es como llegó este error —las
+      // eliminatorias entraban como próximas— y saltárselas dejaría a todo el
+      // que ya las importó sin forma de arreglarlo desde la app.
+      const previa = yaEstan.get(fcpPartido);
+      if (previa) {
+        if (jugada && !previa.finished) {
+          await rawFrom('matchdays').update(datos).eq('id', previa.id);
+          updated++;
+        } else {
+          skipped++;
+        }
+        continue;
+      }
+
+      jornada += 1;
       const md = await MatchdaysApi.createMatchday(season.id, {
         jornada_number: jornada,
         opponent: `${rivalName} (${label})`,
-        is_home: leg.isHome,
+        is_home: jugada ? soyLocal : leg.isHome,
       });
-      // Columnas que `createMatchday` no conoce (el vínculo con la FCP y la
-      // marca de sede sin confirmar).
+      // Columnas que `createMatchday` no conoce: el vínculo con la FCP, la
+      // marca de sede sin confirmar y el resultado. Sin esto las jornadas de
+      // playoff entraban SIEMPRE como próximas, aunque estuvieran jugadas y
+      // tuviéramos el acta delante.
       await rawFrom('matchdays')
-        .update({ fcp_id_partido: fcpPartido, home_unconfirmed: true })
+        .update({ fcp_id_partido: fcpPartido, ...datos })
         .eq('id', md.id);
       created++;
     }
   }
-  return { created, skipped };
+  return { created, updated, skipped };
 }
 
 export interface FcpBracketTieActa {
