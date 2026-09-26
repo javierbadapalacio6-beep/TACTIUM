@@ -880,12 +880,15 @@ export async function fetchTeamFcpGroup(
   teamId: string,
 ): Promise<{ fed: string; idGrupo: string } | null> {
   const sb = supabaseBrowser();
-  const { data: link } = await sb
+  // El vínculo más reciente, sin `maybeSingle`: si un día hubiera dos filas
+  // (pasó en la app), esto no tiene que reventar.
+  const { data: links } = await sb
     .from("fcp_team_links")
     .select("fcp_id_equipo")
     .eq("team_id", teamId)
-    .maybeSingle();
-  const fcpId = (link as { fcp_id_equipo: number } | null)?.fcp_id_equipo ?? null;
+    .order("linked_at", { ascending: false })
+    .limit(1);
+  const fcpId = ((links ?? []) as { fcp_id_equipo: number }[])[0]?.fcp_id_equipo ?? null;
   if (fcpId == null) return null;
 
   // La temporada actual (mayor id_liga), su liga regular (no playoff/fase).

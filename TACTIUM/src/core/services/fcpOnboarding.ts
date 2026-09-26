@@ -378,6 +378,11 @@ export async function importFcpTeams(
       // 2) El usuario decidió sustituir un equipo suyo creado a mano.
       teamId = reuse[t.id_equipo];
       await updateTeam(teamId, { ...canonical, club_id: clubId ?? null });
+      // Un equipo tiene UN vínculo. Si ya lo tenía (p. ej. «Preparar
+      // temporada» lo apuntó a la inscripción del año que viene), sustituir
+      // por el id de la liga en curso dejaba DOS filas y `getFcpIdEquipo`
+      // (maybeSingle) fallaba: la clasificación desaparecía.
+      await rawFrom('fcp_team_links').delete().eq('team_id', teamId);
       await rawFrom('fcp_team_links').insert({
         fcp_id_equipo: t.id_equipo,
         team_id: teamId,

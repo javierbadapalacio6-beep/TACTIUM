@@ -42,11 +42,16 @@ function fcpDisplayName(r: {
 
 /** id_equipo federativo vinculado a un equipo TACTIUM (null si no está vinculado). */
 export async function getFcpIdEquipo(teamId: string): Promise<number | null> {
+  // El más reciente y nada de `maybeSingle`: con dos filas (pasó al
+  // sustituir un equipo ya preparado para la temporada siguiente) PostgREST
+  // devolvía error y el equipo aparecía como «no vinculado».
   const { data } = await rawFrom('fcp_team_links')
     .select('fcp_id_equipo')
     .eq('team_id', teamId)
-    .maybeSingle();
-  return data ? ((data as { fcp_id_equipo: number }).fcp_id_equipo ?? null) : null;
+    .order('linked_at', { ascending: false })
+    .limit(1);
+  const row = ((data ?? []) as { fcp_id_equipo: number }[])[0];
+  return row?.fcp_id_equipo ?? null;
 }
 
 /**
