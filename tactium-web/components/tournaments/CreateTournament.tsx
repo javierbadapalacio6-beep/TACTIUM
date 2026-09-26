@@ -38,6 +38,7 @@ import {
   Toggle,
 } from "@/components/ui";
 import { EmptyState, Skeleton } from "@/components/states";
+import { ActivateTeamsCard } from "@/components/club/ActivateTeamsCard";
 import {
   IconAlert,
   IconCheck,
@@ -316,6 +317,8 @@ export function CreateTournament() {
         title="Mis torneos"
         lede="Gestiona los torneos de tu club o crea uno nuevo."
       />
+
+      <ActivateTeamsCard />
 
       {/* Torneos del club — arriba del todo: es lo primero que necesita el club
           (encontrar, pagar y gestionar los suyos), antes del asistente. */}

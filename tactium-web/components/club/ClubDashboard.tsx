@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import {
   coverTeam,
@@ -45,7 +46,13 @@ import { EditClubModal } from "@/components/club/EditClubModal";
 import { Crest } from "@/components/Crest";
 
 interface ClubData {
-  club: { id: string; name: string; federation: string | null; logo_url: string | null } | null;
+  club: {
+    id: string;
+    name: string;
+    federation: string | null;
+    logo_url: string | null;
+    tournaments_only: boolean | null;
+  } | null;
   teams: DbClubTeam[];
 }
 
@@ -96,6 +103,14 @@ export function ClubDashboard() {
     [clubId, reloadKey],
     !!clubId
   );
+
+  // Espacio de organizador («solo torneos»): no hay panel de club, su casa
+  // es la pantalla de torneos, como en la app.
+  const router = useRouter();
+  const tournamentsOnly = data?.club?.tournaments_only === true;
+  useEffect(() => {
+    if (tournamentsOnly) router.replace("/club/torneos");
+  }, [tournamentsOnly, router]);
 
   if (!clubId) {
     return (

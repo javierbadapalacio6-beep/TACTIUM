@@ -81,6 +81,24 @@ export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
 };
 
 /**
+ * Espacio de organizador (club «solo torneos»): menú recortado, como en la
+ * app (Torneos + Perfil). Sin equipos, horarios ni facturación hasta que el
+ * dueño active la gestión de equipos desde la pantalla de torneos.
+ */
+export const NAV_TOURNAMENTS_ONLY: NavEntry[] = [
+  { href: "/club/torneos", label: "Torneos", icon: "trophy" },
+  { href: "/torneos", label: "Explorar torneos", icon: "search" },
+  { href: "/club/cobros", label: "Cobros", icon: "creditCard" },
+  { href: "/comunidad", label: "Comunidad", icon: "globe" },
+];
+export const TABS_TOURNAMENTS_ONLY: NavEntry[] = [
+  { href: "/club/torneos", label: "Torneos", icon: "trophy" },
+  { href: "/torneos", label: "Explorar", icon: "search" },
+  { href: "/club/cobros", label: "Cobros", icon: "creditCard" },
+  { href: "/ajustes", label: "Perfil", icon: "userPlus" },
+];
+
+/**
  * Navegación del marco PÚBLICO (visitante sin sesión).
  *
  * Sólo destinos que la base de datos sirve sin sesión: torneos, comunidad y
@@ -240,8 +258,12 @@ export interface NavGroup extends NavEntry {
  * La pantalla de aterrizaje del rol (`/club` para el club) nunca actúa de
  * padre: si lo hiciera se tragaría su propio menú entero en un desplegable.
  */
-export function topNav(role: Role): { home: NavEntry; groups: NavGroup[] } {
-  const entries = NAV_BY_ROLE[role];
+export function topNav(
+  role: Role,
+  opts?: { tournamentsOnly?: boolean },
+): { home: NavEntry; groups: NavGroup[] } {
+  const entries =
+    role === "club" && opts?.tournamentsOnly ? NAV_TOURNAMENTS_ONLY : NAV_BY_ROLE[role];
   const landing = entries[0];
   const home: NavEntry =
     entries.find((e) => e.href === "/") ?? { href: "/", label: "Inicio", icon: "home" };

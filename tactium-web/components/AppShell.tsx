@@ -26,6 +26,7 @@ import { Wordmark } from "./Wordmark";
 import { Avatar } from "./ui";
 import {
   TABS_BY_ROLE,
+  TABS_TOURNAMENTS_ONLY,
   hasTeamSwitcher,
   isKnownRoute,
   isPublicPath,
@@ -375,12 +376,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <SignedOut />;
   }
 
-  const { home, groups } = topNav(role);
+  // Espacio de organizador («solo torneos»): menú recortado, como en la app.
+  const tournamentsOnly =
+    role === "club" && (clubs.find((c) => c.id === clubId)?.tournamentsOnly ?? false);
+  const { home, groups } = topNav(role, { tournamentsOnly });
   const pillActiveHref = activeHref(
     pathname,
     groups.flatMap((g) => [g.href, ...(g.items?.map((i) => i.href) ?? [])]),
   );
-  const tabs = TABS_BY_ROLE[role];
+  const tabs = tournamentsOnly ? TABS_TOURNAMENTS_ONLY : TABS_BY_ROLE[role];
   const tabsActiveHref = activeHref(pathname, tabs.map((t) => t.href));
   const unread = notices.filter((n) => n.unread).length;
   const activeClub = clubs.find((c) => c.id === clubId) ?? null;

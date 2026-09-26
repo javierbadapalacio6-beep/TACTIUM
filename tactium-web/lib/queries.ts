@@ -315,7 +315,12 @@ export async function updateTeam(
 /** Actualiza campos de un club (edición: nombre/federación). */
 export async function updateClub(
   id: string,
-  patch: { name?: string; federation?: string | null; logo_url?: string | null },
+  patch: {
+    name?: string;
+    federation?: string | null;
+    logo_url?: string | null;
+    tournaments_only?: boolean;
+  },
 ): Promise<void> {
   const { error } = await supabaseBrowser().from("clubs").update(patch).eq("id", id);
   if (error) throw error;
@@ -916,7 +921,7 @@ export async function fetchTeamFcpGroup(
 export async function fetchClub(clubId: string) {
   const { data, error } = await supabaseBrowser()
     .from("clubs")
-    .select("id, name, federation, logo_url")
+    .select("id, name, federation, logo_url, tournaments_only")
     .eq("id", clubId)
     .maybeSingle();
   if (error) throw error;
@@ -925,6 +930,7 @@ export async function fetchClub(clubId: string) {
     name: string;
     federation: string | null;
     logo_url: string | null;
+    tournaments_only: boolean | null;
   } | null;
 }
 

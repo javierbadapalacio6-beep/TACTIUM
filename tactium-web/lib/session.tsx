@@ -59,6 +59,8 @@ export interface ClubRef {
   id: string;
   name: string;
   logoUrl: string | null;
+  /** Espacio de organizador («solo torneos»): menú recortado, sin equipos. */
+  tournamentsOnly: boolean;
 }
 
 export interface SessionUser {
@@ -166,7 +168,7 @@ export function SessionProvider({
         .eq("user_id", authUser.id),
       sb
         .from("club_members")
-        .select("club_id, clubs(id, name, logo_url)")
+        .select("club_id, clubs(id, name, logo_url, tournaments_only)")
         .eq("user_id", authUser.id),
     ]);
 
@@ -206,7 +208,12 @@ export function SessionProvider({
     // Antes se cogía `clubRes.data[0].club_id` sin ordenar: con dos clubes te
     // tocaba el que devolviera Postgres y no había forma de cambiarlo. Ahora se
     // cargan todos y el usuario elige (la elección se guarda en el navegador).
-    type ClubRow = { id: string; name: string; logo_url: string | null };
+    type ClubRow = {
+      id: string;
+      name: string;
+      logo_url: string | null;
+      tournaments_only: boolean | null;
+    };
     const clubRows = (clubRes.data ?? []) as unknown as {
       club_id: string;
       clubs: ClubRow | ClubRow[] | null;
@@ -214,7 +221,14 @@ export function SessionProvider({
     const myClubs: ClubRef[] = clubRows
       .map((r) => {
         const c = Array.isArray(r.clubs) ? r.clubs[0] : r.clubs;
-        return c ? { id: c.id, name: c.name, logoUrl: c.logo_url ?? null } : null;
+        return c
+          ? {
+              id: c.id,
+              name: c.name,
+              logoUrl: c.logo_url ?? null,
+              tournamentsOnly: c.tournaments_only === true,
+            }
+          : null;
       })
       .filter((c): c is ClubRef => c !== null)
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
