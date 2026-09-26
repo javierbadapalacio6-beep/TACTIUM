@@ -247,6 +247,169 @@
    ───────────────────────────────────────────────────────────────── */
 const LOG = [
   {
+    date: "2026-09-26",
+    title: "🌐 UNA SOLA WEB EN tactium.io: la landing se fusiona dentro de tactium-web (portada de marketing + explorar sin cuenta + app), con hero 3D en Three.js, marco redondeado como el panel, SEO y legales portados; app.tactium.io redirige; la app móvil apunta al apex por OTA; Stripe y Vercel limpios.",
+    changes: [
+      { type: "decision", text: "<strong>tactium-web</strong> · <strong>Un solo proyecto y un solo dominio.</strong> Había dos Next.js con dos lenguajes visuales (landing en Inter + anime.js; web en Satoshi + <code>ui.tsx</code>) y la app móvil en tiendas lleva URLs fijas a AMBOS (<code>tactium.io/auth/reset-password</code>, <code>tactium.io/legal/*</code>, <code>app.tactium.io/torneos/…</code>, <code>/suscripcion</code>). Decidido: canónico <strong>tactium.io</strong> (marca, SEO, Site URL de Supabase sin cambiar) y <code>app.tactium.io</code>/<code>www</code> → 308 <em>conservando la ruta</em> desde <code>middleware.ts</code> (env <code>CANONICAL_HOST</code>), con <code>/api/*</code> excluido para que los webhooks de Stripe no se rompan. <code>tactium-landing/</code> se conserva sólo como herramientas de marketing (carruseles IG, plantillas de email)." },
+
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>La portada se renderiza en servidor.</strong> Antes <code>AppShell</code> pintaba un spinner hasta que el cliente resolvía la sesión: Google recibía un spinner. Ahora <code>serverUser()</code> (<code>lib/supabase/server.ts</code>, React <code>cache</code>) decide en <code>app/page.tsx</code>: visitante → <code>MarketingHome</code>; con sesión → <code>HomeSwitch</code> (panel del rol). <code>SessionProvider</code> recibe <code>initialUser</code> y nace <code>ready</code> para el visitante. <code>curl</code> a <code>/</code> devuelve el <code>&lt;h1&gt;</code> completo." },
+
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Portada nueva</strong> (<code>components/marketing/*</code>, <code>app/marketing.css</code>, sólo oscura por la clase <code>.mk-dark</code> que re-declara los tokens): hero con <strong>pista de pádel 3D en react-three-fiber</strong> (medidas reales 20×10, red de malla, cristales, bola en globo, polvo; parallax con el puntero; se para fuera de pantalla; sin WebGL cae al canvas 2D y con <em>reduced motion</em> se queda quieta), flujo de una jornada con capturas reales, bento de funciones (miniaturas en CSS, sin capturas con datos de prueba), panel de club ilustrado, formatos de torneo, <strong>banda «Explorar sin cuenta» con datos reales</strong> (torneos por <code>explore_tournaments</code> y una clasificación en juego de la FCP), precios leyendo <code>lib/plans.ts</code> (misma fuente que <code>/pro</code>, el importe grande es el FACTURADO, como en el paywall), FAQ y cierre con badges de tienda. Revelados con <code>motion/react</code>." },
+
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Marco público = marco del panel.</strong> La parte pública estrena el mismo lienzo oscuro con marco redondeado de 24 px (<code>.tw-pub-shell</code> + <code>.tw-pub</code>, scroll dentro del marco), la barra de 64 px con píldoras redondas (icono sólo en la activa) y un pie de 4 columnas (Producto · Explorar · Cuenta · Legal y contacto). Al entrar con cuenta la ventana no cambia de forma." },
+
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Portado de la landing</strong>: legales en <code>/legal/privacidad</code>, <code>/terminos</code> y <code>/eliminar-cuenta</code> (arregla los enlaces rotos del paywall <code>/pro</code>); <strong>reset de contraseña</strong> con doble flujo — el hash implícito que manda la app móvil (cliente plano <code>flowType:'implicit'</code>, porque el cliente PKCE de <code>@supabase/ssr</code> lo rechaza) y el PKCE de la web vía <code>/auth/callback</code>; el modal «Recuperar contraseña» de <code>/entrar</code> por fin envía el email; <code>/entrar</code> respeta <code>?next=</code>; <code>sitemap</code>, <code>robots</code> (con las rutas privadas fuera), <code>manifest</code>, <code>opengraph-image</code>, JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage), <code>metadataBase</code>; <code>public/brand/logo.png</code> (los emails lo cargan por URL absoluta), capturas e iconos." },
+
+      { type: "fix", text: "<strong>tactium-web</strong> · <strong>Lo que salió de la crítica y la revisión visual</strong> (agentes <code>critico-premium</code> y <code>revisor-visual</code>): el pie salía apilado en una columna porque <code>marketing.css</code> se importa antes que el resto de <code>globals.css</code> (doble clase para ganar especificidad); la pista pisaba la entradilla y dejaba una costura vertical → máscara radial y cámara más lejos; verde sólo en el H1 (no en cada H2), fuera el brillo que seguía al ratón, la rejilla y la píldora del hero; borradas las secciones redundantes «Para quién» y el marquee de federaciones; clubes de demo filtrados y formato del torneo traducido en la banda Explorar; nombres de grupo FCP en frase normal; <code>scroll-margin-top</code> para que al llegar por un ancla (<code>#faq</code> desde la app) el título no se pegue a la barra. Sin scroll horizontal ni errores de consola en 18 combinaciones página/tema/viewport." },
+
+      { type: "decision", text: "<strong>Nada de «17 federaciones».</strong> El usuario paró la cifra en la portada: sólo la Cántabra está activa (competición cargada al día). La FAQ ahora dice que las alineaciones valen para cualquier liga federada (los puntos los pone el usuario) y que <em>el resto irán entrando</em>. Guardado como regla." },
+
+      { type: "chore", text: "<strong>Despliegue, hecho desde la sesión</strong>: push a <code>main</code> (<code>e2579eee</code> + <code>bbfa0b52</code>); por la API de Vercel con el token del CLI: el apex <code>tactium.io</code> pasa a principal (estaba al revés, apex → www, lo que habría hecho un bucle con el middleware), <code>www</code> → 308 → apex, env de producción <code>NEXT_PUBLIC_APP_URL=https://tactium.io</code> y <code>CANONICAL_HOST=tactium.io</code>, redeploy (<code>tactium-drxdzfzm7</code>). El usuario añadió <code>https://tactium.io/**</code> a las Redirect URLs de Supabase y confirmó el login con Google. Verificado en producción: apex 200 con portada nueva, <code>app.tactium.io/torneos?x=1</code> → 308 con ruta y query, <code>/api/tournaments/webhook</code> sin redirigir, legales/reset/<code>#faq</code> y SEO en 200. Gotcha de Git Bash: <code>MSYS_NO_PATHCONV=1</code> o las rutas <code>/v9/…</code> de la API se convierten en <code>C:/…</code>." },
+
+      { type: "chore", text: "<strong>Stripe y Vercel limpios.</strong> Los dos webhooks live (suscripciones y torneos) apuntan ya a <code>https://tactium.io/api/…</code> (cambiados con el Stripe CLI, mismo secreto de firma; ambos responden en la URL nueva). El proyecto Vercel <code>tactium</code> (landing vieja) no se podía pausar (sin deployment de producción activo tras moverle los dominios) y el usuario pidió <strong>borrarlo</strong>: borrado, y <code>tactium.io</code> siguió en 200." },
+
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>La app apunta al apex</strong> (<code>126729d6</code>): <code>TACTIUM_WEB_BASE_URL</code> y todos los enlaces y textos con <code>app.tactium.io</code> (checkout de torneos, suscripción, cobros del club, paywall) → <code>tactium.io</code>. <strong>OTA publicada</strong> al canal <code>production</code>, runtime 1.4.2, grupo <code>e14b58ae-67e6-4d40-a3b7-371d7ae9ff0a</code>." },
+
+      { type: "chore", text: "<strong>TACTIUM app</strong> · Antes de la fusión: la pizarra táctica entra en <code>main</code> aparcada (<code>5e5e9015</code>) y se rescata de la rama <code>backup/strava-social</code> lo que valía antes de borrarla (<code>6a60b4fe</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-25",
+    title: "🏆 FCP: las eliminatorias y las actas de la federación entran completas en la app — día, hora y pista de cada eliminatoria, la alineación que salió en el acta y los resultados set a set; volcar la liga nueva ya no pisa la temporada anterior.",
+    changes: [
+      { type: "fix", text: "<strong>TACTIUM app</strong> · Volcar la liga nueva desde la Federación <strong>ya no pisa la temporada anterior</strong> (<code>f48b2fe7</code>): cada temporada conserva su calendario y su clasificación." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · Las eliminatorias entraban al calendario como «próximas» sin fecha (<code>9be67f85</code>); ahora <strong>entran con su día, su hora y su pista</strong> (<code>b29cf371</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app</strong> · Al importar una jornada jugada se trae también <strong>la alineación que salió en el acta</strong> (<code>606888e9</code>) y <strong>los resultados set a set</strong> (<code>a67109c4</code>): la jornada queda como si la hubiera cerrado el capitán." },
+    ],
+  },
+  {
+    date: "2026-09-24",
+    title: "📋 Plantilla e inscripción de la temporada que viene, sin sorpresas: la ficha del equipo enseñaba la inscripción del otro género, la pantalla no se desplazaba, y «preparar temporada» comparaba con la plantilla del año pasado y borraba la clasificación.",
+    changes: [
+      { type: "fix", text: "<strong>TACTIUM app</strong> · La tarjeta de inscripción <strong>enseñaba la del equipo del otro género</strong> del mismo club (<code>a44b3fcc</code>); la pantalla de plantilla <strong>no se podía desplazar</strong> (<code>80089ca1</code>); más aire en la tarjeta (<code>310efb97</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app</strong> · El aviso de temporada nueva ofrece también <strong>volcar las jornadas</strong> de la federación, no sólo la plantilla (<code>aeee0a39</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · «Preparar temporada» <strong>comparaba con la plantilla del año pasado</strong> (<code>ba5a0d15</code>) y, al terminar, <strong>la clasificación desaparecía</strong> (<code>adab1b03</code>). Arreglados los dos." },
+    ],
+  },
+  {
+    date: "2026-09-23",
+    title: "🖼️ Actas con cara: avatares de los jugadores en el acta de Explorar Federación, la pista de apertura reducida a un chevron, y la app avisa cuando hay una actualización OTA lista en vez de esperar al siguiente arranque.",
+    changes: [
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>Avatares en el acta</strong> y la pista «toca para ver el acta» pasa a un chevron discreto (<code>209ad416</code>); el texto se comía la primera letra (<code>7b826b09</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>Aviso de actualización lista</strong> (<code>b47c759b</code>): cuando una OTA se ha descargado en segundo plano, la app lo dice y ofrece reiniciar, en vez de aplicarla en silencio al siguiente arranque." },
+    ],
+  },
+  {
+    date: "2026-09-22",
+    title: "🧊 EL DÍA GRANDE DE LA WEB: marco redondeado y nav nuevo, glassmorphism en todo el panel, inicio «bento» con calendario mensual, Federación con cabecera propia y escudo real, clasificación + jornadas en la misma pantalla, acta de cada partido con caras y puntos, horario de torneos arrastrable… y 30 arreglos por el camino. En la app: acta entera en Explorar Federación y un doble cobro evitado.",
+    changes: [
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Marco y lenguaje</strong>: marco redondeado del panel y navegación superior nueva (<code>16c10f8c</code>), el inicio vuelve a la portada y el panel usa todo el ancho (<code>e882706d</code>), <strong>glassmorphism</strong> en marco, barra y tarjetas (<code>5e642e90</code>) que luego llega al resto de pantallas (<code>9e1ed810</code>, <code>35a8f9d5</code>) y al marco público (<code>fe92efe8</code>); menos verde en la destacada y cartelito en las barras (<code>45cfa606</code>); escala del inicio ajustada tarjeta a tarjeta (<code>51767dc1</code>)." },
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Inicio del capitán</strong> en lenguaje «bento» (<code>8bc5c1e1</code>) con <strong>calendario mensual de jornadas</strong> (<code>648c10a6</code>)." },
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Federación</strong>: cabecera propia, escudo real de la FCP y rejilla de grupos (<code>58ff1a32</code>); <strong>clasificación y jornadas del grupo en la misma pantalla</strong> (<code>9cee5f01</code>) y las jornadas se pasan con botones, sin scroll (<code>63c36de1</code>); <strong>acta de cada partido</strong> con las parejas, su cara y sus puntos (<code>8f98eebc</code>) sobre un RPC nuevo de fotos (<code>7725a69a</code>); foto y enlace al jugador desde el ranking, y lo ganado en el año (<code>816d5c67</code>)." },
+      { type: "fix", text: "<strong>tactium-web</strong> · La liga en inscripción sólo enseñaba <strong>60 de sus 323 equipos</strong> (<code>afc1f5b8</code>); la ficha de un equipo sin sorteo decía «no hay datos» (<code>2220b34c</code>); «Importar de la Federación» <strong>importaba de verdad</strong>, no sólo enlazaba (<code>495d6609</code>); el vínculo federativo reventaba al reimportar por la RLS (<code>6da7097e</code>); fuera el contador de jornada en la ficha del jugador (<code>f7d02a2e</code>)." },
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Club y horarios</strong>: equipos invitados en Horarios y que «Guardar» guarde de verdad (<code>3baae79c</code>), selector de día y hora que se entiende (<code>8bb01a24</code>), viernes por la tarde y alta de invitados desde Horarios (<code>67d9a334</code>)." },
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Torneos</strong>: el horario deja de ser una columna interminable (<code>08f56b83</code>) y los partidos se <strong>arrastran o se tocan para moverlos</strong> (<code>7c04b3bf</code>); el admin de un club veía controles de organizador en torneos ajenos (<code>3adda068</code>)." },
+      { type: "fix", text: "<strong>tactium-web</strong> · Los menús dejan de salir por detrás y los avisos tienen botón de leerlos (<code>11f37873</code>); los avisos se borran y llevan a donde toca (<code>0942e53e</code>); la alineación cabe en pantalla sin scroll (<code>fda529ec</code>); cabeceras pegajosas con el desfase de la barra vieja (<code>a9eb7833</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>El acta entera</strong> en las jornadas de Explorar Federación (<code>a0c7ea56</code>), se abre al tocar y el marcador va en columnas (<code>8de28624</code>); el equipo independiente ya ve su inscripción de la temporada que viene (<code>ae129397</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · <strong>Comprar en la tienda teniendo una suscripción de Stripe eran DOS cobros</strong> (<code>26b0ef42</code>): el paywall lo detecta y manda a gestionarla en la web." },
+      { type: "chore", text: "Recogido el trabajo suelto del día en el repo (<code>37966f2f</code>): normativa de la Liga Cántabra en PDF, prompt del vídeo del ecosistema, plan de la web y esta bitácora." },
+    ],
+  },
+  {
+    date: "2026-09-21",
+    title: "🎨 REDISEÑO DEL PANEL WEB COMO PRODUCTO PROFESIONAL + cierre de la auditoría de paridad web↔app + versión 1.4.2 con Club Elite a 49,99 €/mes y el tarball de EAS a dieta (3,7 GB fuera).",
+    changes: [
+      { type: "feat", text: "<strong>tactium-web</strong> · <strong>Rediseño entero</strong> (<code>f248ac73</code>): no cambió la paleta, cambió la <em>disciplina</em>. Tokens y recetas en <code>globals.css</code>, primitivas en <code>ui.tsx</code> (<code>PageHeader</code>, <code>Card</code>, <code>Btn</code>, <code>Chip</code>, <code>Table</code>, <code>Modal</code>…), guía en <code>docs/GUIA-ESTILO-PANEL.md</code>: mono sólo para números, un solo botón de acento por bloque, ningún componente inventa un valor. La alineación pasa a <code>dnd-kit</code>." },
+      { type: "feat", text: "<strong>tactium-web</strong> · Temporada en inscripción, cambio de rol y aviso en el horario (<code>26f03fa3</code>); la <strong>rejilla de horario del torneo ya es real</strong> (<code>3c2bcb2a</code>) con los días de cada fase (<code>2ffda4f6</code>); crear, renombrar y borrar <strong>variantes de alineación</strong> (<code>d02ac786</code>)." },
+      { type: "fix", text: "<strong>tactium-web</strong> · El rótulo del rol seguía al derivado, no al elegido (<code>5257737a</code>); la tarjeta del horario decía «RONDA 1» y el bloque de días «SEMIFINALES» (<code>ccc03139</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app + web</strong> · Borrar la cuenta <strong>se lleva también los ficheros del usuario</strong> en Storage (<code>8742b613</code>), limpiando los buckets en paralelo (<code>a01a7959</code>)." },
+      { type: "docs", text: "<strong>Auditoría de paridad web↔app cerrada</strong> (<code>e7a8e2a8</code>): lo que hace la app lo hace la web, verificado en navegador." },
+      { type: "decision", text: "<strong>Precios</strong>: <strong>Club Elite sube a 49,99 €/mes y 479,99 €/año</strong> (<code>fec99011</code>) y se aplica en Apple y Google (<code>b000b340</code>); un precio se toca en 3 ficheros + 2 docs + las 2 tiendas. Interruptor del IVA en el cobro, apagado hasta el alta (<code>cc418cc8</code>)." },
+      { type: "chore", text: "<strong>TACTIUM app</strong> · <strong>Versión 1.4.2</strong>: notas de versión (<code>8dee6d16</code>, <code>9d70a14a</code>) y el <code>.easignore</code> de la raíz excluye los subproyectos nuevos, que metían <strong>3,7 GB</strong> en el tarball de EAS (<code>8393c5aa</code>). iOS build 31 en revisión, Android vc 25 en producción." },
+    ],
+  },
+  {
+    date: "2026-09-19",
+    title: "🧾 La web hace de verdad lo que prometía: perfil editable, exportación real, borrar cuenta y borrar club de verdad, condiciones del torneo, agrupar categorías y stats de parejas; y dos fugas de dinero cerradas (baja programada invisible, retención por inscripción que no cubría la pasarela).",
+    changes: [
+      { type: "fix", text: "<strong>TACTIUM app + web</strong> · La <strong>baja programada desde el portal de Stripe era invisible</strong> para TACTIUM (<code>52d4c873</code>): el webhook la registra y las pantallas la enseñan." },
+      { type: "fix", text: "<strong>tactium-web</strong> · La <strong>retención por inscripción</strong> de torneo ahora <strong>cubre el coste de la pasarela</strong> (<code>439ebb7b</code>): antes TACTIUM podía perder dinero en cada cobro." },
+      { type: "feat", text: "<strong>tactium-web</strong> · Perfil editable, exportación de datos real y las acciones que faltaban (<code>9e10eed1</code>); <strong>borrar cuenta de verdad</strong> y poder cambiar de club (<code>4eb76acd</code>); <strong>borrar club de verdad</strong>, cubrir equipos y el resto de acciones de club (<code>00dc8665</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app + web</strong> · <strong>Condiciones propias del torneo</strong> con casilla obligatoria y constancia, agrupar categorías y estadísticas de parejas (<code>b8111f62</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-17",
+    title: "🔌 Stripe Connect: un rechazo de Stripe ya se explica como tal, no como «no se pudo conectar».",
+    changes: [
+      { type: "fix", text: "<strong>tactium-web</strong> · Un rechazo del alta en Stripe Connect (datos del club incompletos, cuenta restringida…) salía como un genérico «no se pudo conectar» (<code>bb4d0815</code>); ahora se traduce a un mensaje accionable." },
+    ],
+  },
+  {
+    date: "2026-09-16",
+    title: "↩️ Los redirects de la suscripción vuelven a app.tactium.io (y no al apex, que entonces era la landing).",
+    changes: [
+      { type: "fix", text: "<strong>tactium-web</strong> · Tras el checkout y el portal de Stripe se volvía al apex <code>tactium.io</code>, que era la landing y no tenía la ruta (<code>3d87e9cb</code>); se fijan a <code>app.tactium.io</code>. (El 26-09 esto se dio la vuelta con la fusión: hoy todo vive en el apex.)" },
+    ],
+  },
+  {
+    date: "2026-09-15",
+    title: "📆 Temporada que viene explorable y plantillas con refresco manual en el club; «ACTIVA · renueva el 14» el día 15; el descuento anual comparaba monedas distintas. Rodaje del vídeo tutorial en casa. Decisión: las inscripciones de torneo cobran por Connect al CLUB con un 3 % para TACTIUM.",
+    changes: [
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>La temporada en inscripción ya se puede explorar</strong> en Federación (<code>f39a8a51</code>) y la categoría de la temporada nueva ya no sale vacía (<code>c13f67ba</code>); en el club, <strong>plantillas de la temporada que viene con refresco manual</strong> (<code>c70b367b</code>)." },
+      { type: "fix", text: "<strong>tactium-web</strong> · «ACTIVA · renueva el 14 de septiembre» seguía en pantalla el día 15 (<code>6cb19e31</code>). <strong>TACTIUM app</strong> · el descuento anual del paywall podía comparar monedas distintas (<code>397dc6b1</code>)." },
+      { type: "decision", text: "<strong>Cobro de inscripciones</strong>: Stripe Connect al club con <strong>3 %</strong> para TACTIUM; el pago del torneo se hace al cerrar la inscripción por parejas reales. Producción encendida, cero clubes conectados aún." },
+      { type: "chore", text: "<strong>TACTIUM-VIDEO</strong> · Formato tutorial y todo el rodaje en casa (<code>5714d6f9</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-14",
+    title: "🗓️ Las temporadas de la federación se leen como cursos (2025/2026) y la vigente es la que se juega; tabla fcp_inscripciones y las inscripciones de la temporada que viene en el panel del club. Marca: Satoshi sustituye a Inter y el color pasa a doble tema. Plantilla de reels 9:16.",
+    changes: [
+      { type: "feat", text: "<strong>TACTIUM app</strong> · Las temporadas se leen como <strong>cursos</strong> (2025/2026), no como años sueltos (<code>e9812d49</code>); la vigente es <strong>la que se juega</strong>, no la más nueva que exista (<code>2996b478</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app + BD</strong> · Tabla <code>fcp_inscripciones</code> (equipos apuntados a una liga sin empezar, <code>ba6e3321</code>) y <strong>las inscripciones de la temporada que viene en el panel del club</strong> (<code>5ee89133</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · «Activa» en pantalla con la suscripción ya caducada (<code>67bbf96c</code>, <code>76c931e7</code>)." },
+      { type: "docs", text: "<strong>tactium-landing / marca</strong> · <strong>Satoshi sustituye a Inter</strong> y el color se amplía a doble tema en los documentos de marca (<code>cc59452b</code>); merge del sistema de diseño (<code>55f7caf2</code>)." },
+      { type: "feat", text: "<strong>TACTIUM-VIDEO</strong> · Plantilla de reels 9:16 con gráficos de dato (<code>3a4a6d43</code>); el A3 se graba en la habitación, no en el coche (<code>cc67bbb6</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-09",
+    title: "🔁 Webhook v10: un periodo vencido no puede quedar en estado premium (la tienda mandaba CANCELLATION 400 ms después del EXPIRATION y resucitaba la sub). El grupo de liga de cada equipo en Horarios de local; los puntos del jugador eran de otra temporada.",
+    changes: [
+      { type: "fix", text: "<strong>Webhook RevenueCat v10</strong> · La tienda manda <code>CANCELLATION</code> justo después del <code>EXPIRATION</code> y la suscripción volvía a premium (<code>8418f35c</code>): periodo vencido ⇒ <code>expired</code> siempre. <code>verify_jwt</code> DEBE seguir en <code>false</code>." },
+      { type: "feat", text: "<strong>TACTIUM app</strong> · El <strong>grupo de liga</strong> de cada equipo en Horarios de local (<code>83d5f2ec</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · La lista de jugadores enseñaba los <strong>puntos de otra temporada</strong> (<code>c6c338c2</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-08",
+    title: "👥 Equipos invitados bien contados: no cuentan como equipo independiente, aparecen tras darlos de alta y llevan género y categoría en Horarios; importar de la Federación fallaba con «cannot coerce the result»; el número de build por fin es el real.",
+    changes: [
+      { type: "fix", text: "<strong>BD</strong> · Los equipos invitados <strong>ya no cuentan como equipo independiente</strong> (<code>5ac0816d</code>). <strong>TACTIUM app</strong> · no aparecían tras darlos de alta (<code>d157d99d</code>)." },
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>Género y categoría de cada equipo</strong> en Horarios de local (<code>2a77df15</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · Importar de la Federación fallaba con «cannot coerce the result» (<code>864b037d</code>); el número de build seguía siendo falso, ahora sale el real (<code>1e82a702</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-07",
+    title: "🔀 Cambiar entre plan de club y plan de capitán sin cancelar; equipos invitados de varios clubes y desde Horarios; una sub vencida ya no cuenta como activa; versión 1.4.2 y scripts para vigilar suscripciones y builds en App Store Connect.",
+    changes: [
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>Cambiar entre plan de club y plan de capitán sin cancelar</strong> (<code>71ce244f</code>)." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · Una suscripción vencida ya no cuenta como activa en el cliente (<code>89c85cf4</code>); dar de alta equipos invitados de varios clubes, y desde Horarios (<code>990d6b7d</code>); el número de build no salía en Android, Ajustes mostraba «1.4.1 (?)» (<code>53b053c0</code>)." },
+      { type: "chore", text: "<strong>TACTIUM app</strong> · <strong>Versión 1.4.2</strong> (<code>9d63f380</code>) y scripts para vigilar suscripciones en vivo y el estado de build en App Store Connect (<code>dc90422e</code>)." },
+    ],
+  },
+  {
+    date: "2026-09-06",
+    title: "🛒 La app reconoce sola la compra de la tienda y la aplica al club (adiós al «restaurar compras» que se enganchaba al club equivocado); importar equipos propios e invitados en la misma pasada.",
+    changes: [
+      { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>La app reconoce sola la compra de la tienda y la aplica al club</strong> (<code>9b33746d</code>): con dos clubes, la sub restaurada se quedaba en el primero y el otro veía el paywall." },
+      { type: "fix", text: "<strong>TACTIUM app</strong> · Importar equipos propios e invitados en la misma pasada (<code>f76cbc8e</code>)." },
+      { type: "decision", text: "<strong>Códigos de invitación</strong> (migración <code>20260905b</code>): el código de <strong>jugador</strong> es único por equipo, reutilizable y sin caducidad (rotable); el de <strong>capitán</strong> sigue siendo de un solo uso." },
+    ],
+  },
+  {
     date: "2026-09-04",
     title: "🗄️ APAGADO DEL SUPABASE VIEJO (4PADEL OFICIAL) SIN QUE TACTIUM PIERDA LA FEDERACIÓN: auditoría de dónde salen los datos FCP, backup completo verificado, el agente de Railway pasa a escribir SOLO en TACTIUM y el proyecto viejo queda archivado en una organización Free y pausado.",
     changes: [
