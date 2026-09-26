@@ -72,6 +72,9 @@
   position: relative;
   padding: 64px 0;
   border-top: 1px solid var(--hair);
+  /* Al llegar por un ancla (#explorar, #faq desde la app) el título no se
+     pega al borde del marco. */
+  scroll-margin-top: 24px;
 }
 .mk-sec--flush {
   border-top: 0;
@@ -1253,6 +1256,7 @@
 /* ── Cierre ──────────────────────────────────────────────────────── */
 .mk-final {
   text-align: center;
+  scroll-margin-top: 24px;
   padding: 96px 0 112px;
   background: radial-gradient(60% 60% at 50% 0%, var(--accent-10), transparent 70%);
 }
