@@ -4367,20 +4367,25 @@ select.tw-cell-input {
 }
 
 /* ── Diálogo ───────────────────────────────────────────────────── */
+/* El diálogo se centra "safe": si es más alto que el hueco, arranca arriba y
+   se desplaza dentro del velo. La altura máxima va en % del velo, no en vh:
+   dentro del marco (que lleva backdrop-filter) el `fixed` se mide contra el
+   marco, y con vh el diálogo se salía por arriba sin poder hacer scroll. */
 .tw-scrim {
   position: fixed;
   inset: 0;
   z-index: 95;
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
   padding: 24px;
+  overflow-y: auto;
   background: var(--scrim);
   backdrop-filter: blur(6px) saturate(120%);
 }
 .tw-dialog {
   width: 100%;
-  max-height: calc(100vh - 48px);
+  max-height: 100%;
   overflow-y: auto;
   padding: 24px;
   border-radius: var(--r-xl);
