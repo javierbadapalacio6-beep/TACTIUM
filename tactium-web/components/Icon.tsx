@@ -353,6 +353,7 @@ export const ICONS = {
   settings: IconSettings,
   lock: IconLock,
   search: IconSearch,
+  plus: IconPlus,
 } as const;
 
 /* ── Portada (marketing) ─────────────────────────────────────────── */

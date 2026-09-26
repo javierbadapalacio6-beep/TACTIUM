@@ -2387,6 +2387,12 @@ button.list-row:hover,
 .tw-pills::-webkit-scrollbar {
   display: none;
 }
+/* Con un desplegable abierto el contenedor no puede recortar: `overflow-x:
+   auto` arrastra `overflow-y` y el menú de «Torneos» se quedaba invisible
+   (el botón "no hacía nada"). */
+.tw-pills:has([aria-expanded="true"]) {
+  overflow: visible;
+}
 .tw-pill {
   display: inline-flex;
   align-items: center;

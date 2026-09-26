@@ -175,7 +175,14 @@ export default function MisTorneosPage() {
       <PageHeader
         title="Mis torneos"
         lede="Los torneos en los que juegas, con su cuadro y tu horario."
-        actions={<BtnLink href="/torneos">Explorar torneos</BtnLink>}
+        actions={
+          <>
+            <BtnLink href="/torneos">Explorar torneos</BtnLink>
+            <BtnLink href="/torneos/organizar" variant="accent">
+              Organizar un torneo
+            </BtnLink>
+          </>
+        }
       />
 
       {/* Vincularse con el código del compañero */}

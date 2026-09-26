@@ -29,7 +29,8 @@ export type IconName =
   | "alert"
   | "settings"
   | "lock"
-  | "search";
+  | "search"
+  | "plus";
 
 export interface NavEntry {
   href: string;
@@ -44,6 +45,7 @@ export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
     { href: "/equipo", label: "Equipo", icon: "users" },
     { href: "/torneos", label: "Torneos", icon: "trophy" },
     { href: "/torneos/mios", label: "Mis torneos", icon: "trophy" },
+    { href: "/torneos/organizar", label: "Organizar un torneo", icon: "plus" },
     { href: "/federacion", label: "Federación", icon: "flag" },
     { href: "/stats", label: "Stats", icon: "chart" },
     { href: "/comunidad", label: "Comunidad", icon: "globe" },
@@ -63,6 +65,7 @@ export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
     { href: "/stats", label: "Stats", icon: "chart" },
     { href: "/torneos", label: "Torneos", icon: "trophy" },
     { href: "/torneos/mios", label: "Mis torneos", icon: "trophy" },
+    { href: "/torneos/organizar", label: "Organizar un torneo", icon: "plus" },
     { href: "/federacion", label: "Federación", icon: "flag" },
     { href: "/comunidad", label: "Comunidad", icon: "globe" },
   ],
@@ -72,6 +75,7 @@ export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
     { href: "/stats", label: "Stats", icon: "chart" },
     { href: "/torneos", label: "Torneos", icon: "trophy" },
     { href: "/torneos/mios", label: "Mis torneos", icon: "trophy" },
+    { href: "/torneos/organizar", label: "Organizar un torneo", icon: "plus" },
     { href: "/comunidad", label: "Comunidad", icon: "globe" },
   ],
 };

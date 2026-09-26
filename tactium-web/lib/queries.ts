@@ -109,6 +109,10 @@ export async function deletePlayer(id: string): Promise<void> {
 export async function createClub(
   name: string,
   federation?: string | null,
+  opts?: {
+    /** Espacio de organizador: un club «solo torneos», sin equipos ni cuota. */
+    tournamentsOnly?: boolean;
+  },
 ): Promise<string> {
   const sb = supabaseBrowser();
   const {
@@ -117,7 +121,12 @@ export async function createClub(
   if (!user) throw new Error("No hay sesión activa.");
   const { data, error } = await sb
     .from("clubs")
-    .insert({ owner_id: user.id, name, federation: federation ?? null })
+    .insert({
+      owner_id: user.id,
+      name,
+      federation: federation ?? null,
+      ...(opts?.tournamentsOnly ? { tournaments_only: true } : {}),
+    })
     .select("id")
     .single();
   if (error) throw error;

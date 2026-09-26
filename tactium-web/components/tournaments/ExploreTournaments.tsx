@@ -283,14 +283,14 @@ export function ExploreTournaments() {
 
           <Card flush>
             <ListRow
-              href="/club/torneos"
+              href="/torneos/organizar"
               icon={
                 <IconTile>
                   <IconTicket size={16} />
                 </IconTile>
               }
               title="Organizo torneos"
-              sub="Crea y gestiona los torneos de tu club"
+              sub="Monta el cuadro y el horario, con tu club o sin él"
             />
           </Card>
         </div>

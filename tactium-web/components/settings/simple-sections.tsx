@@ -492,10 +492,10 @@ const TOURNEY_LINKS = [
     href: "/torneos",
   },
   {
-    label: "Crear torneo",
-    body: "Monta uno en tu club",
+    label: "Organizar un torneo",
+    body: "Con tu club, o sin él: creamos tu espacio de organizador",
     Icon: IconPlus,
-    href: "/club/torneos/nuevo",
+    href: "/torneos/organizar",
   },
   {
     label: "Entrar con código",
