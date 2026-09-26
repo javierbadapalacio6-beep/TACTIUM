@@ -248,10 +248,11 @@ export async function fetchTeam(id: string): Promise<{
   gender: string | null;
   federation: string | null;
   league: string | null;
+  logo_url: string | null;
 } | null> {
   const { data, error } = await supabaseBrowser()
     .from("teams")
-    .select("id, name, category, group_name, gender, federation, league")
+    .select("id, name, category, group_name, gender, federation, league, logo_url")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -263,6 +264,7 @@ export async function fetchTeam(id: string): Promise<{
     gender: string | null;
     federation: string | null;
     league: string | null;
+    logo_url: string | null;
   } | null) ?? null;
 }
 
@@ -274,6 +276,7 @@ export async function updateTeam(
     category?: string | null;
     group_name?: string | null;
     gender?: string;
+    logo_url?: string | null;
   },
 ): Promise<void> {
   const { error } = await supabaseBrowser().from("teams").update(patch).eq("id", id);
@@ -283,10 +286,71 @@ export async function updateTeam(
 /** Actualiza campos de un club (edición: nombre/federación). */
 export async function updateClub(
   id: string,
-  patch: { name?: string; federation?: string | null },
+  patch: { name?: string; federation?: string | null; logo_url?: string | null },
 ): Promise<void> {
   const { error } = await supabaseBrowser().from("clubs").update(patch).eq("id", id);
   if (error) throw error;
+}
+
+/* ── Escudos de equipo y de club ───────────────────────────────── */
+const LOGO_BUCKET = "logos";
+
+/**
+ * Sube el escudo al bucket público `logos` (`teams/<id>/…` o `clubs/<id>/…`;
+ * las políticas exigen ser capitán/admin de ese equipo o club) y deja la URL
+ * en `logo_url`. El timestamp va en el nombre para que el CDN no siga
+ * sirviendo el logo viejo; los anteriores se borran.
+ */
+export async function uploadLogo(
+  kind: "team" | "club",
+  id: string,
+  file: File
+): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("El archivo tiene que ser una imagen");
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    throw new Error("El logo no puede pesar más de 3 MB");
+  }
+  const sb = supabaseBrowser();
+  const folder = `${kind === "team" ? "teams" : "clubs"}/${id}`;
+  const ext =
+    file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : file.type === "image/svg+xml" ? "svg" : "jpg";
+  const filename = `logo_${Date.now()}.${ext}`;
+  const path = `${folder}/${filename}`;
+
+  const { error: upErr } = await sb.storage
+    .from(LOGO_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: true });
+  if (upErr) throw upErr;
+
+  try {
+    const { data: files } = await sb.storage.from(LOGO_BUCKET).list(folder);
+    const old = (files ?? []).filter((f) => f.name !== filename).map((f) => `${folder}/${f.name}`);
+    if (old.length > 0) await sb.storage.from(LOGO_BUCKET).remove(old);
+  } catch {
+    /* basura en storage, no es motivo para fallar */
+  }
+
+  const {
+    data: { publicUrl },
+  } = sb.storage.from(LOGO_BUCKET).getPublicUrl(path);
+
+  if (kind === "team") await updateTeam(id, { logo_url: publicUrl });
+  else await updateClub(id, { logo_url: publicUrl });
+  return publicUrl;
+}
+
+/** Quita el escudo: borra los ficheros y limpia la columna. */
+export async function deleteLogo(kind: "team" | "club", id: string): Promise<void> {
+  const sb = supabaseBrowser();
+  const folder = `${kind === "team" ? "teams" : "clubs"}/${id}`;
+  const { data: files } = await sb.storage.from(LOGO_BUCKET).list(folder);
+  if (files && files.length > 0) {
+    await sb.storage.from(LOGO_BUCKET).remove(files.map((f) => `${folder}/${f.name}`));
+  }
+  if (kind === "team") await updateTeam(id, { logo_url: null });
+  else await updateClub(id, { logo_url: null });
 }
 
 /* ── Temporadas ────────────────────────────────────────────────── */
@@ -820,11 +884,16 @@ export async function fetchTeamFcpGroup(
 export async function fetchClub(clubId: string) {
   const { data, error } = await supabaseBrowser()
     .from("clubs")
-    .select("id, name, federation")
+    .select("id, name, federation, logo_url")
     .eq("id", clubId)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return data as {
+    id: string;
+    name: string;
+    federation: string | null;
+    logo_url: string | null;
+  } | null;
 }
 
 /* ── Horarios de local del club (RPC get_club_home_schedule) ─────── */
@@ -2664,6 +2733,8 @@ export interface FcpRosterPlayer {
   name: string;
   puntos: number;
   categoria: string | null;
+  /** Cara de la ficha federativa, si la hay. */
+  avatarUrl: string | null;
 }
 /**
  * Un equipo de una temporada EN INSCRIPCIÓN. No tiene clasificación ni
@@ -2706,7 +2777,7 @@ async function fetchFcpRoster(idEquipo: number): Promise<FcpRosterPlayer[]> {
     .select("id_jugador, nombre_pila, apellido1, apellido2, nombre, puntos, categoria")
     .eq("id_equipo", idEquipo)
     .order("puntos", { ascending: false, nullsFirst: false });
-  return ((data ?? []) as {
+  const rows = (data ?? []) as {
     id_jugador: string;
     puntos: number | null;
     categoria: string | null;
@@ -2714,11 +2785,28 @@ async function fetchFcpRoster(idEquipo: number): Promise<FcpRosterPlayer[]> {
     apellido1: string | null;
     apellido2: string | null;
     nombre: string | null;
-  }[]).map((r) => ({
+  }[];
+  // Las caras salen del mismo RPC que el acta; si falla, la lista va sin foto.
+  const faces = new Map<string, string | null>();
+  if (rows.length > 0) {
+    try {
+      const { data: fotos } = await supabaseBrowser().rpc("fcp_player_avatars", {
+        p_ids: rows.map((r) => r.id_jugador),
+      });
+      for (const f of (fotos ?? []) as { fcp_id_jugador?: string; id_jugador?: string; avatar_url: string | null }[]) {
+        const key = f.fcp_id_jugador ?? f.id_jugador;
+        if (key) faces.set(key, f.avatar_url);
+      }
+    } catch {
+      /* sin fotos */
+    }
+  }
+  return rows.map((r) => ({
     idJugador: r.id_jugador,
     name: fcpDisplayName(r),
     puntos: r.puntos ?? 0,
     categoria: r.categoria ?? null,
+    avatarUrl: faces.get(r.id_jugador) ?? null,
   }));
 }
 
@@ -2848,6 +2936,7 @@ export async function fetchFcpTeamProfile(
     name: fcpDisplayName(r),
     puntos: r.puntos ?? 0,
     categoria: r.categoria ?? null,
+    avatarUrl: null,
   }));
 
   return {

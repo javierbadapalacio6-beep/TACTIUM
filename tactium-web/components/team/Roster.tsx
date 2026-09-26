@@ -57,6 +57,7 @@ import {
   IconUsers,
 } from "@/components/Icon";
 import { EditTeamModal } from "@/components/team/EditTeamModal";
+import { Crest } from "@/components/Crest";
 
 type SortKey = "name" | "pts" | "pos";
 
@@ -313,7 +314,12 @@ export function Roster() {
   return (
     <div className="tw-page">
       <PageHeader
-        title={activeTeam?.name ?? "Equipo"}
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <Crest src={activeTeam?.logoUrl} size={40} />
+            {activeTeam?.name ?? "Equipo"}
+          </span>
+        }
         lede="La plantilla del equipo: puntos, posición y disponibilidad de cada jugador."
         meta={[
           [activeTeam?.category, activeTeam?.gender].filter(Boolean).join(" · ") || null,
@@ -410,7 +416,10 @@ export function Roster() {
                   {inscripcion.data.roster.map((j, i) => (
                     <div key={j.idJugador} className="tw-insc-roster-row">
                       <span className="pos">{i + 1}</span>
-                      <span className="truncate">{niceName(j.name)}</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <Avatar initials={initials(j.name)} src={j.avatarUrl} size={24} />
+                        <span className="truncate">{niceName(j.name)}</span>
+                      </span>
                       <span className="pts">{j.puntos}</span>
                     </div>
                   ))}

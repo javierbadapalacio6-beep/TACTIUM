@@ -42,9 +42,10 @@ import {
   IconShield,
 } from "@/components/Icon";
 import { EditClubModal } from "@/components/club/EditClubModal";
+import { Crest } from "@/components/Crest";
 
 interface ClubData {
-  club: { id: string; name: string; federation: string | null } | null;
+  club: { id: string; name: string; federation: string | null; logo_url: string | null } | null;
   teams: DbClubTeam[];
 }
 
@@ -163,7 +164,12 @@ export function ClubDashboard() {
   return (
     <div className="tw-page">
       <PageHeader
-        title={club?.name ?? "Club"}
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <Crest src={club?.logo_url} kind="club" size={40} />
+            {club?.name ?? "Club"}
+          </span>
+        }
         meta={[
           club?.federation ? club.federation.toUpperCase() : "Sin federación",
           `${teams.length} ${teams.length === 1 ? "equipo" : "equipos"}`,
@@ -351,6 +357,7 @@ export function ClubDashboard() {
           clubId={club.id}
           initialName={club.name}
           initialFederation={club.federation}
+          initialLogo={club.logo_url}
         />
       )}
 

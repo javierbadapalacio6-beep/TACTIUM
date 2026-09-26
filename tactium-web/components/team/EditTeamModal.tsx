@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Btn, Field, Modal, Toggle } from "@/components/ui";
 import { Toast } from "@/components/states";
+import { LogoField } from "@/components/LogoField";
 import { deleteTeam, fetchTeam, updateTeam } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
 import { TEAM_CATEGORIES, TEAM_GROUPS } from "@/lib/federations";
@@ -31,6 +32,9 @@ export function EditTeamModal({
   const [cat, setCat] = useState(initialCategory ?? "2ª");
   const [hasGroup, setHasGroup] = useState(false);
   const [group, setGroup] = useState("A");
+  const [logo, setLogo] = useState<string | null>(null);
+  // Si el escudo cambió, al cerrar hay que recargar aunque no se pulse Guardar.
+  const [logoDirty, setLogoDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -61,6 +65,8 @@ export function EditTeamModal({
         setCat(t.category ?? "2ª");
         setHasGroup(!!t.group_name);
         setGroup(t.group_name ?? "A");
+        setLogo(t.logo_url ?? null);
+        setLogoDirty(false);
       })
       .catch(() => {});
     return () => {
@@ -111,14 +117,16 @@ export function EditTeamModal({
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={() => (logoDirty ? window.location.reload() : onClose())}
       labelledBy="edit-equipo"
       width={520}
       title={teamName}
-      lede="Corrige la categoría o completa el grupo cuando se sortee la liga."
+      lede="Escudo, categoría y grupo del equipo."
       footer={
         <>
-          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={() => (logoDirty ? window.location.reload() : onClose())}>
+            {logoDirty ? "Cerrar" : "Cancelar"}
+          </Btn>
           <Btn variant="accent" disabled={busy} onClick={save}>
             {busy ? "Guardando…" : "Guardar"}
           </Btn>
@@ -126,6 +134,19 @@ export function EditTeamModal({
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <Field label="Escudo">
+          <LogoField
+            kind="team"
+            id={teamId}
+            value={logo}
+            onChange={(url) => {
+              setLogo(url);
+              setLogoDirty(true);
+            }}
+            onError={setToast}
+          />
+        </Field>
+
         <Field label="Categoría">
           <div style={cellRow} role="radiogroup" aria-label="Categoría">
             {TEAM_CATEGORIES.map((v) => {

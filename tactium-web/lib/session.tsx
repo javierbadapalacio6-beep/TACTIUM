@@ -51,11 +51,14 @@ export interface TeamRef {
   gender: string | null;
   clubId: string | null;
   role: string;
+  /** Escudo del equipo (`teams.logo_url`), si lo han subido. */
+  logoUrl: string | null;
 }
 
 export interface ClubRef {
   id: string;
   name: string;
+  logoUrl: string | null;
 }
 
 export interface SessionUser {
@@ -159,11 +162,11 @@ export function SessionProvider({
         .maybeSingle(),
       sb
         .from("team_members")
-        .select("role, teams(id, name, category, gender, club_id)")
+        .select("role, teams(id, name, category, gender, club_id, logo_url)")
         .eq("user_id", authUser.id),
       sb
         .from("club_members")
-        .select("club_id, clubs(id, name)")
+        .select("club_id, clubs(id, name, logo_url)")
         .eq("user_id", authUser.id),
     ]);
 
@@ -184,6 +187,7 @@ export function SessionProvider({
         category: string | null;
         gender: string | null;
         club_id: string | null;
+        logo_url: string | null;
       } | null;
     }[];
 
@@ -196,19 +200,21 @@ export function SessionProvider({
         gender: r.teams!.gender,
         clubId: r.teams!.club_id,
         role: r.role,
+        logoUrl: r.teams!.logo_url ?? null,
       }));
 
     // Antes se cogía `clubRes.data[0].club_id` sin ordenar: con dos clubes te
     // tocaba el que devolviera Postgres y no había forma de cambiarlo. Ahora se
     // cargan todos y el usuario elige (la elección se guarda en el navegador).
+    type ClubRow = { id: string; name: string; logo_url: string | null };
     const clubRows = (clubRes.data ?? []) as unknown as {
       club_id: string;
-      clubs: { id: string; name: string } | { id: string; name: string }[] | null;
+      clubs: ClubRow | ClubRow[] | null;
     }[];
     const myClubs: ClubRef[] = clubRows
       .map((r) => {
         const c = Array.isArray(r.clubs) ? r.clubs[0] : r.clubs;
-        return c ? { id: c.id, name: c.name } : null;
+        return c ? { id: c.id, name: c.name, logoUrl: c.logo_url ?? null } : null;
       })
       .filter((c): c is ClubRef => c !== null)
       .sort((a, b) => a.name.localeCompare(b.name, "es"));

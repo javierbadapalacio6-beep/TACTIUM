@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Btn, Field, Input, Modal } from "@/components/ui";
 import { Toast } from "@/components/states";
+import { LogoField } from "@/components/LogoField";
 import { FederationSelect } from "@/components/entry/start";
 import { updateClub } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
@@ -19,12 +20,14 @@ export function EditClubModal({
   clubId,
   initialName,
   initialFederation,
+  initialLogo = null,
 }: {
   open: boolean;
   onClose: () => void;
   clubId: string;
   initialName: string;
   initialFederation: string | null;
+  initialLogo?: string | null;
 }) {
   const fedOf = (code: string | null): Federation | null =>
     FEDERATIONS.find((f) => f.code === code) ?? null;
@@ -33,6 +36,8 @@ export function EditClubModal({
   const [federation, setFederation] = useState<Federation | null>(
     fedOf(initialFederation),
   );
+  const [logo, setLogo] = useState<string | null>(initialLogo);
+  const [logoDirty, setLogoDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -41,8 +46,13 @@ export function EditClubModal({
     if (!open) return;
     setName(initialName);
     setFederation(fedOf(initialFederation));
+    setLogo(initialLogo);
+    setLogoDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialName, initialFederation]);
+  }, [open, initialName, initialFederation, initialLogo]);
+
+  // El escudo se guarda al elegirlo; si cambió, cerrar tiene que recargar.
+  const close = () => (logoDirty ? window.location.reload() : onClose());
 
   const valid = name.trim().length >= 2;
 
@@ -63,14 +73,14 @@ export function EditClubModal({
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={close}
       labelledBy="edit-club"
       width={520}
       title={initialName || "Club"}
-      lede="Cambia el nombre del club o su federación."
+      lede="Escudo, nombre y federación del club."
       footer={
         <>
-          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={close}>{logoDirty ? "Cerrar" : "Cancelar"}</Btn>
           <Btn variant="accent" disabled={busy || !valid} onClick={save}>
             {busy ? "Guardando…" : "Guardar"}
           </Btn>
@@ -78,6 +88,19 @@ export function EditClubModal({
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <Field label="Escudo">
+          <LogoField
+            kind="club"
+            id={clubId}
+            value={logo}
+            onChange={(url) => {
+              setLogo(url);
+              setLogoDirty(true);
+            }}
+            onError={setToast}
+          />
+        </Field>
+
         <Field label="Nombre del club" htmlFor="edit-club-name">
           <Input
             id="edit-club-name"

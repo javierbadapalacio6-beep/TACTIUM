@@ -392,6 +392,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     role === "club"
       ? (activeClub?.name ?? "Sin club")
       : (activeTeam?.name ?? "Sin equipo");
+  const ctxLogo = role === "club" ? activeClub?.logoUrl : activeTeam?.logoUrl;
   const showCtx = clubs.length > 0 || hasTeamSwitcher(role);
 
   function toggleBell() {
@@ -464,8 +465,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="tw-ctx"
                   title="Club y equipo activos"
                 >
-                  <span className="tw-ctx-icon">
-                    {role === "club" ? <IconBuilding size={14} /> : <IconShield size={14} />}
+                  <span className={"tw-ctx-icon" + (ctxLogo ? " has-img" : "")}>
+                    {ctxLogo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={ctxLogo} alt="" />
+                    ) : role === "club" ? (
+                      <IconBuilding size={14} />
+                    ) : (
+                      <IconShield size={14} />
+                    )}
                   </span>
                   <span className="tw-ctx-name truncate">{ctxLabel}</span>
                   <IconChevronDown size={14} style={{ flex: "none", opacity: 0.7 }} />

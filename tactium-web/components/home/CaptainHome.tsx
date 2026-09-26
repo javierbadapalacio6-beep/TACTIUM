@@ -17,6 +17,7 @@ import { useAsync } from "@/lib/use-async";
 import { BtnLink, Card, Chip } from "@/components/ui";
 import { EmptyState, SkeletonPage } from "@/components/states";
 import { SeasonCalendar } from "@/components/home/SeasonCalendar";
+import { Crest } from "@/components/Crest";
 import {
   IconCalendar,
   IconCheck,
@@ -208,7 +209,9 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
   const greeting = (
     <div className="greet">
-      <div style={{ minWidth: 0 }}>
+      <div className="greet-main">
+        <Crest src={activeTeam?.logoUrl} size={56} />
+        <div style={{ minWidth: 0 }}>
         <div className="greet-hi">Hola, {(user?.name ?? "").split(" ")[0] || "capitán"}</div>
         <h1 className="greet-name">{activeTeam?.name}</h1>
         <div
@@ -231,6 +234,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               {season.name}
             </span>
           )}
+        </div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

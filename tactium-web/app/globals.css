@@ -1752,6 +1752,61 @@ button.chip:hover:not(:disabled) {
   object-fit: cover;
 }
 
+/* Escudo de equipo/club: tesela de marca hasta que suban su logo. */
+.crest {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+  background: var(--tile-bg);
+  color: var(--tile-fg);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-lit);
+}
+.crest.has-img {
+  background: var(--bg-card);
+}
+.crest img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tw-ctx-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.tw-ctx-icon.has-img {
+  background: var(--bg-card);
+  overflow: hidden;
+}
+/* Cabecera de inicio con escudo: el nombre va al lado, no debajo. */
+.greet-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+/* Bloque de logo en los modales de edición. */
+.tw-logo-field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.tw-logo-field .crest {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+}
+.tw-logo-field-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ── Campos de formulario ─────────────────────────────────────── */
 .field {
   display: flex;
@@ -2122,7 +2177,7 @@ button.list-row:hover,
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 5px 0;
+  padding: 4px 0;
   border-bottom: 1px solid var(--hair);
   font-size: 13px;
 }
