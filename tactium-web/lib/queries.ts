@@ -29,14 +29,34 @@ export interface DbPlayer {
 }
 
 export async function fetchPlayers(teamId: string): Promise<DbPlayer[]> {
-  const { data, error } = await supabaseBrowser()
+  const sb = supabaseBrowser();
+  const { data, error } = await sb
     .from("players")
     .select("id, name, alias, pts, position, active, available, user_id, photo_url")
     .eq("team_id", teamId)
     .order("pts", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []).map((p) => ({
+  const rows = data ?? [];
+
+  // La foto que el jugador subió a SU cuenta vale para el equipo y el club
+  // sin que nadie la suba otra vez: si el jugador está vinculado, se mezcla
+  // el avatar de `profiles` (la RLS `profiles_teammate_select` deja leerlo al
+  // capitán y al club). La foto puesta a mano en la ficha manda si existe.
+  // Mismo criterio que `fetchPlayers` en la app.
+  const userIds = [...new Set(rows.map((p) => p.user_id).filter((u): u is string => !!u))];
+  const avatarByUser = new Map<string, string | null>();
+  if (userIds.length > 0) {
+    const { data: profiles } = await sb
+      .from("profiles")
+      .select("id, avatar_url")
+      .in("id", userIds);
+    for (const pr of (profiles ?? []) as { id: string; avatar_url: string | null }[]) {
+      avatarByUser.set(pr.id, pr.avatar_url);
+    }
+  }
+
+  return rows.map((p) => ({
     id: p.id,
     name: p.name,
     alias: p.alias,
@@ -45,7 +65,7 @@ export async function fetchPlayers(teamId: string): Promise<DbPlayer[]> {
     active: p.active ?? true,
     available: p.available,
     userId: p.user_id,
-    photoUrl: p.photo_url,
+    photoUrl: p.photo_url ?? (p.user_id ? (avatarByUser.get(p.user_id) ?? null) : null),
   }));
 }
 

@@ -14,7 +14,7 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { BtnLink, Card, Chip } from "@/components/ui";
+import { Avatar, BtnLink, Card, Chip } from "@/components/ui";
 import { EmptyState, SkeletonPage } from "@/components/states";
 import { SeasonCalendar } from "@/components/home/SeasonCalendar";
 import { Crest } from "@/components/Crest";
@@ -632,7 +632,14 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 <div key={p.id} className="rank-row">
                   <span className="rank-pos">{i + 1}</span>
                   <span style={{ minWidth: 0 }}>
-                    <span className="rank-name">{p.name}</span>
+                    <span className="rank-name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Avatar
+                        initials={p.name.trim().split(/\s+/).map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase()}
+                        src={p.photoUrl}
+                        size={22}
+                      />
+                      <span className="truncate">{p.name}</span>
+                    </span>
                     <span className="rank-track">
                       <span style={{ width: `${Math.round((p.pts / topMax) * 100)}%` }} />
                     </span>

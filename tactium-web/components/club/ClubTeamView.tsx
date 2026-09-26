@@ -15,6 +15,7 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
+  Avatar,
   Btn,
   BtnLink,
   Card,
@@ -26,6 +27,16 @@ import {
   StatRow,
   Table,
 } from "@/components/ui";
+
+function initialsOf(n: string) {
+  return n
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 import { EmptyState, SkeletonPage } from "@/components/states";
 import {
   IconCalendar,
@@ -234,7 +245,12 @@ export function ClubTeamView({ id }: { id: string }) {
               <tbody>
                 {players.map((p) => (
                   <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
-                    <td className="cell-main">{p.name}</td>
+                    <td className="cell-main">
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                        <Avatar initials={initialsOf(p.name)} src={p.photoUrl} size={28} />
+                        {p.name}
+                      </span>
+                    </td>
                     <td className="num">{p.pts}</td>
                   </tr>
                 ))}
