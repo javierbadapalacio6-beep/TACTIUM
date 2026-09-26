@@ -1509,6 +1509,14 @@ a.bcard:hover,
   opacity: 0.45;
   cursor: default;
 }
+/* El verde a media opacidad con texto blanco no llega al contraste en claro:
+   el botón principal deshabilitado pasa a superficie neutra, opaca. */
+.btn-accent:disabled {
+  opacity: 1;
+  background: var(--bg-card-3);
+  color: var(--text-faint);
+  border-color: var(--line);
+}
 .btn svg {
   flex: none;
 }
@@ -3326,6 +3334,19 @@ select.tw-cell-input {
   position: relative;
   height: 110px;
   border-bottom: 1px solid var(--line);
+}
+/* Sin foto: superficie neutra con las líneas de una pista y el icono, en vez
+   del degradado borroso, que al lado de una foto real parecía de maqueta. */
+.tw-tourney-cover.is-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  background-color: var(--bg-card-2);
+  background-image:
+    linear-gradient(var(--hair) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hair) 1px, transparent 1px);
+  background-size: 100% 36px, 25% 100%;
+  background-position: 0 18px, 12.5% 0;
 }
 
 .tw-steps {

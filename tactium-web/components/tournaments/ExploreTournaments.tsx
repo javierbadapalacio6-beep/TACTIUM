@@ -174,7 +174,7 @@ export function ExploreTournaments() {
                       style={{ height: "100%", display: "flex", flexDirection: "column" }}
                     >
                       <div
-                        className={"tw-tourney-cover" + (t.cover_url ? "" : " amb")}
+                        className={"tw-tourney-cover" + (t.cover_url ? "" : " is-empty")}
                         style={
                           t.cover_url
                             ? {
@@ -185,6 +185,7 @@ export function ExploreTournaments() {
                             : undefined
                         }
                       >
+                        {!t.cover_url && <IconTrophy size={22} />}
                         <Chip
                           tone={st.tone}
                           style={{ position: "absolute", top: 12, right: 12 }}
