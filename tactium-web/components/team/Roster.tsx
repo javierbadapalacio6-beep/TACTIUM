@@ -71,6 +71,22 @@ function initials(n: string) {
     .toUpperCase();
 }
 
+/* La Federación publica todo en MAYÚSCULAS ("C.D. PADEL Y TENIS MEDIO
+   CUDEYO"); se pasa a frase normal respetando siglas con punto y partículas. */
+const SMALL_WORDS = new Set(["y", "de", "del", "la", "el", "los", "las", "e"]);
+function niceName(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w, i) => {
+      if (w.includes(".")) return w.toUpperCase();
+      if (i > 0 && SMALL_WORDS.has(w)) return w;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(" ");
+}
+
 export function Roster() {
   const { activeTeam } = useSession();
 
@@ -317,7 +333,7 @@ export function Roster() {
       />
 
       {/* Cifras */}
-      <StatRow style={{ marginBottom: 16 }}>
+      <StatRow compact style={{ marginBottom: 16 }}>
         <Stat label="Jugadores" value={PLAYERS.length} icon={<IconUsers size={14} />} />
         <Stat label="Media de puntos" value={avg} tone="accent" />
         <Stat
@@ -344,42 +360,42 @@ export function Roster() {
               {inscripcion.data.confirmado ? "Confirmado" : "Sin confirmar"}
             </Chip>
           </CardHead>
-          <div style={{ padding: "0 16px 16px" }}>
-            <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
+          <div style={{ padding: "0 16px 14px" }}>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
               {inscripcion.data.confirmado
                 ? "La Federación te tiene inscrito y confirmado."
                 : "Estás apuntado, pero la Federación todavía no lo ha confirmado."}{" "}
-              {inscripcion.data.categoriaActual &&
-              inscripcion.data.categoria &&
-              inscripcion.data.categoriaActual !== inscripcion.data.categoria
-                ? `Cambias de ${inscripcion.data.categoriaActual} a ${inscripcion.data.categoria}.`
-                : inscripcion.data.categoria
-                  ? `Jugarás en ${inscripcion.data.categoria}.`
-                  : ""}{" "}
-              Todavía no hay calendario: cuando la Federación lo publique podrás
-              volcar la temporada con sus jornadas.
+              Cuando publique el calendario podrás volcar la temporada con sus
+              jornadas.
             </p>
-            <StatRow>
-              <Stat
-                label="Categoría"
-                value={inscripcion.data.categoria ?? "—"}
-                sub={
-                  inscripcion.data.categoriaActual &&
-                  inscripcion.data.categoria &&
-                  inscripcion.data.categoriaActual !== inscripcion.data.categoria
-                    ? `Ahora en ${inscripcion.data.categoriaActual}`
-                    : "Sin cambio"
-                }
-              />
-              <Stat label="Sede de local" value={inscripcion.data.sede ?? "Sin asignar"} />
-              <Stat
-                label="Plantilla inscrita"
-                value={inscripcion.data.roster.length}
-                sub="Según la Federación"
-              />
-            </StatRow>
+            <dl className="tw-insc-facts">
+              <div className="tw-insc-fact">
+                <dt>Categoría</dt>
+                <dd>
+                  {inscripcion.data.categoria ?? "—"}
+                  <small>
+                    {inscripcion.data.categoriaActual &&
+                    inscripcion.data.categoria &&
+                    inscripcion.data.categoriaActual !== inscripcion.data.categoria
+                      ? `Ahora en ${inscripcion.data.categoriaActual}`
+                      : "Sin cambio"}
+                  </small>
+                </dd>
+              </div>
+              <div className="tw-insc-fact">
+                <dt>Sede de local</dt>
+                <dd>{inscripcion.data.sede ? niceName(inscripcion.data.sede) : "Sin asignar"}</dd>
+              </div>
+              <div className="tw-insc-fact">
+                <dt>Plantilla inscrita</dt>
+                <dd>
+                  {inscripcion.data.roster.length}
+                  <small>Según la Federación</small>
+                </dd>
+              </div>
+            </dl>
             {inscripcion.data.roster.length > 0 ? (
-              <details style={{ marginTop: 14 }}>
+              <details style={{ marginTop: 12 }}>
                 <summary
                   style={{
                     cursor: "pointer",
@@ -390,32 +406,12 @@ export function Roster() {
                 >
                   Ver la plantilla inscrita
                 </summary>
-                <div style={{ marginTop: 10 }}>
+                <div className="tw-insc-roster">
                   {inscripcion.data.roster.map((j, i) => (
-                    <div
-                      key={j.idJugador}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "6px 0",
-                      }}
-                    >
-                      <span
-                        className="mono"
-                        style={{ fontSize: 12, color: "var(--text-faint)", width: 20 }}
-                      >
-                        {i + 1}
-                      </span>
-                      <span className="truncate" style={{ flex: 1, fontSize: 13.5 }}>
-                        {j.name}
-                      </span>
-                      <span
-                        className="mono"
-                        style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}
-                      >
-                        {j.puntos}
-                      </span>
+                    <div key={j.idJugador} className="tw-insc-roster-row">
+                      <span className="pos">{i + 1}</span>
+                      <span className="truncate">{niceName(j.name)}</span>
+                      <span className="pts">{j.puntos}</span>
                     </div>
                   ))}
                 </div>

@@ -1434,6 +1434,25 @@ a.bcard:hover,
   align-items: center;
   gap: 6px;
 }
+/* Variante compacta: mitad de alto, cifra a 22. */
+.stat-row--compact .stat {
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+.stat-row--compact .stat-label {
+  font-size: 12px;
+}
+.stat-row--compact .stat-value {
+  margin-top: 4px;
+  font-size: 22px;
+}
+.stat-row--compact .stat-value small {
+  font-size: 12.5px;
+}
+.stat-row--compact .stat-sub {
+  margin-top: 4px;
+  font-size: 11.5px;
+}
 .stat-accent .stat-value {
   color: var(--accent);
 }
@@ -2061,6 +2080,63 @@ button.list-row:hover,
 .kv dd {
   margin: 0;
   font-weight: 600;
+}
+
+/* Ficha de inscripción a la temporada que viene: los datos van en una tira
+   (un nombre de sede no es una cifra) y la plantilla inscrita en columnas. */
+.tw-insc-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--bg-card-2);
+}
+.tw-insc-fact dt {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.tw-insc-fact dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.tw-insc-fact dd small {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+.tw-insc-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0 24px;
+  margin-top: 8px;
+}
+.tw-insc-roster-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--hair);
+  font-size: 13px;
+}
+.tw-insc-roster-row .pos {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.tw-insc-roster-row .pts {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 /* Bloque de aviso en línea */

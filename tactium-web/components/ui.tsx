@@ -219,13 +219,21 @@ export function StatRow({
   children,
   style,
   className,
+  compact,
 }: {
   children: ReactNode;
   style?: CSSProperties;
   className?: string;
+  /** Mitad de alto: para pantallas donde la cifra acompaña, no protagoniza. */
+  compact?: boolean;
 }) {
   return (
-    <div className={"stat-row" + (className ? " " + className : "")} style={style}>
+    <div
+      className={
+        "stat-row" + (compact ? " stat-row--compact" : "") + (className ? " " + className : "")
+      }
+      style={style}
+    >
       {children}
     </div>
   );
