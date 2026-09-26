@@ -101,8 +101,8 @@ export const ClubBillingScreen = ({
   const subWeb = clubSub?.platform === 'web';
 
   const openWebBilling = () => {
-    Linking.openURL('https://app.tactium.io/suscripcion').catch(() =>
-      toast.error('No se pudo abrir', 'Entra en app.tactium.io desde el navegador.'),
+    Linking.openURL('https://tactium.io/suscripcion').catch(() =>
+      toast.error('No se pudo abrir', 'Entra en tactium.io desde el navegador.'),
     );
   };
 
@@ -134,7 +134,7 @@ export const ClubBillingScreen = ({
       await Linking.openURL(url);
     } catch (e) {
       // Fallback: la consola web del club (ahí también está el alta).
-      Linking.openURL('https://app.tactium.io/club/cobros').catch(() => {});
+      Linking.openURL('https://tactium.io/club/cobros').catch(() => {});
       toast.error(
         'No se pudo abrir el alta',
         e instanceof Error ? e.message : 'Inténtalo desde la web (Club → Cobros).',
@@ -451,7 +451,7 @@ export const ClubBillingScreen = ({
               </Text>
               <Text style={styles.actionSub}>
                 {subWeb
-                  ? 'La contrataste en app.tactium.io'
+                  ? 'La contrataste en tactium.io'
                   : `Cancelar o cambiar plan en ${Platform.OS === 'ios' ? 'App Store' : 'Google Play'}`}
               </Text>
             </View>

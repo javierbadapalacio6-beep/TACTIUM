@@ -431,7 +431,7 @@ export const TournamentSignupScreen = ({
     // inscripción gratuita en estos torneos.
     if ((found.entry_fee ?? 0) > 0) {
       Linking.openURL(
-        `https://app.tactium.io/torneos/${found.id}/inscripcion`,
+        `https://tactium.io/torneos/${found.id}/inscripcion`,
       ).catch(() => toast.error('No se pudo abrir la ficha de pago'));
       return;
     }

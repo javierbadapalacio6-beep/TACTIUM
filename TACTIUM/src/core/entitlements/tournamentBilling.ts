@@ -34,7 +34,7 @@ export const TOURNAMENT_TIERS: TournamentTier[] = [
 export const TOURNAMENT_EXTRA_PAIR_EUR = 2; // recargo por pareja por encima del tramo/tope
 export const TOURNAMENT_FREE_PAIRS = 16;
 
-// Interruptor del cobro por torneo. ACTIVO: la web (app.tactium.io) tiene las
+// Interruptor del cobro por torneo. ACTIVO: la web (tactium.io) tiene las
 // claves de Stripe y el webhook, y la BD aplica el gate (un torneo nace 'draft'
 // y nadie se inscribe hasta pagar/publicar). Con `true`, crear un torneo que
 // requiere pago lo deja en borrador y pide el pago por email antes de publicar.
@@ -42,10 +42,10 @@ export const TOURNAMENT_FREE_PAIRS = 16;
 // app) antes del OTA a producción.
 export const TOURNAMENT_BILLING_ENABLED = true;
 
-// Base de la web de TACTIUM (checkout). La web app está desplegada en el
-// subdominio app.tactium.io (el apex tactium.io es la landing). Aquí llegan las
-// llamadas de pago de torneo (/api/tournaments/:id/checkout con deliver:email).
-export const TACTIUM_WEB_BASE_URL = 'https://app.tactium.io';
+// Base de la web de TACTIUM (checkout). Desde 2026-09-26 la web entera vive en
+// el apex tactium.io (app.tactium.io redirige). Aquí llegan las llamadas de
+// pago de torneo (/api/tournaments/:id/checkout con deliver:email).
+export const TACTIUM_WEB_BASE_URL = 'https://tactium.io';
 
 /** Precio del tramo para un club SIN suscripción, según las parejas inscritas. */
 export function perTournamentPriceEur(pairs: number): number {

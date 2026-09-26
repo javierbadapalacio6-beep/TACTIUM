@@ -130,8 +130,8 @@ export const SubscriptionScreen = ({
   const subWeb = (activeSub ?? mySub)?.platform === 'web';
 
   const openWebBilling = () => {
-    Linking.openURL('https://app.tactium.io/suscripcion').catch(() =>
-      toast.error('No se pudo abrir', 'Entra en app.tactium.io desde el navegador.'),
+    Linking.openURL('https://tactium.io/suscripcion').catch(() =>
+      toast.error('No se pudo abrir', 'Entra en tactium.io desde el navegador.'),
     );
   };
 
@@ -426,7 +426,7 @@ export const SubscriptionScreen = ({
             label="Gestionar suscripción"
             sub={
               subWeb
-                ? 'La contrataste en la web: gestiónala en app.tactium.io'
+                ? 'La contrataste en la web: gestiónala en tactium.io'
                 : Platform.OS === 'ios'
                   ? 'Cancelar o cambiar plan en App Store'
                   : 'Cancelar o cambiar plan en Google Play'

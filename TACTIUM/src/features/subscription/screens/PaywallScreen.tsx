@@ -430,7 +430,7 @@ export const PaywallScreen = ({
     if (subDeWeb) {
       toast.error(
         'Tu suscripción es de la web',
-        'Cámbiala o cancélala en app.tactium.io; si compras aquí pagarías dos veces.',
+        'Cámbiala o cancélala en tactium.io; si compras aquí pagarías dos veces.',
       );
       return;
     }
