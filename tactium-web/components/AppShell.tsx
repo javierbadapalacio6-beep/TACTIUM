@@ -56,7 +56,14 @@ import { WRITES_ENABLED } from "@/lib/writes";
  */
 
 /** Rutas sin shell: onboarding y acceso ocupan toda la pantalla. */
-const BARE_ROUTES = ["/entrar", "/alta", "/recuperar", "/empezar", "/bienvenida"];
+const BARE_ROUTES = [
+  "/entrar",
+  "/alta",
+  "/recuperar",
+  "/empezar",
+  "/bienvenida",
+  "/auth/reset-password",
+];
 
 const REHEAL_KEY = "tw_session_reheal";
 
@@ -360,6 +367,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
+    // La portada de marketing es solo oscura (regla de marca): el marco se
+    // fuerza a oscuro ahí y sigue siendo de doble tema en el resto.
+    if (pathname === "/") return <PublicShell dark>{children}</PublicShell>;
     if (isPublicPath(pathname)) return <PublicShell>{children}</PublicShell>;
     if (!isKnownRoute(pathname)) return <PublicShell>{children}</PublicShell>;
     return <SignedOut />;

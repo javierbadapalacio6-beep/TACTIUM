@@ -9,6 +9,8 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { SITE_URL } from "@/lib/site";
+
 /**
  * Recuperación del COSTE DE PASARELA, en puntos básicos + fijo. No es margen.
  *
@@ -37,26 +39,19 @@ export function inscriptionFeeCents(amountCents: number): number {
 }
 
 /**
- * Origen del WEB APP para los redirects de Stripe. `/club` y `/torneos` viven en
- * el subdominio `app.tactium.io`; el apex `tactium.io` (y `www`) es la LANDING y
- * no tiene esas rutas. Como las llamadas desde la app móvil no traen cabecera
- * `Origin`, se cae a `NEXT_PUBLIC_APP_URL`, que puede estar puesto al apex → aquí
- * lo normalizamos al subdominio para no mandar al usuario a la landing.
+ * Origen de la web para los redirects de Stripe. Como las llamadas desde la
+ * app móvil no traen cabecera `Origin`, se cae a `NEXT_PUBLIC_APP_URL`. Todo lo
+ * que no sea local (previews …vercel.app, dominios secundarios) se normaliza
+ * al dominio canónico, que es el que está en la allowlist de Supabase.
  */
 export function webAppOrigin(req: Request): string {
-  const raw =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    req.headers.get("origin") ??
-    "https://app.tactium.io";
+  const raw = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get("origin") ?? SITE_URL;
   try {
     const u = new URL(raw);
-    // Local: se respeta. Todo lo demás (apex tactium.io, *.vercel.app, previews)
-    // se fuerza al dominio canónico app.tactium.io — es el único que está en la
-    // allowlist de Supabase y donde vive la web app.
     if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return u.origin;
-    return "https://app.tactium.io";
+    return SITE_URL;
   } catch {
-    return "https://app.tactium.io";
+    return SITE_URL;
   }
 }
 

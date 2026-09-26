@@ -24,7 +24,8 @@ Configúralas en el host (Vercel → Project → Settings → Environment Variab
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | pública | URL del proyecto Supabase (producción) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | pública | anon/publishable key de Supabase |
-| `NEXT_PUBLIC_APP_URL` | pública | Dominio real, ej. `https://tactium.io` (success/cancel de Stripe y el `pago-ok`) |
+| `NEXT_PUBLIC_APP_URL` | pública | Dominio canónico, `https://tactium.io` (success/cancel de Stripe, `pago-ok`, sitemap y metadata) |
+| `CANONICAL_HOST` | config | `tactium.io`: activa la redirección 308 de `app.tactium.io` y `www` al canónico (sin ella no redirige: local, previews) |
 | `NEXT_PUBLIC_TACTIUM_WRITES` | pública | `off` para lanzar en solo-lectura (recomendado hasta pulir la UI) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **secreta** | Que el webhook confirme pagos saltándose RLS |
 | `STRIPE_SECRET_KEY` | **secreta** | `sk_live_…` — interruptor del cobro |
@@ -114,3 +115,24 @@ Verifica solo que el **build publicado de la app** enruta ese `tactium://…`
   endpoints del webhook.
 - **Supabase**: si usas login por OAuth/enlace mágico, añade el dominio de
   producción a las *Redirect URLs* del proyecto Supabase.
+
+---
+
+## 8. Dominio único (fusión con la landing, 2026-09-26)
+
+La web sirve los TRES hostnames y redirige al canónico desde `middleware.ts`.
+Checklist de paneles al desplegar:
+
+1. **Vercel** → proyecto de `tactium-web` → Domains: `tactium.io` (principal),
+   `www.tactium.io` y `app.tactium.io`, los tres SIN redirect de Vercel (lo
+   hace el middleware, que excluye `/api/*` para que los webhooks de Stripe
+   sigan entrando por donde estén dados de alta). Quitar los dominios del
+   proyecto de `tactium-landing` y pausarlo.
+2. **Vercel** → env: `CANONICAL_HOST=tactium.io`, `NEXT_PUBLIC_APP_URL=https://tactium.io`.
+3. **Supabase** → Auth → Redirect URLs: añadir `https://tactium.io/**` y
+   `https://www.tactium.io/**`. El **Site URL no cambia** (`https://tactium.io`).
+4. **Stripe** → cuando se quiera, apuntar los dos webhooks a `https://tactium.io/api/...`.
+5. **Google OAuth**: nada (el redirect URI es `login.tactium.io`).
+6. **App móvil** (OTA futura, no bloquea): `TACTIUM_WEB_BASE_URL` y los enlaces
+   fijos a `app.tactium.io` → `tactium.io`. Mientras tanto la redirección los
+   cubre; `tactium.io/auth/reset-password` y `tactium.io/legal/*` ya existen aquí.

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./marketing.css";
 
 /* ============================================================================
  * TACTIUM web · sistema de diseño del panel
@@ -3692,32 +3693,67 @@ select.tw-cell-input {
   }
 }
 
-/* ═══ MARCO PÚBLICO ═══════════════════════════════════════════════════ */
+/* ═══ MARCO PÚBLICO ═══════════════════════════════════════════════════
+   Mismo marco que el panel (`.tw-shell` + `.tw-frame`): lienzo oscuro fuera,
+   marco redondeado dentro y el scroll DENTRO del marco. Al entrar con cuenta
+   la ventana no cambia de forma. */
+.tw-pub-shell {
+  height: 100dvh;
+  padding: 10px;
+  background: var(--shell-bg);
+  display: flex;
+  overflow: hidden;
+}
 .tw-pub {
   position: relative;
-  min-height: 100vh;
-  background: var(--bg);
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.6);
 }
 .tw-pub > * {
   position: relative;
   z-index: 1;
 }
+.tw-pub-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: clip;
+  scroll-behavior: smooth;
+}
+@media (max-width: 767px) {
+  .tw-pub-shell {
+    padding: 0;
+    background: var(--bg);
+  }
+  .tw-pub {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
 
+/* Misma receta que la barra del panel (`.tw-topnav`): 64 de alto, cristal
+   sin raya, píldoras redondas. Al entrar, la cabecera no salta. */
 .tw-pub-bar {
-  position: sticky;
-  top: 0;
   z-index: 40;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
+  min-height: 64px;
   padding: 10px 16px;
   flex-wrap: wrap;
   background: var(--glass-bg-hi);
   backdrop-filter: var(--glass-blur-lg);
-  border-bottom: 1px solid var(--glass-line);
 }
 .tw-pub-brand {
   color: var(--text);
@@ -3738,11 +3774,11 @@ select.tw-cell-input {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--r-sm);
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
   color: var(--text-muted);
   text-decoration: none;
@@ -3753,9 +3789,21 @@ select.tw-cell-input {
   color: var(--text);
   background: var(--bg-card-2);
 }
+/* El icono solo acompaña a la píldora activa, como en el panel. */
+.tw-pub-link svg {
+  display: none;
+}
 .tw-pub-link.is-active {
-  color: var(--accent);
-  background: var(--accent-10);
+  color: var(--text-inverse);
+  background: var(--accent);
+  font-weight: 700;
+}
+.tw-pub-link.is-active svg {
+  display: block;
+}
+.tw-pub-link.is-active:hover {
+  background: var(--accent-dim);
+  color: var(--text-inverse);
 }
 
 .tw-pub-actions {
@@ -3827,6 +3875,10 @@ select.tw-cell-input {
 }
 .tw-pub-menu .tw-pub-link {
   height: 40px;
+  border-radius: var(--r-md);
+}
+.tw-pub-menu .tw-pub-link svg {
+  display: block;
 }
 .tw-pub-menu-actions {
   display: flex;
@@ -3878,8 +3930,8 @@ select.tw-cell-input {
 
 @media (min-width: 768px) {
   .tw-pub-bar {
-    gap: 20px;
-    padding: 0 24px;
+    gap: 16px;
+    padding: 0 18px;
     flex-wrap: nowrap;
   }
   .tw-pub-nav {

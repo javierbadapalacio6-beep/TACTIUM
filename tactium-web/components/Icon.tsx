@@ -354,3 +354,41 @@ export const ICONS = {
   lock: IconLock,
   search: IconSearch,
 } as const;
+
+/* ── Portada (marketing) ─────────────────────────────────────────── */
+export const IconLayers = (p: Props) => (
+  <Svg {...p}>
+    <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
+  </Svg>
+);
+
+export const IconCamera = (p: Props) => (
+  <Svg {...p}>
+    <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+    <circle cx="12" cy="13" r="3.5" />
+  </Svg>
+);
+
+export const IconShare = (p: Props) => (
+  <Svg {...p}>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+  </Svg>
+);
+
+export const IconSmartphone = (p: Props) => (
+  <Svg {...p}>
+    <rect x="6" y="2" width="12" height="20" rx="2.5" />
+    <path d="M11 18h2" />
+  </Svg>
+);
+
+export const IconSparkles = (p: Props) => (
+  <Svg {...p}>
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+    <path d="m12 7 1.6 3.4L17 12l-3.4 1.6L12 17l-1.6-3.4L7 12l3.4-1.6L12 7Z" />
+  </Svg>
+);

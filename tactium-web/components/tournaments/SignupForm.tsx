@@ -35,6 +35,7 @@ import {
 import { SkeletonPage } from "@/components/states";
 import { IconAlert, IconCheck, IconSearch } from "@/components/Icon";
 import { GoogleLogo } from "@/components/GoogleLogo";
+import { canonicalOrigin } from "@/lib/site";
 
 /* Torneo real (RPC pública) y su forma normalizada para el formulario. */
 interface RealTournament {
@@ -499,15 +500,10 @@ export function SignupForm({ id }: { id: string }) {
       typeof window !== "undefined"
         ? window.location.pathname + window.location.search
         : `/torneos/${id}/inscripcion`;
-    // El redirectTo se FIJA al dominio canónico app.tactium.io (salvo en local):
-    // ni window.location.origin ni NEXT_PUBLIC_APP_URL son fiables (pueden ser
-    // una URL …vercel.app, que NO está en la allowlist de Supabase → el login
-    // cae al Site URL, tactium.io). El destino va por cookie.
-    const h = window.location.hostname;
-    const appBase =
-      h === "localhost" || h === "127.0.0.1"
-        ? window.location.origin
-        : "https://app.tactium.io";
+    // El redirectTo se FIJA al dominio canónico (salvo en local): una URL
+    // …vercel.app NO está en la allowlist de Supabase y el login caería al
+    // Site URL. El destino va por cookie.
+    const appBase = canonicalOrigin();
     document.cookie = `tactium_next=${encodeURIComponent(next)}; path=/; max-age=600; samesite=lax`;
     supabaseBrowser().auth.signInWithOAuth({
       provider,

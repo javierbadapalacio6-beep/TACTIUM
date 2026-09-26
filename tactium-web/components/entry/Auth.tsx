@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { EntryFrame, Field, Input } from "./EntryFrame";
 import { Btn, Modal, Note } from "@/components/ui";
+import { canonicalOrigin } from "@/lib/site";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { WRITES_ENABLED } from "@/lib/writes";
 import { IconCheckCircle, IconEye, IconEyeOff } from "@/components/Icon";
@@ -38,6 +39,40 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
   const [recoverOpen, setRecoverOpen] = useState(false);
   const [recoverSent, setRecoverSent] = useState(false);
   const [recoverEmail, setRecoverEmail] = useState("");
+  const [recoverBusy, setRecoverBusy] = useState(false);
+  const [recoverError, setRecoverError] = useState<string | null>(null);
+
+  /** Tras entrar se vuelve a donde estaba el visitante (`?next=`), nunca a
+   *  una URL externa. */
+  function afterLogin(): string {
+    const raw = new URLSearchParams(window.location.search).get("next") ?? "/";
+    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  }
+
+  async function sendRecovery() {
+    if (!EMAIL_RE.test(recoverEmail) || recoverBusy) return;
+    setRecoverBusy(true);
+    setRecoverError(null);
+    try {
+      // El enlace del email vuelve por /auth/callback (canjea el código y deja
+      // la sesión) y de ahí a la pantalla de nueva contraseña. El destino va
+      // por cookie y, por si el email se abre en otro navegador, también en
+      // el propio redirect.
+      const base = canonicalOrigin();
+      document.cookie = `tactium_next=${encodeURIComponent("/auth/reset-password")}; path=/; max-age=1800; samesite=lax`;
+      const { error } = await supabaseBrowser().auth.resetPasswordForEmail(recoverEmail, {
+        redirectTo: `${base}/auth/callback?next=/auth/reset-password`,
+      });
+      if (error) throw error;
+      setRecoverSent(true);
+    } catch (err) {
+      setRecoverError(
+        err instanceof Error ? traducirError(err.message) : "No se pudo enviar el email"
+      );
+    } finally {
+      setRecoverBusy(false);
+    }
+  }
 
   const signup = mode === "signup";
   // Tras un intento de envío (touched) se marcan también los campos VACÍOS, para
@@ -85,7 +120,7 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
         password: pass,
       });
       if (error) throw error;
-      router.replace("/");
+      router.replace(afterLogin());
       router.refresh();
     } catch (err) {
       setServerError(
@@ -349,6 +384,11 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
                 onChange={(e) => setRecoverEmail(e.target.value)}
               />
             </Field>
+            {recoverError && (
+              <div style={{ marginTop: 12 }}>
+                <Note tone="error">{recoverError}</Note>
+              </div>
+            )}
             <div
               style={{
                 marginTop: 22,
@@ -360,10 +400,10 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
               <Btn onClick={() => setRecoverOpen(false)}>Cancelar</Btn>
               <Btn
                 variant="accent"
-                disabled={!EMAIL_RE.test(recoverEmail)}
-                onClick={() => setRecoverSent(true)}
+                disabled={!EMAIL_RE.test(recoverEmail) || recoverBusy}
+                onClick={sendRecovery}
               >
-                Enviar
+                {recoverBusy ? "Enviando…" : "Enviar"}
               </Btn>
             </div>
           </>

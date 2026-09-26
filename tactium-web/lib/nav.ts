@@ -97,6 +97,7 @@ export const PUBLIC_ROUTES = [
   "/comunidad",
   "/u/",
   "/pro",
+  "/legal",
 ];
 
 /**
@@ -119,6 +120,7 @@ const KNOWN_ROUTE_PREFIXES = [
   "/comunidad",
   "/u/",
   "/pro",
+  "/legal",
   "/entrar",
   "/empezar",
   "/bienvenida",

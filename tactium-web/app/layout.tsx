@@ -3,6 +3,9 @@ import { JetBrains_Mono } from "next/font/google";
 
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme";
 import { SessionProvider } from "@/lib/session";
+import { serverUser } from "@/lib/supabase/server";
+import { allSchemas } from "@/lib/seo/structured-data";
+import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site";
 import { AppShell } from "@/components/AppShell";
 import { SignedOutToast } from "@/components/SignedOutToast";
 import "./globals.css";
@@ -17,12 +20,34 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "TACTIUM",
+    default: SITE_TITLE,
     template: "%s · TACTIUM",
   },
-  description:
-    "Gestiona tu equipo de pádel federado: alineaciones, jornadas, temporadas, torneos y federación.",
+  description: SITE_DESCRIPTION,
+  keywords: [
+    "pádel federado",
+    "alineaciones pádel",
+    "app pádel equipos",
+    "torneos de pádel",
+    "federación cántabra pádel",
+    "gestión club pádel",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "es_ES",
+    url: SITE_URL,
+    siteName: "TACTIUM",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {
@@ -34,11 +59,13 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const user = await serverUser();
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
@@ -53,10 +80,17 @@ export default function RootLayout({
         />
         {/* Antes del primer pintado: evita el destello de tema equivocado. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {allSchemas(SITE_URL).map((schema, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
+        ))}
       </head>
       <body className={jetbrainsMono.variable}>
         <ThemeProvider>
-          <SessionProvider>
+          <SessionProvider initialUser={user}>
             <AppShell>{children}</AppShell>
             <SignedOutToast />
           </SessionProvider>

@@ -1,7 +1,13 @@
 # TACTIUM web
 
-La app en el navegador. Proyecto aparte de `tactium-landing/` (marketing) — este
-es el **producto**, y va a `app.tactium.io`.
+TACTIUM en el navegador: **la única web**. Desde la fusión con la landing
+(2026-09-26) sirve la portada de marketing (`/` sin sesión), la parte pública de
+explorar (`/torneos`, `/federacion`, `/comunidad`, `/pro`, `/legal/*`) y la app
+logueada, todo en `tactium.io`. `app.tactium.io` y `www` redirigen (308,
+conservando la ruta) vía `middleware.ts` cuando `CANONICAL_HOST=tactium.io`.
+
+`tactium-landing/` ya no se despliega: queda como herramientas de marketing
+(carruseles de Instagram, plantillas de email, assets sociales).
 
 ```bash
 npm install

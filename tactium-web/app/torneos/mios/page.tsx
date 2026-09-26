@@ -24,6 +24,7 @@ import {
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { GoogleLogo } from "@/components/GoogleLogo";
 import { IconTrophy } from "@/components/Icon";
+import { canonicalOrigin } from "@/lib/site";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "Fecha por confirmar";
@@ -125,13 +126,9 @@ export default function MisTorneosPage() {
   }
 
   const login = () => {
-    // redirectTo FIJADO a app.tactium.io (salvo local): una URL …vercel.app no
-    // está en la allowlist de Supabase → caería al Site URL. Destino por cookie.
-    const h = window.location.hostname;
-    const appBase =
-      h === "localhost" || h === "127.0.0.1"
-        ? window.location.origin
-        : "https://app.tactium.io";
+    // redirectTo FIJADO al dominio canónico (salvo local): una URL …vercel.app
+    // no está en la allowlist de Supabase → caería al Site URL. Destino por cookie.
+    const appBase = canonicalOrigin();
     document.cookie = `tactium_next=${encodeURIComponent("/torneos/mios")}; path=/; max-age=600; samesite=lax`;
     supabaseBrowser().auth.signInWithOAuth({
       provider: "google",

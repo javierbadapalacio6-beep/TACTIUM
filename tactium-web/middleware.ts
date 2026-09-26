@@ -2,13 +2,34 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Refresca el token de Supabase en cada navegación y reescribe las cookies.
+ * 1. Dominio canónico: desde la fusión con la landing, todo vive en
+ *    `tactium.io`. Los demás hostnames del proyecto (`app.tactium.io`,
+ *    `www.tactium.io`) redirigen con 308 conservando ruta y query —los
+ *    enlaces fijos de la app móvil siguen funcionando—. `/api/*` queda fuera:
+ *    los webhooks de Stripe no siguen redirecciones y entran por donde estén
+ *    dados de alta. Se activa con `CANONICAL_HOST` (en local no hay).
  *
- * Sin esto la sesión caduca en mitad de la sesión del usuario y los Server
- * Components empiezan a ver `anon` — con lo que la RLS deja de devolver datos
- * y las pantallas se vacían sin error visible.
+ * 2. Refresca el token de Supabase en cada navegación y reescribe las
+ *    cookies. Sin esto la sesión caduca en mitad de la sesión del usuario y
+ *    los Server Components empiezan a ver `anon` — con lo que la RLS deja de
+ *    devolver datos y las pantallas se vacían sin error visible.
  */
 export async function middleware(request: NextRequest) {
+  const canonical = process.env.CANONICAL_HOST;
+  const host = request.headers.get("host")?.toLowerCase();
+  if (
+    canonical &&
+    host &&
+    host !== canonical &&
+    !request.nextUrl.pathname.startsWith("/api/")
+  ) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = canonical;
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

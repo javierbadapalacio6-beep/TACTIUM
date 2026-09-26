@@ -112,7 +112,19 @@ function initialsOf(name: string): string {
   );
 }
 
-export function SessionProvider({ children }: { children: ReactNode }) {
+export function SessionProvider({
+  children,
+  initialUser,
+}: {
+  children: ReactNode;
+  /**
+   * Lo que el servidor sabe de la sesión al pintar. `null` = visitante: el
+   * contexto nace ya resuelto y la portada pública se renderiza en servidor
+   * (antes llegaba un spinner hasta que el cliente preguntaba a Supabase).
+   * Con usuario se espera a cargar perfil y roles, como siempre.
+   */
+  initialUser?: User | null;
+}) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [derivedRole, setDerivedRole] = useState<Role>("suelto");
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
@@ -121,7 +133,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [clubs, setClubs] = useState<ClubRef[]>([]);
   const [activeClubId, setActiveClubId] = useState<string | null>(null);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(initialUser === null);
 
   const loadFor = useCallback(async (authUser: User | null) => {
     const sb = supabaseBrowser();

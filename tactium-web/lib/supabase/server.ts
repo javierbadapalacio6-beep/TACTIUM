@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 /**
  * Cliente Supabase para Server Components y Route Handlers.
@@ -39,3 +41,20 @@ export async function supabaseServer() {
     },
   });
 }
+
+/**
+ * Usuario de la petición actual, resuelto en servidor y compartido entre el
+ * layout y la página (React `cache` dedupe dentro de la misma petición).
+ *
+ * Sin cookies de sesión no hay llamada de red: `getUser` devuelve null al
+ * instante, que es el caso del visitante que llega a la portada.
+ */
+export const serverUser = cache(async (): Promise<User | null> => {
+  try {
+    const sb = await supabaseServer();
+    const { data } = await sb.auth.getUser();
+    return data.user ?? null;
+  } catch {
+    return null;
+  }
+});
