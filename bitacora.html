@@ -271,6 +271,10 @@ const LOG = [
       { type: "feat", text: "<strong>TACTIUM app</strong> · <strong>La app apunta al apex</strong> (<code>126729d6</code>): <code>TACTIUM_WEB_BASE_URL</code> y todos los enlaces y textos con <code>app.tactium.io</code> (checkout de torneos, suscripción, cobros del club, paywall) → <code>tactium.io</code>. <strong>OTA publicada</strong> al canal <code>production</code>, runtime 1.4.2, grupo <code>e14b58ae-67e6-4d40-a3b7-371d7ae9ff0a</code>." },
 
       { type: "chore", text: "<strong>TACTIUM app</strong> · Antes de la fusión: la pizarra táctica entra en <code>main</code> aparcada (<code>5e5e9015</code>) y se rescata de la rama <code>backup/strava-social</code> lo que valía antes de borrarla (<code>6a60b4fe</code>)." },
+
+      { type: "docs", text: "<strong>📓 Bitácora al día</strong> (<code>86d9bb7f</code>): estaba parada en el 4 de septiembre; se añadieron las 15 entradas del 6 al 26 (unos 120 commits en app, web, BD, vídeo y marca), una por día." },
+
+      { type: "fix", text: "<strong>tactium-web</strong> · <strong>Los dos leves de <code>/torneos</code> que dejó la revisión visual</strong> (<code>a1d6850c</code>): el botón «Buscar» deshabilitado del bloque «Tengo un código» era verde al 45 % con texto blanco y no pasaba el contraste en modo claro → <code>.btn-accent:disabled</code> pasa a superficie neutra opaca (<code>--bg-card-3</code> + <code>--text-faint</code>), vale para los dos temas y para cualquier botón principal deshabilitado; y las tarjetas de torneo sin foto de portada, que llevaban el degradado borroso <code>amb</code> y parecían de maqueta al lado de una con foto real, ahora tienen fondo neutro con las líneas de una pista en CSS y el icono del trofeo. Verificado en claro a 1280 px." },
     ],
   },
   {
