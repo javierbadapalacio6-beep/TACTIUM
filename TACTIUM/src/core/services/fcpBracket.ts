@@ -424,6 +424,21 @@ export async function importPlayoffMatchdays(
   let updated = 0;
   let skipped = 0;
 
+  // Las jornadas nuevas se numeran POR FECHA, no en el orden en que llegan
+  // los cruces (la final iba la primera y la ronda 4, jugada un mes antes,
+  // la última). Se recogen aquí y se crean al final, ordenadas.
+  const toCreate: {
+    fcpPartido: string;
+    rivalName: string;
+    label: string;
+    isHome: boolean;
+    datos: Record<string, unknown>;
+    fecha: string | null;
+    hora: string | null;
+    avance: number | null;
+    suffix: 'ida' | 'vuelta';
+  }[] = [];
+
   for (const t of ties) {
     const rivalName =
       normTeam(t.equipo_local) === me ? t.equipo_visit : t.equipo_local;
@@ -508,21 +523,48 @@ export async function importPlayoffMatchdays(
         continue;
       }
 
-      jornada += 1;
-      const md = await MatchdaysApi.createMatchday(season.id, {
-        jornada_number: jornada,
-        opponent: `${rivalName} (${label})`,
-        is_home: jugada ? soyLocal : leg.isHome,
+      toCreate.push({
+        fcpPartido,
+        rivalName,
+        label,
+        isHome: jugada ? soyLocal : leg.isHome,
+        datos,
+        fecha,
+        hora,
+        avance: t.avance,
+        suffix: leg.suffix,
       });
-      // Columnas que `createMatchday` no conoce: el vínculo con la FCP, la
-      // marca de sede sin confirmar y el resultado. Sin esto las jornadas de
-      // playoff entraban SIEMPRE como próximas, aunque estuvieran jugadas y
-      // tuviéramos el acta delante.
-      await rawFrom('matchdays')
-        .update({ fcp_id_partido: fcpPartido, ...datos })
-        .eq('id', md.id);
-      created++;
     }
+  }
+
+  // Primero lo que tiene fecha, en orden; lo que aún no la tiene va detrás
+  // por ronda (avance mayor = ronda más temprana) y la ida antes que la vuelta.
+  toCreate.sort((a, b) => {
+    if (a.fecha && b.fecha) {
+      return a.fecha.localeCompare(b.fecha) || (a.hora ?? '').localeCompare(b.hora ?? '');
+    }
+    if (a.fecha) return -1;
+    if (b.fecha) return 1;
+    const av = (b.avance ?? 0) - (a.avance ?? 0);
+    if (av !== 0) return av;
+    return a.suffix === b.suffix ? 0 : a.suffix === 'ida' ? -1 : 1;
+  });
+
+  for (const n of toCreate) {
+    jornada += 1;
+    const md = await MatchdaysApi.createMatchday(season.id, {
+      jornada_number: jornada,
+      opponent: `${n.rivalName} (${n.label})`,
+      is_home: n.isHome,
+    });
+    // Columnas que `createMatchday` no conoce: el vínculo con la FCP, la
+    // marca de sede sin confirmar y el resultado. Sin esto las jornadas de
+    // playoff entraban SIEMPRE como próximas, aunque estuvieran jugadas y
+    // tuviéramos el acta delante.
+    await rawFrom('matchdays')
+      .update({ fcp_id_partido: n.fcpPartido, ...n.datos })
+      .eq('id', md.id);
+    created++;
   }
   return { created, updated, skipped };
 }
