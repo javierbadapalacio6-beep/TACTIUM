@@ -21,6 +21,14 @@
       ],
       "cwd": "tactium-web",
       "port": 3000
+    },
+    {
+      "name": "panel",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "TACTIUM-VIDEO/panel/server.mjs"
+      ],
+      "port": 4173
     }
   ]
 }

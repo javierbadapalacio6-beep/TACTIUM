@@ -1,0 +1,66 @@
+{
+  "pieza": "memoria",
+  "modelo": "v2",
+  "frases": [
+    {
+      "id": "01-intro",
+      "voz": "Brian",
+      "texto": "TACTIUM. La plataforma del pádel por equipos y de competición. Este es el Trabajo Final de Javier Bada en el programa Especialista en Programación con IA de Racks Academy. Y esta, su memoria técnica."
+    },
+    {
+      "id": "02-problema",
+      "voz": "Brian",
+      "texto": "El pádel por equipos se organiza hoy con WhatsApp, Excel y la web de la federación. Cada jornada, el capitán tiene que alinear las parejas que exige su competición, que cambian según la federación y la liga, y ordenarlas según sus reglas de puntos, preguntando a cada jugador uno a uno. El jugador no sabe si está convocado. El club organiza sus torneos con hojas de cálculo. Y los datos oficiales están dispersos."
+    },
+    {
+      "id": "03-solucion",
+      "voz": "Brian",
+      "texto": "TACTIUM lo reúne todo en una sola herramienta, con app para iOS y Android, y web en tactium punto io. El capitán elige su federación y su liga, y TACTIUM ajusta cuántas parejas alinear, valida el orden por puntos y le dice quién está disponible. El jugador ve su convocatoria y su perfil. El club organiza torneos y cobra las inscripciones online. Y los datos de la Federación Cántabra están integrados."
+    },
+    {
+      "id": "04-impacto",
+      "voz": "Brian",
+      "texto": "Hoy TACTIUM está en producción y en fase piloto. Estamos trabajando con un club de Cantabria, ya hay primeros usuarios reales y alguna suscripción de pago. La base federativa integra más de treinta y tres mil jugadores. Y una aclaración: muchas de las cuentas, clubes y equipos de la base de datos son de prueba o de demostración. Demuestran que el producto funciona de punta a punta, no tracción comercial."
+    },
+    {
+      "id": "05-ia-construir",
+      "voz": "Brian",
+      "texto": "La inteligencia artificial está en tres niveles. El primero, para construir. El proyecto nace en el curso con Bolt y Cursor, y TACTIUM se construye con Claude Code como agente principal: el noventa y dos por ciento de los commits están coescritos con él. Conectado por MCP a Supabase, Playwright, Figma y Stripe, con unas setenta skills y una memoria persistente de decisiones."
+    },
+    {
+      "id": "06-ia-producto",
+      "voz": "Brian",
+      "texto": "El segundo nivel, dentro del producto. Un escáner con Gemini convierte una foto del ranking o del calendario oficial en la plantilla o las jornadas del equipo, incluso cuando el calendario es una tabla cruzada. Y como investigación, TACTIUM AI sigue a los cuatro jugadores en un vídeo de pádel."
+    },
+    {
+      "id": "07-ia-marketing",
+      "voz": "Brian",
+      "texto": "El tercer nivel, para salir al mercado. Los reels se generan con código en Remotion, con subtítulos de Whisper, voces de ElevenLabs e imágenes de Gemini, y se publican desde un panel propio. Y se decide con datos: al medir que los vídeos horizontales retenían la mitad, se pasó al formato vertical."
+    },
+    {
+      "id": "08-proceso",
+      "voz": "Brian",
+      "texto": "El proceso. Primer commit, el once de mayo de dos mil veintiséis. Seis semanas después, la primera versión estaba en las tiendas. En cinco meses: quinientos dieciséis commits, cincuenta pantallas en la app, cincuenta y tres páginas web, cincuenta y una tablas protegidas con ciento nueve políticas de seguridad, y la versión uno punto cuatro punto dos publicada."
+    },
+    {
+      "id": "09-arquitectura",
+      "voz": "Brian",
+      "texto": "La arquitectura es sencilla: la app y la web comparten un único backend en Supabase. La lógica sensible vive en la base de datos, con seguridad a nivel de fila. Y los pagos son híbridos: compras integradas en el móvil con RevenueCat, y Stripe con Connect en la web y en los torneos."
+    },
+    {
+      "id": "10-modulos",
+      "voz": "Brian",
+      "texto": "Todo esto conecta con el curso. La mentalidad MVP y las herramientas de los primeros módulos. El frontend del MVP. El backend, la base de datos y la autenticación. La integración con MCP y Playwright. Los pagos con Stripe. El despliegue. Y el Go to Market: perfiles de cliente, prueba gratuita y canales."
+    },
+    {
+      "id": "11-lecciones",
+      "voz": "Brian",
+      "texto": "Las lecciones. Verificar siempre: una herramienta puede decir «enviado» sin que sea verdad. La memoria del proyecto es la ventaja. La seguridad empieza en la base de datos. Las tiendas imponen reglas de producto. Y no hay que inflar el impacto: primero, una federación bien hecha."
+    },
+    {
+      "id": "12-cierre",
+      "voz": "Brian",
+      "texto": "La conclusión: con IA, una sola persona ha construido y lanzado una plataforma completa. Pero la IA no sustituye al criterio. Lo multiplica. TACTIUM. tactium punto io."
+    }
+  ]
+}

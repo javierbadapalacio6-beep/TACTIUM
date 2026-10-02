@@ -1,0 +1,1 @@
+{ "id": "S5", "formato": "story", "slides": [ { "tipo": "pantalla", "eyebrow": "Encuesta", "titulo": "¿Sabes cuántos puntos federados tienes ahora mismo?", "sub": "Sí · Ni idea", "src": "app/fed-ranking.png", "alto": 860 } ] }

@@ -1,19 +1,25 @@
 import React, { useMemo } from "react";
 import {
   AbsoluteFill,
+  Audio,
+  Easing,
   Img,
   OffthreadVideo,
   Sequence,
   interpolate,
   staticFile,
   useCurrentFrame,
+  useVideoConfig,
 } from "remotion";
 import { T, ms } from "./tokens";
 import type { Cobertura, Frase, Grafico, Pieza } from "./piezas";
 import { Contador, Cortinilla, EnPanel, ListaTicks, Mockup, NumeroGrande, Resalte } from "./graficos";
+import { Karaoke, palabrasDe, trocear, type Bloque } from "./Karaoke";
+import { Efecto, TINTE_MARCA } from "./estilo/Cinetico";
 
 /** El cierre de marca. Idéntico en todas las piezas: es la firma. */
-export const CIERRE_MS = 1000;
+// 1,8 s (antes 1 s): Javier pidió alargar el cierre en los vídeos siguientes (30-09).
+export const CIERRE_MS = 1800;
 
 export const durDePieza = (p: Pieza) => ms(p.duracionMs + CIERRE_MS);
 
@@ -25,9 +31,9 @@ export const durDePieza = (p: Pieza) => ms(p.duracionMs + CIERRE_MS);
 // en decir algo. En cuanto exista la locución real, se ajustan a mano las que
 // bailen: por eso los campos son opcionales y no calculados siempre.
 // ─────────────────────────────────────────────────────────────────────────────
-type Cue = { frase: Frase; desdeMs: number; hastaMs: number };
+export type Cue = { frase: Frase; desdeMs: number; hastaMs: number };
 
-const repartir = (frases: Frase[], totalMs: number): Cue[] => {
+export const repartir = (frases: Frase[], totalMs: number): Cue[] => {
   const pesos = frases.map((f) => Math.max(f.texto.length, 1));
   const suma = pesos.reduce((a, b) => a + b, 0);
   let cursor = 0;
@@ -67,7 +73,7 @@ const Linea: React.FC<{ texto: string; enfasis?: string }> = ({ texto, enfasis }
   );
 };
 
-const Subtitulos: React.FC<{ cues: Cue[]; sinEnfasis?: boolean; baseline?: number }> = ({
+export const Subtitulos: React.FC<{ cues: Cue[]; sinEnfasis?: boolean; baseline?: number }> = ({
   cues,
   sinEnfasis,
   baseline = T.sub.baseline,
@@ -129,8 +135,9 @@ const Subtitulos: React.FC<{ cues: Cue[]; sinEnfasis?: boolean; baseline?: numbe
  * gráfico de dato ya es verde y grande: dos bloques verdes compiten y ninguno
  * señala. Es automático a propósito — no depende de acordarse al escribir los datos.
  */
-const SubtitulosDePieza: React.FC<{ cues: Cue[]; pieza: Pieza; baseline: number }> = ({
+const SubtitulosDePieza: React.FC<{ cues: Cue[]; bloques: Bloque[] | null; pieza: Pieza; baseline: number }> = ({
   cues,
+  bloques,
   pieza,
   baseline,
 }) => {
@@ -138,15 +145,34 @@ const SubtitulosDePieza: React.FC<{ cues: Cue[]; pieza: Pieza; baseline: number 
   // El rótulo de apertura y el subtítulo nunca se solapan: dos textos en el
   // mismo segundo no se leen, compiten.
   if (pieza.gancho && frame < ms(pieza.gancho.hastaMs)) return null;
-  const hayGrafico = (pieza.graficos ?? []).some(
+  const activos = (pieza.graficos ?? []).filter(
     (g) => frame >= ms(g.desdeMs) && frame < ms(g.hastaMs),
   );
+  // La cortinilla ya dice su cifra a pantalla completa: un subtítulo encima
+  // repetiría el mismo texto dos veces en el mismo segundo.
+  if (activos.some((g) => g.tipo === "cortinilla")) return null;
+  const hayGrafico = activos.length > 0;
   // El baseline lo decide `Reel`, porque en `motion` se mueve con el panel.
+  if (bloques) {
+    return (
+      <AbsoluteFill
+        style={{
+          justifyContent: "flex-start",
+          alignItems: "center",
+          paddingTop: T.canvas.h * baseline,
+          paddingLeft: T.safe.sides,
+          paddingRight: T.safe.sides,
+        }}
+      >
+        <Karaoke bloques={bloques} size={78} maxWidth={T.sub.maxWidth} apagado={hayGrafico} />
+      </AbsoluteFill>
+    );
+  }
   return <Subtitulos cues={cues} sinEnfasis={hayGrafico} baseline={baseline} />;
 };
 
 /** Quién habla. Solo los dos primeros segundos, en una cuenta de marca hace falta. */
-const Cartelito: React.FC<{ suelo: number }> = ({ suelo }) => {
+export const Cartelito: React.FC<{ suelo: number; arriba?: boolean }> = ({ suelo, arriba }) => {
   const frame = useCurrentFrame();
   const fin = ms(T.cartelito.durMs);
   const t = interpolate(frame, [0, ms(200), fin - ms(200), fin], [0, 1, 1, 0], {
@@ -157,11 +183,14 @@ const Cartelito: React.FC<{ suelo: number }> = ({ suelo }) => {
   return (
     <AbsoluteFill
       style={{
-        justifyContent: "flex-end",
+        // Con el panel abierto el subtítulo vive en la juntura, así que el
+        // cartelito sube a la esquina superior para no pisarlo.
+        justifyContent: arriba ? "flex-start" : "flex-end",
         alignItems: "flex-start",
         // Se queda dentro de la banda de la cara: por debajo taparía la app
         // o el panel de gráficos. Con el panel cerrado cae en la zona segura.
-        paddingBottom: suelo,
+        paddingTop: arriba ? T.safe.top : 0,
+        paddingBottom: arriba ? 0 : suelo,
         paddingLeft: T.safe.sides,
       }}
     >
@@ -176,6 +205,7 @@ const Cartelito: React.FC<{ suelo: number }> = ({ suelo }) => {
           borderRadius: T.radius.pill,
           padding: `${T.space[3]}px ${T.space[6]}px`,
           borderLeft: `3px solid ${T.color.accent}`,
+          whiteSpace: "nowrap",
         }}
       >
         {T.cartelito.texto}
@@ -221,9 +251,14 @@ const PanelTextura: React.FC = () => (
 // tramo abierto. Si no, el panel rebotaría entre uno y el siguiente, y un salto
 // de medio lienzo cada pocos segundos se lee como un fallo.
 // ─────────────────────────────────────────────────────────────────────────────
-const tramosAbiertos = (pieza: Pieza): { a: number; b: number }[] => {
+export const tramosAbiertos = (pieza: Pieza): { a: number; b: number }[] => {
   const holgura = T.motion.slow * 2;
-  const gs = [...(pieza.graficos ?? [])].sort((x, y) => x.desdeMs - y.desdeMs);
+  // Abre el panel un gráfico o una captura. La cortinilla no: va a pantalla
+  // completa por encima de todo, y el panel se cierra debajo de ella.
+  const gs = [
+    ...(pieza.graficos ?? []).filter((g) => g.tipo !== "cortinilla"),
+    ...pieza.cobertura,
+  ].sort((x, y) => x.desdeMs - y.desdeMs);
   const out: { a: number; b: number }[] = [];
   for (const g of gs) {
     const ultimo = out[out.length - 1];
@@ -250,7 +285,7 @@ const useApertura = (pieza: Pieza): number => {
 };
 
 /** Marcador de encuadre: lo que se ve mientras no hay plano rodado. */
-const Marcador: React.FC<{ titulo: string; ruta: string; anclaY: number }> = ({
+export const Marcador: React.FC<{ titulo: string; ruta: string; anclaY: number }> = ({
   titulo,
   ruta,
   anclaY,
@@ -284,7 +319,7 @@ const esVideo = (src: string) => /\.(mp4|mov|webm)$/i.test(src);
 
 /** Despacha cada gráfico a su componente. El `never` del default obliga a que,
  *  si mañana se añade un tipo a `Grafico`, TypeScript avise aquí. */
-const PintaGrafico: React.FC<{ g: Grafico }> = ({ g }) => {
+export const PintaGrafico: React.FC<{ g: Grafico }> = ({ g }) => {
   switch (g.tipo) {
     case "numero":
       return <NumeroGrande valor={g.valor} eyebrow={g.eyebrow} pie={g.pie} />;
@@ -315,15 +350,26 @@ const PintaGrafico: React.FC<{ g: Grafico }> = ({ g }) => {
 const Plano: React.FC<{ pieza: Pieza; apertura: number }> = ({ pieza, apertura }) => {
   const frame = useCurrentFrame();
   const [zIni, zFin] = pieza.zoom ?? [1, 1.07];
-  const escala = interpolate(frame, [0, ms(pieza.duracionMs)], [zIni, zFin], {
+  let escala = interpolate(frame, [0, ms(pieza.duracionMs)], [zIni, zFin], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+  // Con cortes declarados, cada tramo alterna el tamaño de partida y empuja
+  // despacio dentro del tramo. Un corte entre dos tomas del mismo encuadre sin
+  // cambio de escala se lee como un salto de cámara; con el cambio, como montaje.
+  if (pieza.cortes && pieza.cortes.length) {
+    const cortes = pieza.cortes.map(ms);
+    const idx = cortes.filter((c) => frame >= c).length;
+    const ini = idx === 0 ? 0 : cortes[idx - 1];
+    const fin = idx < cortes.length ? cortes[idx] : ms(pieza.duracionMs);
+    const p = Math.min(1, Math.max(0, (frame - ini) / Math.max(1, fin - ini)));
+    escala = (idx % 2 ? 1.1 : 1) + p * 0.05;
+  }
 
   // Al recortar 1920px a una banda, el centro geométrico cae por el pecho y la
-  // cabeza se queda fuera: con el panel abierto el ancla sube al 10%. Con el
-  // panel cerrado no hay recorte y el encuadre es el que se rodó.
-  const anclaY = interpolate(apertura, [0, 1], [50, 10]);
+  // cabeza se queda fuera: con el panel abierto el ancla sube (10% por defecto).
+  // Con el panel cerrado no hay recorte y el encuadre es el que se rodó.
+  const anclaY = interpolate(apertura, [0, 1], [50, pieza.anclaY ?? 10]);
 
   if (!pieza.plano) {
     return (
@@ -358,7 +404,7 @@ const Plano: React.FC<{ pieza: Pieza; apertura: number }> = ({ pieza, apertura }
  * eso va más grande y dura menos. Mientras está en pantalla el subtítulo calla,
  * o se leerían dos textos compitiendo en el mismo segundo.
  */
-const GanchoRotulo: React.FC<{ g: NonNullable<Pieza["gancho"]> }> = ({ g }) => {
+export const GanchoRotulo: React.FC<{ g: NonNullable<Pieza["gancho"]> }> = ({ g }) => {
   const frame = useCurrentFrame();
   const fin = ms(g.hastaMs);
   const t = interpolate(
@@ -402,26 +448,136 @@ const GanchoRotulo: React.FC<{ g: NonNullable<Pieza["gancho"]> }> = ({ g }) => {
   );
 };
 
-const Pantalla: React.FC<{ c: Cobertura }> = ({ c }) =>
-  c.src === null ? (
+const EASE_OUT = Easing.bezier(0.25, 1, 0.5, 1);
+
+export const Pantalla: React.FC<{ c: Cobertura; enPanel?: boolean }> = ({ c, enPanel }) => {
+  const frame = useCurrentFrame();
+  if (c.src === null) {
     // Aún sin grabar: se puede montar la pieza entera igualmente.
-    <Marcador titulo="FALTA COBERTURA" ruta={c.nota ?? "cobertura/…"} anclaY={0.1} />
-  ) : esVideo(c.src) ? (
-    <OffthreadVideo
-      src={staticFile(c.src)}
-      startFrom={ms(c.offsetMs ?? 0)}
-      style={{ width: "100%", height: "100%", objectFit: "contain" }}
-    />
+    return <Marcador titulo="FALTA COBERTURA" ruta={c.nota ?? "cobertura/…"} anclaY={0.1} />;
+  }
+  // `contain`, no `cover`, a pantalla completa: una captura de la app recortada
+  // pierde justo lo que se quería enseñar. En el panel es al revés: entera
+  // cabría a 490px de ancho y no se leería, así que se recorta y se panea.
+  const ajuste = c.ajuste ?? (enPanel ? "cover" : "contain");
+  const dur = ms(c.hastaMs - c.desdeMs);
+  const [p0, p1] = c.pan ?? [0, 0];
+  const posY = interpolate(frame, [0, dur], [p0, p1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const estilo: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: ajuste,
+    objectPosition: `center ${posY}%`,
+  };
+  const media = esVideo(c.src) ? (
+    <OffthreadVideo src={staticFile(c.src)} startFrom={ms(c.offsetMs ?? 0)} style={estilo} />
   ) : (
-    // `contain`, no `cover`: una captura de la app recortada pierde justo lo
-    // que se quería enseñar (la cabecera, el total de abajo).
-    <Img src={staticFile(c.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+    <Img src={staticFile(c.src)} style={estilo} />
   );
+  if (!enPanel) return media;
+
+  // Marco de iPhone, el mismo que en los carruseles: bisel, Dynamic Island y
+  // barra de estado. La barra se pinta SIEMPRE y queda fija arriba mientras la
+  // captura panea debajo; por eso las capturas van sin su barra propia
+  // (`app/reel/`, `img/*-sinbarra`). Entra subiendo y sangra por abajo.
+  const t = interpolate(frame, [0, ms(T.motion.base)], [0, 1], {
+    easing: EASE_OUT,
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const esWeb = true;
+  const R = 96;
+  const bisel = 14;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: T.space[6],
+        left: T.space[8] + T.space[4],
+        right: T.space[8] + T.space[4],
+        bottom: 0,
+        borderRadius: `${R}px ${R}px 0 0`,
+        background: "#0a0a0a",
+        padding: bisel,
+        boxShadow: `0 0 0 2px #2a2d2e, 0 0 0 4px #121414, 0 -30px 80px -30px rgba(0,223,130,0.25)`,
+        transform: `translateY(${(1 - t) * 48}px)`,
+        opacity: t,
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          height: "100%",
+          borderRadius: `${R - bisel}px ${R - bisel}px 0 0`,
+          overflow: "hidden",
+          background: T.color.card,
+        }}
+      >
+        {/* Dynamic Island */}
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: 22,
+            transform: "translateX(-50%)",
+            width: 186,
+            height: 56,
+            borderRadius: 30,
+            background: "#000",
+            zIndex: 3,
+          }}
+        />
+        {esWeb ? (
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 100,
+              zIndex: 2,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "0 58px 0 62px",
+              fontFamily: T.font.sans,
+              fontWeight: 700,
+              fontSize: 30,
+              color: "#fff",
+            }}
+          >
+            <span>9:41</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <svg width="30" height="22" viewBox="0 0 30 22" fill="#fff">
+                <rect x="0" y="14" width="5" height="8" rx="1" />
+                <rect x="8" y="10" width="5" height="12" rx="1" />
+                <rect x="16" y="5" width="5" height="17" rx="1" />
+                <rect x="24" y="0" width="5" height="22" rx="1" />
+              </svg>
+              <svg width="30" height="22" viewBox="0 0 30 22" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
+                <path d="M3 8a17 17 0 0 1 24 0" />
+                <path d="M8 13a10 10 0 0 1 14 0" />
+                <circle cx="15" cy="18" r="1.5" fill="#fff" />
+              </svg>
+              <span style={{ position: "relative", width: 48, height: 22, border: "3px solid rgba(255,255,255,0.9)", borderRadius: 8, display: "inline-block" }}>
+                <span style={{ position: "absolute", left: 3, top: 3, bottom: 3, width: "70%", background: "#fff", borderRadius: 3 }} />
+              </span>
+            </span>
+          </div>
+        ) : null}
+        <div style={{ position: "absolute", left: 0, right: 0, top: esWeb ? 100 : 0, bottom: 0 }}>{media}</div>
+      </div>
+    </div>
+  );
+};
 
 /** Pinta el reposo solo en los frames en que ningún gráfico ocupa el panel. */
 const PanelEnReposoSiToca: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
   const frame = useCurrentFrame();
-  const ocupado = (pieza.graficos ?? []).some(
+  const ocupado = [...(pieza.graficos ?? []), ...pieza.cobertura].some(
     (g) => frame >= ms(g.desdeMs) && frame < ms(g.hastaMs),
   );
   return ocupado ? null : <PanelTextura />;
@@ -429,6 +585,10 @@ const PanelEnReposoSiToca: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
 
 export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
   const cues = useMemo(() => repartir(pieza.frases, pieza.duracionMs), [pieza]);
+  const bloques = useMemo(() => {
+    const ps = palabrasDe(pieza);
+    return ps ? trocear(ps) : null;
+  }, [pieza]);
   const finCuerpo = ms(pieza.duracionMs);
   const layout = pieza.layout ?? "alterna";
   const esMotion = layout === "motion";
@@ -439,15 +599,17 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
   // gancho se ve a pantalla completa y el panel sólo existe cuando aporta.
   const bandaCara = Math.round(
     esMotion
-      ? interpolate(apertura, [0, 1], [T.canvas.h, T.canvas.h * T.panel.caraAlto])
+      ? interpolate(apertura, [0, 1], [T.canvas.h, T.canvas.h * (pieza.caraAlto ?? T.panel.caraAlto)])
       : T.canvas.h * T.tutorial.caraAlto,
   );
   const panelVisible = esMotion && apertura > 0.001;
 
   // El subtítulo acompaña a la juntura: al 62% sobre el plano entero, al 46%
   // —justo debajo del borde— cuando el panel está abierto.
+  // En `motion` el subtítulo se pone a caballo de la juntura: pisa la barbilla
+  // lo mínimo y sólo tapa la cabecera de la captura, que es lo que menos importa.
   const baseSub = esMotion
-    ? interpolate(apertura, [0, 1], [T.sub.baseline, T.panel.subBaseline])
+    ? interpolate(apertura, [0, 1], [T.sub.baseline, (pieza.caraAlto ?? T.panel.caraAlto) - 0.045])
     : layout === "tutorial"
       ? T.tutorial.subBaseline
       : T.sub.baseline;
@@ -491,21 +653,6 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
         </div>
       </Sequence>
 
-      {/* 2 · La pantalla de la app. En `alterna` tapa el plano por tramos; en
-              `tutorial` y `pip` convive con él. */}
-      {pieza.cobertura.map((c, i) => (
-        <Sequence
-          key={i}
-          from={ms(c.desdeMs)}
-          durationInFrames={ms(c.hastaMs - c.desdeMs)}
-          name={`cobertura-${i}`}
-        >
-          <div style={marcoPantalla}>
-            <Pantalla c={c} />
-          </div>
-        </Sequence>
-      ))}
-
       {/* 3 · El panel de marca del layout `motion`. Sólo existe mientras hay un
               dato que enseñar: el resto del tiempo el plano ocupa el lienzo. */}
       {panelVisible ? (
@@ -524,6 +671,22 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
         </div>
       ) : null}
 
+      {/* 2 · La pantalla de la app. En `alterna` tapa el plano por tramos; en
+              `tutorial` y `pip` convive con él. */}
+      {pieza.cobertura.map((c, i) => (
+        <Sequence
+          key={i}
+          from={ms(c.desdeMs)}
+          durationInFrames={ms(c.hastaMs - c.desdeMs)}
+          name={`cobertura-${i}`}
+        >
+          {c.sfx ? <Audio src={staticFile(c.sfx)} volume={0.55} /> : null}
+          <div style={marcoPantalla}>
+            <Pantalla c={c} enPanel={esMotion} />
+          </div>
+        </Sequence>
+      ))}
+
       {/* 4 · Gráficos. Superpuestos al plano en `alterna`; dentro del panel en
               `motion`, donde se centran solos gracias al contexto. */}
       {(pieza.graficos ?? []).map((g, i) => (
@@ -533,7 +696,8 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
           durationInFrames={ms(g.hastaMs - g.desdeMs)}
           name={`grafico-${g.tipo}`}
         >
-          {esMotion ? (
+          {g.sfx ? <Audio src={staticFile(g.sfx)} volume={0.7} /> : null}
+          {esMotion && g.tipo !== "cortinilla" ? (
             <div style={{ position: "absolute", top: bandaCara, left: 0, right: 0, bottom: 0 }}>
               <EnPanel.Provider value={true}>
                 <PintaGrafico g={g} />
@@ -548,11 +712,29 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
       {/* 5 · Rótulo de apertura, subtítulos y cartelito: siempre por encima. */}
       <Sequence durationInFrames={finCuerpo} name="subtitulos">
         {pieza.gancho ? <GanchoRotulo g={pieza.gancho} /> : null}
-        <SubtitulosDePieza cues={cues} pieza={pieza} baseline={baseSub} />
-        <Cartelito suelo={Math.max(T.safe.bottom, T.canvas.h - bandaCara + T.space[4])} />
+        <SubtitulosDePieza cues={cues} bloques={bloques} pieza={pieza} baseline={baseSub} />
+        <Cartelito
+          suelo={Math.max(T.safe.bottom, T.canvas.h - bandaCara + T.space[4])}
+          arriba={esMotion && apertura > 0.5}
+        />
       </Sequence>
 
-      {/* 6 · El cierre de marca. Un segundo, idéntico en todas las piezas. */}
+      {/* 6 · Cama musical, si la hay: entra en medio segundo y se va con el cierre. */}
+      {pieza.musica ? (
+        <Audio
+          src={staticFile(pieza.musica.src)}
+          volume={(f) =>
+            interpolate(
+              f,
+              [0, ms(600), finCuerpo - ms(400), finCuerpo + ms(CIERRE_MS)],
+              [0, pieza.musica!.volumen, pieza.musica!.volumen, 0],
+              { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+            )
+          }
+        />
+      ) : null}
+
+      {/* 7 · El cierre de marca. Un segundo, idéntico en todas las piezas. */}
       <Sequence from={finCuerpo} durationInFrames={ms(CIERRE_MS)} name="cierre">
         <Cierre />
       </Sequence>
@@ -560,18 +742,37 @@ export const Reel: React.FC<{ pieza: Pieza }> = ({ pieza }) => {
   );
 };
 
-const Cierre: React.FC = () => {
+/**
+ * El cierre de marca: el monograma «T» (no el nombre en letras, a petición de Javier,
+ * 29-09-2026). Se revela de arriba abajo, con un halo verde y un destello anamórfico de
+ * los packs que lo cruza, teñido al verde de marca. Mismo en vertical y en 16:9.
+ */
+export const Cierre: React.FC = () => {
   const frame = useCurrentFrame();
-  const t = interpolate(frame, [0, ms(T.motion.base)], [0, 1], {
+  const { width, height } = useVideoConfig();
+  const lado = Math.round(Math.min(width, height) * 0.55);
+  const t = interpolate(frame, [0, ms(380)], [0, 1], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1),
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   return (
     <AbsoluteFill style={{ background: T.color.bg, alignItems: "center", justifyContent: "center" }}>
       <Img
-        src={staticFile("img/wordmark.png")}
-        style={{ width: 620, opacity: t, transform: `scale(${0.98 + t * 0.02})` }}
+        src={staticFile("img/logo-t.png")}
+        style={{
+          width: lado,
+          height: lado,
+          opacity: t,
+          clipPath: `inset(0 0 ${(1 - t) * 100}% 0)`,
+          transform: `scale(${0.94 + t * 0.06})`,
+          filter: `drop-shadow(0 0 ${Math.round(lado * 0.08)}px rgba(0,223,130,${0.35 * t}))`,
+        }}
       />
+      <Sequence from={ms(120)} layout="none">
+        <Efecto src="efectos/destello.mp4" tinte={TINTE_MARCA} opacidad={0.9} />
+        <Audio src={staticFile("sfx/pop.mp3")} volume={0.4} />
+      </Sequence>
     </AbsoluteFill>
   );
 };

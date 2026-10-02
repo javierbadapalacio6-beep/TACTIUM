@@ -140,3 +140,32 @@ Casi la mitad del lote. No es que sea malo — es que es para otro programa.
    wordmark.
 
 Lo demás puede esperar.
+
+---
+
+## Mapa de sonido (revisado el 30-09-2026)
+
+Qué suena en cada momento de un reel. Todo sale de `MOTION GRAPICHS TACTIUM/PACKS/SOUND EFFECTS`
+(102 sonidos únicos; el Pack 2 repite casi todo el Pack 1) y está copiado en `public/sfx/`.
+
+| Momento | Archivo | Origen | Nota |
+|---|---|---|---|
+| Gancho (intriga) | `riser-4.wav` · `riser-6.wav` · `riser-corto.mp3` | 02 Riser · 01 Riser · Copia de riseer 1 | Pico medido a 3,5 s · 5,5 s · 1,5 s. `RiserGancho` elige el que cabe y lo cuadra para que el pico caiga en el corte |
+| Corte tras el gancho | `golpe-sub.wav` | Sub Bass Hit | Golpe seco, pico en 0 s |
+| Subida de la música / remate | `basshit.wav` + `flash.wav` | Deep Bass Hit 1 · Camera Flash | Con el quemado de película |
+| Entrada a tarjeta | `whoosh-1.mp3` · `whoosh-3.mp3` · `swoosh.wav` | VS_Short Whoosh · Swoosh 01-03 | Uno por corte, no en todos |
+| Icono chat | `pop.mp3` | Pop up SFX | |
+| Icono cronómetro | `reloj.mp3` | RELOJ (primer 1,2 s) | Tic-tac corto |
+| Icono libreta | `boli.mp3` | Bolígrafo (1,4 s) | Trazo de boli |
+| Cierre (logo) | `pop.mp3` | Pop up SFX | Con el destello |
+
+**Guardados para más adelante:** `Tecla.mp3` y `Escribir teclado` (texto que se teclea),
+`Subrayado rotulador` (resaltar una palabra), `Acierto y error` (check / aviso: hay que cortar
+cada mitad), `Camera Shutter` (capturas de pantalla), `Counter_9` (números que cuentan).
+
+**Descartados:** `CENSORED`, `Laser Gun`, `Windows_error`, `Thunder`, `8-bit`, los `Boom` largos y
+los `Cinematic Bass` de 10 s (demasiado peliculeros para la marca), y el `25 sonidos de
+transiciones.mp3` (hay que trocearlo y repite lo que ya hay suelto).
+
+Efectos visuales en uso: ver `public/efectos/` (glitch 6 y 4, quemado vertical/horizontal,
+destello anamórfico 7), teñidos al verde de marca. Descartado el glitch 7 (lleva «NO REF»).

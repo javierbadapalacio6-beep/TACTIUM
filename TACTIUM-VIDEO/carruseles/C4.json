@@ -1,0 +1,10 @@
+{ "id": "C4", "titulo": "Tus puntos sin PDF", "slides": [
+  { "tipo": "portada", "foto": "gen/pdf-papeles.png", "eyebrow": "Jugadores federados", "titulo": "Tus puntos, sin buscarte en un *PDF.*" },
+  { "tipo": "pantalla", "eyebrow": "Dentro de la app", "titulo": "La Federación Cántabra está dentro de la app.", "src": "app/explorar.png", "alto": 780 },
+  { "tipo": "pantalla", "eyebrow": "Jugadores", "titulo": "Buscas a un jugador y ves sus puntos y su ranking.", "src": "app/fed-ranking.png", "alto": 760, "offset": 560 },
+  { "tipo": "pantalla", "eyebrow": "Liga", "titulo": "Las clasificaciones de la liga completas.", "src": "app/fed-clasificacion.png", "alto": 780 },
+  { "tipo": "pantalla", "eyebrow": "Playoff", "titulo": "Y los cuadros de playoff, sin esperar a que alguien cuelgue una foto.", "src": "web/fed-playoff.png", "alto": 740 },
+  { "tipo": "pantalla", "eyebrow": "Torneos", "titulo": "Al inscribirte a un torneo, el sistema ya sabe tus puntos y te dice si puedes jugar esa categoría.", "tam": "sm", "src": "web/torneo-ficha.png", "alto": 680 },
+  { "tipo": "texto", "eyebrow": "Honestamente", "titulo": "De momento, la Federación Cántabra.", "sub": "El resto **irán entrando.**" },
+  { "tipo": "cierre", "foto": "gen/red-pista.png", "titulo": "Síguenos para saber cuándo llega *la tuya.*", "cta": "Seguir · @tactium" }
+]}

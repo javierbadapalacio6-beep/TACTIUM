@@ -13,6 +13,13 @@ Los prompts de avatar siguen intactos en `03-generacion.md` por si se recuperan.
 
 - **No los leas.** Entiende la idea y dilo con tus palabras. Si cambias una frase, mejor.
 - Los **primeros 2 segundos** no admiten preámbulo. Nada de «hola, qué tal», «hoy os traigo».
+- **Empieza a hablar en el primer fotograma** (01-10, datos de A1: la gente se iba en el
+  segundo 3). Nada de coger aire o mirar al móvil antes: dale a grabar, cuenta 2 en silencio
+  y arranca con la frase *y* con la acción a la vez. Ese silencio lo corto yo.
+- **Cada gancho lleva una acción en el primer segundo** (levantarte, enseñar algo a cámara,
+  tirar algo a la mesa). Un plano quieto con alguien hablando se pasa de largo.
+- **Se publica en vertical (9:16), de cuerpo entero.** Deja aire por arriba de la cabeza y no
+  te salgas por los lados: el texto va abajo, sobre las piernas.
 - Energía **un punto por encima** de como hablas normalmente.
 - Mira **a la lente**, no a tu cara en la pantalla.
 - **3 tomas** de cada uno, y déjalas todas (`A1-federaciones-toma3.mp4`). Suelo montar con trozos de dos.
@@ -122,53 +129,55 @@ Duración objetivo **10-15s** cada una: gancho 0-2s · desarrollo 2-6s · produc
 
 ---
 
-## A1 — «Diecisiete federaciones» → `A1-federaciones.mp4` · ~12s
+## A1 — «Lo decide tu federación» → `A1-federaciones.mp4` · ~14s
 
-**La primera que se publica.** Es el único ángulo que nadie te puede copiar, porque el trabajo
-está hecho y es verdad. No promete: demuestra.
+**Reescrito el 28-09-2026.** El guion anterior presumía de «las diecisiete federaciones», y
+esa cifra no se usa: la competición al día solo está cargada para la Federación Cántabra (el
+resto irán entrando). Lo que sí es verdad para cualquier capitán federado es que el orden de
+las parejas lo marca su federación, y que la app lo comprueba. Y el cierre habla a Cantabria,
+que es donde está la mayoría de la audiencia.
 
-> **[A cámara, palas de fondo, medio serio]**
-> Me leí la normativa de alineaciones de las diecisiete federaciones de pádel.
-> Una por comunidad. Y no dicen lo mismo.
+> **[A cámara, palas de fondo, directo, sin sonreír]**
+> El orden de tus parejas no lo decides tú. Lo decide tu federación.
 >
-> **[Levanta el móvil, se ve la app un segundo]**
-> Así que lo metí todo aquí dentro.
+> **[Ligero encogimiento de hombros]**
+> Y cada una tiene su norma: unas te exigen ordenar por puntos y otras no.
 >
-> **[Encogimiento de hombros, cierre]**
-> Tú eliges jugadores; el orden te lo valida solo.
+> **[Levanta el móvil, se ve la alineación un segundo]**
+> Aquí eliges a tus jugadores y la app te comprueba el orden antes de publicarla.
+>
+> **[Baja el móvil, cierre mirando a cámara]**
+> Y si juegas en Cantabria, tu competición ya está dentro.
 
-**Esto es verdad, lo he comprobado en el código**: `TACTIUM/src/core/data/federations.ts` tiene
-las 17 autonómicas (más Ceuta y Melilla, y la FEP como referencia), con el número de parejas por
-federación, liga y género. Y `LineupScreen` valida el orden con `requiresStrengthOrder`.
-Puedes decirlo mirando a cámara sin que te tiemble la voz.
+**Todo es verdad:** `LineupScreen` valida el orden con `requiresStrengthOrder` según la
+federación elegida, y la Federación Cántabra (clasificaciones, jornadas, cuadros) está cargada
+al día. No se dice ninguna cifra de federaciones.
 
 ---
 
 ## A2 — «El orden de parejas» → `A2-orden.mp4` · ~12s
+
+**Cambiado por Javier al grabarlo (29-09-2026).** El gancho ya no acusa («está mal»): habla
+del lío de cuadrar el orden sumando y restando puntos, y de que con TACTIUM se comprueba. El
+montaje se hace con la transcripción de lo que dijo de verdad, no con este texto.
 
 Formato distinto a propósito: **sentado a tu mesa, con el móvil boca arriba en primer plano** y
 la cámara fija, plano de pecho para arriba. Que se note que es otro sitio de la casa, no la
 misma pared que el A1.
 
 > **[0-2s, inclinado hacia delante, a cámara]**
-> El orden de parejas de tu equipo probablemente está mal.
+> El orden de parejas de tu equipo seguramente es un caos.
 >
 > **[2-5s, se encoge de hombros, una mano explicando]**
-> No por mala fe: es que cada federación lo define distinto.
-> Y si la pareja dos es más fuerte que la uno, te la pueden impugnar.
+> No por mala fe: es que estar sumando puntos y restando puntos tiene que ser un lío.
 >
 > **[5-8s, coge el móvil y gira la pantalla hacia cámara]**
-> Aquí lo tienes comprobado antes de mandarlo.
+> Con TACTIUM lo compruebas antes de mandarlo.
 >
 > **[8-10s, lo deja donde estaba y se echa atrás con un gesto de asentimiento]**
 
 **Graba la pantalla del error, es literal.** Cuando la pareja 2 suma más puntos que la 1, la app
 pinta en rojo `Pareja 2 más fuerte que la 1`. Esa captura es el reel entero: enséñala.
-
-⚠️ **Contrasta antes de publicar** la frase «te la pueden impugnar». Es la única de todos los
-guiones que hace una afirmación de reglamento, y el código modela el orden obligatorio pero no
-la sanción. Tienes la normativa en `Normativa Liga Cántabra de Pádel 2026 NUEVO FORMATO(1).pdf`.
-Si no lo dice con esas palabras, cámbialo por «te lo pueden reclamar» y listo.
 
 ---
 
@@ -198,12 +207,14 @@ Las tres de arriba son para captar. Estas son para que quien ya paró entienda y
 
 ## R1 — «Lo he construido yo solo» → `R1-fundador.mp4` · ~40s
 
+**Primer segundo:** enseñas el móvil a cámara con la app abierta, a un palmo de la lente.
+
 > **[GANCHO, a cámara]**
+> Doce meses, una persona y cero euros. Esto es lo que salió.
 > Soy Javier, y esta aplicación la he construido yo solo.
-> Doce meses. Sin equipo y sin un euro de inversión.
 >
 > **[DESARROLLO — tapo con A9 abrir app + A1 alineación + A3 torneo]**
-> Juego al pádel federado, y cada semana veía lo mismo: el capitán persiguiendo a ocho tíos
+> Juego al pádel federado, y cada semana veía lo mismo: el capitán persiguiendo a diez tíos
 > por WhatsApp para saber quién juega el sábado. La disponibilidad apuntada en una libreta.
 > Los resultados que se pierden. Y los datos de la federación en una web que parece de 2005.
 >
@@ -215,8 +226,10 @@ Las tres de arriba son para captar. Estas son para que quien ya paró entienda y
 
 **Ganchos alternativos** (graba los tres seguidos, pruebo cuál tira):
 - «Nadie me ha pagado por hacer esto.»
-- «Doce meses, una persona, cero euros de inversión. Esto es lo que salió.»
 - «Si juegas al pádel federado, esto lo he hecho por ti. Literalmente.»
+- «Mis amigos creen que estoy loco. Llevo un año con esto.»
+
+💬 **Pregunta del texto:** «¿Qué le falta? Te leo en comentarios.»
 
 ## R2 — El domingo del capitán → `R2-capitan.mp4` · ~35s
 
@@ -226,7 +239,7 @@ Las tres de arriba son para captar. Estas son para que quien ya paró entienda y
 > **[DESARROLLO — tapo con B7 el caos: el grupo de WhatsApp haciendo scroll]**
 > Domingo por la noche. Abres el grupo. Ochenta y cuatro mensajes sin leer.
 > Tres que dicen «yo el sábado no sé todavía». Dos que no han contestado.
-> Y tú ahí, con una libreta, intentando cuadrar cuatro parejas.
+> Y tú ahí, con una libreta, intentando cuadrar cinco parejas.
 >
 > **[GIRO — tapo con A1 alineación]**
 > Aquí tus jugadores marcan si están disponibles. Tú abres la jornada,
@@ -255,8 +268,11 @@ Necesito **el calendario de la liga en papel de verdad** en la mano.
 Carril B (club). Este es el que te trae a quien paga. También en casa: de pie, encuadre algo
 más abierto que el A1 para que no sean el mismo plano.
 
+**Primer segundo:** dejas caer a la mesa un taco de folios (el «Excel impreso») y lo señalas.
+
 > **[GANCHO, a cámara]**
-> Así se monta un torneo de pádel de treinta y dos parejas.
+> Treinta y dos parejas, ocho pistas y un Excel. Así acaba el domingo de quien organiza.
+> Y así se monta aquí.
 >
 > **[DESARROLLO — tapo con A3 torneo + A4 inscripción]**
 > Eliges el formato: fase de grupos y eliminatoria, con cuadro de consolación
@@ -265,12 +281,20 @@ más abierto que el A1 para que no sean el mismo plano.
 > Los jugadores se inscriben con un código desde el móvil y pagan por la web.
 >
 > **[CIERRE, a cámara]**
-> Si tu club sigue haciendo esto con un Excel, hablamos.
+> Lo organizas tú y se juega en tu club; la app solo te quita el Excel.
+> Si organizas torneos y sigues con un Excel, hablamos.
+
+**Gancho alternativo:** «Si organizas torneos en tu club, esto te devuelve el domingo.»
+
+💬 **Pregunta del texto:** «¿Cuántas parejas tuvo el último torneo de tu club?»
 
 ## R5 — La federación → `R5-federacion.mp4` · ~35s
 
+**Primer segundo:** te inclinas hacia la cámara, como quien pregunta en serio.
+
 > **[GANCHO, a cámara]**
-> Tus puntos federados están en una web que parece de 2005.
+> ¿Cuántos puntos federados tienes ahora mismo? No lo sabes. Normal:
+> están en una web que parece de 2005.
 >
 > **[DESARROLLO — tapo con A5 federación]**
 > Y para saber si puedes jugar una categoría, te toca buscarte a ti mismo en un PDF.
@@ -282,15 +306,54 @@ más abierto que el A1 para que no sean el mismo plano.
 > **[CIERRE, a cámara]**
 > Sin buscar nada. Sin preguntar a nadie.
 
+**Gancho alternativo:** «Tus puntos federados están en una web que parece de 2005.»
+
+💬 **Pregunta del texto:** «¿Cuántos puntos tienes? Sin mirar 👇»
+
 ## R6 — «No quieres otra app» → `R6-objecion.mp4` · ~25s
+
+**Primer segundo:** levantas el móvil, deslizas el dedo por la pantalla de apps y lo bajas con cara de hartazgo.
 
 > **[A cámara, entero]**
 > No quieres otra app. Lo sé.
 > Nadie se levanta por la mañana con ganas de instalarse otra aplicación más.
-> Lo que quieres es dejar de perseguir a ocho tíos por WhatsApp cada semana.
+> Lo que quieres es dejar de perseguir a diez tíos por WhatsApp cada semana.
 > Eso es lo único que hace TACTIUM: que el sábado sepas quién juega.
 
+**Gancho alternativo:** «Tienes cuarenta apps en el móvil. No te voy a pedir otra… salvo que seas capitán.»
+
+💬 **Pregunta del texto:** «¿Cuántos sois en el grupo del equipo?»
+
 ---
+
+## R7 — «Tu torneo, en una app» → `R7-torneo-app.mp4` · ~18s
+
+Carril organizadores. Abre la semana de torneos: qué hace la app por quien organiza y por quien
+juega. Sin consolación (no es el argumento: la app crea el torneo, el resto lo pone el organizador).
+
+**Primer segundo:** levantas el móvil a cámara mientras vibra sin parar (pon sonido de WhatsApp).
+
+> **[GANCHO, a cámara]**
+> Organizar un torneo de pádel: cuarenta WhatsApps, un Excel y cobrar en mano.
+>
+> **[DESARROLLO — tapo con crear torneo, inscripción con código, pago y resultados]**
+> Con esta app creas el torneo en unos minutos.
+> Los jugadores se apuntan desde aquí con un código, pagan online
+> y ven sus partidos, sus horarios y sus resultados en el móvil.
+>
+> **[CIERRE, a cámara]**
+> Tú pones las pistas. Si organizas torneos, en un club o por tu cuenta, hablamos.
+
+**Gancho alternativo:** «¿Todavía cobras los torneos en mano?»
+
+💬 **Pregunta del texto:** «¿Cómo os apuntáis hoy a un torneo: WhatsApp, llamada o mostrador?»
+
+# OJO con los torneos (01-10)
+
+TACTIUM **no organiza torneos**: da la herramienta para crearlos. El torneo es del club o del
+organizador (también alguien sin club) y se juega en sus pistas. Nunca «nuestros torneos»,
+«aquí no pasa», «en todos los torneos hay consolación» (la consolación la activa quien organiza).
+El cierre de venta va a **organizadores**, no solo a clubes.
 
 # TANDA 3 — Tutoriales · tu cara y la app a la vez
 
@@ -345,8 +408,10 @@ Necesito el calendario **en papel de verdad** en la mano.
 
 ## T3 — Inscribirse en un torneo → `T3-inscripcion.mp4` · ~20s
 
+**Primer segundo:** el móvil suena (pon un tono), lo miras y lo cuelgas.
+
 > **[GANCHO]**
-> Apuntarte a un torneo sin llamar a nadie.
+> Deja de llamar al club para apuntarte a un torneo.
 >
 > **[TUTORIAL]**
 > El club te pasa un código.
@@ -355,6 +420,88 @@ Necesito el calendario **en papel de verdad** en la mano.
 > porque ya sabe tus puntos federados.
 > Pones a tu compañero, confirmas, y pagas por la web.
 > Ya estás en el cuadro.
+
+**Gancho alternativo:** «Apuntarte a un torneo sin llamar a nadie.»
+
+💬 **Pregunta del texto:** «¿Cómo te apuntas hoy: llamada, WhatsApp o en el mostrador?»
+
+---
+
+# TANDA 4 — Humor (para compartir y etiquetar)
+
+Lo que más alcance ha dado a la cuenta (la pala, «Nivel de evolución») es humor de pádel en el
+que uno se reconoce, no la app. Aquí la app casi no sale: el objetivo es que lo manden al grupo
+del equipo y etiqueten al compañero. Se graban en casa, en vertical y de cuerpo entero.
+Sin rótulos que no se digan: lo que sale escrito es lo que dices.
+
+## H1 — «¿Quién puede el sábado?» → `H1-sabado.mp4` · ~25s
+
+Haces tú de todos. Cada personaje, un cambio rápido: gorra, sudadera, gafas de sol, auriculares.
+Un plano por personaje, 3-4 s, corto seco entre uno y otro.
+
+**Primer segundo:** miras el móvil, lo levantas a cámara y preguntas, ya hablando.
+
+> **[CAPITÁN, a cámara]**
+> Grupo del equipo: ¿quién puede el sábado?
+>
+> **[EL DEL «DEPENDE» — con gorra, mirando al techo]**
+> Depende. ¿A qué hora? ¿Y contra quién? Te digo el viernes.
+>
+> **[EL DEL AUDIO — auriculares, andando por la habitación]**
+> Oye, mira, te cuento, que esta semana es un poco lío porque mi cuñado…
+>
+> **[EL DE LAS DOS DE LA MAÑANA — a oscuras, con la luz del móvil en la cara]**
+> Yo puedo. ¿Sigue en pie?
+>
+> **[EL QUE NI LEE — tumbado en el sofá con el móvil boca abajo]**
+> (no dice nada; suena una notificación y ni la mira)
+>
+> **[CAPITÁN, a cámara, agotado]**
+> Y así cada semana.
+
+💬 **Pregunta del texto:** «¿Cuál de estos tienes en tu equipo? Etiquétalo 👇»
+
+## H2 — «Domingo, 23:40» → `H2-domingo.mp4` · ~20s
+
+Habitación a oscuras, tú en la cama con la luz del móvil en la cara. Lees los mensajes en voz
+alta, cada vez más desesperado.
+
+**Primer segundo:** el móvil vibra en la mesilla, lo coges de golpe y lo enciendes.
+
+> **[EN LA CAMA, leyendo]**
+> Ochenta y cuatro mensajes.
+> «Yo el sábado no sé todavía».
+> «¿A qué hora era?».
+> «¿Jugamos en casa o fuera?».
+> «Si falta uno, me traigo a mi cuñado, ¿vale?».
+>
+> **[Sueltas el móvil sobre la cama y miras al techo. Silencio de un segundo]**
+>
+> **[Lo vuelves a coger, tocas tres veces la pantalla y lo dejas en la mesilla]**
+> Alineación publicada. A dormir.
+
+💬 **Pregunta del texto:** «¿Cuántos mensajes sin leer tiene ahora el grupo de tu equipo? 👇»
+
+## H3 — «Cosas que solo entiende un capitán» → `H3-capitan.mp4` · ~20s
+
+A cámara, de pie. Cada frase con su objeto en la mano: una calculadora, una libreta, el móvil.
+
+**Primer segundo:** levantas una calculadora a cámara, muy serio.
+
+> **[A cámara]**
+> Cosas que solo entiende un capitán de pádel.
+> Sumar puntos federados a las doce de la noche.
+> Saberte de memoria el móvil de diez personas que no contestan.
+> Tener un compañero que siempre «llega justo»… y llega en el segundo set.
+> Y decir «el sábado lo vemos» sabiendo que el sábado no lo vemos.
+>
+> **[CIERRE, a cámara]**
+> Si te has visto en las cuatro, eres capitán. Lo siento.
+
+💬 **Pregunta del texto:** «¿Cuál te falta? Etiqueta a tu capitán 👇»
+
+**Si se graba en Smash** (cuando haya permiso): versión «Lo que dice tu compañero / lo que pasa».
+«Tranquilo, esta es fácil» → la falla. «Yo juego de revés» → no llega a ninguna. Corto seco.
 
 ---
 

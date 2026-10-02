@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TACTIUM · el orden de parejas</title>
+<!--
+  Prueba de motion: el orden de parejas. La P2 suma más que la P1 → aviso →
+  auto-orden → orden correcto. Es verdad: la alineación valida el orden según la
+  norma de la federación y tiene auto-orden (GUIONES-REELS.md, A2 y T1).
+  Música: pixabay-music-promotion desde 82.03 (golpe 82.53 → t 0.5), 118 BPM.
+-->
+<link rel="stylesheet" href="../lib/base.css">
+<style> canvas.full { position: absolute; inset: 0; width: 1080px; height: 1920px; } </style>
+</head>
+<body>
+<div id="stage"><canvas id="c2" class="full" width="1080" height="1920"></canvas><canvas id="fx" class="full" width="1080" height="1920"></canvas></div>
+<script type="module">
+import { arrancar } from "../lib/base.js";
+import { clamp, prog, eOut, eInOut, eBack, lerp, $ } from "../lib/util.js";
+import { C, W, H, CX, font, grano, barridos, hud, cargarLogo, cierre } from "../lib/marca2d.js";
+
+const FPS = 30, DUR = 9.6, B = 60 / 118, b = (n) => 0.5 + n * B;
+const g = $("#c2").getContext("2d"), fx = $("#fx").getContext("2d");
+const logo = await cargarLogo();
+
+const ROWS = [
+  { a: ["Javi", 820], b: ["Dani", 760] },
+  { a: ["Rubén", 900], b: ["Iker", 780] },
+  { a: ["Pablo", 760], b: ["Sergio", 730] },
+  { a: ["Álex", 680], b: ["Mario", 620] },
+  { a: ["Hugo", 590], b: ["Leo", 530] },
+].map((r) => ({ ...r, sum: r.a[1] + r.b[1] }));
+const SORTED = ROWS.map((r, i) => i).sort((x, y) => ROWS[y].sum - ROWS[x].sum);
+const slotY = (i) => 520 + i * 148;
+const fmt = (n) => n.toLocaleString("es-ES");
+
+function pill(x, y, [name, pts]) {
+  font(g, 700, 34); g.fillStyle = C.HUESO; g.textAlign = "left"; g.fillText(name, x, y + 10);
+  const w = g.measureText(name).width; font(g, 500, 24, "JBM"); g.fillStyle = C.GRIS; g.fillText(String(pts), x + w + 14, y + 10);
+}
+
+function escena(t) {
+  g.fillStyle = C.BG; g.fillRect(0, 0, W, H);
+  const aviso = t >= b(4) && t < b(8), ok = t >= b(10);
+  // Gancho: visible desde el primer fotograma; en el golpe sube y se encoge.
+  if (t < b(12)) {
+    const m = eInOut(prog(t, 0.5, 0.35)), px = lerp(112, 60, m), y = lerp(760, 380, m);
+    font(g, 900, px); g.fillStyle = C.HUESO; g.textAlign = "left"; g.letterSpacing = "-2px";
+    g.fillText("¿Tu pareja 2 suma", 80, y); g.fillText("más que la 1?", 80, y + px * 1.05); g.letterSpacing = "0px";
+  }
+  if (t >= 0.5 && t < b(12)) {
+    // Etiquetas fijas P1..P5
+    font(g, 700, 30, "JBM"); g.textAlign = "left";
+    for (let i = 0; i < 5; i++) { g.globalAlpha = eOut(prog(t, 0.5 + i * B / 2, 0.3)); g.fillStyle = C.GRIS; g.fillText(`P${i + 1}`, 80, slotY(i) + 74); }
+    g.globalAlpha = 1;
+    const ord = eBack(prog(t, b(8), 0.45));
+    ROWS.forEach((r, i) => {
+      const enter = eOut(prog(t, 0.5 + i * B / 2, 0.35)); if (enter <= 0) return;
+      let y = lerp(slotY(i), slotY(SORTED.indexOf(i)), ord), x = 160 + (1 - enter) * 900;
+      const mal = aviso && (i === 0 || i === 1);
+      if (mal) x += Math.sin(t * 60) * 9 * Math.exp(-(t - b(4)) * 4);
+      g.beginPath(); g.roundRect(x, y, 750, 128, 24); g.fillStyle = "#0B2420"; g.fill();
+      if (mal) { g.lineWidth = 4; g.strokeStyle = C.AVISO; g.stroke(); }
+      pill(x + 32, y + 64, r.a); pill(x + 290, y + 64, r.b);
+      font(g, 900, 54); g.textAlign = "right"; g.fillStyle = mal ? C.AVISO : C.HUESO; g.fillText(fmt(r.sum), x + 720, y + 82);
+    });
+    // Aviso → botón → orden correcto
+    font(g, 500, 28, "JBM"); g.textAlign = "left"; g.letterSpacing = "2px";
+    if (aviso) { g.globalAlpha = eOut(prog(t, b(4), 0.2)) * (1 - eOut(prog(t, b(8), 0.2))); g.fillStyle = C.AVISO; g.fillText("⚠ ORDEN INCORRECTO · P2 SUMA MÁS QUE P1", 80, 1300); }
+    if (ok) { g.globalAlpha = eOut(prog(t, b(10), 0.25)); g.fillStyle = C.VERDE; g.fillText("✓ ORDEN CORRECTO", 80, 1300); }
+    g.globalAlpha = 1; g.letterSpacing = "0px";
+    const bt = eBack(prog(t, b(6), 0.3)) * (1 - eOut(prog(t, b(8) + 0.2, 0.25)));
+    if (bt > 0.01) {
+      const press = t >= b(7) ? 1 - 0.08 * Math.exp(-(t - b(7)) * 12) * Math.sin(Math.min(Math.PI, (t - b(7)) * 20)) : 1;
+      g.save(); g.translate(CX, 1400); g.scale(bt * press, bt * press);
+      g.beginPath(); g.roundRect(-190, -48, 380, 96, 48); g.fillStyle = C.HUESO; g.fill();
+      font(g, 900, 40); g.fillStyle = C.BG; g.textAlign = "center"; g.fillText("Auto-orden", 0, 14); g.restore();
+      const q = prog(t, b(7), 0.5); if (q > 0 && q < 1) { g.beginPath(); g.ellipse(CX, 1400, 190 + q * 160, 48 + q * 70, 0, 0, 7); g.strokeStyle = C.HUESO; g.globalAlpha = 1 - q; g.lineWidth = 3; g.stroke(); g.globalAlpha = 1; }
+    }
+  }
+  // Remate
+  if (t >= b(12) && t < b(14)) {
+    const p1 = eOut(prog(t, b(12), 0.3)), p2 = eOut(prog(t, b(13), 0.3));
+    font(g, 900, 116); g.fillStyle = C.HUESO; g.textAlign = "left"; g.letterSpacing = "-3px";
+    g.globalAlpha = p1; g.fillText("La app comprueba", 80, 860 + (1 - p1) * 40); g.fillText("el orden por ti.", 80, 980 + (1 - p1) * 40);
+    g.letterSpacing = "0px"; font(g, 700, 46); g.fillStyle = C.GRIS; g.globalAlpha = p2; g.fillText("Según la norma de tu federación.", 80, 1080); g.globalAlpha = 1;
+  }
+  if (t >= b(14)) cierre(g, t - b(14), logo);
+}
+
+function seek(t) {
+  const frame = Math.round(t * FPS);
+  escena(t);
+  fx.clearRect(0, 0, W, H);
+  barridos(fx, t, [b(12), b(14)]);
+  if (t < b(14)) hud(fx, t, frame, { fps: FPS, dur: DUR, arribaDer: "ORDEN DE PAREJAS", abajoIzq: "ALINEACIÓN" });
+  grano(fx, frame);
+  const f = prog(t, DUR - 0.5, 0.5); if (f > 0) { fx.fillStyle = `rgba(0,0,0,${f * f})`; fx.fillRect(0, 0, W, H); }
+}
+
+arrancar({ dur: DUR, fps: FPS, musica: { src: "public/musica/pixabay-music-promotion.mp3", desde: 82.03 }, salida: "renders/sin-remotion/motion-orden.mp4" }, seek);
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TACTIUM · un torneo en minutos</title>
+<!--
+  Prueba de motion: 16 parejas → grupos → cruces → final. TACTIUM es la
+  herramienta, no el organizador (feedback 01-10): el remate habla de quien
+  organiza y el llamamiento va a organizadores. Sin consolación (es opcional).
+  Música: pixabay-creative-technology-showreel desde 63.07 (drop 64.07 → t 1.0),
+  compases de 1.6 s, golpes de 0.4 s.
+-->
+<link rel="stylesheet" href="../lib/base.css">
+<style> canvas.full { position: absolute; inset: 0; width: 1080px; height: 1920px; } </style>
+</head>
+<body>
+<div id="stage"><canvas id="c2" class="full" width="1080" height="1920"></canvas><canvas id="fx" class="full" width="1080" height="1920"></canvas></div>
+<script type="module">
+import { arrancar } from "../lib/base.js";
+import { clamp, prog, eOut, eInOut, eBack, lerp, $ } from "../lib/util.js";
+import { C, W, H, CX, font, grano, barridos, hud, cargarLogo, cierre } from "../lib/marca2d.js";
+
+const FPS = 30, DUR = 10.6, BAR = 1.6, k = (n) => 1.0 + n * BAR; // k(0)=1.0 drop
+const g = $("#c2").getContext("2d"), fx = $("#fx").getContext("2d");
+const logo = await cargarLogo();
+
+// Grupos 2x2 y posiciones de cada pareja
+const BOX = [[100, 640], [510, 640], [100, 1000], [510, 1000]], BW = 380, BH = 320;
+const enGrupo = (i) => { const gr = Math.floor(i / 4), j = i % 4; return { x: BOX[gr][0] + 110 + (j % 2) * 160, y: BOX[gr][1] + 110 + Math.floor(j / 2) * 130 }; };
+const enRejilla = (i) => ({ x: CX - 255 + (i % 4) * 170, y: 820 + Math.floor(i / 4) * 140 });
+// Los dos primeros de cada grupo (índice dentro del grupo 0 y 3) pasan a cuartos.
+const PASAN = [0, 3, 4, 7, 8, 11, 12, 15];
+const QF = (j) => ({ x: 150, y: 640 + j * 92 }), SF = (j) => ({ x: 420, y: 640 + 46 + j * 184 }), FI = (j) => ({ x: 650, y: 640 + 138 + j * 368 }), CAMP = { x: 860, y: 640 + 322 };
+const CRUCE = [0, 7, 2, 5, 4, 3, 6, 1]; // orden en el cuadro: 1ºA-2ºD, ...
+const lineTo = (a, b2, p) => { g.beginPath(); g.moveTo(a.x, a.y); const mx = lerp(a.x, b2.x, 0.5); const pts = [[mx, a.y], [mx, b2.y], [b2.x, b2.y]]; let len = 0; const segs = []; let prev = [a.x, a.y]; for (const q of pts) { const l = Math.hypot(q[0] - prev[0], q[1] - prev[1]); segs.push([prev, q, l]); len += l; prev = q; } let rest = len * p; for (const [s, e, l] of segs) { if (rest <= 0) break; const f = Math.min(1, rest / l); g.lineTo(lerp(s[0], e[0], f), lerp(s[1], e[1], f)); rest -= l; } g.stroke(); };
+
+function titulo(t, texto, t0) { const p = eOut(prog(t, t0, 0.3)); font(g, 900, 96); g.fillStyle = C.HUESO; g.textAlign = "left"; g.globalAlpha = p; g.fillText(texto, 80 - (1 - p) * 80, 470); g.globalAlpha = 1; }
+
+function escena(t) {
+  g.fillStyle = C.BG; g.fillRect(0, 0, W, H);
+  if (t < k(4)) {
+    // Gancho desde el primer fotograma
+    if (t < k(0) + 0.2) {
+      const out = eOut(prog(t, k(0), 0.2));
+      font(g, 900, 92); g.fillStyle = C.HUESO; g.textAlign = "left"; g.letterSpacing = "-3px"; g.globalAlpha = 1 - out;
+      g.fillText("Un torneo,", 80, 430); g.fillText("montado en minutos.", 80, 530); g.letterSpacing = "0px"; g.globalAlpha = 1;
+    }
+    if (t >= k(0) && t < k(3)) titulo(t, t < k(2) ? "Grupos." : "Cruces.", t < k(2) ? k(0) : k(2));
+    // Cajas de grupo
+    const box = eOut(prog(t, k(0), 0.35)) * (1 - eOut(prog(t, k(2), 0.3)));
+    if (box > 0.01) BOX.forEach(([x, y], gi) => {
+      g.globalAlpha = box; g.beginPath(); g.roundRect(x, y, BW, BH, 26); g.strokeStyle = "#1E3A36"; g.lineWidth = 3; g.stroke();
+      font(g, 500, 22, "JBM"); g.letterSpacing = "4px"; g.fillStyle = C.GRIS; g.textAlign = "left"; g.fillText(`GRUPO ${"ABCD"[gi]}`, x + 26, y + 44); g.letterSpacing = "0px";
+      // Partidos de todos contra todos
+      const pares = [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]];
+      pares.forEach(([a, c], m) => { const p = eOut(prog(t, k(1) + m * 0.1 + gi * 0.04, 0.3)); if (p <= 0) return; g.strokeStyle = C.GRIS; g.lineWidth = 2; g.globalAlpha = box * 0.6; lineTo(enGrupo(gi * 4 + a), enGrupo(gi * 4 + c), p); });
+      g.globalAlpha = 1;
+    });
+    // Parejas
+    for (let i = 0; i < 16; i++) {
+      const s = eBack(prog(t, -0.3 + i * 0.04, 0.3)); if (s <= 0) continue;
+      const a = enRejilla(i), gp = enGrupo(i), m = eInOut(prog(t, k(0) + (i % 4) * 0.03, 0.45));
+      let x = lerp(a.x, gp.x, m), y = lerp(a.y, gp.y, m);
+      const pasa = PASAN.includes(i), dest = pasa ? QF(CRUCE.indexOf(PASAN.indexOf(i))) : gp, mq = eInOut(prog(t, k(2) + 0.1, 0.5));
+      if (pasa) { x = lerp(x, dest.x, mq); y = lerp(y, dest.y, mq); }
+      const dim = t >= k(1) + 0.8 && !pasa ? 0.25 : 1; const out = pasa ? 1 : 1 - eOut(prog(t, k(2), 0.3));
+      g.globalAlpha = dim * out; g.beginPath(); g.arc(x, y, Math.max(0.1, 30 * s), 0, 7); g.fillStyle = C.HUESO; g.fill(); g.globalAlpha = 1;
+    }
+    if (t < k(0)) { font(g, 500, 26, "JBM"); g.letterSpacing = "6px"; g.textAlign = "center"; g.fillStyle = C.GRIS; g.globalAlpha = eOut(prog(t, 0.4, 0.3)); g.fillText("16 PAREJAS INSCRITAS", CX, 1300); g.globalAlpha = 1; g.letterSpacing = "0px"; }
+  }
+  // Cuadro: cuartos → semis → final → campeones
+  if (t >= k(2) + 0.3 && t < k(4) + 1.6) {
+    if (t >= k(3)) titulo(t, "Final.", k(3));
+    g.lineWidth = 3; g.strokeStyle = "#2B4A45";
+    for (let j = 0; j < 8; j++) lineTo(QF(j), SF(j >> 1), eOut(prog(t, k(2) + 0.6 + j * 0.03, 0.4)));
+    for (let j = 0; j < 4; j++) lineTo(SF(j), FI(j >> 1), eOut(prog(t, k(2) + 1.0 + j * 0.04, 0.4)));
+    for (let j = 0; j < 2; j++) lineTo(FI(j), CAMP, eOut(prog(t, k(2) + 1.4 + j * 0.05, 0.4)));
+    for (let j = 0; j < 8; j++) { const p = QF(j); g.beginPath(); g.arc(p.x, p.y, 30, 0, 7); g.fillStyle = C.HUESO; g.fill(); }
+    [[SF, 4, k(2) + 1.2], [FI, 2, k(2) + 1.6]].forEach(([f, n, t0]) => { for (let j = 0; j < n; j++) { const s = eBack(prog(t, t0 + j * 0.05, 0.3)); if (s <= 0) continue; const p = f(j); g.beginPath(); g.arc(p.x, p.y, Math.max(0.1, 26 * s), 0, 7); g.fillStyle = C.HUESO; g.fill(); } });
+    // Camino de los campeones en verde
+    g.strokeStyle = C.VERDE; g.lineWidth = 7;
+    lineTo(QF(2), SF(1), eOut(prog(t, k(3) + 0.1, 0.35))); lineTo(SF(1), FI(0), eOut(prog(t, k(3) + 0.5, 0.35))); lineTo(FI(0), CAMP, eOut(prog(t, k(3) + 0.9, 0.35)));
+    const cs = eBack(prog(t, k(3) + 1.2, 0.35));
+    if (cs > 0.01) { g.beginPath(); g.arc(CAMP.x, CAMP.y, Math.max(0.1, 46 * cs), 0, 7); g.fillStyle = C.VERDE; g.fill();
+      for (let r = 0; r < 2; r++) { const q = prog(t, k(3) + 1.25 + r * 0.25, 0.8); if (q > 0 && q < 1) { g.beginPath(); g.arc(CAMP.x, CAMP.y, 46 + q * 120, 0, 7); g.strokeStyle = C.VERDE; g.globalAlpha = 1 - q; g.lineWidth = 3; g.stroke(); g.globalAlpha = 1; } } }
+    font(g, 500, 22, "JBM"); g.letterSpacing = "4px"; g.fillStyle = C.GRIS; g.textAlign = "center";
+    [["CUARTOS", 150], ["SEMIS", 420], ["FINAL", 650]].forEach(([s, x]) => { g.globalAlpha = eOut(prog(t, k(2) + 0.6, 0.3)); g.fillText(s, x, 600); });
+    g.globalAlpha = 1; g.letterSpacing = "0px";
+  }
+  // Remate para organizadores
+  if (t >= 7.4 && t < 9.0) {
+    g.fillStyle = C.BG; g.fillRect(0, 0, W, H);
+    const p1 = eOut(prog(t, 7.4, 0.3)), p2 = eOut(prog(t, 7.8, 0.3)), p3 = eOut(prog(t, 8.2, 0.3));
+    font(g, 900, 96); g.fillStyle = C.HUESO; g.textAlign = "left"; g.letterSpacing = "-3px";
+    g.globalAlpha = p1; g.fillText("Quien organiza,", 80, 860 + (1 - p1) * 40);
+    g.globalAlpha = p2; g.fillText("lo monta con la app.", 80, 980 + (1 - p2) * 40);
+    g.letterSpacing = "0px"; font(g, 700, 46); g.fillStyle = C.GRIS; g.globalAlpha = p3; g.fillText("Grupos, cruces y horarios.", 80, 1080); g.globalAlpha = 1;
+  }
+  if (t >= 9.0) cierre(g, t - 9.0, logo, { linea: "¿Organizas torneos? Escríbenos." });
+}
+
+function seek(t) {
+  const frame = Math.round(t * FPS);
+  escena(t);
+  fx.clearRect(0, 0, W, H);
+  barridos(fx, t, [7.4, 9.0]);
+  if (t < 9.0) hud(fx, t, frame, { fps: FPS, dur: DUR, arribaDer: "TORNEOS", abajoIzq: t < k(2) ? "FASE DE GRUPOS" : t < 7.4 ? "CUADRO FINAL" : "PARA ORGANIZADORES" });
+  grano(fx, frame);
+  const f = prog(t, DUR - 0.5, 0.5); if (f > 0) { fx.fillStyle = `rgba(0,0,0,${f * f})`; fx.fillRect(0, 0, W, H); }
+}
+
+arrancar({ dur: DUR, fps: FPS, musica: { src: "public/musica/pixabay-creative-technology-showreel.mp3", desde: 63.07 }, salida: "renders/sin-remotion/motion-torneo.mp4" }, seek);
+</script>
+</body>
+</html>

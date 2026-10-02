@@ -1,0 +1,14 @@
+{
+  "id": "S10",
+  "formato": "story",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/story-palas.png",
+      "eyebrow": "Organizadores",
+      "titulo": "¿Organizas torneos con un *Excel*?",
+      "tam": "sm",
+      "sub": "Escríbenos por DM."
+    }
+  ]
+}

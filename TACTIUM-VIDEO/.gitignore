@@ -9,3 +9,9 @@ bruto/
 public/plano/
 public/cobertura/
 public/voz/
+
+# Fotos de referencia de terceros para la IA: no se suben ni se publican.
+referencias/
+
+# Imagen de apoyo (clips de juego y generados): pesan mucho, viven solo en local.
+public/broll/

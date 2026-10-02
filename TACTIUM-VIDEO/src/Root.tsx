@@ -14,6 +14,13 @@ import { S8Cierre } from "./scenes/S8Cierre";
 import { PIEZAS } from "./reel/piezas";
 import { Reel, Guias, durDePieza } from "./reel/Reel";
 import { T } from "./reel/tokens";
+import { Ancho, ANCHO } from "./reel/Ancho";
+import { MuestraV1, MUESTRA_MS } from "./reel/estilo/MuestraV1";
+import { ReelJuego, REELS_JUEGO, durJuego } from "./reel/estilo/ReelJuego";
+import { ReelHablado, HABLADOS, durHablado } from "./reel/estilo/ReelHablado";
+import { Portada, PORTADAS } from "./reel/estilo/Portada";
+import { CIERRE_MS } from "./reel/Reel";
+import { Memoria, durMemoria, FPS as FPS_MEMORIA } from "./memoria/Memoria";
 
 const COMPONENTS: Record<string, React.FC<{ durationInFrames: number }>> = {
   hook: S1Hook,
@@ -50,6 +57,11 @@ const Video: React.FC = () => {
 // ── Reels verticales ────────────────────────────────────────────────────────
 // Una composición por pieza. Los datos están en `reel/piezas.ts`; el componente
 // no se toca para montar una pieza nueva.
+const AnchoComp: React.FC<{ piezaId: string }> = ({ piezaId }) => {
+  const pieza = PIEZAS.find((p) => p.id === piezaId);
+  return pieza ? <Ancho pieza={pieza} /> : null;
+};
+
 const ReelComp: React.FC<{ piezaId: string; guias: boolean }> = ({ piezaId, guias }) => {
   const pieza = PIEZAS.find((p) => p.id === piezaId);
   if (!pieza) return null;
@@ -63,6 +75,8 @@ const ReelComp: React.FC<{ piezaId: string; guias: boolean }> = ({ piezaId, guia
 
 export const Root: React.FC = () => (
   <>
+    {/* Memoria técnica del Trabajo Final (Racks Academy): voz IA + escenas sincronizadas. */}
+    <Composition id="memoria-tpf" component={Memoria} durationInFrames={durMemoria()} fps={FPS_MEMORIA} width={1920} height={1080} />
     <Composition
       id="tactium-ecosistema"
       component={Video}
@@ -83,5 +97,84 @@ export const Root: React.FC = () => (
         height={T.canvas.h}
       />
     ))}
+    {/* La misma pieza en horizontal (16:9): tu plano entero a un lado, el panel al otro. */}
+    {PIEZAS.map((p) => (
+      <Composition
+        key={`ancho-${p.id}`}
+        id={`ancho-${p.id}`}
+        component={AnchoComp}
+        defaultProps={{ piezaId: p.id }}
+        durationInFrames={durDePieza(p)}
+        fps={T.canvas.fps}
+        width={ANCHO.w}
+        height={ANCHO.h}
+      />
+    ))}
+    {/* Reel de juego: clips reales + estilo cinético, sin voz. */}
+    {REELS_JUEGO.map((r) => (
+      <Composition
+        key={r.id}
+        id={r.id}
+        component={ReelJuego}
+        defaultProps={{ id: r.id }}
+        durationInFrames={Math.round(((durJuego(r) + CIERRE_MS) / 1000) * T.canvas.fps)}
+        fps={T.canvas.fps}
+        width={ANCHO.w}
+        height={ANCHO.h}
+      />
+    ))}
+    {/* Reels hablados con estilo cinético (16:9): `hablado-<id>`. */}
+    {HABLADOS.map((r) => (
+      <Composition
+        key={`hablado-${r.id}`}
+        id={`hablado-${r.id}`}
+        component={ReelHablado}
+        defaultProps={{ id: r.id }}
+        durationInFrames={Math.round(((durHablado(r) + CIERRE_MS) / 1000) * T.canvas.fps)}
+        fps={T.canvas.fps}
+        width={ANCHO.w}
+        height={ANCHO.h}
+      />
+    ))}
+    {/* Portadas de los reels (cover_url): `portada-<pieza>`, un solo fotograma. */}
+    {PORTADAS.map((p) => (
+      <Composition key={`portada-${p.id}`} id={`portada-${p.id}`} component={Portada} defaultProps={{ id: p.id }}
+        durationInFrames={1} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
+    ))}
+    {/* Los mismos hablados en 9:16 (el formato que se publica en Reels): `hablado-<id>-vertical`. */}
+    {HABLADOS.map((r) => (
+      <Composition
+        key={`hablado-${r.id}-vertical`}
+        id={`hablado-${r.id}-vertical`}
+        component={ReelHablado}
+        defaultProps={{ id: r.id, vertical: true }}
+        durationInFrames={Math.round(((durHablado(r) + CIERRE_MS) / 1000) * T.canvas.fps)}
+        fps={T.canvas.fps}
+        width={T.canvas.w}
+        height={T.canvas.h}
+      />
+    ))}
+    {/* Y en 9:16 los reels de juego hechos solo con clips verticales. */}
+    {REELS_JUEGO.filter((r) => r.vertical).map((r) => (
+      <Composition
+        key={`${r.id}-vertical`}
+        id={`${r.id}-vertical`}
+        component={ReelJuego}
+        defaultProps={{ id: r.id, vertical: true }}
+        durationInFrames={Math.round(((durJuego(r) + CIERRE_MS) / 1000) * T.canvas.fps)}
+        fps={T.canvas.fps}
+        width={T.canvas.w}
+        height={T.canvas.h}
+      />
+    ))}
+    {/* Muestra del estilo cinético (texto grande en el hueco, tarjetas, descifrado…). */}
+    <Composition
+      id="estilo-V1"
+      component={MuestraV1}
+      durationInFrames={Math.round(((MUESTRA_MS + CIERRE_MS) / 1000) * T.canvas.fps)}
+      fps={T.canvas.fps}
+      width={ANCHO.w}
+      height={ANCHO.h}
+    />
   </>
 );

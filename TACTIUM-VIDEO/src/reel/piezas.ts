@@ -27,10 +27,18 @@ export type Cobertura = {
   hastaMs: number;
   /** Segundo del clip de origen por el que entra. Por defecto, 0. */
   offsetMs?: number;
+  /** Sonido que entra con la pantalla (ruta en `public/`). Un whoosh corto. */
+  sfx?: string;
+  /** `cover` recorta y deja paneo; `contain` enseña la captura entera. En el
+   *  panel de `motion` el defecto es `cover`: una captura entera a 490px no se lee. */
+  ajuste?: "contain" | "cover";
+  /** Paneo vertical en % (posición del objeto) de principio a fin del tramo.
+   *  `[0, 30]` empieza por la cabecera y baja despacio. Solo con `cover`. */
+  pan?: [number, number];
 };
 
 /** Gráficos de dato. Solo entran si construyen el mensaje; si decoran, sobran. */
-export type Grafico = { desdeMs: number; hastaMs: number } & (
+export type Grafico = { desdeMs: number; hastaMs: number; sfx?: string } & (
   | { tipo: "numero"; valor: number; eyebrow?: string; pie?: string }
   | {
       tipo: "resalte";
@@ -94,6 +102,18 @@ export type Pieza = {
    * eso va más grande y dura menos.
    */
   gancho?: { texto: string; enfasis?: string; hastaMs: number };
+  /**
+   * Dónde están los cortes entre tomas del plano (ms de la PIEZA). En cada
+   * tramo el punch-in alterna (1,00 → 1,05 · 1,10 → 1,15): un corte con cambio
+   * de tamaño se lee como montaje; el mismo corte sin cambio, como un fallo.
+   */
+  cortes?: number[];
+  /** Altura de la banda de la cara en `motion` (0-1). Por defecto, el token. */
+  caraAlto?: number;
+  /** Ancla vertical (%) del plano cuando se recorta a la banda. Por defecto 10. */
+  anclaY?: number;
+  /** Cama musical bajo toda la pieza. `volumen` lineal: 0,1 ≈ -20 dB. */
+  musica?: { src: string; volumen: number };
   duracionMs: number;
   frases: Frase[];
   cobertura: Cobertura[];
@@ -157,9 +177,15 @@ const BASE: Pieza[] = [
   {
     id: "V1-vuelta",
     titulo: "Se acabó el verano",
-    // Plano completo: los rótulos y los mockups van ENCIMA de ti, no en una
-    // mitad negra. Se ve más producto y se te ve a ti todo el rato.
-    layout: "alterna",
+    // Cara arriba (38%) y la app debajo, grande y con paneo. El primer montaje
+    // ponía un móvil pequeño y listas de ticks sobre la boca: no se veía
+    // producto y te tapaba. Ahora cada bloque enseña pantallas reales.
+    layout: "motion",
+    caraAlto: 0.38,
+    anclaY: 8,
+    // Los seis trozos pegados: en cada corte el punch-in cambia de tamaño.
+    cortes: [3711, 6464, 15067, 23297, 31633],
+    musica: { src: "musica/ncs-hold-you.mp3", volumen: 0.09 },
     // Los 6 trozos ya cortados por el silencio, recortados a plano medio y
     // pegados: `bash /tmp/montar.sh` en el historial. 34,60s de habla real.
     plano: "plano/V1-vuelta.mp4",
@@ -207,69 +233,62 @@ const BASE: Pieza[] = [
       { texto: "ya está cargada.", desdeMs: 33153, hastaMs: 34335 },
       { texto: "Empezamos.", desdeMs: 34335, hastaMs: 34876, enfasis: "Empezamos." },
     ],
-    // Sin cobertura: en `motion` el panel de abajo lo llenan los gráficos, no
-    // capturas. Así la pieza se publica sin esperar a grabar pantallas.
-    cobertura: [],
-    graficos: [
-      // Bloque 2 · el dato
-      { tipo: "numero", valor: 300, eyebrow: "cambios", desdeMs: 4300, hastaMs: 7000 },
-
-      // Bloque 3 · tu equipo — aquí sí hay captura real, así que en vez de
-      // enumerar se enseña: el móvil entra por la derecha con la alineación.
-      { tipo: "mockup", src: "img/alineacion.jpg", lado: "der", desdeMs: 7400, hastaMs: 14900 },
+    // Cada frase con su pantalla. Todas reales: capturas de la app y de la web
+    // en móvil (public/web, sin la cabecera del navegador). Entran con un
+    // whoosh y panean despacio para que la imagen no esté quieta.
+    cobertura: [
+      // Bloque 3 · tu equipo
+      { src: "app/reel/disponibilidad.png", desdeMs: 6464, hastaMs: 8847, pan: [0, 26], sfx: "sfx/whoosh-1.mp3" },
+      { src: "img/alineacion-sinbarra.jpg", desdeMs: 8847, hastaMs: 12275, pan: [4, 42], sfx: "sfx/whoosh-3.mp3" },
+      { src: "app/reel/equipo.png", desdeMs: 12275, hastaMs: 15067, pan: [0, 30], sfx: "sfx/whoosh-1.mp3" },
 
       // Bloque 4 · torneos
-      {
-        tipo: "ticks",
-        items: [
-          { texto: "Grupos y cuadro", enMs: 200 },
-          { texto: "Consolación", enMs: 1700 },
-          { texto: "Horarios por pista", enMs: 3400 },
-          { texto: "Inscripción y cobro", enMs: 5600 },
-        ],
-        desdeMs: 14200, hastaMs: 21600,
-      },
+      { src: "web/torneo-cuadro.png", desdeMs: 15067, hastaMs: 16799, pan: [0, 18], sfx: "sfx/swoosh.wav" },
+      { src: "web/torneo-consolacion.png", desdeMs: 16799, hastaMs: 17975, pan: [0, 14], sfx: "sfx/whoosh-3.mp3" },
+      { src: "web/torneo-horario-lista.png", desdeMs: 17975, hastaMs: 19876, pan: [0, 24], sfx: "sfx/whoosh-1.mp3" },
+      { src: "app/reel/torneos-explorar.png", desdeMs: 19876, hastaMs: 21967, pan: [0, 10], sfx: "sfx/swoosh.wav" },
+      { src: "web/torneo-ficha.png", desdeMs: 21967, hastaMs: 23297, pan: [10, 30], sfx: "sfx/whoosh-3.mp3" },
 
       // Bloque 5 · federación
-      {
-        tipo: "ticks",
-        items: [
-          { texto: "Tus puntos", enMs: 200 },
-          { texto: "Clasificaciones", enMs: 2100 },
-          { texto: "Cuadros de playoff", enMs: 3900 },
-        ],
-        desdeMs: 22000, hastaMs: 29800,
-      },
+      { src: "app/reel/fed-explorar.png", desdeMs: 23297, hastaMs: 26833, pan: [0, 30], sfx: "sfx/whoosh-1.mp3" },
+      { src: "app/reel/fed-ranking.png", desdeMs: 26833, hastaMs: 27715, pan: [18, 30], sfx: "sfx/swoosh.wav" },
+      { src: "app/reel/fed-clasificacion.png", desdeMs: 27715, hastaMs: 29099, pan: [10, 30], sfx: "sfx/whoosh-3.mp3" },
+      { src: "web/fed-playoff.png", desdeMs: 29099, hastaMs: 30156, pan: [0, 16], sfx: "sfx/whoosh-1.mp3" },
+      // «Sin buscarte en un PDF» vuelve a ti a pantalla completa: el panel se cierra.
+    ],
+    graficos: [
+      // Bloque 2 · el dato. Abre el panel con un golpe de bajo.
+      { tipo: "numero", valor: 300, eyebrow: "cambios", desdeMs: 3711, hastaMs: 6464, sfx: "sfx/basshit.wav" },
 
-      // Bloque 6 · el curso nuevo
-      { tipo: "cortinilla", cifra: "2026/2027", pie: "ya está cargada", desdeMs: 30200, hastaMs: 33000 },
+      // Bloque 6 · el curso nuevo, a pantalla completa mientras lo dices.
+      // «Empezamos.» queda para tu cara, y detrás el cierre de marca.
+      { tipo: "cortinilla", cifra: "2026/2027", pie: "ya está cargada", desdeMs: 31633, hastaMs: 34335, sfx: "sfx/subbass.wav" },
     ],
   },
 
   {
     id: "A1-federaciones",
-    titulo: "Diecisiete federaciones",
+    titulo: "Lo decide tu federación",
     plano: null, // → "plano/A1-federaciones.mp4"
-    duracionMs: 12000,
+    duracionMs: 14000,
+    // Provisional: al llegar el plano se transcribe (scripts/transcribir.py) y
+    // los subtítulos y tiempos salen de la voz real.
     frases: [
-      { texto: "Me leí la normativa" },
-      { texto: "de alineaciones de las" },
-      { texto: "diecisiete federaciones", enfasis: "diecisiete" },
-      { texto: "de pádel." },
-      { texto: "Una por comunidad." },
-      { texto: "Y no dicen lo mismo." },
-      { texto: "Así que lo metí" },
-      { texto: "todo aquí dentro." },
-      { texto: "Tú eliges jugadores;" },
-      { texto: "el orden te lo valida solo.", enfasis: "solo" },
+      { texto: "El orden de tus parejas" },
+      { texto: "no lo decides tú." },
+      { texto: "Lo decide tu federación.", enfasis: "federación" },
+      { texto: "Y cada una tiene su norma:" },
+      { texto: "unas te exigen ordenar por puntos" },
+      { texto: "y otras no." },
+      { texto: "Aquí eliges a tus jugadores" },
+      { texto: "y la app te comprueba el orden", enfasis: "comprueba" },
+      { texto: "antes de publicarla." },
+      { texto: "Y si juegas en Cantabria," },
+      { texto: "tu competición ya está dentro.", enfasis: "dentro" },
     ],
     cobertura: [
-      // El móvil entra cuando dice "aquí dentro" y se va antes del remate.
-      { src: "img/alineacion.jpg", desdeMs: 7600, hastaMs: 9800 },
-    ],
-    graficos: [
-      // El 17 aparece exactamente mientras lo dice, y se va con "de pádel".
-      { tipo: "numero", valor: 17, eyebrow: "federaciones", desdeMs: 2600, hastaMs: 4600 },
+      // La alineación entra cuando levanta el móvil.
+      { src: "img/alineacion.jpg", desdeMs: 7800, hastaMs: 10600 },
     ],
   },
 

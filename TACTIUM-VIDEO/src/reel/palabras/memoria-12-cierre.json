@@ -1,0 +1,135 @@
+{
+ "texto": "La conclusión. Con IA, una sola persona ha construido y lanzado una plataforma completa. Pero la IA no sustituye al criterio. Lo multiplica. TACTIUM, TACTIUM.IO",
+ "palabras": [
+  {
+   "t": "La",
+   "a": 0,
+   "b": 180
+  },
+  {
+   "t": "conclusión.",
+   "a": 180,
+   "b": 880
+  },
+  {
+   "t": "Con",
+   "a": 1520,
+   "b": 1740
+  },
+  {
+   "t": "IA,",
+   "a": 1740,
+   "b": 2120
+  },
+  {
+   "t": "una",
+   "a": 2320,
+   "b": 2480
+  },
+  {
+   "t": "sola",
+   "a": 2480,
+   "b": 2660
+  },
+  {
+   "t": "persona",
+   "a": 2660,
+   "b": 3080
+  },
+  {
+   "t": "ha",
+   "a": 3080,
+   "b": 3240
+  },
+  {
+   "t": "construido",
+   "a": 3240,
+   "b": 3740
+  },
+  {
+   "t": "y",
+   "a": 3740,
+   "b": 3900
+  },
+  {
+   "t": "lanzado",
+   "a": 3900,
+   "b": 4240
+  },
+  {
+   "t": "una",
+   "a": 4240,
+   "b": 4380
+  },
+  {
+   "t": "plataforma",
+   "a": 4380,
+   "b": 4760
+  },
+  {
+   "t": "completa.",
+   "a": 4760,
+   "b": 5300
+  },
+  {
+   "t": "Pero",
+   "a": 5840,
+   "b": 6140
+  },
+  {
+   "t": "la",
+   "a": 6140,
+   "b": 6300
+  },
+  {
+   "t": "IA",
+   "a": 6300,
+   "b": 6660
+  },
+  {
+   "t": "no",
+   "a": 6660,
+   "b": 6820
+  },
+  {
+   "t": "sustituye",
+   "a": 6820,
+   "b": 7380
+  },
+  {
+   "t": "al",
+   "a": 7380,
+   "b": 7480
+  },
+  {
+   "t": "criterio.",
+   "a": 7480,
+   "b": 7940
+  },
+  {
+   "t": "Lo",
+   "a": 8220,
+   "b": 8320
+  },
+  {
+   "t": "multiplica.",
+   "a": 8320,
+   "b": 8960
+  },
+  {
+   "t": "TACTIUM,",
+   "a": 9540,
+   "b": 10080
+  },
+  {
+   "t": "TACTIUM",
+   "a": 10400,
+   "b": 11140
+  },
+  {
+   "t": ".IO",
+   "a": 11140,
+   "b": 11740
+  }
+ ]
+}

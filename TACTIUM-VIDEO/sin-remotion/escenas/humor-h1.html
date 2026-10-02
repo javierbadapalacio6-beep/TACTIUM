@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TACTIUM · H1 ¿Quién puede el sábado? (muñecos)</title>
+<!--
+  H1 de GUIONES-REELS.md («¿Quién puede el sábado?») con muñecos 2D, estilo Niña Repelente.
+  Voces IA (scripts/gen-voz.mjs, fal → ElevenLabs) y montaje calculado por
+  sin-remotion/humor/preparar.mjs → ../humor/H1.json. Cortes secos entre personajes,
+  subtítulos con lo que se dice (nada escrito que no se diga) y cierre con la marca.
+-->
+<link rel="stylesheet" href="../lib/base.css">
+<style> canvas.full { position: absolute; inset: 0; width: 1080px; height: 1920px; } </style>
+</head>
+<body>
+<div id="stage"><canvas id="c2" class="full" width="1080" height="1920"></canvas></div>
+<script type="module">
+import { arrancar } from "../lib/base.js";
+import { clamp, prog, eOut, $ } from "../lib/util.js";
+import { busto, movil, parpadeo, apertura } from "../lib/munecos.js";
+import { salon, club, cocina, dormitorio, sofa } from "../lib/escenarios.js";
+import { cargarLogo, cierre, CX } from "../lib/marca2d.js";
+
+const M = await (await fetch("../humor/H1.json")).json();
+const logo = await cargarLogo();
+const g = $("#c2").getContext("2d");
+const W = 1080, H = 1920;
+
+// Caracterización: cada uno se reconoce sin hablar.
+const CAPITAN = { piel: "#F1C9A5", pelo: "#3B2A1E", peinado: "corto", camiseta: "#03624C", detalle: "#00DF82", barba: "#3B2A1E", brazalete: "C", ojeras: true, cejasGruesas: true };
+const DEPENDE = { piel: "#E0AC85", pelo: "#1E1A17", peinado: "corto", cabeza: { rx: 206, ry: 198 }, nariz: "larga", ancho: 1.08, camiseta: "#F2F2F2", detalle: "#2D6FD0", gorra: "#E94F37", gorraVisera: "#C23B26", gorraAlReves: true, gafasSol: true, parpados: 0.32 };
+const AUDIO = { piel: "#F3D2B5", pelo: "#C8902E", peinado: "tupe", cabeza: { rx: 178, ry: 230 }, nariz: "gancho", ropa: "sudadera", camiseta: "#FFC93C", cascos: "#2B2B2B", mejillas: "rgba(240,120,110,0.35)" };
+const MADRUGADA = { piel: "#EFC3A0", pelo: "#5A3A22", peinado: "almohada", ropa: "pijama", camiseta: "#C9D3F0", rayas: "#8796C9", manta: "#D9826B", ojeras: true };
+const NILEE = { piel: "#D9A27E", pelo: "#222222", peinado: "rapado", cabeza: { rx: 206, ry: 205 }, ropa: "tirantes", camiseta: "#F5F5F5", barba: "#2a2a2a", barbaLarga: true, ancho: 1.15 };
+
+/** Empuje lento de cámara alrededor de la cabeza. */
+function camara(x, y, s, fn) { g.save(); g.translate(x, y); g.scale(s, s); g.translate(-x, -y); fn(); g.restore(); }
+
+/** Subtítulo: las palabras del guion aparecen al ritmo de las que oye Whisper. */
+function subtitulo(v, t) {
+  if (!v || t < v.en) return;
+  const pal = v.texto.split(/\s+/), np = v.palabras.length;
+  const n = pal.filter((_, i) => t >= v.en + v.palabras[Math.min(np - 1, Math.round((i * np) / pal.length))].a).length;
+  if (!n) return;
+  g.font = "900 70px Satoshi"; g.textAlign = "center"; g.lineJoin = "round";
+  // Reparto en líneas de ≤ 830 px con todas las palabras (para que no salten al aparecer).
+  const lineas = []; let cur = [];
+  for (const w of pal) { const prueba = [...cur, w].join(" "); if (g.measureText(prueba).width > 830 && cur.length) { lineas.push(cur); cur = [w]; } else cur.push(w); }
+  lineas.push(cur);
+  let k = 0; const y0 = 1460 - (lineas.length - 1) * 82;
+  lineas.forEach((ln, li) => {
+    const vis = ln.filter(() => k++ < n); if (!vis.length) return;
+    const full = ln.join(" "), x0 = 540 - g.measureText(full).width / 2; g.textAlign = "left";
+    const s = vis.join(" ");
+    g.lineWidth = 14; g.strokeStyle = "#141414"; g.strokeText(s, x0, y0 + li * 82);
+    g.fillStyle = "#fff"; g.fillText(s, x0, y0 + li * 82);
+  });
+}
+
+const boca = (v, t) => (v ? apertura(v.env, t, v.en) : 0);
+const palabraDicha = (v, t, w) => v && v.palabras.some((p) => p.t.toLowerCase().startsWith(w) && t >= v.en + p.a);
+
+const ESCENAS = {
+  capitan(e, t, lt) {
+    salon(g);
+    camara(540, 820, 1.02 + lt * 0.012, () => busto(g, CAPITAN, { t, boca: boca(e.voz, t), ojos: parpadeo(t, 1), cejas: "arriba", movil: "mano", pantalla: "#DFF5EA" }, 540, 820, 1.05));
+  },
+  depende(e, t, lt) {
+    club(g);
+    const mira = palabraDicha(e.voz, t, "te") ? { x: 0, y: 0 } : { x: 0.35, y: -1 }; // mira al techo y, al «te digo», a cámara
+    camara(540, 850, 1.02 + lt * 0.01, () => busto(g, DEPENDE, { t, boca: boca(e.voz, t), ojos: parpadeo(t, 2), mirada: mira, cejas: "duda", sonrisa: 0, brazo: { lado: 1, x: 235, y: 660 + Math.sin(lt * 1.3) * 8, objeto: "cana" } }, 540, 850, 1.05));
+  },
+  audio(e, t, lt) {
+    cocina(g, lt * 300);
+    const paso = -Math.abs(Math.sin(lt * 7.5)) * 18;
+    busto(g, AUDIO, { t, boca: boca(e.voz, t), ojos: parpadeo(t, 3), mirada: { x: -0.4, y: 0 }, cejas: "arriba", movil: "boca", pantalla: "#E8F7EE", inclina: Math.sin(lt * 3.7) * 0.04, brazo: { lado: 1, x: 250 + Math.sin(lt * 6) * 55, y: 470 + Math.cos(lt * 4.5) * 50, objeto: "palma" } }, 560, 860 + paso, 1.05);
+  },
+  madrugada(e, t, lt) {
+    dormitorio(g);
+    camara(540, 900, 1.03 + lt * 0.015, () => busto(g, MADRUGADA, { t, boca: boca(e.voz, t), ojos: Math.max(parpadeo(t, 4), 0.1), cansado: true, mirada: { x: 0.2, y: 0.7 }, cejas: "cansadas", sonrisa: 0, movil: "mano", pantalla: "#CFE6FF" }, 540, 900, 1.05));
+    // Noche: todo oscuro menos la luz azul del móvil en la cara.
+    g.save(); g.globalCompositeOperation = "multiply"; g.fillStyle = "#4A5590"; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "screen";
+    const luz = g.createRadialGradient(700, 1250, 40, 620, 1000, 760); luz.addColorStop(0, "rgba(150,200,255,0.8)"); luz.addColorStop(0.5, "rgba(100,150,235,0.4)"); luz.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = luz; g.fillRect(0, 0, W, H); g.restore();
+  },
+  nilee(e, t, lt) {
+    sofa(g, t);
+    // Tumbado a lo largo del sofá, mirando la tele; el móvil boca abajo sobre la barriga.
+    g.save(); g.translate(300, 1250); g.rotate(-Math.PI / 2);
+    busto(g, NILEE, { t, boca: 0, ojos: 0, mirada: { x: 0, y: 0.9 }, cejas: "neutra", sonrisa: 0.05, brazo: { lado: -1, x: -150, y: 640, objeto: "mando" } }, 0, 0, 0.78);
+    g.restore();
+    // Bolsa de patatas abierta en la barriga
+    g.save(); g.translate(930, 1210); g.rotate(0.25); g.beginPath(); g.moveTo(-90, -110); g.lineTo(90, -110); g.lineTo(80, 110); g.lineTo(-80, 110); g.closePath(); g.fillStyle = "#FFC93C"; g.fill(); g.lineWidth = 8; g.strokeStyle = "#141414"; g.stroke();
+    g.fillStyle = "#E94F37"; g.beginPath(); g.arc(0, 10, 45, 0, 7); g.fill(); g.stroke(); g.fillStyle = "#F2D27A"; for (const [dx, dy] of [[-40, -125], [10, -135], [50, -120]]) { g.beginPath(); g.ellipse(dx, dy, 26, 16, dx * 0.02, 0, 7); g.fill(); g.lineWidth = 5; g.stroke(); } g.restore();
+    const z = lt > 0.6 ? Math.exp(-(lt - 0.6) * 6) : 0; // vibra con la notificación
+    movil(g, 720 + Math.sin(lt * 90) * 9 * z, 1185 - z * 14, 1.45, { piel: NILEE.piel, bocaAbajo: true });
+    if (z > 0.02) { g.save(); g.globalAlpha = z; g.strokeStyle = "#141414"; g.lineWidth = 6; for (const s of [-1, 1]) { g.beginPath(); g.arc(720, 1185, 150, s > 0 ? -0.5 : Math.PI - 0.5, s > 0 ? 0.5 : Math.PI + 0.5); g.stroke(); } g.restore(); }
+  },
+  "capitan-final"(e, t, lt) {
+    salon(g);
+    camara(540, 860, 1.1 + lt * 0.02, () => busto(g, CAPITAN, { t, boca: boca(e.voz, t), ojos: parpadeo(t, 6), cansado: true, cejas: "cansadas", sonrisa: -0.6, inclina: 0.06, movil: "mano", pantalla: "#DFF5EA" }, 540, 880, 1.05));
+  },
+  cierre(e, t, lt) { cierre(g, lt, logo); },
+};
+
+function seek(t) {
+  const e = M.escenas.find((x) => t >= x.desde && t < x.hasta) || M.escenas[M.escenas.length - 1];
+  g.clearRect(0, 0, W, H);
+  ESCENAS[e.id](e, t, t - e.desde);
+  subtitulo(e.voz, t);
+  const f = prog(t, M.dur - 0.4, 0.4); if (f > 0) { g.fillStyle = `rgba(0,0,0,${f})`; g.fillRect(0, 0, W, H); }
+}
+
+arrancar({ dur: M.dur, fps: M.fps, pistas: M.pistas, salida: "renders/sin-remotion/humor-h1.mp4" }, seek);
+</script>
+</body>
+</html>

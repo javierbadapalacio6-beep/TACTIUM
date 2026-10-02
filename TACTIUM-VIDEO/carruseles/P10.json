@@ -1,0 +1,13 @@
+{
+  "id": "P10",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/remate.png",
+      "eyebrow": "Torneos",
+      "titulo": "Nadie se va a casa después de *un partido.*",
+      "tam": "sm",
+      "sub": "Con cuadro de consolación, si el organizador lo activa."
+    }
+  ]
+}

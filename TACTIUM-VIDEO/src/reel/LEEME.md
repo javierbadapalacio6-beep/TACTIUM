@@ -18,6 +18,17 @@ npx remotion still src/index.ts reel-A1-federaciones renders/p.png --frame=100 -
 
 Las guías de zona segura se activan en el studio poniendo `guias: true` en los props.
 
+## Versión 16:9 (`ancho-<id>`)
+
+Cada pieza tiene también una composición horizontal (1920×1080) en `Ancho.tsx`, con los
+mismos datos de `piezas.ts`: tu plano vertical **entero** en una columna (sin recortar a
+banda) que va centrada mientras no hay nada que enseñar y se desplaza a la izquierda
+cuando se abre el panel de capturas y gráficos a la derecha.
+
+```bash
+npx remotion render src/index.ts ancho-V1-vuelta renders/V1-vuelta-16x9.mp4
+```
+
 ## El panel respira
 
 En `motion` el panel de abajo **no está siempre**. Se abre cuando hay un gráfico que
@@ -128,3 +139,29 @@ y no calculados siempre.
 ```bash
 cp "/c/Users/javie/Desktop/DESIGN SYSTEMS/TACTIUM_2026-09-14/03_TOKENS/tokens.json" src/reel/tokens.json
 ```
+
+## Subtítulos palabra a palabra (desde el 28-09-2026)
+
+Los subtítulos ya no se escriben a mano en `frases`: salen de la voz real.
+
+1. Con el plano ya cortado en `public/plano/<plano>.mp4`, se transcribe en local
+   (Whisper con `faster-whisper`, gratis y sin enviar nada fuera):
+
+   ```bash
+   python scripts/transcribir.py <plano> public/plano/<plano>.mp4
+   ```
+
+   Deja `src/reel/palabras/<plano>.json` (cada palabra con su inicio y fin en ms)
+   y regenera `palabras/index.ts`. Revisa el texto que imprime: si Whisper
+   escribe mal una palabra, corrígela en el JSON o añádela a `CORRECCIONES`.
+2. Nada más. Si la pieza tiene transcripción, `Reel` y `Ancho` usan `Karaoke.tsx`;
+   si no, siguen con las `frases` de antes.
+
+Cómo se ven: 1 a 3 palabras cada vez, la que se está diciendo en verde, sin caja
+(contorno oscuro + sombra). Cortan en puntos, comas y pausas de la voz, y nunca
+dejan colgando «de», «la», «con»… En el 16:9 van dentro de la columna mientras el
+panel está cerrado y bajo la tarjeta cuando se abre; nunca se salen de su hueco.
+
+Ojo: los tiempos de `cobertura` y `graficos` se sacan también del JSON de
+palabras (el instante en que dices la palabra que presenta la pantalla). Las
+frases a mano de V1 llegaron a ir 2 s tarde.

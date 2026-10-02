@@ -1,0 +1,9 @@
+{ "id": "C1", "titulo": "Tres cosas que cambian esta temporada", "slides": [
+  { "tipo": "portada", "foto": "gen/pista-noche.png", "eyebrow": "Temporada 2026/2027", "titulo": "Tres cosas que cambian *esta temporada.*" },
+  { "tipo": "numero", "eyebrow": "cambios en la app este verano", "valor": "300", "sub": "Tres meses sin parar. Algunos se ven. Otros no." },
+  { "tipo": "pantalla", "eyebrow": "1 · Tu equipo", "titulo": "Quién puede jugar, la alineación según la normativa de tu federación, y la temporada entera registrada.", "tam": "sm", "src": "img/alineacion.jpg", "alto": 700, "offset": 0 },
+  { "tipo": "pantalla", "eyebrow": "2 · Torneos", "titulo": "Grupos y eliminatoria, con consolación para que nadie se vaya a casa tras perder un partido.", "tam": "sm", "src": "web/torneo-cuadro.png", "alto": 700 },
+  { "tipo": "pantalla", "eyebrow": "2 · Torneos", "titulo": "Se inscriben con un código desde el móvil. Pagan por la web.", "src": "app/torneos-explorar.png", "alto": 760 },
+  { "tipo": "pantalla", "eyebrow": "3 · Federación", "titulo": "La Federación Cántabra dentro de la app: puntos, clasificaciones y cuadros de playoff. Sin PDF.", "tam": "sm", "src": "app/fed-ranking.png", "alto": 700 },
+  { "tipo": "cierre", "titulo": "La temporada 2026/2027 ya está cargada. *Empezamos.*", "cta": "Guárdalo para cuando arranque tu liga" }
+]}

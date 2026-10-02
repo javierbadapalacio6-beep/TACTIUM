@@ -1,0 +1,162 @@
+{
+  "pieza": "H1",
+  "voces": "sin-remotion/humor/H1-voces.json",
+  "musica": {
+    "src": "public/musica/pixabay-cello-pizzicato.mp3",
+    "desde": 0,
+    "vol": 0.065,
+    "agacha": 0.5
+  },
+  "escenas": [
+    {
+      "id": "capitan",
+      "voz": "1-capitan",
+      "antes": 0.05,
+      "despues": 0.45,
+      "sfx": [
+        {
+          "src": "public/sfx/tecla.mp3",
+          "en": 0.0,
+          "vol": 0.45
+        },
+        {
+          "src": "public/sfx/tecla.mp3",
+          "en": 0.14,
+          "vol": 0.4
+        },
+        {
+          "src": "public/sfx/tecla.mp3",
+          "en": 0.27,
+          "vol": 0.45
+        },
+        {
+          "src": "public/sfx/pop.mp3",
+          "palabra": "sábado",
+          "tras": 0.45,
+          "vol": 0.55
+        }
+      ]
+    },
+    {
+      "id": "depende",
+      "voz": "2-depende",
+      "antes": 0.3,
+      "despues": 0.55,
+      "sfx": [
+        {
+          "src": "public/sfx/swoosh.wav",
+          "en": 0,
+          "vol": 0.6
+        },
+        {
+          "src": "public/sfx/whip.mp3",
+          "palabra": "te",
+          "tras": -0.08,
+          "vol": 0.45
+        }
+      ]
+    },
+    {
+      "id": "audio",
+      "voz": "3-audio",
+      "antes": 0.2,
+      "despues": 0.12,
+      "sfx": [
+        {
+          "src": "public/sfx/swoosh-2.wav",
+          "en": 0,
+          "vol": 0.6
+        },
+        {
+          "src": "public/sfx/pop.mp3",
+          "en": 0.05,
+          "vol": 0.4
+        }
+      ]
+    },
+    {
+      "id": "madrugada",
+      "voz": "4-madrugada",
+      "antes": 0.75,
+      "despues": 0.75,
+      "sfx": [
+        {
+          "src": "public/sfx/golpe-sub.wav",
+          "en": 0,
+          "vol": 0.55
+        },
+        {
+          "src": "public/sfx/reloj.mp3",
+          "en": 0.1,
+          "vol": 0.5
+        },
+        {
+          "src": "public/sfx/reloj.mp3",
+          "en": 1.3,
+          "vol": 0.5
+        },
+        {
+          "src": "public/sfx/reloj.mp3",
+          "en": 2.5,
+          "vol": 0.5
+        }
+      ]
+    },
+    {
+      "id": "nilee",
+      "dur": 2.6,
+      "sfx": [
+        {
+          "src": "public/sfx/swoosh.wav",
+          "en": 0,
+          "vol": 0.6
+        },
+        {
+          "src": "public/sfx/notif.wav",
+          "en": 0.6,
+          "vol": 0.9
+        },
+        {
+          "src": "public/sfx/vibra.wav",
+          "en": 0.62,
+          "vol": 0.6
+        }
+      ]
+    },
+    {
+      "id": "capitan-final",
+      "voz": "6-capitan",
+      "antes": 0.35,
+      "despues": 0.9,
+      "sfx": [
+        {
+          "src": "public/sfx/swoosh-2.wav",
+          "en": 0,
+          "vol": 0.6
+        },
+        {
+          "src": "public/sfx/golpe-sub.wav",
+          "palabra": "semana",
+          "tras": 0.2,
+          "vol": 0.6
+        }
+      ]
+    },
+    {
+      "id": "cierre",
+      "dur": 1.8,
+      "sfx": [
+        {
+          "src": "public/sfx/whoosh-2.wav",
+          "en": 0,
+          "vol": 0.45
+        },
+        {
+          "src": "public/sfx/pop.mp3",
+          "en": 0.9,
+          "vol": 0.55
+        }
+      ]
+    }
+  ]
+}

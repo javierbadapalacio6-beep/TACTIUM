@@ -1,0 +1,12 @@
+{ "pieza": "H1", "modelo": "v3", "frases": [
+  { "id": "1-capitan", "voz": "Brian", "texto": "Grupo del equipo: ¿quién puede el sábado?",
+    "actuado": "[exasperated, dramatic, like a desperate announcement] Grupo del equipo... [short pause] ¿QUIÉN puede el sábado?" },
+  { "id": "2-depende", "voz": "Charlie", "texto": "Depende... ¿A qué hora? ¿Y contra quién? Te digo el viernes.",
+    "actuado": "[lazy, totally unbothered, dragging the words] Depeeende... [pause] ¿A qué hora? [sighs] ¿Y contra quién? [casually, as if doing a favour] Te digo el viernes." },
+  { "id": "3-audio", "voz": "Liam", "texto": "Oye, mira, te cuento, que esta semana es un poco lío, porque mi cuñado...",
+    "actuado": "[very fast, rambling, overexcited, barely breathing] Oye, mira, te cuento, que esta semana es un poco lío, porque mi cuñado..." },
+  { "id": "4-madrugada", "voz": "Will", "texto": "Yo puedo. ¿Sigue en pie?",
+    "actuado": "[yawns] [whispering, half asleep, way too late] Yo puedo... [pause] ¿Sigue en pie?" },
+  { "id": "6-capitan", "voz": "Brian", "texto": "Y así... cada semana.",
+    "actuado": "[sighs deeply] [exhausted, defeated, almost crying] Y así... [pause] cada... semana." }
+]}

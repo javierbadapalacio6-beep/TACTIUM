@@ -1,0 +1,71 @@
+[
+  {
+    "id": "bola-linea",
+    "refs": [
+      "pelota.png"
+    ],
+    "prompt": "Low side-angle close-up of one yellow padel ball (fuzzy felt with a white curved seam) resting on the blue artificial turf right where the white service line meets the bottom of a glass back wall, soft cool evening light, shallow depth of field, the glass wall and mesh softly blurred behind."
+  },
+  {
+    "id": "palas-red",
+    "refs": [
+      "palas-red-sinlogos.jpg"
+    ],
+    "prompt": "Two plain matte black padel rackets (solid teardrop-shaped carbon paddles, about 45 cm long, flat hitting face drilled with many small round holes, an open triangular throat just above the short handle, white overgrip, wrist cord, NO strings) with a thin green accent line, lying crossed on the blue artificial turf in the back corner of a padel court, right in front of the tempered glass back wall, three yellow felt padel balls next to them. No net in the picture. Soft daylight, seen from above at 45 degrees, wide horizontal framing with empty turf on the left. The rackets are completely blank: no printing, no letters, no graphics."
+  },
+  {
+    "id": "pista-atardecer",
+    "refs": [
+      "pista-atardecer-red-sinlogos.jpg",
+      "pista-cristal-dia-sinlogos.jpg"
+    ],
+    "prompt": "Empty padel court (10 x 20 m, blue artificial turf with sand and white lines, back walls of tempered glass 3 m high with black welded metal mesh above, black steel posts, black net with white padded posts) at sunset, seen from the back corner looking diagonally across the whole court towards the net, the low sun behind the far glass wall making a warm flare, long shadows of the mesh on the blue turf. Wide horizontal framing."
+  },
+  {
+    "id": "pista-exterior-atardecer",
+    "refs": [
+      "pista-verde-atardecer-sinlogos.jpg",
+      "pista-cristal-dia-sinlogos.jpg"
+    ],
+    "prompt": "Outdoor padel court (10 x 20 m, green artificial turf with sand and white lines, back walls of tempered glass 3 m high with black welded metal mesh above, black steel posts, black net with white padded posts) seen from outside, side view at dusk, silhouette of the glass and mesh structure against a dramatic pink and orange sky, tall floodlight poles turned off. Wide horizontal framing, cinematic."
+  },
+  {
+    "id": "pista-cristal-dia",
+    "refs": [
+      "pista-cristal-dia-sinlogos.jpg",
+      "pista-atardecer-red-sinlogos.jpg"
+    ],
+    "prompt": "Panoramic padel court (10 x 20 m, blue artificial turf with sand and white lines, back walls of tempered glass 3 m high with black welded metal mesh above, black steel posts, black net with white padded posts) on a sunny day, frameless glass side walls held by metal clamps, grey paving and palm trees around, seen from the outside at eye level along the side of the court. Wide horizontal framing."
+  },
+  {
+    "id": "pista-noche",
+    "refs": [
+      "pista-cristal-dia-sinlogos.jpg",
+      "pista-atardecer-red-sinlogos.jpg"
+    ],
+    "prompt": "Empty padel court (10 x 20 m, blue artificial turf with sand and white lines, back walls of tempered glass 3 m high with black welded metal mesh above, black steel posts, black net with white padded posts) at night, lit by bright LED floodlights on tall black poles, dark blue sky, reflections of the lights on the glass, seen from behind the back glass wall through the centre of the court. Wide horizontal framing, moody and cinematic."
+  },
+  {
+    "id": "puntos-libreta",
+    "manos": true,
+    "refs": [
+      "palas-red-sinlogos.jpg"
+    ],
+    "prompt": "Close-up from above of a padel team captain's hands adding up player points in a small spiral notebook with a pen: columns of handwritten numbers, some crossed out and rewritten, arrows, a sum circled. The notebook rests on a wooden bench; the edge of a black perforated padel racket (no strings) and a yellow felt ball at the side. Evening light, shallow depth of field. The handwriting is illegible scribbles, not readable words."
+  },
+  {
+    "id": "movil-notificaciones",
+    "refs": [
+      "pelota.png"
+    ],
+    "prompt": "A smartphone lying face up on a wooden bench beside a padel court at night, its screen lit with a long stack of chat message notifications (generic green and grey bubbles, unreadable blurred text, no app logos), a yellow felt padel ball next to it, the dark court and floodlights softly out of focus behind. Moody night light, the phone screen is the main light source."
+  },
+  {
+    "id": "libreta-parejas",
+    "manos": true,
+    "refs": [
+      "palas-red-sinlogos.jpg"
+    ],
+    "prompt": "At home at night, a kitchen table under a warm lamp: hands holding a pen over an open notebook with a handwritten list arranged in pairs, several lines crossed out and redone, a phone face down next to it and a black perforated padel racket (no strings) leaning on the chair. Cozy, a bit tense, cinematic. The handwriting is illegible scribbles, not readable words."
+  }
+]

@@ -1,0 +1,49 @@
+{
+  "id": "C2",
+  "titulo": "El orden de parejas",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/libreta-banquillo.png",
+      "eyebrow": "Capitanes",
+      "titulo": "El orden de parejas: lo que *casi nadie* sabe."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "La norma",
+      "titulo": "Cada federación decide el orden de las parejas a su manera.",
+      "sub": "Algunas exigen **orden de fuerza**, por puntos o por nivel. Otras no piden nada."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "El problema",
+      "titulo": "Si tu federación exige orden de fuerza y la pareja 2 suma más que la 1…",
+      "sub": "…te lo pueden **reclamar**. Después del partido."
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "Antes de publicar",
+      "titulo": "Aquí lo comprobamos antes: si el orden no cuadra, sale en rojo.",
+      "src": "img/alineacion.jpg",
+      "alto": 720
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "Un toque",
+      "titulo": "Auto-orden coloca las parejas por puntos.",
+      "src": "img/alineacion.jpg",
+      "alto": 760
+    },
+    {
+      "tipo": "texto",
+      "titulo": "No es mala fe.",
+      "sub": "Es la norma que casi nadie mira dos veces."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/banquillo-palas.png",
+      "titulo": "Compruébalo *antes* de publicar. No después del partido.",
+      "cta": "¿Qué exige tu federación? Cuéntanoslo"
+    }
+  ]
+}

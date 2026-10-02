@@ -1,0 +1,24 @@
+/* Común a todas las escenas: fuentes de marca, tokens, lienzo 1080x1920 y HUD. */
+@font-face { font-family: Satoshi; src: url(/public/fonts/satoshi-500.woff2); font-weight: 500; }
+@font-face { font-family: Satoshi; src: url(/public/fonts/satoshi-700.woff2); font-weight: 700; }
+@font-face { font-family: Satoshi; src: url(/public/fonts/satoshi-900.woff2); font-weight: 900; }
+@font-face { font-family: JBM; src: url(/public/fonts/jbmono-500.woff2); font-weight: 500; }
+@font-face { font-family: JBM; src: url(/public/fonts/jbmono-700.woff2); font-weight: 700; }
+@font-face { font-family: ISerif; src: url(/public/fonts/InstrumentSerif-Italic.ttf); font-style: italic; }
+
+:root { --bg: #030F0F; --verde: #00DF82; --prof: #03624C; --hueso: #F3F9F6; --gris: #6F8580; }
+html, body { margin: 0; background: #000; }
+body.preview { display: grid; place-items: center; height: 100vh; overflow: hidden; }
+#stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); transform-origin: center; }
+#gl { position: absolute; inset: 0; width: 1080px; height: 1920px; }
+.layer { position: absolute; inset: 0; pointer-events: none; }
+/* Zona segura de Reels: texto en x 80-910, y 260-1540 */
+.safe { position: absolute; left: 80px; width: 830px; }
+
+#hud { font: 500 22px JBM; color: var(--gris); letter-spacing: 3px; }
+#hud .tl { position: absolute; left: 80px; top: 262px; }
+#hud .tr { position: absolute; left: 80px; width: 830px; top: 262px; text-align: right; }
+#hud .bl { position: absolute; left: 80px; top: 1500px; }
+#hud .br { position: absolute; left: 80px; width: 830px; top: 1500px; text-align: right; }
+#hud .bar { position: absolute; left: 80px; width: 830px; top: 1480px; height: 1px; background: rgba(111,133,128,0.45); }
+#hud .ph { position: absolute; top: 1472px; width: 2px; height: 17px; background: var(--hueso); }

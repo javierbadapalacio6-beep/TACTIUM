@@ -1,0 +1,63 @@
+{
+  "id": "C3",
+  "titulo": "Un torneo de 32 parejas",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/papel-cuadro.png",
+      "eyebrow": "Organizadores",
+      "titulo": "Un torneo de 32 parejas, *paso a paso.*"
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "1 · Formato",
+      "titulo": "Grupos y eliminatoria, con consolación para que nadie se vaya a casa tras perder un partido.",
+      "tam": "sm",
+      "src": "web/torneo-consolacion.png",
+      "alto": 700
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "2 · Cuadros",
+      "titulo": "Generas los cuadros en un momento.",
+      "src": "web/torneo-cuadro-final.png",
+      "alto": 780
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "3 · Horario",
+      "titulo": "La app reparte los partidos pista a pista, con su horario.",
+      "src": "web/torneo-horario-lista.png",
+      "alto": 760
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "4 · Inscripción",
+      "titulo": "Se inscriben con un código desde el móvil. La categoría se comprueba con sus puntos federados.",
+      "tam": "sm",
+      "src": "app/torneos-explorar.png",
+      "alto": 700
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "5 · Cobro",
+      "titulo": "Pagan por la web.",
+      "src": "web/torneo-ficha.png",
+      "alto": 800,
+      "offset": 0
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "6 · Control",
+      "titulo": "Tú ves quién se ha inscrito y quién ha pagado, en un mismo sitio.",
+      "src": "img/club.png",
+      "alto": 740
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pdf-papeles.png",
+      "titulo": "¿Organizas torneos y sigues con un Excel? *Escríbenos.*",
+      "cta": "DM abierto · @tactium"
+    }
+  ]
+}

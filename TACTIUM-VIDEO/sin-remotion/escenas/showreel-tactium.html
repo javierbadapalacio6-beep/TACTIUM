@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TACTIUM · showreel</title>
+<!--
+  Versión TACTIUM del showreel de un solo disparo (escenas/showreel-claude.html):
+  misma rejilla (un compás por sección a 118 BPM), cada técnica cuenta algo de la app.
+  Paleta de marca, un solo acento verde por plano, texto dentro de la zona segura
+  de Reels (x 80-910, y 260-1540).
+  node sin-remotion/render.mjs escenas/showreel-tactium.html
+-->
+<link rel="stylesheet" href="../lib/base.css">
+<style>
+  canvas.full { position: absolute; inset: 0; width: 1080px; height: 1920px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl" width="1080" height="1920"></canvas>
+  <canvas id="c2" class="full" width="1080" height="1920"></canvas>
+  <canvas id="fx" class="full" width="1080" height="1920"></canvas>
+</div>
+<script type="module">
+import * as THREE from "../vendor/three.module.js";
+import { crearRenderer, arrancar } from "../lib/base.js";
+import { crearPistas } from "../lib/pistas.js";
+import { clamp, prog, eOut, eInOut, eBack, lerp, rnd, decode, $ } from "../lib/util.js";
+
+const W = 1080, H = 1920, FPS = 30, DUR = 15;
+const BG = "#030F0F", HUESO = "#F3F9F6", VERDE = "#00DF82", PROF = "#03624C", GRIS = "#6F8580";
+const CX = 495; // centro de la zona segura (80-910)
+const B0 = 1.0, BEAT = 60 / 118, BAR = 4 * BEAT;
+const bar = (i) => B0 + i * BAR;
+const S = [0, bar(0), bar(1), bar(2), bar(3), bar(4), bar(5), bar(6), DUR];
+const NOMBRES = ["", "EQUIPO", "ALINEACIÓN", "PISTAS", "RESULTADO", "TU LIGA", "UN TOQUE", ""];
+const seccion = (t) => { let i = 0; while (i < 7 && t >= S[i + 1]) i++; return i; };
+const eIn = (p) => p * p * p;
+
+const g = $("#c2").getContext("2d");
+const fx = $("#fx").getContext("2d");
+const font = (ctx, w, px, fam = "Satoshi", style = "") => { ctx.font = `${style} ${w} ${px}px ${fam}`.trim(); };
+
+// ── 3D: las 5 pistas del kit y partículas que forman el marcador
+const { renderer, scene, cam } = crearRenderer($("#gl"));
+const pistas = crearPistas(); scene.add(pistas.group);
+const N_P = 5200;
+let particles, A, B, C0;
+function prepararParticulas() {
+  const c = document.createElement("canvas"); c.width = 1080; c.height = 520; const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.font = "900 380px Satoshi"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("3–2", 540, 270);
+  const data = x.getImageData(0, 0, 1080, 520).data, cand = [];
+  for (let yy = 0; yy < 520; yy += 4) for (let xx = 0; xx < 1080; xx += 4) if (data[(yy * 1080 + xx) * 4 + 3] > 128) cand.push([xx, yy]);
+  const r = rnd(11), cH = new THREE.Color(HUESO), cV = new THREE.Color(VERDE);
+  A = new Float32Array(N_P * 3); B = new Float32Array(N_P * 3); C0 = new Float32Array(N_P * 3);
+  const colors = new Float32Array(N_P * 3);
+  for (let i = 0; i < N_P; i++) {
+    const [px, py] = cand[Math.floor(r() * cand.length)];
+    A[i * 3] = (px - 540) / 230 - 0.4; A[i * 3 + 1] = -(py - 270) / 230; A[i * 3 + 2] = (r() - 0.5) * 0.3;
+    // La esfera es la pelota: la costura (sinusoide sobre la esfera) va en verde.
+    const k = i + 0.5, phi = Math.acos(1 - (2 * k) / N_P), th = Math.PI * (1 + Math.sqrt(5)) * k;
+    B[i * 3] = 2.4 * Math.cos(th) * Math.sin(phi) - 0.4; B[i * 3 + 1] = 2.4 * Math.cos(phi); B[i * 3 + 2] = 2.4 * Math.sin(th) * Math.sin(phi);
+    C0[i * 3] = (r() - 0.5) * 30; C0[i * 3 + 1] = (r() - 0.5) * 40; C0[i * 3 + 2] = (r() - 0.5) * 20 - 4;
+    const lat = Math.PI / 2 - phi, seam = Math.abs(lat - 0.6 * Math.sin(2 * th)) < 0.09;
+    const cc = seam ? cV : cH; colors[i * 3] = cc.r; colors[i * 3 + 1] = cc.g; colors[i * 3 + 2] = cc.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N_P * 3), 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  particles = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.05, vertexColors: true, transparent: true, opacity: 0.95, fog: false }));
+  scene.add(particles);
+}
+
+const grain = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d"); const im = x.createImageData(256, 256); const r = rnd(5);
+  for (let i = 0; i < 256 * 256; i++) { const v = r() * 255; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
+  x.putImageData(im, 0, 0); return c;
+})();
+const logo = new Image(); logo.src = "/public/img/logo-t.png";
+
+// ── 0 · Intro
+function intro(t, frame) {
+  g.fillStyle = BG; g.fillRect(0, 0, W, H);
+  const p = eInOut(prog(t, 0.05, 0.45)), grow = eIn(prog(t, 0.8, 0.2));
+  g.fillStyle = HUESO; const lh = lerp(3, H, grow);
+  g.fillRect(CX - 415 * p, 960 - lh / 2, 830 * p, lh);
+  g.strokeStyle = HUESO; g.lineWidth = 2;
+  for (let k = -4; k <= 4; k++) { const h = 22 * eOut(prog(t, 0.3 + Math.abs(k) * 0.03, 0.2)); g.beginPath(); g.moveTo(CX + k * 100, 975); g.lineTo(CX + k * 100, 975 + h); g.stroke(); }
+  if (grow < 0.3) {
+    g.textAlign = "center"; g.fillStyle = HUESO; font(g, 500, 36, "JBM"); g.letterSpacing = "8px";
+    g.fillText(decode("LIGA POR EQUIPOS — 26/27", prog(t, 0.2, 0.5), frame, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), CX, 1070);
+    g.fillStyle = GRIS; font(g, 500, 24, "JBM"); g.fillText("TACTIUM", CX, 910); g.letterSpacing = "0px";
+  }
+}
+
+// ── 1 · EQUIPO: tipografía cinética
+function equipo(lt) {
+  const k = Math.min(3, Math.floor(lt / BEAT));
+  const bgs = [HUESO, BG, VERDE, BG], fgs = [BG, HUESO, BG, HUESO];
+  g.fillStyle = bgs[k]; g.fillRect(0, 0, W, H);
+  font(g, 900, 190); g.textAlign = "left"; g.textBaseline = "middle"; g.lineWidth = 2; g.strokeStyle = fgs[k]; g.globalAlpha = 0.16;
+  const rowW = g.measureText("EQUIPO ").width;
+  for (let r = 0; r < 8; r++) {
+    const y = 120 + r * 240; if (Math.abs(y - 960) < 150) continue;
+    const off = (((r % 2 ? -1 : 1) * (lt * 420 + r * 170)) % rowW + rowW) % rowW;
+    for (let x = -rowW + off - rowW; x < W + rowW; x += rowW) g.strokeText("EQUIPO ", x, y);
+  }
+  g.globalAlpha = 1;
+  const word = "EQUIPO"; font(g, 900, 190); g.letterSpacing = "-4px";
+  const ws = [...word].map((ch) => g.measureText(ch).width); const tot = ws.reduce((a, b) => a + b, 0);
+  const pulse = lt > BEAT ? 1 + 0.07 * Math.exp(-((lt % BEAT) * 10)) : 1;
+  g.save(); g.translate(CX, 960); g.scale(pulse, pulse);
+  let x = -tot / 2; g.fillStyle = fgs[k];
+  [...word].forEach((ch, i) => {
+    const p = prog(lt, i * 0.06, 0.42), cx = x + ws[i] / 2; x += ws[i];
+    g.save(); g.translate(cx, 0);
+    if (i === 0) g.translate(0, -900 * (1 - eBack(p)));
+    if (i === 1) { const s = eBack(p); g.rotate((1 - p) * -1.6); g.scale(s, s); }
+    if (i === 2) g.translate(800 * (1 - eOut(p)), 0);
+    if (i === 3) g.scale(1, Math.max(0.001, eBack(p)));
+    if (i === 4) { g.rotate((1 - eOut(p)) * Math.PI * 2); g.scale(eOut(p), eOut(p)); }
+    if (i === 5) g.translate(0, 900 * (1 - eBack(p)));
+    g.textAlign = "center"; g.fillText(ch, 0, 8); g.restore();
+  });
+  g.restore(); g.letterSpacing = "0px"; g.textBaseline = "alphabetic";
+}
+
+// ── 2 · ALINEA: 10 jugadores → 5 parejas → ordenadas por puntos → un equipo
+const JUG = (() => {
+  const r = rnd(42);
+  return Array.from({ length: 10 }, (_, i) => ({ pts: 600 + Math.round(r() * 1400), sx: 140 + r() * 700, sy: 520 + r() * 700 }));
+})();
+const PAREJAS = [[0, 5], [1, 7], [2, 9], [3, 6], [4, 8]];
+const ORDEN = PAREJAS.map((p, i) => ({ i, s: JUG[p[0]].pts + JUG[p[1]].pts })).sort((a, b) => b.s - a.s).map((o) => o.i);
+function posJugador(j, tt) {
+  const k = clamp(Math.floor(tt / BEAT), 0, 3);
+  const pi = PAREJAS.findIndex((p) => p.includes(j)), lado = PAREJAS[pi][0] === j ? 0 : 1;
+  const fila = (ord) => ({ x: lado ? 640 : 400, y: 520 + ord * 150 });
+  const P = [{ x: JUG[j].sx, y: JUG[j].sy }, fila(pi), fila(ORDEN.indexOf(pi)), fila(ORDEN.indexOf(pi))];
+  const from = P[Math.max(0, k - 1)], to = P[k], m = k === 0 ? 1 : eBack(prog(tt - k * BEAT, 0, 0.32));
+  return { x: lerp(from.x, to.x, m), y: lerp(from.y, to.y, m), s: eBack(prog(tt - j * 0.03, 0, 0.3)) };
+}
+function alinea(lt) {
+  g.fillStyle = VERDE; g.fillRect(0, 0, W, H);
+  g.strokeStyle = BG; g.lineWidth = 3;
+  for (const [x, y, sx, sy] of [[90, 380, 1, 1], [900, 380, -1, 1], [90, 1290, 1, -1], [900, 1290, -1, -1]]) { g.beginPath(); g.moveTo(x, y + sy * 50); g.lineTo(x, y); g.lineTo(x + sx * 50, y); g.stroke(); }
+  const k = clamp(Math.floor(lt / BEAT), 0, 3);
+  // Unión de cada pareja (desde que se agrupan) y la línea del equipo al final.
+  if (k >= 1) PAREJAS.forEach(([a, b]) => { const A = posJugador(a, lt), Bp = posJugador(b, lt); g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(Bp.x, Bp.y); g.strokeStyle = BG; g.globalAlpha = 0.35; g.lineWidth = 6; g.stroke(); });
+  g.globalAlpha = 1;
+  if (k === 3) { const q = eInOut(prog(lt, 3 * BEAT, 0.35)); g.fillStyle = BG; g.fillRect(515, 500, 10, 640 * q); }
+  // Estela + jugadores
+  for (let j = 0; j < 10; j++) {
+    for (let e = 4; e >= 1; e--) { const tt = lt - e * 0.035; if (tt < 0) continue; const p = posJugador(j, tt); g.beginPath(); g.arc(p.x, p.y, Math.max(0.1, 44 * p.s), 0, 7); g.strokeStyle = BG; g.globalAlpha = 0.4 - e * 0.08; g.lineWidth = 2; g.stroke(); }
+    g.globalAlpha = 1; const p = posJugador(j, lt);
+    g.beginPath(); g.arc(p.x, p.y, Math.max(0.1, 44 * p.s), 0, 7); g.fillStyle = BG; g.fill();
+    g.fillStyle = HUESO; font(g, 700, 24, "JBM"); g.textAlign = "center"; g.fillText(String(JUG[j].pts), p.x, p.y + 8);
+  }
+  if (k >= 2) { const q = eOut(prog(lt, 2 * BEAT + 0.1, 0.3)); g.globalAlpha = q; font(g, 700, 30, "JBM"); g.fillStyle = BG; g.textAlign = "left";
+    for (let o = 0; o < 5; o++) g.fillText(`P${o + 1}`, 120, 530 + o * 150); g.globalAlpha = 1; }
+  font(g, 900, 170); g.fillStyle = BG; g.textAlign = "left"; g.fillText("ALINEA", 80, 1450);
+}
+
+// ── 3 · JUEGA: las 5 pistas
+function juega3d(lt) {
+  pistas.camara(cam, pistas.rutas.subida, eInOut(prog(lt, 0, BAR))); cam.fov = 50;
+  pistas.animarJugadores(lt, { aparecen: 0.25, alzan: 0.7, red: 1.15 });
+}
+function juegaOverlay(lt) {
+  g.clearRect(0, 0, W, H);
+  const gr = g.createLinearGradient(0, 0, 0, 900); gr.addColorStop(0, "rgba(3,15,15,0.9)"); gr.addColorStop(0.6, "rgba(3,15,15,0.5)"); gr.addColorStop(1, "rgba(3,15,15,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, W, 900);
+  const p = eOut(prog(lt, 0.1, 0.4)); font(g, 900, 220); g.textAlign = "left"; g.fillStyle = HUESO; g.globalAlpha = p;
+  g.fillText("JUEGA", 80 - (1 - p) * 120, 500); g.globalAlpha = 1;
+  const q = eOut(prog(lt, BEAT * 2, 0.3)); font(g, 700, 54); g.globalAlpha = q; g.fillText("5 parejas. 10 jugadores.", 80, 590); g.globalAlpha = 1;
+}
+
+// ── 4 · RESULTADO: el 3–2 en partículas que se hace pelota
+function resultado3d(lt) {
+  cam.position.set(Math.sin(lt * 0.4) * 1.2, 0, 12); cam.up.set(0, 1, 0); cam.lookAt(-0.4, 0, 0); cam.fov = 50;
+  const pos = particles.geometry.attributes.position.array;
+  const toB = eInOut(prog(lt, 2 * BEAT, 0.55)), out = eIn(prog(lt, 3.5 * BEAT, BAR - 3.5 * BEAT));
+  for (let i = 0; i < N_P; i++) {
+    const inA = eOut(prog(lt, (i % 97) / 97 * 0.2, 0.5));
+    let x = lerp(C0[i * 3], A[i * 3], inA), y = lerp(C0[i * 3 + 1], A[i * 3 + 1], inA), z = lerp(C0[i * 3 + 2], A[i * 3 + 2], inA);
+    x += Math.sin(lt * 9 + i) * 0.015 * inA; y += Math.cos(lt * 8 + i * 1.3) * 0.015 * inA;
+    if (toB > 0) {
+      const sw = (1 - toB) * 2.4 * toB + lt * 1.4 * toB;
+      const bx0 = B[i * 3] + 0.4, bx = bx0 * Math.cos(sw) - B[i * 3 + 2] * Math.sin(sw) - 0.4, bz = bx0 * Math.sin(sw) + B[i * 3 + 2] * Math.cos(sw);
+      x = lerp(x, bx, toB); y = lerp(y, B[i * 3 + 1], toB); z = lerp(z, bz, toB);
+    }
+    // Al final la pelota sale disparada hacia arriba, como un globo.
+    pos[i * 3] = x; pos[i * 3 + 1] = y + out * 14; pos[i * 3 + 2] = z;
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+}
+function resultadoOverlay(lt) {
+  g.clearRect(0, 0, W, H);
+  const p = eOut(prog(lt, 0.5, 0.3)) * (1 - eOut(prog(lt, 2 * BEAT, 0.2)));
+  g.globalAlpha = p; g.textAlign = "center"; font(g, 500, 28, "JBM"); g.letterSpacing = "8px"; g.fillStyle = GRIS;
+  g.fillText("JORNADA 06 · RESULTADO", CX, 700); g.letterSpacing = "0px"; g.globalAlpha = 1;
+}
+
+// ── 5 · TU LIGA: rejilla de sistemas de la app
+function liga(lt) {
+  g.fillStyle = HUESO; g.fillRect(0, 0, W, H);
+  font(g, 900, 130); g.fillStyle = BG; g.textAlign = "left";
+  const tp = eOut(prog(lt, 0, 0.35)); g.globalAlpha = tp; g.fillText("TU LIGA", 80, 430 + (1 - tp) * 40); g.globalAlpha = 1;
+  const pw = 405, ph = 320, x0 = 80, y0 = 460, gap = 20;
+  for (let idx = 0; idx < 6; idx++) {
+    const pt = lt - idx * BEAT / 2; if (pt < 0) continue;
+    const s = eBack(prog(pt, 0, 0.35)); const px = x0 + (idx % 2) * (pw + gap), py = y0 + Math.floor(idx / 2) * (ph + gap);
+    g.save(); g.translate(px + pw / 2, py + ph / 2); g.scale(lerp(0.8, 1, s), lerp(0.8, 1, s)); g.globalAlpha = clamp(s * 1.5);
+    g.beginPath(); g.roundRect(-pw / 2, -ph / 2, pw, ph, 28); g.fillStyle = BG; g.fill(); g.clip();
+    font(g, 500, 18, "JBM"); g.letterSpacing = "3px"; g.fillStyle = GRIS; g.textAlign = "left";
+    g.fillText(["CLASIFICACIÓN", "DISPONIBILIDAD", "CONVOCADOS", "FORMA", "AVISOS", "CALENDARIO"][idx], -pw / 2 + 26, -ph / 2 + 42); g.letterSpacing = "0px";
+    panel(idx, pt, pw, ph);
+    g.restore();
+  }
+  g.globalAlpha = 1;
+}
+function panel(idx, pt, pw, ph) {
+  g.fillStyle = HUESO; g.strokeStyle = HUESO; g.textAlign = "center";
+  if (idx === 0) { // clasificación: 5 equipos, el nuestro en verde
+    const L = [0.92, 0.8, 0.66, 0.5, 0.38];
+    L.forEach((v, j) => { const w = 300 * v * eOut(prog(pt, 0.1 + j * 0.06, 0.45)); g.fillStyle = j === 0 ? VERDE : "rgba(243,249,246,0.75)"; g.fillRect(-160, -70 + j * 40, w, 24); });
+  } else if (idx === 1) { // Voy / Duda / No
+    const parts = [[0.7, VERDE], [0.2, HUESO], [0.1, GRIS]]; let a0 = -Math.PI / 2; const grow = eOut(prog(pt, 0, 0.7));
+    g.lineWidth = 34; g.lineCap = "butt";
+    parts.forEach(([v, c]) => { const a1 = a0 + v * Math.PI * 2 * grow; g.beginPath(); g.arc(0, 20, 95, a0, a1); g.strokeStyle = c; g.stroke(); a0 = a1 + 0.04; });
+    font(g, 900, 46); g.fillStyle = HUESO; g.fillText(`${Math.round(70 * grow)}%`, 0, 36);
+  } else if (idx === 2) { // convocados
+    const v = Math.round(eOut(prog(pt, 0, 1.0)) * 10); font(g, 900, 120); g.fillText(`${v}/10`, 0, 50);
+    for (let j = 0; j < 10; j++) { g.fillStyle = j < v ? VERDE : "#173230"; g.fillRect(-150 + j * 31, 90, 22, 10); }
+  } else if (idx === 3) { // forma: línea que sube
+    const P = [[-160, 70], [-110, 40], [-60, 55], [-10, 10], [40, 25], [90, -30], [150, -60]]; const n = eOut(prog(pt, 0, 0.8)) * (P.length - 1);
+    g.beginPath(); g.moveTo(...P[0]); for (let j = 1; j <= Math.floor(n); j++) g.lineTo(...P[j]);
+    const f = n - Math.floor(n), j0 = Math.floor(n); if (j0 < P.length - 1) g.lineTo(lerp(P[j0][0], P[j0 + 1][0], f), lerp(P[j0][1], P[j0 + 1][1], f));
+    g.lineWidth = 6; g.lineJoin = "round"; g.strokeStyle = VERDE; g.stroke();
+  } else if (idx === 4) { // aviso que se escribe
+    const txt = "Jornada 6 · sáb 10:00"; const n = clamp(Math.floor(pt * 26), 0, txt.length);
+    font(g, 500, 26, "JBM"); g.textAlign = "left"; g.fillText(txt.slice(0, n), -170, -10);
+    if (n < txt.length || Math.floor(pt * 4) % 2 === 0) { const w = g.measureText(txt.slice(0, n)).width; g.fillStyle = VERDE; g.fillRect(-170 + w + 4, -34, 14, 30); }
+    if (n === txt.length) { g.fillStyle = GRIS; g.fillText("✓ convocatoria enviada", -170, 40); }
+  } else { // calendario: semanas de la temporada
+    for (let yy = 0; yy < 5; yy++) for (let xx = 0; xx < 7; xx++) {
+      const rr = 7 + 7 * (0.5 + 0.5 * Math.sin(pt * 7 - (xx + yy) * 0.7)); g.beginPath(); g.arc(-150 + xx * 50, -70 + yy * 42, rr * eOut(prog(pt, 0, 0.3)), 0, 7);
+      g.fillStyle = yy * 7 + xx === 17 ? VERDE : "rgba(243,249,246,0.8)"; g.fill();
+    }
+  }
+}
+
+// ── 6 · Iris con la frase
+function iris(lt) {
+  g.fillStyle = HUESO; g.fillRect(0, 0, W, H);
+  const a = eInOut(prog(lt, 0, 0.38)) * 1250, b = eInOut(prog(lt, 0.18, 0.42)) * 1250;
+  g.beginPath(); g.arc(CX, 960, a, 0, 7); g.fillStyle = VERDE; g.fill();
+  g.beginPath(); g.arc(CX, 960, b, 0, 7); g.fillStyle = BG; g.fill();
+  for (let j = 0; j < 3; j++) { const q = prog(lt, 0.5 + j * 0.12, 1.0); if (q <= 0 || q >= 1) continue; g.beginPath(); g.arc(CX, 960, 80 + q * 900, 0, 7); g.strokeStyle = HUESO; g.globalAlpha = (1 - q) * 0.5; g.lineWidth = 2; g.stroke(); }
+  g.globalAlpha = 1; g.textAlign = "left";
+  const p1 = eOut(prog(lt, BEAT, 0.35)), p2 = eOut(prog(lt, 2 * BEAT, 0.3)), p3 = eInOut(prog(lt, 3 * BEAT, 0.35));
+  font(g, 400, 170, "ISerif", "italic"); g.fillStyle = HUESO; g.globalAlpha = p1; g.fillText("Tu equipo,", 80, 900 + (1 - p1) * 40);
+  font(g, 900, 128); g.globalAlpha = p2; g.save(); g.translate(80, 1050); g.scale(lerp(1.2, 1, p2), lerp(1.2, 1, p2)); g.fillText("en un toque.", 0, 0); g.restore();
+  g.globalAlpha = 1; g.fillStyle = VERDE; g.fillRect(80, 1092, 760 * p3, 10);
+}
+
+// ── 7 · Cierre: logo + wordmark
+function cierre(lt, t) {
+  g.fillStyle = BG; g.fillRect(0, 0, W, H);
+  if (logo.complete && logo.naturalWidth) {
+    const p = eOut(prog(lt, 0, 0.45)), s = 380;
+    g.save(); g.globalCompositeOperation = "lighten"; g.beginPath(); g.rect(CX - s / 2, 560, s, s * p); g.clip();
+    g.drawImage(logo, CX - s / 2, 560 + (1 - p) * -60, s, s); g.restore();
+  }
+  // TACT i UM, con el punto de la i en verde (como el wordmark).
+  font(g, 900, 150); g.letterSpacing = "4px"; g.textAlign = "left";
+  const parts = ["T", "A", "C", "T", "i", "U", "M"]; const ws = parts.map((c) => (c === "i" ? 32 + 12 : g.measureText(c).width));
+  let x = CX - ws.reduce((a, b) => a + b, 0) / 2; const base = 1130;
+  parts.forEach((ch, i) => {
+    const p = eOut(prog(lt, 0.2 + i * 0.05, 0.4)), dy = (1 - p) * 70; g.globalAlpha = p;
+    if (ch === "i") { g.fillStyle = HUESO; g.fillRect(x + 6, base - 76 + dy, 32, 76); const d = eBack(prog(lt, 0.9, 0.3)); g.fillStyle = VERDE; g.globalAlpha = d > 0.01 ? 1 : 0; g.fillRect(x + 6, base - 108 - (1 - d) * 120, 32, 32); }
+    else { g.fillStyle = HUESO; g.fillText(ch, x, base + dy); }
+    x += ws[i];
+  });
+  g.globalAlpha = eOut(prog(lt, 1.0, 0.35)); g.letterSpacing = "8px"; font(g, 500, 34, "JBM"); g.fillStyle = GRIS; g.textAlign = "center";
+  g.fillText("tactium.io", CX, 1230); g.globalAlpha = 1; g.letterSpacing = "0px";
+  const f = prog(t, 14.45, 0.55); if (f > 0) { g.fillStyle = `rgba(0,0,0,${eIn(f)})`; g.fillRect(0, 0, W, H); }
+}
+
+function efectos(t, frame, i) {
+  fx.clearRect(0, 0, W, H);
+  for (let b = 1; b <= 7; b++) {
+    const q = (t - S[b] + 0.07) / 0.2; if (q <= 0 || q >= 1) continue;
+    for (let j = 0; j < 5; j++) { const y = j * (H / 5); const x = lerp(-W, W, eInOut(clamp(q * 1.3 - j * 0.07))); fx.fillStyle = j % 2 ? VERDE : HUESO; fx.fillRect(x, y, W, H / 5 + 1); }
+  }
+  if (i > 0 && i < 7) {
+    fx.globalCompositeOperation = "difference"; fx.fillStyle = "#fff"; font(fx, 500, 22, "JBM"); fx.letterSpacing = "4px";
+    fx.textAlign = "left"; fx.fillText("TACTIUM — LIGA POR EQUIPOS", 80, 280); fx.fillText(`0${i} — ${NOMBRES[i]}`, 80, 1530);
+    fx.textAlign = "right"; fx.fillText(`0${i} / 06`, 910, 280);
+    const ff = frame % FPS, ss = Math.floor(frame / FPS); fx.fillText(`00:00:${String(ss).padStart(2, "0")}:${String(ff).padStart(2, "0")}`, 910, 1530);
+    fx.fillRect(80, 1500, 830 * (t / DUR), 2);
+    fx.globalCompositeOperation = "source-over"; fx.letterSpacing = "0px";
+  }
+  // Grano suave: menos que en la prueba de Claude, para que Instagram no lo machaque.
+  fx.save(); fx.globalAlpha = 0.04; fx.globalCompositeOperation = "overlay";
+  const ox = (frame * 73) % 256, oy = (frame * 151) % 256; fx.translate(-ox, -oy); fx.fillStyle = fx.createPattern(grain, "repeat"); fx.fillRect(0, 0, W + 256, H + 256);
+  fx.restore();
+}
+
+function seek(t) {
+  const frame = Math.round(t * FPS), i = seccion(t), lt = t - S[i];
+  pistas.group.visible = i === 3; if (particles) particles.visible = i === 4;
+  if (i === 0) intro(t, frame);
+  if (i === 1) equipo(lt);
+  if (i === 2) alinea(lt);
+  if (i === 3) { juega3d(lt); juegaOverlay(lt); }
+  if (i === 4) { resultado3d(lt); resultadoOverlay(lt); }
+  if (i === 5) liga(lt);
+  if (i === 6) iris(lt);
+  if (i === 7) cierre(lt, t);
+  if (i === 3 || i === 4) { cam.updateProjectionMatrix(); renderer.render(scene, cam); }
+  efectos(t, frame, i);
+}
+
+await document.fonts.load("900 10px Satoshi");
+await logo.decode().catch(() => {});
+prepararParticulas();
+arrancar({
+  dur: DUR, fps: FPS,
+  musica: { src: "public/musica/pixabay-music-promotion.mp3", desde: 16.45 }, // golpe 17.45 → t 1.0
+  salida: "renders/sin-remotion/showreel-tactium.mp4",
+}, seek);
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "pista-noche",
+    "prompt": "Cinematic slow dolly forward into an empty outdoor padel court at night, blue artificial turf with white lines, tempered glass back walls and black metal mesh fence, bright LED floodlights, light haze in the air, moody teal and green tones, shallow depth of field, realistic, 4k"
+  },
+  {
+    "id": "bola-linea",
+    "prompt": "Extreme close-up at ground level: a single yellow padel ball rolls slowly across blue artificial turf and stops right on the white court line, sand granules on the turf, soft evening light, shallow depth of field, realistic macro cinematography"
+  },
+  {
+    "id": "palas-banquillo",
+    "prompt": "Two padel paddle racket (solid foam paddle with no strings, a perforated flat hitting face full of small round holes, short handle)s and three yellow balls resting on a wooden bench beside an enclosed padel court (small court fully surrounded by glass back walls and black metal mesh fences, blue artificial turf), golden hour sunlight, slow lateral parallax camera move, background softly out of focus, realistic, cinematic. Not tennis rackets, no strings."
+  },
+  {
+    "id": "red-pista",
+    "prompt": "Slow tracking shot along the net of a padel court at sunset, low angle, warm sun flare through the glass walls, dust particles floating in the light, blue turf, nobody on court, realistic cinematic footage"
+  },
+  {
+    "id": "club-interior",
+    "prompt": "Wide establishing shot inside a modern indoor padel club: a row of several enclosed padel court (small court fully surrounded by glass back walls and black metal mesh fences, blue artificial turf)s side by side, each court boxed in by glass walls, high ceiling with lights, a few players far away and out of focus, slow pan left to right, realistic, cinematic. Not tennis courts."
+  },
+  {
+    "id": "movil-banquillo",
+    "prompt": "A smartphone lying face down on a bench next to a padel paddle racket (solid foam paddle with no strings, a perforated flat hitting face full of small round holes, short handle) and a water bottle, just outside an enclosed padel court (small court fully surrounded by glass back walls and black metal mesh fences, blue artificial turf), late afternoon light, slow push-in, shallow depth of field, realistic. Not a tennis racket, no strings."
+  }
+]

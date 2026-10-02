@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TACTIUM · ¿cuántos puntos tienes?</title>
+<!--
+  Prueba de motion: los puntos federados dentro de la app (solo Federación
+  Cántabra activa: no hablar de «17 federaciones»). Gancho de R5: «¿Cuántos
+  puntos tienes? Sin mirar». Datos de ejemplo (nombres y puntos inventados).
+  Música: pixabay-creative-technology-showreel desde 12.38 (drop 12.88 → t 0.5),
+  compases de 1.6 s, golpes de 0.4 s.
+-->
+<link rel="stylesheet" href="../lib/base.css">
+<style> canvas.full { position: absolute; inset: 0; width: 1080px; height: 1920px; } </style>
+</head>
+<body>
+<div id="stage"><canvas id="c2" class="full" width="1080" height="1920"></canvas><canvas id="fx" class="full" width="1080" height="1920"></canvas></div>
+<script type="module">
+import { arrancar } from "../lib/base.js";
+import { clamp, prog, eOut, eInOut, eBack, lerp, rnd, $ } from "../lib/util.js";
+import { C, W, H, CX, font, grano, barridos, hud, cargarLogo, cierre } from "../lib/marca2d.js";
+
+const FPS = 30, DUR = 8.6, k = (n) => 0.5 + n * 1.6;
+const g = $("#c2").getContext("2d"), fx = $("#fx").getContext("2d");
+const logo = await cargarLogo();
+const TU = 1284;
+const RANK = [
+  [208, "Marcos G.", 1352], [209, "Nacho R.", 1340], [210, "Iván P.", 1331], [211, "Carlos M.", 1318], [212, "Jorge L.", 1301],
+  [213, "Adrián S.", 1296], [214, "Tú", TU], [215, "Óscar B.", 1270], [216, "Raúl F.", 1262], [217, "David T.", 1251], [218, "Unai C.", 1240],
+];
+const fmt = (n) => n.toLocaleString("es-ES");
+
+function escena(t, frame) {
+  g.fillStyle = C.BG; g.fillRect(0, 0, W, H);
+  // Gancho desde el primer fotograma
+  if (t < k(1)) {
+    const out = eOut(prog(t, k(1) - 0.25, 0.25));
+    font(g, 900, 112); g.fillStyle = C.HUESO; g.textAlign = "left"; g.letterSpacing = "-3px"; g.globalAlpha = 1 - out;
+    g.fillText("¿Cuántos puntos", 80, 440); g.fillText("tienes?", 80, 556); g.letterSpacing = "0px";
+    const p = eOut(prog(t, 0.2, 0.3)); g.globalAlpha = p * (1 - out); font(g, 400, 96, "ISerif", "italic"); g.fillStyle = C.GRIS; g.fillText("Sin mirar.", 80, 680);
+    g.globalAlpha = 1;
+  }
+  // Marcador de tragaperras: gira hasta k(1) - 0.4 y se para dígito a dígito
+  if (t >= k(0) && t < k(2)) {
+    const up = eInOut(prog(t, k(1), 0.45));
+    const y = lerp(1080, 560, up), px = lerp(280, 150, up);
+    font(g, 700, px, "JBM"); g.textAlign = "center"; g.fillStyle = C.HUESO;
+    const s = fmt(TU), r = rnd(Math.floor(frame / 2) * 31 + 7);
+    const stop = (i) => k(1) - 0.5 + i * 0.12;
+    const shown = [...s].map((ch, i) => (ch === "." || t >= stop(i)) ? ch : String(Math.floor(r() * 10))).join("");
+    const pop = 1 + 0.06 * Math.exp(-Math.max(0, t - stop(4)) * 10) * (t >= stop(4) ? 1 : 0);
+    g.save(); g.translate(CX, y); g.scale(pop, pop); g.fillText(shown, 0, 0); g.restore();
+    font(g, 500, 26, "JBM"); g.letterSpacing = "6px"; g.fillStyle = C.GRIS; g.globalAlpha = eOut(prog(t, 0.7, 0.3));
+    g.fillText("FEDERACIÓN CÁNTABRA · PUNTOS", CX, y + lerp(110, 70, up)); g.letterSpacing = "0px"; g.globalAlpha = 1;
+  }
+  // Ranking que corre y se para en ti
+  if (t >= k(1) + 0.1 && t < k(2)) {
+    const enter = eOut(prog(t, k(1) + 0.1, 0.35)), scroll = eInOut(prog(t, k(1) + 0.1, 1.2));
+    const off = lerp(600, 0, scroll); // la lista sube hasta dejarte en el centro
+    g.save(); g.beginPath(); g.rect(0, 720, W, 760); g.clip();
+    RANK.forEach(([pos, name, pts], i) => {
+      const rowY = 1100 + (i - 6) * 110 + off;
+      const tu = name === "Tú";
+      g.globalAlpha = enter;
+      g.beginPath(); g.roundRect(80, rowY - 48, 830, 92, 20); g.fillStyle = tu ? C.VERDE : "#0B2420"; g.fill();
+      font(g, 500, 30, "JBM"); g.textAlign = "left"; g.fillStyle = tu ? C.BG : C.GRIS; g.fillText(`#${pos}`, 110, rowY + 10);
+      font(g, tu ? 900 : 700, 38); g.fillStyle = tu ? C.BG : C.HUESO; g.fillText(name, 240, rowY + 12);
+      font(g, 700, 34, "JBM"); g.textAlign = "right"; g.fillText(fmt(pts), 880, rowY + 12);
+    });
+    g.restore(); g.globalAlpha = 1;
+  }
+  // Lo que tienes en la app, a golpe
+  if (t >= k(2) && t < k(3)) {
+    font(g, 900, 120); g.textAlign = "left"; g.letterSpacing = "-3px";
+    ["Tus puntos.", "Tu clasificación.", "Tu equipo."].forEach((s, i) => {
+      const p = eOut(prog(t, k(2) + i * 0.4, 0.25)); g.globalAlpha = p; g.fillStyle = i === 2 ? C.VERDE : C.HUESO;
+      g.save(); g.translate(80, 820 + i * 140); g.scale(lerp(1.15, 1, p), lerp(1.15, 1, p)); g.fillText(s, 0, 0); g.restore();
+    });
+    g.globalAlpha = 1; g.letterSpacing = "0px";
+  }
+  if (t >= k(3) && t < k(4)) {
+    const p1 = eOut(prog(t, k(3), 0.3)), p2 = eOut(prog(t, k(3) + 0.4, 0.3)), p3 = eOut(prog(t, k(3) + 0.8, 0.3));
+    font(g, 900, 132); g.fillStyle = C.HUESO; g.textAlign = "left"; g.letterSpacing = "-4px";
+    g.globalAlpha = p1; g.fillText("Sin salir", 80, 880 + (1 - p1) * 40);
+    g.globalAlpha = p2; g.fillText("de la app.", 80, 1010 + (1 - p2) * 40);
+    g.letterSpacing = "0px"; font(g, 700, 46); g.fillStyle = C.GRIS; g.globalAlpha = p3; g.fillText("Federación Cántabra.", 80, 1110); g.globalAlpha = 1;
+  }
+  if (t >= k(4)) cierre(g, t - k(4), logo);
+}
+
+function seek(t) {
+  const frame = Math.round(t * FPS);
+  escena(t, frame);
+  fx.clearRect(0, 0, W, H);
+  barridos(fx, t, [k(2), k(4)]);
+  if (t < k(4)) hud(fx, t, frame, { fps: FPS, dur: DUR, arribaDer: "FEDERACIÓN", abajoIzq: "PUNTOS FEDERADOS" });
+  grano(fx, frame);
+  const f = prog(t, DUR - 0.5, 0.5); if (f > 0) { fx.fillStyle = `rgba(0,0,0,${f * f})`; fx.fillRect(0, 0, W, H); }
+}
+
+arrancar({ dur: DUR, fps: FPS, musica: { src: "public/musica/pixabay-creative-technology-showreel.mp3", desde: 12.38 }, salida: "renders/sin-remotion/motion-puntos.mp4" }, seek);
+</script>
+</body>
+</html>
