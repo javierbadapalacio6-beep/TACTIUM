@@ -12,7 +12,7 @@ import { FcpTeamScreen } from '@features/seasons/screens/FcpTeamScreen';
 import { FcpPlayerScreen } from '@features/seasons/screens/FcpPlayerScreen';
 import { useAuthStore } from '@store/authStore';
 
-import type { AuthStackParamList, SeasonsStackScreenProps } from './types';
+import type { AuthStackParamList, CompetirStackScreenProps } from './types';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -25,7 +25,7 @@ const Stack = createNativeStackNavigator<AuthStackParamList>();
  */
 const asSeasons = <T extends 'Federacion' | 'FcpGroup' | 'FcpTeam' | 'FcpPlayer'>(
   props: unknown,
-) => props as SeasonsStackScreenProps<T>;
+) => props as CompetirStackScreenProps<T>;
 
 const PublicFederacion = (props: object) => (
   <FederacionScreen {...asSeasons<'Federacion'>(props)} />

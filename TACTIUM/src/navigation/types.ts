@@ -1,6 +1,9 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { CompositeScreenProps } from '@react-navigation/native';
+import type {
+  CompositeScreenProps,
+  NavigatorScreenParams,
+} from '@react-navigation/native';
 
 // ─── Auth Stack ─────────────────────────────────────────────────────
 export type AuthStackParamList = {
@@ -33,151 +36,108 @@ export type OnboardingStackParamList = {
   CreateTeamsForClub: undefined;
   CreateTeam: { clubId?: string } | undefined;
   AddPlayers: undefined;
-  // Paywall en onboarding es un gate OBLIGATORIO entre crear el subject
-  // (club/team) y los siguientes pasos. Sin sub no se llega a tabs ni a
-  // CreateTeamsForClub/AddPlayers. nextScreen indica a dónde saltar tras
-  // un trial/compra exitosa — el PaywallScreen hace navigation.replace
-  // para que el back NO devuelva al pago.
+  // Paywall dentro del onboarding: SOLO como upsell opcional y descartable
+  // (p. ej. ofrecer el volcado automático). La prueba de 14 días sin tarjeta
+  // arranca sola al crear el primer equipo independiente o el club.
   Paywall: {
     intent: 'captain' | 'club';
-    // Upsell OPCIONAL dentro del onboarding (p.ej. ofrecer el volcado automático
-    // en AddPlayers): planes de onboarding pero DESCARTABLE (cerrar/atrás vuelven
-    // a la pantalla anterior, sin cerrar sesión). Sin esto es un gate obligatorio.
     optional?: boolean;
-    // `nextScreen` tras iniciar trial (solo gate DURO; el upsell opcional lo
-    // omite y hace goBack):
-    //  · CreateTeamsForClub → flow Club (club ya creado antes del paywall).
-    //  · AddPlayers         → flow Capitán (el paywall recibe `pendingTeam`
-    //    en params, crea el team tras success y enseguida navega aquí).
-    nextScreen?: 'CreateTeamsForClub' | 'AddPlayers';
-    // Solo flow Capitán: datos del form de CreateTeam que esperan ser
-    // insertados tras arrancar el trial. Permite mostrar paywall después
-    // de que el usuario haya rellenado el form (sunk-cost → menos abandono)
-    // mientras seguimos respetando el trigger DB `enforce_team_quota`
-    // que exige sub activa antes del INSERT.
-    pendingTeam?: {
-      name: string;
-      federation?: string;
-      league?: string;
-      category?: string;
-      group?: string;
-      gender?: 'masculino' | 'femenino' | 'mixto';
-    };
   };
 };
 
-// ─── Home Stack (nested under Home tab) ─────────────────────────────
+// ─── Rutas de detalle compartidas ───────────────────────────────────
+// La barra es la MISMA para todos los roles (Inicio · Competir · ＋ · Equipo ·
+// Perfil). Varias pestañas empujan las mismas pantallas de detalle; se declaran
+// una vez y cada stack las incluye con los MISMOS params, para que una pantalla
+// (Jornada, FcpTeam…) funcione igual esté en la stack que esté.
+type MatchdayRoutes = {
+  Jornada: { matchdayId?: string };
+  Lineup: { matchdayId: string };
+  Results: { matchdayId: string; focus?: number };
+  Availability: { matchdayId?: string };
+};
+
+// Explorador de la Federación (Cántabra): años → grupos → clasificación.
+type FcpRoutes = {
+  Federacion: undefined;
+  FcpTeam: { idEquipo: number; name?: string };
+  FcpPlayer: { idJugador: string; name?: string };
+  FcpGroup: { idGrupo: string; nombre?: string };
+};
+
+// Gestión del club (club_admin).
+type ClubRoutes = {
+  // Horarios de local del club (asignar hora a los partidos de local).
+  ClubSchedule: undefined;
+  CreateTeamFromClub: undefined;
+};
+
+type TournamentRoutes = {
+  // Detalle EDITABLE de un torneo del club (gestión).
+  TournamentDetail: { tournamentId: string };
+};
+
+// ─── Pestaña Inicio ─────────────────────────────────────────────────
+// El root cambia por rol: HomeScreen / SoloHomeScreen (jugador, capitán,
+// suelto), ClubDashboardScreen (club) o ClubTournamentsScreen (organizador).
 export type HomeStackParamList = {
-  HomeRoot: undefined;
+  // `createTournament` (nonce): abre el asistente de crear torneo al llegar
+  // (organizador, desde el botón ＋).
+  HomeRoot: { createTournament?: number } | undefined;
   Amistoso: undefined;
-  Jornada: { matchdayId?: string };
-  Lineup: { matchdayId: string };
-  Results: { matchdayId: string; focus?: number };
-  Availability: { matchdayId?: string };
-  // Explorar Federación reusado DENTRO del HomeStack para que, abierto desde el
-  // atajo de Home, "atrás" vuelva a Inicio (no a Temporadas). Mismos params que
-  // en SeasonsStack para reusar los componentes sin cast.
-  Federacion: undefined;
-  FcpTeam: { idEquipo: number; name?: string };
-  FcpPlayer: { idJugador: string; name?: string };
-  FcpGroup: { idGrupo: string; nombre?: string };
-};
+} & MatchdayRoutes &
+  FcpRoutes &
+  ClubRoutes &
+  TournamentRoutes;
 
-export type SeasonsStackParamList = {
-  SeasonsRoot: undefined;
-  // `autoOpen` permite que otros screens (ej. el empty state de Home)
-  // naveguen aquí abriendo directamente un sheet sin que el user tenga
-  // que descubrir el botón. 'scan' = ScanSheet de calendario.
-  SeasonDetail: { id: string; autoOpen?: 'scan' };
-  // Detalle federativo (Federación Cántabra): equipo rival y jugador.
-  FcpTeam: { idEquipo: number; name?: string };
-  FcpPlayer: { idJugador: string; name?: string };
-  // Navegación libre de la Federación: años → grupos → clasificación/jornadas.
-  Federacion: undefined;
-  FcpGroup: { idGrupo: string; nombre?: string };
-  // Flujo de jornada reusado DENTRO de la stack de Temporadas, para que "atrás"
-  // vuelva a la temporada (no a Inicio).
-  Jornada: { matchdayId?: string };
-  Lineup: { matchdayId: string };
-  Results: { matchdayId: string; focus?: number };
-  Availability: { matchdayId?: string };
-};
+// ─── Pestaña Competir ───────────────────────────────────────────────
+// Root con selector «Liga · Federación · Torneos». Registra todas las rutas de
+// detalle de esos tres mundos.
+export type CompetirSegment = 'liga' | 'federacion' | 'torneos';
 
+export type CompetirStackParamList = {
+  CompetirRoot: { segment?: CompetirSegment } | undefined;
+  // Gestión de torneos del club con equipos (Competir › Torneos › «Gestionar
+  // torneos»). `createTournament` (nonce) abre el asistente — botón ＋.
+  ClubTournaments: { createTournament?: number } | undefined;
+  // `autoOpen` abre directamente un sheet de la temporada (pasando por el
+  // gate premium): 'scan' = escáner de calendario, 'add' = nueva jornada.
+  // `nonce` re-dispara el autoOpen si la temporada ya estaba en la stack.
+  SeasonDetail: { id: string; autoOpen?: 'scan' | 'add'; nonce?: number };
+  // Horarios de local (raíz embebida de Liga para el club).
+  ClubSchedule: undefined;
+} & MatchdayRoutes &
+  FcpRoutes &
+  TournamentRoutes;
+
+// ─── Pestaña Equipo ─────────────────────────────────────────────────
+// Root por rol: TeamScreen (capitán/jugador), ClubTeamsScreen (club), CTA de
+// activar la gestión de equipos (organizador) o estado vacío (suelto).
+// ClubTeamPreview = dashboard de SOLO LECTURA de un equipo del club.
 export type TeamStackParamList = {
   TeamRoot: undefined;
-};
-
-// Stack de la pestaña Federación (capitán). El root decide en runtime: si el
-// equipo hereda una federación con datos (FCantP) → el explorador directo; si
-// no → un selector de federaciones. Comparte pantallas fcp_* para navegar.
-export type FederacionStackParamList = {
-  FederacionRoot: undefined;
-  Federacion: undefined;
-  FcpTeam: { idEquipo: number; name?: string };
-  FcpPlayer: { idJugador: string; name?: string };
-  FcpGroup: { idGrupo: string; nombre?: string };
-};
+  ClubTeamPreview: undefined;
+} & MatchdayRoutes;
 
 export type ProfileStackParamList = {
   ProfileRoot: undefined;
 };
 
-export type ClubStackParamList = {
-  ClubRoot: undefined;
-  CreateTeamFromClub: undefined;
-  // Horarios de local del club (asignar hora a los partidos de local).
-  ClubSchedule: undefined;
-  // La exploración de la Federación ya no vive en el ClubStack: el club_admin
-  // tiene su propia pestaña (FederacionTab → FederacionStack), igual que el
-  // capitán.
-  // Reusadas del HomeStack para que el ClubDashboard pueda navegar
-  // directo a una jornada (ej. tap en card de últimos resultados) sin
-  // cambiar de tab. Quedan read-only automáticamente para club_admin
-  // porque selectIsCaptain devuelve false desde 2026-05-16.
-  Jornada: { matchdayId?: string };
-  Lineup: { matchdayId: string };
-  Results: { matchdayId: string; focus?: number };
-};
-
-// Tab dedicada al club_admin para navegar por los equipos del club en
-// modo SOLO LECTURA. El root es un listado de equipos; al elegir uno
-// se entra a ClubTeamPreview (dashboard curado por equipo) y desde ahí
-// se navega a Jornada/Lineup/Results (reusadas del HomeStack — quedan
-// read-only porque selectIsCaptain devuelve false para club_admin).
-export type ClubTeamsStackParamList = {
-  ClubTeamsRoot: undefined;
-  ClubTeamPreview: undefined;
-  // Jornada/Lineup/Results comparten params con HomeStack para reusar
-  // los mismos componentes sin cast de navigation.
-  Jornada: { matchdayId?: string };
-  Lineup: { matchdayId: string };
-  Results: { matchdayId: string; focus?: number };
-};
-
 // ─── Bottom Tabs ────────────────────────────────────────────────────
+// `Create` es el botón central ＋: no es una pantalla, abre la hoja CREAR.
 export type TabParamList = {
-  Club: undefined;
-  ClubTeams: undefined;
-  Tournaments: undefined;
-  Home: undefined;
-  Seasons: undefined;
-  Team: undefined;
-  Stats: undefined;
-  FederacionTab: undefined;
-  Profile: undefined;
-};
-
-// Stack de la pestaña Torneos (club_admin).
-export type TournamentsStackParamList = {
-  TournamentsRoot: undefined;
-  TournamentDetail: { tournamentId: string };
+  Home: NavigatorScreenParams<HomeStackParamList> | undefined;
+  Competir: NavigatorScreenParams<CompetirStackParamList> | undefined;
+  Create: undefined;
+  Team: NavigatorScreenParams<TeamStackParamList> | undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
 // ─── Root Stack ─────────────────────────────────────────────────────
 export type RootStackParamList = {
   AuthFlow: undefined;
   OnboardingFlow: undefined;
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<TabParamList> | undefined;
   // Modales presentados encima de las tabs
   Paywall: { intent?: string } | undefined;
   Subscription: undefined;
@@ -208,6 +168,9 @@ export type RootStackParamList = {
     initialTab?: 'main' | 'schedule' | 'players' | 'info';
     paid?: string;
   };
+  // Unirse a un equipo desde el enlace de invitación `tactium.io/i/{code}`.
+  // Vista previa + unirse; existe con y sin sesión y en el onboarding.
+  JoinTeam: { code: string };
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -223,37 +186,17 @@ export type HomeStackScreenProps<T extends keyof HomeStackParamList> =
     TabScreenProps<keyof TabParamList>
   >;
 
-export type SeasonsStackScreenProps<T extends keyof SeasonsStackParamList> =
+export type CompetirStackScreenProps<T extends keyof CompetirStackParamList> =
   CompositeScreenProps<
-    NativeStackScreenProps<SeasonsStackParamList, T>,
+    NativeStackScreenProps<CompetirStackParamList, T>,
     TabScreenProps<keyof TabParamList>
   >;
 
-export type FederacionStackScreenProps<T extends keyof FederacionStackParamList> =
+export type TeamStackScreenProps<T extends keyof TeamStackParamList> =
   CompositeScreenProps<
-    NativeStackScreenProps<FederacionStackParamList, T>,
+    NativeStackScreenProps<TeamStackParamList, T>,
     TabScreenProps<keyof TabParamList>
   >;
-
-export type ClubStackScreenProps<T extends keyof ClubStackParamList> =
-  CompositeScreenProps<
-    NativeStackScreenProps<ClubStackParamList, T>,
-    TabScreenProps<keyof TabParamList>
-  >;
-
-export type ClubTeamsStackScreenProps<
-  T extends keyof ClubTeamsStackParamList,
-> = CompositeScreenProps<
-  NativeStackScreenProps<ClubTeamsStackParamList, T>,
-  TabScreenProps<keyof TabParamList>
->;
-
-export type TournamentsStackScreenProps<
-  T extends keyof TournamentsStackParamList,
-> = CompositeScreenProps<
-  NativeStackScreenProps<TournamentsStackParamList, T>,
-  TabScreenProps<keyof TabParamList>
->;
 
 export type AuthStackScreenProps<T extends keyof AuthStackParamList> =
   NativeStackScreenProps<AuthStackParamList, T>;

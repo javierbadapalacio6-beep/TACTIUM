@@ -22,7 +22,7 @@ import {
   type FcpPlayerHistory,
   type FcpPlayerMatch,
 } from '@core/services/fcpProfiles';
-import type { SeasonsStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 
 const fmtN = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const MON = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
@@ -42,7 +42,7 @@ const initials = (name: string): string => {
 type Filtro = 'todos' | 'victorias' | 'derrotas';
 const FILTRO_LABEL: Record<Filtro, string> = { todos: 'TODOS ▾', victorias: 'VICTORIAS ▾', derrotas: 'DERROTAS ▾' };
 
-export const FcpPlayerScreen = ({ navigation, route }: SeasonsStackScreenProps<'FcpPlayer'>) => {
+export const FcpPlayerScreen = ({ navigation, route }: CompetirStackScreenProps<'FcpPlayer'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();

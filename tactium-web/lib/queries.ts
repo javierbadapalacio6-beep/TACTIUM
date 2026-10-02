@@ -1,8 +1,34 @@
 "use client";
 
 import { supabaseBrowser } from "./supabase/client";
+import { guardedWrite, type WriteResult } from "./writes";
 import type { Position } from "./team-data";
 import { FCP_FEDERATION_CODE } from "./federations";
+import {
+  fcpDisplayName,
+  fcpTeamKey,
+  findLastFcpMeeting,
+  type FcpMeeting,
+  fetchFcpGroupHeader as fetchFcpGroupHeaderWith,
+  fetchFcpMatches as fetchFcpMatchesWith,
+  fetchFcpRoster as fetchFcpRosterWith,
+  fetchFcpStandings as fetchFcpStandingsWith,
+  fetchFcpTeamProfile as fetchFcpTeamProfileWith,
+  type FcpGroupHeader,
+  type FcpMatch,
+  type FcpRosterPlayer,
+  type FcpStanding,
+  type FcpTeamProfile,
+} from "./fcp-public";
+export type {
+  FcpGroupHeader,
+  FcpMatch,
+  FcpMeeting,
+  FcpPreseason,
+  FcpRosterPlayer,
+  FcpStanding,
+  FcpTeamProfile,
+} from "./fcp-public";
 
 /**
  * Capa de datos.
@@ -176,8 +202,154 @@ export async function createInvitation(
   return data as DbInvitation;
 }
 
+/**
+ * Código de jugador nuevo: borra el compartido de siempre y devuelve otro.
+ * Quien ya canjeó el anterior sigue en el equipo. Mismo RPC que la app
+ * (`rotatePlayerCode`); la BD valida is_team_admin.
+ */
+export async function rotatePlayerCode(teamId: string): Promise<DbInvitation> {
+  const { data, error } = await supabaseBrowser().rpc("rotate_team_player_code", {
+    target_team: teamId,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("No se pudo generar el código");
+  return data as DbInvitation;
+}
+
 export function invitationActive(inv: DbInvitation): boolean {
   return inv.used_at === null && new Date(inv.expires_at) > new Date();
+}
+
+/* ── Vista previa de una invitación (RPC, también sin sesión) ───── */
+export interface InvitationPreviewPlayer {
+  id: string;
+  name: string;
+  position: string | null;
+  pts: number | null;
+  claimed: boolean;
+}
+
+export type InvitationPreview =
+  | { valid: false; reason: "not_found" | "used" | "expired" }
+  | {
+      valid: true;
+      role: "player" | "captain";
+      team: {
+        id: string;
+        name: string;
+        logo_url: string | null;
+        league: string | null;
+        category: string | null;
+        group_name: string | null;
+        federation: string | null;
+      };
+      club_name: string | null;
+      captain_name: string | null;
+      players_count: number;
+      next_matchday: {
+        jornada: number | null;
+        date: string | null;
+        opponent: string | null;
+      } | null;
+      roster: InvitationPreviewPlayer[];
+    };
+
+/**
+ * Lo público de un equipo a partir de un código de invitación: no une a
+ * nadie ni escribe nada. Funciona con y sin sesión (RPC `SECURITY DEFINER`
+ * concedida a `anon`).
+ */
+export async function previewInvitation(code: string): Promise<InvitationPreview> {
+  const { data, error } = await supabaseBrowser().rpc("preview_team_invitation", {
+    p_code: code.replace(/\s+/g, "").toUpperCase(),
+  });
+  if (error) throw error;
+  const d = (data ?? { valid: false, reason: "not_found" }) as InvitationPreview;
+  if (!d.valid) return d;
+  return {
+    ...d,
+    players_count: Number(d.players_count) || 0,
+    roster: Array.isArray(d.roster) ? d.roster : [],
+  };
+}
+
+/**
+ * Canjea el código y, si el invitado eligió su ficha, le vincula a ella.
+ * «Ya estás vinculado a otro jugador del equipo» no es un fallo: ya tiene
+ * ficha. Si la vinculación falla por otra cosa, la unión YA está hecha y se
+ * devuelve el motivo para avisar sin deshacer nada.
+ */
+export async function joinTeamWithInvite(
+  code: string,
+  playerId: string | null,
+): Promise<{ claimError: string | null }> {
+  await redeemInvitation(code);
+  if (!playerId) return { claimError: null };
+  try {
+    await claimPlayer(playerId);
+    return { claimError: null };
+  } catch (e) {
+    const msg =
+      e && typeof e === "object" && "message" in e
+        ? String((e as { message: unknown }).message)
+        : "No se pudo vincular la ficha";
+    if (/ya est[aá]s vinculado/i.test(msg)) return { claimError: null };
+    return { claimError: msg };
+  }
+}
+
+/* ── Prueba gratis de 14 días sin tarjeta (RPC) ─────────────────── */
+/**
+ * Arranca la suscripción de prueba (`trialing`, 14 días, sin tienda). Es
+ * idempotente por sujeto: si ya tiene una, la BD no crea otra.
+ */
+export async function startSubscriptionTrial(
+  subjectType: "user" | "club",
+  subjectId: string,
+  planTier: string,
+): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("start_subscription_trial", {
+    p_subject_type: subjectType,
+    p_subject_id: subjectId,
+    p_plan_tier: planTier,
+  });
+  if (error) throw error;
+}
+
+export interface DbTrialSubscription {
+  planTier: string;
+  subjectType: string;
+  subjectId: string;
+  currentPeriodEnd: string;
+}
+
+/**
+ * La prueba gratuita EN CURSO del pagador indicado (la de BD: `trialing` con
+ * `product_id` `trial_*`, no la de una tienda). null si no hay.
+ */
+export async function fetchTrialSubscription(
+  subjectType: "user" | "club",
+  subjectId: string,
+): Promise<DbTrialSubscription | null> {
+  const { data, error } = await supabaseBrowser()
+    .from("subscriptions")
+    .select("plan_tier, subject_type, subject_id, product_id, current_period_end")
+    .eq("subject_type", subjectType)
+    .eq("subject_id", subjectId)
+    .eq("status", "trialing")
+    .like("product_id", "trial_%")
+    .gt("current_period_end", new Date().toISOString())
+    .order("current_period_end", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    planTier: data.plan_tier,
+    subjectType: data.subject_type,
+    subjectId: data.subject_id,
+    currentPeriodEnd: data.current_period_end,
+  };
 }
 
 /* ── Vinculación usuario ↔ jugador de plantilla (claim) ──────────── */
@@ -461,6 +633,9 @@ export interface DbMatchday {
   scoreFor: number | null;
   scoreAgainst: number | null;
   photoUrl: string | null;
+  /** Parejas por turno horario, «N-N-N» (p. ej. «1-2»). null si la liga no
+   *  usa tandas. Opcional para no obligar a quien construye jornadas a mano. */
+  tandas?: string | null;
 }
 
 function mapMatchday(m: Record<string, unknown>): DbMatchday {
@@ -478,11 +653,12 @@ function mapMatchday(m: Record<string, unknown>): DbMatchday {
     scoreFor: (m.score_for as number) ?? null,
     scoreAgainst: (m.score_against as number) ?? null,
     photoUrl: (m.photo_url as string) ?? null,
+    tandas: (m.tandas as string) ?? null,
   };
 }
 
 const MATCHDAY_COLS =
-  "id, season_id, jornada_number, match_date, match_time, opponent, is_home, status, outcome, location, score_for, score_against, photo_url";
+  "id, season_id, jornada_number, match_date, match_time, opponent, is_home, status, outcome, location, score_for, score_against, photo_url, tandas";
 
 export async function fetchMatchdays(seasonId: string): Promise<DbMatchday[]> {
   const { data, error } = await supabaseBrowser()
@@ -687,6 +863,127 @@ export async function clearPlayerAvailability(
   if (error) throw error;
 }
 
+/* ── Disponibilidad en un toque (Voy · Duda · No puedo) ─────────
+ * Misma lógica que la app (TACTIUM/src/core/services/availability.ts):
+ * fuente de verdad = tabla `availability` por jornada; sin fila = sin
+ * contestar. La duda cierra 24 h antes del partido. */
+export type AvailStatus = "yes" | "maybe" | "no";
+export type MaybeReason = "trabajo" | "molestias" | "viaje" | "pendiente";
+
+export const MAYBE_REASONS: { id: MaybeReason; label: string }[] = [
+  { id: "trabajo", label: "Trabajo" },
+  { id: "molestias", label: "Molestias" },
+  { id: "viaje", label: "Viaje" },
+  { id: "pendiente", label: "Lo sé más tarde" },
+];
+
+export const STATUS_LABEL: Record<AvailStatus, string> = {
+  yes: "Voy",
+  maybe: "Duda",
+  no: "No puedo",
+};
+
+export interface AvailRow {
+  status: AvailStatus;
+  reason: MaybeReason | null;
+  note: string | null;
+  autoResolved: boolean;
+}
+
+/** Respuestas de una jornada por player_id (con estado, motivo y nota). */
+export async function fetchAvailabilityDetail(
+  matchdayId: string,
+): Promise<Record<string, AvailRow>> {
+  // `select *`: antes de la migración no existe `status`; se deriva de `available`.
+  const { data, error } = await supabaseBrowser()
+    .from("availability")
+    .select("*")
+    .eq("matchday_id", matchdayId);
+  if (error) throw error;
+  const out: Record<string, AvailRow> = {};
+  for (const a of (data ?? []) as Record<string, unknown>[]) {
+    out[a.player_id as string] = {
+      status: ((a.status as AvailStatus | undefined) ?? (a.available ? "yes" : "no")),
+      reason: (a.reason as MaybeReason | null | undefined) ?? null,
+      note: (a.note as string | null | undefined) ?? null,
+      autoResolved: !!a.auto_resolved,
+    };
+  }
+  return out;
+}
+
+/** Cierre de la duda (24 h antes del partido), o null. */
+export async function fetchMaybeDeadline(matchdayId: string): Promise<Date | null> {
+  const { data, error } = await supabaseBrowser().rpc("availability_maybe_deadline", {
+    p_matchday_id: matchdayId,
+  });
+  if (error) return null;
+  return data ? new Date(data as string) : null;
+}
+
+/** Responde por un jugador (él mismo, o el capitán por cualquiera). */
+export async function respondAvailability(
+  matchdayId: string,
+  playerId: string,
+  status: AvailStatus,
+  reason?: MaybeReason | null,
+  note?: string | null,
+): Promise<void> {
+  const { error } = await supabaseBrowser().rpc("respond_availability", {
+    p_matchday_id: matchdayId,
+    p_player_id: playerId,
+    p_status: status,
+    p_reason: reason ?? null,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+}
+
+/** Último «Recordar ahora» de la jornada (bloqueo de 12 h). */
+export async function fetchLastReminder(matchdayId: string): Promise<Date | null> {
+  const { data, error } = await supabaseBrowser()
+    .from("availability_reminders")
+    .select("created_at")
+    .eq("matchday_id", matchdayId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) return null;
+  const row = (data as { created_at: string }[] | null)?.[0];
+  return row ? new Date(row.created_at) : null;
+}
+
+export type RemindOutcome =
+  | { ok: true; reminded: number; withoutApp: string[] }
+  | { ok: false; kind: "premium" | "cooldown" | "other"; message: string };
+
+/** Capitán (premium): push a pendientes y dudas. 1 vez / 12 h. */
+export async function remindPendingAvailability(matchdayId: string): Promise<RemindOutcome> {
+  const { data, error } = await supabaseBrowser().rpc("remind_pending_availability", {
+    p_matchday_id: matchdayId,
+  });
+  if (error) {
+    const hint = (error as { hint?: string }).hint ?? "";
+    return {
+      ok: false,
+      kind: hint === "premium_required" ? "premium" : hint.startsWith("cooldown:") ? "cooldown" : "other",
+      message: error.message,
+    };
+  }
+  const d = data as { reminded: number; without_app: { name: string }[] };
+  return { ok: true, reminded: d.reminded, withoutApp: (d.without_app ?? []).map((p) => p.name) };
+}
+
+/** Recuento por estado sobre los ids de la plantilla activa. */
+export function countAvail(ids: string[], map: Record<string, AvailRow>) {
+  const c = { yes: 0, maybe: 0, no: 0, pending: 0, total: ids.length };
+  for (const id of ids) {
+    const s = map[id]?.status;
+    if (s) c[s] += 1;
+    else c.pending += 1;
+  }
+  return c;
+}
+
 /** El propio jugador marca SU disponibilidad (RPC set_player_self_availability,
  *  que resuelve la jornada relevante en el servidor). */
 export async function setSelfAvailability(
@@ -886,6 +1183,23 @@ export async function fetchClubTeams(clubId: string): Promise<DbClubTeam[]> {
 }
 
 /**
+ * `id_equipo` federativo (FCP) vinculado a un equipo TACTIUM, o null. Es lo
+ * que identifica a «tu equipo» en una clasificación: el nombre no sirve
+ * (dos equipos pueden llamarse igual y el de la federación va en mayúsculas).
+ */
+export async function fetchTeamFcpId(teamId: string): Promise<number | null> {
+  // El vínculo más reciente, sin `maybeSingle`: si un día hubiera dos filas
+  // (pasó en la app), esto no tiene que reventar.
+  const { data: links } = await supabaseBrowser()
+    .from("fcp_team_links")
+    .select("fcp_id_equipo")
+    .eq("team_id", teamId)
+    .order("linked_at", { ascending: false })
+    .limit(1);
+  return ((links ?? []) as { fcp_id_equipo: number }[])[0]?.fcp_id_equipo ?? null;
+}
+
+/**
  * Resuelve el grupo federativo (FCP) de un equipo, para enlazar «Mi grupo» a su
  * clasificación concreta en vez de al explorador general. Devuelve null si el
  * equipo no está vinculado a la Federación Cántabra.
@@ -894,15 +1208,7 @@ export async function fetchTeamFcpGroup(
   teamId: string,
 ): Promise<{ fed: string; idGrupo: string } | null> {
   const sb = supabaseBrowser();
-  // El vínculo más reciente, sin `maybeSingle`: si un día hubiera dos filas
-  // (pasó en la app), esto no tiene que reventar.
-  const { data: links } = await sb
-    .from("fcp_team_links")
-    .select("fcp_id_equipo")
-    .eq("team_id", teamId)
-    .order("linked_at", { ascending: false })
-    .limit(1);
-  const fcpId = ((links ?? []) as { fcp_id_equipo: number }[])[0]?.fcp_id_equipo ?? null;
+  const fcpId = await fetchTeamFcpId(teamId);
   if (fcpId == null) return null;
 
   // La temporada actual (mayor id_liga), su liga regular (no playoff/fase).
@@ -916,6 +1222,76 @@ export async function fetchTeamFcpGroup(
   );
   if (!row?.id_grupo) return null;
   return { fed: FCP_FEDERATION_CODE, idGrupo: row.id_grupo };
+}
+
+/**
+ * Nombre federativo de un equipo por su `id_equipo` (el de la temporada más
+ * reciente). El cuadro de playoff solo guarda NOMBRES, así que para resaltar
+ * «tu equipo» por vínculo hay que pasar del id al nombre.
+ */
+export async function fetchFcpTeamNameById(
+  fcpId: number,
+  idGrupo?: string,
+): Promise<string | null> {
+  const { data } = await supabaseBrowser()
+    .from("fcp_clasificacion")
+    .select("equipo, id_grupo, id_liga")
+    .eq("id_equipo", fcpId)
+    .order("id_liga", { ascending: false });
+  const rows = (data ?? []) as { equipo: string | null; id_grupo: string | null }[];
+  // 1) En el propio grupo, si el id aparece; 2) si no (el playoff cambia de
+  // id), el nombre en su liga principal (grupo regular, no «fase…»).
+  const inGroup = idGrupo ? rows.find((r) => r.id_grupo === idGrupo) : undefined;
+  const main = rows.find((r) => r.id_grupo && !/^fase/i.test(r.id_grupo));
+  return (inGroup ?? main ?? rows[0])?.equipo ?? null;
+}
+
+/**
+ * Contexto federativo de una jornada: puesto y racha de los dos equipos y su
+ * último cruce en el grupo. Nuestro equipo se reconoce por el VÍNCULO
+ * (fcp_team_links); el rival, por nombre normalizado, porque la jornada solo
+ * guarda el texto del rival. Sin vínculo devuelve null y la pantalla pinta
+ * la cabecera sin puesto ni racha.
+ */
+export interface MatchdayFcpContext {
+  fed: string;
+  idGrupo: string;
+  us: FcpStanding | null;
+  them: FcpStanding | null;
+  lastMeeting: FcpMeeting | null;
+}
+
+export async function fetchMatchdayFcpContext(
+  teamId: string,
+  opponent: string,
+  matchDate: string | null,
+): Promise<MatchdayFcpContext | null> {
+  const fcpId = await fetchTeamFcpId(teamId);
+  if (fcpId == null) return null;
+  const group = await fetchTeamFcpGroup(teamId);
+  if (!group) return null;
+  const [standings, matches] = await Promise.all([
+    fetchFcpStandings(group.idGrupo),
+    fetchFcpMatches(group.idGrupo),
+  ]);
+  const us = standings.find((s) => Number(s.idEquipo) === fcpId) ?? null;
+  // Si nuestro id no está en la tabla (el grupo es de una temporada anterior),
+  // ni racha ni puesto para nadie: compararíamos contra una tabla vieja.
+  if (!us) return { fed: group.fed, idGrupo: group.idGrupo, us: null, them: null, lastMeeting: null };
+  const key = fcpTeamKey(opponent);
+  let them = standings.find((s) => fcpTeamKey(s.equipo) === key) ?? null;
+  if (!them && key) {
+    // Tolerancia: «Medio Cudeyo» frente a «MEDIO CUDEYO A». Solo si hay UN
+    // candidato; con dos, mejor no decir nada que decir el de otro.
+    const loose = standings.filter((s) => {
+      const k = fcpTeamKey(s.equipo);
+      return s !== us && (k.startsWith(key + " ") || key.startsWith(k + " "));
+    });
+    if (loose.length === 1) them = loose[0];
+  }
+  const lastMeeting =
+    us && them ? findLastFcpMeeting(matches, us.equipo, them.equipo, matchDate) : null;
+  return { fed: group.fed, idGrupo: group.idGrupo, us, them, lastMeeting };
 }
 
 export async function fetchClub(clubId: string) {
@@ -1082,6 +1458,21 @@ export interface DbNotification {
   created_at: string;
   /** A dónde lleva el aviso. Null si no hay destino para ese tipo. */
   href: string | null;
+  /** Jornada / torneo a los que se refiere (para los botones en línea). */
+  matchdayId: string | null;
+  tournamentId: string | null;
+  /** `new_follower`: quién te sigue. `clubId` sólo si sigue a tu club. */
+  actor: NotifActor | null;
+  clubId: string | null;
+}
+
+export interface NotifActor {
+  id: string;
+  /** Nombre completo del perfil, o null si no se pudo leer. */
+  name: string | null;
+  username: string | null;
+  /** Si tú ya le sigues (tabla `follows`). */
+  following: boolean;
 }
 
 /**
@@ -1112,7 +1503,11 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
     case "matchday_created":
       return jornada ? `/jornada/${jornada}` : null;
     case "tournament_schedule":
+    case "tournament_bracket":
+    case "tournament_moved":
       return torneo ? `/torneos/${torneo}` : null;
+    case "tournament_payment_due":
+      return torneo ? `/torneos/${torneo}/inscripcion` : null;
     case "tournament_signup":
       return torneo ? `/torneos/${torneo}` : "/club/torneos";
     case "joined_team":
@@ -1121,6 +1516,14 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
       return "/equipo";
     case "schedule_set":
       return "/club/horarios";
+    case "kudos": {
+      // data = {type, actor_id, target_kind: 'casual'|'league', target_id}
+      const target = g("target_id", "targetId");
+      if (!target) return null;
+      return g("target_kind", "targetKind") === "league"
+        ? `/jornada/${target}`
+        : `/amistosos/${target}`;
+    }
     default:
       return null;
   }
@@ -1137,6 +1540,14 @@ export async function fetchNotifications(): Promise<DbNotification[]> {
     data: Record<string, unknown> | null;
   })[];
 
+  const str = (d: Record<string, unknown> | null, ...keys: string[]) => {
+    for (const k of keys) {
+      const v = d?.[k];
+      if (typeof v === "string" && v) return v;
+    }
+    return null;
+  };
+
   const out: DbNotification[] = rows.map((r) => ({
     id: r.id,
     type: r.type,
@@ -1145,34 +1556,120 @@ export async function fetchNotifications(): Promise<DbNotification[]> {
     read_at: r.read_at,
     created_at: r.created_at,
     href: notifHref(r.type, r.data),
+    matchdayId: str(r.data, "matchdayId", "matchday_id"),
+    tournamentId: str(r.data, "tournamentId", "tournament_id"),
+    actor: null,
+    clubId: r.type === "new_follower" ? str(r.data, "club_id", "clubId") : null,
   }));
 
   // «X te ha empezado a seguir» sólo trae el uuid, y el perfil público va
-  // por nombre de usuario. Se resuelven aparte, que suelen ser pocos.
-  const seguidores = rows.filter(
-    (r) => r.type === "new_follower" && typeof r.data?.actor_id === "string"
-  );
-  if (seguidores.length > 0) {
-    const ids = [...new Set(seguidores.map((r) => r.data!.actor_id as string))];
-    const perfiles = await Promise.all(
-      ids.map(async (id) => {
-        const { data: p } = await supabaseBrowser().rpc("get_public_user_profile", {
-          target: id,
-        });
-        const u = (p as { username?: string } | null)?.username;
-        return [id, u ?? null] as const;
-      })
-    );
+  // por nombre de usuario. Se resuelven aparte, que suelen ser pocos. De paso
+  // se mira si ya le sigues, para el botón «Seguir también».
+  const actorIds = [
+    ...new Set(
+      out
+        .filter((r) => r.type === "new_follower")
+        .map((r) => str(rows.find((x) => x.id === r.id)?.data ?? null, "actor_id"))
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  if (actorIds.length > 0) {
+    const [perfiles, siguiendo] = await Promise.all([
+      Promise.all(
+        actorIds.map(async (id) => {
+          const { data: p } = await supabaseBrowser().rpc("get_public_user_profile", {
+            target: id,
+          });
+          const prof = (Array.isArray(p) ? p[0] : p) as
+            | { username?: string | null; full_name?: string | null }
+            | null;
+          return [id, prof] as const;
+        })
+      ),
+      fetchFollowedUserIds(actorIds).catch(() => new Set<string>()),
+    ]);
     const byId = new Map(perfiles);
     for (const r of out) {
       if (r.type !== "new_follower") continue;
-      const actor = rows.find((x) => x.id === r.id)?.data?.actor_id;
-      const user = typeof actor === "string" ? byId.get(actor) : null;
-      r.href = user ? `/u/${user}` : "/comunidad";
+      const actorId = str(rows.find((x) => x.id === r.id)?.data ?? null, "actor_id");
+      if (!actorId) {
+        r.href = "/comunidad";
+        continue;
+      }
+      const prof = byId.get(actorId) ?? null;
+      const username = prof?.username ?? null;
+      r.actor = {
+        id: actorId,
+        name: prof?.full_name?.trim() || null,
+        username,
+        following: siguiendo.has(actorId),
+      };
+      r.href = username ? `/u/${username}` : "/comunidad";
     }
   }
 
   return out;
+}
+
+/** De una lista de usuarios, a cuáles sigues tú (tabla `follows`). */
+export async function fetchFollowedUserIds(userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return new Set();
+  const { data, error } = await sb
+    .from("follows")
+    .select("target_id")
+    .eq("follower_id", user.id)
+    .eq("target_type", "user")
+    .in("target_id", userIds);
+  if (error) throw error;
+  return new Set(((data ?? []) as { target_id: string }[]).map((f) => f.target_id));
+}
+
+/**
+ * Tu respuesta a una jornada, para los botones del aviso de disponibilidad.
+ *
+ * Tu ficha se resuelve en el equipo DE ESA JORNADA (jornada → temporada →
+ * equipo → jugador con tu `user_id`), no en el equipo activo: el aviso puede
+ * ser de otro equipo tuyo. Null si no eres jugador de ese equipo o la
+ * jornada no existe.
+ */
+export async function fetchMyMatchdayAvailability(matchdayId: string): Promise<{
+  playerId: string;
+  status: AvailStatus | null;
+  upcoming: boolean;
+} | null> {
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return null;
+  const md = await fetchMatchday(matchdayId);
+  if (!md) return null;
+  const { data: season } = await sb
+    .from("seasons")
+    .select("team_id")
+    .eq("id", md.seasonId)
+    .maybeSingle();
+  const teamId = (season as { team_id: string | null } | null)?.team_id ?? null;
+  if (!teamId) return null;
+  const { data: players } = await sb
+    .from("players")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", user.id)
+    .limit(1);
+  const playerId = ((players ?? []) as { id: string }[])[0]?.id ?? null;
+  if (!playerId) return null;
+  const detail = await fetchAvailabilityDetail(matchdayId);
+  return {
+    playerId,
+    status: detail[playerId]?.status ?? null,
+    upcoming: md.status === "upcoming",
+  };
 }
 
 /** Borra un aviso. La RLS acota a los tuyos. */
@@ -1470,10 +1967,29 @@ export async function fetchTournamentRegs(id: string) {
   const { data: direct } = await sb
     .from("tournament_registrations")
     .select(
-      "id, gender, category, group_no, pair_label, p1_name, p2_name, p1_phone, p1_email, seed, seed_points, status",
+      "id, gender, category, group_no, pair_label, p1_name, p2_name, p1_phone, p1_email, p1_user_id, p2_user_id, seed, seed_points, status",
     )
     .eq("tournament_id", id);
   return (direct ?? []) as Record<string, unknown>[];
+}
+
+/**
+ * Inscripciones de un torneo en las que está el usuario (como jugador 1 o 2).
+ * Sirve para resaltar «Tu camino» en el cuadro. Lee directo bajo RLS, que deja
+ * ver a cada uno sus propias inscripciones; si no puede, devuelve vacío y el
+ * cuadro se pinta sin resaltar (nunca rompe la pantalla).
+ */
+export async function fetchMyTournamentRegIds(
+  tournamentId: string,
+  userId: string,
+): Promise<string[]> {
+  const { data, error } = await supabaseBrowser()
+    .from("tournament_registrations")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .or(`p1_user_id.eq.${userId},p2_user_id.eq.${userId}`);
+  if (error) return [];
+  return ((data ?? []) as { id: string }[]).map((r) => r.id);
 }
 
 /** Estado de cobro de las inscripciones (para el organizador). La RPC pública no
@@ -1696,6 +2212,10 @@ export interface FeedRow {
   title: string;
   subtitle: string | null;
   positive: boolean | null;
+  /** Kudos recibidos por el resultado (migración 20261002b_activity_kudos). */
+  kudos_count: number;
+  /** Si el usuario ya dio el suyo. */
+  i_gave_kudos: boolean;
 }
 
 export async function fetchFeed(limit = 30): Promise<FeedRow[]> {
@@ -1703,11 +2223,52 @@ export async function fetchFeed(limit = 30): Promise<FeedRow[]> {
     p_limit: limit,
   });
   if (error) throw error;
-  return (data ?? []) as FeedRow[];
+  // Un servidor sin la migración de kudos no trae las columnas: se rellenan.
+  return ((data ?? []) as Partial<FeedRow>[]).map((r) => ({
+    ...(r as FeedRow),
+    kudos_count: Number(r.kudos_count ?? 0),
+    i_gave_kudos: !!r.i_gave_kudos,
+  }));
 }
 
-export async function fetchPublicProfile(userId: string) {
-  const { data, error } = await supabaseBrowser().rpc("get_public_user_profile", {
+/**
+ * Da o quita tu kudos a un resultado del feed (toggle). Pasa por
+ * `guardedWrite`. En un amistoso, `targetUserId` es el `actor_id` del ítem
+ * (a quién le llega el aviso); en una jornada, null.
+ */
+export async function toggleActivityKudos(
+  kind: "casual" | "league",
+  targetId: string,
+  targetUserId: string | null = null,
+): Promise<WriteResult<{ given: boolean; count: number }>> {
+  return guardedWrite("dar kudos", async () => {
+    const { data, error } = await supabaseBrowser().rpc("toggle_activity_kudos", {
+      p_kind: kind,
+      p_target_id: targetId,
+      p_target_user_id: kind === "casual" ? targetUserId : null,
+    });
+    if (error) throw error;
+    const d = (data ?? {}) as { given?: boolean; count?: number };
+    return { given: !!d.given, count: Number(d.count ?? 0) };
+  });
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Perfil público por id o por @usuario (las URLs /u/<x> usan las dos formas). */
+export async function fetchPublicProfile(idOrUsername: string) {
+  const sb = supabaseBrowser();
+  let userId = idOrUsername;
+  if (!UUID_RE.test(idOrUsername)) {
+    const handle = decodeURIComponent(idOrUsername).replace(/^@/, "");
+    const { data: resolved, error: rErr } = await sb.rpc("resolve_username", {
+      p_username: handle,
+    });
+    if (rErr) throw rErr;
+    if (!resolved) return null;
+    userId = resolved as string;
+  }
+  const { data, error } = await sb.rpc("get_public_user_profile", {
     target: userId,
   });
   if (error) throw error;
@@ -1726,6 +2287,10 @@ export interface DbCasual {
   photoUrl: string | null;
   sideA: string[];
   sideB: string[];
+  /** Cuentas vinculadas de cada lado (null = jugador sin cuenta). Sirve para
+   *  saber en qué lado jugó el usuario, que NO siempre es el 0. */
+  userIdsA: (string | null)[];
+  userIdsB: (string | null)[];
 }
 
 export async function fetchCasualMatches(limit = 30): Promise<DbCasual[]> {
@@ -1733,7 +2298,7 @@ export async function fetchCasualMatches(limit = 30): Promise<DbCasual[]> {
   const { data, error } = await sb
     .from("casual_matches")
     .select(
-      "id, type, played_on, sets, winner_side, claim_code, photo_url, casual_match_participants(side, slot, name)"
+      "id, type, played_on, sets, winner_side, claim_code, photo_url, casual_match_participants(side, slot, name, user_id)"
     )
     .order("played_on", { ascending: false })
     .limit(limit);
@@ -1745,6 +2310,7 @@ export async function fetchCasualMatches(limit = 30): Promise<DbCasual[]> {
       side: number;
       slot: number;
       name: string;
+      user_id: string | null;
     }[]).slice().sort((a, b) => a.slot - b.slot);
     return {
       id: m.id,
@@ -1756,6 +2322,8 @@ export async function fetchCasualMatches(limit = 30): Promise<DbCasual[]> {
       photoUrl: m.photo_url,
       sideA: parts.filter((p) => p.side === 0).map((p) => p.name),
       sideB: parts.filter((p) => p.side === 1).map((p) => p.name),
+      userIdsA: parts.filter((p) => p.side === 0).map((p) => p.user_id ?? null),
+      userIdsB: parts.filter((p) => p.side === 1).map((p) => p.user_id ?? null),
     };
   });
 }
@@ -1968,19 +2536,8 @@ export async function fetchFcpGroups(
  */
 export async function fetchFcpGroupHeader(
   idGrupo: string,
-): Promise<{ nombre: string; genero: string | null; temporada: string | null } | null> {
-  const { data, error } = await supabaseBrowser()
-    .from("fcp_grupos")
-    .select("nombre, genero, temporada")
-    .eq("id_grupo", idGrupo)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return {
-    nombre: data.nombre ?? idGrupo,
-    genero: data.genero ?? null,
-    temporada: data.temporada ?? null,
-  };
+): Promise<FcpGroupHeader | null> {
+  return fetchFcpGroupHeaderWith(supabaseBrowser(), idGrupo);
 }
 
 /**
@@ -2166,98 +2723,17 @@ export async function fetchFcpRanking(opts: {
   );
 }
 
-export interface FcpStanding {
-  posicion: number;
-  idEquipo: number;
-  equipo: string;
-  puntos: number;
-  pj: number;
-  pg: number;
-  setsFavor: number;
-  setsContra: number;
-  enf: number;
-  /** Racha reciente (hasta 5, del más antiguo al más nuevo). Derivada. */
-  form: ("V" | "D")[];
-}
-
 export async function fetchFcpStandings(
   idGrupo: string
 ): Promise<FcpStanding[]> {
-  const sb = supabaseBrowser();
-  // PJ/PG/racha se DERIVAN de fcp_partidos: las columnas de fcp_clasificacion
-  // vienen en 0 (el scrape de la matriz no las rellena).
-  const [{ data, error }, { data: partidos, error: pe }] = await Promise.all([
-    sb
-      .from("fcp_clasificacion")
-      .select("posicion, id_equipo, equipo, puntos, sets_favor, sets_contra, enf")
-      .eq("id_grupo", idGrupo)
-      .order("posicion", { ascending: true }),
-    sb
-      .from("fcp_partidos")
-      .select("equipo_local, equipo_visit, ganador, estado, jornada")
-      .eq("id_grupo", idGrupo)
-      .order("jornada", { ascending: true }),
-  ]);
-  if (error) throw error;
-  if (pe) throw pe;
-  const stats = deriveTeamStats((partidos ?? []) as FcpPartidoLite[]);
-  return (data ?? []).map((r) => {
-    const s = stats.get(r.equipo) ?? { pj: 0, pg: 0, form: [] as ("V" | "D")[] };
-    return {
-      posicion: r.posicion ?? 0,
-      idEquipo: r.id_equipo,
-      equipo: r.equipo ?? "—",
-      puntos: r.puntos ?? 0,
-      pj: s.pj,
-      pg: s.pg,
-      setsFavor: r.sets_favor ?? 0,
-      setsContra: r.sets_contra ?? 0,
-      enf: r.enf ?? 0,
-      form: s.form.slice(-5),
-    };
-  });
-}
-
-export interface FcpMatch {
-  idPartido: string;
-  jornada: number | null;
-  fecha: string | null;
-  hora: string | null;
-  local: string;
-  visitante: string;
-  resultado: string | null;
-  ganador: string | null;
-  estado: string | null;
-  ronda: string | null;
-  cuadro: string | null;
+  return fetchFcpStandingsWith(supabaseBrowser(), idGrupo);
 }
 
 export async function fetchFcpMatches(
   idGrupo: string,
   limit = 200
 ): Promise<FcpMatch[]> {
-  const { data, error } = await supabaseBrowser()
-    .from("fcp_partidos")
-    .select(
-      "id_partido, jornada, fecha, hora, equipo_local, equipo_visit, resultado, ganador, estado, ronda, cuadro"
-    )
-    .eq("id_grupo", idGrupo)
-    .order("jornada", { ascending: true })
-    .limit(limit);
-  if (error) throw error;
-  return (data ?? []).map((p) => ({
-    idPartido: p.id_partido,
-    jornada: p.jornada,
-    fecha: p.fecha,
-    hora: p.hora,
-    local: p.equipo_local ?? "—",
-    visitante: p.equipo_visit ?? "—",
-    resultado: p.resultado,
-    ganador: p.ganador,
-    estado: p.estado,
-    ronda: p.ronda,
-    cuadro: p.cuadro,
-  }));
+  return fetchFcpMatchesWith(supabaseBrowser(), idGrupo, limit);
 }
 
 export interface FcpPlayerRow {
@@ -2611,21 +3087,6 @@ const fcpNorm = (s: string | null | undefined): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** Nombre para mostrar: "NOMBRE APELLIDO1 APELLIDO2". La columna `nombre` viene
- *  como "APELLIDO1 APELLIDO2, NOMBRE", así que no sirve para presentación. */
-function fcpDisplayName(r: {
-  nombre_pila?: string | null;
-  apellido1?: string | null;
-  apellido2?: string | null;
-  nombre?: string | null;
-}): string {
-  const n = [r.nombre_pila, r.apellido1, r.apellido2]
-    .map((x) => (x ?? "").trim())
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  return n || (r.nombre ?? "Jugador");
-}
 /** Nombre tal como aparece en el acta: "nombre_pila apellido1". */
 const fcpActaName = (r: {
   nombre_pila?: string | null;
@@ -2644,68 +3105,6 @@ function fcpShortCatFromGroup(nombre: string | null): string | null {
   return [cat, g].filter(Boolean).join(" ") || null;
 }
 
-interface FcpPartidoLite {
-  equipo_local: string | null;
-  equipo_visit: string | null;
-  ganador: string | null;
-  estado: string | null;
-}
-
-/** PJ/PG/racha por equipo, derivados del calendario (fcp_partidos). */
-function deriveTeamStats(
-  partidos: FcpPartidoLite[]
-): Map<string, { pj: number; pg: number; form: ("V" | "D")[] }> {
-  const stats = new Map<string, { pj: number; pg: number; form: ("V" | "D")[] }>();
-  for (const p of partidos) {
-    if (p.estado !== "jugado") continue;
-    const sides: [string | null, boolean][] = [
-      [p.equipo_local, true],
-      [p.equipo_visit, false],
-    ];
-    for (const [name, isLocal] of sides) {
-      if (!name) continue;
-      const s = stats.get(name) ?? { pj: 0, pg: 0, form: [] as ("V" | "D")[] };
-      s.pj += 1;
-      const won =
-        (p.ganador === "local" && isLocal) ||
-        (p.ganador === "visitante" && !isLocal);
-      const decided = p.ganador === "local" || p.ganador === "visitante";
-      if (won) s.pg += 1;
-      if (decided) s.form.push(won ? "V" : "D");
-      stats.set(name, s);
-    }
-  }
-  return stats;
-}
-
-/** Grupo principal (liga regular) de un id_equipo federativo: el que tiene más
- *  partidos (donde vive el calendario completo), no un playoff. */
-async function resolveFcpMainGroup(
-  idEquipo: number
-): Promise<{ idGrupo: string; equipo: string } | null> {
-  const sb = supabaseBrowser();
-  const { data, error } = await sb
-    .from("fcp_clasificacion")
-    .select("id_grupo, equipo")
-    .eq("id_equipo", idEquipo);
-  if (error) throw error;
-  const rows = (data ?? []) as { id_grupo: string; equipo: string }[];
-  if (rows.length === 0) return null;
-  if (rows.length === 1) return { idGrupo: rows[0].id_grupo, equipo: rows[0].equipo };
-  let best = rows[0];
-  let bestCount = -1;
-  for (const r of rows) {
-    const { count } = await sb
-      .from("fcp_partidos")
-      .select("id_partido", { count: "exact", head: true })
-      .eq("id_grupo", r.id_grupo);
-    if ((count ?? 0) > bestCount) {
-      bestCount = count ?? 0;
-      best = r;
-    }
-  }
-  return { idGrupo: best.id_grupo, equipo: best.equipo };
-}
 
 /* ── Clasificación de grupo (con PJ/PG/racha derivados) ─────────────── */
 export interface FcpGroupMeta {
@@ -2765,234 +3164,16 @@ export async function fetchFcpGroupMetas(
   return out;
 }
 
-/* ── Equipo federado: perfil completo (hero + stats + racha + plantilla) ─ */
-export interface FcpRosterPlayer {
-  idJugador: string;
-  name: string;
-  puntos: number;
-  categoria: string | null;
-  /** Cara de la ficha federativa, si la hay. */
-  avatarUrl: string | null;
-}
-/**
- * Un equipo de una temporada EN INSCRIPCIÓN. No tiene clasificación ni
- * partidos —el sorteo no está hecho— pero sí tiene todo lo que de verdad se
- * quiere mirar mientras dura la inscripción: en qué categoría le han
- * encuadrado, si el club ya lo confirmó, dónde jugará de local y, sobre todo,
- * su plantilla, que es donde se ven los fichajes.
- */
-export interface FcpPreseason {
-  categoria: string | null;
-  genero: string | null;
-  confirmado: boolean;
-  sede: string | null;
-  temporada: string | null;
-}
-
-export interface FcpTeamProfile {
-  idEquipo: number;
-  equipo: string;
-  grupo: string | null;
-  idGrupo: string | null;
-  posicion: number | null;
-  puntos: number;
-  pj: number;
-  pg: number;
-  pp: number;
-  setsFavor: number;
-  setsContra: number;
-  form: ("V" | "D")[];
-  roster: FcpRosterPlayer[];
-  /** No null ⇒ la temporada aún no ha empezado y las cifras de arriba son 0
-   *  porque no existen, no porque el equipo vaya mal. */
-  preseason: FcpPreseason | null;
-}
-
-/** Plantilla de un equipo, por id de la Federación. */
+/* ── Equipo federado: perfil completo (hero + stats + racha + plantilla) ─
+   La implementación vive en `fcp-public.ts` (compartida con el servidor). */
 async function fetchFcpRoster(idEquipo: number): Promise<FcpRosterPlayer[]> {
-  const { data } = await supabaseBrowser()
-    .from("fcp_jugadores")
-    .select("id_jugador, nombre_pila, apellido1, apellido2, nombre, puntos, categoria")
-    .eq("id_equipo", idEquipo)
-    .order("puntos", { ascending: false, nullsFirst: false });
-  const rows = (data ?? []) as {
-    id_jugador: string;
-    puntos: number | null;
-    categoria: string | null;
-    nombre_pila: string | null;
-    apellido1: string | null;
-    apellido2: string | null;
-    nombre: string | null;
-  }[];
-  // Las caras salen del mismo RPC que el acta; si falla, la lista va sin foto.
-  const faces = new Map<string, string | null>();
-  if (rows.length > 0) {
-    try {
-      const { data: fotos } = await supabaseBrowser().rpc("fcp_player_avatars", {
-        p_ids: rows.map((r) => r.id_jugador),
-      });
-      for (const f of (fotos ?? []) as { fcp_id_jugador?: string; id_jugador?: string; avatar_url: string | null }[]) {
-        const key = f.fcp_id_jugador ?? f.id_jugador;
-        if (key) faces.set(key, f.avatar_url);
-      }
-    } catch {
-      /* sin fotos */
-    }
-  }
-  return rows.map((r) => ({
-    idJugador: r.id_jugador,
-    name: fcpDisplayName(r),
-    puntos: r.puntos ?? 0,
-    categoria: r.categoria ?? null,
-    avatarUrl: faces.get(r.id_jugador) ?? null,
-  }));
-}
-
-/**
- * Ficha de un equipo que todavía no tiene calendario.
- *
- * Existe porque la ficha normal arranca resolviendo el grupo desde la
- * CLASIFICACIÓN, y una liga en inscripción no tiene ninguna: la pantalla decía
- * «no hay datos sincronizados» para los 323 equipos de la temporada que viene,
- * cuando en realidad teníamos su categoría, su sede y su plantilla.
- */
-async function fetchFcpPreseasonTeam(
-  idEquipo: number
-): Promise<FcpTeamProfile | null> {
-  const { data } = await supabaseBrowser()
-    .from("fcp_inscripciones")
-    .select("id_liga, equipo, genero, grupo_nombre, confirmado, sede")
-    .eq("id_equipo", idEquipo)
-    .order("id_liga", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const r = data as {
-    id_liga: number;
-    equipo: string | null;
-    genero: string | null;
-    grupo_nombre: string | null;
-    confirmado: boolean | null;
-    sede: string | null;
-  } | null;
-  if (!r) return null;
-
-  const [{ data: liga }, roster] = await Promise.all([
-    supabaseBrowser()
-      .from("fcp_ligas")
-      .select("temporada, nombre")
-      .eq("id_liga", r.id_liga)
-      .maybeSingle(),
-    fetchFcpRoster(idEquipo),
-  ]);
-
-  return {
-    idEquipo,
-    equipo: (r.equipo ?? "").trim() || "—",
-    grupo: r.grupo_nombre,
-    idGrupo: null,
-    posicion: null,
-    puntos: 0,
-    pj: 0,
-    pg: 0,
-    pp: 0,
-    setsFavor: 0,
-    setsContra: 0,
-    form: [],
-    roster,
-    preseason: {
-      categoria: r.grupo_nombre,
-      genero: r.genero,
-      confirmado: r.confirmado === true,
-      sede: r.sede,
-      temporada:
-        (liga as { temporada: string | null } | null)?.temporada ?? null,
-    },
-  };
+  return fetchFcpRosterWith(supabaseBrowser(), idEquipo);
 }
 
 export async function fetchFcpTeamProfile(
   idEquipo: number
 ): Promise<FcpTeamProfile | null> {
-  const main = await resolveFcpMainGroup(idEquipo);
-  // Sin clasificación no tiene por qué ser un equipo desconocido: puede estar
-  // apuntado a la temporada que viene, que aún no tiene sorteo ni calendario.
-  if (!main) return fetchFcpPreseasonTeam(idEquipo);
-  const sb = supabaseBrowser();
-  const [{ data: cls }, { data: partidos }, { data: g }, { data: jug }] =
-    await Promise.all([
-      sb
-        .from("fcp_clasificacion")
-        .select("posicion, puntos, sets_favor, sets_contra")
-        .eq("id_equipo", idEquipo)
-        .eq("id_grupo", main.idGrupo)
-        .maybeSingle(),
-      sb
-        .from("fcp_partidos")
-        .select("equipo_local, equipo_visit, ganador, estado, jornada")
-        .eq("id_grupo", main.idGrupo)
-        .order("jornada", { ascending: true }),
-      sb.from("fcp_grupos").select("nombre").eq("id_grupo", main.idGrupo).maybeSingle(),
-      sb
-        .from("fcp_jugadores")
-        .select("id_jugador, nombre_pila, apellido1, apellido2, nombre, puntos, categoria")
-        .eq("id_equipo", idEquipo)
-        .order("puntos", { ascending: false, nullsFirst: false }),
-    ]);
-
-  // PJ/PG/PP/racha del propio equipo, en orden cronológico.
-  let pj = 0;
-  let pg = 0;
-  let pp = 0;
-  const form: ("V" | "D")[] = [];
-  for (const p of (partidos ?? []) as (FcpPartidoLite & { jornada: number | null })[]) {
-    if (p.estado !== "jugado") continue;
-    const isLocal = p.equipo_local === main.equipo;
-    const isVisit = p.equipo_visit === main.equipo;
-    if (!isLocal && !isVisit) continue;
-    pj += 1;
-    const won =
-      (p.ganador === "local" && isLocal) || (p.ganador === "visitante" && isVisit);
-    const decided = p.ganador === "local" || p.ganador === "visitante";
-    if (won) pg += 1;
-    else if (decided) pp += 1;
-    if (decided) form.push(won ? "V" : "D");
-  }
-
-  const c = cls as
-    | { posicion: number | null; puntos: number | null; sets_favor: number | null; sets_contra: number | null }
-    | null;
-  const roster: FcpRosterPlayer[] = ((jug ?? []) as {
-    id_jugador: string;
-    puntos: number | null;
-    categoria: string | null;
-    nombre_pila: string | null;
-    apellido1: string | null;
-    apellido2: string | null;
-    nombre: string | null;
-  }[]).map((r) => ({
-    idJugador: r.id_jugador,
-    name: fcpDisplayName(r),
-    puntos: r.puntos ?? 0,
-    categoria: r.categoria ?? null,
-    avatarUrl: null,
-  }));
-
-  return {
-    idEquipo,
-    equipo: main.equipo,
-    grupo: (g as { nombre: string | null } | null)?.nombre ?? null,
-    idGrupo: main.idGrupo,
-    posicion: c?.posicion ?? null,
-    puntos: c?.puntos ?? 0,
-    pj,
-    pg,
-    pp,
-    setsFavor: c?.sets_favor ?? 0,
-    setsContra: c?.sets_contra ?? 0,
-    form,
-    preseason: null,
-    roster,
-  };
+  return fetchFcpTeamProfileWith(supabaseBrowser(), idEquipo);
 }
 
 /** Puesto del jugador dentro de su plantilla por puntos (Nº X en el equipo). */
@@ -3512,6 +3693,17 @@ export interface FcpBracketTie {
   marcador: string | null;
   ganador: string | null;
   estado: string | null;
+  /** Fecha y sede de cada manga, tal como las publica la FCP (texto libre;
+   *  a menudo vienen vacías). Opcionales para no romper a quien ya las usa. */
+  fechaIda?: string | null;
+  fechaVuelta?: string | null;
+  lugarIda?: string | null;
+  lugarVuelta?: string | null;
+  /** Partidos ganados en cada manga, contados de las actas y orientados al
+   *  cruce (l = equipo `local` del cruce, v = `visit`, también en la vuelta,
+   *  donde juegan con los papeles cambiados). Null si esa manga no tiene acta. */
+  idaScore?: { l: number; v: number } | null;
+  vueltaScore?: { l: number; v: number } | null;
 }
 export interface FcpBracketRound {
   avance: number;
@@ -3541,7 +3733,7 @@ export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
     sb
       .from("fcp_partidos")
       .select(
-        "id_partido, cuadro, avance, posicion_bracket, ronda, equipo_local, equipo_visit, ganador, estado"
+        "id_partido, cuadro, avance, posicion_bracket, ronda, equipo_local, equipo_visit, ganador, estado, fecha_ida, fecha_vuelta, lugar_ida, lugar_vuelta"
       )
       .eq("id_grupo", idGrupo)
       .like("id_partido", "fcp_playoff_%"),
@@ -3555,15 +3747,25 @@ export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
   // Marcador real (partidos ganados) por eliminatoria, desde las actas. En la
   // VUELTA los roles se invierten.
   const score = new Map<string, { l: number; v: number }>();
+  // Lo mismo, manga a manga (para el «Recorrido de tu equipo»).
+  const legScore = new Map<string, { l: number; v: number }>();
   for (const a of (actas ?? []) as { id_partido: string; ganador: string | null }[]) {
     const m = a.id_partido.match(/^(.*)_(ida|vuelta)$/);
     if (!m) continue;
     const tieId = m[1];
     const ida = m[2] === "ida";
     const s = score.get(tieId) ?? { l: 0, v: 0 };
-    if (a.ganador === "local") ida ? s.l++ : s.v++;
-    else if (a.ganador === "visitante") ida ? s.v++ : s.l++;
+    const legKey = `${tieId}|${m[2]}`;
+    const leg = legScore.get(legKey) ?? { l: 0, v: 0 };
+    if (a.ganador === "local") {
+      ida ? s.l++ : s.v++;
+      ida ? leg.l++ : leg.v++;
+    } else if (a.ganador === "visitante") {
+      ida ? s.v++ : s.l++;
+      ida ? leg.v++ : leg.l++;
+    }
     score.set(tieId, s);
+    legScore.set(legKey, leg);
   }
 
   const ties: FcpBracketTie[] = ((data ?? []) as {
@@ -3576,8 +3778,13 @@ export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
     equipo_visit: string | null;
     ganador: string | null;
     estado: string | null;
+    fecha_ida: string | null;
+    fecha_vuelta: string | null;
+    lugar_ida: string | null;
+    lugar_vuelta: string | null;
   }[]).map((r) => {
     const s = score.get(r.id_partido);
+    const txt = (v: string | null) => (v && v.trim() ? v.trim() : null);
     return {
       idPartido: r.id_partido,
       cuadro: r.cuadro || "Final",
@@ -3589,6 +3796,12 @@ export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
       marcador: s && s.l + s.v > 0 ? `${s.l}-${s.v}` : null,
       ganador: r.ganador ?? null,
       estado: r.estado ?? null,
+      fechaIda: txt(r.fecha_ida),
+      fechaVuelta: txt(r.fecha_vuelta),
+      lugarIda: txt(r.lugar_ida),
+      lugarVuelta: txt(r.lugar_vuelta),
+      idaScore: legScore.get(`${r.id_partido}|ida`) ?? null,
+      vueltaScore: legScore.get(`${r.id_partido}|vuelta`) ?? null,
     };
   });
 

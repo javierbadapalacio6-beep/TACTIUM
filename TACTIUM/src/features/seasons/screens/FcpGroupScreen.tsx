@@ -16,9 +16,17 @@ import {
   type FcpBrowseStanding,
   type FcpBrowseMatch,
 } from '@core/services/fcpBrowse';
-import { fetchFcpActa, type FcpActaPartido } from '@core/services/fcpSeason';
+import {
+  fetchFcpActa,
+  getFcpIdEquipo,
+  resolveMainGroupOrPrevious,
+  type FcpActaPartido,
+} from '@core/services/fcpSeason';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { groupZones, zoneIn, zoneColor, zoneRange, ZONES_FOOTNOTE } from '@core/data/fcpZones';
+import { useTeamStore } from '@store/teamStore';
 import { FcpBracketView } from '../components/FcpBracketView';
-import type { SeasonsStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 
 type Tab = 'clasif' | 'jornadas' | 'cuadro';
 
@@ -117,7 +125,7 @@ function splitScore(resultado: string | null): [string, string] | null {
   return [m[1], m[2]];
 }
 
-export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'FcpGroup'>) => {
+export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'FcpGroup'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -126,6 +134,13 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
 
   const [loading, setLoading] = useState(true);
   const [grupo, setGrupo] = useState<string | null>(nombre ?? null);
+  const [genero, setGenero] = useState<string | null>(null);
+  // Mi equipo federativo (equipo activo vinculado por fcp_team_links).
+  const activeTeamId = useTeamStore((s) => s.activeTeamId);
+  const [myFcpId, setMyFcpId] = useState<number | null>(null);
+  // Nombre federativo de mi equipo (el de la clasificación de su liga). En el
+  // cuadro de playoff el id_equipo cambia, así que se resalta por nombre.
+  const [myFcpName, setMyFcpName] = useState<string | null>(null);
   const [rows, setRows] = useState<FcpBrowseStanding[]>([]);
   const [schedule, setSchedule] = useState<FcpBrowseMatch[]>([]);
   const [tab, setTab] = useState<Tab>(esPlayoff ? 'cuadro' : 'clasif');
@@ -150,6 +165,7 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
       .then(([st, sc, ins]) => {
         if (!alive) return;
         setGrupo(st.nombre ?? nombre ?? null);
+        setGenero(st.genero);
         setRows(st.rows);
         setSchedule(sc);
         setInscritos(ins);
@@ -160,6 +176,30 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
       alive = false;
     };
   }, [idGrupo, nombre]);
+
+  useEffect(() => {
+    if (!activeTeamId) {
+      setMyFcpId(null);
+      setMyFcpName(null);
+      return;
+    }
+    let alive = true;
+    getFcpIdEquipo(activeTeamId)
+      .then(async (id) => {
+        if (!alive) return;
+        setMyFcpId(id);
+        const main = id != null ? await resolveMainGroupOrPrevious(id).catch(() => null) : null;
+        if (alive) setMyFcpName(main?.equipo ?? null);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyFcpId(null);
+        setMyFcpName(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeTeamId]);
 
   const jornadas = useMemo(() => {
     const byJ = new Map<number, FcpBrowseMatch[]>();
@@ -238,9 +278,19 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
     ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas']]
     : [['clasif', 'Clasificación'], ['jornadas', 'Jornadas']];
 
-  // Zona de ascenso/descenso: la FCP no publica los cupos, así que no se pinta
-  // (evitamos etiquetar mal). El hook queda listo para cuando exista el dato.
-  const zoneOf = (_pos: number | null): 'up' | 'down' | null => null;
+  // Zonas de play off / descenso: la FCP no publica los cupos, salen de la
+  // normativa (core/data/fcpZones.ts). Solo en la fase de grupos; sin datos,
+  // null y la tabla queda como siempre.
+  const zones = useMemo(
+    () =>
+      esPlayoff
+        ? null
+        : groupZones({ fed: FCP_FEDERATION_CODE, idGrupo, nombre: grupo, genero }),
+    [esPlayoff, idGrupo, grupo, genero],
+  );
+  const zoneOf = (pos: number | null) => zoneIn(zones, pos);
+  const myRow = myFcpId != null ? rows.find((r) => r.idEquipo === myFcpId) ?? null : null;
+  const myZone = myRow ? zoneOf(myRow.posicion) : null;
 
   const selDate = selMatches.find((m) => m.fecha)?.fecha ?? null;
   const selPlayed = selMatches.length > 0 && selMatches.every((m) => m.resultado);
@@ -325,13 +375,37 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
           </View>
         ) : tab === 'cuadro' ? (
           <View style={{ marginTop: 18 }}>
-            <FcpBracketView idGrupo={idGrupo} />
+            <FcpBracketView idGrupo={idGrupo} highlightTeam={myRow?.equipo ?? myFcpName} />
           </View>
         ) : tab === 'clasif' ? (
           rows.length === 0 ? (
             <Text style={styles.empty}>Sin clasificación disponible.</Text>
           ) : (
             <View style={{ marginTop: 22 }}>
+              {myRow ? (
+                <View style={styles.myCard}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.myCardEyebrow}>TU EQUIPO</Text>
+                    <Text style={styles.myCardTitle} numberOfLines={1}>
+                      {myRow.posicion != null ? `${myRow.posicion}º` : '–'} · {myRow.puntos ?? 0} pts
+                    </Text>
+                    <Text style={styles.myCardTeam} numberOfLines={1}>{myRow.equipo}</Text>
+                  </View>
+                  {myZone ? (
+                    <View
+                      style={[
+                        styles.zoneChip,
+                        { borderColor: zoneColor(myZone.key, c), backgroundColor: zoneColor(myZone.key, c) + '1F' },
+                      ]}
+                    >
+                      <Text style={[styles.zoneChipText, { color: zoneColor(myZone.key, c) }]}>
+                        {myZone.label.toUpperCase()}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               {/* Cabecera de tabla */}
               <View style={styles.thead}>
                 <Text style={[styles.th, { width: 22 }]}>#</Text>
@@ -343,25 +417,34 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
               </View>
 
               <View style={{ gap: 6, marginTop: 10 }}>
-                {rows.map((t) => {
+                {rows.map((t, i) => {
                   const dif = (t.setsFavor ?? 0) - (t.setsContra ?? 0);
                   const zone = zoneOf(t.posicion);
+                  const prevZone = i > 0 ? zoneOf(rows[i - 1].posicion) : null;
+                  // Línea discontinua al cambiar de zona.
+                  const cambio = !!zones && i > 0 && (prevZone?.key ?? null) !== (zone?.key ?? null);
+                  const isMine = myFcpId != null && t.idEquipo === myFcpId;
                   return (
+                    <React.Fragment key={`${t.idEquipo}-${t.equipo}`}>
+                    {cambio ? <View style={styles.zoneDivider} /> : null}
                     <Pressable
-                      key={`${t.idEquipo}-${t.equipo}`}
                       onPress={() =>
                         t.idEquipo != null
                           ? navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
                           : undefined
                       }
-                      style={({ pressed }) => [styles.stRow, pressed && { opacity: 0.85 }]}
+                      style={({ pressed }) => [
+                        styles.stRow,
+                        isMine && { borderColor: c.accent, backgroundColor: c.accent10 },
+                        pressed && { opacity: 0.85 },
+                      ]}
                     >
                       {zone ? (
-                        <View style={[styles.zoneBar, { backgroundColor: zone === 'up' ? c.accent : c.error }]} />
+                        <View style={[styles.zoneBar, { backgroundColor: zoneColor(zone.key, c) }]} />
                       ) : null}
                       <View style={styles.stTop}>
                         <Text style={[styles.stPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
-                        <Text style={[styles.stTeam, { flex: 1 }]} numberOfLines={1}>{t.equipo}</Text>
+                        <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={1}>{t.equipo}</Text>
                         <Text style={[styles.stNum, { width: 26, color: c.textMuted }]}>{t.pj}</Text>
                         <Text style={[styles.stNum, { width: 26, color: c.text }]}>{t.pg}</Text>
                         <Text style={[styles.stNum, { width: 40, textAlign: 'right', color: c.textFaint }]}>
@@ -380,9 +463,26 @@ export const FcpGroupScreen = ({ navigation, route }: SeasonsStackScreenProps<'F
                         </View>
                       ) : null}
                     </Pressable>
+                    </React.Fragment>
                   );
                 })}
               </View>
+
+              {zones ? (
+                <View style={styles.legend}>
+                  <View style={styles.legendRow}>
+                    {zones.map((zn) => (
+                      <View key={zn.key} style={styles.legendItem}>
+                        <View style={[styles.legendSwatch, { backgroundColor: zoneColor(zn.key, c) }]} />
+                        <Text style={styles.legendText}>
+                          {zn.label} {zoneRange(zn)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={styles.legendNote}>{ZONES_FOOTNOTE}</Text>
+                </View>
+              ) : null}
             </View>
           )
         ) : jNums.length === 0 ? (
@@ -618,7 +718,42 @@ const makeStyles = (c: Palette) =>
       gap: 8,
       overflow: 'hidden',
     },
-    zoneBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+    zoneBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+    zoneDivider: {
+      height: 1,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.hairStrong,
+      borderRadius: 1,
+      marginVertical: 3,
+    },
+    legend: { marginTop: 16, gap: 8 },
+    legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendSwatch: { width: 10, height: 10, borderRadius: 3 },
+    legendText: { fontFamily: Fonts.mono, fontSize: 10.5, color: c.textMuted, letterSpacing: 0.3 },
+    legendNote: { fontSize: 11.5, color: c.textFaint, lineHeight: 16 },
+    myCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 14,
+      marginBottom: 16,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      backgroundColor: c.accent10,
+    },
+    myCardEyebrow: { fontFamily: Fonts.mono, fontSize: 9.5, letterSpacing: 1.6, color: c.accent, fontWeight: '600' },
+    myCardTitle: { fontFamily: Fonts.mono, fontSize: 18, fontWeight: '800', color: c.text, marginTop: 3 },
+    myCardTeam: { fontSize: 12.5, color: c.textMuted, marginTop: 2 },
+    zoneChip: {
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: Radius.full,
+      borderWidth: 1,
+    },
+    zoneChipText: { fontFamily: Fonts.mono, fontSize: 9.5, letterSpacing: 1, fontWeight: '700' },
     stTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     stPos: { fontFamily: Fonts.mono, fontSize: 14, fontWeight: '700', color: c.textMuted },
     stTeam: { color: c.text, fontSize: 14.5, fontWeight: '700', letterSpacing: -0.1, minWidth: 0 },

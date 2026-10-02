@@ -20,6 +20,7 @@ import {
   Card,
   CardHead,
   Chip,
+  Field,
   IconTile,
   Input,
   ListRow,
@@ -27,6 +28,7 @@ import {
   Note,
   PageHeader,
   Progress,
+  Select,
   Stat,
   StatRow,
 } from "@/components/ui";
@@ -41,7 +43,10 @@ import {
   IconReceipt,
   IconSettings,
   IconShield,
+  IconUserPlus,
 } from "@/components/Icon";
+import { InvitePanel } from "@/components/invite/InvitePanel";
+import { TrialCard } from "@/components/subscription/TrialCard";
 import { EditClubModal } from "@/components/club/EditClubModal";
 import { Crest } from "@/components/Crest";
 
@@ -91,6 +96,9 @@ export function ClubDashboard() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Invitar a la plantilla de uno de los equipos del club.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
 
   const { data, loading, error } = useAsync<ClubData>(
     async () => {
@@ -203,6 +211,8 @@ export function ClubDashboard() {
         }
       />
 
+      <TrialCard subjectType="club" subjectId={clubId} />
+
       <StatRow style={{ marginBottom: 16 }}>
         <Stat label="Equipos" value={teams.length} icon={<IconShield size={14} />} />
         <Stat
@@ -235,6 +245,19 @@ export function ClubDashboard() {
         {/* ── Equipos ─────────────────────────────────────────────── */}
         <Card flush>
           <CardHead title="Equipos" count={teams.length}>
+            {teams.length > 0 && (
+              <Btn
+                size="sm"
+                variant="quiet"
+                icon={<IconUserPlus size={14} />}
+                onClick={() => {
+                  setInviteTeamId((cur) => cur ?? teams[0]?.id ?? null);
+                  setInviteOpen(true);
+                }}
+              >
+                Invitar
+              </Btn>
+            )}
             <Link href="/club/equipos" className="link-action">
               Ver todos
             </Link>
@@ -313,6 +336,43 @@ export function ClubDashboard() {
           ))}
         </Card>
       </div>
+
+      {/* ── Invitar a la plantilla de un equipo ─────────────────── */}
+      {inviteOpen && (
+        <Modal
+          open
+          onClose={() => setInviteOpen(false)}
+          labelledBy="club-invitar"
+          width={460}
+          title="Invitar a tu gente"
+          lede="Comparte el enlace del equipo: capitán y jugadores se unen gratis desde la app o la web."
+          footer={<Btn onClick={() => setInviteOpen(false)}>Listo</Btn>}
+        >
+          {teams.length > 1 && (
+            <Field label="Equipo" htmlFor="club-invitar-equipo" style={{ marginBottom: 16 }}>
+              <Select
+                id="club-invitar-equipo"
+                value={inviteTeamId ?? ""}
+                onChange={(e) => setInviteTeamId(e.target.value)}
+              >
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {inviteTeamId && (
+            <InvitePanel
+              key={inviteTeamId}
+              teamId={inviteTeamId}
+              teamName={teams.find((t) => t.id === inviteTeamId)?.name ?? "tu equipo"}
+              onToast={setToast}
+            />
+          )}
+        </Modal>
+      )}
 
       {/* ── Zona de peligro ───────────────────────────────────────── */}
       <Card danger style={{ marginTop: 24, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>

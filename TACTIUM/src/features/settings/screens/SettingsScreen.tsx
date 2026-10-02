@@ -37,7 +37,6 @@ import * as ProfileApi from '@core/services/profile';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
-import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import type { Database } from '@core/supabase/database.types';
 import type { RootStackParamList } from '@navigation/types';
 
@@ -101,10 +100,8 @@ export const SettingsScreen = () => {
   const [redeemOpen, setRedeemOpen]     = useState(false);
   const [claimOpen, setClaimOpen]       = useState(false);
   const [inviteOpen, setInviteOpen]     = useState(false);
-  // Reverse trial: invitar jugadores es premium → gate al paywall. Canjear /
-  // vincularse con código (redeem) sigue siendo gratis (el jugador no paga).
-  const gate = usePremiumGate();
-  const openInvite = gate(() => setInviteOpen(true), 'invite_create');
+  // Invitar jugadores es GRATIS (lo premium es la gestión), igual que canjear.
+  const openInvite = () => setInviteOpen(true);
   const [unlinking, setUnlinking]       = useState(false);
   const [deleting, setDeleting]         = useState(false);
   // Toggle de notificaciones push (profiles.notifications_enabled). El backend

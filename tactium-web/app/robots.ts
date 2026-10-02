@@ -10,6 +10,7 @@ const PRIVATE = [
   "/ajustes",
   "/amistosos",
   "/club",
+  "/competir",
   "/connect",
   "/empezar",
   "/bienvenida",

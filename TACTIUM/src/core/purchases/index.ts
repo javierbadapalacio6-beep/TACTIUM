@@ -119,6 +119,22 @@ export function getOfferingPrices(
 }
 
 /**
+ * ¿La TIENDA ofrece prueba gratis (oferta de introducción a 0 €) para este
+ * plan × periodo? Desde octubre de 2026 la prueba es nuestra (sin tarjeta) y la
+ * de la tienda se retira; el paywall no debe prometer días gratis que la tienda
+ * no va a dar. Sin offering cargado (simulador, sandbox) devuelve false.
+ */
+export function storeOffersFreeTrial(
+  offering: PurchasesOffering | null,
+  tier: PlanTier,
+  billing: BillingPeriod,
+): boolean {
+  if (!offering) return false;
+  const intro = resolvePackage(offering, tier, billing)?.product?.introPrice;
+  return Boolean(intro && intro.price === 0);
+}
+
+/**
  * Setea atributos custom que viajan con TODOS los eventos del webhook RC
  * → Supabase (`subscriber_attributes` en el payload). El webhook los lee
  * vía `resolveSubject(event)` y decide si la sub es del propio user o de

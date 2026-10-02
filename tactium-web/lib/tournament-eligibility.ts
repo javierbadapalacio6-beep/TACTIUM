@@ -8,7 +8,7 @@ export type CategoryRuleMode = "points" | "nivel" | "both";
 
 export interface CategoryThreshold {
   puntos: number | null; // máximo de puntos de la pareja (suma) — null = sin tope
-  nivel: number | null; // mínimo de nivel de liga de la pareja (suma) — null = sin mínimo
+  nivel: number | null; // mínimo de nivel (liga o circuito) de la pareja (suma) — null = sin mínimo
 }
 
 export interface CategoryRules {
@@ -54,9 +54,9 @@ export function checkCategoryEligibility(
   }
   if (checkNiv && t.nivel != null) {
     if (pairNivel == null)
-      return `Indica el nivel de liga de cada jugador para la categoría ${category}.`;
+      return `Indica el nivel (liga o circuito) de cada jugador para la categoría ${category}.`;
     if (pairNivel < t.nivel)
-      return `Necesitáis nivel de liga ≥ ${t.nivel} en ${category} (sumáis ${pairNivel}).`;
+      return `Necesitáis nivel (liga o circuito) ≥ ${t.nivel} en ${category} (sumáis ${pairNivel}).`;
   }
   return null;
 }

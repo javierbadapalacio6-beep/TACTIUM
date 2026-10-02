@@ -178,14 +178,22 @@ export interface FcpStandingRow {
   pj: number; // partidos jugados (derivado de fcp_partidos)
   pg: number; // partidos ganados (derivado)
   isMe: boolean;
+  /** Racha reciente (hasta 5, del más antiguo al más nuevo). */
+  form: ('V' | 'D')[];
 }
 
 /** Clasificación del grupo del equipo (todos los rivales, con id_equipo para la ficha). */
 export async function fetchFcpGroupStandings(
   fcpIdEquipo: number,
-): Promise<{ grupo: string | null; rows: FcpStandingRow[] }> {
+): Promise<{
+  grupo: string | null;
+  /** id_grupo y género ('M'|'F') del grupo, para las zonas de la normativa. */
+  idGrupo: string | null;
+  genero: string | null;
+  rows: FcpStandingRow[];
+}> {
   const main = await resolveMainGroupOrPrevious(fcpIdEquipo);
-  if (!main) return { grupo: null, rows: [] };
+  if (!main) return { grupo: null, idGrupo: null, genero: null, rows: [] };
   const grupo = main.id_grupo;
   const { data } = await rawFrom('fcp_clasificacion')
     .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
@@ -194,9 +202,12 @@ export async function fetchFcpGroupStandings(
 
   // PJ/PG derivados de fcp_partidos (el scrape de la matriz los deja en 0).
   const { data: partidos } = await rawFrom('fcp_partidos')
-    .select('equipo_local, equipo_visit, ganador, estado')
-    .eq('id_grupo', grupo);
+    .select('equipo_local, equipo_visit, ganador, estado, jornada')
+    .eq('id_grupo', grupo)
+    .order('jornada', { ascending: true });
   const stats = new Map<string, { pj: number; pg: number }>();
+  // Resultados por equipo en orden cronológico → racha (últimos 5).
+  const streak = new Map<string, ('V' | 'D')[]>();
   for (const p of (partidos ?? []) as {
     equipo_local: string | null;
     equipo_visit: string | null;
@@ -212,19 +223,35 @@ export async function fetchFcpGroupStandings(
       if (!name) continue;
       const s = stats.get(name) ?? { pj: 0, pg: 0 };
       s.pj += 1;
-      if ((p.ganador === 'local' && isLocal) || (p.ganador === 'visitante' && !isLocal)) s.pg += 1;
+      const won = (p.ganador === 'local' && isLocal) || (p.ganador === 'visitante' && !isLocal);
+      if (won) s.pg += 1;
       stats.set(name, s);
+      if (p.ganador === 'local' || p.ganador === 'visitante') {
+        const f = streak.get(name) ?? [];
+        f.push(won ? 'V' : 'D');
+        streak.set(name, f);
+      }
     }
   }
 
   const rows: FcpStandingRow[] = (
-    (data ?? []) as Omit<FcpStandingRow, 'isMe' | 'pj' | 'pg'>[]
+    (data ?? []) as Omit<FcpStandingRow, 'isMe' | 'pj' | 'pg' | 'form'>[]
   ).map((r) => {
     const s = stats.get(r.equipo) ?? { pj: 0, pg: 0 };
-    return { ...r, pj: s.pj, pg: s.pg, isMe: r.id_equipo === main.idEquipo };
+    return {
+      ...r,
+      pj: s.pj,
+      pg: s.pg,
+      isMe: r.id_equipo === main.idEquipo,
+      form: (streak.get(r.equipo) ?? []).slice(-5),
+    };
   });
-  const { data: g } = await rawFrom('fcp_grupos').select('nombre').eq('id_grupo', grupo).maybeSingle();
-  return { grupo: g ? ((g as { nombre: string }).nombre ?? null) : null, rows };
+  const { data: g } = await rawFrom('fcp_grupos')
+    .select('nombre, genero')
+    .eq('id_grupo', grupo)
+    .maybeSingle();
+  const gi = g as { nombre: string | null; genero: string | null } | null;
+  return { grupo: gi?.nombre ?? null, idGrupo: grupo, genero: gi?.genero ?? null, rows };
 }
 
 export interface FcpScheduleRow {
@@ -287,6 +314,80 @@ export async function fetchFcpGroupSchedule(
 
   const { data: g } = await rawFrom('fcp_grupos').select('nombre').eq('id_grupo', grupo).maybeSingle();
   return { grupo: g ? ((g as { nombre: string }).nombre ?? null) : null, myName, rows };
+}
+
+/** Normaliza un nombre de equipo para cruzarlo con la Federación (sin tildes,
+ *  sin mayúsculas, espacios colapsados). */
+export const normFcpName = norm;
+
+/** Último cruce jugado entre dos equipos de un grupo, desde MI punto de vista. */
+export interface FcpLastCrossing {
+  jornada: number | null;
+  fecha: string | null; // ISO 'YYYY-MM-DD'
+  /** Partidos (pistas) ganados por nosotros / por el rival. Null si el acta
+   *  no trae marcador legible. */
+  us: number | null;
+  them: number | null;
+  outcome: 'win' | 'loss' | 'draw' | null;
+  isHome: boolean;
+}
+
+/**
+ * Último partido JUGADO entre `myName` y `rivalName` en el grupo `idGrupo` (la
+ * temporada de ese grupo). `excludeFecha` deja fuera el propio partido de la
+ * jornada que se está mirando, para que la previa no se cite a sí misma.
+ */
+export async function fetchFcpLastCrossing(
+  idGrupo: string,
+  myName: string,
+  rivalName: string,
+  excludeFecha?: string | null,
+): Promise<FcpLastCrossing | null> {
+  const me = norm(myName);
+  const rv = norm(rivalName);
+  if (!me || !rv || me === rv) return null;
+  const { data } = await rawFrom('fcp_partidos')
+    .select('jornada, equipo_local, equipo_visit, resultado, ganador, estado, fecha')
+    .eq('id_grupo', idGrupo)
+    .eq('estado', 'jugado');
+  const rows = ((data ?? []) as {
+    jornada: number | null;
+    equipo_local: string | null;
+    equipo_visit: string | null;
+    resultado: string | null;
+    ganador: string | null;
+    estado: string | null;
+    fecha: string | null;
+  }[]).filter((r) => {
+    const l = norm(r.equipo_local);
+    const v = norm(r.equipo_visit);
+    const cruce = (l === me && v === rv) || (l === rv && v === me);
+    if (!cruce) return false;
+    if (excludeFecha && r.fecha && r.fecha.slice(0, 10) === excludeFecha.slice(0, 10)) return false;
+    return true;
+  });
+  if (rows.length === 0) return null;
+  // El más reciente: por fecha y, sin fecha, por jornada.
+  rows.sort((a, b) => {
+    const fa = a.fecha ?? '';
+    const fb = b.fecha ?? '';
+    if (fa !== fb) return fb.localeCompare(fa);
+    return (b.jornada ?? 0) - (a.jornada ?? 0);
+  });
+  const r = rows[0];
+  const isHome = norm(r.equipo_local) === me;
+  // resultado llega como "3/2" (local/visitante).
+  const m = /^\s*(\d+)\s*[/\-–]\s*(\d+)\s*$/.exec(r.resultado ?? '');
+  const local = m ? Number(m[1]) : null;
+  const visit = m ? Number(m[2]) : null;
+  const us = isHome ? local : visit;
+  const them = isHome ? visit : local;
+  let outcome: FcpLastCrossing['outcome'] = null;
+  if (r.ganador === 'empate') outcome = 'draw';
+  else if (r.ganador === 'local') outcome = isHome ? 'win' : 'loss';
+  else if (r.ganador === 'visitante') outcome = isHome ? 'loss' : 'win';
+  else if (us != null && them != null) outcome = us > them ? 'win' : us < them ? 'loss' : 'draw';
+  return { jornada: r.jornada, fecha: r.fecha, us, them, outcome, isHome };
 }
 
 export interface FcpActaPartido {

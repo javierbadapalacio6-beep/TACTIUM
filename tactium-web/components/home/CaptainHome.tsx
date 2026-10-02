@@ -1,23 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
+  countAvail,
   fetchActiveSeason,
-  fetchAvailability,
+  fetchAvailabilityDetail,
   fetchMatchdays,
+  fetchMaybeDeadline,
   fetchPlayers,
+  respondAvailability,
+  type AvailRow,
+  type AvailStatus,
+  type MaybeReason,
   type DbMatchday,
   type DbPlayer,
   type DbSeason,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { guardedWrite } from "@/lib/writes";
+import { RsvpButtons, STATUS_COLOR, formatDeadline, timeLeft } from "@/components/team/AvailabilityControls";
 import { Avatar, BtnLink, Card, Chip } from "@/components/ui";
 import { EmptyState, SkeletonPage } from "@/components/states";
 import { SeasonCalendar } from "@/components/home/SeasonCalendar";
+import { OtherTeamsStrip } from "@/components/home/OtherTeamsStrip";
 import { Crest } from "@/components/Crest";
+import { TrialCard } from "@/components/subscription/TrialCard";
 import {
   IconCalendar,
   IconCheck,
@@ -102,14 +112,17 @@ interface HomeData {
   season: DbSeason | null;
   matchdays: DbMatchday[];
   players: DbPlayer[];
-  availability: Record<string, boolean>;
+  availability: Record<string, AvailRow>;
+  deadline: Date | null;
 }
 
 /** Panel del capitán / jugador de equipo, con datos reales del equipo activo. */
 export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const { activeTeam, user } = useSession();
   const teamId = activeTeam?.id ?? null;
-  const [avail, setAvail] = useState<"yes" | "no" | null>(null);
+  // Respuestas de la próxima jornada (editable en local, optimista).
+  const [answers, setAnswers] = useState<Record<string, AvailRow>>({});
+  const [availError, setAvailError] = useState<string | null>(null);
 
   const { data, loading, error } = useAsync<HomeData>(
     async () => {
@@ -119,12 +132,18 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         fetchPlayers(teamId!),
       ]);
       const next = matchdays.find((m) => m.status !== "finished");
-      const availability = next ? await fetchAvailability(next.id) : {};
-      return { season, matchdays, players, availability };
+      const [availability, deadline] = next
+        ? await Promise.all([fetchAvailabilityDetail(next.id), fetchMaybeDeadline(next.id)])
+        : [{}, null];
+      return { season, matchdays, players, availability, deadline };
     },
     [teamId],
     !!teamId
   );
+
+  useEffect(() => {
+    if (data) setAnswers(data.availability);
+  }, [data]);
 
   if (!teamId) {
     return (
@@ -164,12 +183,15 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const season = data?.season ?? null;
   const matchdays = data?.matchdays ?? [];
   const players = data?.players ?? [];
-  const availability = data?.availability ?? {};
+  const deadline = data?.deadline ?? null;
+  const maybeClosed = deadline ? Date.now() >= deadline.getTime() : false;
 
   const active = players.filter((p) => p.active);
-  const availableCount = active.filter((p) =>
-    p.id in availability ? availability[p.id] : p.available === true
-  ).length;
+  // Disponibilidad POR JORNADA (igual que la app): «van» = respuesta «Voy».
+  const availCounts = countAvail(active.map((p) => p.id), answers);
+  const availableCount = availCounts.yes;
+  const me = active.find((p) => !!user && p.userId === user.id) ?? null;
+  const myAnswer = me ? answers[me.id] : undefined;
   const pct = active.length
     ? Math.round((availableCount / active.length) * 100)
     : 0;
@@ -248,10 +270,21 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
     </div>
   );
 
+  // La prueba la paga quien paga el equipo: el capitán si es independiente,
+  // el club si es de un club.
+  const trial = isCaptain ? (
+    <TrialCard
+      subjectType={activeTeam?.clubId ? "club" : "user"}
+      subjectId={activeTeam?.clubId ?? user?.id}
+    />
+  ) : null;
+
   if (!season) {
     return (
       <div className="tw-page">
         {greeting}
+        <OtherTeamsStrip />
+        {trial}
         <Card>
           <EmptyState
             icon={<IconCalendar size={24} />}
@@ -271,6 +304,8 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   return (
     <div className="tw-page">
       {greeting}
+      <OtherTeamsStrip />
+      {trial}
 
       <div className="bento">
         {/* ══ La tarjeta que manda: la próxima jornada ══════════════ */}
@@ -314,7 +349,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               {/* Disponibles, dentro de la tarjeta que manda: es el dato que
                   decide si el capitán puede hacer su trabajo hoy. */}
               <div style={{ flex: "none" }}>
-                <div className="kpi-label">Disponibles</div>
+                <div className="kpi-label">Van</div>
                 <div className="kpi-num">
                   {availableCount}
                   <span className="unit">/ {active.length}</span>
@@ -557,7 +592,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
             <span className="unit">%</span>
           </div>
           <div className="kpi-sub">
-            {availableCount} de {active.length} para la próxima jornada
+            {availableCount} van · {availCounts.maybe} en duda · {availCounts.pending} sin contestar
           </div>
           <div style={{ marginTop: 14 }}>
             <div
@@ -658,61 +693,73 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           )}
         </div>
 
-        {/* ══ Mi disponibilidad ════════════════════════════════════ */}
+        {/* ══ Mi disponibilidad ════════════════════════════════════
+            Mismo modelo que la app: Voy · Duda · No puedo, por jornada. */}
         <div className="bcard col-5">
           <div className="bcard-head">
-            <span className="bcard-title">¿Puedes jugar la próxima jornada?</span>
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {(
-              [
-                { key: "yes", label: "Sí, cuenta conmigo", c: "var(--accent)", bg: "var(--accent-10)" },
-                { key: "no", label: "No puedo", c: "var(--error)", bg: "var(--error-soft)" },
-              ] as const
-            ).map((o) => {
-              const on = avail === o.key;
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setAvail(on ? null : o.key)}
-                  style={{
-                    flex: "1 1 160px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    minHeight: 46,
-                    padding: "0 14px",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    fontSize: 14,
-                    fontWeight: on ? 700 : 500,
-                    textAlign: "left",
-                    background: on ? o.bg : "var(--bg-card-2)",
-                    color: on ? o.c : "var(--text-muted)",
-                    border: `1.5px solid ${on ? o.c : "transparent"}`,
-                    transition: "all var(--dur-fast) var(--ease)",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: 999,
-                      background: on ? o.c : "var(--text-faint)",
-                      flex: "none",
-                    }}
-                  />
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="bcard-foot">
-            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              Modo solo lectura · no se guarda
+            <span
+              className="bcard-title"
+              style={myAnswer ? { color: STATUS_COLOR[myAnswer.status].c } : undefined}
+            >
+              {myAnswer?.status === "maybe"
+                ? "Estás en duda"
+                : myAnswer?.status === "yes"
+                  ? "Vas a la próxima jornada"
+                  : myAnswer?.status === "no"
+                    ? "No puedes la próxima jornada"
+                    : "¿Puedes jugar la próxima jornada?"}
             </span>
+          </div>
+          {m && me ? (
+            <>
+              {myAnswer?.status === "maybe" && deadline && (
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10 }}>
+                  <b className="mono" style={{ fontSize: 20, color: "var(--warning)" }}>{timeLeft(deadline)}</b>{" "}
+                  para decidir · después del {formatDeadline(deadline)} contarás como «No puedo».
+                </div>
+              )}
+              <RsvpButtons
+                value={myAnswer}
+                maybeClosed={maybeClosed}
+                deadline={deadline}
+                onAnswer={async (status: AvailStatus, reason?: MaybeReason | null, note?: string | null) => {
+                  const prev = answers[me.id];
+                  setAnswers((a) => ({
+                    ...a,
+                    [me.id]: { status, reason: status === "maybe" ? reason ?? null : null, note: note ?? null, autoResolved: false },
+                  }));
+                  const res = await guardedWrite("guardar tu disponibilidad", () =>
+                    respondAvailability(m.id, me.id, status, reason, note),
+                  );
+                  if (!res.ok) {
+                    setAnswers((a) => {
+                      const next = { ...a };
+                      if (prev) next[me.id] = prev;
+                      else delete next[me.id];
+                      return next;
+                    });
+                    setAvailError(res.reason);
+                  } else setAvailError(null);
+                }}
+              />
+            </>
+          ) : (
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              {m ? "Tu cuenta no está vinculada a la plantilla." : "No hay jornada próxima."}
+            </span>
+          )}
+          <div className="bcard-foot">
+            <span style={{ fontSize: 12, color: availError ? "var(--error)" : "var(--text-faint)" }}>
+              {availError ??
+                (myAnswer
+                  ? "Tu capitán ya lo sabe."
+                  : "Tu capitán lo verá al momento.")}
+            </span>
+            {m && (
+              <Link href={`/jornada/${m.id}/disponibilidad`} className="link-action">
+                Ver convocatoria <IconChevronRight size={14} />
+              </Link>
+            )}
           </div>
         </div>
 

@@ -12,6 +12,9 @@ interface NotificationState {
 
   load: () => Promise<void>;
   markAllRead: () => Promise<void>;
+  markOneRead: (id: string) => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  deleteAllNotifications: () => Promise<void>;
   subscribe: (userId: string) => void;
   unsubscribe: () => void;
   reset: () => void;
@@ -51,6 +54,43 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       await NotificationsApi.markAllRead();
     } catch (e) {
       console.warn('markAllRead', e);
+    }
+  },
+
+  markOneRead: async (id) => {
+    const { items } = get();
+    const target = items.find((n) => n.id === id);
+    if (!target || target.read_at) return;
+    const now = new Date().toISOString();
+    const next = items.map((n) => (n.id === id ? { ...n, read_at: now } : n));
+    set({ items: next, unread: next.filter((n) => !n.read_at).length });
+    try {
+      await NotificationsApi.markOneRead(id);
+    } catch (e) {
+      console.warn('markOneRead', e);
+    }
+  },
+
+  // Borrados: optimistas, y si el servidor falla se recarga y se lanza el
+  // error para que la UI avise.
+  deleteNotification: async (id) => {
+    const next = get().items.filter((n) => n.id !== id);
+    set({ items: next, unread: next.filter((n) => !n.read_at).length });
+    try {
+      await NotificationsApi.deleteNotification(id);
+    } catch (e) {
+      void get().load();
+      throw e;
+    }
+  },
+
+  deleteAllNotifications: async () => {
+    set({ items: [], unread: 0 });
+    try {
+      await NotificationsApi.deleteAllNotifications();
+    } catch (e) {
+      void get().load();
+      throw e;
     }
   },
 

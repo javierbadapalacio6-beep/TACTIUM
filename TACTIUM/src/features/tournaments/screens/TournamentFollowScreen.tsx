@@ -215,6 +215,8 @@ export const TournamentFollowScreen = ({
       ),
     [regs, uid],
   );
+  // Mismo conjunto en array, para resaltar mis cruces en el cuadro.
+  const myRegIdList = useMemo(() => [...myRegIds], [myRegIds]);
   const myMatches = useMemo(
     () =>
       matches
@@ -508,6 +510,7 @@ export const TournamentFollowScreen = ({
                 collapsed={collapsed}
                 toggleRound={toggleRound}
                 readOnly
+                myRegIds={myRegIdList}
               />
             </View>
           )}

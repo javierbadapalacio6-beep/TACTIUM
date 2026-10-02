@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type BracketTie,
@@ -10,6 +10,7 @@ import {
   fetchTournament,
   fetchTournamentMatches,
   fetchTournamentRegs,
+  fetchMyTournamentRegIds,
   fetchRegsPayments,
   fetchPhaseDays,
   mergeDivision,
@@ -54,6 +55,7 @@ import {
   IconAlert,
   IconCalendar,
   IconCheck,
+  IconClock,
   IconCopy,
   IconInfo,
   IconTicket,
@@ -136,6 +138,10 @@ interface RealReg {
   status: string;
   payment_status?: string | null;
   payment_method?: string | null;
+  /** Cuentas de los jugadores (la RPC pública los devuelve; la app los usa
+   *  para «mis partidos»). */
+  p1_user_id?: string | null;
+  p2_user_id?: string | null;
 }
 
 interface RealMatch {
@@ -377,7 +383,37 @@ const TABS: [Tab, string][] = [
 ];
 
 /* ── Cuadro ────────────────────────────────────────────────────── */
-type UiTie = BracketTie & { onEnter?: () => void };
+type UiTie = BracketTie & {
+  onEnter?: () => void;
+  /** Lado del usuario en el cruce: 0 = a, 1 = b, -1 / ausente = no juega. */
+  mine?: number;
+};
+
+/** «Sáb 10:30 · Pista 3» a partir del hueco del horario; null si no tiene. */
+function tieSlotLabel(t: BracketTie): string | null {
+  const parts: string[] = [];
+  if (t.time) {
+    const d = new Date(t.time);
+    if (!Number.isNaN(d.getTime())) {
+      const wd = d.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", "");
+      const hh = d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      parts.push(`${wd.charAt(0).toUpperCase()}${wd.slice(1)} ${hh}`);
+    }
+  }
+  if (t.court) parts.push(t.court);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** Hueco sin pareja decidida (se pinta apagado). */
+const isTbd = (name: string) =>
+  name === "Por determinar" ||
+  name === "Por decidir" ||
+  name === "BYE" ||
+  name === "—" ||
+  name.startsWith("Ganador de ");
+
+/** Etiqueta corta de ronda para los chips. */
+const chipLabel = (round: string) => (round === "Semifinales" ? "Semis" : round);
 
 function Bracket({
   rounds,
@@ -386,6 +422,10 @@ function Bracket({
   rounds: { round: string; ties: UiTie[] }[];
   title?: string;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const colRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [activeCol, setActiveCol] = useState<number | null>(null);
+
   // Campeón: la última ronda con un solo cruce ya resuelto. Se deduce de lo que
   // ya llega en `rounds`, no se consulta nada nuevo.
   const finalTie = rounds.at(-1)?.ties.length === 1 ? rounds.at(-1)!.ties[0] : null;
@@ -396,13 +436,126 @@ function Bracket({
         : finalTie.b
       : null;
 
+  // «Tu camino»: los cruces del usuario, ronda a ronda.
+  const myPath = rounds.flatMap((col) =>
+    col.ties
+      .filter((t) => (t.mine ?? -1) >= 0)
+      .map((t) => ({ round: col.round, t })),
+  );
+
+  // Los chips de ronda desplazan el lienzo (solo en horizontal: no mueven la
+  // página) hasta la columna.
+  function goToCol(i: number) {
+    const box = scrollRef.current;
+    const col = colRefs.current[i];
+    if (!box || !col) return;
+    setActiveCol(i);
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    box.scrollTo({ left: col.offsetLeft, behavior: reduce ? "auto" : "smooth" });
+  }
+
   return (
     <Card flush>
       {title && <CardHead title={title} />}
-      <div className="tw-bracket-scroll">
-        <div className="tw-bracket">
-          {rounds.map((col) => (
-            <div key={col.round} className="tw-bracket-col">
+
+      {myPath.length > 0 && (
+        <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--line)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>
+            Tu camino
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {myPath.map(({ round, t }, i) => {
+              const me = t.mine ?? 0;
+              const rival = me === 0 ? t.b : t.a;
+              const decided = t.winner >= 0;
+              const won = decided && t.winner === me;
+              const slot = tieSlotLabel(t);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 12px",
+                    borderRadius: "var(--r-md)",
+                    background: "var(--bg-card-2)",
+                    border: "1px solid var(--line)",
+                    minWidth: 0,
+                  }}
+                >
+                  <span style={{ width: 92, flex: "none", fontSize: 12.5, color: "var(--text-muted)" }}>
+                    {round}
+                  </span>
+                  <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}>
+                    {rival === "BYE"
+                      ? "Pasa sin jugar (BYE)"
+                      : isTbd(rival)
+                        ? rival.startsWith("Ganador de ")
+                          ? `vs ${rival}`
+                          : "Rival por decidir"
+                        : `vs ${rival}`}
+                  </span>
+                  {decided ? (
+                    <span style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+                      {t.score && (
+                        <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                          {t.score}
+                        </span>
+                      )}
+                      <Chip tone={won ? "accent" : "error"}>{won ? "Victoria" : "Derrota"}</Chip>
+                    </span>
+                  ) : (
+                    <span
+                      className="mono"
+                      style={{ flex: "none", fontSize: 12.5, color: slot ? "var(--text)" : "var(--text-faint)" }}
+                    >
+                      {slot ? slot.toUpperCase() : "Por decidir"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {rounds.length > 1 && (
+        <div
+          role="toolbar"
+          aria-label="Ir a la ronda"
+          style={{
+            display: "flex",
+            gap: 6,
+            overflowX: "auto",
+            padding: "12px 18px 0",
+          }}
+        >
+          {rounds.map((col, i) => (
+            <button
+              key={col.round}
+              type="button"
+              className={"tw-fcp-chip" + (activeCol === i ? " is-on" : "")}
+              onClick={() => goToCol(i)}
+            >
+              {chipLabel(col.round)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="tw-bracket-scroll" ref={scrollRef}>
+        <div className="tw-bracket" style={{ position: "relative" }}>
+          {rounds.map((col, ci) => (
+            <div
+              key={col.round}
+              className="tw-bracket-col"
+              ref={(el) => {
+                colRefs.current[ci] = el;
+              }}
+            >
               <div
                 className="grid-head"
                 style={{ textAlign: "center", marginBottom: 12 }}
@@ -410,78 +563,109 @@ function Bracket({
                 {col.round}
               </div>
               <div className="tw-bracket-ties">
-                {col.ties.map((t, i) => (
-                  <div
-                    key={i}
-                    className="tw-tie"
-                    onClick={t.onEnter}
-                    role={t.onEnter ? "button" : undefined}
-                    tabIndex={t.onEnter ? 0 : undefined}
-                    onKeyDown={
-                      t.onEnter
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              t.onEnter!();
+                {col.ties.map((t, i) => {
+                  const mine = t.mine ?? -1;
+                  const pending = t.winner < 0;
+                  const slot = pending ? tieSlotLabel(t) : null;
+                  return (
+                    <div
+                      key={i}
+                      className="tw-tie"
+                      onClick={t.onEnter}
+                      role={t.onEnter ? "button" : undefined}
+                      tabIndex={t.onEnter ? 0 : undefined}
+                      aria-label={mine >= 0 && !t.onEnter ? "Tu cruce" : undefined}
+                      onKeyDown={
+                        t.onEnter
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                t.onEnter!();
+                              }
                             }
-                          }
-                        : undefined
-                    }
-                    style={t.onEnter ? { cursor: "pointer" } : undefined}
-                    title={t.onEnter ? "Meter resultado" : undefined}
-                  >
-                    {[t.a, t.b].map((name, side) => {
-                      const isWinner = t.winner === side;
-                      const decided = t.winner >= 0;
-                      const tbd = name === "Por determinar";
-                      return (
+                          : undefined
+                      }
+                      style={{
+                        ...(t.onEnter ? { cursor: "pointer" } : null),
+                        ...(mine >= 0 ? { borderColor: "var(--accent-40)" } : null),
+                      }}
+                      title={t.onEnter ? "Meter resultado" : undefined}
+                    >
+                      {[t.a, t.b].map((name, side) => {
+                        const isWinner = t.winner === side;
+                        const decided = t.winner >= 0;
+                        const tbd = isTbd(name);
+                        const isMe = mine === side;
+                        return (
+                          <div
+                            key={side}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: "10px 12px",
+                              borderBottom:
+                                side === 0 ? "1px solid var(--line)" : "none",
+                              background: isMe ? "var(--accent-10)" : undefined,
+                              boxShadow: isWinner
+                                ? "inset 2px 0 0 var(--accent)"
+                                : "none",
+                            }}
+                          >
+                            <span
+                              className="truncate"
+                              style={{
+                                flex: 1,
+                                fontSize: 13,
+                                fontWeight: isWinner || isMe ? 700 : 500,
+                                color: tbd
+                                  ? "var(--text-faint)"
+                                  : decided && !isWinner
+                                    ? "var(--text-muted)"
+                                    : "var(--text)",
+                              }}
+                            >
+                              {name === "Por determinar" ? "Por decidir" : name}
+                            </span>
+                            {isMe && (
+                              <span style={{ flex: "none", fontSize: 11.5, fontWeight: 700, color: "var(--accent)" }}>
+                                Tú
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {t.score ? (
                         <div
-                          key={side}
+                          className="mono"
+                          style={{
+                            padding: "6px 12px",
+                            fontSize: 12,
+                            color: "var(--text-faint)",
+                            borderTop: "1px solid var(--line)",
+                          }}
+                        >
+                          {t.score}
+                        </div>
+                      ) : pending ? (
+                        <div
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 10,
-                            padding: "10px 12px",
-                            borderBottom:
-                              side === 0 ? "1px solid var(--line)" : "none",
-                            boxShadow: isWinner
-                              ? "inset 2px 0 0 var(--accent)"
-                              : "none",
+                            gap: 6,
+                            padding: "6px 12px",
+                            fontSize: 12,
+                            color: slot ? "var(--text-muted)" : "var(--text-faint)",
+                            borderTop: "1px solid var(--line)",
                           }}
                         >
-                          <span
-                            className="truncate"
-                            style={{
-                              flex: 1,
-                              fontSize: 13,
-                              fontWeight: isWinner ? 700 : 500,
-                              color: tbd
-                                ? "var(--text-faint)"
-                                : decided && !isWinner
-                                  ? "var(--text-muted)"
-                                  : "var(--text)",
-                            }}
-                          >
-                            {name}
-                          </span>
+                          <IconClock size={12} />
+                          <span className={slot ? "mono" : undefined}>{slot ? slot.toUpperCase() : "Por decidir"}</span>
                         </div>
-                      );
-                    })}
-                    {t.score && (
-                      <div
-                        className="mono"
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 12,
-                          color: "var(--text-faint)",
-                          borderTop: "1px solid var(--line)",
-                        }}
-                      >
-                        {t.score}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -510,7 +694,7 @@ function Bracket({
               }}
             >
               <IconTrophy size={18} />
-              {champion ?? "Por determinar"}
+              {champion ?? "Por decidir"}
             </div>
           </div>
         </div>
@@ -1347,8 +1531,15 @@ export function TournamentDetail({
   /** Vista de jugador/espectador: sin acciones de organizador. */
   spectator?: boolean;
 }) {
-  const { clubs } = useSession();
+  const { clubs, user } = useSession();
   const [tab, setTab] = useState<Tab>(spectator ? "cuadro" : "inscripciones");
+  // Inscripciones del usuario en ESTE torneo (para «Tu camino» en el cuadro).
+  const uid = user?.id ?? null;
+  const myRegsQ = useAsync(
+    () => fetchMyTournamentRegIds(id, uid!),
+    [id, uid],
+    !!uid,
+  );
   const [followed, setFollowed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -1852,8 +2043,39 @@ export function TournamentDetail({
   const koKeys = Array.from(new Set(koMatches.map((m) => m.bracket))).sort(
     (a, b) => bracketRank(a) - bracketRank(b),
   );
+  // Parejas del usuario: por la consulta propia (RLS) y, por si acaso, por los
+  // ids de cuenta que trae la RPC pública.
+  const myRegIds = new Set<string>([
+    ...(myRegsQ.data ?? []),
+    ...(uid
+      ? regs
+          .filter((r) => r.p1_user_id === uid || r.p2_user_id === uid)
+          .map((r) => r.id)
+      : []),
+  ]);
+  // Apellido del primer jugador de una pareja («Pérez»), para «Ganador de …».
+  const regById = new Map(regs.map((r) => [r.id, r]));
+  const surname = (regId: string | null): string | null => {
+    const r = regId ? regById.get(regId) : undefined;
+    if (!r?.p1_name) return null;
+    const w = r.p1_name.trim().split(/\s+/);
+    return w.length > 1 ? w[1] : w[0];
+  };
   const koBrackets = koKeys.map((key) => {
     const bm = koMatches.filter((m) => m.bracket === key);
+    // Nombre de cada hueco: la pareja si ya se conoce; en rondas posteriores,
+    // «Ganador de Pérez/Gómez» si el cruce previo tiene las dos parejas; si
+    // no, «Por decidir». En la 1ª ronda un hueco vacío es un BYE.
+    const firstRound = bm.reduce((mn, m) => Math.min(mn, m.round), Infinity);
+    const slotName = (m: RealMatch, side: 0 | 1): string => {
+      const reg = side === 0 ? m.home_reg : m.away_reg;
+      if (reg) return nameOr(reg);
+      if (m.round === firstRound) return "BYE";
+      const prev = bm.find((x) => x.round === m.round - 1 && x.slot === m.slot * 2 + side);
+      const a = prev ? surname(prev.home_reg) : null;
+      const b = prev ? surname(prev.away_reg) : null;
+      return a && b ? `Ganador de ${a}/${b}` : "Por decidir";
+    };
     const total = bm.reduce((mx, m) => Math.max(mx, m.round), 0);
     const roundNums = Array.from(new Set(bm.map((m) => m.round))).sort(
       (a, b) => a - b,
@@ -1864,13 +2086,21 @@ export function TournamentDetail({
         .filter((m) => m.round === rn)
         .sort((a, b) => a.slot - b.slot)
         .map((m) => ({
-          a: nameOr(m.home_reg),
-          b: nameOr(m.away_reg),
+          a: slotName(m, 0),
+          b: slotName(m, 1),
           score: setsToScore(m.sets),
           winner:
             m.winner_reg === m.home_reg
               ? 0
               : m.winner_reg === m.away_reg
+                ? 1
+                : -1,
+          time: m.scheduled_at,
+          court: m.court,
+          mine:
+            m.home_reg && myRegIds.has(m.home_reg)
+              ? 0
+              : m.away_reg && myRegIds.has(m.away_reg)
                 ? 1
                 : -1,
           onEnter:

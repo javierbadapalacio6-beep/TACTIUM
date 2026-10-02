@@ -2,18 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { type Availability as Av, type Position } from "@/lib/team-data";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
-  clearPlayerAvailability,
-  fetchAvailability,
+  countAvail,
+  fetchAvailabilityDetail,
+  fetchLastReminder,
   fetchMatchday,
+  fetchMaybeDeadline,
   fetchPlayers,
-  setPlayerAvailability,
-  setSelfAvailability,
+  fetchTeam,
+  remindPendingAvailability,
+  respondAvailability,
+  clearPlayerAvailability,
+  STATUS_LABEL,
+  type AvailRow,
+  type AvailStatus,
   type DbMatchday,
+  type MaybeReason,
 } from "@/lib/queries";
+import { getCourtsForCompetition, type TeamGender } from "@/lib/courts";
 import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
 import {
   Avatar,
@@ -22,28 +30,22 @@ import {
   Chip,
   Note,
   PageHeader,
-  Progress,
   Segmented,
-  Stat,
-  StatRow,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconCheck, IconUsers } from "@/components/Icon";
+import { IconUsers } from "@/components/Icon";
+import {
+  ConvoBar,
+  RsvpButtons,
+  STATUS_COLOR,
+  formatDeadline,
+  reasonLabel,
+  timeLeft,
+} from "@/components/team/AvailabilityControls";
 
-type Filter = "todos" | "disp" | "bajas";
+type Tab = "pending" | "yes" | "maybe" | "no";
 
-/** Fila de la plantilla con su estado de disponibilidad para esta jornada. */
-interface Row {
-  id: string;
-  name: string;
-  pts: number;
-  pos: Position;
-  /** Baja: no entra en alineación aunque esté disponible. */
-  out: boolean;
-  avail: Av;
-  /** El jugador vinculado a la cuenta que mira la pantalla. */
-  isMe: boolean;
-}
+const REMIND_COOLDOWN_MS = 12 * 3_600_000;
 
 function initials(n: string) {
   return n
@@ -55,12 +57,10 @@ function initials(n: string) {
 }
 
 /**
- * Disponibilidad — datos reales.
- *
- * La plantilla sale de `players` (bajo RLS, la del equipo activo) y el estado
- * por jornada de la tabla `availability`: si un jugador no tiene fila, aún no ha
- * marcado y sale como «sin marcar». Los controles se mantienen visibles pero
- * NO persisten: marcar disponibilidad es una fase posterior. Aquí sólo se lee.
+ * Disponibilidad de una jornada — mismo modelo que la app: Voy · Duda ·
+ * No puedo, «sin contestar» = sin fila. El capitán ve la plantilla por
+ * estado, recuerda a los pendientes (premium, 1 vez / 12 h) y puede marcar
+ * por cualquiera. Todas las escrituras pasan por `guardedWrite`.
  */
 export function AvailabilityView({ id }: { id: string }) {
   const { activeTeam, role, user } = useSession();
@@ -72,50 +72,39 @@ export function AvailabilityView({ id }: { id: string }) {
       Promise.all([
         fetchMatchday(id),
         fetchPlayers(teamId!),
-        fetchAvailability(id),
+        fetchAvailabilityDetail(id),
+        fetchMaybeDeadline(id),
+        fetchLastReminder(id),
+        fetchTeam(teamId!),
       ]),
     [id, teamId],
-    !!teamId
+    !!teamId,
   );
 
   const matchday: DbMatchday | null = data?.[0] ?? null;
+  const players = useMemo(() => (data?.[1] ?? []).filter((p) => p.active), [data]);
+  const deadline = data?.[3] ?? null;
 
-  const players: Row[] = useMemo(() => {
-    if (!data) return [];
-    const [, dbPlayers, avail] = data;
-    return dbPlayers.map((p) => {
-      const a = avail[p.id];
-      return {
-        id: p.id,
-        name: p.name,
-        pts: p.pts,
-        pos: p.position,
-        out: !p.active,
-        avail: a === undefined ? "unset" : a ? "yes" : "no",
-        isMe: !!user && p.userId === user.id,
-      };
-    });
-  }, [data, user]);
-
-  const [state, setState] = useState<Record<string, Av>>({});
-  const [filter, setFilter] = useState<Filter>("todos");
-  const [saving, setSaving] = useState(false);
+  const [map, setMap] = useState<Record<string, AvailRow>>({});
+  const [lastReminder, setLastReminder] = useState<Date | null>(null);
+  const [tab, setTab] = useState<Tab>("pending");
   const [toast, setToast] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
-  // El estado editable arranca del estado real cuando llegan los datos.
   useEffect(() => {
-    setState(Object.fromEntries(players.map((p) => [p.id, p.avail])));
-  }, [players]);
+    if (data) {
+      setMap(data[2]);
+      setLastReminder(data[4]);
+      const c = countAvail(data[1].filter((p) => p.active).map((p) => p.id), data[2]);
+      setTab(!isCaptain || c.pending === 0 ? "yes" : "pending");
+    }
+  }, [data, isCaptain]);
 
   if (!teamId) {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconUsers size={24} />}
-            title="Sin equipo activo"
-            body="Entra con una cuenta que pertenezca a un equipo."
-          />
+          <EmptyState icon={<IconUsers size={24} />} title="Sin equipo activo" body="Entra con una cuenta que pertenezca a un equipo." />
         </Card>
       </div>
     );
@@ -125,11 +114,7 @@ export function AvailabilityView({ id }: { id: string }) {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconUsers size={24} />}
-            title="No se pudo cargar la disponibilidad"
-            body={error}
-          />
+          <EmptyState icon={<IconUsers size={24} />} title="No se pudo cargar la disponibilidad" body={error} />
         </Card>
       </div>
     );
@@ -138,205 +123,244 @@ export function AvailabilityView({ id }: { id: string }) {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconUsers size={24} />}
-            title="Jornada no encontrada"
-            body="Abre una jornada del calendario para ver la disponibilidad."
-          />
+          <EmptyState icon={<IconUsers size={24} />} title="Jornada no encontrada" body="Abre una jornada del calendario para ver la disponibilidad." />
         </Card>
       </div>
     );
   }
 
-  const active = players.filter((p) => !p.out);
-  const yes = active.filter((p) => state[p.id] === "yes").length;
-  const unset = active.filter((p) => state[p.id] === "unset").length;
-  const pct = active.length ? Math.round((yes / active.length) * 100) : 0;
+  const maybeClosed = deadline ? Date.now() >= deadline.getTime() : false;
+  const counts = countAvail(players.map((p) => p.id), map);
+  const team = data?.[5] ?? null;
+  const courts = getCourtsForCompetition(
+    team?.federation,
+    team?.league,
+    (team?.gender as TeamGender | null | undefined) ?? null,
+  );
+  const needed = courts * 2;
+  const missing = Math.max(0, needed - counts.yes);
+  const me = players.find((p) => !!user && p.userId === user.id) ?? null;
+  const cooldownUntil =
+    lastReminder && Date.now() - lastReminder.getTime() < REMIND_COOLDOWN_MS
+      ? new Date(lastReminder.getTime() + REMIND_COOLDOWN_MS)
+      : null;
+  const toRemind = counts.pending + counts.maybe;
 
-  const list = players.filter((p) => {
-    if (filter === "disp") return state[p.id] === "yes";
-    if (filter === "bajas") return state[p.id] === "no" || p.out;
-    return true;
-  });
-  // El jugador vinculado a la cuenta va primero: es su propia marca.
-  const sorted = [...list].sort((a, b) => Number(!!b.isMe) - Number(!!a.isMe));
-
-  // Marca un jugador. Optimista en local + persistencia por el camino que toca:
-  //  · capitán/club → upsert directo (o borrado si «sin marcar»),
-  //  · el propio jugador → RPC set_player_self_availability.
-  // Todo pasa por `guardedWrite`: con las escrituras apagadas no toca la BD.
-  async function mark(rowId: string, v: Av) {
-    const next: Av = state[rowId] === v ? "unset" : v;
-    setState((s) => ({ ...s, [rowId]: next }));
-    const res = await guardedWrite("guardar la disponibilidad", async () => {
-      if (isCaptain) {
-        if (next === "unset") await clearPlayerAvailability(id, rowId);
-        else await setPlayerAvailability(id, rowId, next === "yes");
-      } else if (next !== "unset") {
-        // El RPC del propio jugador no admite «sin marcar».
-        await setSelfAvailability(rowId, next === "yes");
-      }
-    });
-    if (!res.ok) setToast(res.reason);
-  }
-
-  // «Marcar todo» (solo capitán): pone disponibles a los que no son baja.
-  async function markAll() {
-    setSaving(true);
-    setState((s) =>
-      Object.fromEntries(
-        Object.entries(s).map(([k, v]) => [
-          k,
-          players.find((p) => p.id === k)?.out ? v : "yes",
-        ]),
-      ),
+  async function answer(playerId: string, status: AvailStatus, reason?: MaybeReason | null, note?: string | null) {
+    const prev = map[playerId];
+    setMap((m) => ({ ...m, [playerId]: { status, reason: status === "maybe" ? reason ?? null : null, note: note ?? null, autoResolved: false } }));
+    const res = await guardedWrite("guardar la disponibilidad", () =>
+      respondAvailability(id, playerId, status, reason, note),
     );
-    const targets = active.filter((p) => state[p.id] !== "yes");
-    const res = await guardedWrite("marcar disponibles", async () => {
-      for (const p of targets) await setPlayerAvailability(id, p.id, true);
-    });
-    setSaving(false);
-    setToast(res.ok ? "Disponibilidad guardada" : res.reason);
+    if (!res.ok) {
+      setMap((m) => {
+        const next = { ...m };
+        if (prev) next[playerId] = prev;
+        else delete next[playerId];
+        return next;
+      });
+      setToast(res.reason);
+    }
   }
 
-  const noCount = active.filter((p) => state[p.id] === "no").length;
+  async function clear(playerId: string) {
+    const prev = map[playerId];
+    setMap((m) => {
+      const next = { ...m };
+      delete next[playerId];
+      return next;
+    });
+    const res = await guardedWrite("quitar la respuesta", () => clearPlayerAvailability(id, playerId));
+    if (!res.ok) {
+      if (prev) setMap((m) => ({ ...m, [playerId]: prev }));
+      setToast(res.reason);
+    }
+  }
+
+  async function remind() {
+    setSending(true);
+    const res = await guardedWrite("recordar a los pendientes", () => remindPendingAvailability(id));
+    setSending(false);
+    if (!res.ok) return setToast(res.reason);
+    const out = res.data;
+    if (out.ok) {
+      setLastReminder(new Date());
+      setToast(
+        (out.reminded === 0 ? "Nadie con la app tenía la respuesta pendiente" : `Recordatorio enviado a ${out.reminded}`) +
+          (out.withoutApp.length ? ` · Sin la app: ${out.withoutApp.join(", ")} (escríbeles por WhatsApp)` : ""),
+      );
+    } else if (out.kind === "premium") {
+      setToast("«Recordar ahora» es una función del plan. Mira los planes en Suscripción.");
+    } else if (out.kind === "cooldown") {
+      setLastReminder(new Date());
+      setToast("Ya recordaste hace menos de 12 horas.");
+    } else setToast(out.message);
+  }
+
+  const rows = players
+    .filter((p) => {
+      const s = map[p.id]?.status ?? null;
+      return tab === "pending" ? s === null : s === tab;
+    })
+    .sort((a, b) => Number(b.id === me?.id) - Number(a.id === me?.id));
 
   return (
     <div className="tw-page">
       <PageHeader
-        title={isCaptain ? "¿Quién está disponible?" : "¿Estás disponible?"}
+        title={isCaptain ? "¿Quién juega?" : "¿Puedes jugar?"}
         meta={[
           `Jornada ${matchday.round}`,
           `vs ${matchday.opponent}`,
-          "Cierra el jueves a las 20:00",
-        ]}
-        actions={
-          isCaptain ? (
-            <Btn variant="accent" onClick={markAll} disabled={saving} icon={<IconCheck size={15} />}>
-              {saving ? "Marcando…" : "Marcar todo"}
-            </Btn>
-          ) : undefined
-        }
+          deadline
+            ? maybeClosed
+              ? "Dudas cerradas: solo Voy o No puedo"
+              : `Las dudas se cierran el ${formatDeadline(deadline)}`
+            : "",
+        ].filter(Boolean)}
       />
 
-      <StatRow style={{ marginBottom: 16 }}>
-        <Stat
-          label="Disponibles"
-          value={yes}
-          unit={`/ ${active.length}`}
-          tone={active.length > 0 && pct >= 70 ? "accent" : undefined}
-        >
-          <Progress value={pct} style={{ marginTop: 10 }} tone={pct < 50 ? "warning" : undefined} />
-        </Stat>
-        <Stat
-          label="Sin marcar"
-          value={unset}
-          tone={unset > 0 ? "warning" : undefined}
-          sub={unset > 0 ? "Aún no han respondido" : "Todos han respondido"}
-        />
-        <Stat label="No pueden" value={noCount} sub={`${players.length - active.length} bajas en plantilla`} />
-      </StatRow>
+      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", marginBottom: 16 }}>
+        {me && (
+          <Card>
+            <div style={{ display: "grid", gap: 10 }}>
+              <span className="eyebrow" style={{ color: STATUS_COLOR[map[me.id]?.status ?? "yes"].c }}>
+                {map[me.id]?.status === "maybe"
+                  ? "ESTÁS EN DUDA"
+                  : map[me.id]?.status === "yes"
+                    ? "VAS"
+                    : map[me.id]?.status === "no"
+                      ? "NO PUEDES"
+                      : "¿PUEDES JUGAR?"}
+              </span>
+              {map[me.id]?.status === "maybe" && deadline && (
+                <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                  <b className="mono" style={{ fontSize: 22, color: "var(--warning)" }}>{timeLeft(deadline)}</b>{" "}
+                  para decidir · si no, contarás como «No puedo».
+                </span>
+              )}
+              <RsvpButtons
+                value={map[me.id]}
+                maybeClosed={maybeClosed}
+                deadline={deadline}
+                onAnswer={(s, r, n) => answer(me.id, s, r, n)}
+              />
+            </div>
+          </Card>
+        )}
+
+        {isCaptain && (
+          <Card>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="eyebrow">CONVOCATORIA</span>
+                <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                  {counts.yes}/{counts.total} van
+                </span>
+              </div>
+              <ConvoBar counts={counts} />
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: missing === 0 ? "var(--accent)" : undefined }}>
+                {missing === 0
+                  ? `Tienes ${counts.yes} para ${courts} pistas: equipo completo`
+                  : `Necesitas ${needed} para ${courts} pistas: te ${missing === 1 ? "falta 1" : `faltan ${missing}`}`}
+              </span>
+              {toRemind > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <Btn variant="accent" onClick={remind} disabled={sending || !!cooldownUntil}>
+                    {sending ? "Enviando…" : cooldownUntil ? "Recordado" : `Recordar ahora a ${toRemind}`}
+                  </Btn>
+                  <Chip tone="mute" plain>PRO</Chip>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                    {cooldownUntil
+                      ? `Podrás volver a recordar a las ${formatDeadline(cooldownUntil).split(" ")[1]}`
+                      : "Recordatorio automático a las 9:00 y a las 21:00"}
+                  </span>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+      </div>
 
       <div className="tw-toolbar">
         <Segmented
-          label="Filtrar jugadores"
-          value={filter}
-          onChange={setFilter}
+          label="Filtrar por respuesta"
+          value={tab}
+          onChange={setTab}
           options={[
-            { value: "todos", label: "Todos" },
-            { value: "disp", label: "Disponibles" },
-            { value: "bajas", label: "Bajas" },
+            { value: "pending", label: `Sin contestar ${counts.pending}` },
+            { value: "yes", label: `Van ${counts.yes}` },
+            { value: "maybe", label: `Duda ${counts.maybe}` },
+            { value: "no", label: `No ${counts.no}` },
           ]}
         />
-        <span className="tw-toolbar-spacer" />
-        <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
-          {sorted.length} de {players.length} jugadores
-        </span>
       </div>
 
-      {sorted.length === 0 ? (
+      {rows.length === 0 ? (
         <Card>
           <EmptyState
             icon={<IconUsers size={22} />}
-            title="Nadie en este filtro"
-            body="Prueba con otro filtro o marca a alguien."
+            title={tab === "pending" ? "Todos han contestado" : "Nadie en este grupo"}
+            body={tab === "pending" ? "No queda nadie por responder a esta jornada." : "Prueba con otra pestaña."}
           />
         </Card>
       ) : (
         <div className="tw-avail-grid">
-          {sorted.map((p) => {
-            const v = state[p.id];
-            const locked = p.out || (!isCaptain && !p.isMe);
+          {rows.map((p) => {
+            const a = map[p.id];
+            const isMe = p.id === me?.id;
+            const meta = [
+              reasonLabel(a?.reason),
+              a?.note ? `«${a.note}»` : null,
+              a?.autoResolved ? "duda sin resolver" : null,
+              !a && !p.userId ? "sin la app" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
             return (
-              <Card
-                key={p.id}
-                style={{
-                  borderColor: p.isMe ? "var(--accent-40)" : undefined,
-                  opacity: p.out ? 0.6 : 1,
-                }}
-              >
+              <Card key={p.id} style={{ borderColor: isMe ? "var(--accent-40)" : undefined }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <Avatar initials={initials(p.name)} size={36} />
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span
-                      className="truncate"
-                      style={{ display: "block", fontSize: 14, fontWeight: 700 }}
-                    >
+                    <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
                       {p.name}
                     </span>
-                    <span
-                      style={{
-                        display: "block",
-                        marginTop: 2,
-                        fontSize: 12.5,
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {p.pos} · <span className="mono">{p.pts}</span> pts
+                    <span className="truncate" style={{ display: "block", marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
+                      {meta || (
+                        <>
+                          {p.position} · <span className="mono">{p.pts}</span> pts
+                        </>
+                      )}
                     </span>
                   </span>
-                  {p.isMe && <Chip plain>Soy yo</Chip>}
-                  {p.out && <Chip tone="warning">Baja</Chip>}
+                  {isMe && <Chip plain>Soy yo</Chip>}
+                  {a ? (
+                    <Chip tone={a.status === "yes" ? "accent" : a.status === "maybe" ? "warning" : "error"}>
+                      {STATUS_LABEL[a.status]}
+                    </Chip>
+                  ) : (
+                    <Chip tone="mute">Sin contestar</Chip>
+                  )}
                 </div>
-
-                <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-                  {(
-                    [
-                      ["yes", "Disponible", "var(--accent)", "var(--accent-10)"],
-                      ["no", "No puedo", "var(--error)", "var(--error-soft)"],
-                    ] as const
-                  ).map(([k, label, color, bg]) => {
-                    const on = v === k;
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        aria-pressed={on}
-                        disabled={locked}
-                        onClick={() => mark(p.id, k as Av)}
-                        className="btn btn-ghost btn-sm"
-                        style={{
-                          flex: 1,
-                          ...(on
-                            ? { background: bg, color, borderColor: color, fontWeight: 700 }
-                            : null),
-                        }}
-                      >
-                        {label}
+                {isCaptain && !isMe && (
+                  <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
+                    <RsvpButtons
+                      value={a}
+                      maybeClosed={maybeClosed}
+                      deadline={deadline}
+                      forName={p.name.split(" ")[0]}
+                      onAnswer={(s, r, n) => answer(p.id, s, r, n)}
+                    />
+                    {a && (
+                      <button type="button" className="link-action" style={{ justifySelf: "start", fontSize: 12.5 }} onClick={() => clear(p.id)}>
+                        Quitar respuesta
                       </button>
-                    );
-                  })}
-                </div>
+                    )}
+                  </div>
+                )}
               </Card>
             );
           })}
         </div>
-      )}
-
-      {saving && (
-        <Note tone="accent" icon={<IconCheck size={15} />} style={{ marginTop: 16 }}>
-          Marcando a toda la plantilla…
-        </Note>
       )}
 
       {!WRITES_ENABLED && (

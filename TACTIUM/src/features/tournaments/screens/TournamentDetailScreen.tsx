@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -97,7 +97,7 @@ import {
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
 
-import type { TournamentsStackScreenProps } from '@navigation/types';
+import type { HomeStackScreenProps } from '@navigation/types';
 
 const roundLabel = (round: number, total: number): string => {
   const fromEnd = total - round;
@@ -118,7 +118,7 @@ const shortRoundLabel = (round: number, total: number): string => {
 
 // Geometría del cuadro (para alinear rondas y dibujar los conectores en L).
 const BRACKET_H = 60; // alto de cada partido
-const BRACKET_G = 16; // hueco base entre partidos de la 1ª ronda
+const BRACKET_G = 20; // hueco base entre partidos de la 1ª ronda (cabe la línea «SÁB 10:30 · PISTA 3»)
 const COL_W = 198; // ancho de columna de ronda
 const CONN_W = 26; // ancho de la columna de conectores
 const HEADER_H = 46; // alto reservado para la cabecera de ronda
@@ -2812,7 +2812,7 @@ const EditTournamentSheet: React.FC<{
 export const TournamentDetailScreen = ({
   navigation,
   route,
-}: TournamentsStackScreenProps<'TournamentDetail'>) => {
+}: HomeStackScreenProps<'TournamentDetail'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -3718,18 +3718,26 @@ const MatchSide: React.FC<{
   name: string;
   score: number | null;
   win: boolean;
-}> = ({ styles, name, score, win }) => {
-  const bye = name === '—';
+  /** Texto del hueco vacío cuando aún no se sabe quién llega
+   *  («Ganador de A/B», «Por decidir»). Sin él, el hueco vacío es un BYE. */
+  placeholder?: string | null;
+}> = ({ styles, name, score, win, placeholder }) => {
+  const empty = name === '—';
+  const bye = empty && !placeholder;
   return (
     <View style={styles.matchSide}>
       <View style={[styles.wDotSm, win && styles.wDotSmOn]}>
         {win ? <Text style={styles.wDotSmText}>W</Text> : null}
       </View>
       <Text
-        style={[styles.matchName, win && styles.matchNameWin, bye && styles.matchNameBye]}
+        style={[
+          styles.matchName,
+          win && styles.matchNameWin,
+          empty && styles.matchNameBye,
+        ]}
         numberOfLines={1}
       >
-        {bye ? 'BYE' : name}
+        {bye ? 'BYE' : empty ? placeholder : name}
       </Text>
       <Text style={[styles.matchScore, win && styles.matchNameWin]}>
         {score ?? ''}
@@ -3785,6 +3793,34 @@ export const StandingsTable: React.FC<{ standings: StandingRow[]; styles: Styles
   );
 };
 
+// Ronda en los chips de navegación del cuadro (corto: «Semis», no «Semifinales»).
+const chipRoundLabel = (round: number, total: number): string => {
+  const l = roundLabel(round, total);
+  return l === 'Semifinales' ? 'Semis' : l;
+};
+
+// «SÁB 10:30 · PISTA 3» para un partido con horario/pista asignados.
+const fmtBracketSlot = (m: TournamentMatch): string | null => {
+  const parts: string[] = [];
+  if (m.scheduled_at) {
+    const d = new Date(m.scheduled_at);
+    if (!Number.isNaN(d.getTime())) {
+      parts.push(`${DOW_ABBR[d.getDay()].toUpperCase()} ${fmtTime(m.scheduled_at)}`);
+    }
+  }
+  const court = (m.court ?? '').trim();
+  if (court) parts.push((/^\d+$/.test(court) ? `Pista ${court}` : court).toUpperCase());
+  return parts.length ? parts.join(' · ') : null;
+};
+
+// Apellido (última palabra del primer jugador) de una pareja, para los huecos
+// «Ganador de Pérez/Gómez». Quita la siembra «(1) ».
+const shortPairName = (full: string): string => {
+  const first = full.replace(/^\(\d+\)\s*/, '').split(' / ')[0].trim();
+  const words = first.split(/\s+/).filter(Boolean);
+  return words[words.length - 1] ?? first;
+};
+
 // Cuadro KO (columnas por ronda + conectores + rondas colapsables).
 export const BracketView: React.FC<{
   matches: TournamentMatch[];
@@ -3793,80 +3829,235 @@ export const BracketView: React.FC<{
   collapsed: Set<number>;
   toggleRound: (r: number) => void;
   readOnly?: boolean;
-}> = ({ matches, regName, onEdit, collapsed, toggleRound, readOnly }) => {
+  /** Inscripciones del usuario (seguir torneo): resalta sus cruces y pinta
+   *  «Tu camino» encima del cuadro. */
+  myRegIds?: string[];
+}> = ({ matches, regName, onEdit, collapsed, toggleRound, readOnly, myRegIds }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const scrollRef = useRef<ScrollView>(null);
   const totalRounds = matches.reduce((m, x) => Math.max(m, x.round), 0);
   const r1count = matches.filter((m) => m.round === 1).length;
   const totalH = r1count * PITCH1;
+
+  const mine = useMemo(() => new Set(myRegIds ?? []), [myRegIds]);
+  const isMine = useCallback(
+    (m: TournamentMatch) =>
+      mine.size > 0 &&
+      ((!!m.home_reg && mine.has(m.home_reg)) || (!!m.away_reg && mine.has(m.away_reg))),
+    [mine],
+  );
+
+  // Partido por (ronda, slot) para deducir de dónde viene cada hueco vacío.
+  const byPos = useMemo(() => {
+    const map = new Map<string, TournamentMatch>();
+    for (const m of matches) map.set(`${m.round}:${m.slot}`, m);
+    return map;
+  }, [matches]);
+
+  // Hueco sin pareja: en 1ª ronda es un BYE (null); en las siguientes, el
+  // ganador del partido que alimenta ese lado (slot 2s → local, 2s+1 → visitante).
+  const placeholderFor = (m: TournamentMatch, side: 0 | 1): string | null => {
+    if (m.round <= 1) return null;
+    const feeder = byPos.get(`${m.round - 1}:${m.slot * 2 + side}`);
+    if (!feeder) return 'Por decidir';
+    if (feeder.winner_reg) return regName(feeder.winner_reg);
+    if (feeder.home_reg && feeder.away_reg) {
+      return `Ganador de ${shortPairName(regName(feeder.home_reg))}/${shortPairName(
+        regName(feeder.away_reg),
+      )}`;
+    }
+    return 'Por decidir';
+  };
+
+  // Mis partidos de esta fase, en orden de ronda («Tu camino»).
+  const myPath = useMemo(
+    () =>
+      mine.size === 0
+        ? []
+        : matches.filter(isMine).sort((a, b) => a.round - b.round || a.slot - b.slot),
+    [matches, mine, isMine],
+  );
+
+  // Posición X de cada columna (las colapsadas miden 52).
+  const colX = (round: number) => {
+    let x = 0;
+    for (let r = 1; r < round; r++) x += (collapsed.has(r) ? 52 : COL_W) + CONN_W;
+    return x;
+  };
+  const goToRound = (round: number) => {
+    if (collapsed.has(round)) toggleRound(round);
+    scrollRef.current?.scrollTo({ x: colX(round), animated: true });
+  };
+
   if (matches.length === 0) {
     return <Text style={styles.bracketHint}>Sin cuadro todavía.</Text>;
   }
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={{ flexDirection: 'row', paddingHorizontal: 22, paddingTop: 12 }}>
-        {Array.from({ length: totalRounds }, (_, r) => r + 1).map((round) => {
-          const col = matches
-            .filter((m) => m.round === round)
-            .sort((a, b) => a.slot - b.slot);
-          const isCol = collapsed.has(round);
-          const { pitch, topOffset } = roundMetrics(round);
-          return (
-            <React.Fragment key={round}>
-              <View style={{ width: isCol ? 52 : COL_W }}>
+    <View>
+      {myPath.length > 0 ? (
+        <View style={styles.pathWrap}>
+          <Text style={styles.sectionLabel}>TU CAMINO</Text>
+          <View style={{ gap: 6, marginTop: 8 }}>
+            {myPath.map((m) => {
+              const meHome = !!m.home_reg && mine.has(m.home_reg);
+              const rivalId = meHome ? m.away_reg : m.home_reg;
+              const rival = rivalId
+                ? regName(rivalId)
+                : placeholderFor(m, meHome ? 1 : 0) ?? 'BYE';
+              const finished = !!m.winner_reg;
+              const won = finished && mine.has(m.winner_reg as string);
+              const myScore = meHome ? m.home_score : m.away_score;
+              const rvScore = meHome ? m.away_score : m.home_score;
+              const slot = fmtBracketSlot(m);
+              return (
                 <Pressable
-                  onPress={() => toggleRound(round)}
-                  style={({ pressed }) => [styles.roundPill, pressed && { opacity: 0.7 }]}
+                  key={m.id}
+                  onPress={() => goToRound(m.round)}
+                  style={({ pressed }) => [styles.pathRow, pressed && { opacity: 0.8 }]}
                 >
-                  <Text style={styles.roundPillText} numberOfLines={1}>
-                    {isCol ? shortRoundLabel(round, totalRounds) : roundLabel(round, totalRounds)}
+                  <Text style={styles.pathRound} numberOfLines={1}>
+                    {chipRoundLabel(m.round, totalRounds).toUpperCase()}
                   </Text>
-                  <Text style={styles.roundPillChevron}>{isCol ? '›' : '⌄'}</Text>
+                  <Text style={styles.pathRival} numberOfLines={1}>
+                    vs {rival}
+                  </Text>
+                  {finished ? (
+                    <Text
+                      style={[styles.pathState, { color: won ? c.accent : c.error }]}
+                      numberOfLines={1}
+                    >
+                      {won ? 'G' : 'P'}
+                      {myScore != null && rvScore != null ? ` ${myScore}–${rvScore}` : ''}
+                    </Text>
+                  ) : (
+                    <Text style={styles.pathState} numberOfLines={1}>
+                      {slot ?? 'Por jugar'}
+                    </Text>
+                  )}
                 </Pressable>
-                {isCol ? (
-                  <View style={[styles.collapsedStrip, { height: totalH }]}>
-                    <Text style={styles.collapsedText}>{col.length}</Text>
-                  </View>
-                ) : (
-                  <View style={{ height: totalH }}>
-                    {col.map((m, i) => {
-                      const playable = !!m.home_reg && !!m.away_reg;
-                      const homeWin = m.winner_reg && m.winner_reg === m.home_reg;
-                      const awayWin = m.winner_reg && m.winner_reg === m.away_reg;
-                      return (
-                        <Pressable
-                          key={m.id}
-                          disabled={!playable || readOnly}
-                          onPress={() => onEdit(m)}
-                          style={({ pressed }) => [
-                            styles.matchCard,
-                            { marginTop: i === 0 ? topOffset : pitch - BRACKET_H, height: BRACKET_H },
-                            pressed && playable && !readOnly && { opacity: 0.85 },
-                          ]}
-                        >
-                          <MatchSide styles={styles} name={regName(m.home_reg)} score={m.home_score} win={!!homeWin} />
-                          <View style={styles.matchDivider} />
-                          <MatchSide styles={styles} name={regName(m.away_reg)} score={m.away_score} win={!!awayWin} />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-              {round < totalRounds ? (
-                <RoundConnectors
-                  round={round}
-                  targets={Math.floor(r1count / Math.pow(2, round))}
-                  totalH={totalH}
-                  line={c.hairStrong}
-                  hidden={isCol || collapsed.has(round + 1)}
-                />
-              ) : null}
-            </React.Fragment>
-          );
-        })}
-      </View>
-    </ScrollView>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      {totalRounds > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.roundChips}
+        >
+          {Array.from({ length: totalRounds }, (_, r) => r + 1).map((round) => (
+            <Pressable
+              key={round}
+              onPress={() => goToRound(round)}
+              accessibilityRole="button"
+              accessibilityLabel={`Ir a ${roundLabel(round, totalRounds)}`}
+              style={({ pressed }) => [styles.roundChip, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.roundChipText}>{chipRoundLabel(round, totalRounds)}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+
+      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 22, paddingTop: 12 }}>
+          {Array.from({ length: totalRounds }, (_, r) => r + 1).map((round) => {
+            const col = matches
+              .filter((m) => m.round === round)
+              .sort((a, b) => a.slot - b.slot);
+            const isCol = collapsed.has(round);
+            const { pitch, topOffset } = roundMetrics(round);
+            return (
+              <React.Fragment key={round}>
+                <View style={{ width: isCol ? 52 : COL_W }}>
+                  <Pressable
+                    onPress={() => toggleRound(round)}
+                    style={({ pressed }) => [styles.roundPill, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.roundPillText} numberOfLines={1}>
+                      {isCol ? shortRoundLabel(round, totalRounds) : roundLabel(round, totalRounds)}
+                    </Text>
+                    <Text style={styles.roundPillChevron}>{isCol ? '›' : '⌄'}</Text>
+                  </Pressable>
+                  {isCol ? (
+                    <View style={[styles.collapsedStrip, { height: totalH }]}>
+                      <Text style={styles.collapsedText}>{col.length}</Text>
+                    </View>
+                  ) : (
+                    <View style={{ height: totalH }}>
+                      {col.map((m, i) => {
+                        const playable = !!m.home_reg && !!m.away_reg;
+                        const homeWin = m.winner_reg && m.winner_reg === m.home_reg;
+                        const awayWin = m.winner_reg && m.winner_reg === m.away_reg;
+                        const pending = !m.winner_reg && m.status !== 'finished';
+                        const slot = pending ? fmtBracketSlot(m) : null;
+                        const myMatch = isMine(m);
+                        return (
+                          <View
+                            key={m.id}
+                            style={{
+                              marginTop: i === 0 ? topOffset : pitch - BRACKET_H,
+                              height: BRACKET_H,
+                            }}
+                          >
+                            <Pressable
+                              disabled={!playable || readOnly}
+                              onPress={() => onEdit(m)}
+                              style={({ pressed }) => [
+                                styles.matchCard,
+                                { height: BRACKET_H },
+                                myMatch && styles.matchCardMine,
+                                pressed && playable && !readOnly && { opacity: 0.85 },
+                              ]}
+                            >
+                              <MatchSide
+                                styles={styles}
+                                name={regName(m.home_reg)}
+                                score={m.home_score}
+                                win={!!homeWin}
+                                placeholder={m.home_reg ? null : placeholderFor(m, 0)}
+                              />
+                              <View style={styles.matchDivider} />
+                              <MatchSide
+                                styles={styles}
+                                name={regName(m.away_reg)}
+                                score={m.away_score}
+                                win={!!awayWin}
+                                placeholder={m.away_reg ? null : placeholderFor(m, 1)}
+                              />
+                            </Pressable>
+                            {slot ? (
+                              <Text
+                                style={[styles.matchSlotLine, myMatch && { color: c.accent }]}
+                                numberOfLines={1}
+                              >
+                                {slot}
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+                {round < totalRounds ? (
+                  <RoundConnectors
+                    round={round}
+                    targets={Math.floor(r1count / Math.pow(2, round))}
+                    totalH={totalH}
+                    line={c.hairStrong}
+                    hidden={isCol || collapsed.has(round + 1)}
+                  />
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -5104,6 +5295,48 @@ export const makeStyles = (c: Palette) =>
     wDotSmText: { color: '#0A0F0D', fontSize: 8, fontWeight: '900' },
     matchScore: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700', color: c.text, minWidth: 16, textAlign: 'right' },
     matchDivider: { height: 1, backgroundColor: c.hair },
+    // Mis cruces (seguir torneo): borde de acento.
+    matchCardMine: { borderColor: c.accent, borderWidth: 1.5, backgroundColor: c.accent10 },
+    // «SÁB 10:30 · PISTA 3» bajo cada partido pendiente (va en el hueco entre partidos).
+    matchSlotLine: {
+      position: 'absolute',
+      top: BRACKET_H + 2,
+      left: 4,
+      right: 4,
+      fontFamily: Fonts.mono,
+      fontSize: 9,
+      lineHeight: 12,
+      letterSpacing: 0.6,
+      color: c.textFaint,
+    },
+    roundChips: { flexDirection: 'row', gap: 6, paddingHorizontal: 22, paddingTop: 10 },
+    roundChip: {
+      paddingHorizontal: 12,
+      height: 30,
+      borderRadius: 9999,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    roundChipText: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 0.6, color: c.textMuted, fontWeight: '600' },
+    // «Tu camino»: mis partidos de la fase, en orden.
+    pathWrap: { paddingHorizontal: 22, paddingTop: 12 },
+    pathRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+      height: 40,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    pathRound: { width: 64, fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 0.8, color: c.accent, fontWeight: '700' },
+    pathRival: { flex: 1, minWidth: 0, color: c.text, fontSize: 13, fontWeight: '600' },
+    pathState: { fontFamily: Fonts.mono, fontSize: 10.5, letterSpacing: 0.4, color: c.textMuted, fontWeight: '600' },
     bracketHint: { color: c.textFaint, fontSize: 12, paddingHorizontal: 22, marginTop: 12 },
     // Clasificación (liga)
     stHeader: {

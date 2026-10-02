@@ -35,6 +35,7 @@ import {
   type FollowListMode,
 } from '@features/social/components/FollowListSheet';
 import type { RootStackParamList } from '@navigation/types';
+import { RecordCard } from '@features/profile/components/RecordCards';
 
 export const PublicProfileScreen = () => {
   const c = useColors();
@@ -197,6 +198,22 @@ export const PublicProfileScreen = () => {
           {/* Stats de amistosos (solo jugadores) */}
           {type === 'user' ? (
             <>
+              {/* RÉCORD público: solo amistosos (la liga es privada del
+                  equipo y el RPC público no la expone). */}
+              {(user?.casual_played ?? 0) > 0 ? (
+                <View style={{ marginTop: 20 }}>
+                  <RecordCard
+                    eyebrow="RÉCORD · AMISTOSOS"
+                    won={user?.casual_won ?? 0}
+                    lost={Math.max(
+                      0,
+                      (user?.casual_played ?? 0) - (user?.casual_won ?? 0),
+                    )}
+                    winRate={user?.casual_win_rate ?? null}
+                  />
+                </View>
+              ) : null}
+
               {user?.photos && user.photos.length > 0 ? (
                 <>
                   <Text style={styles.sectionLabel}>FOTOS DE PARTIDOS</Text>
@@ -242,26 +259,6 @@ export const PublicProfileScreen = () => {
                   </ScrollView>
                 </>
               ) : null}
-
-              <Text style={styles.sectionLabel}>AMISTOSOS</Text>
-              <View style={styles.statsCard}>
-                <StatCell label="Jugados" value={String(user?.casual_played ?? 0)} />
-                <View style={styles.statDivider} />
-                <StatCell
-                  label="Victorias"
-                  value={String(user?.casual_won ?? 0)}
-                  highlight
-                />
-                <View style={styles.statDivider} />
-                <StatCell
-                  label="Tasa V"
-                  value={
-                    user?.casual_win_rate != null
-                      ? `${user.casual_win_rate}%`
-                      : '—'
-                  }
-                />
-              </View>
 
               {user?.teams && user.teams.length > 0 ? (
                 <>
@@ -339,23 +336,6 @@ const CountBox: React.FC<{
       <Text style={styles.countValue}>{value}</Text>
       <Text style={styles.countLabel}>{label}</Text>
     </Pressable>
-  );
-};
-
-const StatCell: React.FC<{
-  label: string;
-  value: string;
-  highlight?: boolean;
-}> = ({ label, value, highlight }) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-    <View style={styles.statCell}>
-      <Text style={[styles.statValue, highlight && { color: c.accent }]}>
-        {value}
-      </Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
   );
 };
 
@@ -482,30 +462,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: 22,
     marginBottom: 10,
   },
-  statsCard: {
-    flexDirection: 'row',
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.hair,
-    paddingVertical: 16,
-  },
-  statCell: { flex: 1, alignItems: 'center' },
-  statValue: {
-    fontFamily: Fonts.mono,
-    color: c.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  statLabel: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginTop: 6,
-    textTransform: 'uppercase',
-  },
-  statDivider: { width: 1, backgroundColor: c.hair, marginVertical: 4 },
 
   clubCard: {
     flexDirection: 'row',

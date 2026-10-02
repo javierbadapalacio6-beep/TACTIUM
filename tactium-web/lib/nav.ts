@@ -38,65 +38,72 @@ export interface NavEntry {
   icon: IconName;
 }
 
-export const NAV_BY_ROLE: Record<Role, NavEntry[]> = {
-  capitan: [
-    { href: "/", label: "Inicio", icon: "home" },
-    { href: "/temporadas", label: "Temporadas", icon: "calendar" },
-    { href: "/equipo", label: "Equipo", icon: "users" },
-    { href: "/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/torneos/mios", label: "Mis torneos", icon: "trophy" },
-    { href: "/torneos/organizar", label: "Organizar un torneo", icon: "plus" },
-    { href: "/federacion", label: "Federación", icon: "flag" },
-    { href: "/stats", label: "Stats", icon: "chart" },
-    { href: "/comunidad", label: "Comunidad", icon: "globe" },
-  ],
-  club: [
-    { href: "/club", label: "Club", icon: "building" },
-    { href: "/club/equipos", label: "Equipos", icon: "shield" },
-    { href: "/club/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/club/horarios", label: "Horarios", icon: "clock" },
-    { href: "/federacion", label: "Federación", icon: "flag" },
-    { href: "/club/facturacion", label: "Facturación", icon: "receipt" },
-    { href: "/comunidad", label: "Comunidad", icon: "globe" },
-  ],
-  jugador: [
-    { href: "/", label: "Inicio", icon: "home" },
-    { href: "/equipo", label: "Equipo", icon: "users" },
-    { href: "/stats", label: "Stats", icon: "chart" },
-    { href: "/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/torneos/mios", label: "Mis torneos", icon: "trophy" },
-    { href: "/torneos/organizar", label: "Organizar un torneo", icon: "plus" },
-    { href: "/federacion", label: "Federación", icon: "flag" },
-    { href: "/comunidad", label: "Comunidad", icon: "globe" },
-  ],
-  suelto: [
-    { href: "/", label: "Mi pádel", icon: "home" },
-    { href: "/amistosos", label: "Amistosos", icon: "userPlus" },
-    { href: "/stats", label: "Stats", icon: "chart" },
-    { href: "/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/torneos/mios", label: "Mis torneos", icon: "trophy" },
-    { href: "/torneos/organizar", label: "Organizar un torneo", icon: "plus" },
-    { href: "/comunidad", label: "Comunidad", icon: "globe" },
-  ],
-};
+/**
+ * Navegación única (mejora n.º 11): los MISMOS cuatro apartados para todos
+ * los roles —Inicio · Competir · Equipo · Perfil— más el botón «＋ Crear»,
+ * igual que la barra de la app. Lo único que cambia por rol es a dónde
+ * apunta «Equipo» y qué acciones salen al pulsar «＋ Crear».
+ */
+export type MainSection = "inicio" | "competir" | "equipo" | "perfil";
+
+export interface MainNavEntry extends NavEntry {
+  key: MainSection;
+}
+
+export function mainNav(role: Role, opts?: { tournamentsOnly?: boolean }): MainNavEntry[] {
+  // El club con gestión de equipos tiene su lista de equipos; el resto
+  // (capitán, jugador, suelto y organizador) entra por `/equipo`, que pinta
+  // la plantilla o el estado vacío que toque.
+  const equipoHref = role === "club" && !opts?.tournamentsOnly ? "/club/equipos" : "/equipo";
+  return [
+    { key: "inicio", href: "/", label: "Inicio", icon: "home" },
+    { key: "competir", href: "/competir", label: "Competir", icon: "trophy" },
+    { key: "equipo", href: equipoHref, label: "Equipo", icon: "users" },
+    { key: "perfil", href: "/ajustes", label: "Perfil", icon: "user" },
+  ];
+}
+
+/** Rutas que cuelgan de cada apartado. Gana el prefijo más largo. */
+const SECTION_PREFIXES: { prefix: string; key: MainSection; exact?: boolean }[] = [
+  { prefix: "/", key: "inicio", exact: true },
+  { prefix: "/club", key: "inicio", exact: true }, // panel del club
+  { prefix: "/novedades", key: "inicio" },
+  { prefix: "/comunidad", key: "inicio" },
+  { prefix: "/amistosos", key: "inicio" },
+  { prefix: "/competir", key: "competir" },
+  { prefix: "/temporadas", key: "competir" },
+  { prefix: "/jornada", key: "competir" },
+  { prefix: "/federacion", key: "competir" },
+  { prefix: "/torneos", key: "competir" },
+  { prefix: "/club/torneos", key: "competir" },
+  { prefix: "/club/horarios", key: "competir" },
+  { prefix: "/club/cobros", key: "competir" },
+  { prefix: "/equipo", key: "equipo" },
+  { prefix: "/club/equipos", key: "equipo" },
+  { prefix: "/club/importar", key: "equipo" },
+  { prefix: "/ajustes", key: "perfil" },
+  { prefix: "/stats", key: "perfil" },
+  { prefix: "/suscripcion", key: "perfil" },
+  { prefix: "/pro", key: "perfil" },
+  { prefix: "/club/facturacion", key: "perfil" },
+];
 
 /**
- * Espacio de organizador (club «solo torneos»): menú recortado, como en la
- * app (Torneos + Perfil). Sin equipos, horarios ni facturación hasta que el
- * dueño active la gestión de equipos desde la pantalla de torneos.
+ * ¿Qué apartado del menú se enciende en esta ruta? `null` si ninguno (p. ej.
+ * el perfil público de OTRO jugador). Con `username`, el perfil propio cuenta
+ * como «Perfil».
  */
-export const NAV_TOURNAMENTS_ONLY: NavEntry[] = [
-  { href: "/club/torneos", label: "Torneos", icon: "trophy" },
-  { href: "/torneos", label: "Explorar torneos", icon: "search" },
-  { href: "/club/cobros", label: "Cobros", icon: "creditCard" },
-  { href: "/comunidad", label: "Comunidad", icon: "globe" },
-];
-export const TABS_TOURNAMENTS_ONLY: NavEntry[] = [
-  { href: "/club/torneos", label: "Torneos", icon: "trophy" },
-  { href: "/torneos", label: "Explorar", icon: "search" },
-  { href: "/club/cobros", label: "Cobros", icon: "creditCard" },
-  { href: "/ajustes", label: "Perfil", icon: "userPlus" },
-];
+export function sectionOf(pathname: string, username?: string | null): MainSection | null {
+  if (username && pathname === `/u/${username}`) return "perfil";
+  let best: { prefix: string; key: MainSection } | null = null;
+  for (const r of SECTION_PREFIXES) {
+    const hit = r.exact
+      ? pathname === r.prefix
+      : pathname === r.prefix || pathname.startsWith(r.prefix + "/");
+    if (hit && (!best || r.prefix.length > best.prefix.length)) best = r;
+  }
+  return best?.key ?? null;
+}
 
 /**
  * Navegación del marco PÚBLICO (visitante sin sesión).
@@ -120,6 +127,9 @@ export const PUBLIC_ROUTES = [
   "/u/",
   "/pro",
   "/legal",
+  // Enlaces de invitación (tactium.io/i/CÓDIGO). Con barra: "/i" a secas
+  // sería prefijo de cualquier ruta futura que empiece por «i».
+  "/i/",
 ];
 
 /**
@@ -143,6 +153,7 @@ const KNOWN_ROUTE_PREFIXES = [
   "/u/",
   "/pro",
   "/legal",
+  "/i/",
   "/entrar",
   "/empezar",
   "/bienvenida",
@@ -150,6 +161,7 @@ const KNOWN_ROUTE_PREFIXES = [
   "/ajustes",
   "/amistosos",
   "/club",
+  "/competir",
   "/equipo",
   "/jornada",
   "/novedades",
@@ -170,38 +182,6 @@ export function hasTeamSwitcher(role: Role): boolean {
   return role !== "suelto";
 }
 
-/** Tab bar de móvil, máximo 5 destinos. */
-export const TABS_BY_ROLE: Record<Role, NavEntry[]> = {
-  capitan: [
-    { href: "/", label: "Inicio", icon: "home" },
-    { href: "/temporadas", label: "Temporadas", icon: "calendar" },
-    { href: "/equipo", label: "Equipo", icon: "users" },
-    { href: "/stats", label: "Stats", icon: "chart" },
-    { href: "/ajustes", label: "Perfil", icon: "userPlus" },
-  ],
-  club: [
-    { href: "/club", label: "Club", icon: "building" },
-    { href: "/club/equipos", label: "Equipos", icon: "shield" },
-    { href: "/club/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/club/horarios", label: "Horarios", icon: "clock" },
-    { href: "/ajustes", label: "Perfil", icon: "userPlus" },
-  ],
-  jugador: [
-    { href: "/", label: "Inicio", icon: "home" },
-    { href: "/equipo", label: "Equipo", icon: "users" },
-    { href: "/stats", label: "Stats", icon: "chart" },
-    { href: "/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/ajustes", label: "Perfil", icon: "userPlus" },
-  ],
-  suelto: [
-    { href: "/", label: "Mi pádel", icon: "home" },
-    { href: "/amistosos", label: "Amistosos", icon: "userPlus" },
-    { href: "/stats", label: "Stats", icon: "chart" },
-    { href: "/torneos", label: "Torneos", icon: "trophy" },
-    { href: "/ajustes", label: "Perfil", icon: "userPlus" },
-  ],
-};
-
 /**
  * Eyebrow + título de la barra superior por ruta. Se resuelve por el prefijo
  * más largo que case, así `/torneos/abc` hereda el de `/torneos`.
@@ -215,6 +195,7 @@ const ROUTE_META: { prefix: string; eyebrow: string; title: string }[] = [
   { prefix: "/club/equipos", eyebrow: "CLUB · EQUIPOS", title: "Equipos" },
   { prefix: "/club/torneos", eyebrow: "CLUB · TORNEOS", title: "Torneos" },
   { prefix: "/club", eyebrow: "CLUB · ADMIN", title: "Club" },
+  { prefix: "/competir", eyebrow: "COMPETIR", title: "Competir" },
   { prefix: "/temporadas", eyebrow: "TEMPORADA", title: "Temporadas" },
   { prefix: "/jornada", eyebrow: "JORNADA", title: "Jornada" },
   { prefix: "/equipo", eyebrow: "EQUIPO", title: "Plantilla" },
@@ -239,70 +220,7 @@ export function routeMeta(pathname: string, role: Role) {
   };
 }
 
-export interface Crumb {
-  label: string;
-  href?: string;
-}
-
 /** Un destino del nav superior. Con `items`, es un desplegable. */
 export interface NavGroup extends NavEntry {
   items?: NavEntry[];
-}
-
-/**
- * Navegación superior: el botón de inicio va SIEMPRE a `/` —la portada, sea
- * cual sea el rol— y el resto de destinos se reparte en píldoras. Los que
- * cuelgan de otro —«Mis torneos» dentro de «Torneos»— se agrupan en un
- * desplegable, que es lo que permite que quepan en una sola fila.
- *
- * La pantalla de aterrizaje del rol (`/club` para el club) nunca actúa de
- * padre: si lo hiciera se tragaría su propio menú entero en un desplegable.
- */
-export function topNav(
-  role: Role,
-  opts?: { tournamentsOnly?: boolean },
-): { home: NavEntry; groups: NavGroup[] } {
-  const entries =
-    role === "club" && opts?.tournamentsOnly ? NAV_TOURNAMENTS_ONLY : NAV_BY_ROLE[role];
-  const landing = entries[0];
-  const home: NavEntry =
-    entries.find((e) => e.href === "/") ?? { href: "/", label: "Inicio", icon: "home" };
-  const groups: NavGroup[] = [];
-
-  for (const item of entries) {
-    if (item.href === "/") continue; // ése es ya el botón de inicio
-    const parent = groups.find(
-      (g) => g.href !== landing.href && item.href.startsWith(g.href + "/"),
-    );
-    if (parent) {
-      // Al abrir el grupo, el propio padre pasa a ser su primera opción.
-      if (!parent.items) {
-        parent.items = [{ ...parent, label: `Explorar ${parent.label.toLowerCase()}` }];
-      }
-      parent.items.push(item);
-    } else {
-      groups.push({ ...item });
-    }
-  }
-  return { home, groups };
-}
-
-/**
- * Migas de pan de la barra superior: sección padre (enlazable) + pantalla.
- * Sale de la propia navegación del rol, así el padre siempre es un destino
- * real del menú y no un rótulo inventado.
- */
-export function routeCrumbs(pathname: string, role: Role): Crumb[] {
-  const meta = routeMeta(pathname, role);
-  const nav = NAV_BY_ROLE[role];
-  // El ítem de menú cuyo href es prefijo más largo de la ruta.
-  const parent = nav
-    .filter((i) => i.href !== "/" && (pathname === i.href || pathname.startsWith(i.href + "/")))
-    .sort((a, b) => b.href.length - a.href.length)[0];
-
-  if (!parent) return [{ label: meta.title }];
-  if (parent.href === pathname || parent.label === meta.title) {
-    return [{ label: parent.label }];
-  }
-  return [{ label: parent.label, href: parent.href }, { label: meta.title }];
 }

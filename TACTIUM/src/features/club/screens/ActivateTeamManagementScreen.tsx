@@ -44,7 +44,7 @@ export const ActivateTeamManagementScreen = ({
       await unlockTeamManagement(club.id, fed?.code ?? null);
       toast.success(
         'Gestión de equipos activada',
-        'Ya puedes crear equipos y plantillas desde las pestañas del club.',
+        'Ya puedes crear equipos y plantillas desde Inicio o con el botón ＋.',
       );
       // Upsell: mandamos al paywall de club. Con `replace`, al cerrarlo se
       // vuelve a las tabs (ya en modo club completo), no a esta pantalla.

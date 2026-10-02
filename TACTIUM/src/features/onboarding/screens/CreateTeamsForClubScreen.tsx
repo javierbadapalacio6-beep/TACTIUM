@@ -66,8 +66,9 @@ export const CreateTeamsForClubScreen = ({
 
   const clubTeams = club ? teams.filter((t) => t.club_id === club.id) : [];
 
-  // Plan activo del club + cuántos equipos cubre. El paywall del onboarding
-  // ya creó la sub justo antes de llegar aquí, así que esperamos encontrarla.
+  // Plan activo del club + cuántos equipos cubre. Al crear el club en el
+  // onboarding arranca la prueba de 14 días sin tarjeta, así que lo normal es
+  // encontrarla (si falló, no hay sub y el alta sigue igual).
   // Mismo patrón que CreateTeamFromClubScreen post-onboarding — sin ello,
   // el usuario podía crear N equipos saltándose el quota del plan.
   const clubSub = useMemo(() => {
@@ -224,6 +225,13 @@ export const CreateTeamsForClubScreen = ({
         'Crea al menos un equipo',
         'Tu club necesita al menos un equipo para empezar.',
       );
+      return;
+    }
+    // Un único equipo: el último paso es invitar a su gente (mismo «Paso 3 de
+    // 3» que el capitán). Con varios, se invita desde el panel de cada equipo.
+    const activeTeam = useTeamStore.getState().team;
+    if (clubTeams.length === 1 && activeTeam?.id === clubTeams[0].id) {
+      navigation.navigate('AddPlayers');
       return;
     }
     finishOnboarding();

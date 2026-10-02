@@ -204,3 +204,102 @@ export async function createMatchday(
   if (error) throw error;
   return data;
 }
+
+/** Próxima jornada de un equipo, en versión ligera para Inicio. */
+export interface TeamNextMatchday {
+  teamId: string;
+  matchday: Pick<
+    Matchday,
+    'id' | 'opponent' | 'match_date' | 'match_time' | 'jornada_number' | 'status'
+  >;
+  /** Mi ficha en ese equipo (null si no juego en él). */
+  myPlayerId: string | null;
+  /** Mi respuesta de disponibilidad: null = sin contestar. */
+  myStatus: 'yes' | 'maybe' | 'no' | null;
+}
+
+/**
+ * Próxima jornada (no terminada, de hoy en adelante o sin fecha) de la
+ * temporada activa de cada equipo, con mi respuesta si juego en él. Tres
+ * consultas en total, da igual cuántos equipos: jornadas, mis fichas y mis
+ * respuestas. Equipos sin jornada próxima no aparecen.
+ */
+export async function fetchNextMatchdaysForTeams(
+  teamIds: string[],
+  userId: string | null,
+): Promise<TeamNextMatchday[]> {
+  if (teamIds.length === 0) return [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [mdRes, plRes] = await Promise.all([
+    supabase
+      .from('matchdays')
+      .select(
+        'id, opponent, match_date, match_time, jornada_number, status, seasons!inner(team_id, active)',
+      )
+      .in('seasons.team_id', teamIds)
+      .eq('seasons.active', true)
+      .neq('status', 'finished')
+      .or(`match_date.is.null,match_date.gte.${today}`)
+      .order('match_date', { ascending: true, nullsFirst: false })
+      .order('jornada_number', { ascending: true })
+      .limit(100),
+    userId
+      ? supabase
+          .from('players')
+          .select('id, team_id')
+          .eq('user_id', userId)
+          .in('team_id', teamIds)
+      : Promise.resolve({ data: [] as { id: string; team_id: string }[], error: null }),
+  ]);
+  if (mdRes.error) throw mdRes.error;
+
+  // La primera por equipo (ya vienen ordenadas por fecha y jornada).
+  const firstByTeam = new Map<string, TeamNextMatchday['matchday']>();
+  for (const row of mdRes.data ?? []) {
+    const season = row.seasons as unknown as { team_id: string } | { team_id: string }[] | null;
+    const teamId = Array.isArray(season) ? season[0]?.team_id : season?.team_id;
+    if (!teamId || firstByTeam.has(teamId)) continue;
+    firstByTeam.set(teamId, {
+      id: row.id,
+      opponent: row.opponent,
+      match_date: row.match_date,
+      match_time: row.match_time,
+      jornada_number: row.jornada_number,
+      status: row.status,
+    });
+  }
+
+  const myPlayerByTeam = new Map<string, string>();
+  for (const p of plRes.data ?? []) myPlayerByTeam.set(p.team_id, p.id);
+
+  // Mis respuestas en esas jornadas (una sola consulta).
+  const mdIds = Array.from(firstByTeam.values()).map((m) => m.id);
+  const myPlayerIds = Array.from(myPlayerByTeam.values());
+  const statusByMd = new Map<string, 'yes' | 'maybe' | 'no'>();
+  if (mdIds.length && myPlayerIds.length) {
+    const { data } = await supabase
+      .from('availability')
+      .select('*')
+      .in('matchday_id', mdIds)
+      .in('player_id', myPlayerIds);
+    for (const r of (data ?? []) as { matchday_id: string; status?: string | null }[]) {
+      if (r.status === 'yes' || r.status === 'maybe' || r.status === 'no') {
+        statusByMd.set(r.matchday_id, r.status);
+      }
+    }
+  }
+
+  return teamIds
+    .filter((id) => firstByTeam.has(id))
+    .map((teamId) => {
+      const matchday = firstByTeam.get(teamId)!;
+      const myPlayerId = myPlayerByTeam.get(teamId) ?? null;
+      return {
+        teamId,
+        matchday,
+        myPlayerId,
+        myStatus: myPlayerId ? statusByMd.get(matchday.id) ?? null : null,
+      };
+    });
+}

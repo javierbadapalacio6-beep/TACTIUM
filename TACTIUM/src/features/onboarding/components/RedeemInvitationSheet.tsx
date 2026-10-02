@@ -1,22 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet } from '@components/ui';
-import * as InvitationsApi from '@core/services/invitations';
 import { useTeamStore } from '@store/teamStore';
-import { useClubStore } from '@store/clubStore';
-import { toast } from '@store/toastStore';
+
+import { JoinTeamPreview } from './JoinTeamPreview';
 
 export const RedeemInvitationSheet: React.FC<{
   open: boolean;
@@ -26,57 +17,24 @@ export const RedeemInvitationSheet: React.FC<{
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [code, setCode] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const loadTeam = useTeamStore((s) => s.loadForUser);
-  const loadClubs = useClubStore((s) => s.loadForUser);
+  const setActiveTeam = useTeamStore((s) => s.setActiveTeam);
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
 
   const trimmed = code.trim().toUpperCase();
-  const valid = trimmed.length === 8;
+  const complete = trimmed.length === 8;
 
-  const handleRedeem = async () => {
-    if (!valid || submitting) return;
-    setSubmitting(true);
-    try {
-      await InvitationsApi.redeemInvitation(trimmed);
-      // Recargamos datos para que aparezca el equipo recién canjeado.
-      // Clubs primero por consistencia con App.tsx (teamStore lee clubs).
-      await loadClubs();
-      await loadTeam();
-      finishOnboarding();
-      setCode('');
-      onClose();
-      // Toast post-redeem: orienta al user recién unido sobre qué hacer.
-      // El PlayerClaimGate ya abrirá automáticamente el sheet de reclamar
-      // slot si era role=player; este toast cubre el caso de captain
-      // invitado y refuerza el siguiente paso para players también.
-      toast.success(
-        '¡Te has unido al equipo!',
-        'Marca tu disponibilidad para la próxima jornada cuando puedas.',
-      );
-      onRedeemed?.();
-    } catch (e: any) {
-      Alert.alert('Código inválido', e?.message ?? 'Inténtalo de nuevo.');
-    } finally {
-      setSubmitting(false);
-    }
+  const close = () => {
+    setCode('');
+    onClose();
   };
 
   return (
-    <BottomSheet
-      open={open}
-      onClose={() => {
-        if (!submitting) {
-          setCode('');
-          onClose();
-        }
-      }}
-    >
+    <BottomSheet open={open} onClose={close}>
       <Text style={styles.eyebrow}>INVITACIÓN DE EQUIPO</Text>
       <Text style={styles.title}>Únete a tu equipo</Text>
       <Text style={styles.lede}>
-        El gestor de tu club o tu capitán ha creado el equipo y te ha enviado
-        una invitación de 8 caracteres para unirte como jugador.
+        Mete el código de 8 caracteres que te ha enviado tu capitán o tu club.
+        Antes de unirte verás a qué equipo entras.
       </Text>
 
       <View style={styles.input}>
@@ -96,21 +54,28 @@ export const RedeemInvitationSheet: React.FC<{
         <Text style={styles.inputCounter}>{trimmed.length}/8</Text>
       </View>
 
-      <Pressable
-        disabled={!valid || submitting}
-        onPress={handleRedeem}
-        style={({ pressed }) => [
-          styles.cta,
-          (!valid || submitting) && { opacity: 0.4 },
-          pressed && valid && !submitting && { opacity: 0.85 },
-        ]}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#001810" />
-        ) : (
+      {complete ? (
+        <View style={{ marginTop: 14 }}>
+          {/* key = código: al cambiarlo se vuelve a pedir la vista previa. */}
+          <JoinTeamPreview
+            key={trimmed}
+            code={trimmed}
+            onJoined={() => {
+              close();
+              onRedeemed?.();
+            }}
+            onGoToTeam={(teamId) => {
+              void setActiveTeam(teamId).catch(() => {});
+              finishOnboarding();
+              close();
+            }}
+          />
+        </View>
+      ) : (
+        <View style={[styles.cta, { opacity: 0.4 }]}>
           <Text style={styles.ctaLabel}>Unirme al equipo</Text>
-        )}
-      </Pressable>
+        </View>
+      )}
     </BottomSheet>
   );
 };

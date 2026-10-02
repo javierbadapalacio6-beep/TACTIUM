@@ -21,7 +21,6 @@ import {
 } from '@components/ui';
 import * as TeamMembersApi from '@core/services/teamMembers';
 import * as InvitationsApi from '@core/services/invitations';
-import { useTeamGate } from '@core/hooks/usePremiumGate';
 import { useTeamStore } from '@store/teamStore';
 import * as PlayersApi from '@core/services/players';
 
@@ -90,17 +89,11 @@ export const TeamMembersSheet: React.FC<{
     return m;
   }, [players]);
 
-  // Reverse trial + cobertura dura: invitar es premium y se gatea contra el
-  // equipo de ESTE sheet (no el activo). Si el equipo no está cubierto, el
-  // gate ofrece cubrirlo o mejorar el plan.
-  const teamGate = useTeamGate();
-  const teams = useTeamStore((s) => s.teams);
+  // Invitar es GRATIS (montar el equipo y traer a la gente no se cobra; lo
+  // premium es la gestión). Sin gate de suscripción ni de cobertura.
   const deleteTeamAction = useTeamStore((s) => s.deleteTeam);
-  const sheetTeam = teams.find((t) => t.id === teamId) ?? null;
-  const gateInvite = (role: InvitationsApi.InvitableRole) =>
-    sheetTeam
-      ? teamGate(sheetTeam, () => handleCreateInvitation(role), 'invite_create')
-      : () => handleCreateInvitation(role);
+  const gateInvite = (role: InvitationsApi.InvitableRole) => () =>
+    handleCreateInvitation(role);
 
   const handleDeleteTeam = () => {
     if (!teamId) return;
@@ -134,13 +127,14 @@ export const TeamMembersSheet: React.FC<{
     setGenerating(true);
     try {
       const inv = await InvitationsApi.createInvitation(teamId, role);
-      setInvitations((list) => [inv, ...list]);
+      // El código de jugador es COMPARTIDO: la RPC puede devolver uno que ya
+      // estaba en la lista → sin duplicar la fila.
+      setInvitations((list) => [inv, ...list.filter((i) => i.id !== inv.id)]);
       // Abrimos el share sheet directamente: el caso típico es enviar el code
       // por WhatsApp al capitán inmediatamente después de generarlo.
-      const label = role === 'captain' ? 'capitán' : 'jugador';
       try {
         await Share.share({
-          message: `Únete como ${label} a "${teamName ?? 'el equipo'}" en TACTIUM con este código: ${inv.code}`,
+          message: InvitationsApi.buildInviteMessage(teamName, inv.code, role),
         });
       } catch {
         /* user cancelado, no es error */
@@ -153,10 +147,9 @@ export const TeamMembersSheet: React.FC<{
   };
 
   const handleShareCode = async (code: string, role: InvitationsApi.InvitableRole) => {
-    const label = role === 'captain' ? 'capitán' : 'jugador';
     try {
       await Share.share({
-        message: `Únete como ${label} a "${teamName ?? 'el equipo'}" en TACTIUM con este código: ${code}`,
+        message: InvitationsApi.buildInviteMessage(teamName, code, role),
       });
     } catch {
       /* sin error si cancelan */

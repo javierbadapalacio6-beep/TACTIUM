@@ -2745,6 +2745,43 @@ button.list-row:hover,
   background: var(--accent-10);
 }
 
+/* Navegación única · «＋ Crear». En móvil, botón redondo en el centro de la
+   barra inferior; desde tablet, botón en la cabecera (y el botón de inicio
+   se retira: «Inicio» ya es la primera píldora). */
+.tw-tab-create {
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.tw-tab-create-dot {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-md);
+  transition: background var(--dur-fast) var(--ease);
+}
+.tw-tab-create:hover .tw-tab-create-dot {
+  background: var(--accent-dim);
+}
+.tw-createbtn {
+  display: none;
+}
+@media (min-width: 768px) {
+  .tw-createbtn {
+    display: inline-flex;
+  }
+  .tw-homebtn {
+    display: none;
+  }
+}
+
 /* ── Tablet: aparecen las píldoras; la tab bar se retira ───────── */
 @media (min-width: 768px) {
   .tw-tabbar {

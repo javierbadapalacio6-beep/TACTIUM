@@ -23,7 +23,7 @@ import { FcpSeasonUpdateSheet } from '../components/FcpSeasonUpdateSheet';
 import { FcpGroupSheet } from '../components/FcpGroupSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 
-import type { ClubTeamsStackScreenProps } from '@navigation/types';
+import type { TeamStackScreenProps } from '@navigation/types';
 
 /**
  * Dashboard READ-ONLY de un equipo concreto, accesible desde el tab
@@ -43,7 +43,7 @@ import type { ClubTeamsStackScreenProps } from '@navigation/types';
  */
 export const ClubTeamPreviewScreen = ({
   navigation,
-}: ClubTeamsStackScreenProps<'ClubTeamPreview'>) => {
+}: TeamStackScreenProps<'ClubTeamPreview'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();

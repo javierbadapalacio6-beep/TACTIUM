@@ -17,20 +17,20 @@ import {
   IconShield,
   IconSun,
   IconTrash,
-  IconX,
 } from "./Icon";
 import { LogoMark } from "./LogoMark";
 import { LogoSpinner } from "./TactiumLogo3D";
 import { PublicShell } from "./PublicShell";
 import { Wordmark } from "./Wordmark";
 import { Avatar } from "./ui";
+import { NoticeList, type Notice } from "./notifications/NoticeList";
+import { CreateMenu } from "./nav/CreateMenu";
 import {
-  TABS_BY_ROLE,
-  TABS_TOURNAMENTS_ONLY,
   hasTeamSwitcher,
   isKnownRoute,
   isPublicPath,
-  topNav,
+  mainNav,
+  sectionOf,
   type NavGroup,
 } from "@/lib/nav";
 import { ROLE_LABELS, useSession } from "@/lib/session";
@@ -49,8 +49,10 @@ import { WRITES_ENABLED } from "@/lib/writes";
  * Shell persistente del panel.
  *
  * La navegación va ARRIBA, en píldoras, dentro de un marco redondeado que
- * flota sobre un lienzo más oscuro. A la izquierda la marca y el botón de
- * inicio; a la derecha el contexto (club y equipo) y los controles.
+ * flota sobre un lienzo más oscuro. A la izquierda la marca y los cuatro
+ * apartados de la navegación única (Inicio · Competir · Equipo · Perfil, los
+ * mismos para todos los roles); a la derecha «＋ Crear», el contexto (club y
+ * equipo) y los controles. En móvil, la barra inferior con «＋» en el centro.
  *
  * El scroll vive en `tw-main`, no en el body: es lo que mantiene el marco
  * quieto y el redondeo intacto.
@@ -128,25 +130,17 @@ function SignedOut() {
   );
 }
 
-/* ── Avisos (campanita) ── datos reales de la tabla `notifications` ──── */
-type NoticeTone = "accent" | "warning" | "muted";
-interface Notice {
-  id: string;
-  icon: keyof typeof ICONS;
-  text: string;
-  time: string;
-  unread: boolean;
-  tone: NoticeTone;
-  /** A dónde lleva. Null si ese tipo no tiene destino. */
-  href: string | null;
-}
-
+/* ── Avisos (campanita) ── datos reales de la tabla `notifications` ────
+   La lista (agrupada por día, con botones en línea) vive en
+   `components/notifications/NoticeList.tsx`. */
 function iconForNotif(type: string): keyof typeof ICONS {
   if (["member_joined", "joined_team", "player_claimed"].includes(type))
     return "userPlus";
   if (["matchday_created", "lineup_published"].includes(type)) return "calendar";
   if (type.includes("reminder")) return "clock";
-  if (type.includes("follow")) return "users";
+  if (type.includes("follow") || type === "kudos") return "users";
+  if (type === "tournament_payment_due") return "creditCard";
+  if (type.startsWith("tournament")) return "trophy";
   return "calendar";
 }
 
@@ -165,16 +159,6 @@ function timeAgo(iso: string): string {
   if (w < 5) return `hace ${w} sem`;
   const mo = Math.floor(d / 30);
   return `hace ${mo} ${mo === 1 ? "mes" : "meses"}`;
-}
-
-/** Envuelve el contenido de un aviso en un enlace si tiene destino. */
-function cuerpoDe(n: Notice, contenido: ReactNode, alPulsar: () => void) {
-  if (!n.href) return <span className="tw-bell-body">{contenido}</span>;
-  return (
-    <Link href={n.href} className="tw-bell-body" onClick={alPulsar}>
-      {contenido}
-    </Link>
-  );
 }
 
 function matchesHref(pathname: string, href: string) {
@@ -293,6 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [ctxOpen, setCtxOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const ctxRef = useDismiss(ctxOpen, () => setCtxOpen(false));
   const bellRef = useDismiss(bellOpen, () => setBellOpen(false));
@@ -302,6 +287,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setCtxOpen(false);
     setBellOpen(false);
     setUserOpen(false);
+    setCreateOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -327,11 +313,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         setNotices(
           rows.map((n) => ({
             id: n.id,
+            type: n.type,
             href: n.href,
             icon: iconForNotif(n.type),
             text: n.title,
             time: timeAgo(n.created_at),
+            createdAt: n.created_at,
             unread: n.read_at == null,
+            matchdayId: n.matchdayId,
+            tournamentId: n.tournamentId,
+            actor: n.actor,
+            clubId: n.clubId,
             tone: n.type.includes("reminder")
               ? "warning"
               : n.read_at == null
@@ -376,19 +368,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <SignedOut />;
   }
 
-  // Espacio de organizador («solo torneos»): menú recortado, como en la app.
+  // Navegación única: los mismos cuatro apartados para todos los roles. El
+  // organizador («solo torneos») sólo cambia a dónde apunta «Equipo».
   const tournamentsOnly =
     role === "club" && (clubs.find((c) => c.id === clubId)?.tournamentsOnly ?? false);
-  const { home, groups } = topNav(role, { tournamentsOnly });
-  const pillActiveHref = activeHref(
-    pathname,
-    groups.flatMap((g) => [g.href, ...(g.items?.map((i) => i.href) ?? [])]),
-  );
-  const tabs = tournamentsOnly ? TABS_TOURNAMENTS_ONLY : TABS_BY_ROLE[role];
-  const tabsActiveHref = activeHref(pathname, tabs.map((t) => t.href));
+  const nav = mainNav(role, { tournamentsOnly });
+  const home = nav[0];
+  // El apartado se enciende en TODAS sus rutas (Competir en /temporadas,
+  // /federacion, /torneos…), no sólo en la de su enlace.
+  const section = sectionOf(pathname, user.username);
   const unread = notices.filter((n) => n.unread).length;
   const activeClub = clubs.find((c) => c.id === clubId) ?? null;
-  const atHome = matchesHref(pathname, home.href);
+  const atHome = section === "inicio";
 
   // Qué contexto se enseña en la píldora: el club manda cuando se usa como
   // club; si no, el equipo, que es sobre lo que actúan las pantallas.
@@ -410,9 +401,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Se quita de la lista antes de que conteste el servidor: si fallara, el
   // aviso vuelve al recargar, que es mejor que una campana que no responde.
-  function borrarAviso(id: string) {
-    setNotices((ns) => ns.filter((n) => n.id !== id));
-    if (WRITES_ENABLED) deleteNotification(id).catch(() => {});
+  // Una fila agrupada («3 nuevos seguidores») son varios avisos.
+  function borrarAvisos(ids: string[]) {
+    setNotices((ns) => ns.filter((n) => !ids.includes(n.id)));
+    if (WRITES_ENABLED) for (const id of ids) deleteNotification(id).catch(() => {});
   }
 
   function borrarTodos() {
@@ -449,16 +441,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <nav className="tw-pills" aria-label="Navegación principal">
-            {groups.map((g) => {
-              const hrefs = [g.href, ...(g.items?.map((i) => i.href) ?? [])];
-              // Sólo la píldora MÁS específica se enciende: `/club/equipos`
-              // empieza por `/club`, así que con un `some` se marcaban las dos.
-              const active = pillActiveHref !== null && hrefs.includes(pillActiveHref);
-              return <NavPill key={g.href} group={g} active={active} pathname={pathname} />;
-            })}
+            {nav.map((g) => (
+              <NavPill key={g.key} group={g} active={section === g.key} pathname={pathname} />
+            ))}
           </nav>
 
           <div className="tw-topnav-right">
+            {/* «＋ Crear»: acciones rápidas del rol. En móvil va en la barra
+                inferior, centrado. */}
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="btn btn-accent btn-sm tw-createbtn"
+              aria-haspopup="dialog"
+            >
+              <IconPlus size={15} />
+              Crear
+            </button>
+
             {/* Contexto: club y equipo activos. */}
             {showCtx && (
               <div ref={ctxRef} style={{ position: "relative" }}>
@@ -621,110 +621,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     </span>
                   </div>
                   <div className="tw-bell-list">
-                  {notices.length === 0 && (
-                    <div
-                      style={{
-                        padding: "22px 16px",
-                        textAlign: "center",
-                        fontSize: 13,
-                        color: "var(--text-faint)",
-                      }}
-                    >
-                      No tienes avisos.
-                    </div>
-                  )}
-                  {notices.map((n, i) => {
-                    const Icon = ICONS[n.icon as keyof typeof ICONS];
-                    const color =
-                      n.tone === "accent"
-                        ? "var(--accent)"
-                        : n.tone === "warning"
-                          ? "var(--warning)"
-                          : "var(--text-muted)";
-                    return (
-                      <div
-                        key={n.id}
-                        className={"tw-bell-row" + (n.href ? " is-link" : "")}
-                        style={{
-                          borderBottom:
-                            i === notices.length - 1 ? "none" : "1px solid var(--line)",
-                        }}
-                      >
-                        {/* Cuerpo pinchable cuando el aviso lleva a algún
-                            sitio; si no, texto suelto. El botón de borrar va
-                            FUERA: un `button` dentro de un `Link` no es HTML
-                            válido. */}
-                        {cuerpoDe(
-                          n,
-                          <>
-                        <span
-                          style={{
-                            width: 30,
-                            height: 30,
-                            borderRadius: 999,
-                            background:
-                              n.tone === "accent" ? "var(--accent-10)" : "var(--bg-card-2)",
-                            color,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flex: "none",
-                          }}
-                        >
-                          <Icon size={15} />
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: 13.5,
-                              lineHeight: 1.35,
-                              color: n.unread ? "var(--text)" : "var(--text-muted)",
-                            }}
-                          >
-                            {n.text}
-                          </span>
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: 12,
-                              color: "var(--text-faint)",
-                              marginTop: 4,
-                            }}
-                          >
-                            {n.time}
-                          </span>
-                        </span>
-                        {n.unread && (
-                          <span
-                            style={{
-                              width: 7,
-                              height: 7,
-                              borderRadius: 999,
-                              background: "var(--accent)",
-                              marginTop: 6,
-                              flex: "none",
-                            }}
-                          />
-                        )}
-                          </>,
-                          () => setBellOpen(false)
-                        )}
-                        <button
-                          type="button"
-                          className="tw-bell-del"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            borrarAviso(n.id);
-                          }}
-                          aria-label="Borrar este aviso"
-                          title="Borrar"
-                        >
-                          <IconX size={14} />
-                        </button>
-                      </div>
-                    );
-                  })}
+                    <NoticeList
+                      notices={notices}
+                      onNavigate={() => setBellOpen(false)}
+                      onDelete={borrarAvisos}
+                    />
                   </div>
                 </div>
               )}
@@ -828,12 +729,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* ══ Tab bar · móvil ════════════════════════════════════════ */}
       <nav className="tw-tabbar" aria-label="Navegación principal">
-        {tabs.map((t) => {
-          const active = t.href === tabsActiveHref;
+        {nav.flatMap((t, i) => {
+          const active = section === t.key;
           const Icon = ICONS[t.icon];
-          return (
+          const tab = (
             <Link
-              key={t.href + t.label}
+              key={t.key}
               href={t.href}
               aria-current={active ? "page" : undefined}
               className={"tw-tab" + (active ? " is-active" : "")}
@@ -844,8 +745,27 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </Link>
           );
+          // «＋» en el centro: Inicio · Competir · ＋ · Equipo · Perfil.
+          if (i !== 2) return [tab];
+          return [
+            <button
+              key="crear"
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="tw-tab tw-tab-create"
+              aria-label="Crear"
+              aria-haspopup="dialog"
+            >
+              <span className="tw-tab-create-dot">
+                <IconPlus size={20} />
+              </span>
+            </button>,
+            tab,
+          ];
         })}
       </nav>
+
+      <CreateMenu open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }

@@ -11,10 +11,6 @@ import {
   listUnclaimedPlayers,
   claimPlayer,
   unclaimPlayer,
-  fetchTeamInvitations,
-  createInvitation,
-  redeemInvitation,
-  invitationActive,
   type DbClaimablePlayer,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
@@ -31,12 +27,12 @@ import {
   Input,
   ListRow,
   Note,
-  Segmented,
 } from "@/components/ui";
 import { EmptyState, SkeletonCard, Toast } from "@/components/states";
+import { InvitePanel } from "@/components/invite/InvitePanel";
+import { InlineInvitePreview } from "@/components/invite/InviteJoin";
 import {
   IconCalendar,
-  IconCopy,
   IconFile,
   IconLock,
   IconMail,
@@ -263,163 +259,54 @@ export function Invitaciones() {
   const { activeTeam } = useSession();
   const teamId = activeTeam?.id ?? null;
 
-  const [reloadKey, setReloadKey] = useState(0);
-  const [role, setRole] = useState<"player" | "captain">("player");
-  const [busy, setBusy] = useState(false);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [code, setCode] = useState("");
-  const [joining, setJoining] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-
-  const { data: invites } = useAsync(
-    () => fetchTeamInvitations(teamId!),
-    [teamId, reloadKey],
-    !!teamId,
-  );
-  const active = (invites ?? []).filter(invitationActive);
-
-  async function generate() {
-    if (busy || !teamId) return;
-    setBusy(true);
-    const res = await guardedWrite("crear la invitación", () =>
-      createInvitation(teamId, role),
-    );
-    setBusy(false);
-    if (res.ok) {
-      setReloadKey((k) => k + 1);
-      setToast(`Código creado: ${res.data.code}`);
-    } else setToast(res.reason);
-  }
-
-  async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedCode(value);
-      setTimeout(() => setCopiedCode(null), 1800);
-    } catch {
-      /* Sin permiso de portapapeles: el código se ve y se copia a mano. */
-    }
-  }
-
-  async function join() {
-    if (joining || code.trim().length < 3) return;
-    setJoining(true);
-    const res = await guardedWrite("unirte con el código", () =>
-      redeemInvitation(code),
-    );
-    setJoining(false);
-    if (res.ok) {
-      setToast("Te has unido. Recargando…");
-      setTimeout(() => window.location.reload(), 900);
-    } else setToast(res.reason);
-  }
 
   return (
     <div className="tw-club-grid">
-      {/* Generar (solo si gestionas un equipo). */}
+      {/* Invitar (solo si gestionas un equipo): el enlace primero. */}
       <Card flush>
         <CardHead
           title={teamId ? `Invitar a ${activeTeam?.name ?? "tu equipo"}` : "Invitar jugadores"}
           sub={
             teamId
-              ? "Genera un código para que se unan a la plantilla."
+              ? "Comparte el enlace: se unen desde la app o desde la web, gratis."
               : undefined
           }
         />
-        {teamId ? (
-          <>
-            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <Field label="Rol del invitado">
-                <Segmented
-                  label="Rol del invitado"
-                  value={role}
-                  onChange={setRole}
-                  options={[
-                    { value: "player", label: "Jugador" },
-                    { value: "captain", label: "Capitán" },
-                  ]}
-                />
-              </Field>
-              <Btn variant="accent" onClick={generate} disabled={busy} icon={<IconPlus size={15} />} block>
-                {busy ? "Generando…" : "Generar código"}
-              </Btn>
-              {role === "player" && (
-                <Note>
-                  El código de jugador es único por equipo y se puede reutilizar.
-                  El de capitán sirve una sola vez.
-                </Note>
-              )}
-            </div>
-
-            {active.length === 0 ? (
-              <EmptyState compact title="Sin códigos activos" body="Genera uno para empezar a invitar." />
-            ) : (
-              active.map((inv) => (
-                <div key={inv.id} className="list-row">
-                  <span className="list-row-main">
-                    <span
-                      className="mono"
-                      style={{
-                        display: "block",
-                        fontSize: 17,
-                        fontWeight: 700,
-                        letterSpacing: "0.12em",
-                        color: "var(--accent)",
-                      }}
-                    >
-                      {inv.code}
-                    </span>
-                    <span className="list-row-sub">
-                      {inv.role === "captain" ? "Capitán" : "Jugador"}
-                    </span>
-                  </span>
-                  <Btn
-                    size="sm"
-                    variant="quiet"
-                    onClick={() => copy(inv.code)}
-                    aria-label={`Copiar ${inv.code}`}
-                    icon={<IconCopy size={14} />}
-                  >
-                    {copiedCode === inv.code ? "Copiado" : "Copiar"}
-                  </Btn>
-                </div>
-              ))
-            )}
-          </>
-        ) : (
-          <div className="card-body">
+        <div className="card-body">
+          {teamId ? (
+            <InvitePanel
+              teamId={teamId}
+              teamName={activeTeam?.name ?? "tu equipo"}
+              onToast={setToast}
+            />
+          ) : (
             <Note>
-              Necesitas gestionar un equipo para generar códigos. Crea uno desde
+              Necesitas gestionar un equipo para invitar. Crea uno desde
               «Equipo actual».
             </Note>
-          </div>
-        )}
+          )}
+        </div>
       </Card>
 
-      {/* Unirme con código (universal). */}
+      {/* Unirme con código (universal): vista previa antes de confirmar. */}
       <Card flush>
-        <CardHead title="Unirme con código" sub="¿Te han pasado uno? Úsalo aquí." />
-        <div className="card-body">
+        <CardHead title="Unirme con código" sub="¿Te han pasado uno? Escríbelo y verás el equipo antes de unirte." />
+        <div className="card-body" style={{ display: "grid", gap: 16 }}>
           <Field label="Código de invitación" htmlFor="codigo-invitacion">
-            <div style={{ display: "flex", gap: 8 }}>
-              <Input
-                id="codigo-invitacion"
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="ABC-123"
-                className="mono"
-                style={{ letterSpacing: "0.12em" }}
-              />
-              <Btn
-                variant="accent"
-                onClick={join}
-                disabled={code.trim().length < 3 || joining}
-              >
-                {joining ? "…" : "Unirme"}
-              </Btn>
-            </div>
+            <Input
+              id="codigo-invitacion"
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="ABC123"
+              autoComplete="off"
+              className="mono"
+              style={{ letterSpacing: "0.12em" }}
+            />
           </Field>
+          <InlineInvitePreview code={code} />
         </div>
       </Card>
 

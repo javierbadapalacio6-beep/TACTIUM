@@ -136,7 +136,7 @@ export const MyStatsScreen = () => {
     load();
   }, [load]);
 
-  // La pestaña Stats queda MONTADA (tabs con lazy:false): sin esto, al
+  // Refresco al recuperar el foco: sin esto, al
   // guardar un amistoso y volver aquí no se refrescaban los números.
   const focusReload = useCallback(() => {
     load();

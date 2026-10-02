@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   createBottomTabNavigator,
   BottomTabBar,
@@ -19,24 +19,17 @@ import Animated, {
 import { useColors, useIsDark } from '@core/theme';
 import {
   IconHome,
-  IconAnalytics,
-  IconCalendar,
   IconTeam,
   IconUser,
   IconTrophy,
+  IconPlus,
 } from '@components/ui/Icon';
-import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { HomeStack } from './HomeStack';
-import { SeasonsStack } from './SeasonsStack';
-import { FederacionStack } from './FederacionStack';
-import { ClubStack } from './ClubStack';
-import { ClubTeamsStack } from './ClubTeamsStack';
-import { TournamentsStack } from './TournamentsStack';
+import { CompetirStack } from './CompetirStack';
 import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
-import { MyStatsScreen } from '@features/profile/screens/MyStatsScreen';
-import { useTeamStore } from '@store/teamStore';
-import { useClubStore, selectActiveClub } from '@store/clubStore';
+import { CreateSheet } from '@features/create/components/CreateSheet';
+import { useNavRole } from './navRole';
 
 import type { TabParamList } from './types';
 
@@ -143,9 +136,50 @@ const AnimatedTabButton: React.FC<BottomTabBarButtonProps> = ({
   );
 };
 
-// Icono para el tab "Club" — aprovechamos el de Team con sutil tinte distinto.
-// Mantenerlo simple evita añadir un asset nuevo en Fase 4.
-const IconClub = IconTeam;
+// Botón central ＋: círculo de acento con sombra, más grande que el resto de
+// huecos. No es una pestaña — abre la hoja CREAR (acciones por rol).
+const CreateTabButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
+  const c = useColors();
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withTiming(0.9, {
+          duration: 90,
+          easing: Easing.out(Easing.cubic),
+        });
+      }}
+      onPressOut={() => {
+        scale.value = withTiming(1, {
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+        });
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Crear"
+      accessibilityHint="Abre las acciones rápidas para crear"
+      android_ripple={null}
+      style={styles.tabButton}
+    >
+      <Animated.View
+        style={[
+          styles.createCircle,
+          { backgroundColor: c.accent, shadowColor: c.accent },
+          animStyle,
+        ]}
+      >
+        <IconPlus size={22} color={c.textInverse} />
+      </Animated.View>
+    </Pressable>
+  );
+};
+
+// Pantalla vacía del hueco ＋ (nunca se enfoca: el toque se intercepta).
+const CreatePlaceholder = () => null;
 
 // Tab bar flotante "isla" con cristal. Estructura:
 //   floatingWrap (absolute, posiciona horizontal/bottom)
@@ -230,223 +264,110 @@ const FloatingTabBar: React.FC<BottomTabBarProps> = (props) => {
   );
 };
 
+/**
+ * Barra ÚNICA para todos los roles: Inicio · Competir · ＋ · Equipo · Perfil.
+ * Lo que cambia por rol es el CONTENIDO de cada pestaña (ver HomeStack,
+ * CompetirStack, TeamStack) y las acciones de la hoja ＋ (CreateSheet).
+ * Los nombres de pestaña son estables (`Home`, `Team`, `Profile`) para que
+ * avisos, push y enlaces sigan llegando a su sitio sea cual sea el rol.
+ */
 export const TabNavigator = () => {
   const c = useColors();
-  const activeRole = useTeamStore((s) => s.activeRole);
-  const hasTeam = useTeamStore((s) => !!s.team);
-  // Club en modo "solo torneos": menú recortado a Torneos + Perfil hasta que el
-  // owner desbloquee la gestión de equipos.
-  const activeClub = useClubStore(selectActiveClub);
-  const tournamentsOnly = activeClub?.tournaments_only ?? false;
+  const [createOpen, setCreateOpen] = useState(false);
+  // Al cambiar de rol (Perfil → cambiar de equipo/club) el contenido de las
+  // stacks se recalcula solo; aquí solo se usa para el texto de Equipo.
+  const role = useNavRole();
+  const teamLabel = role === 'club' || role === 'organizer' ? 'Equipos' : 'Equipo';
 
   return (
-    <Tab.Navigator
-      tabBar={(props) => <FloatingTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: c.tabBarActive,
-        tabBarInactiveTintColor: c.tabBarInactive,
-        // El BottomTabBar interno se renderiza encima del pill cristal.
-        // Lo dejamos transparente para que se vea el blur a través.
-        tabBarStyle: styles.innerTabBar,
-        tabBarLabelStyle: styles.label,
-        tabBarItemStyle: styles.item,
-        tabBarBackground: () => null,
-        // Botón con animación de press (scale-feedback + spring).
-        tabBarButton: (props) => <AnimatedTabButton {...props} />,
-        // `animation: 'none'`: con `'shift'` se veía el bug del lazy mount;
-        // con `'fade'` aún quedaba un edge case donde nav rápida entre tabs
-        // dejaba opacity 0 (Profile salía blanco). `none` cambia
-        // instantáneo entre tabs — menos sutil visualmente, pero 100%
-        // robusto. La animación bonita entre stacks la sigue dando el
-        // `slide_from_right` de los stacks internos para drill-down.
-        animation: 'none',
-        // Pre-montamos las 3 tabs al arrancar (vs. `lazy: true` default que
-        // monta solo al primer focus). Sin esto, navegar rápido entre tabs
-        // disparaba el lazy-mount del stack interno a mitad de la animación
-        // `fade` y la pantalla quedaba con tab bar visible pero contenido
-        // vacío. Coste: ~50-100 KB extra de RAM por tener las 3 montadas;
-        // aceptable porque solo tenemos 2 stacks por rol.
-        lazy: false,
-        // Defensa adicional: no congelar el render de la tab al perder
-        // focus. `freezeOnBlur: true` (que es default cuando hay
-        // react-native-screens) puede causar que al re-focus haya un
-        // frame con contenido stale o vacío en navegaciones muy rápidas.
-        freezeOnBlur: false,
-      }}
-    >
-      {activeRole === 'club_admin' ? (
-        tournamentsOnly ? (
-          // ── Menú RECORTADO (club "solo torneos") ──────────────────────────
-          // Solo Torneos + Perfil. El CTA para desbloquear la gestión de
-          // equipos vive dentro de la pantalla de Torneos.
-          <>
-            <Tab.Screen
-              name="Tournaments"
-              component={TournamentsStack}
-              options={{
-                tabBarLabel: 'Torneos',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconTrophy} focused={focused} />
-                ),
-              }}
-            />
-            <Tab.Screen
-              name="Profile"
-              component={ProfileStack}
-              options={{
-                tabBarLabel: 'Perfil',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconUser} focused={focused} />
-                ),
-              }}
-            />
-          </>
-        ) : (
-        <>
-          <Tab.Screen
-            name="Club"
-            component={ClubStack}
-            options={{
-              tabBarLabel: 'Club',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconClub} focused={focused} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="ClubTeams"
-            component={ClubTeamsStack}
-            options={{
-              tabBarLabel: 'Equipos',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconTeam} focused={focused} />
-              ),
-            }}
-          />
-          {TOURNAMENTS_ENABLED ? (
-            <Tab.Screen
-              name="Tournaments"
-              component={TournamentsStack}
-              options={{
-                tabBarLabel: 'Torneos',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconTrophy} focused={focused} />
-                ),
-              }}
-            />
-          ) : null}
-          {/* Federación: pestaña del club (como el capitán). El root decide
-              explorador (Cántabra) o selector de federaciones según la
-              federación del CLUB. Icono distinto del de Torneos (IconTrophy). */}
-          <Tab.Screen
-            name="FederacionTab"
-            component={FederacionStack}
-            options={{
-              tabBarLabel: 'Federación',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconAnalytics} focused={focused} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="Profile"
-            component={ProfileStack}
-            options={{
-              tabBarLabel: 'Perfil',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconUser} focused={focused} />
-              ),
-            }}
-          />
-        </>
-        )
-      ) : (
-        <>
-          <Tab.Screen
-            name="Home"
-            component={HomeStack}
-            options={{
-              tabBarLabel: 'Inicio',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconHome} focused={focused} />
-              ),
-            }}
-          />
-
-          {activeRole !== 'player' && hasTeam ? (
-            <Tab.Screen
-              name="Seasons"
-              component={SeasonsStack}
-              options={{
-                tabBarLabel: 'Temporadas',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconCalendar} focused={focused} />
-                ),
-              }}
-            />
-          ) : null}
-
-          {activeRole !== 'player' && hasTeam ? (
-            <Tab.Screen
-              name="Team"
-              component={TeamStack}
-              options={{
-                tabBarLabel: 'Equipo',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconTeam} focused={focused} />
-                ),
-              }}
-            />
-          ) : null}
-
-          {/* Stats personales: pieza de retención del JUGADOR (F5a). No se
-              muestra a club_admin (cuenta de organización) ni al capitán (su
-              barra es de gestión; sigue teniendo sus stats en Perfil → "Mis
-              estadísticas"). Tab para el jugador de equipo Y para el jugador
-              SUELTO (activeRole null, sin equipo): sus stats son los amistosos.
-              Antes el suelto no veía la pestaña y el "Ver mis stats" fallaba. */}
-          {activeRole === 'player' || activeRole === null ? (
-            <Tab.Screen
-              name="Stats"
-              component={MyStatsScreen}
-              options={{
-                tabBarLabel: 'Stats',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconAnalytics} focused={focused} />
-                ),
-              }}
-            />
-          ) : null}
-
-          {/* Federación: sustituye a Stats en la barra del CAPITÁN. Abre su
-              federación heredada (Cántabra tiene datos) o el selector. */}
-          {activeRole === 'captain' ? (
-            <Tab.Screen
-              name="FederacionTab"
-              component={FederacionStack}
-              options={{
-                tabBarLabel: 'Federación',
-                tabBarIcon: ({ focused }) => (
-                  <TabIcon Icon={IconTrophy} focused={focused} />
-                ),
-              }}
-            />
-          ) : null}
-
-          <Tab.Screen
-            name="Profile"
-            component={ProfileStack}
-            options={{
-              tabBarLabel: 'Perfil',
-              tabBarIcon: ({ focused }) => (
-                <TabIcon Icon={IconUser} focused={focused} />
-              ),
-            }}
-          />
-        </>
-      )}
-    </Tab.Navigator>
+    <>
+      <Tab.Navigator
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: c.tabBarActive,
+          tabBarInactiveTintColor: c.tabBarInactive,
+          // El BottomTabBar interno se renderiza encima del pill cristal.
+          // Lo dejamos transparente para que se vea el blur a través.
+          tabBarStyle: styles.innerTabBar,
+          tabBarLabelStyle: styles.label,
+          tabBarItemStyle: styles.item,
+          tabBarBackground: () => null,
+          // Botón con animación de press (scale-feedback + halo).
+          tabBarButton: (props) => <AnimatedTabButton {...props} />,
+          // `animation: 'none'`: con `'shift'`/`'fade'` quedaban frames vacíos
+          // en navegación rápida entre pestañas. La animación bonita la dan
+          // los `slide_from_right` de las stacks internas.
+          animation: 'none',
+          // Pre-montamos las pestañas al arrancar: el lazy-mount a mitad de
+          // una navegación rápida dejaba la pantalla vacía. Además los avisos
+          // navegan a rutas anidadas y necesitan las stacks montadas.
+          lazy: false,
+          // No congelar al perder el foco: evita un frame stale/vacío al
+          // volver en navegaciones muy rápidas.
+          freezeOnBlur: false,
+        }}
+      >
+        <Tab.Screen
+          name="Home"
+          component={HomeStack}
+          options={{
+            tabBarLabel: 'Inicio',
+            tabBarIcon: ({ focused }) => (
+              <TabIcon Icon={IconHome} focused={focused} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Competir"
+          component={CompetirStack}
+          options={{
+            tabBarLabel: 'Competir',
+            tabBarIcon: ({ focused }) => (
+              <TabIcon Icon={IconTrophy} focused={focused} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Create"
+          component={CreatePlaceholder}
+          options={{
+            tabBarLabel: 'Crear',
+            tabBarButton: () => (
+              <CreateTabButton onPress={() => setCreateOpen(true)} />
+            ),
+          }}
+          listeners={{
+            // Nunca se navega a este hueco: solo abre la hoja.
+            tabPress: (e) => {
+              e.preventDefault();
+              setCreateOpen(true);
+            },
+          }}
+        />
+        <Tab.Screen
+          name="Team"
+          component={TeamStack}
+          options={{
+            tabBarLabel: teamLabel,
+            tabBarIcon: ({ focused }) => (
+              <TabIcon Icon={IconTeam} focused={focused} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Profile"
+          component={ProfileStack}
+          options={{
+            tabBarLabel: 'Perfil',
+            tabBarIcon: ({ focused }) => (
+              <TabIcon Icon={IconUser} focused={focused} />
+            ),
+          }}
+        />
+      </Tab.Navigator>
+      <CreateSheet open={createOpen} onClose={() => setCreateOpen(false)} />
+    </>
   );
 };
 
@@ -532,6 +453,17 @@ const styles = StyleSheet.create({
     right: 8,
     borderRadius: 18,
     borderWidth: 1,
+  },
+  createCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   label: {
     fontSize: 10,

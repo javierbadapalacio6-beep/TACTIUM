@@ -27,7 +27,6 @@ import {
   IconArrowRight,
   IconCourt,
   IconShare,
-  IconTeam,
   IconAnalytics,
   IconChevron,
   IconPin,
@@ -38,14 +37,23 @@ import {
   IconTrophy,
 } from '@components/ui';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
-import { ProgressRing } from '@components/ui/ProgressRing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore } from '@store/teamStore';
 import { useAuthStore } from '@store/authStore';
 import { buildCaptainInviteMessage } from '@core/config/referral';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { FeedPreview } from '@features/social/components/FeedPreview';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
+import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
 import { matchdayState } from '@core/utils/matchday';
+import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
+import { RsvpCard } from '@features/availability/components/RsvpCard';
+import { ConvocatoriaCard } from '@features/availability/components/ConvocatoriaCard';
+import { useRemindPending } from '@features/availability/hooks/useRemindPending';
+import {
+  OtherTeamsMatchdays,
+  formatMatchDate,
+} from '@features/home/components/OtherTeamsMatchdays';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
@@ -205,9 +213,19 @@ export const HomeScreen = ({
       : myPair.player_a_name
     : null;
 
-  const avail = players.filter((p) => p.available).length;
-  const total = players.length || 1;
-  const pct = Math.round((avail / total) * 100);
+  // Disponibilidad POR JORNADA (antes: players.available, global).
+  const availability = useMatchdayAvailability(
+    nextMatchday && nextMatchday.status === 'upcoming' ? nextMatchday.id : null,
+  );
+  const { counts: availCounts } = availability;
+  const remind = useRemindPending({
+    matchdayId: nextMatchday?.id,
+    opponent: nextMatchday?.opponent,
+    jornadaNumber: nextMatchday?.jornada_number,
+    lastReminder: availability.lastReminder,
+    setLastReminder: availability.setLastReminder,
+  });
+  const avail = availCounts.yes;
 
   const inviteCaptain = async () => {
     try {
@@ -217,10 +235,15 @@ export const HomeScreen = ({
     }
   };
 
-  const goSeasons = () => navigation.getParent()?.navigate('Seasons');
-  const goTeam = () => navigation.getParent()?.navigate('Team');
+  // Temporadas viven ahora en Competir → segmento «Liga».
+  const goSeasons = () =>
+    navigation.navigate('Competir', {
+      screen: 'CompetirRoot',
+      params: { segment: 'liga' },
+    });
+  const goTeam = () => navigation.navigate('Team');
   // Atajo al aha moment del capitán: abrir directamente el ScanSheet de
-  // matchdays sin tener que descubrir la pestaña Temporadas. Solo tiene
+  // matchdays sin tener que pasar por Competir › Liga. Solo tiene
   // sentido si ya hay activeSeason — sin temporada no hay dónde colgar
   // los matchdays escaneados.
   // Reverse trial: escanear es premium. El gate comprueba la sub al pulsar →
@@ -229,7 +252,7 @@ export const HomeScreen = ({
   const gate = usePremiumGate();
   const goScanCalendar = gate(() => {
     if (!activeSeason) return;
-    navigation.getParent()?.navigate('Seasons', {
+    navigation.navigate('Competir', {
       screen: 'SeasonDetail',
       params: { id: activeSeason.id, autoOpen: 'scan' },
     });
@@ -270,6 +293,13 @@ export const HomeScreen = ({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Prueba gratis de 14 días (solo quien gestiona/paga). */}
+        {canEdit ? <TrialHomeCard /> : null}
+
+        {/* Varios equipos: la próxima jornada de los demás, para saltar a
+            ellos de un toque. Con un solo equipo no pinta nada. */}
+        <OtherTeamsMatchdays bleed={22} />
+
         <Text style={styles.eyebrow}>
           {nextMatchday && matchdayState(nextMatchday) === 'pending-acta'
             ? 'JORNADA PENDIENTE'
@@ -300,62 +330,66 @@ export const HomeScreen = ({
 
             <View style={heroStyles.heroLive}>
               <NeonDot size={6} />
-              <Text style={heroStyles.heroLiveText}>
-                J·{String(nextMatchday.jornada_number).padStart(2, '0')}
-                {nextMatchday.match_date ? ` · ${nextMatchday.match_date}` : ''}
+              <Text style={heroStyles.heroLiveText} numberOfLines={1}>
+                J{String(nextMatchday.jornada_number).padStart(2, '0')}
+                {nextMatchday.match_date ? ` · ${formatMatchDate(nextMatchday.match_date)}` : ''}
                 {nextMatchday.match_time ? ` · ${nextMatchday.match_time.slice(0, 5)}` : ''}
               </Text>
+              <View style={heroStyles.heroOpen}>
+                <IconArrowRight size={13} color={darkColors.textInverse} />
+              </View>
             </View>
 
-            <Text style={heroStyles.heroLabel}>vs.</Text>
-            <Text style={heroStyles.heroTitle}>{nextMatchday.opponent}</Text>
-            {nextMatchday.location?.trim() ? (
-              <View style={heroStyles.heroLocationRow}>
-                <IconPin size={12} color={darkColors.textMuted} />
-                <Text style={heroStyles.heroLocation} numberOfLines={1}>
-                  {nextMatchday.location.trim()}
+            <Text
+              style={heroStyles.heroTitle}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
+              <Text style={heroStyles.heroVs}>vs </Text>
+              {nextMatchday.opponent}
+            </Text>
+
+            <View style={heroStyles.heroMetaRow}>
+              {nextMatchday.location?.trim() ? (
+                <View style={[heroStyles.heroMeta, { flexShrink: 1 }]}>
+                  <IconPin size={11} color={darkColors.textMuted} />
+                  <Text style={heroStyles.heroMetaText} numberOfLines={1}>
+                    {nextMatchday.location.trim()}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={heroStyles.heroMeta}>
+                <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
+                  {avail}/{players.length} van
                 </Text>
               </View>
-            ) : null}
-
-            <View style={heroStyles.statRow}>
-              <StatChip label="DISPONIBLES" value={`${avail}`} suffix={`/ ${total}`} highlight />
-              <StatChip
-                label="ALINEACIÓN"
-                value={
-                  lineupFilled === 0
-                    ? '—'
-                    : lineupFilled >= matchesPerRound
-                      ? '✓'
-                      : `${lineupFilled}/${matchesPerRound}`
-                }
-                sub={
-                  lineupFilled === 0
-                    ? 'Pendiente'
-                    : lineupFilled >= matchesPerRound
-                      ? 'Lista'
-                      : 'En curso'
-                }
-                highlight={lineupFilled >= matchesPerRound}
-              />
-              <StatChip
-                label="ESTADO"
-                value={
-                  nextMatchday.status === 'in_progress'
-                    ? 'EN JUEGO'
+              <View style={heroStyles.heroMeta}>
+                <Text style={heroStyles.heroMetaText}>
+                  {nextMatchday.status === 'in_progress'
+                    ? 'En juego'
                     : matchdayState(nextMatchday) === 'pending-acta'
-                      ? 'PENDIENTE'
-                      : 'PRÓXIMA'
-                }
-              />
-            </View>
-
-            <View style={heroStyles.heroFooter}>
-              <Text style={heroStyles.heroFooterText}>Abrir jornada</Text>
-              <View style={heroStyles.heroFooterArrow}>
-                <IconArrowRight size={14} color={darkColors.textInverse} />
+                      ? 'Falta el acta'
+                      : lineupFilled === 0
+                        ? 'Sin alineación'
+                        : lineupFilled >= matchesPerRound
+                          ? 'Alineación lista'
+                          : `Alineación ${lineupFilled}/${matchesPerRound}`}
+                </Text>
               </View>
             </View>
+
+            {nextMatchday.status === 'upcoming' && myPlayerId ? (
+              <RsvpCard
+                embedded
+                palette={darkColors}
+                jornadaNumber={nextMatchday.jornada_number}
+                answer={availability.map[myPlayerId]}
+                deadline={availability.deadline}
+                maybeClosed={availability.maybeClosed}
+                onRespond={(status, extra) => availability.respond(myPlayerId, status, extra)}
+              />
+            ) : null}
           </Pressable>
         ) : activeSeason && seasonMatchdayCount > 0 ? (
           // Temporada abierta con el calendario ya cargado y sin jornadas
@@ -384,7 +418,7 @@ export const HomeScreen = ({
                 ? 'El capitán todavía no ha planificado jornadas.'
                 : activeSeason
                   ? 'Escanea el calendario de tu liga y TACTIUM importa todas las jornadas de un golpe.'
-                  : 'Crea una temporada activa desde la pestaña Temporadas.'}
+                  : 'Crea una temporada activa en Competir › Liga.'}
             </Text>
             {canEdit ? (
               <Pressable
@@ -424,6 +458,18 @@ export const HomeScreen = ({
             ) : null}
           </View>
         )}
+
+        {canEdit && nextMatchday && nextMatchday.status === 'upcoming' && players.length > 0 ? (
+          <ConvocatoriaCard
+            counts={availCounts}
+            needed={matchesPerRound * 2}
+            courts={matchesPerRound}
+            onRemind={remind.remind}
+            remindDisabledUntil={remind.cooldownUntil}
+            sending={remind.sending}
+            onOpen={() => navigation.navigate('Availability', { matchdayId: nextMatchday.id })}
+          />
+        ) : null}
 
         {isPlayer && nextMatchday && myPair ? (
           <Pressable
@@ -481,167 +527,99 @@ export const HomeScreen = ({
           </Pressable>
         ) : null}
 
-        <Text style={[styles.eyebrowFaint, { marginTop: 32 }]}>ATAJOS</Text>
-
-        <View style={{ gap: 8 }}>
-          {team?.federation === 'FCantP' ? (
-            <ActionRow
+        {/* Atajos: una fila de iconos (antes, 4-5 filas grandes). La
+            disponibilidad ya no va aquí: la cubre la tarjeta de la jornada. */}
+        <View style={styles.shortcuts}>
+          {/* Atajo del jugador a su federación (también está en Competir). */}
+          {team?.federation === 'FCantP' && isPlayer ? (
+            <ShortcutTile
               icon={<IconTrophy size={20} color={c.accent} />}
-              title="Explorar la Federación"
-              hint="Clasificaciones y jornadas de toda la liga"
+              label="Federación"
               onPress={() => navigation.navigate('Federacion')}
             />
           ) : null}
-          <ActionRow
-            icon={<IconTeam size={20} color={c.accent} />}
-            title={isPlayer ? 'Mi disponibilidad' : 'Disponibilidad'}
-            value={`${avail}/${total}`}
-            hint={
-              isPlayer
-                ? 'Marca si puedes jugar la próxima jornada'
-                : `${pct}% del equipo confirmado`
-            }
-            onPress={() =>
-              navigation.navigate('Availability', {
-                matchdayId: nextMatchday?.id,
-              })
-            }
-          />
-          {canEdit ? (
-            <ActionRow
-              icon={<IconGift size={20} color={c.accent} />}
-              title="Invita a un capitán"
-              hint="¿Conoces a otro capitán? Regálale dejar el Excel"
-              onPress={inviteCaptain}
-            />
-          ) : null}
-          <ActionRow
+          <ShortcutTile
             icon={<IconBall size={20} color={c.accent} />}
-            title="Amistoso"
-            hint={
-              canEdit
-                ? 'Registra un equipo vs equipo y compártelo'
-                : 'Registra un amistoso y compártelo'
-            }
+            label="Amistoso"
             onPress={() => navigation.navigate('Amistoso')}
           />
           {TOURNAMENTS_ENABLED ? (
-            <ActionRow
-              icon={<IconTrophy size={20} color={c.accent} />}
-              title="Explorar torneos"
-              hint="Busca por zona, club o fecha · o entra con tu código"
+            <ShortcutTile
+              icon={<IconCalendar size={20} color={c.accent} />}
+              label="Torneos"
               onPress={() => rootNav.navigate('ExploreTournaments')}
+            />
+          ) : null}
+          {canEdit ? (
+            <ShortcutTile
+              icon={<IconGift size={20} color={c.accent} />}
+              label="Invitar capitán"
+              onPress={inviteCaptain}
             />
           ) : null}
         </View>
 
-        {canEdit ? (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('Availability', {
-                matchdayId: nextMatchday?.id,
-              })
-            }
-            style={({ pressed }) => [
-              styles.statusFooter,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <ProgressRing pct={pct} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.statusTitle}>Equipo confirmado</Text>
-              <Text style={styles.statusMeta}>
-                {avail} de {total} disponibles
-                {nextMatchday?.jornada_number != null
-                  ? ` para la J·${String(nextMatchday.jornada_number).padStart(2, '0')}`
-                  : ''}
-              </Text>
-            </View>
-            <Text style={styles.statusAction}>Gestionar →</Text>
-          </Pressable>
-        ) : null}
+
+        {/* TU GENTE: el feed de quien sigues, con kudos. */}
+        <FeedPreview />
       </ScrollView>
     </View>
   );
 };
 
-const StatChip: React.FC<{
-  label: string;
-  value: string;
-  suffix?: string;
-  sub?: string;
-  highlight?: boolean;
-}> = ({ label, value, suffix, sub, highlight }) => {
-  // StatChip vive solo dentro de la tarjeta de jornada (siempre oscura),
-  // así que usa la paleta oscura fija para que su texto se lea sobre el
-  // degradado verde también en modo claro.
-  const c = darkColors;
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-    <View
-      style={[
-        styles.statChip,
-        highlight && { borderColor: c.accent40 },
-      ]}
-    >
-      <Text style={styles.statChipLabel} numberOfLines={1}>
-        {label}
-      </Text>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2, marginTop: 4 }}>
-        <Text
-          style={[
-            styles.statChipValue,
-            highlight && { color: c.accent },
-          ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.55}
-        >
-          {value}
-        </Text>
-        {suffix ? <Text style={styles.statChipSuffix}>{suffix}</Text> : null}
-      </View>
-      {sub ? <Text style={styles.statChipSub}>{sub}</Text> : null}
-    </View>
-  );
-};
-
-const ActionRow: React.FC<{
+const ShortcutTile: React.FC<{
   icon: React.ReactNode;
-  title: string;
-  /** Pill de la derecha; vacío u omitido = no se pinta (sin recuadro). */
-  value?: string;
-  hint: string;
+  label: string;
   onPress: () => void;
-}> = ({ icon, title, value, hint, onPress }) => {
+}> = ({ icon, label, onPress }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${value ?? ''}. ${hint}`}
-      style={({ pressed }) => [
-        styles.actionRow,
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.shortcut, pressed && { opacity: 0.8 }]}
     >
-      <View style={styles.actionIcon}>{icon}</View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.actionTitle}>{title}</Text>
-        <Text style={styles.actionHint}>{hint}</Text>
-      </View>
-      {value ? (
-        <View style={styles.actionPill}>
-          <Text style={styles.actionPillText}>{value}</Text>
-        </View>
-      ) : null}
-      <IconChevron size={14} color={c.textFaint} />
+      <View style={styles.shortcutIcon}>{icon}</View>
+      <Text style={styles.shortcutLabel} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  shortcuts: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 24,
+  },
+  shortcut: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderRadius: Radius.lg,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hair,
+  },
+  shortcutIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: c.accent10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortcutLabel: {
+    color: c.text,
+    fontSize: 11.5,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   root: {
     flex: 1,
     backgroundColor: c.background,
@@ -759,9 +737,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   hero: {
     borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 22,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
     borderWidth: 1,
     borderColor: c.accent40,
     overflow: 'hidden',
@@ -781,7 +759,44 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 10,
+  },
+  heroOpen: {
+    marginLeft: 'auto',
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: c.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroVs: {
+    color: c.textMuted,
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0,
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  heroMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: c.black35,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+  },
+  heroMetaText: {
+    color: c.textMuted,
+    fontSize: 11.5,
+    fontWeight: '600',
   },
   heroLiveText: {
     fontFamily: Fonts.mono,
@@ -789,19 +804,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.accent,
     letterSpacing: 1.6,
   },
-  heroLabel: {
-    fontSize: 12,
-    color: c.textMuted,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
   heroTitle: {
     color: c.text,
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: '700',
-    letterSpacing: -0.8,
-    lineHeight: 32,
-    marginBottom: 6,
+    letterSpacing: -0.6,
+    lineHeight: 28,
   },
   heroLocationRow: {
     flexDirection: 'row',
@@ -813,68 +821,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.textMuted,
     fontSize: 12,
     flexShrink: 1,
-  },
-  statRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 22,
-  },
-  statChip: {
-    flex: 1,
-    backgroundColor: c.black35,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  statChipLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 9,
-    color: c.textFaint,
-    letterSpacing: 1.4,
-    fontWeight: '500',
-  },
-  statChipValue: {
-    color: c.text,
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: -0.4,
-  },
-  statChipSuffix: {
-    color: c.textFaint,
-    fontSize: 11,
-  },
-  statChipSub: {
-    color: c.textMuted,
-    fontSize: 10,
-    marginTop: 2,
-  },
-  heroFooter: {
-    marginTop: 22,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderColor: c.hairStrong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  heroFooterText: {
-    color: c.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  heroFooterArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: c.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: c.accent,
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
   },
   heroEmpty: {
     backgroundColor: c.bgCard,
@@ -951,76 +897,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.1,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: c.hair,
-  },
-  actionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: c.accent15,
-    borderWidth: 1,
-    borderColor: c.accent25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionTitle: {
-    color: c.text,
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  actionHint: {
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  actionPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: c.bgRaised,
-  },
-  actionPillText: {
-    fontFamily: Fonts.mono,
-    fontSize: 13,
-    color: c.text,
-    fontWeight: '600',
-  },
-  statusFooter: {
-    marginTop: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    borderRadius: Radius.md,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hair,
-  },
-  statusTitle: {
-    color: c.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  statusMeta: {
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  statusAction: {
-    color: c.accent,
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

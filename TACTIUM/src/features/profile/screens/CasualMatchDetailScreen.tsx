@@ -378,7 +378,7 @@ export const CasualMatchDetailScreen = () => {
                     </Text>
                     <Text style={styles.codeHint}>
                       Compártelo con quien jugó y no tiene TACTIUM: al
-                      registrarse, mete el código en Stats y este partido cuenta
+                      registrarse, mete el código en Perfil › Mi récord y este partido cuenta
                       en sus estadísticas.
                     </Text>
                   </View>

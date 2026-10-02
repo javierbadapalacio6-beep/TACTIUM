@@ -148,7 +148,7 @@ export interface FcpBrowseStanding {
 /** Clasificación de un grupo (PJ/PG derivados de fcp_partidos). */
 export async function fetchGroupStandings(
   idGrupo: string,
-): Promise<{ nombre: string | null; rows: FcpBrowseStanding[] }> {
+): Promise<{ nombre: string | null; genero: string | null; rows: FcpBrowseStanding[] }> {
   const { data } = await rawFrom('fcp_clasificacion')
     .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
     .eq('id_grupo', idGrupo)
@@ -214,10 +214,11 @@ export async function fetchGroupStandings(
   });
 
   const { data: g } = await rawFrom('fcp_grupos')
-    .select('nombre')
+    .select('nombre, genero')
     .eq('id_grupo', idGrupo)
     .maybeSingle();
-  return { nombre: g ? ((g as { nombre: string }).nombre ?? null) : null, rows };
+  const gi = g as { nombre: string | null; genero: string | null } | null;
+  return { nombre: gi?.nombre ?? null, genero: gi?.genero ?? null, rows };
 }
 
 export interface FcpBrowseMatch {

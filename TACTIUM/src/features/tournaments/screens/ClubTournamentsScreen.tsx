@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,17 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconPlus, IconChevron, IconTrophy, IconCamera, BottomSheet } from '@components/ui';
+import {
+  IconPlus,
+  IconChevron,
+  IconTrophy,
+  IconCamera,
+  IconBack,
+  BottomSheet,
+} from '@components/ui';
 import { DateField, dateToIsoDate } from '@components/ui/DateTimeField';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
+import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { toast } from '@store/toastStore';
 import {
@@ -51,7 +59,7 @@ import { requestTournamentPayment } from '@core/services/tournamentCheckout';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 
 import type {
-  TournamentsStackScreenProps,
+  HomeStackScreenProps,
   RootStackParamList,
 } from '@navigation/types';
 
@@ -133,9 +141,15 @@ const CREATE_STEPS: { key: string; title: string; sub: string }[] = [
   { key: 'prizes', title: 'Premios e info', sub: 'Premios, datos del evento y observaciones.' },
 ];
 
+// Gestión de torneos del club. Vive en DOS sitios: raíz de Inicio del
+// ORGANIZADOR (club «solo torneos») y, para el club con equipos, empujada desde
+// Competir › Torneos («Gestionar torneos»; ahí lleva «Atrás»).
+// `route.params.createTournament` (nonce) abre el asistente de crear torneo —
+// lo manda el botón ＋.
 export const ClubTournamentsScreen = ({
   navigation,
-}: TournamentsStackScreenProps<'TournamentsRoot'>) => {
+  route,
+}: HomeStackScreenProps<'HomeRoot'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -148,6 +162,15 @@ export const ClubTournamentsScreen = ({
   const [items, setItems] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  // Empujada desde Competir (club con equipos) → «Atrás». Como raíz de Inicio
+  // del organizador no hay a dónde volver.
+  const showBack = navigation.canGoBack();
+
+  // Botón ＋ → «Crear torneo»: llega un nonce nuevo y se abre el asistente.
+  const createNonce = route?.params?.createTournament;
+  useEffect(() => {
+    if (createNonce) setCreating(true);
+  }, [createNonce]);
 
   // Club en modo "solo torneos": el CTA abre el paso de activación (elegir
   // federación + desbloquear + paywall). El desbloqueo real ocurre allí.
@@ -191,7 +214,19 @@ export const ClubTournamentsScreen = ({
     <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
       <View style={styles.topbar}>
         <View style={styles.brandRow}>
-          <TactiumMark size={34} gradient />
+          {showBack ? (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Volver"
+              style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+            >
+              <IconBack size={20} color={c.text} />
+            </Pressable>
+          ) : (
+            <TactiumMark size={34} gradient />
+          )}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.eyebrow}>CLUB · TORNEOS</Text>
             <Text style={styles.brandName} numberOfLines={1}>
@@ -240,6 +275,15 @@ export const ClubTournamentsScreen = ({
             <IconPlus size={16} color={c.textInverse} />
             <Text style={styles.createLabel}>Crear torneo</Text>
           </Pressable>
+          {TOURNAMENTS_ENABLED ? (
+            <Pressable
+              onPress={() => rootNav.navigate('ExploreTournaments')}
+              hitSlop={8}
+              style={({ pressed }) => [styles.exploreLink, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.exploreLinkText}>Explorar torneos de otros clubes →</Text>
+            </Pressable>
+          ) : null}
 
           {items.length === 0 ? (
             <View style={styles.empty}>
@@ -1271,6 +1315,18 @@ const makeStyles = (c: Palette) =>
       borderRadius: Radius.lg,
       backgroundColor: c.accent,
     },
+    exploreLink: { alignSelf: 'center', paddingVertical: 12 },
+    backBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    exploreLinkText: { color: c.accent, fontSize: 13, fontWeight: '700' },
     createLabel: {
       color: c.textInverse,
       fontSize: 15,

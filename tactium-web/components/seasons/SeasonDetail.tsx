@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   createMatchday,
@@ -89,6 +89,20 @@ export function SeasonDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // «＋ Crear → Nueva jornada» llega con `?nueva=1`: el formulario se abre
+  // solo y el parámetro se limpia para que recargar no lo vuelva a abrir.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("nueva") !== "1") return;
+      setNewOpen(true);
+      url.searchParams.delete("nueva");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    } catch {
+      /* sin URL: se abre a mano */
+    }
+  }, []);
 
   /**
    * Renumera las jornadas 1..N por fecha. Tras borrar una en medio, la

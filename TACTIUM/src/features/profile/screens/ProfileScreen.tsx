@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
-import { IconMenu, IconSearch } from '@components/ui';
+import { IconMenu, IconSearch, IconChevron } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
 import { displayNameOf } from '@core/utils/format';
@@ -32,6 +32,13 @@ import {
 } from '@features/social/components/FollowListSheet';
 import { EditProfileSheet } from '@features/profile/components/EditProfileSheet';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
+import {
+  RecordCard,
+  StreakCard,
+  BestPartnerCard,
+  RecordSkeleton,
+} from '@features/profile/components/RecordCards';
+import { useMyRecord } from '@core/hooks/useMyRecord';
 import type { RootStackParamList } from '@navigation/types';
 
 // Rejilla de fotos a 3 columnas. El item es cuadrado y se calcula a partir
@@ -60,6 +67,10 @@ export const ProfileScreen = () => {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [followSheet, setFollowSheet] = useState<FollowListMode | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // Récord liga + amistosos (todas las temporadas y equipos). Se refresca al
+  // volver a la pantalla; sin partidos decididos, las tarjetas no salen.
+  const { record, loading: recordLoading } = useMyRecord(userId);
+  const openStats = () => navigation.navigate('MyStats');
 
   const displayName = displayNameOf(user);
   const roleLabel = activeRole ? ROLE_LABEL[activeRole] ?? null : null;
@@ -229,6 +240,71 @@ export const ProfileScreen = () => {
           </Pressable>
         </View>
 
+        {/* Récord, racha y mejor pareja → todo lleva a Mis estadísticas */}
+        {recordLoading ? (
+          <View style={styles.recordBlock}>
+            <RecordSkeleton />
+          </View>
+        ) : record && record.played > 0 ? (
+          <View style={styles.recordBlock}>
+            <RecordCard
+              won={record.won}
+              lost={record.lost}
+              winRate={record.winRate}
+              onPress={openStats}
+            />
+            {record.lastFive.length > 0 ? (
+              <StreakCard
+                streak={record.currentStreak}
+                lastFive={record.lastFive}
+                onPress={openStats}
+              />
+            ) : null}
+            {record.bestPartner ? (
+              <BestPartnerCard
+                partner={record.bestPartner}
+                onPress={openStats}
+              />
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Accesos (barra única: la pestaña Stats desaparece y sus números
+            viven aquí; el feed completo también se abre desde Perfil). */}
+        <View style={styles.links}>
+          <LinkRow
+            label="Mi récord"
+            hint="Estadísticas de liga y amistosos"
+            onPress={openStats}
+          />
+          <LinkRow
+            label="Novedades"
+            hint="Lo último de la gente que sigues"
+            onPress={() => navigation.navigate('Feed')}
+          />
+          {userId ? (
+            <LinkRow
+              label="Perfil público"
+              hint="Cómo te ven los demás"
+              onPress={() => openFollowProfile('user', userId)}
+            />
+          ) : null}
+          <LinkRow
+            label="Mi suscripción"
+            hint="Plan, prueba y renovación"
+            onPress={() => navigation.navigate('Subscription')}
+            last={activeRole !== 'club_admin'}
+          />
+          {activeRole === 'club_admin' ? (
+            <LinkRow
+              label="Facturación del club"
+              hint="Plan del club y equipos cubiertos"
+              onPress={() => navigation.navigate('ClubBilling')}
+              last
+            />
+          ) : null}
+        </View>
+
         {/* Rejilla de fotos: amistosos (jugador) + portadas de jornada (capitán) */}
         {photos.length > 0 ? (
           <View style={styles.grid}>
@@ -330,6 +406,36 @@ const StatColumn: React.FC<{
   );
 };
 
+const LinkRow: React.FC<{
+  label: string;
+  hint: string;
+  onPress: () => void;
+  last?: boolean;
+}> = ({ label, hint, onPress, last }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.linkRow,
+        !last && styles.linkRowDivider,
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.linkLabel}>{label}</Text>
+        <Text style={styles.linkHint} numberOfLines={1}>
+          {hint}
+        </Text>
+      </View>
+      <IconChevron size={14} color={c.textFaint} />
+    </Pressable>
+  );
+};
+
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.background },
   header: {
@@ -404,6 +510,27 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     gap: 10,
     marginTop: 16,
   },
+  recordBlock: { gap: 10, marginTop: 20 },
+  links: {
+    marginTop: 20,
+    borderRadius: 16,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hair,
+    paddingHorizontal: 14,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  linkRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: c.hair,
+  },
+  linkLabel: { color: c.text, fontSize: 14.5, fontWeight: '600' },
+  linkHint: { color: c.textMuted, fontSize: 12, marginTop: 2 },
   pillBtn: {
     flex: 1,
     height: 40,

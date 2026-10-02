@@ -7,12 +7,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  BackHandler,
   Linking,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { useColors, type Palette } from '@core/theme';
@@ -54,6 +52,7 @@ import {
   presentCodeRedemption,
   setSubjectAttributes,
   type PurchasesOffering,
+  storeOffersFreeTrial,
 } from '@core/purchases';
 import { TrialTimeline } from '../components/TrialTimeline';
 
@@ -79,6 +78,10 @@ const fmtDate = (iso: string): string => {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+/** Prueba SIN tarjeta creada por nosotros (no por la tienda). */
+const isDbTrial = (s: { product_id?: string | null }) =>
+  (s.product_id ?? '').startsWith('trial_');
+
 export const PaywallScreen = ({
   navigation,
   route,
@@ -87,9 +90,7 @@ export const PaywallScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const signOut = useAuthStore((s) => s.signOut);
   const activeRole = useTeamStore((s) => s.activeRole);
-  const createTeam = useTeamStore((s) => s.createTeam);
   const club = useClubStore(selectActiveClub);
   const clubs = useClubStore((s) => s.clubs);
   const activeTeam = useTeamStore((s) => s.team);
@@ -97,73 +98,25 @@ export const PaywallScreen = ({
   const refreshSubs = useSubscriptionStore((s) => s.refresh);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
-  // Modo onboarding: PaywallScreen vive en dos stacks (RootStack como modal
-  // y OnboardingStack como gate obligatorio). El marcador es `nextScreen`
-  // — solo el OnboardingStack lo pasa. En modo onboarding:
-  //  · no hay X de cerrar (no se puede saltar el gate),
-  //  · al iniciar trial hacemos replace(nextScreen) en vez de goBack,
-  //  · ocultamos el link "Continuar gratis" y lo sustituimos por "Salir
-  //    y cerrar sesión",
-  //  · bloqueamos el back de hardware Android.
+  // PaywallScreen vive en dos stacks: RootStack (modal de upgrade) y
+  // OnboardingStack, donde solo se usa como upsell OPCIONAL (p. ej. ofrecer el
+  // volcado automático): muestra los planes del onboarding pero es DESCARTABLE
+  // (cerrar/atrás vuelven a la pantalla anterior). El antiguo paywall
+  // obligatorio del onboarding ya no existe: la prueba de 14 días arranca sola
+  // al crear el primer equipo o el club.
   const params = route.params as
     | {
-        nextScreen?: string;
         intent?: 'captain' | 'club';
-        // Upsell OPCIONAL (p.ej. ofrecer el volcado automático en AddPlayers):
-        // muestra los planes del onboarding pero es DESCARTABLE — botón cerrar,
-        // atrás permitido, y al terminar/cancelar vuelve atrás en vez de avanzar
-        // ni cerrar sesión. Sin esto, el paywall del onboarding es un gate duro.
         optional?: boolean;
-        pendingTeam?: {
-          name: string;
-          federation?: string;
-          league?: string;
-          category?: string;
-          group?: string;
-          gender?: 'masculino' | 'femenino' | 'mixto';
-        };
       }
     | undefined;
-  const nextScreen = params?.nextScreen;
-  // El upsell opcional muestra los planes del onboarding aunque no traiga
-  // `nextScreen` (al terminar/cerrar hace goBack, no avanza).
-  const isOnboarding = Boolean(nextScreen) || Boolean(params?.optional);
-  // Gate DURO = onboarding obligatorio (crear subject). El upsell opcional es
-  // onboarding en contenido pero descartable en comportamiento.
-  const hardGate = isOnboarding && !params?.optional;
-  // El flow Capitán empaqueta los datos de CreateTeam aquí: tras success
-  // del trial creamos el team (el trigger DB ya pasa porque la sub user/
-  // captain acaba de insertarse) y navegamos a AddPlayers.
-  const pendingTeam = params?.pendingTeam;
+  const isOnboarding = Boolean(params?.optional);
   // En onboarding `activeRole` puede ser null (justo tras CreateClub aún
   // no hay team, y deriveRawRole(null,…) = null). Usamos `intent` como
   // verdad para decidir qué familia de planes mostrar. Fuera de onboarding
   // (modal de upgrade desde Profile) sí confiamos en activeRole, que ya
   // está poblado para entonces.
   const intent = params?.intent;
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!hardGate) return undefined;
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
-      return () => sub.remove();
-    }, [hardGate]),
-  );
-
-  const handleExitOnboarding = () => {
-    Alert.alert(
-      'Salir del registro',
-      'Esto cerrará tu sesión. Podrás volver más tarde para elegir tu plan.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Salir',
-          style: 'destructive',
-          onPress: () => signOut(),
-        },
-      ],
-    );
-  };
 
   // Modo: club_admin ve los 3 tier de club; el resto ve solo plan capitán.
   // En onboarding el activeRole aún no es fiable (no hay team), así que
@@ -316,7 +269,11 @@ export const PaywallScreen = ({
           (s) =>
             s.subject_type === subjectType &&
             s.subject_id === subjectId &&
-            isLiveSub(s),
+            isLiveSub(s) &&
+            // La prueba SIN tarjeta (nuestra, product_id 'trial_*') no es una
+            // compra de la tienda: suscribirse desde ahí es una compra nueva,
+            // no un cambio de plan.
+            !isDbTrial(s),
         )
         .sort(
           (a, b) =>
@@ -326,21 +283,38 @@ export const PaywallScreen = ({
     );
   }, [subscriptions, showClubPlans, club?.id, userId]);
 
+  // Prueba sin tarjeta en curso para este subject (solo para los textos).
+  const dbTrialSub = useMemo(() => {
+    const subjectType = showClubPlans ? 'club' : 'user';
+    const subjectId = showClubPlans ? club?.id : userId;
+    if (!subjectId) return null;
+    return (
+      subscriptions.find(
+        (s) =>
+          s.subject_type === subjectType &&
+          s.subject_id === subjectId &&
+          isLiveSub(s) &&
+          isDbTrial(s),
+      ) ?? null
+    );
+  }, [subscriptions, showClubPlans, club?.id, userId]);
+  // ¿La tienda da prueba gratis para el plan elegido? (oferta de introducción)
+  const storeTrial = storeOffersFreeTrial(offering, selectedPlan.tier, billing);
+
   // Salto de familia de verdad: pagas una y quieres la otra.
   const familySwitch = Boolean(otherFamilySub && !existingSubForSubject);
   const isInTrial = existingSubForSubject?.status === 'trialing';
+  const trialSub = isInTrial ? existingSubForSubject : dbTrialSub;
 
   // Días restantes del trial activo (si aplica). Preferimos `trial_end` y
   // caemos a `current_period_end` (en trial suelen coincidir).
   const trialDaysLeft = useMemo(() => {
-    if (!isInTrial || !existingSubForSubject) return null;
-    const endIso =
-      existingSubForSubject.trial_end ??
-      existingSubForSubject.current_period_end;
+    if (!trialSub) return null;
+    const endIso = trialSub.trial_end ?? trialSub.current_period_end;
     if (!endIso) return null;
     const ms = new Date(endIso).getTime() - Date.now();
     return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
-  }, [isInTrial, existingSubForSubject]);
+  }, [trialSub]);
 
   const trialDaysLabel =
     trialDaysLeft == null
@@ -386,11 +360,7 @@ export const PaywallScreen = ({
         'Plan aplicado',
         `${PLAN_BY_TIER[paidClub!.tier].displayName} cubre ahora ${club.name}.`,
       );
-      if (hardGate && nextScreen) {
-        (navigation as any).replace(nextScreen);
-      } else {
-        navigation.goBack();
-      }
+      navigation.goBack();
     } catch (e: any) {
       toast.error('No se pudo aplicar', e?.message ?? '');
     } finally {
@@ -446,7 +416,10 @@ export const PaywallScreen = ({
         (s) =>
           s.subject_type === subjectType &&
           s.subject_id === subjectId &&
-          isLiveSub(s),
+          isLiveSub(s) &&
+          // Nuestra prueba sin tarjeta no existe en la tienda: no hay nada que
+          // «reemplazar» en Google (fallaría) ni un cambio de plan que aplicar.
+          !isDbTrial(s),
       );
       const hadExistingPremium = Boolean(previousSub);
 
@@ -567,11 +540,7 @@ export const PaywallScreen = ({
           // muestra el plan al instante. Reconciliamos con la DB en segundo
           // plano (cuando el webhook actualice la fila).
           void refreshSubs(userId);
-          if (hardGate && nextScreen) {
-            (navigation as any).replace(nextScreen);
-          } else {
-            navigation.goBack();
-          }
+          navigation.goBack();
           return;
         }
 
@@ -692,23 +661,6 @@ export const PaywallScreen = ({
         return;
       }
 
-      // Flow Capitán: el form de CreateTeam pasó los datos como
-      // `pendingTeam`; ahora que la sub user/captain ya existe el trigger
-      // DB nos deja INSERT del team. Si la creación falla aquí, la sub
-      // queda creada pero el team no — el user puede reintentarlo desde
-      // el siguiente flow (no es bloqueante).
-      if (pendingTeam) {
-        try {
-          await createTeam(pendingTeam);
-        } catch (e: any) {
-          toast.error(
-            'No se pudo crear el equipo',
-            e?.message ?? 'Inténtalo de nuevo.',
-          );
-          return;
-        }
-      }
-
       // Sincroniza el store con la DB antes de navegar. No basta con
       // `addOptimistic` (solo corre si el polling encontró la fila) ni con
       // Realtime (puede llegar tarde/fallar): si no refrescamos aquí, la
@@ -719,11 +671,7 @@ export const PaywallScreen = ({
       // ya enlazada al club.
       await refreshSubs(userId);
 
-      if (hardGate && nextScreen) {
-        (navigation as any).replace(nextScreen);
-      } else {
-        navigation.goBack();
-      }
+      navigation.goBack();
     } catch (e: any) {
       toast.error(
         'No se pudo iniciar la prueba',
@@ -751,7 +699,7 @@ export const PaywallScreen = ({
   // (ya hay sub activa para el subject) va directo a la compra, sin timeline.
   const onCtaPress = () => {
     // Ya pagado: se aplica, no se cobra ni se enseña la cuenta atrás de prueba.
-    if (canApplyPaidPlan || existingSubForSubject || familySwitch) {
+    if (canApplyPaidPlan || existingSubForSubject || familySwitch || !storeTrial) {
       handleStartTrial();
     } else {
       setShowTimeline(true);
@@ -846,24 +794,18 @@ export const PaywallScreen = ({
         entering={FadeIn.duration(220)}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
-        {hardGate ? (
-          // Hard gate: sin botón de cerrar. El usuario solo sale vía
-          // "Empezar prueba" o "Salir y cerrar sesión" en el footer.
-          <View style={{ width: 36 }} />
-        ) : (
-          <Pressable
-            onPress={() => navigation.goBack()}
-            accessibilityRole="button"
-            accessibilityLabel="Cerrar"
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.closeBtn,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <IconX size={14} color={c.text} />
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar"
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.closeBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <IconX size={14} color={c.text} />
+        </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.eyebrow}>TACTIUM PRO</Text>
         </View>
@@ -1056,11 +998,15 @@ export const PaywallScreen = ({
           style={styles.disclaimer}
         >
           <Text style={styles.disclaimerText}>
-            {isInTrial && trialDaysLabel
+            {dbTrialSub && !existingSubForSubject
+              ? `Tu prueba gratis sin tarjeta acaba ${trialDaysLabel ?? 'pronto'}. Si te suscribes, ${storeTrial ? `pagarás ${billedLabel} tras ${TRIAL_DURATION_DAYS} días de prueba de la tienda` : `pagarás ${billedLabel} desde hoy`}, con renovación automática. Cancela en cualquier momento desde Ajustes.`
+              : isInTrial && trialDaysLabel
               ? `Ya estás en prueba gratuita: ${trialDaysLabel}. Al terminar pagarás ${billedLabel} con renovación automática. Cancela en cualquier momento desde Ajustes.`
               : existingSubForSubject
                 ? `Cambiarás tu plan a ${billedLabel} con renovación automática. El cambio se gestiona a través de tu cuenta de App Store. Cancela en cualquier momento desde Ajustes.`
-                : `Pago tras ${TRIAL_DURATION_DAYS} días de prueba. ${billedLabel} con renovación automática. Cancela en cualquier momento desde Ajustes.`}
+                : storeTrial
+                  ? `Pago tras ${TRIAL_DURATION_DAYS} días de prueba. ${billedLabel} con renovación automática. Cancela en cualquier momento desde Ajustes.`
+                  : `${billedLabel} con renovación automática. Cancela en cualquier momento desde Ajustes.`}
           </Text>
           {/* Enlaces legales funcionales en el punto de compra: Apple
               Guideline 3.1.2(c) los exige junto al precio/duración. */}
@@ -1119,7 +1065,9 @@ export const PaywallScreen = ({
                     : 'Cambiar de plan'
                   : familySwitch
                     ? `Cambiar a ${selectedPlan.displayName}`
-                    : `Probar gratis ${TRIAL_DURATION_DAYS} días`}
+                    : storeTrial
+                      ? `Probar gratis ${TRIAL_DURATION_DAYS} días`
+                      : `Suscribirme · ${billedLabel}`}
             </Text>
           )}
         </Pressable>
@@ -1142,37 +1090,28 @@ export const PaywallScreen = ({
           </Text>
         ) : !existingSubForSubject ? (
           <Text style={styles.trustLine}>
-            14 días gratis · Sin compromiso · Cancela cuando quieras
+            {storeTrial
+              ? `${TRIAL_DURATION_DAYS} días gratis · Sin compromiso · Cancela cuando quieras`
+              : 'Sin permanencia · Cancela cuando quieras'}
           </Text>
         ) : null}
         <View style={styles.footerLinks}>
-          {hardGate ? (
-            <Pressable
-              onPress={handleExitOnboarding}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel="Salir y cerrar sesión"
-            >
-              <Text style={styles.footerLink}>Salir y cerrar sesión</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => navigation.goBack()}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={
-                existingSubForSubject
-                  ? 'Mantener plan actual'
-                  : 'Continuar gratis'
-              }
-            >
-              <Text style={styles.footerLink}>
-                {existingSubForSubject
-                  ? 'Mantener plan actual'
-                  : 'Continuar gratis'}
-              </Text>
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={
+              existingSubForSubject
+                ? 'Mantener plan actual'
+                : 'Continuar gratis'
+            }
+          >
+            <Text style={styles.footerLink}>
+              {existingSubForSubject
+                ? 'Mantener plan actual'
+                : 'Continuar gratis'}
+            </Text>
+          </Pressable>
           <Text style={styles.footerLinkSep}>·</Text>
           <Pressable
             onPress={handleRestore}

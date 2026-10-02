@@ -111,9 +111,16 @@ export async function POST(req: Request) {
         // recupera el código de compañero de cada una (para el email de P2).
         const regIds: string[] = [];
         const enriched: { reg: PayReg; partnerCode: string | null }[] = [];
+        // Inscripciones que el servidor rechazó DESPUÉS de cobrar (división
+        // completa, ya inscrito, elegibilidad…). Si hay alguna, se devuelve
+        // el pago entero y no se deja nada a medias.
+        const failures: { category: string | null; message: string }[] = [];
         for (const r of regs) {
-          if (!r.p1Name || !r.p2Name) continue;
-          const { data: regId } = await admin.rpc("tournament_signup_paid", {
+          if (!r.p1Name || !r.p2Name) {
+            failures.push({ category: r.category, message: "Faltan los nombres de la pareja" });
+            continue;
+          }
+          const { data: regId, error: regErr } = await admin.rpc("tournament_signup_paid", {
             p_code: p.code,
             p1_name: r.p1Name,
             p1_email: r.p1Email ?? null,
@@ -131,6 +138,13 @@ export async function POST(req: Request) {
             p_terms_accepted: r.termsAccepted !== false,
           });
           const rid = typeof regId === "string" ? regId : null;
+          if (regErr || !rid) {
+            failures.push({
+              category: r.category,
+              message: regErr?.message ?? "No se pudo crear la inscripción",
+            });
+            continue;
+          }
           if (rid) {
             regIds.push(rid);
             await admin
@@ -154,6 +168,56 @@ export async function POST(req: Request) {
                 null,
             });
           }
+        }
+
+        if (failures.length > 0) {
+          // 1) Deshace las inscripciones que sí se crearon con este pago.
+          if (regIds.length > 0) {
+            await admin.from("tournament_registrations").delete().in("id", regIds);
+          }
+          // 2) Devuelve el dinero: también la parte del club (reverse_transfer)
+          //    y nuestra comisión (refund_application_fee).
+          let refunded = false;
+          if (paymentIntent) {
+            try {
+              await stripe.refunds.create({
+                payment_intent: paymentIntent,
+                reverse_transfer: true,
+                refund_application_fee: true,
+                metadata: { reason: "signup_rejected", signup_payment_id: sp.id },
+              });
+              refunded = true;
+            } catch (e) {
+              console.error("[webhook] refund failed", sp.id, e);
+            }
+          }
+          const why = failures
+            .map((f) => (f.category ? `${f.category}: ${f.message}` : f.message))
+            .join(" · ");
+          await admin
+            .from("tournament_signup_payments")
+            .update({
+              // refund_failed = revisar a mano en Stripe (dinero cobrado sin inscripción).
+              status: refunded ? "refunded" : "refund_failed",
+              stripe_payment_intent: paymentIntent,
+              registration_id: null,
+              signup_payload: { ...p, failure: why },
+            })
+            .eq("id", sp.id);
+          if (p.p1UserId) {
+            await admin.from("notifications").insert({
+              user_id: p.p1UserId,
+              type: "tournament_signup",
+              title: refunded
+                ? "Inscripción no completada · te devolvemos el pago"
+                : "Inscripción no completada",
+              body: refunded
+                ? `${p.tournamentName ?? "El torneo"}: ${why}. Hemos devuelto el importe; puede tardar unos días en verse.`
+                : `${p.tournamentName ?? "El torneo"}: ${why}. Vamos a devolverte el importe; si no lo ves en unos días, escríbenos.`,
+              data: { type: "tournament_signup", signupPaymentId: sp.id },
+            });
+          }
+          return NextResponse.json({ received: true, refunded });
         }
 
         await admin

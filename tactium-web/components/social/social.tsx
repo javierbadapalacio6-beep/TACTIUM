@@ -9,10 +9,19 @@ import {
   fetchPublicProfile,
   followTarget,
   searchCommunity,
+  toggleActivityKudos,
   unfollowTarget,
   type CommunityHit,
   type DbCasual,
+  type FeedRow,
 } from "@/lib/queries";
+import {
+  combineRecord,
+  fetchMyLeagueStats,
+  type RecordGame,
+  type RecordSummary,
+} from "@/lib/player-stats";
+import { fetchPeopleYouKnow, profileHref, type PersonSuggestion } from "@/lib/people";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -33,7 +42,7 @@ import {
 } from "@/components/ui";
 import { EmptyState, SkeletonCard, SkeletonPage, Toast } from "@/components/states";
 import { BarList, Ring, WonLostBar } from "@/components/charts";
-import { IconGlobe, IconPlus, IconSearch, IconUsers } from "@/components/Icon";
+import { IconCheck, IconGlobe, IconPlus, IconSearch, IconUsers } from "@/components/Icon";
 
 function initialsOf(name: string) {
   return (
@@ -65,25 +74,53 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /* ═══ FEED ════════════════════════════════════════════════════════ */
-export function Feed() {
+/**
+ * Con `embedded`, la misma lista se pinta como bloque «Tu gente» dentro de
+ * Inicio: sin cabecera de pantalla, las últimas `limit` y «Ver todo» a
+ * `/novedades`. Kudos y estados vacíos son los mismos.
+ */
+export function Feed({ embedded = false, limit = 5 }: { embedded?: boolean; limit?: number } = {}) {
   const { user } = useSession();
   const { data, loading, error } = useAsync(() => fetchFeed(30), [user?.id], !!user);
-  const rows = data ?? [];
+  const all = data ?? [];
+  const rows = embedded ? all.slice(0, limit) : all;
 
-  if (loading) return <SkeletonPage />;
+  // Kudos por resultado (clave kind·ref: un amistoso con dos jugadores a los
+  // que sigues sale dos veces y comparte recuento). Optimista con rollback.
+  const [kudos, setKudos] = useState<Record<string, { given: boolean; count: number }>>({});
+  const [kudosBusy, setKudosBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const kudosKey = (n: FeedRow) => `${n.kind}-${n.ref_id}`;
+  const kudosOf = (n: FeedRow) =>
+    kudos[kudosKey(n)] ?? { given: n.i_gave_kudos, count: n.kudos_count };
 
-  return (
-    <div className="tw-page-narrow">
-      <PageHeader
-        title="Novedades"
-        lede="Lo que hacen los jugadores y los clubes a los que sigues."
-        actions={
-          <BtnLink href="/comunidad" icon={<IconSearch size={15} />}>
-            Buscar en la comunidad
-          </BtnLink>
-        }
-      />
+  async function toggleKudos(n: FeedRow) {
+    const k = kudosKey(n);
+    if (kudosBusy) return;
+    const prev = kudosOf(n);
+    setKudosBusy(k);
+    setKudos((m) => ({
+      ...m,
+      [k]: { given: !prev.given, count: Math.max(0, prev.count + (prev.given ? -1 : 1)) },
+    }));
+    const res = await toggleActivityKudos(n.kind, n.ref_id, n.kind === "casual" ? n.actor_id : null);
+    setKudosBusy(null);
+    if (res.ok) {
+      setKudos((m) => ({ ...m, [k]: res.data }));
+    } else {
+      setKudos((m) => ({ ...m, [k]: prev })); // revertir
+      setToast(res.blocked ? res.reason : "No se pudo dar kudos");
+    }
+  }
 
+  if (loading) return embedded ? <SkeletonCard /> : <SkeletonPage />;
+
+  // Con el feed vacío o casi (menos de 3 entradas), «Gente que conoces»: a
+  // quién seguir para que el feed se llene. Igual que en la app.
+  const suggest = !error && all.length < 3;
+
+  const body = (
+    <>
       {error ? (
         <Card>
           <EmptyState
@@ -107,10 +144,18 @@ export function Feed() {
         </Card>
       ) : (
         <Card flush>
-          <CardHead title="Actividad reciente" count={rows.length} />
+          {embedded ? (
+            <CardHead title="Actividad reciente">
+              <Link href="/novedades" className="link-action">
+                Ver todo
+              </Link>
+            </CardHead>
+          ) : (
+            <CardHead title="Actividad reciente" count={rows.length} />
+          )}
           {rows.map((n) => (
             <ListRow
-              key={`${n.kind}-${n.ref_id}`}
+              key={`${n.kind}-${n.ref_id}-${n.actor_id ?? ""}`}
               icon={
                 <Avatar
                   initials={initialsOf(n.actor_name ?? "?")}
@@ -141,6 +186,13 @@ export function Feed() {
                       {n.subtitle}
                     </span>
                   )}
+                  <KudosButton
+                    state={kudosOf(n)}
+                    // Sin kudos a uno mismo: en tu propio amistoso solo se ve el recuento.
+                    own={n.kind === "casual" && !!user && n.actor_id === user.id}
+                    busy={kudosBusy === kudosKey(n)}
+                    onToggle={() => void toggleKudos(n)}
+                  />
                 </>
               }
               right={
@@ -155,7 +207,199 @@ export function Feed() {
           ))}
         </Card>
       )}
+
+      {suggest && <PeopleYouKnow showSearch={all.length > 0} />}
+
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+    </>
+  );
+
+  if (embedded) return body;
+
+  return (
+    <div className="tw-page-narrow">
+      <PageHeader
+        title="Novedades"
+        lede="Lo que hacen los jugadores y los clubes a los que sigues."
+        actions={
+          <BtnLink href="/comunidad" icon={<IconSearch size={15} />}>
+            Buscar en la comunidad
+          </BtnLink>
+        }
+      />
+      {body}
     </div>
+  );
+}
+
+/* ═══ GENTE QUE CONOCES ══════════════════════════════════════════ */
+/**
+ * Compañeros de tus equipos y miembros de tus clubes con cuenta, a los que aún
+ * no sigues (máx. 8), en una fila deslizable con «Seguir». Sin nadie que
+ * sugerir no se pinta: es un extra del feed, nunca un estado de error.
+ */
+export function PeopleYouKnow({ showSearch = false }: { showSearch?: boolean }) {
+  const { user, teams, clubs } = useSession();
+  const teamIds = teams.map((t) => t.id);
+  const clubIds = clubs.map((c) => c.id);
+  const { data } = useAsync<PersonSuggestion[]>(
+    () => fetchPeopleYouKnow(user!.id, teamIds, clubIds, 8).catch(() => []),
+    [user?.id, teamIds.join(","), clubIds.join(",")],
+    !!user
+  );
+  const [following, setFollowing] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const people = data ?? [];
+  if (people.length === 0) return null;
+
+  async function follow(p: PersonSuggestion) {
+    if (busy) return;
+    const now = following[p.id] ?? p.following;
+    setBusy(p.id);
+    setFollowing((f) => ({ ...f, [p.id]: !now })); // optimista
+    const res = await guardedWrite(now ? "dejar de seguir" : "seguir", async () => {
+      try {
+        if (now) await unfollowTarget("user", p.id);
+        else await followTarget("user", p.id);
+      } catch (e) {
+        // Ya le seguías (clave duplicada): cuenta como hecho.
+        const code = (e as { code?: string } | null)?.code;
+        if (!now && code === "23505") return;
+        throw e;
+      }
+    });
+    setBusy(null);
+    if (!res.ok) {
+      setFollowing((f) => ({ ...f, [p.id]: now })); // revertir
+      setToast(res.reason);
+    }
+  }
+
+  return (
+    <Card flush style={{ marginTop: 16 }}>
+      <CardHead title="Gente que conoces" sub="De tus equipos y tus clubes">
+        {showSearch && (
+          <Link href="/comunidad" className="link-action">
+            Buscar gente
+          </Link>
+        )}
+      </CardHead>
+      <div
+        className="card-body"
+        style={{
+          display: "grid",
+          gridAutoFlow: "column",
+          gridAutoColumns: "156px",
+          gap: 12,
+          overflowX: "auto",
+          overscrollBehaviorX: "contain",
+          scrollSnapType: "x proximity",
+          paddingBottom: 16,
+        }}
+      >
+        {people.map((p) => {
+          const on = following[p.id] ?? p.following;
+          return (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 8,
+                padding: "16px 12px 12px",
+                borderRadius: "var(--r-md)",
+                background: "var(--bg-card-2)",
+                border: "1px solid var(--line)",
+                textAlign: "center",
+                minWidth: 0,
+                scrollSnapAlign: "start",
+              }}
+            >
+              <Link
+                href={profileHref(p.id)}
+                style={{
+                  color: "inherit",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  minWidth: 0,
+                }}
+              >
+                <Avatar initials={initialsOf(p.name)} src={p.avatarUrl} size={48} />
+                <span
+                  className="truncate"
+                  title={p.name}
+                  style={{ display: "block", maxWidth: "100%", fontSize: 13.5, fontWeight: 700 }}
+                >
+                  {p.name}
+                </span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -4 }}>
+                  {p.source === "team" ? "Tu equipo" : "Tu club"}
+                </span>
+              </Link>
+              <Btn
+                size="sm"
+                block
+                variant={on ? "ghost" : "tint"}
+                disabled={busy === p.id}
+                aria-pressed={on}
+                aria-label={on ? `Dejar de seguir a ${p.name}` : `Seguir a ${p.name}`}
+                icon={on ? <IconCheck size={14} /> : undefined}
+                onClick={() => void follow(p)}
+              >
+                {on ? "Siguiendo" : "Seguir"}
+              </Btn>
+            </div>
+          );
+        })}
+      </div>
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+    </Card>
+  );
+}
+
+/** «👏 Kudos · N» (ya diste el tuyo) / «👏 Dar kudos · N». */
+function KudosButton({
+  state,
+  own,
+  busy,
+  onToggle,
+}: {
+  state: { given: boolean; count: number };
+  own: boolean;
+  busy: boolean;
+  onToggle: () => void;
+}) {
+  if (own) {
+    // En tu propio resultado solo se ve el recuento, y solo si hay alguno.
+    if (state.count <= 0) return null;
+    return (
+      <span
+        style={{ display: "block", marginTop: 8, fontSize: 12.5, color: "var(--text-muted)" }}
+        aria-label={`${state.count} kudos`}
+      >
+        👏 Kudos · <span className="mono">{state.count}</span>
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: "block", marginTop: 8 }}>
+      <Btn
+        size="sm"
+        variant={state.given ? "tint" : "quiet"}
+        aria-pressed={state.given}
+        disabled={busy}
+        onClick={onToggle}
+      >
+        {state.given ? "👏 Kudos · " : "👏 Dar kudos · "}
+        <span className="mono">{state.count}</span>
+      </Btn>
+    </span>
   );
 }
 
@@ -338,9 +582,11 @@ export function PublicProfileView({ username }: { username: string }) {
 
   const p = data as Record<string, unknown>;
   const name = (p.full_name as string) ?? (p.username as string) ?? "Jugador";
-  const played = Number(p.matches_played ?? p.played ?? 0);
-  const won = Number(p.matches_won ?? p.won ?? 0);
-  const rate = played ? Math.round((won / played) * 100) : 0;
+  // `get_public_user_profile` trae los amistosos como casual_played/casual_won
+  // (los matches_* antiguos no existen: se dejan de reserva).
+  const played = Number(p.casual_played ?? p.matches_played ?? 0);
+  const won = Number(p.casual_won ?? p.matches_won ?? 0);
+  const rate = played ? Math.round((won / played) * 100) : null;
 
   return (
     <div className="tw-page-narrow">
@@ -364,25 +610,173 @@ export function PublicProfileView({ username }: { username: string }) {
       </StatRow>
 
       {played > 0 && (
-        <StatRow style={{ marginTop: 16 }}>
-          <Stat label="Victorias" value={won} tone="accent" />
-          <Stat label="Porcentaje de victorias" value={rate} unit="%" />
-          <Stat label="Nivel" value={String(p.level_display ?? "—")} />
-        </StatRow>
+        <div style={{ marginTop: 16 }}>
+          {/* Solo datos públicos: amistosos. La liga es privada del equipo. */}
+          <RecordBlock
+            record={{
+              played,
+              won,
+              lost: Math.max(0, played - won),
+              winRate: rate,
+              partners: [],
+              bestPartner: null,
+              currentStreak: 0,
+              bestStreak: 0,
+              lastFive: [],
+            }}
+            title="Récord · amistosos"
+          />
+        </div>
       )}
+      {p.level_display ? (
+        <StatRow style={{ marginTop: played > 0 ? 0 : 16 }}>
+          <Stat label="Nivel" value={String(p.level_display)} />
+        </StatRow>
+      ) : null}
     </div>
   );
 }
 
+/* ═══ RÉCORD (perfil y /stats) ════════════════════════════════════ */
+/** Victorias · Derrotas · % ganados, racha con los últimos 5 y mejor pareja. */
+function RecordBlock({
+  record,
+  sub,
+  title,
+}: {
+  record: RecordSummary;
+  sub?: string;
+  title?: string;
+}) {
+  // Sin partidos decididos no hay récord que enseñar.
+  if (record.played <= 0) return null;
+  const streak = record.currentStreak;
+  const showStreak = record.lastFive.length > 0;
+  const bp = record.bestPartner;
+  return (
+    <section aria-label={title ?? "Récord"} style={{ marginBottom: 16 }}>
+      {title && (
+        <div style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>{title}</div>
+      )}
+      <StatRow>
+        <Stat label="Victorias" value={record.won} tone="accent" sub={sub} />
+        <Stat label="Derrotas" value={record.lost} />
+        <Stat label="Ganados" value={record.winRate ?? "—"} unit={record.winRate !== null ? "%" : undefined} />
+      </StatRow>
+
+      {(showStreak || bp) && (
+        <div className="tw-club-grid" style={{ marginTop: 16 }}>
+          {showStreak && (
+            <Card>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: 14 }}>
+                  {streak > 0 ? (
+                    <>
+                      🔥 Racha: <b>{streak} {streak === 1 ? "victoria" : "victorias"}</b>
+                    </>
+                  ) : (
+                    "Últimos partidos"
+                  )}
+                </span>
+                {record.lastFive.length > 0 && (
+                  <span
+                    style={{ display: "inline-flex", gap: 4, alignItems: "center" }}
+                    aria-label={`Últimos ${record.lastFive.length}: ${record.lastFive
+                      .map((r) => (r === "W" ? "victoria" : "derrota"))
+                      .join(", ")}`}
+                  >
+                    {record.lastFive.map((r, i) => (
+                      <span
+                        key={i}
+                        title={r === "W" ? "Victoria" : "Derrota"}
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 3,
+                          background: r === "W" ? "var(--accent)" : "var(--error)",
+                        }}
+                      />
+                    ))}
+                  </span>
+                )}
+              </div>
+            </Card>
+          )}
+          {bp && (
+            <Card>
+              <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Mejor pareja</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>{bp.name}</div>
+              <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+                <span className="mono">{bp.won}</span> de <span className="mono">{bp.played}</span>{" "}
+                juntos · <span className="mono">{Math.round((bp.won / bp.played) * 100)} %</span>
+                {bp.court != null && (
+                  <>
+                    {" "}· pista <span className="mono">{bp.court}</span>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ═══ MIS ESTADÍSTICAS ════════════════════════════════════════════ */
+/** Lado en el que jugó `uid` (0/1), o null si no figura con su cuenta. */
+function sideOf(m: DbCasual, uid: string | undefined): 0 | 1 | null {
+  if (!uid) return null;
+  if (m.userIdsA.includes(uid)) return 0;
+  if (m.userIdsB.includes(uid)) return 1;
+  return null;
+}
+
+/** Amistosos decididos en los que juega `uid`, como partidos del récord. */
+function casualRecordGames(matches: DbCasual[], uid: string | undefined): RecordGame[] {
+  const out: RecordGame[] = [];
+  for (const m of matches) {
+    const side = sideOf(m, uid);
+    if (side === null || m.winnerSide === null) continue;
+    const names = side === 0 ? m.sideA : m.sideB;
+    const ids = side === 0 ? m.userIdsA : m.userIdsB;
+    const i = ids.findIndex((id, idx) => id !== uid && !!names[idx]);
+    const partnerName = i >= 0 ? names[i] : null;
+    out.push({
+      sortKey: `${m.playedOn ?? "9999"}·c`,
+      won: m.winnerSide === side,
+      // Como en la app: los compañeros de amistosos se agrupan por nombre.
+      partnerKey: partnerName ? `n:${partnerName.trim().toLowerCase()}` : null,
+      partnerName,
+    });
+  }
+  return out;
+}
+
 export function MyStats() {
   const { user } = useSession();
   const { data, loading, error } = useAsync(
-    () => fetchCasualMatches(100),
+    async () => {
+      const [matches, league] = await Promise.all([
+        fetchCasualMatches(100),
+        // La liga no debe tumbar la pantalla: sin ella, récord solo de amistosos.
+        fetchMyLeagueStats(user!.id).catch(() => null),
+      ]);
+      return { matches, league };
+    },
     [user?.id],
     !!user
   );
-  const matches: DbCasual[] = data ?? [];
+  const matches: DbCasual[] = data?.matches ?? [];
+  const league = data?.league ?? null;
 
   if (loading) return <SkeletonPage />;
   if (error) {
@@ -399,23 +793,32 @@ export function MyStats() {
     );
   }
 
-  const played = matches.filter((m) => m.winnerSide !== null);
-  // Sin saber en qué lado jugó el usuario no se puede atribuir la victoria:
-  // se usa el lado 0 como «nosotros», que es como se guardan los amistosos
-  // creados desde la app.
-  const won = played.filter((m) => m.winnerSide === 0).length;
-  const lost = played.length - won;
+  // El usuario NO siempre es el lado 0 (si le apuntó otro, puede ir en el 1):
+  // su lado sale de su user_id en los participantes. Los partidos en los que
+  // no figura con su cuenta no cuentan para victorias ni derrotas.
+  const uid = user?.id;
+  const casualGames = casualRecordGames(matches, uid);
+  const won = casualGames.filter((g) => g.won).length;
+  const lost = casualGames.length - won;
+  const played = casualGames;
   const rate = played.length ? Math.round((won / played.length) * 100) : 0;
+  const record = combineRecord(league?.games ?? [], casualGames);
 
   const byType = ["amistoso", "entreno", "torneo"].map((t) => ({
     label: t.charAt(0).toUpperCase() + t.slice(1),
     value: matches.filter((m) => m.type === t).length,
   }));
 
-  // Con quién más se ha jugado, contando los nombres del propio lado.
+  // Con quién más se ha jugado: los compañeros de tu lado, sin contarte a ti.
   const mateCount = new Map<string, number>();
   for (const m of matches) {
-    for (const n of m.sideA) mateCount.set(n, (mateCount.get(n) ?? 0) + 1);
+    const side = sideOf(m, uid) ?? 0;
+    const names = side === 0 ? m.sideA : m.sideB;
+    const ids = side === 0 ? m.userIdsA : m.userIdsB;
+    names.forEach((n, i) => {
+      if (ids[i] && ids[i] === uid) return;
+      mateCount.set(n, (mateCount.get(n) ?? 0) + 1);
+    });
   }
   const mates = [...mateCount.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -437,11 +840,22 @@ export function MyStats() {
         }
       />
 
+      {record.played > 0 && (
+        <RecordBlock
+          record={record}
+          sub={
+            league && league.played > 0
+              ? `Liga y amistosos · ${league.played} de liga y ${casualGames.length} amistosos`
+              : "Amistosos con resultado"
+          }
+        />
+      )}
+
       {matches.length === 0 ? (
         <Card>
           <EmptyState
             icon={<IconUsers size={22} />}
-            title="Sin partidos todavía"
+            title={record.played > 0 ? "Sin amistosos todavía" : "Sin partidos todavía"}
             body="Registra tu primer amistoso y empieza a acumular números."
             action={
               <BtnLink href="/amistosos/nuevo" variant="accent" size="sm">
@@ -467,7 +881,7 @@ export function MyStats() {
 
           <div className="tw-club-grid">
             <Card flush>
-              <CardHead title="Porcentaje de victorias" />
+              <CardHead title="Victorias en amistosos" />
               <div className="card-body">
                 <Ring value={rate} label="de victorias" />
               </div>
@@ -504,21 +918,25 @@ export function MyStats() {
 
           <Card flush style={{ marginTop: 16 }}>
             <CardHead title="Últimos partidos" count={matches.length} />
-            {matches.slice(0, 8).map((c) => (
-              <ListRow
-                key={c.id}
-                href={`/amistosos/${c.id}`}
-                title={c.sideA.join(" · ") || "—"}
-                sub={`${TYPE_LABEL[c.type] ?? c.type}${
-                  c.playedOn ? ` · ${formatDate(c.playedOn)}` : ""
-                }`}
-                right={
-                  <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
-                    {c.sets.map(([a, b]) => `${a}-${b}`).join(" ")}
-                  </span>
-                }
-              />
-            ))}
+            {matches.slice(0, 8).map((c) => {
+              // Tu lado y el marcador desde tu lado (los sets se guardan [lado 0, lado 1]).
+              const mine = sideOf(c, uid) === 1;
+              return (
+                <ListRow
+                  key={c.id}
+                  href={`/amistosos/${c.id}`}
+                  title={(mine ? c.sideB : c.sideA).join(" · ") || "—"}
+                  sub={`${TYPE_LABEL[c.type] ?? c.type}${
+                    c.playedOn ? ` · ${formatDate(c.playedOn)}` : ""
+                  }`}
+                  right={
+                    <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
+                      {c.sets.map(([a, b]) => (mine ? `${b}-${a}` : `${a}-${b}`)).join(" ")}
+                    </span>
+                  }
+                />
+              );
+            })}
           </Card>
 
           {photos.length > 0 && (

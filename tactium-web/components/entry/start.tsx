@@ -8,6 +8,7 @@ import {
   Btn,
   Card,
   CardHead,
+  Eyebrow,
   Modal,
   Note,
   // El `Segmented` de EntryFrame solo admite opciones de texto plano
@@ -32,7 +33,7 @@ import {
   createPlayer,
   createTeam,
   fetchClub,
-  redeemInvitation,
+  startSubscriptionTrial,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import {
@@ -52,6 +53,8 @@ import {
   type FcpTeamOption,
 } from "@/lib/fcp-import";
 import { useSession } from "@/lib/session";
+import { InlineInvitePreview } from "@/components/invite/InviteJoin";
+import { InvitePanel } from "@/components/invite/InvitePanel";
 import { guardedWrite } from "@/lib/writes";
 
 /** Botón-celda de selección (categoría, grupo, competición, género…). */
@@ -130,25 +133,9 @@ export function Start() {
   const { user, signOut } = useSession();
   const [picked, setPicked] = useState<string>("equipo");
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
 
   const current = PATHS.find((p) => p.key === picked)!;
   const needsCode = picked === "invitado";
-  const canGo = needsCode ? code.trim().length >= 4 : true;
-
-  async function redeem() {
-    if (busy || code.trim().length < 4) return;
-    setBusy(true);
-    setErr(null);
-    const res = await guardedWrite("canjear el código", () =>
-      redeemInvitation(code),
-    );
-    setBusy(false);
-    // Recarga completa: la sesión detecta el equipo al que te has unido.
-    if (res.ok) window.location.href = "/";
-    else setErr(res.reason);
-  }
 
   return (
     <EntryFrame wide>
@@ -247,30 +234,22 @@ export function Start() {
       </div>
 
       {needsCode && (
-        <div style={{ marginTop: 20, maxWidth: 420, marginInline: "auto" }}>
+        <div style={{ marginTop: 20, maxWidth: 460, marginInline: "auto", display: "grid", gap: 16 }}>
           <Field label="Código de invitación">
-            <div style={{ display: "flex", gap: 8 }}>
-              <Input
-                type="text"
-                placeholder="ABC-123"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                className="mono"
-              />
-              <Btn
-                variant="accent"
-                size="lg"
-                disabled={!canGo || busy}
-                onClick={redeem}
-              >
-                {busy ? "…" : "Unirme"}
-              </Btn>
-            </div>
+            <Input
+              type="text"
+              placeholder="ABC123"
+              value={code}
+              autoComplete="off"
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              className="mono"
+            />
           </Field>
-          {err && (
-            <Note tone="error" style={{ marginTop: 12 }}>
-              {err}
-            </Note>
+          {/* Antes de unirse se ve A QUÉ equipo y se elige la ficha. */}
+          {code.trim().length >= 4 && (
+            <Card>
+              <InlineInvitePreview code={code} />
+            </Card>
           )}
         </div>
       )}
@@ -428,6 +407,9 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
   // Alta desde el panel de un club (con id) vs. alta independiente.
   const fromClub = !!clubId;
   const backHref = fromClub ? "/club/equipos" : "/equipo";
+  const { user, teams } = useSession();
+  // Paso final del alta independiente: «Ahora, tu gente».
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
   const [name, setName] = useState("");
   const [comp, setComp] = useState("federada");
   const [federation, setFederation] = useState<Federation | null>(null);
@@ -476,8 +458,39 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
       importFcpTeams(clubId ?? null, [t]),
     );
     setFcpBusy(false);
-    if (res.ok) window.location.href = backHref;
-    else setFcpErr(res.reason);
+    if (!res.ok) {
+      setFcpErr(res.reason);
+      return;
+    }
+    const first = res.data[0];
+    if (fromClub || !first) {
+      window.location.href = backHref;
+      return;
+    }
+    await afterIndependentTeam(first.teamId, first.equipo);
+    setImportOpen(false);
+  }
+
+  /**
+   * Tras crear un equipo independiente: si es el PRIMERO, arranca la prueba
+   * de 14 días sin tarjeta (best-effort: si falla, el equipo ya está creado y
+   * el paywall seguirá ofreciéndola) y enseña el paso de invitar.
+   */
+  async function afterIndependentTeam(teamId: string, teamName: string) {
+    const ownedIndependent = teams.filter(
+      (t) => !t.clubId && (t.role === "captain" || t.role === "admin"),
+    );
+    if (user && ownedIndependent.length === 0) {
+      await guardedWrite("activar la prueba gratis", () =>
+        startSubscriptionTrial("user", user.id, "captain"),
+      );
+    }
+    try {
+      localStorage.setItem("tactium-active-team", teamId);
+    } catch {
+      /* sin persistencia: la sesión elegirá el primero */
+    }
+    setCreated({ id: teamId, name: teamName });
   }
 
   // Valor efectivo de team.league según el tipo de competición (espejo de la app).
@@ -507,10 +520,18 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
         clubId: clubId ?? undefined,
       }),
     );
+    if (!res.ok) {
+      setBusy(false);
+      setErr(res.reason);
+      return;
+    }
+    // Desde el club: recarga completa, la sesión detecta el equipo.
+    if (fromClub) {
+      window.location.href = backHref;
+      return;
+    }
+    await afterIndependentTeam(res.data, name.trim());
     setBusy(false);
-    // Recarga completa: la sesión detecta el equipo y aterriza donde toca.
-    if (res.ok) window.location.href = backHref;
-    else setErr(res.reason);
   }
 
   const scrollRow: CSSProperties = {
@@ -740,12 +761,67 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
     </>
   );
 
+  if (created && !fromClub) {
+    return <InviteYourPeople teamId={created.id} teamName={created.name} />;
+  }
+
   return fromClub ? (
     <div className="tw-page-narrow">
       <Card>{body}</Card>
     </div>
   ) : (
     <EntryFrame wide>{body}</EntryFrame>
+  );
+}
+
+/* ═══ 04b · AHORA, TU GENTE (paso final del alta) ═════════════════ */
+
+/**
+ * El alta no acaba en un panel vacío: acaba invitando. Código grande, el
+ * enlace para compartir (mismo mensaje que la app), alta manual de jugadores
+ * o seguir. Los enlaces recargan la página para que la sesión vea el equipo.
+ */
+export function InviteYourPeople({ teamId, teamName }: { teamId: string; teamName: string }) {
+  const [toast, setToast] = useState<string | null>(null);
+  // «Lo haré luego» deja de tener sentido cuando ya ha compartido o la
+  // plantilla tiene gente: entonces es simplemente «Ir a mi equipo».
+  const [shared, setShared] = useState(false);
+  const [players, setPlayers] = useState(0);
+  const done = shared || players > 0;
+  return (
+    <EntryFrame>
+      <Eyebrow tone="accent">Paso 3 de 3 · Tu equipo está creado</Eyebrow>
+      <h1 style={{ marginTop: 10 }}>Ahora, tu gente</h1>
+      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
+        Pasa el enlace a la plantilla de {teamName}: se unen gratis desde la app
+        o desde la web.
+      </p>
+
+      <InvitePanel
+        teamId={teamId}
+        teamName={teamName}
+        onboarding
+        onToast={setToast}
+        onShared={() => setShared(true)}
+        onRosterCount={setPlayers}
+      />
+
+      <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
+        <a href="/empezar/jugadores" className="btn btn-ghost btn-lg btn-block">
+          <IconUsers size={16} />
+          Añadir jugadores a mano
+        </a>
+        <a
+          href="/equipo"
+          className={"btn btn-lg btn-block " + (done ? "btn-accent" : "btn-quiet")}
+        >
+          {done ? "Ir a mi equipo" : "Lo haré luego → ir a mi equipo"}
+        </a>
+      </div>
+      {toast && (
+        <Note style={{ marginTop: 16 }}>{toast}</Note>
+      )}
+    </EntryFrame>
   );
 }
 
@@ -764,11 +840,25 @@ export function CreateClub() {
     const res = await guardedWrite("crear el club", () =>
       createClub(name.trim(), federation?.code ?? null),
     );
+    if (!res.ok) {
+      setBusy(false);
+      setErr(res.reason);
+      return;
+    }
+    // Prueba de 14 días sin tarjeta para el club (best-effort: si falla, el
+    // club ya existe y la facturación seguirá ofreciéndola).
+    await guardedWrite("activar la prueba gratis", () =>
+      startSubscriptionTrial("club", res.data, "club_starter"),
+    );
+    try {
+      localStorage.setItem("tactium-active-club", res.data);
+    } catch {
+      /* sin persistencia */
+    }
     setBusy(false);
     // Recarga completa para que la sesión detecte el club nuevo y aterrice en
-    // su panel (donde ya se pueden crear equipos y gestionar todo).
-    if (res.ok) window.location.href = "/club";
-    else setErr(res.reason);
+    // su panel (donde ya se pueden crear equipos, invitar y gestionar todo).
+    window.location.href = "/club";
   }
 
   return (

@@ -283,3 +283,51 @@ export async function mockCancelAtPeriodEnd(
     .eq('id', subscriptionId);
   if (error) throw error;
 }
+
+// ── Prueba de 14 días SIN tarjeta (onboarding) ──────────────────────────────
+
+/**
+ * Arranca la prueba gratis de 14 días en BD (RPC `start_subscription_trial`,
+ * sin tienda ni tarjeta). Solo se llama al crear el PRIMER equipo independiente
+ * (`'user'`, `'captain'`) o el club (`'club'`, `'club_starter'`) en el
+ * onboarding. Idempotente en servidor: si el sujeto ya tuvo alguna sub, no crea
+ * otra y devuelve la existente.
+ *
+ * Best-effort: si falla no bloquea el alta (solo se registra). Al terminar
+ * refresca `subscriptionStore` para que `TrialStartedModal` salude.
+ */
+export async function startOnboardingTrial(
+  subjectType: SubjectType,
+  subjectId: string,
+  planTier: PlanTier,
+  userId: string | null | undefined,
+): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('start_subscription_trial', {
+      p_subject_type: subjectType,
+      p_subject_id: subjectId,
+      p_plan_tier: planTier,
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.warn('startOnboardingTrial', e);
+  }
+  if (userId) {
+    try {
+      await useSubscriptionStore.getState().refresh(userId);
+    } catch {
+      /* el realtime lo traerá */
+    }
+  }
+}
+
+/**
+ * ¿Es la prueba de BD (sin tienda)? La crea `start_subscription_trial` con un
+ * `product_id` que empieza por `trial_`.
+ */
+export function isDbTrial(s: {
+  status: string;
+  product_id: string | null;
+}): boolean {
+  return s.status === 'trialing' && !!s.product_id && s.product_id.startsWith('trial_');
+}

@@ -60,7 +60,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Todo menos estáticos e imágenes.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Todo menos estáticos, imágenes y `/.well-known` (enlaces universales:
+    // Apple y Google lo piden sin seguir redirecciones ni cookies).
+    "/((?!_next/static|_next/image|favicon.ico|\\.well-known/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

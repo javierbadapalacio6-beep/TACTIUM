@@ -21,6 +21,10 @@ import {
   fetchFcpRanking,
   fetchFcpStandings,
   fetchFcpTeamProfile,
+  fetchTeamFcpId,
+  fetchFcpTeamNameById,
+  fcpSameTeam,
+  catShort,
   searchFcpPlayers,
   searchFcpTeams,
   fcpNameKey,
@@ -30,7 +34,10 @@ import {
   type FcpGroup,
   type FcpPlayerMatch,
   type FcpPlayerYearTeam,
+  type FcpTeamProfile,
 } from "@/lib/queries";
+import type { FcpGroupBundle } from "@/lib/seo/fcp";
+import { FCP_ZONES_NOTE, legendFor, type FcpZone } from "@/lib/fcp-zones";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { useDismiss } from "@/lib/use-dismiss";
@@ -303,6 +310,41 @@ export function FederationExplore({ slug }: { slug: string }) {
   const [cat, setCat] = useState("all");
   const [grupo, setGrupo] = useState("all");
 
+  // Los filtros (temporada, género, categoría, grupo) se recuerdan en este
+  // navegador. Se leen tras montar —no en el `useState`— para no romper la
+  // hidratación del HTML de servidor; y no se guarda nada hasta haber leído,
+  // o lo primero que se escribiría serían los valores por defecto.
+  const filtersKey = `tw_fcp_explore_filters:${slug}`;
+  const [filtersRestored, setFiltersRestored] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(filtersKey);
+      if (raw) {
+        const f = JSON.parse(raw) as Partial<{
+          year: number | null;
+          gender: string;
+          cat: string;
+          grupo: string;
+        }>;
+        if (typeof f.year === "number") setYear(f.year);
+        if (f.gender === "all" || f.gender === "M" || f.gender === "F") setGender(f.gender);
+        if (typeof f.cat === "string" && f.cat) setCat(f.cat);
+        if (typeof f.grupo === "string" && f.grupo) setGrupo(f.grupo);
+      }
+    } catch {
+      /* sin storage o dato corrupto: filtros por defecto */
+    }
+    setFiltersRestored(true);
+  }, [filtersKey]);
+  useEffect(() => {
+    if (!filtersRestored) return;
+    try {
+      localStorage.setItem(filtersKey, JSON.stringify({ year, gender, cat, grupo }));
+    } catch {
+      /* sin storage */
+    }
+  }, [filtersRestored, filtersKey, year, gender, cat, grupo]);
+
   // Una consulta por tecla es una consulta de más.
   useEffect(() => {
     const id = setTimeout(() => setTerm(query.trim()), 300);
@@ -314,11 +356,13 @@ export function FederationExplore({ slug }: { slug: string }) {
   // Por defecto, la temporada que SE JUEGA, no la más reciente: la que está en
   // inscripción ordena por delante ("2026/2027" > "2026") y aterrizar ahí sería
   // aterrizar en una temporada sin clasificación ni resultados.
+  // Una temporada recordada que ya no existe también cae en la de por defecto.
   useEffect(() => {
-    if (year != null || !leagues.data?.length) return;
+    if (!filtersRestored || !leagues.data?.length) return;
+    if (year != null && leagues.data.some((l) => l.idLiga === year)) return;
     const jugando = leagues.data.find((l) => !l.upcoming);
     setYear((jugando ?? leagues.data[0]).idLiga);
-  }, [leagues.data, year]);
+  }, [leagues.data, year, filtersRestored]);
 
   const selectedLeague = useMemo(
     () => leagues.data?.find((l) => l.idLiga === year) ?? null,
@@ -357,12 +401,20 @@ export function FederationExplore({ slug }: { slug: string }) {
     [allGroups, gender, cat]
   );
 
-  // Si el grupo elegido deja de casar con los demás filtros, se suelta.
+  // Si el grupo elegido deja de casar con los demás filtros, se suelta. Con
+  // los grupos aún cargando no se decide nada: soltaría el grupo recordado.
   useEffect(() => {
+    if (groups.loading || !groups.data) return;
     if (grupo !== "all" && !grupoOptions.some((g) => g.idGrupo === grupo)) {
       setGrupo("all");
     }
-  }, [grupoOptions, grupo]);
+  }, [groups.loading, groups.data, grupoOptions, grupo]);
+
+  // Igual con una categoría recordada que no existe en esta temporada.
+  useEffect(() => {
+    if (groups.loading || !groups.data) return;
+    if (cat !== "all" && !catOptions.some((c) => c.value === cat)) setCat("all");
+  }, [groups.loading, groups.data, catOptions, cat]);
 
   // ── Grupos que se listan ────────────────────────────────────────────────
   const shownGroups = useMemo(() => {
@@ -926,16 +978,39 @@ const STAND_COLS =
    playoff conserva el cuadro como vista aparte. */
 type GroupTab = "tabla" | "cuadro";
 
-export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
+export function FcpGroupView({
+  slug,
+  id,
+  initial,
+}: {
+  slug: string;
+  id: string;
+  /** Datos ya cargados en servidor (SEO): la vista arranca pintada. */
+  initial?: FcpGroupBundle;
+}) {
   const { user, activeTeam } = useSession();
   const esPlayoff = /^fase/i.test(decodeURIComponent(id));
   const [tab, setTab] = useState<GroupTab>(esPlayoff ? "cuadro" : "tabla");
 
-  const standings = useAsync(() => fetchFcpStandings(id), [id, user?.id]);
+  const standings = useAsync(
+    () => fetchFcpStandings(id),
+    [id, user?.id],
+    true,
+    initial?.standings
+  );
   // Los partidos se cargan siempre: alimentan tanto las jornadas como la meta.
-  const matches = useAsync(() => fetchFcpMatches(id), [id, user?.id]);
+  const matches = useAsync(
+    () => fetchFcpMatches(id),
+    [id, user?.id],
+    true,
+    initial?.matches
+  );
   // El nombre legible del grupo: la URL sólo trae su identificador.
-  const header = useAsync(() => fetchFcpGroupHeader(id), [id]);
+  const header = useAsync(() => fetchFcpGroupHeader(id), [id], true, initial?.header);
+  // «Tu equipo» se reconoce por el VÍNCULO federativo (fcp_team_links), no
+  // por el nombre: dos equipos pueden llamarse igual.
+  const teamId = activeTeam?.id ?? null;
+  const myFcp = useAsync(() => fetchTeamFcpId(teamId!), [teamId], !!teamId);
   if (standings.loading) return <SkeletonPage />;
 
   const rows = standings.data ?? [];
@@ -947,8 +1022,21 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
   const jornadaActual = jugadas.length ? Math.max(...jugadas) : 0;
   const finalizada = jornadaTotal > 0 && jornadaActual >= jornadaTotal;
 
-  // El equipo propio (si hay sesión con equipo) se resalta en la tabla.
-  const myName = activeTeam?.name?.trim().toLowerCase() ?? null;
+  // El equipo propio (si hay sesión con equipo vinculado) se resalta.
+  const myFcpId = myFcp.data ?? null;
+  const isMine = (idEquipo: number) => myFcpId != null && Number(idEquipo) === myFcpId;
+  const myRow = rows.find((t) => isMine(t.idEquipo)) ?? null;
+
+  // Zonas de la normativa (oro, plata, bronce, descenso): sólo en la fase
+  // de grupos; los grupos de play off no tienen.
+  const groupName = header.data?.nombre ?? "";
+  const grupoPlayoff = esPlayoff || /ORO|PLATA|PLAY\s*OFF/i.test(groupName);
+  const zones = grupoPlayoff
+    ? null
+    : legendFor(slug, header.data?.genero ?? null, catShort(groupName));
+  const zoneOf = (pos: number): FcpZone | null =>
+    zones?.find((zn) => pos >= zn.from && pos <= zn.to) ?? null;
+  const myZone = myRow ? zoneOf(myRow.posicion) : null;
 
   const tabs: [GroupTab, string][] = [
     ["cuadro", "Cuadro"],
@@ -1005,6 +1093,24 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
         <div className="tw-fcp-split">
           <section style={{ minWidth: 0 }}>
             <SectionHead title="Clasificación" style={{ margin: "0 0 10px" }} />
+            {myRow && (
+              <Card style={{ marginBottom: 12, padding: "12px 16px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>
+                    Tu equipo: {myRow.posicion}º · {myRow.puntos} pts
+                  </span>
+                  {myZone && <ZoneTag zone={myZone} />}
+                </div>
+              </Card>
+            )}
             {standings.error ? (
               <Card>
                 <EmptyState
@@ -1034,9 +1140,14 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
                   )
                 )}
               </div>
-              {rows.map((t) => {
+              {rows.map((t, i) => {
                 const dif = t.setsFavor - t.setsContra;
-                const mine = myName != null && t.equipo.trim().toLowerCase() === myName;
+                const mine = isMine(t.idEquipo);
+                const zone = zoneOf(t.posicion);
+                // Línea discontinua donde cambia de zona.
+                const next = rows[i + 1];
+                const cambia =
+                  zones != null && next != null && zoneOf(next.posicion)?.id !== zone?.id;
                 return (
                   <Link
                     key={t.idEquipo}
@@ -1047,7 +1158,11 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
                       gridTemplateColumns: STAND_COLS,
                       minWidth: 700,
                       background: mine ? "var(--accent-10)" : undefined,
+                      // Franja de la zona a la izquierda.
+                      boxShadow: zone ? `inset 3px 0 0 ${zone.color}` : undefined,
+                      borderBottom: cambia ? "1px dashed var(--line-strong)" : undefined,
                     }}
+                    title={zone ? zone.label : undefined}
                   >
                     <span className="mono" style={{ color: "var(--text-muted)" }}>
                       {t.posicion}
@@ -1088,6 +1203,7 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
                 </div>
               </Card>
             )}
+            {zones && rows.length > 0 && <ZoneLegend zones={zones} />}
           </section>
 
           <section style={{ minWidth: 0 }}>
@@ -1104,6 +1220,63 @@ export function FcpGroupView({ slug, id }: { slug: string; id: string }) {
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Zonas de la clasificación (normativa de la liga) ── */
+function ZoneSwatch({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden
+      style={{ width: 10, height: 10, borderRadius: 3, background: color, flex: "none" }}
+    />
+  );
+}
+
+function ZoneTag({ zone }: { zone: FcpZone }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 12.5,
+        color: "var(--text-muted)",
+      }}
+    >
+      <ZoneSwatch color={zone.color} />
+      {zone.label}
+    </span>
+  );
+}
+
+function ZoneLegend({ zones }: { zones: FcpZone[] }) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px" }}>
+        {zones.map((zn) => (
+          <span
+            key={zn.id}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12.5,
+              color: "var(--text-muted)",
+            }}
+          >
+            <ZoneSwatch color={zn.color} />
+            {zn.label}
+            <span className="mono" style={{ color: "var(--text-faint)" }}>
+              {zn.from === zn.to ? `${zn.from}º` : `${zn.from}º–${zn.to}º`}
+            </span>
+          </span>
+        ))}
+      </div>
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-faint)" }}>
+        {FCP_ZONES_NOTE}
+      </p>
     </div>
   );
 }
@@ -1468,10 +1641,25 @@ function FcpActaModal({
 
 /* ── Cuadro de playoff (bracket): columnas por ronda + modal de acta ── */
 function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
-  const { user } = useSession();
+  const { user, activeTeam } = useSession();
   const bracket = useAsync(() => fetchFcpBracket(idGrupo), [idGrupo, user?.id]);
   const [selCuadro, setSelCuadro] = useState(0);
   const [openTie, setOpenTie] = useState<FcpBracketTie | null>(null);
+
+  // «Tu equipo» en el cuadro: por el VÍNCULO federativo (id → nombre FCP),
+  // porque el cuadro solo guarda nombres. Sin vínculo, por el nombre del
+  // equipo activo, normalizado.
+  const teamId = activeTeam?.id ?? null;
+  const myFcpName = useAsync(
+    async () => {
+      const fcpId = await fetchTeamFcpId(teamId!);
+      return fcpId != null ? await fetchFcpTeamNameById(fcpId, idGrupo) : null;
+    },
+    [teamId, idGrupo],
+    !!teamId
+  );
+  const myName = myFcpName.data ?? (myFcpName.loading ? null : activeTeam?.name ?? null);
+  const isMine = (name: string | null) => !!myName && fcpSameTeam(name, myName);
 
   if (bracket.loading) return <SkeletonCard />;
   const data = bracket.data;
@@ -1502,6 +1690,15 @@ function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
         </div>
       ) : null}
 
+      {myName && (
+        <BracketPath
+          teamName={myName}
+          rounds={cuadro.rounds}
+          isMine={isMine}
+          onOpen={setOpenTie}
+        />
+      )}
+
       <Card flush>
         <div className="tw-bracket-scroll">
           <div className="tw-bracket">
@@ -1512,7 +1709,12 @@ function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
                 </div>
                 <div className="tw-bracket-ties">
                   {r.ties.map((t) => (
-                    <TieCard key={t.idPartido} tie={t} onOpen={() => setOpenTie(t)} />
+                    <TieCard
+                      key={t.idPartido}
+                      tie={t}
+                      onOpen={() => setOpenTie(t)}
+                      mine={isMine(t.local) ? "local" : isMine(t.visit) ? "visit" : null}
+                    />
                   ))}
                 </div>
               </div>
@@ -1526,9 +1728,164 @@ function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
   );
 }
 
-function TieCard({ tie, onOpen }: { tie: FcpBracketTie; onOpen: () => void }) {
+/** Próxima manga sin jugar de un cruce: «IDA · SÁB 17/05 17:00 · sede».
+ *  Null si ya está jugado o la FCP no ha publicado ni fecha ni sede. */
+function nextLegText(tie: FcpBracketTie): string | null {
+  if (tie.estado === "jugado") return null;
+  const leg = (label: string, f: string | null | undefined, l: string | null | undefined) => {
+    const parts = [fmtLegDate(f), l].filter(Boolean);
+    return parts.length ? [label, ...parts].join(" · ") : null;
+  };
+  const vuelta = leg("VUELTA", tie.fechaVuelta, tie.lugarVuelta);
+  if (tie.estado === "jugado_ida") return vuelta;
+  return leg("IDA", tie.fechaIda, tie.lugarIda) ?? vuelta;
+}
+
+/** Recorrido del equipo del usuario en el cuadro: sus cruces ronda a ronda
+ *  (como en la app). Lo que se quiere saber de un cuadro es «de dónde vengo y
+ *  contra quién voy», y en el lienzo hay que buscarlo columna a columna. */
+function BracketPath({
+  teamName,
+  rounds,
+  isMine,
+  onOpen,
+}: {
+  teamName: string;
+  rounds: { avance: number; label: string; ties: FcpBracketTie[] }[];
+  isMine: (name: string | null) => boolean;
+  onOpen: (tie: FcpBracketTie) => void;
+}) {
+  // Rondas ya vienen de la primera a la final.
+  const path = rounds
+    .map((r) => ({ round: r, tie: r.ties.find((t) => isMine(t.local) || isMine(t.visit)) }))
+    .filter((x): x is { round: (typeof rounds)[number]; tie: FcpBracketTie } => !!x.tie);
+  if (path.length === 0) return null;
+
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <div className="grid-head truncate" style={{ marginBottom: 10 }} title={`Recorrido de ${teamName}`}>
+        RECORRIDO DE {teamName.toUpperCase()}
+      </div>
+      <div style={{ display: "grid", gap: 2 }}>
+        {path.map(({ round, tie }) => {
+          const iAmLocal = isMine(tie.local);
+          const rival = iAmLocal ? tie.visit : tie.local;
+          const won = (iAmLocal && tie.ganador === "local") || (!iAmLocal && tie.ganador === "visitante");
+          const lost = !!tie.ganador && tie.ganador !== "empate" && !won;
+          const hasActa = tie.estado === "jugado" || tie.estado === "jugado_ida";
+          // Marcadores vistos desde mi equipo: lo mío primero.
+          const mineFirst = (s: { l: number; v: number } | null | undefined) =>
+            s ? (iAmLocal ? `${s.l}–${s.v}` : `${s.v}–${s.l}`) : null;
+          const [ml, mv] = (tie.marcador ?? "").split("-");
+          const total = tie.marcador ? (iAmLocal ? `${ml}–${mv}` : `${mv}–${ml}`) : null;
+          const legs = [
+            mineFirst(tie.idaScore) ? `Ida ${mineFirst(tie.idaScore)}` : null,
+            mineFirst(tie.vueltaScore) ? `Vuelta ${mineFirst(tie.vueltaScore)}` : null,
+          ].filter(Boolean);
+          const next = nextLegText(tie);
+          const result = total
+            ? `${won ? "Ganó" : lost ? "Perdió" : ""} ${total}`.trim()
+            : next ?? "Pendiente";
+          return (
+            <button
+              key={tie.idPartido}
+              type="button"
+              disabled={!hasActa}
+              onClick={() => onOpen(tie)}
+              aria-label={hasActa ? `${round.label}: ver acta contra ${rival || "por determinar"}` : undefined}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 7.5rem) minmax(0, 1fr) auto",
+                alignItems: "baseline",
+                columnGap: 12,
+                rowGap: 2,
+                width: "100%",
+                textAlign: "left",
+                padding: "8px 0",
+                background: "none",
+                border: 0,
+                borderTop: "1px solid var(--line)",
+                color: "inherit",
+                font: "inherit",
+                cursor: hasActa ? "pointer" : "default",
+              }}
+            >
+              <span className="truncate" style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>
+                {round.label}
+              </span>
+              <span
+                className="truncate"
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: rival ? "var(--text)" : "var(--text-faint)",
+                  fontStyle: rival ? "normal" : "italic",
+                }}
+              >
+                {rival || "Por determinar"}
+              </span>
+              <span
+                className={total ? "mono" : undefined}
+                style={{
+                  fontSize: total ? 13 : 12,
+                  fontWeight: total ? 700 : 500,
+                  textAlign: "right",
+                  color: won ? "var(--accent)" : lost ? "var(--text-faint)" : "var(--text-muted)",
+                }}
+              >
+                {result}
+              </span>
+              {(legs.length > 0 || (total && next)) && (
+                <span
+                  className="truncate"
+                  style={{ gridColumn: "2 / -1", fontSize: 12, color: "var(--text-muted)" }}
+                >
+                  {[legs.join(" · "), total ? next : null].filter(Boolean).join(" · ")}
+                  {hasActa ? <span className="link-action" style={{ marginLeft: 8 }}>Ver acta</span> : null}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
+        El marcador es de partidos ganados en la eliminatoria, sumando ida y vuelta.
+      </div>
+    </Card>
+  );
+}
+
+/** Fecha de una manga del playoff, como en la app: «SÁB 17/05 17:00». La
+ *  FCP la da como texto; se entiende ISO («2026-05-17 17:00») y «17/05/2026
+ *  17:00». Si no encaja, se deja tal cual. */
+function fmtLegDate(v: string | null | undefined): string | null {
+  if (!v) return null;
+  let y: number, mo: number, d: number;
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const es = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (iso) [y, mo, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (es) [d, mo, y] = [Number(es[1]), Number(es[2]), Number(es[3].length === 2 ? "20" + es[3] : es[3])];
+  else return v.toUpperCase();
+  const date = new Date(y, mo - 1, d);
+  if (Number.isNaN(date.getTime())) return v.toUpperCase();
+  const wd = date.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", "").toUpperCase();
+  const hm = v.match(/(\d{1,2}):(\d{2})/);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${wd} ${pad(d)}/${pad(mo)}${hm ? ` ${pad(Number(hm[1]))}:${hm[2]}` : ""}`;
+}
+
+function TieCard({
+  tie,
+  onOpen,
+  mine,
+}: {
+  tie: FcpBracketTie;
+  onOpen: () => void;
+  /** Lado en el que juega el equipo del usuario, si juega este cruce. */
+  mine?: "local" | "visit" | null;
+}) {
   const hasActa = tie.estado === "jugado" || tie.estado === "jugado_ida";
-  const line = (name: string | null, won: boolean, muted?: boolean) => (
+  const line = (name: string | null, won: boolean, muted?: boolean, me?: boolean) => (
     <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
       <span style={{ width: 14, flex: "none", color: "var(--accent)", display: "flex" }}>
         {won ? <IconCheck size={12} /> : null}
@@ -1536,22 +1893,37 @@ function TieCard({ tie, onOpen }: { tie: FcpBracketTie; onOpen: () => void }) {
       <span
         className="truncate"
         style={{
+          flex: 1,
+          minWidth: 0,
           fontSize: 13,
-          fontWeight: won ? 700 : 500,
-          color: won ? "var(--text)" : muted ? "var(--text-faint)" : "var(--text-muted)",
+          fontWeight: won || me ? 700 : 500,
+          color: won || me ? "var(--text)" : muted ? "var(--text-faint)" : "var(--text-muted)",
           fontStyle: muted ? "italic" : "normal",
         }}
       >
         {name || "—"}
       </span>
+      {me && (
+        <Chip tone="accent" plain style={{ flex: "none" }}>
+          Tu equipo
+        </Chip>
+      )}
     </div>
   );
+  // Fecha y sede de cada manga, solo si la FCP las ha publicado.
+  const legs = (
+    [
+      ["IDA", fmtLegDate(tie.fechaIda), tie.lugarIda],
+      ["VUELTA", fmtLegDate(tie.fechaVuelta), tie.lugarVuelta],
+    ] as [string, string | null, string | null | undefined][]
+  ).filter(([, f, l]) => f || l);
   return (
     <button
       type="button"
       disabled={!hasActa}
       onClick={onOpen}
       className="tw-tie"
+      aria-label={mine ? "Cruce de tu equipo" : undefined}
       style={{
         textAlign: "left",
         width: "100%",
@@ -1559,11 +1931,30 @@ function TieCard({ tie, onOpen }: { tie: FcpBracketTie; onOpen: () => void }) {
         cursor: hasActa ? "pointer" : "default",
         display: "grid",
         gap: 6,
+        ...(mine
+          ? { borderColor: "var(--accent-40)", background: "var(--accent-10)" }
+          : null),
       }}
     >
-      {line(tie.local, tie.ganador === "local")}
+      {line(tie.local, tie.ganador === "local", false, mine === "local")}
       <div className="divider" style={{ margin: 0 }} />
-      {line(tie.visit || "Por determinar", tie.ganador === "visitante", !tie.visit)}
+      {line(tie.visit || "Por determinar", tie.ganador === "visitante", !tie.visit, mine === "visit")}
+      {legs.length > 0 && (
+        <div style={{ display: "grid", gap: 2 }}>
+          {legs.map(([k, f, l]) => (
+            <span
+              key={k}
+              className="truncate"
+              style={{ fontSize: 12, color: "var(--text-muted)" }}
+              title={[k, f, l].filter(Boolean).join(" · ")}
+            >
+              {k}
+              {f ? <span className="mono"> · {f}</span> : null}
+              {l ? ` · ${l}` : null}
+            </span>
+          ))}
+        </div>
+      )}
       <div
         style={{
           display: "flex",
@@ -1690,14 +2081,24 @@ function TieActaModal({ tie, onClose }: { tie: FcpBracketTie | null; onClose: ()
 type FcpActaLeg = Awaited<ReturnType<typeof fetchFcpBracketTieActa>>["ida"];
 
 /* ═══ 04 · EQUIPO FEDERADO ════════════════════════════════════════ */
-export function FcpTeamView({ slug, id }: { slug: string; id: string }) {
+export function FcpTeamView({
+  slug,
+  id,
+  initial,
+}: {
+  slug: string;
+  id: string;
+  /** Perfil ya cargado en servidor (SEO): la vista arranca pintada. */
+  initial?: FcpTeamProfile | null;
+}) {
   const { user } = useSession();
   const idEquipo = Number(id);
   const [sort, setSort] = useState<"puntos" | "nombre">("puntos");
   const { data, loading, error } = useAsync(
     () => fetchFcpTeamProfile(idEquipo),
     [idEquipo, user?.id],
-    Number.isFinite(idEquipo)
+    Number.isFinite(idEquipo),
+    initial
   );
 
   if (loading) return <SkeletonPage />;

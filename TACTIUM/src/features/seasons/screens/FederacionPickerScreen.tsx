@@ -10,7 +10,7 @@ import { FEDERATIONS } from '@core/data/federations';
 import { federationLogo } from '@core/data/federationLogos';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
-import type { FederacionStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 
 // De momento solo la Cántabra tiene datos scrapeados (tablas fcp_*). El resto
 // se listan como "Próximamente" para que se vea que existen y se puedan explorar
@@ -19,13 +19,18 @@ const AVAILABLE = new Set(['FCantP']);
 
 export const FederacionPickerScreen = ({
   navigation,
-}: FederacionStackScreenProps<'FederacionRoot'>) => {
+  embedded,
+}: CompetirStackScreenProps<'CompetirRoot'> & {
+  /** Raíz del segmento Federación de Competir: sin «Atrás». */
+  embedded?: boolean;
+}) => {
+  const showBack = !embedded && navigation.canGoBack();
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   // La federación "propia" depende del rol: el club_admin la hereda del CLUB
   // activo (no tiene equipo activo), el capitán/jugador del EQUIPO. Así el
-  // mismo picker sirve para el tab del capitán y para el ClubStack.
+  // mismo picker sirve a todos los roles en Competir › Federación.
   const activeRole = useTeamStore((s) => s.activeRole);
   const teamFed = useTeamStore((s) => s.team?.federation ?? null);
   const clubFed = useClubStore(selectActiveClub)?.federation ?? null;
@@ -44,9 +49,9 @@ export const FederacionPickerScreen = ({
 
   return (
     <View style={styles.root}>
-      {/* Back solo cuando se puede volver (empujado desde el ClubStack). Como
-          raíz del tab del capitán, canGoBack() es false → no se pinta. */}
-      {navigation.canGoBack() ? (
+      {/* Back solo si se puede volver y NO va embebido en Competir. Como
+          raíz del segmento, `embedded` lo oculta. */}
+      {showBack ? (
         <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
           <Pressable
             onPress={() => navigation.goBack()}
@@ -61,7 +66,7 @@ export const FederacionPickerScreen = ({
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingTop: navigation.canGoBack() ? 8 : insets.top + 16,
+          paddingTop: showBack ? 8 : insets.top + 16,
           paddingBottom: insets.bottom + 64 + 24,
         }}
         showsVerticalScrollIndicator={false}

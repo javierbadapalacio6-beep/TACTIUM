@@ -101,7 +101,12 @@ const TournamentCard: React.FC<{
 
 export const ExploreTournamentsScreen = ({
   navigation,
-}: RootStackScreenProps<'ExploreTournaments'>) => {
+  embedded,
+}: RootStackScreenProps<'ExploreTournaments'> & {
+  /** Segmento Torneos de Competir: sin cabecera ni «Atrás» y con hueco para
+   *  la barra flotante. */
+  embedded?: boolean;
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -198,6 +203,9 @@ export const ExploreTournamentsScreen = ({
 
   return (
     <View style={styles.root}>
+      {embedded ? (
+        <View style={{ height: 12 }} />
+      ) : (
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -211,6 +219,7 @@ export const ExploreTournamentsScreen = ({
           <Text style={styles.title}>{mode === 'mine' ? 'Mis torneos' : 'Explorar'}</Text>
         </View>
       </View>
+      )}
 
       {/* Toggle Explorar / Mis torneos */}
       <View style={styles.modeTabs}>
@@ -271,7 +280,7 @@ export const ExploreTournamentsScreen = ({
         <ScrollView
           contentContainerStyle={{
             paddingHorizontal: 20,
-            paddingBottom: insets.bottom + 24,
+            paddingBottom: insets.bottom + (embedded ? 64 + 12 + 32 : 24),
             paddingTop: 4,
           }}
           showsVerticalScrollIndicator={false}

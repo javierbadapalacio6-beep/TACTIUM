@@ -90,6 +90,8 @@ export interface PartnerStat {
   name: string;
   played: number;
   won: number;
+  /** Pista en la que más habéis jugado juntos (si consta). */
+  usualCourt?: number | null;
 }
 
 export interface CourtStat {
@@ -114,6 +116,9 @@ export interface PlayerLeagueStats {
   bestStreak: number;
   /** Últimos partidos (cronológicos, máx. 5): 'W' | 'L'. */
   lastFive: ('W' | 'L')[];
+  /** Partidos decididos en orden cronológico, con su fecha (YYYY-MM-DD o
+   *  null). Sirve para mezclar la racha con los amistosos (perfil). */
+  sequence: { date: string | null; won: boolean }[];
 }
 
 export function computePlayerLeagueStats(
@@ -131,6 +136,7 @@ export function computePlayerLeagueStats(
 
   // Partidos del jugador: pareja de la alineación oficial donde figura.
   const games: {
+    date: string | null;
     dateKey: string;
     court: number;
     state: CourtState;
@@ -150,6 +156,7 @@ export function computePlayerLeagueStats(
     const rows = resultsByKey.get(`${p.matchday_id}·${p.court_number}`) ?? [];
     const out = courtOutcome(rows);
     games.push({
+      date: md.match_date ?? null,
       dateKey: `${md.match_date ?? '9999'}·${String(
         md.jornada_number ?? 0,
       ).padStart(3, '0')}`,
@@ -170,6 +177,8 @@ export function computePlayerLeagueStats(
   let setsLost = 0;
   const courtMap = new Map<number, CourtStat>();
   const partnerMap = new Map<string, PartnerStat>();
+  // Pistas por compañero → la habitual.
+  const partnerCourts = new Map<string, Map<number, number>>();
   let cur = 0;
   let best = 0;
   const seq: ('W' | 'L')[] = [];
@@ -196,12 +205,28 @@ export function computePlayerLeagueStats(
       ps.played++;
       if (isWin) ps.won++;
       partnerMap.set(g.partnerId, ps);
+      const pc = partnerCourts.get(g.partnerId) ?? new Map<number, number>();
+      pc.set(g.court, (pc.get(g.court) ?? 0) + 1);
+      partnerCourts.set(g.partnerId, pc);
     }
 
     // Racha: se reinicia al cambiar el signo.
     if (isWin) cur = cur >= 0 ? cur + 1 : 1;
     else cur = cur <= 0 ? cur - 1 : -1;
     if (cur > best) best = cur;
+  }
+
+  for (const [pid, pc] of partnerCourts) {
+    let top: number | null = null;
+    let n = 0;
+    for (const [court, times] of pc) {
+      if (times > n) {
+        top = court;
+        n = times;
+      }
+    }
+    const ps = partnerMap.get(pid);
+    if (ps) ps.usualCourt = top;
   }
 
   const played = decided.length;
@@ -225,5 +250,6 @@ export function computePlayerLeagueStats(
     currentStreak: cur,
     bestStreak: best,
     lastFive: seq.slice(-5),
+    sequence: decided.map((g) => ({ date: g.date, won: g.state === 'won' })),
   };
 }

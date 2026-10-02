@@ -46,8 +46,10 @@ const PHASE_LABEL: Record<DbSeason["phase"], string> = {
 };
 
 export function SeasonsList() {
-  const { activeTeam } = useSession();
+  const { activeTeam, role } = useSession();
   const teamId = activeTeam?.id ?? null;
+  // Solo capitán/club crean temporadas; el jugador las consulta (Competir › Liga).
+  const canManage = role === "capitan" || role === "club";
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync(
     () => fetchSeasons(teamId!),
@@ -99,9 +101,11 @@ export function SeasonsList() {
         lede="Cada temporada agrupa las jornadas de una liga o un playoff."
         meta={[activeTeam?.name ?? null, activeTeam?.category ?? null]}
         actions={
-          <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
-            Nueva temporada
-          </Btn>
+          canManage ? (
+            <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
+              Nueva temporada
+            </Btn>
+          ) : undefined
         }
       />
 
@@ -126,11 +130,17 @@ export function SeasonsList() {
           <EmptyState
             icon={<IconCalendar size={24} />}
             title="Sin temporadas"
-            body="Crea la primera y empieza a planificar jornadas."
+            body={
+              canManage
+                ? "Crea la primera y empieza a planificar jornadas."
+                : "Tu capitán aún no ha creado ninguna temporada."
+            }
             action={
-              <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={14} />}>
-                Crear temporada
-              </Btn>
+              canManage ? (
+                <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={14} />}>
+                  Crear temporada
+                </Btn>
+              ) : undefined
             }
           />
         </Card>

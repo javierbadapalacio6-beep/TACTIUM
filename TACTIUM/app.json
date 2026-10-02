@@ -12,6 +12,7 @@
       "bundleIdentifier": "io.tactium.app",
       "buildNumber": "1",
       "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:tactium.io"],
       "infoPlist": {
         "NSCameraUsageDescription": "TACTIUM usa la cámara para escanear el calendario de tu liga, el ranking FEP de tus jugadores y para hacer la foto de tu perfil. Solo se procesan las imágenes que tú captures.",
         "NSPhotoLibraryUsageDescription": "TACTIUM accede a tus fotos para importar un calendario o ranking que ya tengas guardado y para elegir la foto de tu perfil.",
@@ -30,6 +31,17 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "tactium.io", "pathPrefix": "/i/" },
+            { "scheme": "https", "host": "tactium.io", "pathPrefix": "/torneos/" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {

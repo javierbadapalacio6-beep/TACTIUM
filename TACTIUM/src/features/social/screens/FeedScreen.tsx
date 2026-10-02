@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,65 +9,31 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
-import { IconBack, IconChevron } from '@components/ui';
-import { fetchFeed, type FeedItem } from '@core/services/social';
-import { CommunityAvatar } from '@features/social/components/social-ui';
+import { IconBack } from '@components/ui';
+import {
+  FeedItemCard,
+  feedItemKey,
+  useFeed,
+} from '@features/social/components/FeedItems';
+import {
+  PeopleYouKnow,
+  FEW_FEED_ITEMS,
+} from '@features/social/components/PeopleYouKnow';
 import type { RootStackParamList } from '@navigation/types';
 
-const fmtDate = (iso: string | null): string => {
-  if (!iso) return '';
-  try {
-    return new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch {
-    return iso;
-  }
-};
-
+/** Feed completo («Novedades»): se abre con «Ver todo» desde Inicio y Perfil. */
 export const FeedScreen = () => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      setItems(await fetchFeed(40));
-    } catch (e) {
-      console.warn('feed load', e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
-
-  const openActor = (it: FeedItem) => {
-    if (!it.actor_id) return;
-    navigation.navigate('PublicProfile', {
-      type: it.kind === 'casual' ? 'user' : 'club',
-      id: it.actor_id,
-    });
-  };
+  const { items, loading, refreshing, load, onKudos } = useFeed(40);
 
   return (
     <View style={styles.root}>
@@ -104,6 +70,12 @@ export const FeedScreen = () => {
             />
           }
         >
+          {items.length < FEW_FEED_ITEMS ? (
+            <PeopleYouKnow
+              style={{ marginTop: 0, marginBottom: 10 }}
+              showSearchLink={items.length > 0}
+            />
+          ) : null}
           {items.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>Aún no hay novedades</Text>
@@ -111,46 +83,17 @@ export const FeedScreen = () => {
                 Sigue a jugadores y clubes para ver aquí sus resultados y
                 amistosos.
               </Text>
+              <Pressable
+                onPress={() => navigation.navigate('SearchCommunity')}
+                hitSlop={8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptyLink}>Buscar gente →</Text>
+              </Pressable>
             </View>
           ) : (
             items.map((it) => (
-              <Pressable
-                key={`${it.kind}-${it.ref_id}`}
-                onPress={() => openActor(it)}
-                style={({ pressed }) => [
-                  styles.card,
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <CommunityAvatar
-                  name={it.actor_name ?? '—'}
-                  avatarUrl={it.avatar_url}
-                  size={44}
-                />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    style={[
-                      styles.title,
-                      it.positive === true && { color: c.accent },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {it.title}
-                  </Text>
-                  {it.subtitle ? (
-                    <Text style={styles.subtitle} numberOfLines={2}>
-                      {it.subtitle}
-                    </Text>
-                  ) : null}
-                  <View style={styles.metaRow}>
-                    <Text style={styles.kindTag}>
-                      {it.kind === 'casual' ? 'AMISTOSO' : 'LIGA'}
-                    </Text>
-                    <Text style={styles.date}>{fmtDate(it.occurred_on)}</Text>
-                  </View>
-                </View>
-                <IconChevron size={14} color={c.textFaint} />
-              </Pressable>
+              <FeedItemCard key={feedItemKey(it)} it={it} onKudos={onKudos} />
             ))
           )}
         </ScrollView>
@@ -189,48 +132,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   list: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8 },
   emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
+  emptyLink: { color: c.accent, fontSize: 13, fontWeight: '700', marginTop: 4 },
   emptyHint: {
     color: c.textMuted,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
     paddingHorizontal: 24,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hair,
-  },
-  title: {
-    color: c.text,
-    fontSize: 14.5,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  subtitle: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  kindTag: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 9,
-    letterSpacing: 1.2,
-    fontWeight: '700',
-  },
-  date: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10,
-    letterSpacing: 0.4,
   },
 });

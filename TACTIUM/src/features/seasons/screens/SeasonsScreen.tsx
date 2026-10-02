@@ -24,19 +24,22 @@ import {
 } from '@components/ui';
 import * as SeasonsApi from '@core/services/seasons';
 import type * as TeamsApi from '@core/services/teams';
-import { useTeamStore } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
-import type { SeasonsStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 
 export const SeasonsScreen = ({
   navigation,
-}: SeasonsStackScreenProps<'SeasonsRoot'>) => {
+}: CompetirStackScreenProps<'CompetirRoot'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
+  // Competir › Liga es la misma para capitán y jugador. El JUGADOR solo
+  // consulta: sin crear temporadas (ni jornadas, que gatea SeasonDetail).
+  const canManage = useTeamStore(selectIsCaptain);
   const gate = usePremiumGate();
 
   const [seasons, setSeasons] = useState<SeasonsApi.Season[]>([]);
@@ -103,21 +106,25 @@ export const SeasonsScreen = ({
         <Text style={styles.eyebrow}>
           {team ? `${team.name.toUpperCase()} · ${team.category ?? ''}` : 'TEMPORADAS'}
         </Text>
-        <Pressable
-          onPress={startCreating}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Crear temporada"
-          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-        >
-          <IconPlus size={16} color={c.accent} />
-        </Pressable>
+        {canManage ? (
+          <Pressable
+            onPress={startCreating}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Crear temporada"
+            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconPlus size={16} color={c.accent} />
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.intro}>
         <Text style={styles.title}>Temporadas</Text>
         <Text style={styles.lede}>
-          Organiza ligas, playoffs y temporadas pasadas.
+          {canManage
+            ? 'Organiza ligas, playoffs y temporadas pasadas.'
+            : 'Tu liga, tus jornadas y las temporadas pasadas.'}
         </Text>
       </View>
 
@@ -171,8 +178,11 @@ export const SeasonsScreen = ({
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>Sin temporadas</Text>
                 <Text style={styles.emptyText}>
-                  Crea la primera temporada para empezar a planificar jornadas.
+                  {canManage
+                    ? 'Crea la primera temporada para empezar a planificar jornadas.'
+                    : 'Tu capitán aún no ha creado ninguna temporada.'}
                 </Text>
+                {canManage ? (
                 <Pressable
                   onPress={startCreating}
                   style={({ pressed }) => [
@@ -185,6 +195,7 @@ export const SeasonsScreen = ({
                   <IconPlus size={14} color={c.textInverse} />
                   <Text style={styles.emptyCtaLabel}>Crear temporada</Text>
                 </Pressable>
+                ) : null}
               </View>
             ) : null}
 
@@ -210,7 +221,7 @@ export const SeasonsScreen = ({
             {/* Dashed "Crear nueva temporada" sólo cuando ya hay alguna —
                 si la lista está vacía, la card empty ya tiene su CTA y
                 duplicar botones distrae. */}
-            {seasons.length > 0 ? (
+            {canManage && seasons.length > 0 ? (
               <Pressable
                 onPress={startCreating}
                 style={({ pressed }) => [

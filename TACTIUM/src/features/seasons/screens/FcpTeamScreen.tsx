@@ -10,7 +10,7 @@ import { StatCell, FormChips, ListHeader } from '../components/fcpUi';
 import { useFavoritesStore } from '@store/favoritesStore';
 import { toggleFavorite } from '@core/services/favorites';
 import { fetchFcpTeamProfile, type FcpTeamProfile } from '@core/services/fcpProfiles';
-import type { SeasonsStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 
 const fmtN = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
@@ -24,7 +24,7 @@ const initials = (name: string): string => {
 
 type Sort = 'puntos' | 'nombre';
 
-export const FcpTeamScreen = ({ navigation, route }: SeasonsStackScreenProps<'FcpTeam'>) => {
+export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'FcpTeam'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();

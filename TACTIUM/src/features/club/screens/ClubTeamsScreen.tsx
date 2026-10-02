@@ -20,18 +20,18 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
 
-import type { ClubTeamsStackScreenProps } from '@navigation/types';
+import type { TeamStackScreenProps } from '@navigation/types';
 
 /**
  * Pantalla del tab "Equipos" (rol club_admin). Lista todos los equipos del
  * club con stats rápidos. Tap en un equipo cambia `activeTeam` al elegido
- * y navega a HomeRoot del ClubTeamsStack — desde ahí el club_admin recorre
+ * y navega a ClubTeamPreview de la pestaña Equipo — desde ahí el club_admin recorre
  * Jornadas/Lineup/Resultados en SOLO LECTURA (selectIsCaptain devuelve false
  * para club_admin desde 2026-05-16).
  */
 export const ClubTeamsScreen = ({
   navigation,
-}: ClubTeamsStackScreenProps<'ClubTeamsRoot'>) => {
+}: TeamStackScreenProps<'TeamRoot'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -164,7 +164,7 @@ export const ClubTeamsScreen = ({
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Aún no hay equipos</Text>
             <Text style={styles.emptyText}>
-              Crea el primer equipo del club desde la pestaña Club.
+              Crea el primer equipo del club desde Inicio o con el botón ＋.
             </Text>
           </View>
         ) : (

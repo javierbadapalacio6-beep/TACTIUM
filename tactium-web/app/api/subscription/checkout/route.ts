@@ -106,6 +106,9 @@ export async function POST(req: Request) {
     .eq("subject_id", subjectId)
     .in("status", ["trialing", "active", "grace_period"])
     .gt("current_period_end", new Date().toISOString())
+    // La prueba SIN tarjeta (nuestra, product_id 'trial_*') no es una compra:
+    // desde ella hay que poder suscribirse.
+    .or("product_id.is.null,product_id.not.like.trial_%")
     .order("current_period_end", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -132,12 +135,26 @@ export async function POST(req: Request) {
     product_id: `tactium_${tier}_${cycle}`,
   };
 
+  // Quien ya disfrutó nuestra prueba sin tarjeta (al crear su equipo o club)
+  // no recibe OTRA de Stripe: paga desde el primer día. Igual que en la app,
+  // donde la oferta de prueba de la tienda se retira con el build de oct. 2026.
+  const { count: hadOwnTrial } = await admin
+    .from("subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("subject_type", subjectType)
+    .eq("subject_id", subjectId)
+    .like("product_id", "trial_%");
+  const stripeTrialDays = (hadOwnTrial ?? 0) > 0 ? undefined : TRIAL_DAYS;
+
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [subscriptionLineItem(plan, cycle)],
-    // El reverse-trial: 14 días sin cobro. La suscripción arranca en `trialing`.
-    subscription_data: { trial_period_days: TRIAL_DAYS, metadata },
+    // Prueba de Stripe solo si el sujeto no tuvo ya la nuestra sin tarjeta.
+    subscription_data: {
+      ...(stripeTrialDays ? { trial_period_days: stripeTrialDays } : {}),
+      metadata,
+    },
     ...(user?.email ? { customer_email: user.email } : {}),
     // Metadata también en la sesión para el evento checkout.session.completed.
     metadata,

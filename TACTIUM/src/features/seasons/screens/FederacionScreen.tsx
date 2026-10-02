@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
@@ -33,7 +34,7 @@ import {
   type FcpPlayerResult,
   type FcpRankingRow,
 } from '@core/services/fcpSearch';
-import type { SeasonsStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 
 type Tab = 'todo' | 'equipos' | 'jugadores' | 'rankings';
 const TABS: [Tab, string][] = [
@@ -46,6 +47,23 @@ const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª'];
 const CAT_ORDER = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª'];
 const MEDAL: Record<number, string> = { 1: '#E7B93E', 2: '#AEB7C2', 3: '#CD7F45' };
 const fmtN = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+// Filtros recordados entre visitas (temporada, género, categoría, grupo).
+const FILTERS_KEY = 'tactium.federacion.filtros.v1';
+type SavedFilters = {
+  year?: number | null;
+  genderF?: 'all' | 'M' | 'F';
+  catF?: string;
+  selGrupo?: string;
+};
+async function readSavedFilters(): Promise<SavedFilters | null> {
+  try {
+    const raw = await AsyncStorage.getItem(FILTERS_KEY);
+    return raw ? (JSON.parse(raw) as SavedFilters) : null;
+  } catch {
+    return null;
+  }
+}
 
 const GENDER_LABEL: Record<'all' | 'M' | 'F', string> = { all: 'AMBOS', M: 'MASC', F: 'FEM' };
 const estadoLabel = (e: FcpGroupMeta['estado']) =>
@@ -61,7 +79,13 @@ const groupMetaLine = (g: FcpGroupItem, m?: FcpGroupMeta): string => {
   return parts.join(' · ');
 };
 
-export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federacion'>) => {
+export const FederacionScreen = ({
+  navigation,
+  embedded,
+}: CompetirStackScreenProps<'Federacion'> & {
+  /** Raíz del segmento Federación de Competir: sin «Atrás». */
+  embedded?: boolean;
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -89,22 +113,43 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
   const [ranking, setRanking] = useState<FcpRankingRow[]>([]);
   const [loading, setLoading] = useState(false);
   const reqRef = useRef(0);
+  // No se guardan filtros hasta haber leído los recordados (si no, los
+  // valores por defecto pisarían los guardados).
+  const [filtersReady, setFiltersReady] = useState(false);
 
-  // Años disponibles.
+  // Años disponibles + filtros recordados.
   useEffect(() => {
     let alive = true;
-    fetchFcpYears()
-      .then((ys) => {
+    Promise.all([fetchFcpYears(), readSavedFilters()])
+      .then(([ys, saved]) => {
         if (!alive) return;
         setYears(ys);
-        setYear(defaultYear(ys)?.idLiga ?? null);
+        const savedYear =
+          saved?.year != null && ys.some((y) => y.idLiga === saved.year) ? saved.year : null;
+        setYear(savedYear ?? defaultYear(ys)?.idLiga ?? null);
+        if (saved?.genderF === 'all' || saved?.genderF === 'M' || saved?.genderF === 'F') {
+          setGenderF(saved.genderF);
+        }
+        if (typeof saved?.catF === 'string') setCatF(saved.catF);
+        // El grupo solo vale para la misma temporada.
+        if (savedYear != null && typeof saved?.selGrupo === 'string') setSelGrupo(saved.selGrupo);
       })
       .catch(() => alive && setYears([]))
-      .finally(() => alive && setLoadingYears(false));
+      .finally(() => {
+        if (!alive) return;
+        setLoadingYears(false);
+        setFiltersReady(true);
+      });
     return () => {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    const v: SavedFilters = { year, genderF, catF, selGrupo };
+    AsyncStorage.setItem(FILTERS_KEY, JSON.stringify(v)).catch(() => {});
+  }, [filtersReady, year, genderF, catF, selGrupo]);
 
   // Grupos del año (para el filtro de grupo y para acotar equipos/jugadores).
   useEffect(() => {
@@ -133,12 +178,14 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
     [allGroups, genderF, catF],
   );
 
-  // Si el grupo seleccionado deja de casar con los filtros, lo reseteamos.
+  // Si el grupo seleccionado deja de casar con los filtros, lo reseteamos
+  // (cuando ya hay grupos cargados: el grupo recordado llega antes que ellos).
   useEffect(() => {
+    if (allGroups.length === 0) return;
     if (selGrupo !== 'all' && !grupoOptions.some((g) => g.idGrupo === selGrupo)) {
       setSelGrupo('all');
     }
-  }, [grupoOptions, selGrupo]);
+  }, [allGroups, grupoOptions, selGrupo]);
 
   // Equipos del grupo seleccionado → para acotar jugadores por grupo.
   useEffect(() => {
@@ -305,7 +352,7 @@ export const FederacionScreen = ({ navigation }: SeasonsStackScreenProps<'Federa
     <View style={styles.root}>
       {/* Nav: atrás + favorito */}
       <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
-        {navigation.canGoBack() ? (
+        {!embedded && navigation.canGoBack() ? (
           <Pressable
             onPress={() => navigation.goBack()}
             style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}

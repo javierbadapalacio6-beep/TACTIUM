@@ -83,6 +83,15 @@ export interface FeedItem {
   title: string;
   subtitle: string | null;
   positive: boolean | null;
+  // Kudos (aplausos) del ítem. Opcionales por si el RPC aún no los trae.
+  kudos_count?: number;
+  i_gave_kudos?: boolean;
+}
+
+export type KudosKind = 'casual' | 'league';
+export interface KudosResult {
+  given: boolean;
+  count: number;
 }
 
 // ── Casts puntuales (tabla/RPCs fuera de los tipos generados) ──────────────
@@ -178,6 +187,23 @@ export async function fetchFeed(limit = 30): Promise<FeedItem[]> {
   return (await callRpc<FeedItem[]>('social_feed', { p_limit: limit })) ?? [];
 }
 
+/** Da o quita kudos a un amistoso ('casual', `targetId` = id del partido) o a
+ *  una jornada ('league', `targetId` = id de la jornada). En amistosos se pasa
+ *  `targetUserId` (el actor del ítem del feed, a quien se avisa); en liga, null.
+ *  Devuelve el estado final: si lo tengo dado y el total. */
+export async function toggleActivityKudos(
+  kind: KudosKind,
+  targetId: string,
+  targetUserId: string | null = null,
+): Promise<KudosResult> {
+  const r = await callRpc<KudosResult | null>('toggle_activity_kudos', {
+    p_kind: kind,
+    p_target_id: targetId,
+    p_target_user_id: kind === 'casual' ? targetUserId : null,
+  });
+  return { given: !!r?.given, count: Number(r?.count ?? 0) };
+}
+
 export async function followTarget(type: FollowTargetType, id: string): Promise<void> {
   const uid = await requireUid();
   const { error } = await followsTable().insert({
@@ -194,4 +220,119 @@ export async function unfollowTarget(type: FollowTargetType, id: string): Promis
     .delete()
     .match({ follower_id: uid, target_type: type, target_id: id });
   if (error) throw new Error(error.message);
+}
+
+/** ¿Sigo ya a este usuario/club? Va por los RPCs de perfil público (ya
+ *  devuelven `is_following`), así no depende de la RLS de `follows`. */
+export async function isFollowing(type: FollowTargetType, id: string): Promise<boolean> {
+  const p = type === 'user' ? await getPublicUserProfile(id) : await getPublicClubProfile(id);
+  return !!p?.is_following;
+}
+
+// ─── Gente que conoces (sugerencias para seguir) ──────────────────────────
+export interface PersonSuggestion {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  /** «Tu equipo» / «Tu club»: de dónde lo conoces. */
+  context: 'team' | 'club';
+}
+
+const SUGGESTION_MAX = 8;
+
+/** Ids de las filas o [] si la consulta falla (p. ej. por RLS): las
+ *  sugerencias son un extra y nunca deben romper la pantalla. */
+const safeRows = async <T>(
+  q: PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> => {
+  try {
+    const { data, error } = await q;
+    if (error) return [];
+    return data ?? [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Jugadores de mis equipos y miembros de mis clubes que tienen cuenta, sin
+ * mí ni la gente que ya sigo. Primero los compañeros de equipo, luego los del
+ * club. Nombre del perfil público si lo hay; si no, el de la ficha. Máx. 8.
+ */
+export async function fetchPeopleYouKnow(): Promise<PersonSuggestion[]> {
+  const uid = await requireUid();
+
+  // 1) Mis equipos (membresía o ficha de jugador vinculada) y mis clubes.
+  const [tmMine, plMine, cmMine] = await Promise.all([
+    safeRows(supabase.from('team_members').select('team_id').eq('user_id', uid)),
+    safeRows(supabase.from('players').select('team_id').eq('user_id', uid)),
+    safeRows(supabase.from('club_members').select('club_id').eq('user_id', uid)),
+  ]);
+  const teamIds = Array.from(
+    new Set([...tmMine.map((r) => r.team_id), ...plMine.map((r) => r.team_id)]),
+  );
+  const teamClubs = teamIds.length
+    ? await safeRows(supabase.from('teams').select('club_id').in('id', teamIds))
+    : [];
+  const clubIds = Array.from(
+    new Set(
+      [...cmMine.map((r) => r.club_id), ...teamClubs.map((r) => r.club_id)].filter(
+        (x): x is string => !!x,
+      ),
+    ),
+  );
+
+  // 2) Gente de esos equipos y clubes + a quién sigo ya.
+  const [teamPlayers, teamMembers, clubMembers, following] = await Promise.all([
+    teamIds.length
+      ? safeRows(
+          supabase
+            .from('players')
+            .select('user_id, name')
+            .in('team_id', teamIds)
+            .not('user_id', 'is', null),
+        )
+      : Promise.resolve([] as { user_id: string | null; name: string }[]),
+    teamIds.length
+      ? safeRows(supabase.from('team_members').select('user_id').in('team_id', teamIds))
+      : Promise.resolve([] as { user_id: string }[]),
+    clubIds.length
+      ? safeRows(supabase.from('club_members').select('user_id').in('club_id', clubIds))
+      : Promise.resolve([] as { user_id: string }[]),
+    listFollowing(uid).catch(() => [] as FollowingRow[]),
+  ]);
+
+  const followed = new Set(following.filter((f) => f.type === 'user').map((f) => f.id));
+  const fichaName = new Map<string, string>();
+  const ordered: { id: string; context: 'team' | 'club' }[] = [];
+  const seen = new Set<string>([uid]);
+  const push = (id: string | null | undefined, context: 'team' | 'club') => {
+    if (!id || seen.has(id) || followed.has(id)) return;
+    seen.add(id);
+    ordered.push({ id, context });
+  };
+  for (const p of teamPlayers) {
+    if (p.user_id && p.name && !fichaName.has(p.user_id)) fichaName.set(p.user_id, p.name);
+    push(p.user_id, 'team');
+  }
+  for (const m of teamMembers) push(m.user_id, 'team');
+  for (const m of clubMembers) push(m.user_id, 'club');
+  if (ordered.length === 0) return [];
+
+  // 3) Perfil público de los primeros (algo de margen por si alguno falla o
+  //    resulta que ya lo sigo).
+  const candidates = ordered.slice(0, SUGGESTION_MAX + 4);
+  const profiles = await Promise.all(
+    candidates.map((c) => getPublicUserProfile(c.id).catch(() => null)),
+  );
+  const out: PersonSuggestion[] = [];
+  candidates.forEach((c, i) => {
+    const p = profiles[i];
+    if (p?.is_following || p?.is_me) return;
+    const name =
+      p?.full_name?.trim() || p?.username?.trim() || fichaName.get(c.id)?.trim() || '';
+    if (!name) return;
+    out.push({ id: c.id, name, avatar_url: p?.avatar_url ?? null, context: c.context });
+  });
+  return out.slice(0, SUGGESTION_MAX);
 }

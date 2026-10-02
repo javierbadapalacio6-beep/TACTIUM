@@ -45,7 +45,7 @@ import type { ScannedMatchday } from '@core/services/imageRecognition';
 
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 
-import type { SeasonsStackScreenProps } from '@navigation/types';
+import type { CompetirStackScreenProps } from '@navigation/types';
 import { FcpStandings } from '../components/FcpStandings';
 import { FcpBracketView } from '../components/FcpBracketView';
 import {
@@ -63,7 +63,7 @@ type SeasonTab = 'clasif' | 'jornadas' | 'cuadro';
 export const SeasonDetailScreen = ({
   navigation,
   route,
-}: SeasonsStackScreenProps<'SeasonDetail'>) => {
+}: CompetirStackScreenProps<'SeasonDetail'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -144,12 +144,14 @@ export const SeasonDetailScreen = ({
   const openAddMatchday = gate(() => setAdding(true), 'matchday_create');
   const openScan = gate(() => setScanning(true), 'calendar_scan');
 
-  // autoOpen desde atajo/deep-link: abre el escáner PASANDO por el gate premium
-  // (no confiar en el caller). Solo al montar.
+  // autoOpen desde atajo/botón ＋: abre el escáner o «nueva jornada» PASANDO
+  // por el gate premium (no confiar en el caller). Al montar y cada vez que
+  // llega un `nonce` nuevo (la temporada ya estaba abierta en la stack).
   React.useEffect(() => {
     if (route.params.autoOpen === 'scan') openScan();
+    else if (route.params.autoOpen === 'add') openAddMatchday();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [route.params.nonce]);
 
   // Edición permitida solo si la temporada está activa Y el usuario es
   // captain. Temporadas archivadas son siempre read-only.
@@ -433,7 +435,7 @@ export const SeasonDetailScreen = ({
         <Pressable
           onPress={() => {
             if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('SeasonsRoot');
+            else navigation.navigate('CompetirRoot');
           }}
           style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
         >

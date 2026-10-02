@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -25,6 +25,9 @@ import { FeedScreen } from '@features/social/screens/FeedScreen';
 import { TournamentSignupScreen } from '@features/tournaments/screens/TournamentSignupScreen';
 import { ExploreTournamentsScreen } from '@features/tournaments/screens/ExploreTournamentsScreen';
 import { TournamentFollowScreen } from '@features/tournaments/screens/TournamentFollowScreen';
+import { JoinTeamScreen } from '@features/onboarding/screens/JoinTeamScreen';
+import { takePendingInviteCode } from '@core/services/pendingInvite';
+import { navigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -61,7 +64,8 @@ export const RootNavigator = () => {
   }
 
   // `activeRole === 'club_admin'` sin equipo = organizador de torneos (club en
-  // modo "solo torneos"): entra al menú recortado sin necesidad de crear equipo.
+  // modo "solo torneos"): entra a la app (su Inicio son sus torneos) sin
+  // necesidad de crear equipo.
   const showMainTabs =
     isAuthenticated &&
     (!!team || soloMode || activeRole === 'club_admin') &&
@@ -75,6 +79,16 @@ export const RootNavigator = () => {
   //
   // Inscribirse NO está aquí a propósito: es una acción con identidad detrás
   // y vive en la rama autenticada.
+  // Unirse a un equipo por enlace: en las TRES ramas (sin sesión enseña la
+  // vista previa y manda a entrar; en el onboarding y en la app, une).
+  const joinTeamScreen = (
+    <Stack.Screen
+      name="JoinTeam"
+      component={JoinTeamScreen}
+      options={{ presentation: 'card', animation: 'slide_from_right' }}
+    />
+  );
+
   const publicScreens = (
     <>
       <Stack.Screen
@@ -87,6 +101,7 @@ export const RootNavigator = () => {
         component={TournamentFollowScreen}
         options={{ presentation: 'card', animation: 'slide_from_right' }}
       />
+      {joinTeamScreen}
     </>
   );
 
@@ -99,7 +114,10 @@ export const RootNavigator = () => {
             {publicScreens}
           </>
         ) : !showMainTabs ? (
-          <Stack.Screen name="OnboardingFlow" component={OnboardingStack} />
+          <>
+            <Stack.Screen name="OnboardingFlow" component={OnboardingStack} />
+            {joinTeamScreen}
+          </>
         ) : (
           <>
             <Stack.Screen name="MainTabs" component={TabNavigator} />
@@ -219,8 +237,43 @@ export const RootNavigator = () => {
         )}
       </Stack.Navigator>
       {showMainTabs ? <PlayerClaimGate /> : null}
+      {isAuthenticated ? (
+        <PendingInviteHandler branch={showMainTabs ? 'main' : 'onboarding'} />
+      ) : null}
     </>
   );
+};
+
+/**
+ * Tras entrar (login o alta), si se abrió un enlace de invitación sin sesión,
+ * abre `JoinTeam` con ese código. Se consume una sola vez. `branch` re-dispara
+ * la comprobación cuando la raíz cambia (p. ej. del onboarding a la app).
+ */
+const PendingInviteHandler: React.FC<{ branch: 'main' | 'onboarding' }> = ({
+  branch,
+}) => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const code = await takePendingInviteCode();
+      if (!code || cancelled) return;
+      // Espera a que el contenedor y la rama nueva estén montados.
+      let tries = 0;
+      const go = () => {
+        if (cancelled) return;
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('JoinTeam', { code });
+        } else if (tries++ < 20) {
+          setTimeout(go, 150);
+        }
+      };
+      setTimeout(go, 300);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [branch]);
+  return null;
 };
 
 const styles = StyleSheet.create({

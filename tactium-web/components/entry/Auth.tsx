@@ -111,7 +111,10 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
           options: { data: { full_name: name.trim() } },
         });
         if (error) throw error;
-        router.push("/empezar");
+        // Quien llega desde un enlace de invitación vuelve a ella para
+        // unirse; el resto, al alta de equipo o club.
+        const back = afterLogin();
+        router.push(back.startsWith("/i/") ? back : "/empezar");
         return;
       }
 

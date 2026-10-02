@@ -37,10 +37,8 @@ export const OnboardingStack = () => {
       <Stack.Screen name="CreateTeamsForClub" component={CreateTeamsForClubScreen} />
       <Stack.Screen name="CreateTeam" component={CreateTeamScreen} />
       <Stack.Screen name="AddPlayers" component={AddPlayersScreen} />
-      {/* Paywall obligatorio entre creación del subject (club/team) y
-          los pasos posteriores del onboarding (CreateTeamsForClub /
-          AddPlayers). Reusa PaywallScreen — el componente detecta
-          mode onboarding a partir de route.params.nextScreen. */}
+      {/* Paywall como upsell OPCIONAL dentro del onboarding (volcado
+          automático, etc.). Descartable: cerrar/atrás vuelven atrás. */}
       <Stack.Screen
         name="Paywall"
         component={PaywallScreen as any}

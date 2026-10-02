@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { fetchCasualMatches, type DbCasual } from "@/lib/queries";
+import { fetchPublicPeople, profileHref, type PublicPerson } from "@/lib/people";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import {
+  Avatar,
   Btn,
   BtnLink,
   Card,
@@ -15,6 +17,7 @@ import {
   Chip,
   Field,
   Input,
+  ListRow,
   Note,
   PageHeader,
   Segmented,
@@ -56,6 +59,150 @@ function formatDate(iso: string | null): string {
  */
 const wonByUs = (c: DbCasual) => c.winnerSide === 0;
 
+/* ═══ PARTICIPANTES ═══════════════════════════════════════════════ */
+/** Todas las cuentas que salen en una lista de amistosos. */
+const accountIds = (ms: DbCasual[]) =>
+  ms.flatMap((m) => [...m.userIdsA, ...m.userIdsB]).filter((id): id is string => !!id);
+
+/** Perfiles públicos de los participantes con cuenta. Si falla, los nombres
+ *  se pintan igual, sin enlace. */
+function usePeople(ms: DbCasual[]) {
+  const ids = [...new Set(accountIds(ms))].sort();
+  const { data } = useAsync(
+    () => fetchPublicPeople(ids).catch(() => new Map<string, PublicPerson>()),
+    [ids.join(",")],
+    ids.length > 0
+  );
+  return data ?? new Map<string, PublicPerson>();
+}
+
+interface Participant {
+  name: string;
+  userId: string | null;
+}
+
+const sideParticipants = (c: DbCasual, side: 0 | 1): Participant[] =>
+  (side === 0 ? c.sideA : c.sideB).map((name, i) => ({
+    name,
+    userId: (side === 0 ? c.userIdsA : c.userIdsB)[i] ?? null,
+  }));
+
+/** Nombres de un lado, «A · B», con enlace a la ficha pública de quien tiene
+ *  nombre de usuario. */
+function SideNames({
+  people,
+  list,
+}: {
+  people: Map<string, PublicPerson>;
+  list: Participant[];
+}) {
+  if (list.length === 0) return <>—</>;
+  return (
+    <>
+      {list.map((p, i) => {
+        const prof = p.userId ? people.get(p.userId) : undefined;
+        return (
+          <span key={i}>
+            {i > 0 && " · "}
+            {prof?.username ? (
+              <Link href={profileHref(prof.id)} className="link-action" style={{ fontSize: "inherit" }}>
+                {p.name}
+              </Link>
+            ) : (
+              p.name
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** Bloque de un lado en el detalle: avatar, nombre, @usuario y «Tú». */
+function SideBlock({
+  title,
+  list,
+  people,
+  me,
+  winner,
+}: {
+  title: string;
+  list: Participant[];
+  people: Map<string, PublicPerson>;
+  me: string | undefined;
+  winner: boolean;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "12px 18px 4px",
+          fontSize: 12.5,
+          color: "var(--text-muted)",
+        }}
+      >
+        {title}
+        {winner && (
+          <Chip tone="accent" plain>
+            Ganadores
+          </Chip>
+        )}
+      </div>
+      {list.length === 0 ? (
+        <div style={{ padding: "8px 18px 14px", fontSize: 13, color: "var(--text-faint)" }}>
+          Sin jugadores apuntados
+        </div>
+      ) : (
+        list.map((p, i) => {
+          const prof = p.userId ? people.get(p.userId) : undefined;
+          const isMe = !!me && p.userId === me;
+          const sub = prof?.username
+            ? `@${prof.username}`
+            : p.userId
+              ? "Con cuenta en TACTIUM"
+              : "Sin cuenta";
+          const right = isMe ? (
+            <Chip tone="mute" plain>
+              Tú
+            </Chip>
+          ) : undefined;
+          const icon = (
+            <Avatar
+              initials={initialsOf(prof?.fullName || p.name)}
+              src={prof?.avatarUrl ?? null}
+              size={36}
+            />
+          );
+          return prof?.username ? (
+            <ListRow
+              key={i}
+              href={profileHref(prof.id)}
+              icon={icon}
+              title={p.name}
+              sub={sub}
+              right={right}
+            />
+          ) : (
+            <ListRow key={i} icon={icon} title={p.name} sub={sub} right={right} />
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+const initialsOf = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "··";
+
 /* ═══ LISTA DE AMISTOSOS ══════════════════════════════════════════ */
 export function CasualList() {
   const { user } = useSession();
@@ -65,6 +212,7 @@ export function CasualList() {
     !!user
   );
   const matches = data ?? [];
+  const people = usePeople(matches);
 
   if (loading) return <SkeletonPage />;
 
@@ -122,17 +270,17 @@ export function CasualList() {
                 return (
                   <tr key={c.id}>
                     <td>
-                      <Link href={`/amistosos/${c.id}`} style={{ color: "inherit" }}>
-                        <span
-                          className="cell-main truncate"
-                          style={{ display: "block", maxWidth: 260 }}
-                        >
-                          {c.sideA.join(" · ") || "—"}
-                        </span>
-                        <span className="cell-sub truncate" style={{ maxWidth: 260 }}>
-                          vs {c.sideB.join(" · ") || "—"}
-                        </span>
-                      </Link>
+                      {/* Los nombres enlazan a su ficha pública; el partido,
+                          con «Ver» al final de la fila. */}
+                      <span
+                        className="cell-main truncate"
+                        style={{ display: "block", maxWidth: 280 }}
+                      >
+                        <SideNames people={people} list={sideParticipants(c, 0)} />
+                      </span>
+                      <span className="cell-sub truncate" style={{ display: "block", maxWidth: 280 }}>
+                        vs <SideNames people={people} list={sideParticipants(c, 1)} />
+                      </span>
                     </td>
                     <td className="cell-muted">{TYPE_LABEL[c.type] ?? c.type}</td>
                     <td className="cell-muted">{formatDate(c.playedOn)}</td>
@@ -149,6 +297,13 @@ export function CasualList() {
                         ) : (
                           <Chip tone="mute">Sin resultado</Chip>
                         )}
+                        <Link
+                          href={`/amistosos/${c.id}`}
+                          className="link-action"
+                          aria-label={`Ver el partido del ${formatDate(c.playedOn) || "amistoso"}`}
+                        >
+                          Ver
+                        </Link>
                       </div>
                     </td>
                   </tr>
@@ -173,6 +328,7 @@ export function CasualDetail({ id }: { id: string }) {
     !!user
   );
   const c = (data ?? []).find((m) => m.id === id) ?? null;
+  const people = usePeople(c ? [c] : []);
 
   if (loading) return <SkeletonPage />;
   if (error || !c) {
@@ -247,6 +403,30 @@ export function CasualDetail({ id }: { id: string }) {
               <Chip tone={won ? "accent" : "error"}>{won ? "Victoria" : "Derrota"}</Chip>
             </div>
           )}
+        </div>
+      </Card>
+
+      {/* Quién jugó: cada lado con su enlace a la ficha pública. */}
+      <Card flush style={{ marginTop: 16 }}>
+        <CardHead
+          title="Jugadores"
+          count={c.sideA.length + c.sideB.length || undefined}
+        />
+        <div className="tw-club-grid" style={{ gap: 0 }}>
+          <SideBlock
+            title="Pareja 1"
+            list={sideParticipants(c, 0)}
+            people={people}
+            me={user?.id}
+            winner={c.winnerSide === 0}
+          />
+          <SideBlock
+            title="Pareja 2"
+            list={sideParticipants(c, 1)}
+            people={people}
+            me={user?.id}
+            winner={c.winnerSide === 1}
+          />
         </div>
       </Card>
 

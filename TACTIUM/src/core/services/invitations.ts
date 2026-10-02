@@ -136,3 +136,114 @@ export async function rotatePlayerCode(teamId: string): Promise<TeamInvitation> 
   if (!data) throw new Error('No se pudo generar el código');
   return data as TeamInvitation;
 }
+
+// ── Enlace de invitación + mensaje para compartir ──────────────────────────
+// El enlace `tactium.io/i/{CODE}` abre la app (enlace universal) o, sin app, la
+// vista previa en la web. El mensaje es IDÉNTICO en la app y en la web.
+
+/** Enlace público de invitación (con https). */
+export function inviteUrl(code: string): string {
+  return `https://tactium.io/i/${code.trim().toUpperCase()}`;
+}
+
+/** Enlace para pintar en pantalla (sin https). */
+export function inviteUrlDisplay(code: string): string {
+  return `tactium.io/i/${code.trim().toUpperCase()}`;
+}
+
+/** Mensaje para WhatsApp / compartir. */
+export function buildInviteMessage(
+  teamName: string | null | undefined,
+  code: string,
+  role: InvitableRole = 'player',
+): string {
+  const team = teamName?.trim() || 'Nuestro equipo';
+  const cta =
+    role === 'captain' ? 'Únete como capitán aquí:' : 'Únete a la plantilla aquí:';
+  const c = code.trim().toUpperCase();
+  return (
+    `🎾 ${team} ya está en TACTIUM: jornadas, alineaciones y resultados en un sitio.\n\n` +
+    `${cta}\n${inviteUrl(c)}\n\n` +
+    `(o en la app con el código ${c})`
+  );
+}
+
+// ── Vista previa de una invitación (RPC `preview_team_invitation`) ─────────
+// Funciona sin sesión (anon): la usa también el deep link `tactium.io/i/{code}`.
+
+export type InvitationInvalidReason = 'not_found' | 'used' | 'expired';
+
+export interface InvitationRosterSlot {
+  id: string;
+  name: string;
+  position: string | null;
+  pts: number | null;
+  claimed: boolean;
+}
+
+export interface InvitationPreviewTeam {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  league: string | null;
+  category: string | null;
+  group_name: string | null;
+  federation: string | null;
+}
+
+export type InvitationPreview =
+  | { valid: false; reason: InvitationInvalidReason }
+  | {
+      valid: true;
+      role: InvitableRole;
+      team: InvitationPreviewTeam;
+      club_name: string | null;
+      captain_name: string | null;
+      players_count: number;
+      next_matchday: {
+        jornada: number | null;
+        date: string | null;
+        opponent: string | null;
+      } | null;
+      roster?: InvitationRosterSlot[] | null;
+    };
+
+export async function previewInvitation(
+  code: string,
+): Promise<InvitationPreview> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc('preview_team_invitation', {
+    p_code: code.trim().toUpperCase(),
+  });
+  if (error) throw new Error(error.message);
+  if (!data || typeof data !== 'object') {
+    return { valid: false, reason: 'not_found' };
+  }
+  return data as InvitationPreview;
+}
+
+/** Texto claro para cada motivo de invitación no válida. */
+export function invalidInvitationMessage(
+  reason: InvitationInvalidReason,
+): { title: string; body: string } {
+  switch (reason) {
+    case 'used':
+      return {
+        title: 'Este código ya se ha usado',
+        body: 'Era de un solo uso. Pide a quien te invitó un código nuevo.',
+      };
+    case 'expired':
+      return {
+        title: 'Este código ha caducado',
+        body: 'Pide a quien te invitó que te envíe uno nuevo.',
+      };
+    default:
+      return {
+        title: 'Código no válido',
+        body: 'Revisa que esté bien escrito: son 8 letras y números.',
+      };
+  }
+}

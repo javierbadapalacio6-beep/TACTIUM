@@ -32,8 +32,11 @@ function formatDate(iso: string): string {
 
 /**
  * Modal one-shot que se muestra la primera vez que un usuario tiene una
- * subscripción `trialing` recién creada (vía trigger DB tras crear club o
- * team). Una vez visto, lo marcamos en AsyncStorage por `subject_type:subject_id`
+ * subscripción `trialing` recién creada. Hoy la prueba la arranca la app con la
+ * RPC `start_subscription_trial` (14 días, sin tienda ni tarjeta) al crear el
+ * primer equipo independiente o el club en el onboarding, o la tienda tras una
+ * compra con prueba. Los antiguos triggers de BD que la creaban al insertar el
+ * club/equipo ya no existen. Una vez visto, lo marcamos en AsyncStorage por `subject_type:subject_id`
  * (NO por sub.id) para que un cambio de plan dentro del mismo subject
  * — que genera nueva fila optimistic con id distinto — no relance el modal.
  */

@@ -33,7 +33,7 @@ import {
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 
-import type { ClubStackScreenProps } from '@navigation/types';
+import type { HomeStackScreenProps } from '@navigation/types';
 
 const CATS = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª', '9ª', '10ª'];
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -45,7 +45,7 @@ const GENDERS: { id: TeamGender; label: string }[] = [
 
 export const CreateTeamFromClubScreen = ({
   navigation,
-}: ClubStackScreenProps<'CreateTeamFromClub'>) => {
+}: HomeStackScreenProps<'CreateTeamFromClub'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -162,7 +162,7 @@ export const CreateTeamFromClubScreen = ({
         <Pressable
           onPress={() => {
             if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('ClubRoot');
+            else navigation.navigate('HomeRoot');
           }}
           hitSlop={10}
           style={styles.headerBtn}

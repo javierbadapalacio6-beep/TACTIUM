@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useColors, darkColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
+import { FeedPreview } from '@features/social/components/FeedPreview';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { IconBall, IconTicket, IconGift, IconTrophy } from '@components/ui';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
@@ -28,7 +29,7 @@ import {
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
 // Home del JUGADOR SUELTO (F8): usuario sin equipo. Tres acciones:
-// registrar un amistoso, canjear un código de partido (en Stats) e
+// registrar un amistoso, canjear un código de partido (en Mis estadísticas) e
 // invitar colegas. Es la landing del loop de adquisición: quien llega
 // por el código de un amistoso aterriza aquí.
 
@@ -179,7 +180,7 @@ export const SoloHomeScreen = () => {
           <>
             <Text style={styles.sectionLabel}>ÚLTIMOS PARTIDOS</Text>
             <Pressable
-              onPress={() => navigation.getParent()?.navigate('Stats')}
+              onPress={() => rootNav.navigate('MyStats')}
               style={({ pressed }) => [
                 styles.resultsCard,
                 pressed && { opacity: 0.92 },
@@ -225,7 +226,7 @@ export const SoloHomeScreen = () => {
 
         {/* Canje de código */}
         <Pressable
-          onPress={() => navigation.getParent()?.navigate('Stats')}
+          onPress={() => rootNav.navigate('MyStats')}
           style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
         >
           <View style={styles.cardIcon}>
@@ -234,7 +235,7 @@ export const SoloHomeScreen = () => {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.cardTitle}>¿Tienes un código de partido?</Text>
             <Text style={styles.cardText}>
-              Canjéalo en Stats y ese partido contará en tus números.
+              Canjéalo en Mis estadísticas y ese partido contará en tus números.
             </Text>
           </View>
         </Pressable>
@@ -278,6 +279,9 @@ export const SoloHomeScreen = () => {
             </Text>
           </Pressable>
         </View>
+
+        {/* TU GENTE: el feed de quien sigues, con kudos. */}
+        <FeedPreview />
       </ScrollView>
     </View>
   );

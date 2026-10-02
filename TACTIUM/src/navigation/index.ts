@@ -3,14 +3,14 @@ export { TabNavigator } from './TabNavigator';
 export { AuthStack } from './AuthStack';
 export { OnboardingStack } from './OnboardingStack';
 export { HomeStack } from './HomeStack';
-export { SeasonsStack } from './SeasonsStack';
-export { ClubStack } from './ClubStack';
+export { CompetirStack } from './CompetirStack';
+export { TeamStack } from './TeamStack';
 export type {
   RootStackParamList,
   TabParamList,
   AuthStackParamList,
   OnboardingStackParamList,
   HomeStackParamList,
-  SeasonsStackParamList,
-  ClubStackParamList,
+  CompetirStackParamList,
+  TeamStackParamList,
 } from './types';

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,8 +25,11 @@ import {
   IconCheck,
   IconX,
   IconArrowRight,
+  IconShare,
+  IconChevron,
   ScanSheet,
 } from '@components/ui';
+import * as InvitationsApi from '@core/services/invitations';
 import { useTeamStore, type Side } from '@store/teamStore';
 import { useHasActiveSub } from '@core/hooks/usePremiumGate';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
@@ -59,6 +63,49 @@ export const AddPlayersScreen = ({
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
 
   const [adding, setAdding] = useState(false);
+  // «o añade los nombres a mano»: la plantilla manual va plegada; se abre sola
+  // si ya hay jugadores (p. ej. vuelve atrás tras un volcado).
+  const [manualOpen, setManualOpen] = useState(false);
+  useEffect(() => {
+    if (players.length > 0) setManualOpen(true);
+  }, [players.length]);
+
+  // Código de invitación del equipo (el compartido de jugador). Invitar es
+  // GRATIS: lo generamos al entrar para que solo haya que pulsar «Enviar al
+  // grupo de WhatsApp».
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState(false);
+  const [shared, setShared] = useState(false);
+  const loadInvite = useCallback(async () => {
+    if (!team?.id) return;
+    setInviteLoading(true);
+    setInviteError(false);
+    try {
+      const inv = await InvitationsApi.createInvitation(team.id, 'player');
+      setInviteCode(inv.code);
+    } catch (e) {
+      console.warn('AddPlayersScreen: createInvitation', e);
+      setInviteError(true);
+    } finally {
+      setInviteLoading(false);
+    }
+  }, [team?.id]);
+  useEffect(() => {
+    void loadInvite();
+  }, [loadInvite]);
+
+  const handleShareInvite = async () => {
+    if (!inviteCode) return;
+    try {
+      const res = await Share.share({
+        message: InvitationsApi.buildInviteMessage(team?.name, inviteCode, 'player'),
+      });
+      if (res.action === Share.sharedAction) setShared(true);
+    } catch {
+      /* cancelado */
+    }
+  };
 
   // El VOLCADO AUTOMÁTICO (escaneo del ranking o import de la Federación) es
   // premium. En el onboarding no lo bloqueamos a lo bruto: ofrecemos elegir.
@@ -157,6 +204,9 @@ export const AddPlayersScreen = ({
     finishOnboarding();
   };
 
+  const finishLabel =
+    shared || players.length > 0 ? 'Ir a mi equipo' : 'Lo haré luego → ir a mi equipo';
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -174,72 +224,10 @@ export const AddPlayersScreen = ({
         </Pressable>
         <View style={styles.progress}>
           <View style={[styles.bar, { backgroundColor: c.primary }]} />
+          <View style={[styles.bar, { backgroundColor: c.primary }]} />
           <View style={[styles.bar, styles.barActive]} />
         </View>
         <View style={{ width: 36 }} />
-      </View>
-
-      <View style={styles.intro}>
-        <Text style={styles.eyebrow}>PASO 02 — PLANTILLA</Text>
-        <Text style={styles.title}>Añade jugadores</Text>
-        <Text style={styles.lede}>
-          Mínimo 10 jugadores. Los puntos FEP determinan el orden de las parejas.
-        </Text>
-
-        {/* Atajo: escanear ranking FEP directamente desde onboarding.
-            Mismo flow que en TeamScreen → ScanSheet con OCR. */}
-        <Pressable
-          onPress={() => requestBulkImport(() => setScanning(true))}
-          accessibilityRole="button"
-          accessibilityLabel="Escanear plantilla"
-          style={({ pressed }) => [
-            styles.scanShortcut,
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <View style={styles.scanShortcutIcon}>
-            <IconCamera size={14} color={c.accent} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.scanShortcutTitle}>Escanear plantilla</Text>
-            <Text style={styles.scanShortcutHint}>
-              Importa varios jugadores de una captura del ranking
-            </Text>
-          </View>
-          <IconArrowRight size={14} color={c.accent} />
-        </Pressable>
-
-        {/* Atajo: volcar la plantilla oficial desde la Federación Cántabra. */}
-        {FCP_ENABLED && (
-          <Pressable
-            onPress={() => requestBulkImport(() => setImportingFcp(true))}
-            accessibilityRole="button"
-            accessibilityLabel="Importar desde la Federación Cántabra"
-            style={({ pressed }) => [
-              styles.scanShortcut,
-              { marginTop: 10 },
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <View style={styles.scanShortcutIcon}>
-              <Text style={{ fontSize: 14 }}>🏛️</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.scanShortcutTitle}>Importar de la Federación</Text>
-              <Text style={styles.scanShortcutHint}>
-                Vuelca tu plantilla cántabra con los puntos oficiales
-              </Text>
-            </View>
-            <IconArrowRight size={14} color={c.accent} />
-          </Pressable>
-        )}
-      </View>
-
-      <View style={styles.counter}>
-        <Text style={styles.counterText}>
-          {String(players.length).padStart(2, '0')} / 10 mínimo
-        </Text>
-        <Text style={styles.counterSum}>Σ {total} pts</Text>
       </View>
 
       <ScrollView
@@ -247,125 +235,246 @@ export const AddPlayersScreen = ({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.list}>
-          {players.map((p, i) => (
-            <View
-              key={p.id}
-              style={[
-                styles.row,
-                i < players.length - 1 && styles.rowDivider,
-              ]}
-            >
-              <View style={styles.idChip}>
-                <Text style={styles.idChipText}>
-                  {String(i + 1).padStart(2, '0')}
-                </Text>
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.rowName}>{p.name}</Text>
-                <Pressable
-                  onPress={() => cycleSide(p.id, p.position)}
-                  hitSlop={6}
-                  style={styles.posBtn}
-                >
-                  <Text style={styles.posBtnText}>
-                    {p.position.toUpperCase()}
-                  </Text>
-                </Pressable>
-              </View>
-              <View style={styles.ptsPill}>
-                <Text style={styles.ptsPillText}>{p.pts}</Text>
-              </View>
-              <Pressable
-                onPress={() => remove(p.id)}
-                hitSlop={6}
-                style={styles.rowBtn}
-              >
-                <IconX size={14} color={c.textFaint} />
-              </Pressable>
-            </View>
-          ))}
+        <View style={styles.intro}>
+          <Text style={styles.eyebrow}>PASO 3 DE 3 · TU EQUIPO ESTÁ CREADO</Text>
+          <Text style={styles.title}>Ahora, tu gente</Text>
+          <Text style={styles.lede}>
+            Manda el enlace al grupo del equipo: cada jugador entra y elige su
+            nombre. Invitar es gratis.
+          </Text>
+        </View>
 
-          {adding ? (
-            <View style={styles.addInline}>
-              <View style={styles.addRow}>
-                <TextInput
-                  value={newName}
-                  onChangeText={setNewName}
-                  placeholder="Nombre"
-                  placeholderTextColor={c.textFaint}
-                  autoFocus
-                  maxLength={NAME_MAX_LENGTH}
-                  autoCapitalize="words"
-                  style={[styles.addField, { flex: 1 }]}
-                />
-                <TextInput
-                  value={newPts}
-                  onChangeText={(v) => setNewPts(sanitizePtsInput(v))}
-                  placeholder="Pts"
-                  placeholderTextColor={c.textFaint}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                  style={[
-                    styles.addField,
-                    { width: 64, fontFamily: Fonts.mono, textAlign: 'center' },
-                  ]}
-                />
-                <Pressable
-                  onPress={onAdd}
-                  disabled={submittingAdd}
-                  style={styles.confirm}
-                >
-                  {submittingAdd ? (
-                    <ActivityIndicator size="small" color="#000" />
-                  ) : (
-                    <IconCheck size={16} color="#000" />
-                  )}
-                </Pressable>
-              </View>
-              <View style={styles.sideTabs}>
-                {SIDES.map((s) => {
-                  const sel = newSide === s;
-                  return (
-                    <Pressable
-                      key={s}
-                      onPress={() => setNewSide(s)}
-                      style={[
-                        styles.sideTab,
-                        sel && { backgroundColor: c.accent },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.sideTabText,
-                          { color: sel ? '#000' : c.textMuted },
-                        ]}
-                      >
-                        {s}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : (
-            <Pressable onPress={() => setAdding(true)} style={styles.addRowBtn}>
-              <View style={styles.idChip}>
-                <IconPlus size={14} color={c.accent} />
-              </View>
-              <Text style={styles.addRowText}>Añadir jugador</Text>
+        {/* Código grande + enlace */}
+        <View style={styles.codeCard}>
+          <Text style={styles.codeLabel}>CÓDIGO DEL EQUIPO</Text>
+          {inviteLoading ? (
+            <ActivityIndicator color={c.accent} style={{ marginVertical: 14 }} />
+          ) : inviteError ? (
+            <Pressable onPress={loadInvite} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.codeRetry}>No se pudo generar · Reintentar</Text>
             </Pressable>
+          ) : (
+            <>
+              <Text style={styles.codeBig} selectable>
+                {inviteCode ?? '—'}
+              </Text>
+              {inviteCode ? (
+                <Text style={styles.codeLink} selectable numberOfLines={1}>
+                  {InvitationsApi.inviteUrlDisplay(inviteCode)}
+                </Text>
+              ) : null}
+            </>
           )}
         </View>
+
+        <Pressable
+          onPress={handleShareInvite}
+          disabled={!inviteCode}
+          accessibilityRole="button"
+          accessibilityLabel="Enviar al grupo de WhatsApp"
+          style={({ pressed }) => [
+            styles.ctaBtn,
+            { marginTop: 12 },
+            !inviteCode && { opacity: 0.5 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <IconShare size={16} color="#000" />
+          <Text style={styles.ctaLabel}>Enviar al grupo de WhatsApp</Text>
+        </Pressable>
+
+        {/* Volcado de la plantilla oficial (premium; lógica intacta). */}
+        {FCP_ENABLED && (
+          <Pressable
+            onPress={() => requestBulkImport(() => setImportingFcp(true))}
+            accessibilityRole="button"
+            accessibilityLabel="Importar plantilla de la Federación"
+            style={({ pressed }) => [
+              styles.scanShortcut,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.scanShortcutIcon}>
+              <Text style={{ fontSize: 14 }}>🏛️</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.scanShortcutTitle}>
+                Importar plantilla de la Federación
+              </Text>
+              <Text style={styles.scanShortcutHint}>
+                Con los puntos oficiales, en un toque
+              </Text>
+            </View>
+            <IconArrowRight size={14} color={c.accent} />
+          </Pressable>
+        )}
+
+        {/* «o añade los nombres a mano» (plegado) */}
+        <Pressable
+          onPress={() => setManualOpen((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: manualOpen }}
+          style={styles.manualToggle}
+        >
+          <Text style={styles.manualToggleText}>o añade los nombres a mano</Text>
+          <View style={{ transform: [{ rotate: manualOpen ? '90deg' : '0deg' }] }}>
+            <IconChevron size={14} color={c.textMuted} />
+          </View>
+        </Pressable>
+
+        {manualOpen ? (
+          <>
+            {/* Atajo: escanear el ranking (volcado premium; lógica intacta). */}
+            <Pressable
+              onPress={() => requestBulkImport(() => setScanning(true))}
+              accessibilityRole="button"
+              accessibilityLabel="Escanear plantilla"
+              style={({ pressed }) => [
+                styles.scanShortcut,
+                { marginTop: 4 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <View style={styles.scanShortcutIcon}>
+                <IconCamera size={14} color={c.accent} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.scanShortcutTitle}>Escanear plantilla</Text>
+                <Text style={styles.scanShortcutHint}>
+                  Importa varios jugadores de una captura del ranking
+                </Text>
+              </View>
+              <IconArrowRight size={14} color={c.accent} />
+            </Pressable>
+
+            <View style={styles.counter}>
+              <Text style={styles.counterText}>
+                {String(players.length).padStart(2, '0')} en la plantilla
+              </Text>
+              <Text style={styles.counterSum}>Σ {total} pts</Text>
+            </View>
+
+            <View style={styles.list}>
+              {players.map((p, i) => (
+                <View
+                  key={p.id}
+                  style={[
+                    styles.row,
+                    i < players.length - 1 && styles.rowDivider,
+                  ]}
+                >
+                  <View style={styles.idChip}>
+                    <Text style={styles.idChipText}>
+                      {String(i + 1).padStart(2, '0')}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.rowName}>{p.name}</Text>
+                    <Pressable
+                      onPress={() => cycleSide(p.id, p.position)}
+                      hitSlop={6}
+                      style={styles.posBtn}
+                    >
+                      <Text style={styles.posBtnText}>
+                        {p.position.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.ptsPill}>
+                    <Text style={styles.ptsPillText}>{p.pts}</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => remove(p.id)}
+                    hitSlop={6}
+                    style={styles.rowBtn}
+                  >
+                    <IconX size={14} color={c.textFaint} />
+                  </Pressable>
+                </View>
+              ))}
+
+              {adding ? (
+                <View style={styles.addInline}>
+                  <View style={styles.addRow}>
+                    <TextInput
+                      value={newName}
+                      onChangeText={setNewName}
+                      placeholder="Nombre"
+                      placeholderTextColor={c.textFaint}
+                      autoFocus
+                      maxLength={NAME_MAX_LENGTH}
+                      autoCapitalize="words"
+                      style={[styles.addField, { flex: 1 }]}
+                    />
+                    <TextInput
+                      value={newPts}
+                      onChangeText={(v) => setNewPts(sanitizePtsInput(v))}
+                      placeholder="Pts"
+                      placeholderTextColor={c.textFaint}
+                      keyboardType="number-pad"
+                      maxLength={5}
+                      style={[
+                        styles.addField,
+                        { width: 64, fontFamily: Fonts.mono, textAlign: 'center' },
+                      ]}
+                    />
+                    <Pressable
+                      onPress={onAdd}
+                      disabled={submittingAdd}
+                      style={styles.confirm}
+                    >
+                      {submittingAdd ? (
+                        <ActivityIndicator size="small" color="#000" />
+                      ) : (
+                        <IconCheck size={16} color="#000" />
+                      )}
+                    </Pressable>
+                  </View>
+                  <View style={styles.sideTabs}>
+                    {SIDES.map((sd) => {
+                      const sel = newSide === sd;
+                      return (
+                        <Pressable
+                          key={sd}
+                          onPress={() => setNewSide(sd)}
+                          style={[
+                            styles.sideTab,
+                            sel && { backgroundColor: c.accent },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sideTabText,
+                              { color: sel ? '#000' : c.textMuted },
+                            ]}
+                          >
+                            {sd}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : (
+                <Pressable onPress={() => setAdding(true)} style={styles.addRowBtn}>
+                  <View style={styles.idChip}>
+                    <IconPlus size={14} color={c.accent} />
+                  </View>
+                  <Text style={styles.addRowText}>Añadir jugador</Text>
+                </Pressable>
+              )}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
         <Pressable
           onPress={handleFinish}
-          style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.laterBtn, pressed && { opacity: 0.7 }]}
         >
-          <Text style={styles.ctaLabel}>Empezar a alinear</Text>
-          <IconArrowRight size={18} color="#000" />
+          <Text style={styles.laterLabel}>{finishLabel}</Text>
         </Pressable>
       </View>
 
@@ -419,8 +528,72 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     shadowRadius: 6,
   },
   intro: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingHorizontal: 4,
+    paddingTop: 16,
+    marginBottom: 18,
+  },
+  codeCard: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.bgCard,
+  },
+  codeLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    letterSpacing: 2,
+    color: c.textFaint,
+    fontWeight: '600',
+  },
+  codeBig: {
+    fontFamily: Fonts.mono,
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: 6,
+    color: c.text,
+    marginTop: 8,
+  },
+  codeLink: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    color: c.accent,
+    marginTop: 6,
+    letterSpacing: 0.4,
+  },
+  codeRetry: {
+    color: c.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    marginVertical: 14,
+  },
+  manualToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 16,
+  },
+  manualToggleText: {
+    color: c.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  laterBtn: {
+    height: 50,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  laterLabel: {
+    color: c.text,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   eyebrow: {
     fontFamily: Fonts.mono,
@@ -477,7 +650,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: 2,
   },
   counter: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 4,
     marginTop: 18,
     marginBottom: 8,
     flexDirection: 'row',
@@ -498,7 +671,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 28,
   },
   list: {
     backgroundColor: c.bgCard,

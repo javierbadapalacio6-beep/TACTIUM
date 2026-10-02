@@ -13,6 +13,8 @@ import {
   type FcpStandingRow,
   type FcpRivalPlayer,
 } from '@core/services/fcpSeason';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { groupZones, zoneIn, zoneColor, zoneRange, type Zone } from '@core/data/fcpZones';
 
 /**
  * Clasificación del grupo federativo (Federación Cántabra) de un equipo, con
@@ -34,6 +36,7 @@ export const FcpStandings: React.FC<{
 
   const [loading, setLoading] = useState(true);
   const [grupo, setGrupo] = useState<string | null>(null);
+  const [zones, setZones] = useState<Zone[] | null>(null);
   const [rows, setRows] = useState<FcpStandingRow[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [rosters, setRosters] = useState<Record<number, FcpRivalPlayer[]>>({});
@@ -51,13 +54,16 @@ export const FcpStandings: React.FC<{
           if (alive) {
             setRows([]);
             setGrupo(null);
+            setZones(null);
           }
           return;
         }
-        const { grupo: g, rows: r } = await fetchFcpGroupStandings(id);
+        const { grupo: g, idGrupo, genero, rows: r } = await fetchFcpGroupStandings(id);
         if (alive) {
           setGrupo(g);
           setRows(r);
+          // Zonas de la normativa (solo fase de grupos; null = tabla sin zonas).
+          setZones(groupZones({ fed: FCP_FEDERATION_CODE, idGrupo, nombre: g, genero }));
         }
       } catch (e: any) {
         if (alive) toast.error('No se pudo cargar la clasificación', e?.message ?? '');
@@ -113,8 +119,11 @@ export const FcpStandings: React.FC<{
       {grupo ? <Text style={styles.groupName} numberOfLines={2}>{grupo}</Text> : null}
       <Text style={styles.hint}>Toca un rival para ver su plantilla</Text>
       <View style={{ gap: 6 }}>
-        {rows.map((t) => {
+        {rows.map((t, i) => {
           const sd = (t.sets_favor ?? 0) - (t.sets_contra ?? 0);
+          const zone = zoneIn(zones, t.posicion);
+          const prevZone = i > 0 ? zoneIn(zones, rows[i - 1].posicion) : null;
+          const cambio = !!zones && i > 0 && (prevZone?.key ?? null) !== (zone?.key ?? null);
           const isOpen = expanded === t.id_equipo;
           const medal = t.posicion ? MEDAL[t.posicion] : undefined;
           const handle = () => {
@@ -124,6 +133,7 @@ export const FcpStandings: React.FC<{
           };
           return (
             <View key={`${t.id_equipo}-${t.equipo}`}>
+              {cambio ? <View style={styles.zoneDivider} /> : null}
               <Pressable
                 onPress={handle}
                 style={({ pressed }) => [
@@ -132,6 +142,9 @@ export const FcpStandings: React.FC<{
                   pressed && !t.isMe && { opacity: 0.85 },
                 ]}
               >
+                {zone ? (
+                  <View style={[styles.zoneBar, { backgroundColor: zoneColor(zone.key, c) }]} />
+                ) : null}
                 <View
                   style={[
                     styles.posBadge,
@@ -155,9 +168,24 @@ export const FcpStandings: React.FC<{
                   <Text style={[styles.rowName, t.isMe && { color: c.accent }]} numberOfLines={1}>
                     {t.equipo}
                   </Text>
-                  <Text style={styles.rowMeta}>
-                    {t.pj} PJ · {t.pg} PG · sets {sd >= 0 ? `+${sd}` : sd}
-                  </Text>
+                  <View style={styles.metaLine}>
+                    <Text style={styles.rowMeta}>
+                      {t.pj} PJ · {t.pg} PG · sets {sd >= 0 ? `+${sd}` : sd}
+                    </Text>
+                    {t.form.length > 0 ? (
+                      <View
+                        style={styles.formDots}
+                        accessibilityLabel={`Racha: ${t.form.join(' ')}`}
+                      >
+                        {t.form.map((r, k) => (
+                          <View
+                            key={k}
+                            style={[styles.formDot, { backgroundColor: r === 'V' ? c.accent : c.error }]}
+                          />
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
                 <View style={styles.ptsCol}>
                   <Text style={styles.ptsNum}>{t.puntos ?? 0}</Text>
@@ -185,6 +213,18 @@ export const FcpStandings: React.FC<{
           );
         })}
       </View>
+      {zones ? (
+        <View style={styles.legend}>
+          {zones.map((zn) => (
+            <View key={zn.key} style={styles.legendItem}>
+              <View style={[styles.legendSwatch, { backgroundColor: zoneColor(zn.key, c) }]} />
+              <Text style={styles.legendText}>
+                {zn.label} {zoneRange(zn)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 };
@@ -212,7 +252,25 @@ const makeStyles = (c: Palette) =>
       borderRadius: Radius.md,
       paddingHorizontal: 12,
       paddingVertical: 10,
+      overflow: 'hidden',
     },
+    zoneBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+    zoneDivider: {
+      height: 1,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.hairStrong,
+      borderRadius: 1,
+      marginTop: 2,
+      marginBottom: 8,
+    },
+    formDots: { flexDirection: 'row', gap: 3, marginTop: 2 },
+    formDot: { width: 6, height: 6, borderRadius: 3 },
+    metaLine: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 8 },
+    legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    legendSwatch: { width: 8, height: 8, borderRadius: 2 },
+    legendText: { fontFamily: Fonts.mono, fontSize: 10, color: c.textFaint, letterSpacing: 0.3 },
     posBadge: {
       width: 28,
       height: 28,

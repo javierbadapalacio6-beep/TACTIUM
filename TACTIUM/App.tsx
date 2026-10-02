@@ -13,6 +13,9 @@ import { AnimatedSplash } from './src/components/brand/AnimatedSplash';
 // handoff sin parpadeo. Se llama a nivel de módulo (lo antes posible).
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// Botones Voy / Duda / No puedo de las notificaciones de disponibilidad.
+registerAvailabilityCategories();
+
 import { RootNavigator } from './src/navigation';
 import { linking } from './src/navigation/linking';
 import { Colors, type Palette } from './src/core/theme/colors';
@@ -26,6 +29,11 @@ import { useNotificationStore } from './src/store/notificationStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
 import { syncStorePurchases } from './src/core/services/storeSync';
 import { maybePromptForPush } from './src/core/push';
+import {
+  AvailabilityPushResponder,
+  registerAvailabilityCategories,
+} from './src/core/push/availabilityActions';
+import { navigationRef } from './src/navigation/navigationRef';
 import {
   ToastHost,
   OfflineBanner,
@@ -214,6 +222,7 @@ export default function App() {
     <GestureHandlerRootView style={[styles.root, { backgroundColor: c.background }]}>
       <SafeAreaProvider>
         <NavigationContainer
+          ref={navigationRef}
           theme={navTheme}
           linking={linking}
           // Mientras React Navigation resuelve un deep link de arranque (p. ej.
@@ -250,6 +259,7 @@ export default function App() {
                 una sub trialing nueva (auto-creada por trigger DB tras
                 crear primer club/team). */}
             <TrialStartedModal />
+            <AvailabilityPushResponder />
           </ResponsiveFrame>
         </NavigationContainer>
       </SafeAreaProvider>

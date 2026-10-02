@@ -42,6 +42,7 @@ import { useClubStore } from '@store/clubStore';
 import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { useHasActiveSub } from '@core/hooks/usePremiumGate';
+import { startOnboardingTrial } from '@core/services/subscriptions';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -168,15 +169,18 @@ export const CreateTeamScreen = ({
       gender: gender as TeamGender, // `valid` garantiza que hay género elegido
     };
 
-    // Reverse trial: el 1er equipo (independiente o de club existente) es
-    // GRATIS — lo creamos directamente y entramos a la app, sin pasar por el
-    // paywall. Las acciones productivas (jornada, alineación, invitaciones…)
-    // dispararán el trial. El trigger DB `enforce_team_quota` permite este
-    // primer equipo sin sub activa.
+    // El 1er equipo es GRATIS: lo creamos directamente, sin paywall. Si es un
+    // equipo INDEPENDIENTE, arrancamos además la prueba de 14 días sin tarjeta
+    // (best-effort: si falla, el alta sigue). Los de un club existente heredan
+    // la sub del club, no abren prueba propia.
     setSubmitting(true);
     (async () => {
       try {
         await createTeam(clubId ? { ...teamData, clubId } : teamData);
+        if (!clubId) {
+          const uid = useAuthStore.getState().user?.id ?? null;
+          if (uid) void startOnboardingTrial('user', uid, 'captain', uid);
+        }
         navigation.navigate('AddPlayers');
       } catch (e: any) {
         Alert.alert('Error al crear equipo', e?.message ?? 'Inténtalo de nuevo.');

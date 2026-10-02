@@ -189,6 +189,10 @@ export interface BracketTie {
   score: string;
   /** 0 = gana a, 1 = gana b, -1 = sin jugar. */
   winner: number;
+  /** Hueco en el horario, si lo tiene: ISO de `scheduled_at`. */
+  time?: string | null;
+  /** Pista asignada, como texto («Pista 3»). */
+  court?: string | null;
 }
 
 export const KO_ROUNDS: { round: string; ties: BracketTie[] }[] = [

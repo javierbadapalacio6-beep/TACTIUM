@@ -30,6 +30,8 @@ import {
   type Federation,
 } from '@core/data/federations';
 import { useClubStore } from '@store/clubStore';
+import { useAuthStore } from '@store/authStore';
+import { startOnboardingTrial } from '@core/services/subscriptions';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -55,13 +57,15 @@ export const CreateClubScreen = ({
     if (!valid || submitting) return;
     setSubmitting(true);
     try {
-      await createClub({
+      const club = await createClub({
         name: name.trim(),
         federation: federation?.code,
       });
-      // Reverse trial: entramos directos a crear el primer equipo del club
-      // (gratis, 1 equipo). El paywall se disparará al añadir equipos extra
-      // o al ejecutar acciones productivas (jornada, alineación, etc.).
+      // Prueba de 14 días sin tarjeta para el club (plan Starter). Best-effort:
+      // si falla, el alta sigue y el paywall queda para más tarde.
+      const uid = useAuthStore.getState().user?.id ?? null;
+      void startOnboardingTrial('club', club.id, 'club_starter', uid);
+      // Entramos directos a crear los equipos del club.
       navigation.replace('CreateTeamsForClub');
     } catch (e: any) {
       Alert.alert('Error al crear club', e?.message ?? 'Inténtalo de nuevo.');

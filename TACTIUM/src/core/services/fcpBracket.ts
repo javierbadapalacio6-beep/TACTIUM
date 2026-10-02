@@ -34,7 +34,28 @@ export interface FcpBracketTie {
   marcador: string | null;
   ganador: string | null; // 'local' | 'visitante' | 'empate' | null
   estado: string | null; // 'jugado' | 'jugado_ida' | 'pendiente'
+  /** Fecha/hora y sede de cada manga, si la Federación las publica.
+   *  fecha ISO 'YYYY-MM-DD', hora 'HH:MM'. Opcionales: los cruces de rondas a
+   *  sede única no tienen vuelta. */
+  ida?: FcpBracketLeg | null;
+  vuelta?: FcpBracketLeg | null;
 }
+
+export interface FcpBracketLeg {
+  fecha: string | null;
+  hora: string | null;
+  lugar: string | null;
+}
+
+const legOf = (
+  fechaLarga: string | null | undefined,
+  lugar: string | null | undefined,
+): FcpBracketLeg | null => {
+  const { fecha, hora } = parseFechaLarga(fechaLarga);
+  const sitio = (lugar ?? '').trim() || null;
+  if (!fecha && !hora && !sitio) return null;
+  return { fecha, hora, lugar: sitio };
+};
 
 export interface FcpBracketRound {
   avance: number;
@@ -71,7 +92,7 @@ function roundLabel(cuadro: string, avance: number, ties: FcpBracketTie[]): stri
 export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
   const { data } = await rawFrom('fcp_partidos')
     .select(
-      'id_partido, cuadro, avance, posicion_bracket, ronda, equipo_local, equipo_visit, resultado, resultado_ida, resultado_vuelta, ganador, estado',
+      'id_partido, cuadro, avance, posicion_bracket, ronda, equipo_local, equipo_visit, resultado, resultado_ida, resultado_vuelta, ganador, estado, fecha_ida, fecha_vuelta, lugar_ida, lugar_vuelta',
     )
     .eq('id_grupo', idGrupo)
     .like('id_partido', 'fcp_playoff_%');
@@ -112,6 +133,8 @@ export async function fetchFcpBracket(idGrupo: string): Promise<FcpBracket> {
       marcador: s && s.l + s.v > 0 ? `${s.l}-${s.v}` : null,
       ganador: r.ganador ?? null,
       estado: r.estado ?? null,
+      ida: legOf(r.fecha_ida, r.lugar_ida),
+      vuelta: legOf(r.fecha_vuelta, r.lugar_vuelta),
     };
   });
 

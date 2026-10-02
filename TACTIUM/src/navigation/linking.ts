@@ -1,5 +1,8 @@
 import * as Linking from 'expo-linking';
-import type { LinkingOptions } from '@react-navigation/native';
+import {
+  getStateFromPath as defaultGetStateFromPath,
+  type LinkingOptions,
+} from '@react-navigation/native';
 
 import type { RootStackParamList } from './types';
 
@@ -14,7 +17,7 @@ import type { RootStackParamList } from './types';
 // que aterriza en la ficha del torneo (ya publicado). Se usa la vista pública
 // `TournamentFollow` a propósito: existe en el árbol de navegación CON y SIN
 // sesión y lee de RPCs públicas, así que resuelve sea cual sea el rol de quien
-// paga (club o capitán) y sin depender de que la pestaña Torneos esté montada.
+// paga (club o capitán) y sin depender de la pestaña en la que viva la gestión.
 //
 // Nota OAuth: el login con Google usa `WebBrowser.openAuthSessionAsync`, que
 // captura el redirect `tactium://auth-callback` ANTES de que llegue al sistema,
@@ -35,6 +38,28 @@ export const linking: LinkingOptions<RootStackParamList> = {
       TournamentFollow: 'tournament/:tournamentId',
       // Explorar torneos abiertos.
       ExploreTournaments: 'tournaments',
+      // Invitación a un equipo: `tactium.io/i/{CODE}` (enlace universal,
+      // necesita el build con associatedDomains/intentFilters) o
+      // `tactium://i/{CODE}` (funciona ya por OTA).
+      JoinTeam: 'i/:code',
     },
+  },
+  // Rutas de la WEB que el enlace universal también manda a la app
+  // (`/torneos/…`). Se traducen a las de la app; las que no tienen pantalla
+  // equivalente caen en Explorar torneos.
+  getStateFromPath(path, options) {
+    const clean = path.replace(/^\/+/, '');
+    const m = /^torneos(?:\/([^/?#]+))?(?:\/[^?#]*)?(\?.*)?$/.exec(clean);
+    if (m) {
+      const seg = m[1];
+      const query = m[2] ?? '';
+      const reserved = ['mios', 'organizar', 'pago-ok', 'pago-cancelado'];
+      const target =
+        seg && !reserved.includes(seg)
+          ? `tournament/${seg}${query}`
+          : 'tournaments';
+      return defaultGetStateFromPath(target, options);
+    }
+    return defaultGetStateFromPath(path, options);
   },
 };

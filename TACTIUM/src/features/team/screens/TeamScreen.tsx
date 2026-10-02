@@ -44,7 +44,12 @@ import {
   refreshInscripcionRoster,
 } from '@core/services/fcpInscripciones';
 import type { FcpInscripcion } from '@core/services/fcpInscripciones';
-import { useTeamStore, type Player, type Side } from '@store/teamStore';
+import {
+  useTeamStore,
+  selectIsCaptain,
+  type Player,
+  type Side,
+} from '@store/teamStore';
 import { toast } from '@store/toastStore';
 import {
   NAME_MAX_LENGTH,
@@ -55,7 +60,7 @@ import {
 } from '@core/utils/validation';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
-import { usePremiumGate, useIsPremium } from '@core/hooks/usePremiumGate';
+import { useIsPremium } from '@core/hooks/usePremiumGate';
 import type { RootStackParamList } from '@navigation/types';
 import { uploadPlayerPhoto, removePlayerPhoto } from '@core/services/playerPhoto';
 import { displayName, initialsOf, photoOf } from '@core/utils/playerName';
@@ -73,6 +78,9 @@ export const TeamScreen = () => {
   const removePlayer = useTeamStore((s) => s.removePlayer);
 
   const team = useTeamStore((s) => s.team);
+  // La pestaña Equipo es la misma para capitán y jugador. El JUGADOR la ve en
+  // SOLO LECTURA (plantilla y puntos): sin añadir, editar, importar ni invitar.
+  const canManage = useTeamStore(selectIsCaptain);
   const loadForUser = useTeamStore((s) => s.loadForUser);
   const isFcpTeam = team?.federation === FCP_FEDERATION_CODE;
   const [canPrepareSeason, setCanPrepareSeason] = useState(false);
@@ -233,9 +241,9 @@ export const TeamScreen = () => {
   const [seasonOpen, setSeasonOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState(false);
-  // Reverse trial: invitar jugadores con código es premium → gate al paywall.
-  const gate = usePremiumGate();
-  const openInvite = gate(() => setInviting(true), 'invite_create');
+  // Invitar es GRATIS: montar el equipo y traer a la gente no se cobra (lo
+  // premium es la gestión). Sin gate.
+  const openInvite = () => setInviting(true);
   // La IMPORTACIÓN COMPLETA de plantilla (volcado masivo con puntos: escaneo del
   // ranking o import de la Federación) es premium — es la acción de más valor.
   // Mismo aviso que en el onboarding: con premium abre directo; si no, ofrece
@@ -333,6 +341,7 @@ export const TeamScreen = () => {
             que abre: personas → plantilla, calendario → grupo (jornadas y
             clasificación). El botón FCP (import) queda al final y solo si el
             flag está activo. */}
+        {canManage ? (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {isFcpTeam && canPrepareSeason ? (
             <Pressable
@@ -394,11 +403,13 @@ export const TeamScreen = () => {
             </Pressable>
           )}
         </View>
+        ) : null}
       </View>
 
       <View style={styles.intro}>
         <Pressable
           onPress={() => setEditingTeam(true)}
+          disabled={!canManage}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Editar equipo"
@@ -407,7 +418,7 @@ export const TeamScreen = () => {
           <Text style={styles.title} numberOfLines={1}>
             {team?.name ?? 'Equipo'}
           </Text>
-          <IconPencil size={15} color={c.textFaint} />
+          {canManage ? <IconPencil size={15} color={c.textFaint} /> : null}
         </Pressable>
         <Text style={styles.teamMeta} numberOfLines={1}>
           {[
@@ -427,7 +438,7 @@ export const TeamScreen = () => {
         </View>
       </View>
 
-      {isFcpTeam && fcpStatus.newSeason && !noticeHidden.season ? (
+      {canManage && isFcpTeam && fcpStatus.newSeason && !noticeHidden.season ? (
         <View style={styles.fcpNotice}>
           <Text style={styles.fcpNoticeTitle}>Temporada nueva en la Federación</Text>
           <Text style={styles.fcpNoticeText}>
@@ -460,7 +471,7 @@ export const TeamScreen = () => {
         </View>
       ) : null}
 
-      {isFcpTeam && fcpStatus.signing && !noticeHidden.signing ? (
+      {canManage && isFcpTeam && fcpStatus.signing && !noticeHidden.signing ? (
         <View style={styles.fcpNotice}>
           <Text style={styles.fcpNoticeTitle}>Ventana de fichajes abierta</Text>
           <Text style={styles.fcpNoticeText}>
@@ -567,6 +578,7 @@ export const TeamScreen = () => {
                     </View>
                   ))
                 )}
+                {canManage ? (
                 <Pressable
                   onPress={refrescarInscripcion}
                   disabled={refrescando}
@@ -580,6 +592,7 @@ export const TeamScreen = () => {
                     {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
                   </Text>
                 </Pressable>
+                ) : null}
               </View>
             ) : null}
             {/* Lo que la Federación NO dice: nadie publica «has ascendido».
@@ -599,9 +612,11 @@ export const TeamScreen = () => {
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>Plantilla vacía</Text>
                 <Text style={styles.emptySubtitle}>
-                  Añade jugadores manualmente o escanea un ranking FEP para
-                  importarlos.
+                  {canManage
+                    ? 'Añade jugadores manualmente o escanea un ranking FEP para importarlos.'
+                    : 'Tu capitán todavía no ha añadido jugadores.'}
                 </Text>
+                {canManage ? (
                 <View style={styles.emptyActions}>
                   <Pressable
                     onPress={() => setAdding(true)}
@@ -631,6 +646,7 @@ export const TeamScreen = () => {
                     </Text>
                   </Pressable>
                 </View>
+                ) : null}
               </View>
             ) : (
               // Hay jugadores pero el filtro no devuelve nada → sugerir
@@ -659,6 +675,7 @@ export const TeamScreen = () => {
             shown.map((p, i) => (
               <Pressable
                 key={p.id}
+                disabled={!canManage}
                 onPress={() =>
                   Alert.alert(p.name, undefined, [
                     {

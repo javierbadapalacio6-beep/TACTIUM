@@ -43,7 +43,7 @@ import {
   TIME_OPTIONS,
 } from '@features/team/components/PreferredSlotsEditor';
 
-import type { ClubStackScreenProps } from '@navigation/types';
+import type { HomeStackScreenProps } from '@navigation/types';
 
 const hhmm = (t: string | null): string => (t ? t.slice(0, 5) : '');
 
@@ -75,7 +75,11 @@ const teamSlotsOf = (t: unknown): string[] =>
 
 export const ClubScheduleScreen = ({
   navigation,
-}: ClubStackScreenProps<'ClubSchedule'>) => {
+  embedded,
+}: HomeStackScreenProps<'ClubSchedule'> & {
+  /** Raíz del segmento Liga de Competir (club): sin «Atrás». */
+  embedded?: boolean;
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -254,13 +258,15 @@ export const ClubScheduleScreen = ({
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-        >
-          <IconBack size={20} color={c.text} />
-        </Pressable>
+        {embedded ? null : (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={10}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+          >
+            <IconBack size={20} color={c.text} />
+          </Pressable>
+        )}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.eyebrow}>HORARIOS DE LOCAL</Text>
           <Text style={styles.title} numberOfLines={1}>

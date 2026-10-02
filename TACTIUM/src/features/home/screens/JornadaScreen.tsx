@@ -22,13 +22,9 @@ import {
   IconBack,
   IconChevron,
   IconCheck,
-  IconCalendar,
   IconCourt,
   IconAlert,
   IconShare,
-  IconPin,
-  IconHome,
-  IconPlane,
   IconPencil,
   BottomSheet,
   DateField,
@@ -60,13 +56,21 @@ import {
 } from '@components/share/PhotoShareCard';
 import { DOWNLOAD_URL } from '@core/config/referral';
 import { LineupShareCard } from '../components/LineupShareCard';
+import { JornadaScoreHeader } from '../components/jornada/JornadaScoreHeader';
+import {
+  JornadaPhaseTabs,
+  defaultJornadaTab,
+  type JornadaTab,
+} from '../components/jornada/JornadaPhaseTabs';
+import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
+import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
+import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
 import {
   formatLongDay,
   formatShortDay,
-  initialsOf,
 } from '@core/utils/format';
 import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
 
@@ -226,6 +230,9 @@ export const JornadaScreen = ({
   const [matchPhotoUri, setMatchPhotoUri] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const matchPhotoCardRef = React.useRef<View>(null);
+  // Pestaña elegida a mano. Null = la que toca por la fase de la jornada.
+  const [tabPicked, setTabPicked] = useState<JornadaTab | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const targetMatchdayId = route.params?.matchdayId;
   // Spinner solo en la 1ª carga; los refrescos al volver a foco van en segundo
@@ -472,6 +479,16 @@ export const JornadaScreen = ({
     return 'tied';
   }, [closed, matchday, lineupReady, matchStarted, score, courts]);
 
+  // Contexto federativo (puesto, racha, último cruce). Vacío sin vínculo FCP.
+  const fcp = useJornadaFcp(team?.id, matchday?.opponent, matchday?.match_date);
+
+  // Al cambiar de jornada se vuelve a la pestaña que toca por fase.
+  useEffect(() => {
+    setTabPicked(null);
+  }, [matchday?.id]);
+  const tab: JornadaTab =
+    tabPicked ?? defaultJornadaTab({ closed, matchStarted, lineupReady });
+
   const closeMatch = () => {
     if (!matchday) return;
     // Si todos los partidos están resueltos, la RPC backend calcula el outcome.
@@ -601,7 +618,6 @@ export const JornadaScreen = ({
   const closeIsManual =
     !closed && (!lineupReady || score.played < courts);
   const dateObj = isoDateToDate(matchday.match_date);
-  const longDate = dateObj ? formatLongDay(dateObj) : 'Fecha por confirmar';
   const time = matchday.match_time?.slice(0, 5) ?? '';
   const venueLabel =
     matchday.location?.trim() ||
@@ -700,6 +716,43 @@ export const JornadaScreen = ({
     }
   };
 
+  // Eliminar jornada: vive en el menú «⋯» de la barra superior. Misma
+  // confirmación de siempre; borra en cascada alineaciones y resultados. Solo
+  // capitán, jornada abierta y temporada activa (no se borra histórico).
+  const canDelete = isCaptain && !closed && !seasonClosed;
+  const confirmDelete = () => {
+    Alert.alert(
+      'Eliminar jornada',
+      `Vas a borrar la jornada J·${String(matchday.jornada_number).padStart(2, '0')} vs ${matchday.opponent}. Se eliminarán también las alineaciones y resultados asociados. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await MatchdaysApi.deleteMatchday(matchday.id);
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('HomeRoot');
+            } catch (e: any) {
+              Alert.alert(
+                'No se pudo eliminar',
+                e?.message ?? 'Inténtalo de nuevo.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Cabecera: marcador cuando la jornada ya tiene resultado (cerrada o en
+  // juego con pistas resueltas); si no, cuenta atrás.
+  const headerHasResult = closed || (matchStarted && score.played > 0);
+  const headerCfg = makeStatusConfig(c)[
+    status === 'pending' || status === 'scheduled' ? 'in-progress' : status
+  ];
+
   return (
     <View style={styles.root}>
       {/* === NAV === */}
@@ -743,6 +796,20 @@ export const JornadaScreen = ({
               <IconShare size={14} color={c.accent} />
             </Pressable>
           ) : null}
+          {canDelete ? (
+            <Pressable
+              onPress={() => setMoreOpen(true)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Más opciones de la jornada"
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.moreDots}>⋯</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -753,437 +820,367 @@ export const JornadaScreen = ({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* === EYEBROW + TITULAR === */}
-        <Text style={styles.eyebrow}>
-          JORNADA {String(matchday.jornada_number).padStart(2, '0')}
-          {season ? ` · ${season.name}` : ''}
-        </Text>
-        <Text style={styles.title}>vs. {matchday.opponent}</Text>
-
-        {/* === INFO CARD === */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoHeader}>
-            <View style={styles.infoHeaderLeft}>
-              <View style={styles.rivalAvatar}>
-                <Text style={styles.rivalAvatarText}>
-                  {initialsOf(matchday.opponent)}
-                </Text>
-              </View>
-              <View>
-                <Text style={styles.infoEyebrow}>RIVAL</Text>
-                <Text style={styles.rivalName} numberOfLines={1}>
-                  {matchday.opponent}
-                </Text>
-              </View>
-            </View>
-            <View
-              style={[
-                styles.venuePill,
-                {
-                  backgroundColor: withAlpha(
-                    matchday.is_home ? c.accent : c.text,
-                    matchday.is_home ? 0.15 : 0.08,
-                  ),
-                  borderColor: withAlpha(
-                    matchday.is_home ? c.accent : c.text,
-                    matchday.is_home ? 0.4 : 0.2,
-                  ),
-                },
-              ]}
-            >
-              {matchday.is_home ? (
-                <IconHome size={12} color={c.accent} />
-              ) : (
-                <IconPlane size={13} color={c.text} />
-              )}
-              <Text
-                style={[
-                  styles.venuePillText,
-                  { color: matchday.is_home ? c.accent : c.text },
-                ]}
-              >
-                {matchday.is_home ? 'LOCAL' : 'VISITANTE'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.metaGrid}>
-            <View style={styles.metaIcon}>
-              <IconCalendar size={14} color={c.textMuted} />
-            </View>
-            <View style={styles.metaContent}>
-              <Text style={styles.metaPrimary}>{longDate}</Text>
-              {time ? <Text style={styles.metaSecondary}>{time}</Text> : null}
-            </View>
-
-            <View style={styles.metaIcon}>
-              <IconPin size={14} color={c.textMuted} />
-            </View>
-            <View style={styles.metaContent}>
-              <Text style={styles.metaMuted}>{venueLabel}</Text>
-            </View>
-
-            {/* Tandas (distribución de las parejas en turnos). Solo se
-                muestra si el capitán fijó la tanda en la jornada — para
-                muchas ligas amateur no aplica y mostrar 'Sin tanda' sería
-                ruido visual. */}
-            {matchday.tandas ? (
-              <>
-                <View style={styles.metaIcon}>
-                  <IconCourt size={14} color={c.textMuted} />
-                </View>
-                <View style={styles.metaContent}>
-                  <Text style={styles.metaPrimary}>
-                    Tandas {matchday.tandas}
-                  </Text>
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
-
-        {/* === RESULT CARD === */}
-        <ResultCard
-          status={status}
+        {/* === CABECERA MARCADOR ===
+            Nuestro equipo · centro (cuenta atrás o marcador) · rival. Sustituye
+            a la antigua info card: la sede y las tandas pasan a la Previa y la
+            temporada va al pie de la cabecera. */}
+        <JornadaScoreHeader
+          jornadaNumber={matchday.jornada_number}
+          date={dateObj}
+          time={time}
+          isHome={isHome}
+          teamName={teamName}
+          opponent={matchday.opponent}
+          me={fcp.me}
+          rival={fcp.rival}
+          hasResult={headerHasResult}
+          matchStarted={matchStarted}
           us={score.won}
           them={score.lost}
-          played={score.played}
-          courts={courts}
-          isHome={isHome}
-          onPress={() => {
-            if (!lineupReady) return;
-            if (!matchStarted) {
-              const niceDate = dateObj
-                ? `${formatLongDay(dateObj)}${time ? ` a las ${time}` : ''}`
-                : 'la fecha del partido';
-              Alert.alert(
-                'Aún no se pueden cargar resultados',
-                `Podrás introducirlos a partir de ${niceDate}.`,
-              );
-              return;
-            }
-            gate(
-              () =>
-                navigation.navigate('Results', {
-                  matchdayId: matchday.id,
-                  focus: 0,
-                }),
-              'results_edit',
-            )();
-          }}
+          tint={headerCfg.tint}
+          statusLabel={headerCfg.label}
+          footer={season?.name ?? null}
         />
 
-        {weighted && score.played > 0 ? (
-          <Text style={styles.weightedText}>
-            Marcador en puntos: {weighted.us} – {weighted.them}
-            {weighted.us === weighted.them && score.played === courts
-              ? '  (empate)'
-              : ''}
-          </Text>
+        {/* === PESTAÑAS POR FASE === */}
+        <JornadaPhaseTabs value={tab} onChange={setTabPicked} />
+
+        {/* === PREVIA === */}
+        {tab === 'previa' ? (
+          <JornadaPrevia
+            matchdayId={matchday.id}
+            lastCrossing={fcp.lastCrossing}
+            venue={venueLabel}
+            tandas={matchday.tandas}
+            onOpenAvailability={() =>
+              navigation.navigate('Availability', { matchdayId: matchday.id })
+            }
+          />
         ) : null}
 
-        {/* === ALINEACIÓN HEADER === */}
-        <View style={styles.lineupHeader}>
-          <View>
-            <Text style={styles.sectionEyebrow}>Alineación</Text>
-            <Text style={styles.sectionTitle}>{courts} parejas</Text>
-          </View>
-          <View
-            style={[
-              styles.statusPill,
-              {
-                backgroundColor: lineupReady || closed
-                  ? c.accent15
-                  : 'rgba(242,201,76,0.15)',
-                borderColor: lineupReady || closed
-                  ? c.accent40
-                  : 'rgba(242,201,76,0.40)',
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.statusPillDot,
-                {
-                  backgroundColor: lineupReady || closed ? c.accent : c.warning,
-                },
-              ]}
-            />
-            <Text
-              style={[
-                styles.statusPillText,
-                { color: lineupReady || closed ? c.accent : c.warning },
-              ]}
-            >
-              {closed ? 'DISPUTADA' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Traer el acta. Aparece donde duele: jornada federada, acta publicada
-            y la alineación o los resultados en blanco. */}
-        {puedeTraerActa ? (
-          <Pressable
-            onPress={traerDelActa}
-            disabled={trayendoActa}
-            accessibilityRole="button"
-            accessibilityLabel="Traer la alineación y los resultados del acta de la Federación"
-            style={({ pressed }) => [
-              styles.actaLineupBtn,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            {trayendoActa ? (
-              <ActivityIndicator size="small" color={c.accent} />
-            ) : (
-              <Text style={styles.actaLineupBtnText}>
-                Traer el acta: alineación y resultados
-              </Text>
-            )}
-          </Pressable>
-        ) : null}
-
-        {/* === PAIR + RESULT INLINE LIST === */}
-        <View style={{ gap: 8 }}>
-          {Array.from({ length: courts }).map((_, i) => {
-            const court = i + 1;
-            const pair = pairs.find((p) => p.court_number === court);
-            const out = matchOutcome(results, court, isHome);
-            const ai = actaByCourt.get(court) ?? null;
-            return (
-              <PairResultRow
-                key={court}
-                court={court}
-                isTop={court === 1}
-                ready={lineupReady}
-                playerA={pair?.player_a_name ?? null}
-                playerB={pair?.player_b_name ?? null}
-                pts={pair?.pair_points ?? null}
-                outcome={out}
-                acta={ai}
-                closed={closed}
-                disabled={!lineupReady || closed || !matchStarted}
-                onPress={gate(
-                  () =>
-                    navigation.navigate('Results', {
-                      matchdayId: matchday.id,
-                      focus: i,
-                    }),
-                  'results_edit',
-                )}
-              />
-            );
-          })}
-        </View>
-
-        {/* Court order rule */}
-        {lineupReady ? (
-          <View style={styles.ruleBox}>
-            <IconAlert size={14} color={c.textFaint} />
-            <Text style={styles.ruleText}>
-              {pointsScheme ? (
-                <>
-                  Orden automático por{' '}
-                  <Text style={{ color: c.text, fontWeight: '500' }}>
-                    suma de puntos
-                  </Text>
-                  . P1 y P2 valen 3 puntos; el resto, 2.
-                </>
-              ) : (
-                <>
-                  Pareja con{' '}
-                  <Text style={{ color: c.text, fontWeight: '500' }}>
-                    más puntos
-                  </Text>{' '}
-                  en P1. Orden descendente.
-                </>
-              )}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Cerrar acta — solo captain. Players no ven el botón. */}
-        {!closed && isCaptain ? (
+        {/* === ALINEACIÓN === */}
+        {tab === 'alineacion' ? (
           <>
-            <Pressable
-              onPress={gate(closeMatch, 'matchday_close')}
-              disabled={!canClose || closing}
-              style={({ pressed }) => [
-                styles.closeCta,
-                (!canClose || closing) && { opacity: 0.4 },
-                pressed && canClose && !closing && { opacity: 0.85 },
-              ]}
-            >
-              {closing ? (
-                <ActivityIndicator color={c.error} />
-              ) : (
-                <>
-                  <IconCheck size={16} color={c.error} />
-                  <Text style={styles.closeCtaLabel}>Cerrar acta</Text>
-                </>
-              )}
-            </Pressable>
-            {!matchStarted ? (
-              <Text style={styles.closeHint}>
-                El acta podrá cerrarse cuando empiece el partido.
-              </Text>
-            ) : closeIsManual ? (
-              <Text style={styles.closeHint}>
-                Faltan resultados. Al cerrar tendrás que indicar el resultado
-                final manualmente (V/E/D).
-              </Text>
+            {/* === ALINEACIÓN HEADER === */}
+            <View style={styles.lineupHeader}>
+              <View>
+                <Text style={styles.sectionEyebrow}>Alineación</Text>
+                <Text style={styles.sectionTitle}>{courts} parejas</Text>
+              </View>
+              <View
+                style={[
+                  styles.statusPill,
+                  {
+                    backgroundColor: lineupReady || closed
+                      ? c.accent15
+                      : 'rgba(242,201,76,0.15)',
+                    borderColor: lineupReady || closed
+                      ? c.accent40
+                      : 'rgba(242,201,76,0.40)',
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.statusPillDot,
+                    {
+                      backgroundColor: lineupReady || closed ? c.accent : c.warning,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    { color: lineupReady || closed ? c.accent : c.warning },
+                  ]}
+                >
+                  {closed ? 'DISPUTADA' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Traer el acta. Aparece donde duele: jornada federada, acta publicada
+                y la alineación o los resultados en blanco. */}
+            {puedeTraerActa ? (
+              <Pressable
+                onPress={traerDelActa}
+                disabled={trayendoActa}
+                accessibilityRole="button"
+                accessibilityLabel="Traer la alineación y los resultados del acta de la Federación"
+                style={({ pressed }) => [
+                  styles.actaLineupBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                {trayendoActa ? (
+                  <ActivityIndicator size="small" color={c.accent} />
+                ) : (
+                  <Text style={styles.actaLineupBtnText}>
+                    Traer el acta: alineación y resultados
+                  </Text>
+                )}
+              </Pressable>
             ) : null}
+
+            {/* === PAIR + RESULT INLINE LIST === */}
+            <View style={{ gap: 8 }}>
+              {Array.from({ length: courts }).map((_, i) => {
+                const court = i + 1;
+                const pair = pairs.find((p) => p.court_number === court);
+                const out = matchOutcome(results, court, isHome);
+                const ai = actaByCourt.get(court) ?? null;
+                return (
+                  <PairResultRow
+                    key={court}
+                    court={court}
+                    isTop={court === 1}
+                    ready={lineupReady}
+                    playerA={pair?.player_a_name ?? null}
+                    playerB={pair?.player_b_name ?? null}
+                    pts={pair?.pair_points ?? null}
+                    outcome={out}
+                    acta={ai}
+                    closed={closed}
+                    disabled={!lineupReady || closed || !matchStarted}
+                    onPress={gate(
+                      () =>
+                        navigation.navigate('Results', {
+                          matchdayId: matchday.id,
+                          focus: i,
+                        }),
+                      'results_edit',
+                    )}
+                  />
+                );
+              })}
+            </View>
+
+            {/* Court order rule */}
+            {lineupReady ? (
+              <View style={styles.ruleBox}>
+                <IconAlert size={14} color={c.textFaint} />
+                <Text style={styles.ruleText}>
+                  {pointsScheme ? (
+                    <>
+                      Orden automático por{' '}
+                      <Text style={{ color: c.text, fontWeight: '500' }}>
+                        suma de puntos
+                      </Text>
+                      . P1 y P2 valen 3 puntos; el resto, 2.
+                    </>
+                  ) : (
+                    <>
+                      Pareja con{' '}
+                      <Text style={{ color: c.text, fontWeight: '500' }}>
+                        más puntos
+                      </Text>{' '}
+                      en P1. Orden descendente.
+                    </>
+                  )}
+                </Text>
+              </View>
+            ) : null}
+
           </>
         ) : null}
 
-        {/* === FOTO DEL PARTIDO (portada · acta cerrada) ===
-            Persistida en Supabase Storage: el capitán la fija/cambia y la ve
-            todo el equipo; cualquiera la comparte (tarjeta estilo Strava vía
-            expo-sharing). El path {team_id}/{matchday_id}.jpg lo gobierna la
-            RLS (solo admin escribe). Sin foto, el resto no ve acción. */}
-        {closed ? (
-          <View style={styles.photoSection}>
-            <Text style={styles.sectionEyebrow}>Foto del partido</Text>
-            {displayPhoto ? (
+        {/* === RESULTADO === */}
+        {tab === 'resultado' ? (
+          <>
+            {/* === RESULT CARD === */}
+            <ResultCard
+              status={status}
+              us={score.won}
+              them={score.lost}
+              played={score.played}
+              courts={courts}
+              isHome={isHome}
+              onPress={() => {
+                if (!lineupReady) return;
+                if (!matchStarted) {
+                  const niceDate = dateObj
+                    ? `${formatLongDay(dateObj)}${time ? ` a las ${time}` : ''}`
+                    : 'la fecha del partido';
+                  Alert.alert(
+                    'Aún no se pueden cargar resultados',
+                    `Podrás introducirlos a partir de ${niceDate}.`,
+                  );
+                  return;
+                }
+                gate(
+                  () =>
+                    navigation.navigate('Results', {
+                      matchdayId: matchday.id,
+                      focus: 0,
+                    }),
+                  'results_edit',
+                )();
+              }}
+            />
+
+            {weighted && score.played > 0 ? (
+              <Text style={styles.weightedText}>
+                Marcador en puntos: {weighted.us} – {weighted.them}
+                {weighted.us === weighted.them && score.played === courts
+                  ? '  (empate)'
+                  : ''}
+              </Text>
+            ) : null}
+
+            {/* Cerrar acta — solo captain. Players no ven el botón. */}
+            {!closed && isCaptain ? (
               <>
-                <View style={{ alignItems: 'center', marginTop: 4 }}>
-                  <PhotoShareCard
-                    ref={matchPhotoCardRef}
-                    photoUri={displayPhoto}
-                    title={photoTitle}
-                    homeName={teamName}
-                    homeScore={score.won}
-                    awayName={matchday.opponent}
-                    awayScore={score.lost}
-                    highlight="home"
-                    subtitle={photoSubtitle}
-                    detail={photoDetail}
-                  />
-                </View>
                 <Pressable
-                  onPress={() =>
-                    shareCardImage(
-                      matchPhotoCardRef,
-                      displayPhoto,
-                      photoShareText,
-                    )
-                  }
+                  onPress={gate(closeMatch, 'matchday_close')}
+                  disabled={!canClose || closing}
+                  style={({ pressed }) => [
+                    styles.closeCta,
+                    (!canClose || closing) && { opacity: 0.4 },
+                    pressed && canClose && !closing && { opacity: 0.85 },
+                  ]}
+                >
+                  {closing ? (
+                    <ActivityIndicator color={c.error} />
+                  ) : (
+                    <>
+                      <IconCheck size={16} color={c.error} />
+                      <Text style={styles.closeCtaLabel}>Cerrar acta</Text>
+                    </>
+                  )}
+                </Pressable>
+                {!matchStarted ? (
+                  <Text style={styles.closeHint}>
+                    El acta podrá cerrarse cuando empiece el partido.
+                  </Text>
+                ) : closeIsManual ? (
+                  <Text style={styles.closeHint}>
+                    Faltan resultados. Al cerrar tendrás que indicar el resultado
+                    final manualmente (V/E/D).
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+
+          </>
+        ) : null}
+
+        {/* === FOTOS === */}
+        {tab === 'fotos' ? (
+          <>
+            {/* === FOTO DEL PARTIDO (portada · acta cerrada) ===
+                Persistida en Supabase Storage: el capitán la fija/cambia y la ve
+                todo el equipo; cualquiera la comparte (tarjeta estilo Strava vía
+                expo-sharing). El path {team_id}/{matchday_id}.jpg lo gobierna la
+                RLS (solo admin escribe). Sin foto, el resto no ve acción. */}
+            {closed ? (
+              <View style={styles.photoSection}>
+                <Text style={styles.sectionEyebrow}>Foto del partido</Text>
+                {displayPhoto ? (
+                  <>
+                    <View style={{ alignItems: 'center', marginTop: 4 }}>
+                      <PhotoShareCard
+                        ref={matchPhotoCardRef}
+                        photoUri={displayPhoto}
+                        title={photoTitle}
+                        homeName={teamName}
+                        homeScore={score.won}
+                        awayName={matchday.opponent}
+                        awayScore={score.lost}
+                        highlight="home"
+                        subtitle={photoSubtitle}
+                        detail={photoDetail}
+                      />
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        shareCardImage(
+                          matchPhotoCardRef,
+                          displayPhoto,
+                          photoShareText,
+                        )
+                      }
+                      style={({ pressed }) => [
+                        styles.sharePhotoCta,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <IconShare size={16} color={c.accent} />
+                      <Text style={styles.sharePhotoCtaLabel}>
+                        Compartir foto del partido
+                      </Text>
+                    </Pressable>
+                    {isCaptain || !matchday.photo_url ? (
+                      <View style={styles.photoActionsRow}>
+                        <Pressable
+                          onPress={addOrChangePhoto}
+                          disabled={photoUploading}
+                          style={({ pressed }) => pressed && { opacity: 0.7 }}
+                        >
+                          <Text style={styles.changePhotoLabel}>
+                            {photoUploading ? 'Guardando…' : 'Cambiar foto'}
+                          </Text>
+                        </Pressable>
+                        <Text style={styles.photoActionsSep}>·</Text>
+                        <Pressable
+                          onPress={removePhoto}
+                          disabled={photoUploading}
+                          style={({ pressed }) => pressed && { opacity: 0.7 }}
+                        >
+                          <Text style={styles.removePhotoLabel}>Eliminar foto</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </>
+                ) : isCaptain ? (
+                  <Pressable
+                    onPress={addOrChangePhoto}
+                    disabled={photoUploading}
+                    style={({ pressed }) => [
+                      styles.sharePhotoCta,
+                      { marginTop: 4 },
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    {photoUploading ? (
+                      <ActivityIndicator color={c.accent} />
+                    ) : (
+                      <>
+                        <IconImage size={16} color={c.accent} />
+                        <Text style={styles.sharePhotoCtaLabel}>
+                          Añadir foto del partido
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                ) : (
+                  <Text style={styles.photoEmptyHint}>
+                    Aún no hay foto de este partido.
+                  </Text>
+                )}
+
+                {/* Un único botón global: comparte el RESULTADO (texto) por la hoja
+                    nativa (WhatsApp, Telegram, etc. — cada uno elige su app). */}
+                <Pressable
+                  onPress={shareResultNative}
                   style={({ pressed }) => [
                     styles.sharePhotoCta,
+                    { marginTop: 4 },
                     pressed && { opacity: 0.85 },
                   ]}
                 >
                   <IconShare size={16} color={c.accent} />
-                  <Text style={styles.sharePhotoCtaLabel}>
-                    Compartir foto del partido
-                  </Text>
+                  <Text style={styles.sharePhotoCtaLabel}>Compartir resultado</Text>
                 </Pressable>
-                {isCaptain || !matchday.photo_url ? (
-                  <View style={styles.photoActionsRow}>
-                    <Pressable
-                      onPress={addOrChangePhoto}
-                      disabled={photoUploading}
-                      style={({ pressed }) => pressed && { opacity: 0.7 }}
-                    >
-                      <Text style={styles.changePhotoLabel}>
-                        {photoUploading ? 'Guardando…' : 'Cambiar foto'}
-                      </Text>
-                    </Pressable>
-                    <Text style={styles.photoActionsSep}>·</Text>
-                    <Pressable
-                      onPress={removePhoto}
-                      disabled={photoUploading}
-                      style={({ pressed }) => pressed && { opacity: 0.7 }}
-                    >
-                      <Text style={styles.removePhotoLabel}>Eliminar foto</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-              </>
-            ) : isCaptain ? (
-              <Pressable
-                onPress={addOrChangePhoto}
-                disabled={photoUploading}
-                style={({ pressed }) => [
-                  styles.sharePhotoCta,
-                  { marginTop: 4 },
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                {photoUploading ? (
-                  <ActivityIndicator color={c.accent} />
-                ) : (
-                  <>
-                    <IconImage size={16} color={c.accent} />
-                    <Text style={styles.sharePhotoCtaLabel}>
-                      Añadir foto del partido
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            ) : (
+              </View>
+            ) : null}
+
+            {!closed ? (
               <Text style={styles.photoEmptyHint}>
-                Aún no hay foto de este partido.
+                La foto del partido y el resultado se comparten cuando se cierra
+                el acta.
               </Text>
-            )}
-
-            {/* Un único botón global: comparte el RESULTADO (texto) por la hoja
-                nativa (WhatsApp, Telegram, etc. — cada uno elige su app). */}
-            <Pressable
-              onPress={shareResultNative}
-              style={({ pressed }) => [
-                styles.sharePhotoCta,
-                { marginTop: 4 },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <IconShare size={16} color={c.accent} />
-              <Text style={styles.sharePhotoCtaLabel}>Compartir resultado</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {/* === ELIMINAR JORNADA · solo captain, jornada abierta y temporada activa ===
-            Discreto al final. Confirma 2 veces (Alert) y borra en cascada todas
-            las dependencias (lineups, resultados). Se oculta si el acta está
-            cerrada o la temporada archivada (coherente con editar; no se borra
-            histórico). Players nunca ven este botón — RLS lo rechazaría igual. */}
-        {isCaptain && !closed && !seasonClosed ? (
-          <Pressable
-            onPress={() => {
-              Alert.alert(
-                'Eliminar jornada',
-                `Vas a borrar la jornada J·${String(matchday.jornada_number).padStart(2, '0')} vs ${matchday.opponent}. Se eliminarán también las alineaciones y resultados asociados. Esta acción no se puede deshacer.`,
-                [
-                  { text: 'Cancelar', style: 'cancel' },
-                  {
-                    text: 'Eliminar',
-                    style: 'destructive',
-                    onPress: async () => {
-                      try {
-                        await MatchdaysApi.deleteMatchday(matchday.id);
-                        if (navigation.canGoBack()) navigation.goBack();
-                        else navigation.navigate('HomeRoot');
-                      } catch (e: any) {
-                        Alert.alert(
-                          'No se pudo eliminar',
-                          e?.message ?? 'Inténtalo de nuevo.',
-                        );
-                      }
-                    },
-                  },
-                ],
-              );
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Eliminar jornada"
-            style={({ pressed }) => [
-              styles.deleteJornada,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text style={styles.deleteJornadaLabel}>Eliminar jornada</Text>
-          </Pressable>
+            ) : null}
+          </>
         ) : null}
       </ScrollView>
 
@@ -1242,6 +1239,12 @@ export const JornadaScreen = ({
           setMatchday(updated);
           setEditing(false);
         }}
+      />
+
+      <JornadaMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onDelete={confirmDelete}
       />
 
       <ShareLineupSheet
@@ -2010,139 +2013,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
   },
   scroll: { paddingHorizontal: 20, paddingTop: 16 },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 6,
-  },
-  title: {
-    color: c.text,
-    fontSize: 30,
-    fontWeight: '600',
-    letterSpacing: -0.9,
-    lineHeight: 32,
-  },
-  // Info card
-  infoCard: {
-    marginTop: 18,
-    padding: 16,
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.hair,
-    position: 'relative',
-  },
-  infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.hair,
-  },
-  infoHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  rivalAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,223,130,0.30)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rivalAvatarText: {
-    color: c.accent,
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  infoEyebrow: {
-    fontSize: 9,
-    color: c.textFaint,
-    letterSpacing: 1.5,
-    fontFamily: Fonts.mono,
-    fontWeight: '500',
-    marginBottom: 1,
-  },
-  rivalName: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-    maxWidth: 180,
-  },
-  venuePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    borderWidth: 1,
-  },
-  venuePillText: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-  },
-  metaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-    columnGap: 12,
-    alignItems: 'center',
-  },
-  metaIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hair,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metaContent: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    flexWrap: 'wrap',
-    flex: 1,
-  },
-  metaPrimary: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-  },
-  metaSecondary: {
-    color: c.text,
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  metaMuted: {
-    color: c.textMuted,
-    fontSize: 13,
-    letterSpacing: -0.1,
-  },
-  // Result card
   resultCard: {
-    marginTop: 10,
+    marginTop: 0,
     paddingHorizontal: 18,
     paddingVertical: 16,
     backgroundColor: c.bgCard,
@@ -2207,7 +2079,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   // Lineup header
   lineupHeader: {
-    marginTop: 28,
+    // Primera pieza de la pestaña Alineación: sin el hueco de cuando iba
+    // debajo del marcador.
+    marginTop: 2,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2460,7 +2334,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: 0.5,
   },
   // Foto del partido (acta cerrada)
-  photoSection: { marginTop: 24, gap: 10 },
+  photoSection: { marginTop: 0, gap: 10 },
   photoEmptyHint: {
     color: c.textFaint,
     fontSize: 13,
@@ -2787,17 +2661,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     textAlign: 'center',
     marginTop: -4,
   },
-  deleteJornada: {
-    alignSelf: 'center',
-    marginTop: 28,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  deleteJornadaLabel: {
-    color: c.error,
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: 0.2,
+  moreDots: {
+    color: c.text,
+    fontSize: 18,
+    lineHeight: 20,
+    fontWeight: '700',
+    marginTop: -4,
   },
   manualCloseCancel: {
     alignSelf: 'stretch',

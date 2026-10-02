@@ -1,17 +1,16 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
-import { CATEGORIES, GENDERS } from "@/lib/tournament-data";
 import { formatFee, priceSignup } from "@/lib/tournament-signup-pricing";
 import {
   checkCategoryEligibility,
   type CategoryRules,
 } from "@/lib/tournament-eligibility";
 import {
+  defaultTournamentTerms,
   fetchTournament,
   fetchTournamentSignupWindow,
-  resolveFcpPlayer,
   tournamentSignup,
   tournamentSignupOffline,
   getRegistrationPartnerCode,
@@ -24,329 +23,94 @@ import {
   BtnLink,
   Card,
   CardHead,
-  Chip,
   Field,
-  Input,
   Note,
   PageHeader,
+  Segmented,
   Stat,
   StatRow,
 } from "@/components/ui";
-import { SkeletonPage } from "@/components/states";
-import { IconAlert, IconCheck, IconSearch } from "@/components/Icon";
+import { EmptyState, SkeletonPage } from "@/components/states";
+import { IconAlert, IconChevronRight, IconTrophy } from "@/components/Icon";
 import { GoogleLogo } from "@/components/GoogleLogo";
 import { canonicalOrigin } from "@/lib/site";
 
-/* Torneo real (RPC pública) y su forma normalizada para el formulario. */
-interface RealTournament {
-  name: string;
-  club_name?: string | null;
-  location: string | null;
-  starts_on: string | null;
-  ends_on: string | null;
-  entry_fee: number | null;
-  fee_currency: string | null;
-  signup_code: string | null;
-  category: string | null;
-  categories: string[] | null;
-  gender: string | null;
-  genders: string[] | null;
-}
-interface NormTournament {
-  name: string;
-  club: string | null;
-  place: string | null;
-  dates: string | null;
-  fee: string | null;
-  code: string;
-  categories: string[];
-  genders: string[];
-}
+import {
+  buildSignupDays,
+  capitalize,
+  describeThreshold,
+  fmtDates,
+  genderMismatch,
+  hourlyFranjas,
+  isFullName,
+  looksLikeEmail,
+  rulesUseNivel,
+  shortEligibility,
+  SIGNUP_GENDER_DB,
+  type NormTournament,
+  type RealTournament,
+} from "./signup/helpers";
+import {
+  LinkBtn,
+  PlayerFields,
+  validatePlayer,
+  type PlayerDraft,
+  type PlayerErrors,
+} from "./signup/PlayerFields";
+import { AvailabilityGrid, RadioCard, StepBar } from "./signup/parts";
+import { SuccessTicket } from "./signup/SuccessTicket";
+import { saveSignupDraft, takeSignupDraft } from "./signup/draft";
 
-const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const EMPTY_PLAYER: PlayerDraft = {
+  name: "",
+  fedName: null,
+  fedGender: null,
+  noFed: false,
+  pts: "",
+  level: "",
+  email: "",
+  phone: "",
+};
 
-/** Nombre + al menos un apellido (2 palabras). Se exige cuando NO hay respaldo
- *  de la Federación (si lo hay, el nombre canónico ya viene completo). */
-const isFullName = (s: string) =>
-  s.trim().split(/\s+/).filter((w) => w.length > 1).length >= 2;
+const hasErrors = (e: PlayerErrors) => Object.keys(e).length > 0;
 
-/** Email con pinta razonable (validación suave, el server no depende de esto). */
-const looksLikeEmail = (s: string) => /.+@.+\..+/.test(s.trim());
-
-/** Valida el género REAL (FCP) contra la división del torneo. Solo bloquea
- *  cuando se conoce el género (jugador confirmado en la Federación); sin dato
- *  no se puede saber, así que no bloquea. */
-function genderMismatch(
-  divisionDb: string,
-  players: ("M" | "F" | null)[],
-): string | null {
-  const known = players.filter((g): g is "M" | "F" => g === "M" || g === "F");
-  if (divisionDb === "masculino" && known.some((g) => g === "F"))
-    return "Este torneo es masculino: la pareja debe ser de hombres.";
-  if (divisionDb === "femenino" && known.some((g) => g === "M"))
-    return "Este torneo es femenino: la pareja debe ser de mujeres.";
-  return null;
-}
-
-const DOW_ABBR = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-
-/** Días REALES del torneo (de starts_on a ends_on) para el grid de
- *  disponibilidad. Sin fechas -> [] (no se pinta un horario inventado). */
-function buildSignupDays(startsOn: string | null, endsOn: string | null): string[] {
-  if (!startsOn) return [];
-  const parse = (s: string) => {
-    const [y, m, d] = s.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  };
-  const start = parse(startsOn);
-  const end = endsOn ? parse(endsOn) : start;
-  const out: string[] = [];
-  const d = new Date(start);
-  let g = 0;
-  while (d.getTime() <= end.getTime() && g < 21) {
-    out.push(`${DOW_ABBR[d.getDay()]} ${d.getDate()}`);
-    d.setDate(d.getDate() + 1);
-    g++;
-  }
-  return out;
+/**
+ * Suma de una pareja (puntos o nivel) tal como la valida el servidor:
+ * no federado = 0 (válido); federado con el campo vacío = null («falta el
+ * dato»). Antes el vacío contaba como 0 y una suma de 0 se enviaba como null:
+ * la web daba el OK y el servidor rechazaba DESPUÉS de cobrar.
+ */
+function pairSum(
+  noFedA: boolean,
+  rawA: string,
+  noFedB: boolean,
+  rawB: string,
+): number | null {
+  const a = noFedA ? 0 : rawA.trim() === "" ? null : parseInt(rawA, 10);
+  const b = noFedB ? 0 : rawB.trim() === "" ? null : parseInt(rawB, 10);
+  if (a == null || b == null || Number.isNaN(a) || Number.isNaN(b)) return null;
+  return a + b;
 }
 
-/** Franjas de 1 h de la ventana horaria del torneo (start_time..end_time), como
- *  `hourlyFranjas` en la app: la última franja EMPIEZA en (fin − 1 h). Sin datos
- *  → 09:00–22:00. Devuelve las horas de inicio ("09:00" … "21:00"). */
-function buildSignupHours(
-  start?: string | null,
-  end?: string | null,
-): string[] {
-  const sh = parseInt((start || "09:00").slice(0, 2), 10);
-  const eh = parseInt((end || "22:00").slice(0, 2), 10);
-  const s = Number.isFinite(sh) ? sh : 9;
-  const e = Number.isFinite(eh) ? eh : 22;
-  const out: string[] = [];
-  for (let h = s; h + 1 <= e && out.length < 18; h++) {
-    out.push(`${String(h).padStart(2, "0")}:00`);
-  }
-  return out.length ? out : [`${String(s).padStart(2, "0")}:00`];
-}
+type Step = 1 | 2 | 3;
 
-function fmtDates(a: string | null, b: string | null): string | null {
-  const f = (iso: string | null) => {
-    if (!iso) return "";
-    const d = new Date(iso + "T00:00:00");
-    return Number.isNaN(d.getTime())
-      ? ""
-      : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
-  };
-  const da = f(a);
-  const db = f(b);
-  if (da && db && da !== db) return `${da} – ${db}`;
-  return da || db || null;
-}
-
-const SIGNUP_GENDER_DB: Record<string, string> = {
-  Masculino: "masculino",
-  Femenino: "femenino",
-  Mixto: "mixto",
+const STEP_TITLES: Record<Step, string> = {
+  1: "¿Quiénes jugáis?",
+  2: "¿En qué categoría?",
+  3: "Horario y pago",
 };
 
 /**
- * Ficha de inscripción. Es pública: se llega con el código del torneo.
- *
- * Detalle propio del producto: al escribir el nombre aparece un chip
- * "DETECTADO EN LA FEDERACIÓN" que rellena puntos y nivel de una pasada. Se
- * puede editar después — es una sugerencia, no un dato bloqueado.
+ * Inscripción a un torneo en 3 pasos (tras el login, que es obligatorio):
+ *   1 · ¿Quiénes jugáis?  — género, tu ficha y la de tu pareja.
+ *   2 · ¿En qué categoría? — solo las que permiten vuestros puntos/nivel.
+ *   3 · Horario y pago    — horas que no podéis, condiciones, cuota y pago.
+ * Volver atrás no borra nada. El envío y el cobro (Stripe Connect, pago en el
+ * club, gratis) son los de siempre: `submitSignup`.
  */
-// Sugerencia de la Federación (dato REAL de fcp_jugadores, no mock). Igual que
-// el chip FcpSuggest de la app: al escribir el nombre buscamos en la FCP y
-// proponemos puntos + categoría de la mejor coincidencia.
-type FcpHint = {
-  pts: number;
-  level: string;
-  // De dónde sale la categoría: liga, circuito o ambas (cuenta la mejor).
-  origen: "liga" | "circuito" | "ambos" | null;
-  // Solo juega circuito: no tiene puntos de liga (los que cuentan) → 0.
-  soloCircuito: boolean;
-  matched: string;
-  genero: "M" | "F" | null;
-  equipo: string | null;
-};
-
-/** Hook: busca en la FCP el nombre escrito (debounced) y devuelve HASTA 4
- *  candidatos (para poder distinguir homónimos por club/puntos). */
-function useFcpHints(query: string): FcpHint[] {
-  const [hints, setHints] = useState<FcpHint[]>([]);
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 3) {
-      setHints([]);
-      return;
-    }
-    let alive = true;
-    const t = setTimeout(async () => {
-      try {
-        const rows = await resolveFcpPlayer(q);
-        if (!alive) return;
-        setHints(
-          rows.slice(0, 4).map((r) => ({
-            pts: r.puntos ?? 0,
-            soloCircuito: r.nivelLiga == null,
-            // La MEJOR categoría del jugador: liga o circuito (no "ABS").
-            level: r.categoriaDiv ?? "",
-            origen: r.origenNivel,
-            matched: r.name,
-            genero: r.genero ?? null,
-            equipo: r.equipo ?? null,
-          })),
-        );
-      } catch {
-        if (alive) setHints([]);
-      }
-    }, 300);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-  }, [query]);
-  return hints;
-}
-
-/** Checkbox "No está federado": el jugador no tiene ficha FCP → puntos y nivel
- *  cuentan como 0 y no se piden. */
-function NoFedToggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        cursor: "pointer",
-        fontSize: 12.5,
-        color: "var(--text-muted)",
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
-      />
-      No está federado (sin puntos ni nivel de la FCP)
-    </label>
-  );
-}
-
-/** Tarjeta-radio del panel: fondo `--bg-card-2`, y al activarse `--accent-10`
- *  con borde `--accent-40`. Radio 10, igual que en el asistente de torneos. */
-function RadioCard({
-  on,
-  onClick,
-  children,
-  title,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children?: React.ReactNode;
-  title: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={on}
-      onClick={onClick}
-      style={{
-        textAlign: "left",
-        padding: children ? "12px 14px" : "10px 14px",
-        borderRadius: 10,
-        cursor: "pointer",
-        background: on ? "var(--accent-10)" : "var(--bg-card-2)",
-        border: `1px solid ${on ? "var(--accent-40)" : "var(--line)"}`,
-        color: "var(--text)",
-        transition:
-          "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
-      }}
-    >
-      <span style={{ display: "block", fontSize: 13.5, fontWeight: on ? 700 : 600 }}>
-        {title}
-      </span>
-      {children && (
-        <span
-          style={{
-            display: "block",
-            marginTop: 3,
-            fontSize: 12.5,
-            color: "var(--text-muted)",
-          }}
-        >
-          {children}
-        </span>
-      )}
-    </button>
-  );
-}
-
-/** Selector de coincidencias FCP. Si hay varias personas con el mismo nombre,
- *  el usuario elige la suya por CLUB y PUNTOS (evita atribuir los datos de un
- *  homónimo). Si no es ninguna (otra federación no gestionada), no elige y usa
- *  "No está federado" o escribe los puntos a mano. */
-function FcpPicker({
-  hints,
-  confirmed,
-  onPick,
-}: {
-  hints: FcpHint[];
-  confirmed: string | null;
-  onPick: (h: FcpHint) => void;
-}) {
-  if (!hints.length) return null;
-  if (confirmed) {
-    return (
-      <div style={{ marginTop: 8 }}>
-        <Chip>{confirmed} · confirmado en la Federación</Chip>
-      </div>
-    );
-  }
-  const many = hints.length > 1;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 8 }}>
-        {many ? "Hay varios con ese nombre en la Federación. ¿Cuál eres?" : "Detectado en la Federación"}
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {hints.map((h, i) => (
-          <button
-            key={`${h.matched}-${i}`}
-            type="button"
-            onClick={() => onPick(h)}
-            className="tw-fcp-chip"
-            style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
-          >
-            <span style={{ fontWeight: 600 }}>{h.matched}</span>
-            <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
-              {h.soloCircuito ? "sin puntos de liga" : `${h.pts} pts`}
-              {h.level ? ` · ${h.level}` : ""}
-              {h.level && h.origen && h.origen !== "ambos" ? ` (${h.origen})` : ""}
-              {h.equipo ? ` · ${h.equipo}` : ""}
-            </span>
-          </button>
-        ))}
-      </div>
-      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-faint)" }}>
-        ¿No eres ninguno? Marca «No está federado» o escribe tus puntos a mano.
-      </p>
-    </div>
-  );
-}
-
 export function SignupForm({ id }: { id: string }) {
-  // Torneo REAL por id (RPC pública), no la maqueta. Si el id es válido se salta
-  // la pantalla de "mete el código": el torneo ya se conoce por el enlace.
+  // Torneo REAL por id (RPC pública). La página siempre llega con id: el
+  // torneo ya se conoce por el enlace (no hay buscador por código).
   const { data: real, loading } = useAsync(
     () => fetchTournament(id) as Promise<RealTournament | null>,
     [id],
@@ -381,64 +145,57 @@ export function SignupForm({ id }: { id: string }) {
       }
     : null;
 
+  const [step, setStep] = useState<Step>(1);
   const [code, setCode] = useState("");
-  const [found, setFound] = useState(false);
-  const [category, setCategory] = useState<string>("1ª");
-  const [gender, setGender] = useState<string>("Masculino");
+  // Sin valores inventados: la categoría y el género salen del torneo. Sin
+  // categorías → «Categoría única» (null); un solo género → se elige solo.
+  const [category, setCategory] = useState<string | null>(null);
+  const [gender, setGender] = useState<string>("");
 
-  // Al cargar el torneo real, sembramos código/categoría/género una sola vez.
+  // Al cargar el torneo real, sembramos código y género una sola vez.
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (!real || seeded) return;
-    const cats = real.categories?.length
-      ? real.categories
-      : real.category
-        ? [real.category]
-        : [];
     const gens = (
       real.genders?.length ? real.genders : real.gender ? [real.gender] : []
     ).map(capitalize);
     if (real.signup_code) setCode(real.signup_code);
-    if (cats.length) setCategory(cats[0]);
-    if (gens.length) setGender(gens[0]);
-    setFound(true);
+    if (gens.length === 1) setGender(gens[0]);
     setSeeded(true);
   }, [real, seeded]);
 
-  const [name, setName] = useState("");
-  const [pts, setPts] = useState("");
-  const [level, setLevel] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [mateName, setMateName] = useState("");
-  const [matePts, setMatePts] = useState("");
-  const [mateLevel, setMateLevel] = useState("");
-  const [mateEmail, setMateEmail] = useState("");
-  // Nombre COMPLETO tal cual figura en la Federación, fijado SOLO cuando el
-  // usuario confirma la coincidencia (toca el chip). Si lo hay, es el que se
-  // guarda (nombre canónico); si no, se exige nombre y apellidos escritos.
-  const [fedName, setFedName] = useState<string | null>(null);
-  const [mateFedName, setMateFedName] = useState<string | null>(null);
-  // Género REAL (FCP) de cada jugador confirmado, para validar la división del
-  // torneo (evita mujer en torneo masculino y viceversa).
-  const [fedGender, setFedGender] = useState<"M" | "F" | null>(null);
-  const [mateFedGender, setMateFedGender] = useState<"M" | "F" | null>(null);
-  // "No está federado": sin ficha FCP → puntos y nivel cuentan como 0 y no se
-  // piden. Igual que en la app.
-  const [noFed, setNoFed] = useState(false);
-  const [mateNoFed, setMateNoFed] = useState(false);
+  // Fichas: tú (jugador 1), tu pareja y, si hay 2ª categoría, su compañero.
+  const [me, setMe] = useState<PlayerDraft>(EMPTY_PLAYER);
+  const [mate, setMate] = useState<PlayerDraft>(EMPTY_PLAYER);
+  const [mate2, setMate2] = useState<PlayerDraft>(EMPTY_PLAYER);
+  const patchMe = (p: Partial<PlayerDraft>) => setMe((s) => ({ ...s, ...p }));
+  const patchMate = (p: Partial<PlayerDraft>) => setMate((s) => ({ ...s, ...p }));
+  const patchMate2 = (p: Partial<PlayerDraft>) => setMate2((s) => ({ ...s, ...p }));
+  const { name, fedName, fedGender, noFed, pts, level, email, phone } = me;
+  const {
+    name: mateName,
+    fedName: mateFedName,
+    fedGender: mateFedGender,
+    noFed: mateNoFed,
+    pts: matePts,
+    level: mateLevel,
+    email: mateEmail,
+  } = mate;
+  const {
+    name: mate2Name,
+    fedName: mate2FedName,
+    fedGender: mate2FedGender,
+    noFed: mate2NoFed,
+    pts: mate2Pts,
+    level: mate2Level,
+    email: mate2Email,
+  } = mate2;
 
   // 2ª categoría OPCIONAL (como en la app): el mismo jugador se apunta a otra
   // categoría, posiblemente con OTRO compañero. Su precio pasa a la cuota de 2
   // categorías. Solo se ofrece si el torneo tiene ≥2 categorías.
+  const [want2, setWant2] = useState(false);
   const [category2, setCategory2] = useState<string | null>(null);
-  const [mate2Name, setMate2Name] = useState("");
-  const [mate2Pts, setMate2Pts] = useState("");
-  const [mate2Level, setMate2Level] = useState("");
-  const [mate2Email, setMate2Email] = useState("");
-  const [mate2FedName, setMate2FedName] = useState<string | null>(null);
-  const [mate2FedGender, setMate2FedGender] = useState<"M" | "F" | null>(null);
-  const [mate2NoFed, setMate2NoFed] = useState(false);
   // Cuota de 2 categorías del torneo (para el desglose). Llega con la ventana.
   const [entryFee2, setEntryFee2] = useState<number | null>(null);
   // Reglas de elegibilidad por categoría (nivel/puntos). Del torneo (FCP).
@@ -449,9 +206,17 @@ export function SignupForm({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [signErr, setSignErr] = useState<string | null>(null);
   // Condiciones del torneo: casilla OBLIGATORIA (el servidor también la exige).
+  // Si el texto del torneo no llega, se enseñan las estándar: la casilla
+  // siempre está a la vista (nunca un error por una casilla invisible).
   const [terms, setTerms] = useState<string | null>(null);
+  const [defaultTerms, setDefaultTerms] = useState<string | null>(null);
   const [termsOk, setTermsOk] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
+  // Errores de cada paso: solo se enseñan tras intentar avanzar.
+  const [tried1, setTried1] = useState(false);
+  const [tried2, setTried2] = useState(false);
+  // Vuelta de Stripe con el pago cancelado.
+  const [payCancelled, setPayCancelled] = useState(false);
   // Códigos de compañero de las inscripciones creadas (gratis/club), para
   // mostrarlos en la pantalla de éxito y que P1 se los pase a su pareja.
   const [doneCodes, setDoneCodes] = useState<
@@ -476,7 +241,29 @@ export function SignupForm({ id }: { id: string }) {
         const u = data.user;
         setAuthUser(u ? { id: u.id, email: u.email ?? null } : null);
         setCheckingAuth(false);
-        if (u?.email) setEmail((e) => e || u.email!);
+        if (u?.email) setMe((p) => (p.email ? p : { ...p, email: u.email! }));
+        if (!u) return;
+        // Nombre de la cuenta para prerrellenar la ficha (perfil o, si no,
+        // el que dio Google). Solo si el campo sigue vacío.
+        const meta = (u.user_metadata ?? {}) as { full_name?: string; name?: string };
+        const metaName = (meta.full_name || meta.name || "").trim();
+        sb.from("profiles")
+          .select("full_name")
+          .eq("id", u.id)
+          .maybeSingle()
+          .then(
+            ({ data: prof }) => {
+              if (!alive) return;
+              const n =
+                ((prof as { full_name?: string | null } | null)?.full_name ?? "").trim() ||
+                metaName;
+              if (n) setMe((p) => (p.name ? p : { ...p, name: n }));
+            },
+            () => {
+              if (alive && metaName)
+                setMe((p) => (p.name ? p : { ...p, name: metaName }));
+            },
+          );
       })
       .catch(() => {
         if (alive) {
@@ -487,7 +274,7 @@ export function SignupForm({ id }: { id: string }) {
     const { data: sub } = sb.auth.onAuthStateChange((_e, session) => {
       const u = session?.user ?? null;
       setAuthUser(u ? { id: u.id, email: u.email ?? null } : null);
-      if (u?.email) setEmail((e) => e || u.email!);
+      if (u?.email) setMe((p) => (p.email ? p : { ...p, email: u.email! }));
     });
     return () => {
       alive = false;
@@ -517,11 +304,9 @@ export function SignupForm({ id }: { id: string }) {
   //  false = solo "pagar en el club" (club sin Connect o torneo gratis)
   // Evita el bug de "parece que pagué" cuando el club no está dado de alta.
   const [payOnline, setPayOnline] = useState<boolean | null>(null);
-  // Rejilla de disponibilidad: horas y tope REALES del torneo (los fija el club
-  // al crearlo). Por defecto 09:00–22:00 hasta que llega el dato de la FCP.
-  const [signupHours, setSignupHours] = useState<string[]>(() =>
-    buildSignupHours(null, null),
-  );
+  // Rejilla de disponibilidad: franjas y tope REALES del torneo (los fija el
+  // club al crearlo). Por defecto 09:00–22:00 hasta que llega el dato.
+  const [slots, setSlots] = useState(() => hourlyFranjas(null, null));
   // Tope de horas marcables = el REAL del torneo (max_removable_hours). null =
   // sin límite, igual que la app (no un 8 inventado).
   const [removeCap, setRemoveCap] = useState<number | null>(null);
@@ -529,16 +314,31 @@ export function SignupForm({ id }: { id: string }) {
     const code = real?.signup_code;
     if (!code) return;
     let alive = true;
+    // Condiciones estándar por si el torneo no trae las suyas.
+    const loadDefaultTerms = () => {
+      defaultTournamentTerms()
+        .then((txt) => {
+          if (alive && txt) setDefaultTerms(txt);
+        })
+        .catch(() => {});
+    };
     fetchTournamentSignupWindow(code)
       .then((w) => {
-        if (!alive || !w) return;
-        setSignupHours(buildSignupHours(w.start_time, w.end_time));
+        if (!alive) return;
+        if (!w) {
+          loadDefaultTerms();
+          return;
+        }
+        setSlots(hourlyFranjas(w.start_time, w.end_time));
         setRemoveCap(w.max_removable_hours);
         setEntryFee2(w.entry_fee_2);
         setCategoryRules((w.category_rules as CategoryRules | null) ?? null);
         setTerms(w.terms);
+        if (!w.terms) loadDefaultTerms();
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) loadDefaultTerms();
+      });
     return () => {
       alive = false;
     };
@@ -562,6 +362,61 @@ export function SignupForm({ id }: { id: string }) {
       alive = false;
     };
   }, [real, id]);
+
+  // Pago cancelado en Stripe: se recupera el borrador y se vuelve al paso 3.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (!seeded || restoredRef.current) return;
+    restoredRef.current = true;
+    let cancelled = false;
+    try {
+      cancelled =
+        new URLSearchParams(window.location.search).get("pago") === "cancelado";
+    } catch {
+      cancelled = false;
+    }
+    if (!cancelled) return;
+    setPayCancelled(true);
+    const d = takeSignupDraft(id);
+    if (!d) return;
+    setGender(d.gender);
+    setCategory(d.category);
+    setWant2(d.want2);
+    setCategory2(d.category2);
+    setMe(d.me);
+    setMate(d.mate);
+    setMate2(d.mate2 ?? EMPTY_PLAYER);
+    setBlocked(new Set(d.blocked ?? []));
+    setTermsOk(!!d.termsOk);
+    setStep(3);
+  }, [seeded, id]);
+
+  // Lo que se guarda: las franjas que NO podéis, con el formato de la app
+  // («Vie 24 09:00–10:00»), en el orden de la rejilla.
+  const availability = useMemo(() => {
+    const out: string[] = [];
+    for (const d of availDays)
+      for (const s of slots) {
+        const key = `${d} ${s.label}`;
+        if (blocked.has(key)) out.push(key);
+      }
+    return out;
+  }, [availDays, slots, blocked]);
+
+  function saveDraft() {
+    saveSignupDraft(id, {
+      v: 1,
+      gender,
+      category,
+      want2,
+      category2,
+      me,
+      mate,
+      mate2,
+      blocked: [...blocked],
+      termsOk,
+    });
+  }
 
   async function submitSignup(offline = false) {
     if (busy) return;
@@ -632,14 +487,8 @@ export function SignupForm({ id }: { id: string }) {
     setBusy(true);
     setSignErr(null);
 
-    const avail = [...blocked];
+    const avail = availability;
     // 0 si el jugador no está federado (sin ficha FCP).
-    const aPts = noFed ? 0 : parseInt(pts || "0", 10) || 0;
-    const aLvl = noFed ? 0 : parseInt(level || "0", 10) || 0;
-    const matePtsV = mateNoFed ? 0 : parseInt(matePts || "0", 10) || 0;
-    const mateLvlV = mateNoFed ? 0 : parseInt(mateLevel || "0", 10) || 0;
-    const mate2PtsV = mate2NoFed ? 0 : parseInt(mate2Pts || "0", 10) || 0;
-    const mate2LvlV = mate2NoFed ? 0 : parseInt(mate2Level || "0", 10) || 0;
     const p1Email = email.trim() || null;
     const p1Phone = phone.trim() || null;
 
@@ -655,8 +504,8 @@ export function SignupForm({ id }: { id: string }) {
         p1Email,
         p1Phone,
         p2Email: mateEmail.trim() || null,
-        seedPoints: aPts + matePtsV || null,
-        leagueSum: aLvl + mateLvlV || null,
+        seedPoints: pairSum(noFed, pts, mateNoFed, matePts),
+        leagueSum: pairSum(noFed, level, mateNoFed, mateLevel),
         availability: avail,
         termsAccepted: true, // la casilla bloquea el envío si no está marcada
       },
@@ -671,8 +520,8 @@ export function SignupForm({ id }: { id: string }) {
         p1Email,
         p1Phone,
         p2Email: mate2Email.trim() || null,
-        seedPoints: aPts + mate2PtsV || null,
-        leagueSum: aLvl + mate2LvlV || null,
+        seedPoints: pairSum(noFed, pts, mate2NoFed, mate2Pts),
+        leagueSum: pairSum(noFed, level, mate2NoFed, mate2Level),
         availability: avail,
         termsAccepted: true,
       });
@@ -766,6 +615,8 @@ export function SignupForm({ id }: { id: string }) {
           reason?: string;
         };
         if (r.ok && d.url) {
+          // Borrador por si cancela en Stripe (vuelve con ?pago=cancelado).
+          saveDraft();
           window.location.href = d.url; // → Stripe Checkout
           return;
         }
@@ -804,16 +655,15 @@ export function SignupForm({ id }: { id: string }) {
     setDone(true);
   }
 
-  const hints = useFcpHints(name);
-  const mateHints = useFcpHints(mateName);
-  const mate2Hints = useFcpHints(mate2Name);
-
   // Precio POR PERSONA: cada jugador paga según cuántas categorías juega (1 →
   // entry_fee, 2 → entry_fee_2). El que se inscribe paga por todos. El helper
   // agrupa por nombre y calcula el total (mismo cálculo que el servidor).
   const feePer = real?.entry_fee ?? 0;
   const feeCur = real?.fee_currency ?? "€";
-  const hasTwoCats = (t?.categories.length ?? 0) >= 2;
+  const cats = t?.categories ?? [];
+  const hasCats = cats.length > 0;
+  const hasTwoCats = cats.length >= 2;
+  const genders = t?.genders ?? [];
   const regsPreview = useMemo(() => {
     const p1 = fedName ?? name;
     const list = [{ category, p1Name: p1, p2Name: mateFedName ?? mateName }];
@@ -842,48 +692,112 @@ export function SignupForm({ id }: { id: string }) {
 
   // Elegibilidad por categoría (nivel/puntos), igual que la app y que la RPC del
   // servidor. Se calcula con los puntos/nivel SUMADOS de cada pareja.
-  const genderDb = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
-  // Puntos/nivel EFECTIVOS: 0 si el jugador NO está federado (sin ficha FCP).
-  const p1PtsN = noFed ? 0 : parseInt(pts || "0", 10) || 0;
-  const p1LvlN = noFed ? 0 : parseInt(level || "0", 10) || 0;
-  const matePtsN = mateNoFed ? 0 : parseInt(matePts || "0", 10) || 0;
-  const mateLvlN = mateNoFed ? 0 : parseInt(mateLevel || "0", 10) || 0;
-  const mate2PtsN = mate2NoFed ? 0 : parseInt(mate2Pts || "0", 10) || 0;
-  const mate2LvlN = mate2NoFed ? 0 : parseInt(mate2Level || "0", 10) || 0;
+  const genderDb: string | null = gender
+    ? (SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase())
+    : null;
+  // Puntos/nivel de la pareja: ver pairSum (no federado = 0, vacío = falta).
+  const pair1Pts = pairSum(noFed, pts, mateNoFed, matePts);
+  const pair1Niv = pairSum(noFed, level, mateNoFed, mateLevel);
+  const pair2Pts = pairSum(noFed, pts, mate2NoFed, mate2Pts);
+  const pair2Niv = pairSum(noFed, level, mate2NoFed, mate2Level);
   const elig1 = useMemo(
-    () =>
-      checkCategoryEligibility(
-        categoryRules,
-        category,
-        genderDb,
-        p1PtsN + matePtsN,
-        p1LvlN + mateLvlN,
-      ),
-    [categoryRules, category, genderDb, p1PtsN, p1LvlN, matePtsN, mateLvlN],
+    () => checkCategoryEligibility(categoryRules, category, genderDb, pair1Pts, pair1Niv),
+    [categoryRules, category, genderDb, pair1Pts, pair1Niv],
   );
   const elig2 = useMemo(
     () =>
       category2
-        ? checkCategoryEligibility(
-            categoryRules,
-            category2,
-            genderDb,
-            p1PtsN + mate2PtsN,
-            p1LvlN + mate2LvlN,
-          )
+        ? checkCategoryEligibility(categoryRules, category2, genderDb, pair2Pts, pair2Niv)
         : null,
-    [categoryRules, category2, genderDb, p1PtsN, p1LvlN, mate2PtsN, mate2LvlN],
+    [categoryRules, category2, genderDb, pair2Pts, pair2Niv],
   );
   // Género real (FCP) vs división del torneo. La misma división aplica a las 2
   // categorías (hay una sola selección de género en la ficha).
   const genderErr = useMemo(() => {
-    const div = SIGNUP_GENDER_DB[gender] ?? gender.toLowerCase();
     const players: ("M" | "F" | null)[] = [fedGender, mateFedGender];
     if (category2) players.push(mate2FedGender);
-    return genderMismatch(div, players);
-  }, [gender, fedGender, mateFedGender, mate2FedGender, category2]);
+    return genderMismatch(genderDb ?? "", players);
+  }, [genderDb, fedGender, mateFedGender, mate2FedGender, category2]);
   const eligBlocked =
     !!elig1 || (!!category2 && !!elig2) || !!genderErr;
+
+  // ── Paso 1: validación (errores junto al campo, solo tras intentar) ──
+  const showLevel = rulesUseNivel(categoryRules);
+  const genderNeeded = genders.length > 1 && !gender;
+  const meErrs = useMemo(
+    () =>
+      validatePlayer(me, { self: true, showLevel, requireEmail: true, requirePhone: true }),
+    [me, showLevel],
+  );
+  const mateErrs = useMemo(
+    () =>
+      validatePlayer(mate, { self: false, showLevel, requireEmail: false, requirePhone: false }),
+    [mate, showLevel],
+  );
+  const mate2Errs = useMemo(
+    () =>
+      validatePlayer(mate2, { self: false, showLevel, requireEmail: false, requirePhone: false }),
+    [mate2, showLevel],
+  );
+
+  // ── Paso 2: categorías con su elegibilidad ──
+  const catOptions = useMemo(() => {
+    const rows = cats.map((c) => ({
+      c,
+      why: checkCategoryEligibility(categoryRules, c, genderDb, pair1Pts, pair1Niv),
+    }));
+    return [...rows.filter((r) => !r.why), ...rows.filter((r) => !!r.why)];
+  }, [cats, categoryRules, genderDb, pair1Pts, pair1Niv]);
+  const eligibleCats = catOptions.filter((r) => !r.why).map((r) => r.c);
+  const mate2Ready =
+    mate2.noFed ||
+    (mate2.pts.trim() !== "" && (!showLevel || mate2.level.trim() !== ""));
+  const cat2Options = useMemo(
+    () =>
+      cats
+        .filter((c) => c !== category)
+        .filter(
+          (c) =>
+            !checkCategoryEligibility(categoryRules, c, genderDb, pair2Pts, pair2Niv),
+        ),
+    [cats, category, categoryRules, genderDb, pair2Pts, pair2Niv],
+  );
+  const noneEligible = hasCats && eligibleCats.length === 0;
+  const catErr = hasCats && !category ? "Elige una categoría." : null;
+  const cat2Err =
+    want2 && !category2 ? "Elige la 2ª categoría o quita la segunda inscripción." : null;
+
+  function scrollTop() {
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* nada */
+    }
+  }
+
+  function goStep2() {
+    setTried1(true);
+    if (genderNeeded || hasErrors(meErrs) || hasErrors(mateErrs)) return;
+    // La categoría elegida ya no vale (cambió la pareja) → se deselecciona.
+    // Si solo hay una a la que podéis ir, se elige sola.
+    if (category && !eligibleCats.includes(category)) setCategory(null);
+    if (eligibleCats.length === 1) setCategory(eligibleCats[0]);
+    setStep(2);
+    scrollTop();
+  }
+
+  function goStep3() {
+    setTried2(true);
+    if (genderErr || noneEligible || catErr || elig1) return;
+    if (want2 && (cat2Err || hasErrors(mate2Errs) || elig2)) return;
+    setStep(3);
+    scrollTop();
+  }
+
+  function goBack() {
+    setStep((s) => (s === 3 ? 2 : 1));
+    scrollTop();
+  }
 
   function toggleSlot(key: string) {
     setBlocked((s) => {
@@ -894,664 +808,394 @@ export function SignupForm({ id }: { id: string }) {
     });
   }
 
-  // Mientras se resuelve el torneo real, no se pinta la pantalla del código.
+  function removeSecond() {
+    setWant2(false);
+    setCategory2(null);
+    setMate2(EMPTY_PLAYER);
+  }
+
+  // Mientras se resuelve el torneo real, esqueleto.
   if (loading && !real) return <SkeletonPage />;
 
-  if (done) {
+  if (!real || !t) {
     return (
       <div className="tw-page-narrow">
-        <Card style={{ maxWidth: 560, margin: "0 auto", textAlign: "center", padding: "40px 24px" }}>
-          <span
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 14,
-              background: "var(--accent-10)",
-              color: "var(--accent)",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 16,
-            }}
-          >
-            <IconCheck size={24} />
-          </span>
-          <h2 style={{ fontSize: 21 }}>Inscripción hecha</h2>
-          <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-            Te avisaremos cuando salga el cuadro y tu horario.
-          </p>
-
-          {doneCodes.length > 0 && (
-            <div
-              style={{
-                marginTop: 24,
-                padding: "14px 16px",
-                borderRadius: "var(--r-md)",
-                border: "1px solid var(--line)",
-                background: "var(--bg-card-2)",
-                textAlign: "left",
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 700 }}>
-                Código para tu compañero
-              </div>
-              <p
-                style={{
-                  margin: "4px 0 10px",
-                  fontSize: 12.5,
-                  color: "var(--text-muted)",
-                  textWrap: "pretty",
-                }}
-              >
-                Pásale este código a tu compañero. Cuando lo meta en{" "}
-                <b>Mis torneos</b>, el torneo aparecerá también en su cuenta.
-              </p>
-              {doneCodes.map((d, i) => (
-                <div
-                  key={`${d.code}-${i}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    padding: "8px 0",
-                    borderTop: i > 0 ? "1px solid var(--line)" : "none",
-                  }}
-                >
-                  <span style={{ fontSize: 13 }}>
-                    {d.partner}
-                    {d.category ? (
-                      <span style={{ color: "var(--text-faint)" }}>
-                        {" · "}
-                        {d.category}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="code" style={{ fontWeight: 700, color: "var(--accent)" }}>
-                    {d.code}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div
-            style={{
-              marginTop: 24,
-              display: "flex",
-              justifyContent: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <BtnLink href="/torneos/mios" variant="accent">
-              Ver mis torneos
+        <EmptyState
+          icon={<IconTrophy size={22} />}
+          title="No encontramos este torneo"
+          body="El enlace no es válido o el torneo ya no está publicado."
+          action={
+            <BtnLink href="/torneos" variant="accent">
+              Ver torneos
             </BtnLink>
-            <a href="tactium://" className="btn btn-ghost">
-              Volver a la app
-            </a>
-          </div>
-        </Card>
+          }
+        />
       </div>
     );
   }
 
+  if (!real.signup_code) {
+    return (
+      <div className="tw-page-narrow">
+        <EmptyState
+          icon={<IconTrophy size={22} />}
+          title="Inscripción no disponible"
+          body="Este torneo no tiene la inscripción abierta."
+          action={
+            <BtnLink href={`/torneos/${id}`} variant="accent">
+              Ver el torneo
+            </BtnLink>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (done) {
+    const p1 = fedName ?? name;
+    const entries = [{ pair: `${p1} y ${mateFedName ?? mateName}`, category }];
+    if (category2)
+      entries.push({ pair: `${p1} y ${mate2FedName ?? mate2Name}`, category: category2 });
+    return (
+      <SuccessTicket
+        tournamentName={t.name}
+        dates={t.dates}
+        place={t.club ?? t.place}
+        entries={entries}
+        payInClub={feePer > 0}
+        codes={doneCodes}
+      />
+    );
+  }
+
+  // Antes del login: cabecera del torneo + puerta de acceso.
+  if (!authUser) {
+    return (
+      <div className="tw-page-narrow">
+        <PageHeader
+          title={t.name}
+          lede="Apúntate con tu pareja en tres pasos: quiénes jugáis, en qué categoría y cuándo podéis."
+          meta={[t.club, t.place].filter(Boolean) as string[]}
+        />
+        <StatRow style={{ marginBottom: 16 }}>
+          <Stat label="Fechas" value={t.dates ?? "Por confirmar"} />
+          <Stat
+            label="Cuota"
+            value={t.fee ?? "Gratis"}
+            tone="accent"
+            sub="Por persona y categoría"
+          />
+        </StatRow>
+
+        {!checkingAuth && (
+          <Card flush style={{ marginBottom: 16 }}>
+            <CardHead title="Inicia sesión para inscribirte" />
+            <div className="card-body">
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)", textWrap: "pretty" }}>
+                Entra con tu cuenta para apuntarte. Así tu inscripción queda en tu
+                perfil, con tus torneos y estadísticas. Tu compañero podrá vincularse
+                luego con su código, tenga o no club.
+              </p>
+              <Btn
+                variant="accent"
+                block
+                size="lg"
+                onClick={() => loginToSignup("google")}
+                icon={<GoogleLogo />}
+                style={{ marginTop: 18 }}
+              >
+                Continuar con Google
+              </Btn>
+              <p
+                style={{
+                  margin: "14px 0 0",
+                  fontSize: 12.5,
+                  color: "var(--text-faint)",
+                  textAlign: "center",
+                }}
+              >
+                ¿Prefieres email?{" "}
+                <a href={`/entrar?next=${encodeURIComponent(`/torneos/${id}/inscripcion`)}`}>
+                  Inicia sesión aquí
+                </a>
+              </p>
+            </div>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // ── Asistente ──
+  const stepLede =
+    step === 1
+      ? "Tus datos y los de tu pareja. Los rellenas tú; tu pareja se vincula luego con su código."
+      : step === 2
+        ? [
+            pair1Pts != null ? `Sumáis ${pair1Pts} pts` : null,
+            showLevel && pair1Niv != null ? `nivel ${pair1Niv}` : null,
+            gender || null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "Marca cuándo no podéis jugar, acepta las condiciones y confirma.";
+  const termsText = terms ?? defaultTerms;
+  const nextArrow = <IconChevronRight size={15} />;
+
   return (
     <div className="tw-page-narrow">
-      {/* Cabecera del torneo */}
-      {t ? (
+      <StepBar step={step} />
+      <PageHeader
+        eyebrow={`Paso ${step} de 3 · ${t.name}`}
+        title={STEP_TITLES[step]}
+        lede={stepLede}
+      />
+
+      {payCancelled && (
+        <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 16 }}>
+          Pago cancelado: no se ha cobrado nada. Revisa y vuelve a intentarlo.
+        </Note>
+      )}
+
+      {/* ─────────────── PASO 1 · ¿Quiénes jugáis? ─────────────── */}
+      {step === 1 && (
         <>
-          <PageHeader
-            title={t.name}
-            lede="Apúntate con tu pareja. Rellena la ficha, marca tu disponibilidad y confirma."
-            meta={[t.club, t.place].filter(Boolean) as string[]}
-          />
-          <StatRow style={{ marginBottom: 16 }}>
-            <Stat label="Fechas" value={t.dates ?? "Por confirmar"} />
-            <Stat
-              label="Cuota"
-              value={t.fee ?? "Gratis"}
-              tone="accent"
-              sub="Por persona y categoría"
-            />
-          </StatRow>
-        </>
-      ) : (
-        <>
-          <PageHeader
-            title="Inscripción"
-            lede="Busca primero el torneo con su código."
-          />
-          <Card style={{ marginBottom: 16 }}>
-            <Field label="Código del torneo" htmlFor="signup-code">
-              <div style={{ display: "flex", gap: 8 }}>
-                <Input
-                  id="signup-code"
-                  type="text"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="ABC123"
-                  className="mono"
-                  style={{ letterSpacing: "0.12em" }}
+          {genders.length > 1 && (
+            <Card style={{ marginBottom: 16 }}>
+              <Field
+                label="Cuadro"
+                error={tried1 && genderNeeded ? "Elige el cuadro en el que jugáis." : undefined}
+              >
+                <Segmented
+                  label="Cuadro"
+                  value={gender}
+                  options={genders.map((g) => ({ value: g, label: g }))}
+                  onChange={setGender}
                 />
-                <Btn
-                  variant="accent"
-                  disabled={code.trim().length < 4}
-                  onClick={() => setFound(true)}
-                  icon={<IconSearch size={15} />}
-                >
-                  Buscar
-                </Btn>
-              </div>
-            </Field>
+              </Field>
+            </Card>
+          )}
+
+          <Card flush style={{ marginBottom: 16 }}>
+            <CardHead title="Tú" />
+            <div className="card-body">
+              <PlayerFields
+                idPrefix="sf-me"
+                self
+                value={me}
+                onChange={patchMe}
+                showLevel={showLevel}
+                requireEmail
+                showPhone
+                errors={tried1 ? meErrs : undefined}
+              />
+            </div>
           </Card>
+
+          <Card flush style={{ marginBottom: 16 }}>
+            <CardHead
+              title="Tu pareja"
+              sub="Rellenas tú sus datos. Al terminar te damos un código para que vincule su cuenta."
+            />
+            <div className="card-body">
+              <PlayerFields
+                idPrefix="sf-mate"
+                self={false}
+                value={mate}
+                onChange={patchMate}
+                showLevel={showLevel}
+                requireEmail={false}
+                showPhone={false}
+                errors={tried1 ? mateErrs : undefined}
+              />
+            </div>
+          </Card>
+
+          {tried1 && (genderNeeded || hasErrors(meErrs) || hasErrors(mateErrs)) && (
+            <Note tone="error" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
+              Revisa los campos marcados para seguir.
+            </Note>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Btn variant="accent" size="lg" onClick={goStep2}>
+              Ver categorías {nextArrow}
+            </Btn>
+          </div>
         </>
       )}
 
-      {/* Gate de login: para inscribirse hay que iniciar sesión. */}
-      {(found || t) && !checkingAuth && !authUser && (
-        <Card flush style={{ marginBottom: 16 }}>
-          <CardHead title="Inicia sesión para inscribirte" />
-          <div className="card-body">
-            <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)", textWrap: "pretty" }}>
-              Entra con tu cuenta para apuntarte. Así tu inscripción queda en tu
-              perfil, con tus torneos y estadísticas. Tu compañero podrá vincularse
-              luego con su código, tenga o no club.
-            </p>
-            <Btn
-              variant="accent"
-              block
-              size="lg"
-              onClick={() => loginToSignup("google")}
-              icon={<GoogleLogo />}
-              style={{ marginTop: 18 }}
-            >
-              Continuar con Google
-            </Btn>
-            <p
-              style={{
-                margin: "14px 0 0",
-                fontSize: 12.5,
-                color: "var(--text-faint)",
-                textAlign: "center",
-              }}
-            >
-              ¿Prefieres email?{" "}
-              <a href={`/entrar?next=${encodeURIComponent(`/torneos/${id}/inscripcion`)}`}>
-                Inicia sesión aquí
-              </a>
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {(found || t) && authUser && (
+      {/* ─────────────── PASO 2 · ¿En qué categoría? ─────────────── */}
+      {step === 2 && (
         <>
-          <Card style={{ marginBottom: 16 }}>
-            <div className="tw-form-grid">
-              <Field label="Tu categoría">
+          {genderErr && (
+            <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 16 }}>
+              {genderErr} Revisa el cuadro o los jugadores en el paso 1.
+            </Note>
+          )}
+
+          <Card flush style={{ marginBottom: 16 }}>
+            <CardHead title="Categoría" />
+            <div className="card-body">
+              {!hasCats ? (
+                <div role="radiogroup" aria-label="Categoría">
+                  <RadioCard on title="Categoría única">
+                    Este torneo no se divide por categorías.
+                  </RadioCard>
+                </div>
+              ) : noneEligible ? (
+                <>
+                  <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
+                    Con los datos de la pareja no entráis en ninguna categoría de
+                    este torneo. Revisa los puntos
+                    {showLevel ? " y el nivel" : ""} en el paso 1.
+                  </Note>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {catOptions.map((o) => (
+                      <RadioCard key={o.c} on={false} disabled title={o.c}>
+                        {o.why ? shortEligibility(o.why) : null}
+                      </RadioCard>
+                    ))}
+                  </div>
+                </>
+              ) : (
                 <div
                   role="radiogroup"
                   aria-label="Categoría"
-                  style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
                 >
-                  {(t?.categories.length ? t.categories : CATEGORIES).map((c) => (
+                  {catOptions.map((o) => (
                     <RadioCard
-                      key={c}
-                      on={category === c}
-                      onClick={() => setCategory(c)}
-                      title={c}
-                    />
-                  ))}
-                </div>
-              </Field>
-              <Field label="Tu género">
-                <div
-                  role="radiogroup"
-                  aria-label="Género"
-                  style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-                >
-                  {(t?.genders.length ? t.genders : GENDERS).map((g) => (
-                    <RadioCard
-                      key={g}
-                      on={gender === g}
-                      onClick={() => setGender(g)}
-                      title={g}
-                    />
-                  ))}
-                </div>
-              </Field>
-            </div>
-          </Card>
-
-          <div className="tw-form-grid" style={{ marginBottom: 16 }}>
-            {/* Tú */}
-            <Card flush>
-              <CardHead title="Tu ficha" />
-              <div
-                className="card-body"
-                style={{ display: "flex", flexDirection: "column", gap: 16 }}
-              >
-                <Field label="Nombre y apellidos" htmlFor="sf-name">
-                  <Input
-                    id="sf-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      setFedName(null); // editar a mano descarta el nombre FCP
-                      setFedGender(null);
-                    }}
-                    placeholder="Nombre y apellidos"
-                  />
-                  {!noFed && (
-                    <FcpPicker
-                      hints={hints}
-                      confirmed={fedName}
-                      onPick={(h) => {
-                        setName(h.matched);
-                        setFedName(h.matched);
-                        setFedGender(h.genero);
-                        setPts(String(h.pts));
-                        setLevel(h.level);
+                      key={o.c}
+                      on={!o.why && category === o.c}
+                      disabled={!!o.why}
+                      onClick={() => {
+                        setCategory(o.c);
+                        if (category2 === o.c) setCategory2(null);
                       }}
-                    />
-                  )}
-                </Field>
-
-                <NoFedToggle
-                  checked={noFed}
-                  onChange={(v) => {
-                    setNoFed(v);
-                    if (v) {
-                      setPts("");
-                      setLevel("");
-                      setFedName(null);
-                      setFedGender(null);
-                    }
-                  }}
-                />
-                {!noFed && (
-                  <div className="tw-form-grid">
-                    <Field label="Tus puntos" htmlFor="sf-pts">
-                      <Input
-                        id="sf-pts"
-                        type="text"
-                        inputMode="numeric"
-                        value={pts}
-                        onChange={(e) =>
-                          setPts(e.target.value.replace(/\D/g, ""))
-                        }
-                        className="mono"
-                      />
-                    </Field>
-                    <Field label="Tu nivel" htmlFor="sf-level">
-                      <Input
-                        id="sf-level"
-                        type="text"
-                        value={level}
-                        onChange={(e) => setLevel(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                )}
-
-                <Field
-                  label="Tu email"
-                  hint="Te enviaremos la confirmación de la inscripción aquí."
-                  htmlFor="sf-email"
-                >
-                  <Input
-                    id="sf-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tu@email.com"
-                  />
-                </Field>
-                <Field label="Tu teléfono" hint="Opcional" htmlFor="sf-phone">
-                  <Input
-                    id="sf-phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="600 000 000"
-                    className="mono"
-                  />
-                </Field>
-              </div>
-            </Card>
-
-            {/* Compañero */}
-            <Card flush>
-              <CardHead title="Tu compañero" />
-              <div
-                className="card-body"
-                style={{ display: "flex", flexDirection: "column", gap: 16 }}
-              >
-                <Field label="Nombre y apellidos de tu pareja" htmlFor="sf-mate">
-                  <Input
-                    id="sf-mate"
-                    type="text"
-                    value={mateName}
-                    onChange={(e) => {
-                      setMateName(e.target.value);
-                      setMateFedName(null);
-                      setMateFedGender(null);
-                    }}
-                    placeholder="Nombre y apellidos de tu pareja"
-                  />
-                  {!mateNoFed && (
-                    <FcpPicker
-                      hints={mateHints}
-                      confirmed={mateFedName}
-                      onPick={(h) => {
-                        setMateName(h.matched);
-                        setMateFedName(h.matched);
-                        setMateFedGender(h.genero);
-                        setMatePts(String(h.pts));
-                        setMateLevel(h.level);
-                      }}
-                    />
-                  )}
-                </Field>
-
-                <NoFedToggle
-                  checked={mateNoFed}
-                  onChange={(v) => {
-                    setMateNoFed(v);
-                    if (v) {
-                      setMatePts("");
-                      setMateLevel("");
-                      setMateFedName(null);
-                      setMateFedGender(null);
-                    }
-                  }}
-                />
-                {!mateNoFed && (
-                  <div className="tw-form-grid">
-                    <Field label="Sus puntos" htmlFor="sf-mate-pts">
-                      <Input
-                        id="sf-mate-pts"
-                        type="text"
-                        inputMode="numeric"
-                        value={matePts}
-                        onChange={(e) =>
-                          setMatePts(e.target.value.replace(/\D/g, ""))
-                        }
-                        className="mono"
-                      />
-                    </Field>
-                    <Field label="Su nivel" htmlFor="sf-mate-level">
-                      <Input
-                        id="sf-mate-level"
-                        type="text"
-                        value={mateLevel}
-                        onChange={(e) => setMateLevel(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                )}
-
-                <Field
-                  label="Email de tu compañero"
-                  hint="Opcional. Si lo pones, le llega también la confirmación."
-                  htmlFor="sf-mate-email"
-                >
-                  <Input
-                    id="sf-mate-email"
-                    type="email"
-                    value={mateEmail}
-                    onChange={(e) => setMateEmail(e.target.value)}
-                    placeholder="pareja@email.com"
-                  />
-                </Field>
-
-                <Note>
-                  ¿Aún no sabes con quién juegas? Apúntate y comparte tu código
-                  de compañero.
-                </Note>
-              </div>
-            </Card>
-          </div>
-
-          {/* 2ª categoría OPCIONAL (como en la app). Solo si el torneo tiene ≥2
-              categorías. El compañero puede ser distinto. */}
-          {hasTwoCats && (
-            <Card flush style={{ marginBottom: 16 }}>
-              <CardHead
-                title="Segunda categoría"
-                sub="Opcional. Puedes jugar otra categoría, con otro compañero si hace falta. Pagas la cuota de 2 categorías, no el doble."
-              >
-                {!category2 ? (
-                  <Btn
-                    variant="tint"
-                    size="sm"
-                    onClick={() =>
-                      setCategory2(
-                        (t?.categories ?? []).find((c) => c !== category) ??
-                          null,
-                      )
-                    }
-                  >
-                    Añadir
-                  </Btn>
-                ) : (
-                  <Btn
-                    size="sm"
-                    onClick={() => {
-                      setCategory2(null);
-                      setMate2Name("");
-                      setMate2Pts("");
-                      setMate2Level("");
-                      setMate2Email("");
-                      setMate2FedName(null);
-                    }}
-                  >
-                    Quitar
-                  </Btn>
-                )}
-              </CardHead>
-
-              {category2 && (
-                <div
-                  className="card-body"
-                  style={{ display: "flex", flexDirection: "column", gap: 16 }}
-                >
-                  <Field label="Categoría">
-                    <div
-                      role="radiogroup"
-                      aria-label="Segunda categoría"
-                      style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                      title={o.c}
                     >
-                      {(t?.categories ?? [])
-                        .filter((c) => c !== category)
-                        .map((c) => (
-                          <RadioCard
-                            key={c}
-                            on={category2 === c}
-                            onClick={() => setCategory2(c)}
-                            title={c}
-                          />
-                        ))}
-                    </div>
-                  </Field>
-
-                  <Field label="Nombre y apellidos del compañero" htmlFor="sf-mate2">
-                    <Input
-                      id="sf-mate2"
-                      type="text"
-                      value={mate2Name}
-                      onChange={(e) => {
-                        setMate2Name(e.target.value);
-                        setMate2FedName(null);
-                        setMate2FedGender(null);
-                      }}
-                      placeholder="Nombre y apellidos"
-                    />
-                    {!mate2NoFed && (
-                      <FcpPicker
-                        hints={mate2Hints}
-                        confirmed={mate2FedName}
-                        onPick={(h) => {
-                          setMate2Name(h.matched);
-                          setMate2FedName(h.matched);
-                          setMate2FedGender(h.genero);
-                          setMate2Pts(String(h.pts));
-                          setMate2Level(h.level);
-                        }}
-                      />
-                    )}
-                  </Field>
-
-                  <NoFedToggle
-                    checked={mate2NoFed}
-                    onChange={(v) => {
-                      setMate2NoFed(v);
-                      if (v) {
-                        setMate2Pts("");
-                        setMate2Level("");
-                        setMate2FedName(null);
-                        setMate2FedGender(null);
-                      }
-                    }}
-                  />
-                  {!mate2NoFed && (
-                    <div className="tw-form-grid">
-                      <Field label="Sus puntos" htmlFor="sf-mate2-pts">
-                        <Input
-                          id="sf-mate2-pts"
-                          type="text"
-                          inputMode="numeric"
-                          value={mate2Pts}
-                          onChange={(e) =>
-                            setMate2Pts(e.target.value.replace(/\D/g, ""))
-                          }
-                          className="mono"
-                        />
-                      </Field>
-                      <Field label="Su nivel" htmlFor="sf-mate2-level">
-                        <Input
-                          id="sf-mate2-level"
-                          type="text"
-                          value={mate2Level}
-                          onChange={(e) => setMate2Level(e.target.value)}
-                        />
-                      </Field>
-                    </div>
-                  )}
-
-                  <Field label="Su email" hint="Opcional" htmlFor="sf-mate2-email">
-                    <Input
-                      id="sf-mate2-email"
-                      type="email"
-                      value={mate2Email}
-                      onChange={(e) => setMate2Email(e.target.value)}
-                      placeholder="pareja2@email.com"
-                    />
-                  </Field>
+                      {o.why
+                        ? shortEligibility(o.why)
+                        : describeThreshold(categoryRules, o.c, genderDb)}
+                    </RadioCard>
+                  ))}
                 </div>
               )}
-            </Card>
-          )}
-
-          {/* Disponibilidad — solo si el torneo tiene fechas reales. */}
-          {availDays.length > 0 && (
-          <Card flush style={{ marginBottom: 16 }}>
-            <CardHead
-              title="Disponibilidad"
-              sub="Marca las horas en las que no puedes jugar, en franjas de una hora. El club lo tendrá en cuenta al montar el horario."
-            >
-              <Chip
-                tone={
-                  removeCap != null && blocked.size >= removeCap ? "warning" : "mute"
-                }
-                plain
-              >
-                <span className="mono">{blocked.size}</span> h marcadas
-                {removeCap != null ? (
-                  <>
-                    {" · máx. "}
-                    <span className="mono">{removeCap}</span> h
-                  </>
-                ) : null}
-              </Chip>
-            </CardHead>
-
-            <div className="card-body" style={{ overflowX: "auto" }}>
-            <div
-              className="tw-avail-slots"
-              style={{
-                gridTemplateColumns: `58px repeat(${signupHours.length}, minmax(38px, 1fr))`,
-                minWidth: signupHours.length > 6 ? "max-content" : undefined,
-              }}
-            >
-              <span />
-              {signupHours.map((h) => (
-                <span
-                  key={h}
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-faint)",
-                    textAlign: "center",
-                  }}
-                >
-                  {h}
-                </span>
-              ))}
-
-              {availDays.map((d) => (
-                <Fragment key={d}>
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-faint)",
-                      alignSelf: "center",
-                    }}
-                  >
-                    {d}
-                  </span>
-                  {signupHours.map((h) => {
-                    const key = `${d} ${h}`;
-                    const on = blocked.has(key);
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        aria-pressed={on}
-                        aria-label={`${d} a las ${h}${on ? " · no puedo" : ""}`}
-                        onClick={() => toggleSlot(key)}
-                        style={{
-                          padding: "11px 4px",
-                          borderRadius: 10,
-                          fontSize: 12,
-                          cursor: "pointer",
-                          background: on ? "var(--error-soft)" : "var(--bg-card-2)",
-                          color: on ? "var(--error)" : "var(--text-faint)",
-                          border: `1px solid ${
-                            on
-                              ? "color-mix(in srgb, var(--error) 40%, transparent)"
-                              : "var(--line)"
-                          }`,
-                          transition:
-                            "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
-                        }}
-                      >
-                        {on ? "✕" : "·"}
-                      </button>
-                    );
-                  })}
-                </Fragment>
-              ))}
-            </div>
+              {tried2 && catErr && !noneEligible && (
+                <div className="field-error" style={{ marginTop: 8 }}>
+                  {catErr}
+                </div>
+              )}
             </div>
           </Card>
+
+          {/* 2ª categoría OPCIONAL. El compañero puede ser distinto. */}
+          {hasTwoCats && !noneEligible && (
+            <>
+              {!want2 ? (
+                <div style={{ marginBottom: 16 }}>
+                  <LinkBtn onClick={() => setWant2(true)}>
+                    + Apuntarme también a una 2ª categoría
+                  </LinkBtn>
+                </div>
+              ) : (
+                <Card flush style={{ marginBottom: 16 }}>
+                  <CardHead
+                    title="Segunda categoría"
+                    sub="Puedes jugarla con otro compañero. Pagas la cuota de 2 categorías, no el doble."
+                  >
+                    <Btn size="sm" variant="quiet" onClick={removeSecond}>
+                      Quitar
+                    </Btn>
+                  </CardHead>
+                  <div
+                    className="card-body"
+                    style={{ display: "flex", flexDirection: "column", gap: 16 }}
+                  >
+                    <PlayerFields
+                      idPrefix="sf-mate2"
+                      self={false}
+                      value={mate2}
+                      onChange={patchMate2}
+                      showLevel={showLevel}
+                      requireEmail={false}
+                      showPhone={false}
+                      errors={tried2 ? mate2Errs : undefined}
+                    />
+                    <div className="divider" style={{ margin: 0 }} />
+                    <Field
+                      label="2ª categoría"
+                      error={tried2 ? (cat2Err ?? undefined) : undefined}
+                    >
+                      {!mate2Ready ? (
+                        <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>
+                          Completa los puntos de tu compañero para ver en qué
+                          categorías podéis jugar.
+                        </p>
+                      ) : cat2Options.length === 0 ? (
+                        <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>
+                          Con este compañero no entráis en otra categoría del torneo.
+                        </p>
+                      ) : (
+                        <div
+                          role="radiogroup"
+                          aria-label="Segunda categoría"
+                          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                        >
+                          {cat2Options.map((c) => (
+                            <RadioCard
+                              key={c}
+                              on={category2 === c}
+                              onClick={() => setCategory2(c)}
+                              title={c}
+                            >
+                              {describeThreshold(categoryRules, c, genderDb)}
+                            </RadioCard>
+                          ))}
+                        </div>
+                      )}
+                    </Field>
+                    {tried2 && category2 && elig2 && (
+                      <div className="field-error">{elig2}</div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </>
           )}
 
-          {/* Género (división) + elegibilidad por categoría: avisos persistentes.
-              Bloquean el botón. */}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <Btn onClick={goBack}>Atrás</Btn>
+            {genderErr || noneEligible ? (
+              <Btn variant="accent" size="lg" onClick={goBack}>
+                Volver al paso 1
+              </Btn>
+            ) : (
+              <Btn variant="accent" size="lg" onClick={goStep3}>
+                Elegir horario {nextArrow}
+              </Btn>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ─────────────── PASO 3 · Horario y pago ─────────────── */}
+      {step === 3 && (
+        <>
+          {/* Disponibilidad — solo si el torneo tiene fechas reales. */}
+          {availDays.length > 0 && (
+            <AvailabilityGrid
+              days={availDays}
+              slots={slots}
+              blocked={blocked}
+              cap={removeCap}
+              onToggle={toggleSlot}
+            />
+          )}
+
+          {/* Género (división) + elegibilidad: avisos persistentes. Bloquean
+              el botón (red de seguridad: los pasos anteriores ya lo filtran). */}
           {(genderErr || elig1 || (category2 && elig2)) && (
             <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
               {genderErr && <div>{genderErr}</div>}
@@ -1563,44 +1207,24 @@ export function SignupForm({ id }: { id: string }) {
               )}
             </Note>
           )}
-          {terms && (
-            <div style={{ marginBottom: 12 }}>
-              <Note>
-                <span style={{ display: "block", fontWeight: 700, color: "var(--text)" }}>
-                  Condiciones del torneo
-                </span>
-                <span
-                  style={{
-                    display: "block",
-                    marginTop: 6,
-                    whiteSpace: "pre-line",
-                    maxHeight: termsOpen ? "none" : 78,
-                    overflow: "hidden",
-                  }}
-                >
-                  {terms}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setTermsOpen((v) => !v)}
-                  className="link-action"
-                  style={{
-                    marginTop: 8,
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                  }}
-                >
-                  {termsOpen ? "Ocultar" : "Leer todas las condiciones"}
-                </button>
-              </Note>
+
+          {/* Condiciones: una línea con la casilla (siempre visible) y un
+              enlace para desplegar el texto. */}
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
               <label
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 9,
-                  marginTop: 12,
                   cursor: "pointer",
                   fontSize: 13.5,
                   fontWeight: 600,
@@ -1612,10 +1236,27 @@ export function SignupForm({ id }: { id: string }) {
                   onChange={(e) => setTermsOk(e.target.checked)}
                   style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
                 />
-                He leído y acepto las condiciones
+                Acepto las condiciones del torneo
               </label>
+              {termsText && (
+                <LinkBtn onClick={() => setTermsOpen((v) => !v)}>
+                  {termsOpen ? "Ocultar" : "Leer condiciones"}
+                </LinkBtn>
+              )}
             </div>
-          )}
+            {termsText && termsOpen && (
+              <Note style={{ marginTop: 10 }}>
+                <span style={{ display: "block", whiteSpace: "pre-line" }}>{termsText}</span>
+              </Note>
+            )}
+            {!termsText && (
+              <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-faint)" }}>
+                No hemos podido cargar el texto de las condiciones. Si tienes
+                dudas, pregunta al club antes de inscribirte.
+              </p>
+            )}
+          </div>
+
           {signErr && (
             <Note tone="error" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
               {signErr}
@@ -1690,6 +1331,7 @@ export function SignupForm({ id }: { id: string }) {
               </div>
             </Card>
           )}
+
           {(real?.entry_fee ?? 0) <= 0 ? (
             /* Torneo gratis: un único botón de inscripción. */
             <Btn
@@ -1757,9 +1399,14 @@ export function SignupForm({ id }: { id: string }) {
               </p>
             </>
           )}
+
+          <div style={{ marginTop: 16 }}>
+            <Btn variant="quiet" onClick={goBack} disabled={busy}>
+              Atrás
+            </Btn>
+          </div>
         </>
       )}
     </div>
   );
 }
-

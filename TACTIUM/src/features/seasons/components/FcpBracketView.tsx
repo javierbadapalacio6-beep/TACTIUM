@@ -13,6 +13,7 @@ import {
   type FcpBracket,
   type FcpBracketTie,
   type FcpBracketTieActa,
+  type FcpBracketLeg,
 } from '@core/services/fcpBracket';
 import type { FcpActaPartido } from '@core/services/fcpSeason';
 
@@ -20,6 +21,28 @@ interface Props {
   idGrupo: string;
   highlightTeam?: string | null;
 }
+
+const DOW = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+/** «SÁB 17/05 17:00» de una manga (sin la sede). Null si no hay fecha. */
+const fmtLegWhen = (leg: FcpBracketLeg | null | undefined): string | null => {
+  if (!leg?.fecha) return leg?.hora ?? null;
+  const [y, m, d] = leg.fecha.split('-').map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  const day = Number.isNaN(dt.getTime()) ? '' : `${DOW[dt.getDay()]} `;
+  return `${day}${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}${leg.hora ? ` ${leg.hora}` : ''}`;
+};
+/** «IDA · SÁB 17/05 17:00 · Club Pádel X» */
+const fmtLeg = (label: string, leg: FcpBracketLeg | null | undefined): string | null => {
+  if (!leg) return null;
+  const parts = [label, fmtLegWhen(leg), leg.lugar].filter(Boolean);
+  return parts.length > 1 ? parts.join(' · ') : null;
+};
+/** La próxima manga sin jugar de un cruce (para «Recorrido»). */
+const nextLegWhen = (tie: FcpBracketTie): string | null => {
+  if (tie.estado === 'jugado') return null;
+  if (tie.estado === 'jugado_ida') return fmtLegWhen(tie.vuelta);
+  return fmtLegWhen(tie.ida) ?? fmtLegWhen(tie.vuelta);
+};
 
 /** Cuadro de playoff en formato columnas-por-ronda (scroll horizontal). Reúne
  *  TODOS los trozos que la Federación publica por separado para una misma
@@ -131,7 +154,7 @@ export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
                 >
                   {tie.marcador
                     ? `${won ? 'Ganó' : lost ? 'Perdió' : ''} ${tie.marcador.replace('-', '–')}`.trim()
-                    : 'pendiente'}
+                    : nextLegWhen(tie) ?? 'pendiente'}
                 </Text>
               </Pressable>
             );
@@ -235,6 +258,14 @@ const TieCard: React.FC<{
             .join(' · ')}
         </Text>
       ) : null}
+      {/* Fecha y sede de cada manga, si la Federación las publica. */}
+      {[fmtLeg('IDA', tie.ida), fmtLeg(tie.ida ? 'VUELTA' : 'PARTIDO', tie.vuelta)]
+        .filter((x): x is string => !!x)
+        .map((line) => (
+          <Text key={line} style={styles.tieWhen} numberOfLines={1}>
+            {line}
+          </Text>
+        ))}
     </Pressable>
   );
 };
@@ -400,6 +431,13 @@ const makeStyles = (c: Palette) =>
     pathResult: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
     pathHint: { color: c.textFaint, fontSize: 11, lineHeight: 15, marginTop: 8 },
     tieLegs: { color: c.textFaint, fontSize: 10.5, marginTop: 3 },
+    tieWhen: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 9.5,
+      letterSpacing: 0.3,
+      marginTop: 3,
+    },
     legendText: { color: c.textMuted, fontSize: 11.5, fontWeight: '600', flex: 1, minWidth: 0 },
     col: { width: 182, marginRight: 14 },
     colHead: {

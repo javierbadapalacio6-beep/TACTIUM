@@ -7,16 +7,19 @@ import {
   ActivityIndicator,
   Alert,
   Share,
+  Platform,
 } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { BottomSheet, IconTrash, IconPlus, IconShare } from '@components/ui';
+import { BottomSheet, IconTrash, IconShare, IconLink } from '@components/ui';
 import * as InvitationsApi from '@core/services/invitations';
+import * as PlayersApi from '@core/services/players';
 
-// Sheet de invitación de jugadores para captains independientes. Solo
-// gestiona códigos de role='player' — la gestión de members con roles
+// Sheet de invitación de jugadores (GRATIS, sin gate premium). ENLACE PRIMERO:
+// `tactium.io/i/{CODE}` + «Enviar por WhatsApp»; el código queda como
+// alternativa. Solo gestiona códigos de role='player' — la gestión de members con roles
 // existe en TeamMembersSheet del flow club (más completo) y aquí no
 // aplica porque un equipo independiente no invita capitanes.
 export const InvitePlayersSheet: React.FC<{
@@ -32,6 +35,30 @@ export const InvitePlayersSheet: React.FC<{
   >([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  // Plantilla: «N en la plantilla · M ya en TACTIUM» (M = fichas con cuenta).
+  const [roster, setRoster] = useState<{ total: number; linked: number } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open || !teamId) return;
+    let cancelled = false;
+    PlayersApi.fetchPlayers(teamId)
+      .then((pls) => {
+        if (!cancelled) {
+          setRoster({
+            total: pls.length,
+            linked: pls.filter((p) => !!p.user_id).length,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRoster(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, teamId]);
 
   useEffect(() => {
     if (!open || !teamId) return;
@@ -75,7 +102,19 @@ export const InvitePlayersSheet: React.FC<{
   const redeemedCodes = invitations.filter((i) => i.used_at !== null);
 
   const buildShareMessage = (code: string) =>
-    `Únete como jugador a "${teamName ?? 'el equipo'}" en TACTIUM con este código: ${code}`;
+    InvitationsApi.buildInviteMessage(teamName, code, 'player');
+
+  // Copiar: no hay módulo de portapapeles en el build actual, así que abrimos
+  // la hoja del sistema solo con el enlace (trae «Copiar»). El texto del enlace
+  // también se puede seleccionar con una pulsación larga.
+  const handleCopyLink = async (code: string) => {
+    const url = InvitationsApi.inviteUrl(code);
+    try {
+      await Share.share(Platform.OS === 'ios' ? { url } : { message: url });
+    } catch {
+      /* cancelado */
+    }
+  };
 
   const handleRotate = () => {
     if (!teamId || generating) return;
@@ -138,11 +177,11 @@ export const InvitePlayersSheet: React.FC<{
 
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <Text style={styles.eyebrow}>INVITAR JUGADORES</Text>
-      <Text style={styles.title}>Códigos de invitación</Text>
+      <Text style={styles.eyebrow}>INVITAR JUGADORES · GRATIS</Text>
+      <Text style={styles.title}>Invita a tu plantilla</Text>
       <Text style={styles.lede}>
-        Un solo código para toda la plantilla: pégalo en el grupo del equipo y
-        que cada jugador lo meta en la app. No caduca ni se gasta.
+        Mándalo al grupo del equipo: cada uno entra con el enlace y elige su
+        nombre de la plantilla. No caduca ni se gasta.
       </Text>
 
       {loading ? (
@@ -151,53 +190,68 @@ export const InvitePlayersSheet: React.FC<{
         </View>
       ) : (
         <>
-          <Text style={styles.groupLabel}>CÓDIGO DEL EQUIPO</Text>
-          <View style={styles.list}>
-            <View style={styles.row}>
-              <View style={styles.codeBlock}>
-                <Text style={styles.codeText}>{shared?.code ?? '—'}</Text>
-                <Text style={styles.codeMeta}>
-                  {(shared?.uses ?? 0) === 0
-                    ? 'Aún no lo ha usado nadie'
-                    : `${shared?.uses} jugador${shared?.uses === 1 ? '' : 'es'} se ${shared?.uses === 1 ? 'ha' : 'han'} unido`}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => shared && handleShare(shared.code)}
-                hitSlop={8}
-                disabled={!shared}
-                style={({ pressed }) => [
-                  styles.iconBtn,
-                  pressed && { opacity: 0.7 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Compartir código del equipo"
-              >
-                <IconShare size={14} color={c.accent} />
-              </Pressable>
-            </View>
+          <Text style={styles.groupLabel}>ENLACE DEL EQUIPO</Text>
+          <View style={styles.linkBox}>
+            <IconLink size={14} color={c.accent} />
+            <Text style={styles.linkText} numberOfLines={1} selectable>
+              {shared ? InvitationsApi.inviteUrlDisplay(shared.code) : '—'}
+            </Text>
+            <Pressable
+              onPress={() => shared && handleCopyLink(shared.code)}
+              disabled={!shared}
+              hitSlop={8}
+              style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Copiar enlace"
+            >
+              <Text style={styles.copyBtnLabel}>Copiar</Text>
+            </Pressable>
           </View>
 
           <Pressable
-            onPress={handleRotate}
-            disabled={generating || !teamId}
+            onPress={() => shared && handleShare(shared.code)}
+            disabled={!shared}
             style={({ pressed }) => [
               styles.generateBtn,
-              (generating || !teamId) && { opacity: 0.5 },
-              pressed && !generating && { opacity: 0.85 },
+              !shared && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Generar un código de equipo nuevo"
+            accessibilityLabel="Enviar por WhatsApp"
           >
-            {generating ? (
-              <ActivityIndicator color={c.textInverse} />
-            ) : (
-              <>
-                <IconPlus size={14} color={c.textInverse} />
-                <Text style={styles.generateBtnLabel}>Generar código nuevo</Text>
-              </>
-            )}
+            <IconShare size={14} color={c.textInverse} />
+            <Text style={styles.generateBtnLabel}>Enviar por WhatsApp</Text>
           </Pressable>
+
+          <View style={styles.altRow}>
+            <Text style={styles.altText}>¿Prefieren el código? </Text>
+            <Text style={styles.altCode} selectable>
+              {shared?.code ?? '—'}
+            </Text>
+            <Text style={styles.altText}> · </Text>
+            <Pressable
+              onPress={handleRotate}
+              disabled={generating || !teamId}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Cambiar código"
+            >
+              {generating ? (
+                <ActivityIndicator size="small" color={c.accent} />
+              ) : (
+                <Text style={styles.altLink}>Cambiar código</Text>
+              )}
+            </Pressable>
+          </View>
+
+          <Text style={styles.statsLine}>
+            {roster
+              ? `${roster.total} en la plantilla · ${roster.linked} ya en TACTIUM`
+              : ' '}
+            {(shared?.uses ?? 0) > 0
+              ? ` · ${shared?.uses} ${shared?.uses === 1 ? 'se ha unido' : 'se han unido'} con el enlace`
+              : ''}
+          </Text>
 
           {legacyCodes.length > 0 ? (
             <>
@@ -337,6 +391,61 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: -0.2,
   },
   list: { gap: 8 },
+  linkBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 6,
+    borderRadius: Radius.md,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    marginBottom: 10,
+  },
+  linkText: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: Fonts.mono,
+    fontSize: 14,
+    fontWeight: '700',
+    color: c.text,
+    letterSpacing: 0.3,
+  },
+  copyBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radius.sm,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+  },
+  copyBtnLabel: { color: c.accent, fontSize: 13, fontWeight: '700' },
+  altRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: -4,
+  },
+  altText: { color: c.textMuted, fontSize: 13 },
+  altCode: {
+    fontFamily: Fonts.mono,
+    color: c.text,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  altLink: { color: c.accent, fontSize: 13, fontWeight: '600' },
+  statsLine: {
+    fontFamily: Fonts.mono,
+    color: c.textFaint,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textAlign: 'center',
+    marginTop: 12,
+  },
   groupLabel: {
     fontFamily: Fonts.mono,
     color: c.textFaint,

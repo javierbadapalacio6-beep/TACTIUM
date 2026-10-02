@@ -11,11 +11,7 @@ import {
   updatePlayer,
   fetchSubscription,
   fetchTeamInscripcion,
-  fetchTeamInvitations,
-  createInvitation,
-  invitationActive,
   type DbPlayer,
-  type DbInvitation,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -48,7 +44,6 @@ import {
 import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import {
   IconCalendar,
-  IconCopy,
   IconFlag,
   IconSearch,
   IconSettings,
@@ -58,6 +53,7 @@ import {
 } from "@/components/Icon";
 import { EditTeamModal } from "@/components/team/EditTeamModal";
 import { Crest } from "@/components/Crest";
+import { InvitePanel } from "@/components/invite/InvitePanel";
 
 type SortKey = "name" | "pts" | "pos";
 
@@ -175,7 +171,6 @@ export function Roster() {
         : "Ya tenías a toda la plantilla de la Federación",
     );
   }
-  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -274,38 +269,6 @@ export function Roster() {
       setSort(k);
       setAsc(k === "name");
     }
-  }
-
-  // Invitaciones reales del equipo (se cargan al abrir el modal).
-  const [invites, setInvites] = useState<DbInvitation[] | null>(null);
-  const [invRole, setInvRole] = useState<"player" | "captain">("player");
-  const [invBusy, setInvBusy] = useState(false);
-
-  useEffect(() => {
-    if (!inviteOpen || !teamId) return;
-    let alive = true;
-    setInvites(null);
-    fetchTeamInvitations(teamId)
-      .then((r) => alive && setInvites(r))
-      .catch(() => alive && setInvites([]));
-    return () => {
-      alive = false;
-    };
-  }, [inviteOpen, teamId]);
-
-  const activeInvite = (invites ?? []).find(invitationActive) ?? null;
-
-  async function generateInvite() {
-    if (invBusy || !teamId) return;
-    setInvBusy(true);
-    const res = await guardedWrite("crear la invitación", () =>
-      createInvitation(teamId, invRole),
-    );
-    setInvBusy(false);
-    if (res.ok) {
-      setInvites((prev) => [res.data, ...(prev ?? [])]);
-      setToast(`Código creado: ${res.data.code}`);
-    } else setToast(res.reason);
   }
 
   const availableCount = PLAYERS.filter((p) => p.available === true).length;
@@ -743,102 +706,17 @@ export function Roster() {
         labelledBy="invitar"
         width={460}
         title={`Invitar a ${activeTeam?.name ?? "tu equipo"}`}
-        lede="Comparte el código para que se unan desde la app o la web."
+        lede="Comparte el enlace: se unen desde la app o desde la web, gratis."
         footer={<Btn onClick={() => setInviteOpen(false)}>Listo</Btn>}
       >
-        {invites === null ? (
-          <Note>Cargando códigos…</Note>
-        ) : activeInvite ? (
-          <>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "16px 18px",
-                borderRadius: 10,
-                background: "var(--bg-card-2)",
-                border: "1px solid var(--line)",
-              }}
-            >
-              <span style={{ minWidth: 0 }}>
-                <span
-                  className="mono"
-                  style={{
-                    display: "block",
-                    fontSize: 24,
-                    fontWeight: 700,
-                    letterSpacing: "0.16em",
-                  }}
-                >
-                  {activeInvite.code}
-                </span>
-                <span style={{ display: "inline-flex", marginTop: 8 }}>
-                  <Chip tone="mute" plain>
-                    {activeInvite.role === "captain" ? "Capitán" : "Jugador"}
-                  </Chip>
-                </span>
-              </span>
-              <button
-                type="button"
-                aria-label="Copiar código"
-                className="btn btn-icon"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(activeInvite.code);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1800);
-                  } catch {
-                    /* el código se ve y se puede copiar a mano */
-                  }
-                }}
-                style={{ color: copied ? "var(--accent)" : undefined }}
-              >
-                <IconCopy size={17} />
-              </button>
-            </div>
-            <p
-              aria-live="polite"
-              style={{
-                margin: "8px 0 0",
-                fontSize: 12,
-                fontWeight: 600,
-                color: copied ? "var(--accent)" : "transparent",
-              }}
-            >
-              {copied ? "Copiado" : "·"}
-            </p>
-          </>
-        ) : (
-          <Note>Aún no hay códigos activos. Genera uno abajo.</Note>
+        {teamId && (
+          <InvitePanel
+            teamId={teamId}
+            teamName={activeTeam?.name ?? "tu equipo"}
+            players={data ?? null}
+            onToast={setToast}
+          />
         )}
-
-        {/* Generar un código nuevo con el rol elegido. */}
-        <div style={{ marginTop: 18 }}>
-          <Field label="Nuevo código">
-            <Segmented
-              label="Rol de la invitación"
-              value={invRole}
-              onChange={setInvRole}
-              options={[
-                { value: "player", label: "Jugador" },
-                { value: "captain", label: "Capitán" },
-              ]}
-              style={{ alignSelf: "flex-start" }}
-            />
-          </Field>
-          <Btn
-            variant="accent"
-            block
-            onClick={generateInvite}
-            disabled={invBusy}
-            icon={<IconUserPlus size={15} />}
-            style={{ marginTop: 10 }}
-          >
-            {invBusy ? "Generando…" : "Generar código"}
-          </Btn>
-        </div>
       </Modal>
 
       {/* ── Importar de la Federación ────────────────────────────── */}

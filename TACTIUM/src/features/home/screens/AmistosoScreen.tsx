@@ -485,7 +485,7 @@ export const AmistosoScreen = () => {
       ...(claimCode
         ? [
             ``,
-            `Al registrarte, canjea este código en la pestaña Stats y ESTE partido pasa a tu cuenta: ${claimCode}`,
+            `Al registrarte, canjea este código en Perfil › Mi récord y ESTE partido pasa a tu cuenta: ${claimCode}`,
           ]
         : []),
     ].join('\n');

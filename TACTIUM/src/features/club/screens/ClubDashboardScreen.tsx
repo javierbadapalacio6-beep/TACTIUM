@@ -23,7 +23,9 @@ import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { FcpImportSheet } from '../components/FcpImportSheet';
 import { fcpSeasonStatus } from '@core/services/fcpSeason';
 import { FCP_FEDERATION_CODE, hasFcpLinkedTeams } from '@core/services/fcpOnboarding';
+import { FeedPreview } from '@features/social/components/FeedPreview';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
+import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
 import { DeleteClubSheet } from '@features/club/components/DeleteClubSheet';
 import { toast } from '@store/toastStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
@@ -34,7 +36,7 @@ import type { ClubTeamOverview } from '@core/services/clubDashboard';
 import { fetchClubInscripciones, refreshInscripcionRoster } from '@core/services/fcpInscripciones';
 import type { FcpInscripcionesResumen } from '@core/services/fcpInscripciones';
 
-import type { ClubStackScreenProps, RootStackParamList } from '@navigation/types';
+import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
 const MONTH_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const fmtPts = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -49,7 +51,7 @@ function formatShortDate(iso: string | null): string {
 
 export const ClubDashboardScreen = ({
   navigation,
-}: ClubStackScreenProps<'ClubRoot'>) => {
+}: HomeStackScreenProps<'HomeRoot'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -395,6 +397,8 @@ export const ClubDashboardScreen = ({
           </View>
         ) : (
           <>
+            {/* Prueba gratis de 14 días del club (solo quien la paga). */}
+            <TrialHomeCard containerPadding={0} />
             {loadError ? (
               <Pressable
                 onPress={retryOverviews}
@@ -606,6 +610,9 @@ export const ClubDashboardScreen = ({
                 ))}
               </View>
             )}
+
+            {/* TU GENTE: el feed de quien sigue el club, con kudos. */}
+            <FeedPreview style={{ marginHorizontal: 22 }} />
 
             {/* ZONA DE PELIGRO · borrar club (cascada irreversible) */}
             {club ? (
