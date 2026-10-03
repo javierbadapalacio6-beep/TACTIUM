@@ -28,7 +28,7 @@ import { useSubscriptionStore } from './src/store/subscriptionStore';
 import { useNotificationStore } from './src/store/notificationStore';
 import { configurePurchases, logOutPurchases } from './src/core/purchases';
 import { syncStorePurchases } from './src/core/services/storeSync';
-import { maybePromptForPush } from './src/core/push';
+import { refreshPushTokenIfGranted } from './src/core/push';
 import {
   AvailabilityPushResponder,
   registerAvailabilityCategories,
@@ -172,8 +172,10 @@ export default function App() {
         void loadNotifications();
         subscribeNotifications(userId);
         if (cancelled) return;
-        // Avisos push: priming + registro del token (no bloquea el arranque).
-        void maybePromptForPush(userId);
+        // Avisos push: solo se refresca el token si el permiso ya está
+        // concedido, sin alertas. El permiso se pide en la pantalla de Avisos
+        // (paso 3 del onboarding o el modal `PushPrompt`), no al entrar.
+        void refreshPushTokenIfGranted(userId);
       })();
       return () => {
         cancelled = true;
@@ -267,7 +269,10 @@ export default function App() {
           su fade-out. Va fuera del SafeAreaProvider para cubrir notch y
           home indicator a sangre completa. */}
       {splashVisible ? (
-        <AnimatedSplash onFinish={() => setSplashVisible(false)} />
+        <AnimatedSplash
+          ready={!isHydrating}
+          onFinish={() => setSplashVisible(false)}
+        />
       ) : null}
     </GestureHandlerRootView>
   );

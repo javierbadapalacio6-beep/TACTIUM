@@ -15,6 +15,7 @@ import { ALL_PLANS, formatEur } from "@/lib/plans";
 import { useAsync } from "@/lib/use-async";
 import { Btn, BtnLink, Card, Chip, Note, PageHeader } from "@/components/ui";
 import { SkeletonPage } from "@/components/states";
+import { RedeemCode } from "./RedeemCode";
 import { IconClock, IconLock } from "@/components/Icon";
 
 /**
@@ -256,7 +257,7 @@ export function MiSuscripcion() {
             <BtnLink href="/pro" variant="accent">
               Cambiar plan
             </BtnLink>
-            <Btn>Canjear código</Btn>
+            <RedeemCode planHref="/pro" />
             <div style={{ flex: 1 }} />
             <Btn variant="danger-ghost" onClick={openPortal} disabled={portalBusy}>
               {portalBusy ? "Abriendo…" : "Cancelar suscripción"}
@@ -278,7 +279,7 @@ export function MiSuscripcion() {
             <BtnLink href="/pro" variant="accent">
               Hazte Pro · Prueba 14 días
             </BtnLink>
-            <Btn>Canjear código</Btn>
+            <RedeemCode planHref="/pro" />
           </div>
         )}
       </Card>

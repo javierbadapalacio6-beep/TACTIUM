@@ -18,6 +18,7 @@ import {
 } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconBuilding, IconShield } from "@/components/Icon";
+import { proHref } from "@/lib/nav";
 
 /**
  * Facturación del club — DATOS REALES.
@@ -99,7 +100,7 @@ export function ClubBilling() {
             title="El club no tiene plan activo"
             body="Sin plan, los equipos no están cubiertos y las acciones de gestión piden suscripción."
             action={
-              <BtnLink href="/pro" variant="accent">
+              <BtnLink href={proHref(undefined, "club")} variant="accent">
                 Ver planes
               </BtnLink>
             }
@@ -242,7 +243,7 @@ export function ClubBilling() {
                 </div>
               ) : (
                 <BtnLink
-                  href="/pro"
+                  href={proHref(undefined, "club")}
                   variant={isRecommended ? "accent" : "ghost"}
                   block
                   style={{ marginTop: 16 }}

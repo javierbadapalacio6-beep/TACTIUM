@@ -10,6 +10,7 @@ import {
 import { useColors, useTypography, type Palette } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import type { PaywallIntent } from '@core/subscriptions/paywallReasons';
 
 type Variant = 'primary' | 'secondary' | 'destructive' | 'ghost' | 'subtle';
 
@@ -22,9 +23,8 @@ interface Props {
   iconLeft?: React.ReactNode;
   iconRight?: React.ReactNode;
   style?: ViewStyle;
-  // Identificador del flow para tracking analítico futuro
-  // (ej. "lineup_save", "matchday_close").
-  intent?: string;
+  // Motivo con el que se abre el paywall (su línea de contexto).
+  intent?: PaywallIntent;
 }
 
 /**

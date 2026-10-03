@@ -119,6 +119,32 @@ export const PUBLIC_NAV: NavEntry[] = [
   { href: "/pro", label: "Planes", icon: "receipt" },
 ];
 
+/**
+ * Alta de cuenta. Sin sesión, todos los «Crear cuenta» van aquí: `/entrar`
+ * abierto en Crear cuenta y, tras el alta, al onboarding (`/empezar`). Antes
+ * mandaban a `/empezar` sin cuenta y dejaban rellenar el equipo antes de
+ * pedirla.
+ */
+export function signupHref(next = "/empezar"): string {
+  return `/entrar?modo=alta&next=${encodeURIComponent(next)}`;
+}
+
+export const SIGNUP_HREF = signupHref();
+
+/**
+ * Enlace al paywall con el motivo (el gate que lo abre) y la familia de
+ * planes. Los motivos son los de la app: `matchday_close`, `lineup_edit`,
+ * `calendar_scan`, `availability_remind`, `roster_import`, `trial_expiring`
+ * y, solo web de momento, `club_import`.
+ */
+export function proHref(motivo?: string, para?: "club" | "capitan"): string {
+  const q = new URLSearchParams();
+  if (motivo) q.set("motivo", motivo);
+  if (para) q.set("para", para);
+  const s = q.toString();
+  return s ? `/pro?${s}` : "/pro";
+}
+
 /** Prefijos de ruta que funcionan sin sesión. */
 export const PUBLIC_ROUTES = [
   "/torneos",
@@ -156,7 +182,6 @@ const KNOWN_ROUTE_PREFIXES = [
   "/i/",
   "/entrar",
   "/empezar",
-  "/bienvenida",
   "/auth",
   "/ajustes",
   "/amistosos",

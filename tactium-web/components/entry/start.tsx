@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { EntryFrame, Field, Input, Segmented } from "./EntryFrame";
 import {
@@ -15,6 +17,7 @@ import {
   // (`readonly T[]`), y aqui la etiqueta no es el valor: «Equipos del
   // club» guarda "owned". Por eso se tira del de ui.
   Segmented as UiSegmented,
+  Select as UiSelect,
 } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import {
@@ -23,7 +26,9 @@ import {
   IconChevronRight,
   IconFlag,
   IconPlus,
+  IconSearch,
   IconShield,
+  IconTrophy,
   IconUpload,
   IconUserPlus,
   IconUsers,
@@ -33,6 +38,7 @@ import {
   createPlayer,
   createTeam,
   fetchClub,
+  fetchClubTeams,
   startSubscriptionTrial,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
@@ -56,6 +62,8 @@ import { useSession } from "@/lib/session";
 import { InlineInvitePreview } from "@/components/invite/InviteJoin";
 import { InvitePanel } from "@/components/invite/InvitePanel";
 import { guardedWrite } from "@/lib/writes";
+import { TOURNAMENT_FREE_PAIRS } from "@/lib/tournament-billing";
+import { EASE, Stagger, StaggerItem, StepProgress } from "./motion-bits";
 
 /** Botón-celda de selección (categoría, grupo, competición, género…). */
 function CellButton({
@@ -87,200 +95,245 @@ const GENDER_DB: Record<string, string> = {
   Mixto: "mixto",
 };
 
-/* ═══ 03 · ¿CÓMO VAS A EMPEZAR? ═══════════════════════════════════ */
+/* ═══ 03 · ¿QUÉ VAS A HACER? (paso 0) ═══════════════════════════ */
 
-const PATHS = [
+/**
+ * Una sola pregunta. Antes eran dos pantallas («¿Qué vas a hacer?» y «¿Cómo
+ * vas a empezar?»); ahora cada opción lleva directa a su camino y dice lo que
+ * cuesta de verdad. Orden y textos iguales que en la app.
+ */
+const START_OPTIONS = [
   {
     key: "equipo",
-    tag: "Rápido",
-    title: "Equipo independiente",
-    body: "Tú gestionas, tú alineas. Listo en 2 minutos.",
-    foot: "Tras prueba: 4,99 €/mes",
+    title: "Capitanear un equipo",
+    sub: "Convocatoria, alineación y acta · 14 días gratis",
     href: "/empezar/equipo",
     Icon: IconShield,
   },
   {
     key: "club",
-    tag: "Escalable",
-    title: "Club con varios equipos",
-    body: "Para clubes con múltiples equipos y capitanes.",
-    foot: "Tras prueba: desde 11,99 €/mes",
+    title: "Gestionar un club",
+    sub: "Varios equipos en un panel · 14 días gratis",
     href: "/empezar/club",
     Icon: IconBuilding,
   },
   {
-    key: "invitado",
-    tag: "Soy jugador",
-    title: "Me han invitado a un equipo",
-    body: "Entra con el código que te ha pasado tu capitán.",
-    foot: "",
-    href: "",
-    Icon: IconUserPlus,
-  },
-  {
-    key: "suelto",
-    tag: "Gratis",
-    title: "Juego por mi cuenta",
-    body: "Registra tus partidos y mira tus números.",
-    foot: "",
-    href: "/",
-    Icon: IconUsers,
+    key: "torneos",
+    title: "Organizar torneos",
+    sub: `Hasta ${TOURNAMENT_FREE_PAIRS} parejas, gratis`,
+    href: "/torneos/organizar",
+    Icon: IconTrophy,
   },
 ] as const;
 
-export function Start() {
-  const router = useRouter();
-  const { user, signOut } = useSession();
-  const [picked, setPicked] = useState<string>("equipo");
-  const [code, setCode] = useState("");
+const INVITE_CODE_LENGTH = 8;
 
-  const current = PATHS.find((p) => p.key === picked)!;
-  const needsCode = picked === "invitado";
+/** Acepta el código o el enlace entero (tactium.io/i/XK8R9P3M). */
+function cleanInviteInput(raw: string): string {
+  const fromLink = raw.match(/\/i\/([A-Za-z0-9]+)/);
+  const base = fromLink ? fromLink[1] : raw;
+  return base.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, INVITE_CODE_LENGTH);
+}
+
+/** Fila-opción del paso 0: icono, título, precio real y chevron. */
+function StartOption({
+  title,
+  sub,
+  Icon,
+  href,
+  onClick,
+  selected,
+}: {
+  title: string;
+  sub: string;
+  Icon: (p: { size?: number }) => React.ReactElement;
+  href?: string;
+  onClick?: () => void;
+  selected?: boolean;
+}) {
+  const reduce = useReducedMotion();
+  const inner = (
+    <>
+      <span className="tile-icon">
+        <Icon size={17} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          {title}
+        </span>
+        <span style={{ display: "block", marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
+          {sub}
+        </span>
+      </span>
+      <span
+        style={{
+          color: "var(--text-faint)",
+          display: "flex",
+          flex: "none",
+          transform: selected ? "rotate(90deg)" : undefined,
+          transition: "transform var(--dur-base) var(--ease)",
+        }}
+      >
+        <IconChevronRight size={16} />
+      </span>
+    </>
+  );
+  const style: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+    padding: "14px 16px",
+    textAlign: "left",
+    cursor: "pointer",
+    color: "var(--text)",
+    fontFamily: "var(--font-ui)",
+    ...(selected
+      ? { background: "var(--accent-10)", borderColor: "var(--accent-40)" }
+      : null),
+  };
+  return (
+    <StaggerItem
+      whileHover={reduce ? undefined : { y: -1 }}
+      whileTap={reduce ? undefined : { scale: 0.985 }}
+      transition={{ duration: 0.18, ease: EASE }}
+    >
+      {href ? (
+        <Link href={href} className="card card-hover" style={style}>
+          {inner}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-expanded={selected}
+          className="card card-hover"
+          style={style}
+        >
+          {inner}
+        </button>
+      )}
+    </StaggerItem>
+  );
+}
+
+export function Start() {
+  const { user, signOut } = useSession();
+  const reduce = useReducedMotion();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const firstName = user?.name.split(" ")[0];
 
   return (
-    <EntryFrame wide>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <h1 style={{ fontSize: "clamp(26px, 3.6vw, 34px)" }}>
-          ¿Cómo vas a empezar?
-        </h1>
-        <p
-          style={{
-            margin: "10px 0 0",
-            fontSize: 13.5,
-            color: "var(--text-muted)",
-          }}
-        >
-          Crea tu equipo o tu club
-        </p>
-      </div>
-
-      <div
-        role="radiogroup"
-        aria-label="Punto de partida"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 16,
-        }}
-      >
-        {PATHS.map((p) => {
-          const on = p.key === picked;
-          return (
-            <button
-              key={p.key}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              onClick={() => setPicked(p.key)}
-              className="card card-hover"
-              style={{
-                padding: 18,
-                textAlign: "left",
-                cursor: "pointer",
-                color: "var(--text)",
-                background: on ? "var(--accent-10)" : undefined,
-                borderColor: on ? "var(--accent-40)" : undefined,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
-              >
-                <span
-                  className={"tile-icon" + (on ? "" : " tile-icon-mute")}
-                >
-                  <p.Icon size={17} />
-                </span>
-                <span className="chip chip-mute">{p.tag}</span>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {p.title}
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                }}
-              >
-                {p.body}
-              </div>
-              {p.foot && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    fontSize: 12,
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  {p.foot}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {needsCode && (
-        <div style={{ marginTop: 20, maxWidth: 460, marginInline: "auto", display: "grid", gap: 16 }}>
-          <Field label="Código de invitación">
-            <Input
-              type="text"
-              placeholder="ABC123"
-              value={code}
-              autoComplete="off"
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="mono"
-            />
-          </Field>
-          {/* Antes de unirse se ve A QUÉ equipo y se elige la ficha. */}
-          {code.trim().length >= 4 && (
-            <Card>
-              <InlineInvitePreview code={code} />
-            </Card>
-          )}
-        </div>
-      )}
-
+    <EntryFrame>
       <div
         style={{
-          marginTop: 24,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          flexWrap: "wrap",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 20,
+          minHeight: 32,
         }}
       >
-        {!needsCode && (
-          <Btn
-            variant="accent"
-            size="lg"
-            onClick={() => router.push(current.href || "/")}
-          >
-            Empezar
-          </Btn>
-        )}
-        {/* Sólo tiene sentido si HAY sesión (a /empezar se llega logueado para
-            montar equipo/club). Para un visitante anónimo no se muestra. */}
+        <span style={{ fontSize: 13.5, color: "var(--text-muted)" }}>
+          {firstName ? `Hola, ${firstName}` : ""}
+        </span>
         {user && (
-          <Btn variant="quiet" size="lg" onClick={() => void signOut()}>
+          <Btn variant="quiet" size="sm" onClick={() => void signOut()}>
             Cerrar sesión
           </Btn>
         )}
       </div>
+
+      <Eyebrow tone="accent">Bienvenido</Eyebrow>
+      <h1 style={{ marginTop: 8 }}>¿Qué vas a hacer en TACTIUM?</h1>
+
+      <Stagger gap={0.06} delay={0.05} style={{ marginTop: 24, display: "grid", gap: 10 }}>
+        {START_OPTIONS.map((o) => (
+          <StartOption key={o.key} title={o.title} sub={o.sub} Icon={o.Icon} href={o.href} />
+        ))}
+
+        <StaggerItem>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              margin: "14px 0 4px",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text-faint)",
+            }}
+          >
+            <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
+            Soy jugador
+            <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
+          </div>
+        </StaggerItem>
+
+        <StartOption
+          title="Me han invitado a un equipo"
+          sub="Tengo un enlace o un código"
+          Icon={IconUserPlus}
+          selected={inviteOpen}
+          onClick={() => setInviteOpen((o) => !o)}
+        />
+
+        <AnimatePresence initial={false}>
+          {inviteOpen && (
+            <motion.div
+              key="code"
+              initial={reduce ? false : { opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+              transition={{ duration: 0.28, ease: EASE }}
+              style={{ overflow: "hidden" }}
+            >
+              <div style={{ display: "grid", gap: 12, paddingTop: 6 }}>
+                <Field
+                  label="Código de invitación"
+                  hint="Te lo pasa tu capitán. También vale el enlace entero."
+                  action={
+                    <span
+                      className="mono"
+                      style={{ fontSize: 12, color: "var(--text-faint)" }}
+                      aria-live="polite"
+                    >
+                      {code.length}/{INVITE_CODE_LENGTH}
+                    </span>
+                  }
+                >
+                  <Input
+                    type="text"
+                    placeholder="XK8R9P3M"
+                    value={code}
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    autoFocus
+                    onChange={(e) => setCode(cleanInviteInput(e.target.value))}
+                    className="mono"
+                    style={{ letterSpacing: "0.12em" }}
+                  />
+                </Field>
+                {/* Antes de unirse se ve A QUÉ equipo y se elige la ficha. */}
+                {code.length === INVITE_CODE_LENGTH && (
+                  <Card>
+                    <InlineInvitePreview code={code} />
+                  </Card>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <StaggerItem style={{ marginTop: 10, textAlign: "center" }}>
+          <Link href="/" className="link-action">
+            Juego por mi cuenta · gratis →
+          </Link>
+        </StaggerItem>
+      </Stagger>
     </EntryFrame>
   );
 }
@@ -543,10 +596,41 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
 
   const body = (
     <>
-      <h1>{fromClub ? "Configura el equipo" : "Crea tu equipo"}</h1>
-      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        Configura la competición · puedes cambiarlo todo después.
-      </p>
+      {!fromClub && (
+        <StepProgress
+          step={1}
+          aside={
+            <Link href="/empezar" className="link-action">
+              Atrás
+            </Link>
+          }
+        />
+      )}
+      <h1>{fromClub ? "Configura el equipo" : "Tu equipo"}</h1>
+      {fromClub && (
+        <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
+          Configura la competición · puedes cambiarlo todo después.
+        </p>
+      )}
+
+      {/* Búscate primero: con la federación se rellena todo solo. Importar
+          aquí NO pasa por el paywall: la prueba arranca en este mismo paso. */}
+      <FcpLookupCard onSearch={() => setImportOpen(true)} />
+
+      <div
+        aria-hidden="true"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          margin: "18px 0",
+          fontSize: 12.5,
+          color: "var(--text-faint)",
+        }}
+      >
+        <span style={{ flex: 1, height: 1, background: "var(--line)" }} />o
+        <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
+      </div>
 
       <div style={{ display: "grid", gap: 16 }}>
         <Field label="Nombre del equipo">
@@ -576,23 +660,6 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
           <Field label="Federación">
             <FederationSelect value={federation} onChange={setFederation} />
           </Field>
-        )}
-
-        {isFcp && (
-          <Note tone="accent" icon={<IconFlag size={16} />} style={{ alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <span style={{ flex: 1, minWidth: 200, color: "var(--text-muted)" }}>
-                <strong style={{ display: "block", color: "var(--text)", fontWeight: 700 }}>
-                  Importar de la Federación Cántabra
-                </strong>
-                Busca tu equipo y créalo con su plantilla y sus puntos
-                automáticamente. No hace falta rellenar lo de abajo.
-              </span>
-              <Btn variant="tint" size="sm" onClick={() => setImportOpen(true)}>
-                Buscar mi equipo
-              </Btn>
-            </span>
-          </Note>
         )}
 
         {(comp === "personalizada" || (isFederada && !isFcp)) && (
@@ -680,7 +747,7 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
         onClick={submit}
         style={{ marginTop: 20 }}
       >
-        {busy ? "Creando…" : "Crear equipo"}
+        {busy ? "Creando…" : fromClub ? "Crear equipo" : "Continuar"}
       </Btn>
 
       {importOpen && (
@@ -688,13 +755,14 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
           open
           onClose={() => setImportOpen(false)}
           labelledBy="tw-fcp-title"
-          title="Importar de la Federación"
-          lede="Busca tu club o equipo y créalo con su plantilla y sus puntos."
+          title="Búscate en la Liga Cántabra"
+          lede="Elige tu equipo y lo creamos con su categoría, su grupo y la plantilla con los puntos oficiales."
         >
           <Input
             type="text"
-            placeholder="Busca tu club o equipo"
+            placeholder="Nombre del equipo o del club…"
             value={fcpQuery}
+            autoFocus
             onChange={(e) => setFcpQuery(e.target.value)}
           />
           {fcpErr && (
@@ -770,7 +838,49 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
       <Card>{body}</Card>
     </div>
   ) : (
-    <EntryFrame wide>{body}</EntryFrame>
+    <EntryFrame>{body}</EntryFrame>
+  );
+}
+
+/**
+ * Tarjeta destacada del paso 1: «¿Juegas en la Liga Cántabra?». Abre la
+ * búsqueda federativa que ya existía (antes escondida tras elegir
+ * «Federada» + «Cántabra» en el formulario).
+ */
+function FcpLookupCard({ onSearch }: { onSearch: () => void }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: EASE, delay: 0.12 }}
+      style={{
+        marginTop: 20,
+        padding: 16,
+        borderRadius: "var(--r-lg)",
+        background: "var(--accent-10)",
+        border: "1px solid var(--accent-40)",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap",
+      }}
+    >
+      <span className="tile-icon" style={{ flex: "none" }}>
+        <IconFlag size={17} />
+      </span>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          ¿Juegas en la Liga Cántabra?
+        </div>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-muted)", textWrap: "pretty" }}>
+          Búscate y rellenamos categoría, grupo y plantilla con los puntos oficiales.
+        </p>
+      </div>
+      <Btn variant="accent" icon={<IconSearch size={15} />} onClick={onSearch}>
+        Buscarme
+      </Btn>
+    </motion.div>
   );
 }
 
@@ -790,11 +900,11 @@ export function InviteYourPeople({ teamId, teamName }: { teamId: string; teamNam
   const done = shared || players > 0;
   return (
     <EntryFrame>
-      <Eyebrow tone="accent">Paso 3 de 3 · Tu equipo está creado</Eyebrow>
-      <h1 style={{ marginTop: 10 }}>Ahora, tu gente</h1>
+      <StepProgress step={2} />
+      <h1>Ahora, tu gente</h1>
       <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        Pasa el enlace a la plantilla de {teamName}: se unen gratis desde la app
-        o desde la web.
+        Manda el enlace al grupo de {teamName}. Invitar es gratis: se unen desde
+        la app o desde la web.
       </p>
 
       <InvitePanel
@@ -856,16 +966,24 @@ export function CreateClub() {
       /* sin persistencia */
     }
     setBusy(false);
-    // Recarga completa para que la sesión detecte el club nuevo y aterrice en
-    // su panel (donde ya se pueden crear equipos, invitar y gestionar todo).
-    window.location.href = "/club";
+    // Recarga completa para que la sesión detecte el club nuevo. Sigue el
+    // paso 1: sus equipos (importados de la federación o a mano).
+    window.location.href = "/empezar/club/equipos";
   }
 
   return (
     <EntryFrame>
-      <h1>Crea tu club</h1>
+      <StepProgress
+        step={1}
+        aside={
+          <Link href="/empezar" className="link-action">
+            Atrás
+          </Link>
+        }
+      />
+      <h1>Tu club</h1>
       <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        Después darás de alta sus equipos.
+        Ahora el nombre; en un momento, sus equipos.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -904,6 +1022,9 @@ export function CreateClub() {
     </EntryFrame>
   );
 }
+
+/** Paso 2 del alta de club. */
+const CLUB_PEOPLE_HREF = "/empezar/club/gente";
 
 /* ═══ 06 · EQUIPOS DEL CLUB EN LOTE ═══════════════════════════════ */
 
@@ -945,7 +1066,7 @@ export function CreateClubTeams() {
   }
 
   return club?.federation === FCP_FEDERATION_CODE ? (
-    <ClubFcpImport clubId={clubId} clubName={club?.name ?? "tu club"} />
+    <ClubFcpImport clubId={clubId} clubName={club?.name ?? "tu club"} onboarding />
   ) : (
     <ClubManualTeams clubId={clubId} />
   );
@@ -953,8 +1074,18 @@ export function CreateClubTeams() {
 
 /** Import de club: busca en la Federación Cántabra y crea TODOS los equipos
  *  elegidos con su plantilla y sus puntos (multi-selección). */
-export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: string }) {
+export function ClubFcpImport({
+  clubId,
+  clubName,
+  onboarding = false,
+}: {
+  clubId: string;
+  clubName: string;
+  /** Dentro del alta: barra de pasos y, al acabar, «Ahora, tu gente». */
+  onboarding?: boolean;
+}) {
   const router = useRouter();
+  const doneHref = onboarding ? CLUB_PEOPLE_HREF : "/club";
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FcpClubGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -997,12 +1128,13 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
       importFcpTeams(clubId, Object.values(selected), mode),
     );
     setBusy(false);
-    if (res.ok) window.location.href = "/club";
+    if (res.ok) window.location.href = doneHref;
     else setErr(res.reason);
   }
 
   return (
     <EntryFrame wide>
+      {onboarding && <StepProgress step={1} />}
       <h1>Importa los equipos de {clubName}</h1>
       <p style={{ margin: "8px 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
         {mode === "owned"
@@ -1120,7 +1252,7 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
             ? "Importando…"
             : `Importar ${selCount} ${selCount === 1 ? "equipo" : "equipos"}`}
         </Btn>
-        <Btn size="lg" onClick={() => router.push("/club")}>
+        <Btn size="lg" onClick={() => router.push(doneHref)}>
           Omitir · lo hago luego
         </Btn>
       </div>
@@ -1131,7 +1263,6 @@ export function ClubFcpImport({ clubId, clubName }: { clubId: string; clubName: 
 /** Alta manual de los equipos del club (clubes no cántabros). Ahora crea de
  *  verdad (antes solo navegaba a /club sin crear nada). */
 function ClubManualTeams({ clubId }: { clubId: string }) {
-  const router = useRouter();
   const [teams, setTeams] = useState<DraftTeam[]>([
     { id: 1, name: "", gender: "Masculino", category: "1ª" },
   ]);
@@ -1158,12 +1289,20 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
         });
     });
     setBusy(false);
-    if (res.ok) window.location.href = "/club";
+    if (res.ok) window.location.href = CLUB_PEOPLE_HREF;
     else setErr(res.reason);
   }
 
   return (
     <EntryFrame wide>
+      <StepProgress
+        step={1}
+        aside={
+          <Link href={CLUB_PEOPLE_HREF} className="link-action">
+            Lo haré luego
+          </Link>
+        }
+      />
       <h1>Da de alta tus equipos</h1>
       <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
         Añade los que tengas ahora · puedes crear más en cualquier momento.
@@ -1271,6 +1410,76 @@ function ClubManualTeams({ clubId }: { clubId: string }) {
   );
 }
 
+/* ═══ 06b · AHORA, TU GENTE (paso 2 del club) ═════════════════════ */
+
+/**
+ * Cierre del alta de club: el enlace de cada equipo para pasárselo a su
+ * capitán y a sus jugadores (entran gratis bajo el plan del club). Mismo
+ * panel de invitar que el del panel del club.
+ */
+export function ClubYourPeople() {
+  const { clubId } = useSession();
+  const { data: teams, loading } = useAsync(
+    () => (clubId ? fetchClubTeams(clubId) : Promise.resolve([])),
+    [clubId],
+  );
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const list = teams ?? [];
+  const current = list.find((t) => t.id === teamId) ?? list[0] ?? null;
+
+  return (
+    <EntryFrame>
+      <StepProgress step={2} />
+      <h1>Ahora, tu gente</h1>
+      <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
+        Pasa a cada equipo su enlace. Capitanes y jugadores se unen gratis: los
+        cubre el plan del club.
+      </p>
+
+      {loading ? (
+        <SkeletonCard />
+      ) : !current ? (
+        <Card>
+          <EmptyState
+            compact
+            icon={<IconUsers size={22} />}
+            title="Aún no hay equipos"
+            body="Cuando des de alta los equipos del club, cada uno tendrá su enlace para invitar."
+          />
+        </Card>
+      ) : (
+        <>
+          {list.length > 1 && (
+            <Field label="Equipo">
+              <UiSelect value={current.id} onChange={(e) => setTeamId(e.target.value)}>
+                {list.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </UiSelect>
+            </Field>
+          )}
+          <div style={{ marginTop: list.length > 1 ? 16 : 0 }}>
+            <InvitePanel
+              key={current.id}
+              teamId={current.id}
+              teamName={current.name}
+              onToast={setToast}
+            />
+          </div>
+        </>
+      )}
+
+      <a href="/club" className="btn btn-accent btn-lg btn-block" style={{ marginTop: 20 }}>
+        Ir al panel del club
+      </a>
+      {toast && <Note style={{ marginTop: 16 }}>{toast}</Note>}
+    </EntryFrame>
+  );
+}
+
 /* ═══ 07 · AÑADIR JUGADORES ═══════════════════════════════════════ */
 
 const POSITIONS = ["Drive", "Revés", "Ambos"] as const;
@@ -1322,10 +1531,11 @@ export function AddPlayers() {
 
   return (
     <EntryFrame wide>
+      <StepProgress step={2} />
       <h1>Añade tus jugadores</h1>
       <p style={{ margin: "8px 0 24px", fontSize: 13.5, color: "var(--text-muted)" }}>
         {activeTeam ? `Plantilla de ${activeTeam.name}. ` : ""}
-        Añade jugadores a mano o escanea el ranking FEP.
+        Añade jugadores a mano o escanea el ranking de la federación.
       </p>
 
       <div className="tw-players-grid">
@@ -1341,7 +1551,7 @@ export function AddPlayers() {
             <>
               <div className="tw-player-head">
                 <span>Nombre</span>
-                <span>Puntos FEP</span>
+                <span>Puntos de la federación</span>
                 <span>Posición</span>
                 <span />
               </div>
@@ -1360,7 +1570,7 @@ export function AddPlayers() {
                     inputMode="numeric"
                     value={p.pts}
                     placeholder="0"
-                    aria-label="Puntos FEP"
+                    aria-label="Puntos de la federación"
                     onChange={(e) =>
                       patch(p.id, { pts: e.target.value.replace(/\D/g, "") })
                     }
@@ -1436,7 +1646,7 @@ export function AddPlayers() {
                   <IconUpload size={22} />
                 </span>
                 <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                  Arrastra una imagen o un PDF del ranking FEP, o pega desde el
+                  Arrastra una imagen o un PDF del ranking de la federación, o pega desde el
                   portapapeles
                 </span>
                 <input type="file" accept="image/*,.pdf" hidden />

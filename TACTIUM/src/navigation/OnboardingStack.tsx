@@ -3,12 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useColors } from '@core/theme';
 import { OnboardingIntentScreen } from '@features/onboarding/screens/OnboardingIntentScreen';
-import { OnboardingChoiceScreen } from '@features/onboarding/screens/OnboardingChoiceScreen';
 import { CreateClubScreen } from '@features/onboarding/screens/CreateClubScreen';
 import { CreateTournamentClubScreen } from '@features/onboarding/screens/CreateTournamentClubScreen';
 import { CreateTeamsForClubScreen } from '@features/onboarding/screens/CreateTeamsForClubScreen';
 import { CreateTeamScreen } from '@features/onboarding/screens/CreateTeamScreen';
 import { AddPlayersScreen } from '@features/onboarding/screens/AddPlayersScreen';
+import { OnboardingNotificationsScreen } from '@features/onboarding/screens/OnboardingNotificationsScreen';
 import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
 
 import type { OnboardingStackParamList } from './types';
@@ -28,7 +28,6 @@ export const OnboardingStack = () => {
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="OnboardingIntent" component={OnboardingIntentScreen} />
-      <Stack.Screen name="OnboardingChoice" component={OnboardingChoiceScreen} />
       <Stack.Screen name="CreateClub" component={CreateClubScreen} />
       <Stack.Screen
         name="CreateTournamentClub"
@@ -37,6 +36,10 @@ export const OnboardingStack = () => {
       <Stack.Screen name="CreateTeamsForClub" component={CreateTeamsForClubScreen} />
       <Stack.Screen name="CreateTeam" component={CreateTeamScreen} />
       <Stack.Screen name="AddPlayers" component={AddPlayersScreen} />
+      <Stack.Screen
+        name="OnboardingNotifications"
+        component={OnboardingNotificationsScreen}
+      />
       {/* Paywall como upsell OPCIONAL dentro del onboarding (volcado
           automático, etc.). Descartable: cerrar/atrás vuelven atrás. */}
       <Stack.Screen
@@ -44,7 +47,7 @@ export const OnboardingStack = () => {
         component={PaywallScreen as any}
         options={{
           // En onboarding mostramos el paywall como una pantalla normal
-          // (no modal) para que no se vea OnboardingChoice debajo y el
+          // (no modal) para que no se vea la pantalla anterior debajo y el
           // usuario perciba el gate como parte del flow, no un overlay.
           animation: 'slide_from_right',
           gestureEnabled: false,

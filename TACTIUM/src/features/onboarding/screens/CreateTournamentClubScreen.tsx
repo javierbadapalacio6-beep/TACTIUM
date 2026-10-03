@@ -74,9 +74,6 @@ export const CreateTournamentClubScreen = ({
         >
           <IconBack size={18} color={c.text} />
         </Pressable>
-        <View style={styles.progress}>
-          <View style={[styles.bar, styles.barActive]} />
-        </View>
         <View style={styles.headerBtn} />
       </View>
 
@@ -170,20 +167,6 @@ const makeStyles = (c: Palette) =>
       height: 36,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    progress: { flexDirection: 'row', gap: 6 },
-    bar: {
-      width: 18,
-      height: 3,
-      borderRadius: 2,
-      backgroundColor: c.hairStrong,
-    },
-    barActive: {
-      width: 28,
-      backgroundColor: c.accent,
-      shadowColor: c.accent,
-      shadowOpacity: 0.7,
-      shadowRadius: 6,
     },
     scroll: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18 },
     eyebrow: {

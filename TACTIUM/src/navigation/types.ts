@@ -11,7 +11,11 @@ export type AuthStackParamList = {
   // Home PÚBLICA: lo primero al abrir sin cuenta. El login es un botón
   // dentro de ella, no la puerta de entrada.
   PublicHome: undefined;
-  Login: undefined;
+  // `mode: 'email'` abre directamente el formulario de email (si no, la
+  // pantalla de elección Apple/Google/email). `tab` elige la pestaña del
+  // formulario: todo acceso de «crear cuenta» llega con `tab: 'signup'`, y
+  // «Ya tengo cuenta» con `tab: 'signin'`.
+  Login: { mode?: 'choice' | 'email'; tab?: 'signin' | 'signup' } | undefined;
   // Planes visibles SIN cuenta. Solo informan: la suscripción se contrata
   // dentro de la app tras entrar y el torneo se paga por el enlace del correo.
   // `focus` viene del CTA segmentado de la home: abre la pantalla por el
@@ -27,15 +31,19 @@ export type AuthStackParamList = {
 
 // ─── Onboarding Stack ───────────────────────────────────────────────
 export type OnboardingStackParamList = {
-  // Bifurcación inicial: organizar torneos vs gestionar equipos.
+  // Pregunta única del onboarding: capitanear, club, torneos o jugador
+  // invitado (antes eran dos pantallas, Intent y Choice).
   OnboardingIntent: undefined;
-  OnboardingChoice: undefined;
   CreateClub: undefined;
   // Paso mínimo (solo nombre) para el club en modo "solo torneos".
   CreateTournamentClub: undefined;
   CreateTeamsForClub: undefined;
   CreateTeam: { clubId?: string } | undefined;
-  AddPlayers: undefined;
+  // Paso 2. `importedPlayers` llega cuando la plantilla ya se volcó de la
+  // federación en el paso 1 (se enseña como hecha).
+  AddPlayers: { importedPlayers?: number } | undefined;
+  // Paso 3: pedir los avisos explicando para qué sirven. Termina el onboarding.
+  OnboardingNotifications: undefined;
   // Paywall dentro del onboarding: SOLO como upsell opcional y descartable
   // (p. ej. ofrecer el volcado automático). La prueba de 14 días sin tarjeta
   // arranca sola al crear el primer equipo independiente o el club.
@@ -135,7 +143,7 @@ export type TabParamList = {
 
 // ─── Root Stack ─────────────────────────────────────────────────────
 export type RootStackParamList = {
-  AuthFlow: undefined;
+  AuthFlow: NavigatorScreenParams<AuthStackParamList> | undefined;
   OnboardingFlow: undefined;
   MainTabs: NavigatorScreenParams<TabParamList> | undefined;
   // Modales presentados encima de las tabs
@@ -171,6 +179,9 @@ export type RootStackParamList = {
   // Unirse a un equipo desde el enlace de invitación `tactium.io/i/{code}`.
   // Vista previa + unirse; existe con y sin sesión y en el onboarding.
   JoinTeam: { code: string };
+  // La pantalla de Avisos (la del paso 3 del onboarding, sin barra) como modal,
+  // UNA vez, para quien no pasa por el onboarding de equipo.
+  PushPrompt: undefined;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────

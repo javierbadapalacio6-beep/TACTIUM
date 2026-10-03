@@ -179,6 +179,12 @@ export const PublicHomeScreen = ({
   }, [term]);
 
   const goLogin = () => navigation.navigate('Login');
+  // «Crear cuenta» de la barra fija: abre el login con la pestaña de alta ya
+  // elegida (Apple/Google siguen ahí; el email se abre en «Crear cuenta»).
+  const goSignup = () => navigation.navigate('Login', { tab: 'signup' });
+  // Alto de la barra fija (sin el safe area): el contenido se separa lo
+  // mismo para que la tarjeta Pro del final no quede tapada.
+  const SIGNUP_BAR_H = 68;
   const openTournament = (id: string) =>
     navigation.getParent()?.navigate('TournamentFollow', { tournamentId: id });
 
@@ -275,7 +281,10 @@ export const PublicHomeScreen = ({
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 32 },
+          {
+            paddingTop: insets.top + 14,
+            paddingBottom: insets.bottom + SIGNUP_BAR_H + 32,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -669,6 +678,27 @@ export const PublicHomeScreen = ({
           <Text style={styles.ctaNote}>{LANE_BY_KEY[role].note}</Text>
         </View>
       </ScrollView>
+
+      {/* Barra fija para crear cuenta: siempre a mano, sobre el safe area.
+          Antes solo había el icono de arriba y la tarjeta del final. */}
+      <View
+        style={[
+          styles.signupBar,
+          { minHeight: SIGNUP_BAR_H + insets.bottom, paddingBottom: insets.bottom + 10 },
+        ]}
+      >
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.signupBarTitle}>¿Llevas un equipo?</Text>
+          <Text style={styles.signupBarHint}>14 días gratis, sin tarjeta</Text>
+        </View>
+        <Pressable
+          onPress={goSignup}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.signupBarBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.signupBarBtnText}>Crear cuenta</Text>
+        </Pressable>
+      </View>
     </View>
   );
 };
@@ -840,6 +870,32 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     ctaPrimaryText: { color: c.textInverse, fontSize: 14, fontWeight: '700' },
+
+    signupBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 18,
+      paddingTop: 10,
+      backgroundColor: c.bgRaised,
+      borderTopWidth: 1,
+      borderTopColor: c.hairStrong,
+    },
+    signupBarTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
+    signupBarHint: { color: c.textFaint, fontSize: 12, marginTop: 2 },
+    signupBarBtn: {
+      height: 40,
+      paddingHorizontal: 18,
+      borderRadius: 999,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    signupBarBtnText: { color: c.textInverse, fontSize: 14, fontWeight: '700' },
     ctaGhost: {
       flex: 1,
       height: 46,

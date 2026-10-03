@@ -19,7 +19,6 @@ import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import {
   AmbientBackdrop,
-  IconApple,
   IconGoogle,
   IconMail,
   IconBack,
@@ -29,16 +28,32 @@ import {
 } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 
+import { useOAuthSignIn } from '../hooks/useOAuthSignIn';
+import { AppleSignInButton } from '../components/AppleSignInButton';
+import { LegalNote } from '../components/LegalNote';
+
 import type { AuthStackScreenProps } from '@navigation/types';
 
 type Mode = 'choice' | 'email';
 type Tab = 'signin' | 'signup';
 
-export const LoginScreen = ({}: AuthStackScreenProps<'Login'>) => {
+export const LoginScreen = ({
+  navigation,
+  route,
+}: AuthStackScreenProps<'Login'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const [mode, setMode] = useState<Mode>('choice');
-  const [tab, setTab] = useState<Tab>('signin');
+  // Quien llega desde un «Crear cuenta» trae `tab: 'signup'`; «Ya tengo
+  // cuenta» trae `signin`. Con `mode: 'email'` se salta la elección de
+  // proveedor y abre el formulario directamente.
+  const openedInEmail = route.params?.mode === 'email';
+  const [mode, setMode] = useState<Mode>(openedInEmail ? 'email' : 'choice');
+  const [tab, setTab] = useState<Tab>(route.params?.tab ?? 'signin');
+  // Si se vuelve a navegar a un Login ya montado con otros params, se respetan.
+  useEffect(() => {
+    if (route.params?.tab) setTab(route.params.tab);
+    if (route.params?.mode) setMode(route.params.mode);
+  }, [route.params?.tab, route.params?.mode]);
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [name, setName] = useState('');
@@ -49,9 +64,11 @@ export const LoginScreen = ({}: AuthStackScreenProps<'Login'>) => {
   const signIn = useAuthStore((s) => s.signInWithPassword);
   const signUp = useAuthStore((s) => s.signUpWithPassword);
   const sendPasswordReset = useAuthStore((s) => s.sendPasswordReset);
-  const signInApple = useAuthStore((s) => s.signInWithApple);
-  const signInGoogle = useAuthStore((s) => s.signInWithGoogle);
-  const [oauthBusy, setOauthBusy] = useState<null | 'apple' | 'google'>(null);
+  const {
+    busy: oauthBusy,
+    handleApple,
+    handleGoogle,
+  } = useOAuthSignIn();
 
   // Cuando el teclado está abierto, ya cubre el home indicator y la
   // clearance extra del footer (insets+24) deja un hueco visible feo.
@@ -108,27 +125,6 @@ export const LoginScreen = ({}: AuthStackScreenProps<'Login'>) => {
     const { error } = await signIn(email.trim(), pass);
     setSubmitting(false);
     if (error) {
-      Alert.alert('No se pudo iniciar sesión', error);
-    }
-  };
-
-  const handleApple = async () => {
-    if (oauthBusy) return;
-    setOauthBusy('apple');
-    const { error, cancelled } = await signInApple();
-    setOauthBusy(null);
-    // Éxito → onAuthStateChange navega solo. Cancelar → silencio.
-    if (error && !cancelled) {
-      Alert.alert('No se pudo iniciar sesión', error);
-    }
-  };
-
-  const handleGoogle = async () => {
-    if (oauthBusy) return;
-    setOauthBusy('google');
-    const { error, cancelled } = await signInGoogle();
-    setOauthBusy(null);
-    if (error && !cancelled) {
       Alert.alert('No se pudo iniciar sesión', error);
     }
   };
@@ -219,7 +215,13 @@ export const LoginScreen = ({}: AuthStackScreenProps<'Login'>) => {
           setShowPass={setShowPass}
           valid={valid}
           submitting={submitting}
-          onBack={() => setMode('choice')}
+          // Si se abrió directo en el email (desde la Bienvenida), «Atrás»
+          // vuelve a la pantalla de la que venía, no a la elección.
+          onBack={() =>
+            openedInEmail && navigation.canGoBack()
+              ? navigation.goBack()
+              : setMode('choice')
+          }
           onSubmit={handleEmail}
           onForgotPassword={handleForgotPassword}
         />
@@ -262,27 +264,12 @@ const ChoiceView: React.FC<ChoiceProps> = ({
 
       <View style={[styles.actions, { paddingBottom: insetBottom + 28 }]}>
         {showApple ? (
-          <Pressable
+          <AppleSignInButton
             onPress={onApple}
+            loading={busy === 'apple'}
             disabled={!!busy}
-            style={({ pressed }) => [
-              styles.providerBtn,
-              { backgroundColor: '#fff' },
-              pressed && { opacity: 0.85 },
-              !!busy && { opacity: 0.6 },
-            ]}
-          >
-            {busy === 'apple' ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <>
-                <IconApple size={18} color="#000" />
-                <Text style={[styles.providerLabel, { color: '#000' }]}>
-                  Continuar con Apple
-                </Text>
-              </>
-            )}
-          </Pressable>
+            height={54}
+          />
         ) : null}
 
         <Pressable
@@ -330,9 +317,7 @@ const ChoiceView: React.FC<ChoiceProps> = ({
         <Text style={styles.trialNote}>
           14 días de prueba gratis al crear tu primer equipo · Sin compromiso
         </Text>
-        <Text style={styles.legal}>
-          Al continuar aceptas los Términos{'\n'}y la Política de Privacidad.
-        </Text>
+        <LegalNote style={styles.legal} />
       </View>
     </View>
   );
@@ -525,7 +510,9 @@ const EmailView: React.FC<EmailProps> = ({
             </Text>
           </Text>
         </Pressable>
-
+        {isSignup ? (
+          <LegalNote prefix="Al crear la cuenta aceptas" />
+        ) : null}
       </View>
     </View>
   );

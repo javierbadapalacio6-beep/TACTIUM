@@ -34,31 +34,6 @@ import type { AuthStackScreenProps } from '@navigation/types';
  * pantalla solo informa — ver precios antes de registrarse es lo mínimo.
  */
 
-/** Qué incluye cada plan, en la voz del capitán, no del sistema. */
-const PLAN_FEATURES: Record<string, string[]> = {
-  captain: [
-    'Un equipo de hasta 30 jugadores',
-    'Alineaciones ordenadas por puntos',
-    'Avisos a los convocados',
-    'Histórico de temporadas',
-  ],
-  club_starter: [
-    'Panel del club con todos sus equipos',
-    'Capitanes invitados sin coste extra',
-    'Horarios de pista',
-  ],
-  club_pro: [
-    'Multi-categoría (masculino, femenino y mixto)',
-    'Rejilla de horarios y conflictos',
-    'Todo lo del plan anterior',
-  ],
-  club_elite: [
-    'Informes por categoría',
-    'Soporte por WhatsApp',
-    'Todo lo del plan anterior',
-  ],
-};
-
 export const PublicPlansScreen = ({
   navigation,
   route,
@@ -109,7 +84,8 @@ export const PublicPlansScreen = ({
 
       <View style={styles.sep} />
 
-      {(PLAN_FEATURES[p.tier] ?? []).map((f) => (
+      {/* Mismas listas que la web: salen de plans.ts. */}
+      {p.features.map((f) => (
         <View key={f} style={styles.featRow}>
           <IconCheck size={14} color={c.accent} />
           <Text style={styles.featText}>{f}</Text>
@@ -209,6 +185,7 @@ export const PublicPlansScreen = ({
                 <Text style={[styles.toggleText, on && styles.toggleTextOn]}>
                   {label}
                 </Text>
+                {v ? <Text style={styles.toggleChip}>2 meses gratis</Text> : null}
               </Pressable>
             );
           })}
@@ -253,6 +230,7 @@ export const PublicPlansScreen = ({
                 <Text style={[styles.toggleText, on && styles.toggleTextOn]}>
                   {label}
                 </Text>
+                {v ? <Text style={styles.toggleChip}>2 meses gratis</Text> : null}
               </Pressable>
             );
           })}
@@ -315,7 +293,9 @@ export const PublicPlansScreen = ({
           </>
         )}
         <Pressable
-          onPress={() => navigation.navigate('Login')}
+          // Abre el login en modo ALTA: aún deja elegir Apple/Google, y si va
+          // por email, la pestaña ya es «Crear cuenta».
+          onPress={() => navigation.navigate('Login', { tab: 'signup' })}
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
         >
           <Text style={styles.ctaText}>Crear cuenta</Text>
@@ -371,7 +351,21 @@ const makeStyles = (c: Palette) =>
       gap: 4,
       marginBottom: 16,
     },
-    toggleBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 9 },
+    toggleBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 18,
+      paddingVertical: 8,
+      borderRadius: 9,
+    },
+    toggleChip: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+    },
     toggleBtnOn: { backgroundColor: c.accent10 },
     toggleText: { color: c.textMuted, fontSize: 13, fontWeight: '500' },
     toggleTextOn: { color: c.accent, fontWeight: '700' },

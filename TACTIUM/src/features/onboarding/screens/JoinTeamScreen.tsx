@@ -56,7 +56,9 @@ export const JoinTeamScreen = ({
 
   const goToLogin = () => {
     void savePendingInviteCode(code);
-    navigation.navigate('AuthFlow');
+    // Quien abre una invitación sin sesión casi siempre es nuevo: el login se
+    // abre con la pestaña de crear cuenta (puede cambiar a iniciar sesión).
+    navigation.navigate('AuthFlow', { screen: 'Login', params: { tab: 'signup' } });
   };
 
   return (

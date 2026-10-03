@@ -10,6 +10,8 @@ import { AuthStack } from './AuthStack';
 import { OnboardingStack } from './OnboardingStack';
 import { TabNavigator } from './TabNavigator';
 import { PlayerClaimGate } from '@features/onboarding/components/PlayerClaimGate';
+import { PushPromptGate } from '@features/onboarding/components/PushPromptGate';
+import { PushPromptScreen } from '@features/onboarding/screens/OnboardingNotificationsScreen';
 import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
 import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
 import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
@@ -232,11 +234,24 @@ export const RootNavigator = () => {
                 animation: 'slide_from_right',
               }}
             />
+            {/* Avisos, una vez, para quien no pasó por el onboarding de
+                equipo. Lo abre `PushPromptGate`. Sin gesto de cierre: se
+                decide con «Activar avisos» o «Ahora no». */}
+            <Stack.Screen
+              name="PushPrompt"
+              component={PushPromptScreen}
+              options={{
+                presentation: 'fullScreenModal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: false,
+              }}
+            />
             {publicScreens}
           </>
         )}
       </Stack.Navigator>
       {showMainTabs ? <PlayerClaimGate /> : null}
+      {showMainTabs ? <PushPromptGate /> : null}
       {isAuthenticated ? (
         <PendingInviteHandler branch={showMainTabs ? 'main' : 'onboarding'} />
       ) : null}

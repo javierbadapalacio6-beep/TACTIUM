@@ -37,6 +37,7 @@ import { fetchClubInscripciones, refreshInscripcionRoster } from '@core/services
 import type { FcpInscripcionesResumen } from '@core/services/fcpInscripciones';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
+import type { PaywallIntent } from '@core/subscriptions/paywallReasons';
 
 const MONTH_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const fmtPts = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -240,7 +241,10 @@ export const ClubDashboardScreen = ({
         { text: 'A mano', style: 'cancel' },
         {
           text: 'Ver planes',
-          onPress: () => rootNav.navigate('Paywall', { intent: 'club' }),
+          onPress: () =>
+            rootNav.navigate('Paywall', {
+              intent: 'club_roster_import' satisfies PaywallIntent,
+            }),
         },
       ],
     );

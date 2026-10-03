@@ -19,7 +19,6 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
   AmbientBackdrop,
-  IconBack,
   IconCamera,
   IconPlus,
   IconCheck,
@@ -38,6 +37,10 @@ import { ImportFcpSheet } from '@features/team/components/ImportFcpSheet';
 import { FCP_ENABLED } from '@core/config/featureFlags';
 import { toast } from '@store/toastStore';
 import {
+  OnboardingProgress,
+  ProgressAction,
+} from '@features/onboarding/components/OnboardingProgress';
+import {
   NAME_MAX_LENGTH,
   isValidName,
   normalizeName,
@@ -51,6 +54,7 @@ const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 
 export const AddPlayersScreen = ({
   navigation,
+  route,
 }: OnboardingStackScreenProps<'AddPlayers'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -60,15 +64,17 @@ export const AddPlayersScreen = ({
   const removePlayer = useTeamStore((s) => s.removePlayer);
   const updatePlayer = useTeamStore((s) => s.updatePlayer);
   const team = useTeamStore((s) => s.team);
-  const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
+  // La plantilla ya se volcó de la federación en el paso 1: se enseña hecha.
+  const importedPlayers = route.params?.importedPlayers;
+  const imported = importedPlayers != null;
 
   const [adding, setAdding] = useState(false);
   // «o añade los nombres a mano»: la plantilla manual va plegada; se abre sola
   // si ya hay jugadores (p. ej. vuelve atrás tras un volcado).
   const [manualOpen, setManualOpen] = useState(false);
   useEffect(() => {
-    if (players.length > 0) setManualOpen(true);
-  }, [players.length]);
+    if (players.length > 0 && !imported) setManualOpen(true);
+  }, [players.length, imported]);
 
   // Código de invitación del equipo (el compartido de jugador). Invitar es
   // GRATIS: lo generamos al entrar para que solo haya que pulsar «Enviar al
@@ -107,10 +113,11 @@ export const AddPlayersScreen = ({
     }
   };
 
-  // El VOLCADO AUTOMÁTICO (escaneo del ranking o import de la Federación) es
-  // premium. En el onboarding no lo bloqueamos a lo bruto: ofrecemos elegir.
-  // Si ya tiene sub (p.ej. volvió del paywall), abre directo. `useHasActiveSub`
-  // es reactivo → se refresca al volver del paywall con la prueba iniciada.
+  // El ESCANEO del ranking es premium. Normalmente pasa: la prueba sin tarjeta
+  // arranca al crear el equipo o el club en el paso 1 (`useHasActiveSub` es
+  // reactivo y la recoge en cuanto llega). Si no hubiera prueba, se ofrece
+  // empezarla o seguir a mano. Importar de la FEDERACIÓN, en cambio, es libre
+  // dentro del onboarding (fuera sigue tras el gate premium de Equipo).
   const hasSub = useHasActiveSub();
   const requestBulkImport = (open: () => void) => {
     if (hasSub) {
@@ -200,12 +207,9 @@ export const AddPlayersScreen = ({
     removePlayer(id).catch((e) => Alert.alert('Error', e?.message ?? ''));
   };
 
-  const handleFinish = () => {
-    finishOnboarding();
-  };
-
-  const finishLabel =
-    shared || players.length > 0 ? 'Ir a mi equipo' : 'Lo haré luego → ir a mi equipo';
+  // Paso 3 (Avisos) en vez de terminar aquí: es esa pantalla la que cierra
+  // el onboarding.
+  const goNext = () => navigation.navigate('OnboardingNotifications');
 
   return (
     <KeyboardAvoidingView
@@ -215,19 +219,10 @@ export const AddPlayersScreen = ({
       <AmbientBackdrop intensity={0.6} />
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={styles.headerBtn}
-        >
-          <IconBack size={20} color={c.textMuted} />
-        </Pressable>
-        <View style={styles.progress}>
-          <View style={[styles.bar, { backgroundColor: c.primary }]} />
-          <View style={[styles.bar, { backgroundColor: c.primary }]} />
-          <View style={[styles.bar, styles.barActive]} />
-        </View>
-        <View style={{ width: 36 }} />
+        <OnboardingProgress
+          step={2}
+          right={<ProgressAction label="Lo haré luego" onPress={goNext} />}
+        />
       </View>
 
       <ScrollView
@@ -236,7 +231,6 @@ export const AddPlayersScreen = ({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.intro}>
-          <Text style={styles.eyebrow}>PASO 3 DE 3 · TU EQUIPO ESTÁ CREADO</Text>
           <Text style={styles.title}>Ahora, tu gente</Text>
           <Text style={styles.lede}>
             Manda el enlace al grupo del equipo: cada jugador entra y elige su
@@ -283,10 +277,24 @@ export const AddPlayersScreen = ({
           <Text style={styles.ctaLabel}>Enviar al grupo de WhatsApp</Text>
         </Pressable>
 
-        {/* Volcado de la plantilla oficial (premium; lógica intacta). */}
-        {FCP_ENABLED && (
+        {/* Plantilla de la federación: hecha si se importó en el paso 1; si
+            no, el volcado (libre en el onboarding). */}
+        {imported ? (
+          <View style={styles.importedRow}>
+            <View style={styles.scanShortcutIcon}>
+              <Text style={{ fontSize: 14 }}>🏛️</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.importedTitle}>Plantilla de la federación</Text>
+              <Text style={styles.scanShortcutHint}>
+                {`${importedPlayers || players.length} jugadores con sus puntos · ya importada`}
+              </Text>
+            </View>
+            <IconCheck size={16} color={c.accent} />
+          </View>
+        ) : FCP_ENABLED ? (
           <Pressable
-            onPress={() => requestBulkImport(() => setImportingFcp(true))}
+            onPress={() => setImportingFcp(true)}
             accessibilityRole="button"
             accessibilityLabel="Importar plantilla de la Federación"
             style={({ pressed }) => [
@@ -307,7 +315,7 @@ export const AddPlayersScreen = ({
             </View>
             <IconArrowRight size={14} color={c.accent} />
           </Pressable>
-        )}
+        ) : null}
 
         {/* «o añade los nombres a mano» (plegado) */}
         <Pressable
@@ -469,12 +477,21 @@ export const AddPlayersScreen = ({
       </ScrollView>
 
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
+        {/* Discreto mientras no haya gente; en cuanto se envía el enlace o
+            hay plantilla, pasa a ser el botón principal. */}
         <Pressable
-          onPress={handleFinish}
+          onPress={goNext}
           accessibilityRole="button"
-          style={({ pressed }) => [styles.laterBtn, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [
+            shared || players.length > 0 ? styles.ctaBtn : styles.laterBtn,
+            pressed && { opacity: 0.7 },
+          ]}
         >
-          <Text style={styles.laterLabel}>{finishLabel}</Text>
+          <Text
+            style={shared || players.length > 0 ? styles.ctaLabel : styles.laterLabel}
+          >
+            Continuar
+          </Text>
         </Pressable>
       </View>
 
@@ -502,30 +519,24 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
+  },
+  importedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: c.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
   },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progress: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  bar: {
-    width: 22,
-    height: 3,
-    borderRadius: 2,
-  },
-  barActive: {
-    backgroundColor: c.accent,
-    shadowColor: c.accent,
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
+  importedTitle: {
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.1,
   },
   intro: {
     paddingHorizontal: 4,
@@ -594,14 +605,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.1,
-  },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 12,
   },
   title: {
     color: c.text,

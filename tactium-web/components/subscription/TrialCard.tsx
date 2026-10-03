@@ -7,6 +7,7 @@ import { ALL_PLANS, TRIAL_DURATION_DAYS, formatEur } from "@/lib/plans";
 import { useAsync } from "@/lib/use-async";
 import { BtnLink, Card, Chip, Eyebrow } from "@/components/ui";
 import { IconSparkles } from "@/components/Icon";
+import { proHref } from "@/lib/nav";
 
 /**
  * «Prueba gratis · quedan N días», explicada.
@@ -81,7 +82,10 @@ export function TrialCard({
             escáner, recordatorios) es premium.
           </p>
         </div>
-        <BtnLink href="/pro" variant="accent">
+        <BtnLink
+          href={proHref("trial_expiring", subjectType === "club" ? "club" : "capitan")}
+          variant="accent"
+        >
           Elegir plan
         </BtnLink>
       </div>

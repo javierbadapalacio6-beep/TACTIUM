@@ -54,6 +54,7 @@ import {
 import { EditTeamModal } from "@/components/team/EditTeamModal";
 import { Crest } from "@/components/Crest";
 import { InvitePanel } from "@/components/invite/InvitePanel";
+import { proHref } from "@/lib/nav";
 
 type SortKey = "name" | "pts" | "pos";
 
@@ -477,7 +478,7 @@ export function Roster() {
             body={
               query
                 ? "Prueba con otro nombre o alias."
-                : "Añade jugadores a mano o escanea el ranking FEP."
+                : "Añade jugadores a mano o escanea el ranking de la federación."
             }
           />
         </Card>
@@ -490,7 +491,7 @@ export function Roster() {
                 [
                   ["name", "Nombre"],
                   ["pos", "Posición"],
-                  ["pts", "Puntos FEP"],
+                  ["pts", "Puntos de la federación"],
                 ] as const
               ).map(([k, label]) => (
                 <button
@@ -647,7 +648,7 @@ export function Roster() {
               />
             </Field>
 
-            <Field label="Puntos FEP" htmlFor="jugador-pts">
+            <Field label="Puntos de la federación" htmlFor="jugador-pts">
               <Input
                 id="jugador-pts"
                 type="text"
@@ -741,7 +742,7 @@ export function Roster() {
                 jugadores a mano.
               </Note>
               <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
-                <BtnLink href="/pro" variant="accent">
+                <BtnLink href={proHref("roster_import")} variant="accent">
                   Ver planes
                 </BtnLink>
               </div>

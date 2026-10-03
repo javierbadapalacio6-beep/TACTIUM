@@ -47,7 +47,7 @@ export function EntryFrame({
         }}
       >
         <Link
-          href="/bienvenida"
+          href="/"
           style={{ display: "flex", alignItems: "center", color: "var(--text)" }}
           aria-label="TACTIUM"
         >

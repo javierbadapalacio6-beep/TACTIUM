@@ -16,6 +16,7 @@ import {
   TOURNAMENT_TIERS,
 } from "@/lib/tournament-billing";
 import { Reveal } from "./Reveal";
+import { SIGNUP_HREF } from "@/lib/nav";
 
 type Billing = "monthly" | "yearly";
 
@@ -128,7 +129,7 @@ function PlanCard({ plan, billing, delay }: { plan: Plan; billing: Billing; dela
           </li>
         ))}
       </ul>
-      <BtnLink href="/empezar" variant={plan.featured ? "accent" : "ghost"} block>
+      <BtnLink href={SIGNUP_HREF} variant={plan.featured ? "accent" : "ghost"} block>
         Empezar prueba
       </BtnLink>
     </Reveal>

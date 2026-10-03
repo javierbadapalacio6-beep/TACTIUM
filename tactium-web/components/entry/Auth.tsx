@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EntryFrame, Field, Input } from "./EntryFrame";
-import { Btn, Modal, Note } from "@/components/ui";
+import { Btn, Eyebrow, Modal, Note } from "@/components/ui";
 import { canonicalOrigin } from "@/lib/site";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { WRITES_ENABLED } from "@/lib/writes";
@@ -47,6 +48,13 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
   function afterLogin(): string {
     const raw = new URLSearchParams(window.location.search).get("next") ?? "/";
     return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  }
+
+  /** Tras CREAR la cuenta: a la invitación de la que venía o al onboarding
+   *  (que es a donde apunta el `next` de todos los «Crear cuenta»). */
+  function afterSignup(): string {
+    const back = afterLogin();
+    return back.startsWith("/i/") || back.startsWith("/empezar") ? back : "/empezar";
   }
 
   async function sendRecovery() {
@@ -113,8 +121,7 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
         if (error) throw error;
         // Quien llega desde un enlace de invitación vuelve a ella para
         // unirse; el resto, al alta de equipo o club.
-        const back = afterLogin();
-        router.push(back.startsWith("/i/") ? back : "/empezar");
+        router.push(afterSignup());
         return;
       }
 
@@ -138,6 +145,13 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
 
   async function oauth(provider: "google" | "apple") {
     setServerError(null);
+    // El OAuth vuelve por /auth/callback, que lee el destino de esta cookie
+    // (un query en el redirectTo rompe la allowlist de Supabase). En alta, al
+    // onboarding; al entrar, al `?next=` si lo hay.
+    const target = signup ? afterSignup() : afterLogin();
+    if (signup || target !== "/") {
+      document.cookie = `tactium_next=${encodeURIComponent(target)}; path=/; max-age=1800; samesite=lax`;
+    }
     try {
       const { error } = await supabaseBrowser().auth.signInWithOAuth({
         provider,
@@ -153,6 +167,10 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
 
   return (
     <EntryFrame>
+      {/* La frase de producto, la misma que en la bienvenida de la app. */}
+      <Eyebrow tone="accent" style={{ marginBottom: 10 }}>
+        Convoca, alinea y cierra la jornada.
+      </Eyebrow>
       <h1>{signup ? "Crear cuenta" : "Iniciar sesión"}</h1>
       <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
         {signup
@@ -284,6 +302,28 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
         >
           {busy ? "Entrando…" : signup ? "Crear cuenta" : "Iniciar sesión"}
         </Btn>
+
+        {signup && (
+          <p
+            style={{
+              margin: 0,
+              textAlign: "center",
+              fontSize: 12,
+              color: "var(--text-faint)",
+              textWrap: "pretty",
+            }}
+          >
+            Al crear la cuenta aceptas los{" "}
+            <Link href="/legal/terminos" className="link-action" style={{ fontSize: 12 }}>
+              Términos
+            </Link>{" "}
+            y la{" "}
+            <Link href="/legal/privacidad" className="link-action" style={{ fontSize: 12 }}>
+              Privacidad
+            </Link>
+            .
+          </p>
+        )}
       </form>
 
       <div

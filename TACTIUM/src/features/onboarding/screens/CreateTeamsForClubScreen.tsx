@@ -18,7 +18,6 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
   AmbientBackdrop,
-  IconBack,
   IconPlus,
   IconCheck,
   IconX,
@@ -40,7 +39,10 @@ import {
 
 import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
-import { useHasActiveSub } from '@core/hooks/usePremiumGate';
+import {
+  OnboardingProgress,
+  ProgressAction,
+} from '@features/onboarding/components/OnboardingProgress';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -61,7 +63,7 @@ export const CreateTeamsForClubScreen = ({
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
   const createTeam = useTeamStore((s) => s.createTeam);
-  const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
+  const beginOnboarding = useTeamStore((s) => s.beginOnboarding);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
   const clubTeams = club ? teams.filter((t) => t.club_id === club.id) : [];
@@ -100,48 +102,28 @@ export const CreateTeamsForClubScreen = ({
   // Federación Cántabra: onboarding AUTOMÁTICO por importación (no manual).
   const isFcp = club?.federation === FCP_FEDERATION_CODE;
   const [fcpOpen, setFcpOpen] = useState(false);
-  // Club FCP que decide crear los equipos A MANO (sin el volcado premium). Sin
-  // esto, para un club FCP no se renderizaba NINGÚN alta manual y el usuario
-  // quedaba atascado: "A mano" cerraba el aviso y no había forma de crear
-  // equipos ni de avanzar (el CTA exige ≥1 equipo).
+  // Club FCP que decide crear los equipos A MANO en vez de importarlos. Sin
+  // esto, para un club FCP no se renderizaba NINGÚN alta manual.
   const [manualMode, setManualMode] = useState(false);
   const fcpAutoOpened = useRef(false);
-  // El volcado desde la Federación es premium. Con sub: se auto-abre (conveniencia
-  // para clubes FCP). Sin sub: NO auto-abrimos ni soltamos un Alert sorpresa —
-  // el usuario ve el banner y al tocarlo recibe el aviso con opción de omitir.
-  const hasSub = useHasActiveSub();
-  useEffect(() => {
-    if (isFcp && hasSub && !fcpAutoOpened.current && clubTeams.length === 0) {
-      fcpAutoOpened.current = true;
-      setFcpOpen(true);
-    }
-  }, [isFcp, hasSub, clubTeams.length]);
-  const requestFcpImport = () => {
-    if (hasSub) {
-      setFcpOpen(true);
-      return;
-    }
-    Alert.alert(
-      'Volcado automático',
-      'Crea todos los equipos del club con la plantilla y los puntos oficiales de la Federación — es una función premium. Empieza tu prueba gratis para usarlo, o crea los equipos a mano ahora.',
-      [
-        {
-          text: 'A mano',
-          style: 'cancel',
-          // Revela el alta manual (para FCP estaba oculta) y abre el formulario.
-          onPress: () => {
-            setManualMode(true);
-            setAdding(true);
-          },
-        },
-        {
-          text: 'Empezar prueba',
-          onPress: () =>
-            navigation.navigate('Paywall', { intent: 'club', optional: true }),
-        },
-      ],
-    );
+  // Jugadores volcados en la importación: el paso 2 los enseña como hechos.
+  const [importedPlayers, setImportedPlayers] = useState<number | null>(null);
+  // Importar de la federación AL CREAR el club es gratis (la prueba sin
+  // tarjeta arrancó al crear el club). Fuera del onboarding sigue siendo
+  // premium. `beginOnboarding`: la importación crea los equipos por API y
+  // recarga; sin él la raíz saltaría a la app y se perderían los pasos 2 y 3.
+  const openFcpImport = () => {
+    beginOnboarding();
+    setFcpOpen(true);
   };
+  // Club FCP sin equipos: se abre solo el buscador (lo normal es importarse).
+  useEffect(() => {
+    if (isFcp && !fcpAutoOpened.current && clubTeams.length === 0) {
+      fcpAutoOpened.current = true;
+      openFcpImport();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFcp, clubTeams.length]);
   const [newName, setNewName] = useState('');
   // Tipo de competición del equipo a añadir (mismo patrón client-side que
   // CreateTeamScreen: los presets escriben un valor canónico en league).
@@ -227,14 +209,18 @@ export const CreateTeamsForClubScreen = ({
       );
       return;
     }
-    // Un único equipo: el último paso es invitar a su gente (mismo «Paso 3 de
-    // 3» que el capitán). Con varios, se invita desde el panel de cada equipo.
+    // Un único equipo: paso 2, invitar a su gente (como el capitán). Con
+    // varios, se invita desde el panel de cada equipo y se salta al paso 3.
+    beginOnboarding();
     const activeTeam = useTeamStore.getState().team;
     if (clubTeams.length === 1 && activeTeam?.id === clubTeams[0].id) {
-      navigation.navigate('AddPlayers');
+      navigation.navigate(
+        'AddPlayers',
+        importedPlayers != null ? { importedPlayers } : undefined,
+      );
       return;
     }
-    finishOnboarding();
+    navigation.navigate('OnboardingNotifications');
   };
 
   if (!club) {
@@ -253,22 +239,18 @@ export const CreateTeamsForClubScreen = ({
       <AmbientBackdrop intensity={0.6} />
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={styles.headerBtn}
-        >
-          <IconBack size={20} color={c.textMuted} />
-        </Pressable>
-        <View style={styles.progress}>
-          <View style={[styles.bar, styles.barDone]} />
-          <View style={[styles.bar, styles.barActive]} />
-        </View>
-        <View style={{ width: 36 }} />
+        <OnboardingProgress
+          step={1}
+          sublabel="Equipos"
+          right={
+            navigation.canGoBack() ? (
+              <ProgressAction label="‹ Atrás" onPress={() => navigation.goBack()} />
+            ) : undefined
+          }
+        />
       </View>
 
       <View style={styles.intro}>
-        <Text style={styles.eyebrow}>PASO 02 · EQUIPOS DEL CLUB</Text>
         <Text style={styles.title}>Crea tus equipos</Text>
         <Text style={styles.lede}>
           Añade todos los equipos que tendrá {club.name}. Podrás invitar al
@@ -297,16 +279,32 @@ export const CreateTeamsForClubScreen = ({
         showsVerticalScrollIndicator={false}
       >
         {isFcp ? (
-          <Pressable
-            onPress={requestFcpImport}
-            style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
-            <Text style={styles.fcpBannerText}>
-              Busca tu club y crea todos sus equipos con la plantilla y los puntos ya
-              cargados. Automático, sin teclear nada.
-            </Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={openFcpImport}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.fcpBannerTitle}>¿Tu club juega en la Liga Cántabra?</Text>
+              <Text style={styles.fcpBannerText}>
+                Busca tu club y creamos todos sus equipos con la plantilla y los
+                puntos oficiales. Sin teclear nada.
+              </Text>
+            </Pressable>
+            {!manualMode ? (
+              <Pressable
+                onPress={() => {
+                  setManualMode(true);
+                  setAdding(true);
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                style={styles.manualLink}
+              >
+                <Text style={styles.manualLinkText}>o crea los equipos a mano</Text>
+              </Pressable>
+            ) : null}
+          </>
         ) : null}
         <View style={styles.list}>
           {clubTeams.map((t, i) => (
@@ -623,7 +621,7 @@ export const CreateTeamsForClubScreen = ({
             pressed && clubTeams.length > 0 && { opacity: 0.85 },
           ]}
         >
-          <Text style={styles.ctaLabel}>Entrar al club</Text>
+          <Text style={styles.ctaLabel}>Continuar</Text>
           <IconArrowRight size={18} color="#000" />
         </Pressable>
       </View>
@@ -633,6 +631,7 @@ export const CreateTeamsForClubScreen = ({
           open={fcpOpen}
           clubId={club.id}
           onClose={() => setFcpOpen(false)}
+          onImported={(_teams, players) => setImportedPlayers(players)}
         />
       ) : null}
     </KeyboardAvoidingView>
@@ -646,35 +645,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   header: {
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progress: { flexDirection: 'row', gap: 6 },
-  bar: { width: 22, height: 3, borderRadius: 2 },
-  barDone: { backgroundColor: c.accent50 },
-  barActive: {
-    backgroundColor: c.accent,
-    shadowColor: c.accent,
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
   },
 
-  intro: { paddingHorizontal: 24, paddingTop: 22 },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 10,
-  },
+  intro: { paddingHorizontal: 24, paddingTop: 18 },
   title: {
     color: c.text,
     fontSize: 30,
@@ -695,6 +668,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
   fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  manualLink: { alignSelf: 'center', paddingVertical: 4, marginTop: -4, marginBottom: 12 },
+  manualLinkText: { color: c.textMuted, fontSize: 13.5, fontWeight: '600' },
 
   counter: {
     paddingHorizontal: 24,

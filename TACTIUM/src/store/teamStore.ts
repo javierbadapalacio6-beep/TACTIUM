@@ -66,6 +66,13 @@ interface TeamState {
   setSoloUpgrade: (v: boolean) => void;
   reset: () => void;
   finishOnboarding: () => void;
+  /**
+   * Marca que el onboarding sigue en curso aunque aparezca un equipo por otra
+   * vía que no es `createTeam` (la importación de la federación lo crea por
+   * API y recarga con `loadForUser`). Sin esto, en cuanto hay equipo la raíz
+   * saltaba a la app y se perdían los pasos 2 (tu gente) y 3 (avisos).
+   */
+  beginOnboarding: () => void;
   setActiveTeam: (teamId: string) => Promise<void>;
   setActiveRoleOverride: (role: ActiveRole) => Promise<void>;
   refreshMyPlayer: () => Promise<void>;
@@ -443,6 +450,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       finishOnboarding: () => set({ isOnboarding: false }),
+      beginOnboarding: () => set({ isOnboarding: true }),
 
       setActiveTeam: async (teamId) => {
         const teams = get().teams;

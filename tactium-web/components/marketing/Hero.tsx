@@ -1,6 +1,7 @@
 import { BtnLink } from "@/components/ui";
 import { IconChevronDown } from "@/components/Icon";
 import { HeroBackdrop } from "./HeroBackdrop";
+import { SIGNUP_HREF } from "@/lib/nav";
 
 export function Hero() {
   return (
@@ -14,12 +15,16 @@ export function Hero() {
             El sistema operativo del <em>pádel federado</em>
           </h1>
           <p className="mk-lede">
-            Alineaciones con orden de fuerza, disponibilidad de la plantilla,
+            {/* La frase de producto, la misma que abre la app. */}
+            <strong style={{ color: "var(--text)", fontWeight: 700 }}>
+              Convoca, alinea y cierra la jornada.
+            </strong>{" "}
+            Disponibilidad de la plantilla, alineaciones con orden de fuerza,
             torneos completos y la competición federada al día. Para capitanes,
             clubs y jugadores, en iOS, Android y web.
           </p>
           <div className="mk-actions">
-            <BtnLink href="/empezar" variant="accent" size="lg">
+            <BtnLink href={SIGNUP_HREF} variant="accent" size="lg">
               Crear cuenta gratis
             </BtnLink>
             <BtnLink href="#explorar" variant="ghost" size="lg">

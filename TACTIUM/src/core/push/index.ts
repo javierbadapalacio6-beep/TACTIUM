@@ -1,4 +1,5 @@
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -128,39 +129,38 @@ export async function notifyTournamentPush(
   }
 }
 
-// Evita repetir el priming varias veces en la misma sesión de app.
-let primedThisSession = false;
-
 /**
- * Tras iniciar sesión: si ya hay permiso, refresca el token; si está sin
- * decidir, muestra un mensaje de valor ("priming") ANTES del diálogo del SO
- * para maximizar el opt-in. Si lo denegó, no insiste (tendría que ir a Ajustes).
+ * Al iniciar sesión: si el permiso YA está concedido, refresca el token en
+ * silencio (por si cambió de dispositivo o de usuario). Nunca pregunta: el
+ * permiso se pide en la pantalla de Avisos (paso 3 del onboarding, o el modal
+ * `PushPrompt` una vez para quien no pasa por él), donde se explica qué llega.
  */
-export async function maybePromptForPush(userId: string): Promise<void> {
+export async function refreshPushTokenIfGranted(userId: string): Promise<void> {
   if (!Device.isDevice) return;
   const status = await getPushPermission();
+  if (status !== 'granted') return;
+  await registerForPushNotifications(userId);
+}
 
-  if (status === 'granted') {
-    await registerForPushNotifications(userId);
-    return;
+// ── Pantalla de Avisos vista (una vez por usuario y dispositivo) ──────────
+// Quien ya la vio (activara o dijera «Ahora no») no la vuelve a ver. Si el
+// almacenamiento falla, se da por NO vista: lo peor es enseñarla otra vez.
+const promptKey = (userId: string) => `tactium-push-prompt-seen:${userId}`;
+
+export async function hasSeenPushPrompt(userId: string): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(promptKey(userId))) === '1';
+  } catch {
+    return false;
   }
-  if (status === 'denied') return;
-  if (primedThisSession) return;
-  primedThisSession = true;
+}
 
-  Alert.alert(
-    'Activa los avisos de tu equipo',
-    'Recibe al instante cuando hay nueva jornada y disponibilidad que confirmar, y cuando se publica la alineación.',
-    [
-      { text: 'Ahora no', style: 'cancel' },
-      {
-        text: 'Activar',
-        onPress: () => {
-          registerForPushNotifications(userId).catch(() => {});
-        },
-      },
-    ],
-  );
+export async function markPushPromptSeen(userId: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(promptKey(userId), '1');
+  } catch {
+    /* sin almacenamiento: no pasa nada */
+  }
 }
 
 /**

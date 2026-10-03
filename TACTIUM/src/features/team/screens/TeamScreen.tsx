@@ -64,6 +64,7 @@ import { useIsPremium } from '@core/hooks/usePremiumGate';
 import type { RootStackParamList } from '@navigation/types';
 import { uploadPlayerPhoto, removePlayerPhoto } from '@core/services/playerPhoto';
 import { displayName, initialsOf, photoOf } from '@core/utils/playerName';
+import type { PaywallIntent } from '@core/subscriptions/paywallReasons';
 
 const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 
@@ -265,7 +266,10 @@ export const TeamScreen = () => {
         { text: 'A mano', style: 'cancel' },
         {
           text: 'Ver planes',
-          onPress: () => rootNav.navigate('Paywall', { intent: 'captain' }),
+          onPress: () =>
+            rootNav.navigate('Paywall', {
+              intent: 'roster_import' satisfies PaywallIntent,
+            }),
         },
       ],
     );

@@ -28,6 +28,9 @@ export interface PlanDescriptor {
   tournamentPairCap: number | null;
   // Etiqueta corta para UI ("Pro", "Elite", etc.). Para captain = "Capitán".
   shortLabel: string;
+  // Qué incluye el plan, para tarjetas y tablas de comparar. Las listas son
+  // IDÉNTICAS a las de `tactium-web/lib/plans.ts`: si tocas una, toca la otra.
+  features: string[];
 }
 
 export const CAPTAIN_PLAN: PlanDescriptor = {
@@ -40,6 +43,13 @@ export const CAPTAIN_PLAN: PlanDescriptor = {
   teamQuota: 1,
   tournamentPairCap: null,
   shortLabel: 'Capitán',
+  features: [
+    '1 equipo de hasta 30 jugadores',
+    'Alineaciones ordenadas por puntos',
+    'Hasta 5 variantes por jornada',
+    'Avisos a los convocados',
+    'Histórico completo de temporadas',
+  ],
 };
 
 export const CLUB_STARTER_PLAN: PlanDescriptor = {
@@ -52,6 +62,13 @@ export const CLUB_STARTER_PLAN: PlanDescriptor = {
   teamQuota: 3,
   tournamentPairCap: 32,
   shortLabel: 'Starter',
+  features: [
+    'Hasta 3 equipos cubiertos',
+    'Torneos incluidos hasta 32 parejas',
+    'Capitanes invitados sin coste extra',
+    'Panel global del club',
+    'Soporte prioritario por email',
+  ],
 };
 
 export const CLUB_PRO_PLAN: PlanDescriptor = {
@@ -64,6 +81,13 @@ export const CLUB_PRO_PLAN: PlanDescriptor = {
   teamQuota: 10,
   tournamentPairCap: 64,
   shortLabel: 'Pro',
+  features: [
+    'Hasta 10 equipos cubiertos',
+    'Torneos incluidos hasta 64 parejas',
+    'Multi-categoría (M/F/Mixto)',
+    'Horarios de pista y rejilla',
+    'Todo lo de Starter',
+  ],
 };
 
 export const CLUB_ELITE_PLAN: PlanDescriptor = {
@@ -76,6 +100,13 @@ export const CLUB_ELITE_PLAN: PlanDescriptor = {
   teamQuota: 25,
   tournamentPairCap: 128,
   shortLabel: 'Elite',
+  features: [
+    'Hasta 25 equipos cubiertos',
+    'Torneos incluidos hasta 128 parejas',
+    'Informes por categoría',
+    'Todo lo de Pro',
+    'Soporte por WhatsApp',
+  ],
 };
 
 export const ALL_PLANS: PlanDescriptor[] = [
@@ -97,6 +128,23 @@ export const PLAN_BY_TIER: Record<PlanTier, PlanDescriptor> = {
   club_pro: CLUB_PRO_PLAN,
   club_elite: CLUB_ELITE_PLAN,
 };
+
+// ── Ventajas por familia (paywall) ─────────────────────────────────────────
+// Las 4 líneas que el paywall enseña arriba. Distintas para capitán y club:
+// cada uno paga por cosas distintas.
+export const CAPTAIN_BENEFITS: string[] = [
+  'Convocatoria con Voy/Duda/No y recordatorios',
+  'Parejas por puntos, en 5 variantes',
+  'Calendario y plantilla desde la federación',
+  'Acta, resultados y clasificación con zonas',
+];
+
+export const CLUB_BENEFITS: string[] = [
+  'Todos tus equipos en un panel',
+  'Los capitanes no pagan',
+  'Torneos incluidos según el plan',
+  'Horarios de pista y rejilla',
+];
 
 // ── Trial ───────────────────────────────────────────────────────────────────
 export const TRIAL_DURATION_DAYS = 14;

@@ -24,6 +24,7 @@ import {
   BottomSheet,
   IconChevron,
   IconCheck,
+  IconSearch,
 } from '@components/ui';
 import {
   FEDERATIONS,
@@ -41,8 +42,11 @@ import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
 import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
-import { useHasActiveSub } from '@core/hooks/usePremiumGate';
 import { startOnboardingTrial } from '@core/services/subscriptions';
+import {
+  OnboardingProgress,
+  ProgressAction,
+} from '@features/onboarding/components/OnboardingProgress';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -62,35 +66,36 @@ export const CreateTeamScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const createTeam = useTeamStore((s) => s.createTeam);
-  const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
+  const beginOnboarding = useTeamStore((s) => s.beginOnboarding);
   const signOut = useAuthStore((s) => s.signOut);
   const [fcpOpen, setFcpOpen] = useState(false);
-  // Modo "a mano" para un equipo FCP: el usuario rechazó el volcado premium y
-  // quiere rellenar los campos manualmente. Muestra el form manual + "Crear
-  // equipo" en vez del banner de importar.
-  const [fcpManual, setFcpManual] = useState(false);
-  // El volcado desde la Federación es premium. En onboarding ofrecemos elegir:
-  // prueba (paywall descartable) o crear el equipo a mano (campos manuales).
-  const hasSub = useHasActiveSub();
-  const requestFcpImport = () => {
-    if (hasSub) {
-      setFcpOpen(true);
-      return;
-    }
-    Alert.alert(
-      'Volcado automático',
-      'Vuelca tu plantilla de la Federación con los puntos oficiales — es una función premium. Empieza tu prueba gratis para usarlo, o crea tu equipo a mano ahora.',
-      [
-        { text: 'A mano', style: 'cancel', onPress: () => setFcpManual(true) },
-        {
-          text: 'Empezar prueba',
-          onPress: () =>
-            navigation.navigate('Paywall', { intent: 'captain', optional: true }),
-        },
-      ],
-    );
-  };
   const clubId = route.params?.clubId;
+
+  // Importar de la Federación Cántabra AL CREAR el equipo es gratis: la prueba
+  // sin tarjeta arranca en este mismo paso, y cobrar el volcado un minuto
+  // antes era la peor primera impresión. Fuera del onboarding el volcado de
+  // plantilla sigue siendo premium (usePremiumGate en Equipo).
+  const openFcpImport = () => {
+    setComp('federada');
+    setFederation(FEDERATIONS.find((f) => f.code === FCP_FEDERATION_CODE) ?? null);
+    // La importación crea el equipo por API y recarga con `loadForUser`: sin
+    // esto la raíz saltaría a la app en cuanto aparece el equipo.
+    beginOnboarding();
+    setFcpOpen(true);
+  };
+  // Tras importar: arranca la prueba (equipo independiente) y sigue al paso 2
+  // con la plantilla ya marcada como hecha.
+  const onFcpImported = (_teams: number, players: number) => {
+    if (!clubId) {
+      const uid = useAuthStore.getState().user?.id ?? null;
+      if (uid) void startOnboardingTrial('user', uid, 'captain', uid);
+    }
+    navigation.navigate('AddPlayers', { importedPlayers: players });
+  };
+  // «Más opciones» (solo liga propia): partidos por jornada y orden de fuerza.
+  // Plegado por defecto con los mismos valores de siempre; no se pueden
+  // cambiar después en los ajustes del equipo, por eso siguen aquí.
+  const [moreOpen, setMoreOpen] = useState(false);
   const parentClub = useClubStore((s) =>
     clubId ? s.clubs.find((c) => c.id === clubId) ?? null : null,
   );
@@ -121,10 +126,6 @@ export const CreateTeamScreen = ({
   const preset = getCompetitionPreset(comp);
   const isFederada = comp === 'federada';
   const isFcp = isFederada && federation?.code === FCP_FEDERATION_CODE;
-  // Modo importación vs manual para equipos FCP. `showImport` = banner + CTA
-  // "Buscar mi equipo"; si no, se enseñan los campos manuales + "Crear equipo".
-  const showImport = isFcp && !fcpManual;
-  const showManual = !isFcp || fcpManual;
 
   // Valor efectivo de team.league según el tipo de competición.
   const effectiveLeague = useMemo(() => {
@@ -190,6 +191,12 @@ export const CreateTeamScreen = ({
     })();
   };
 
+  // Chips de selección única (competición, categoría, grupo…): mismo aspecto
+  // en todo el formulario.
+  const chipSel = (sel: boolean) =>
+    sel ? { backgroundColor: c.accent, borderColor: c.accent } : null;
+  const chipText = (sel: boolean) => ({ color: sel ? c.textInverse : c.text });
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -197,33 +204,24 @@ export const CreateTeamScreen = ({
     >
       <AmbientBackdrop intensity={0.6} />
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerBtn} />
-        <View style={styles.progress}>
-          {parentClub ? (
-            <>
-              <View style={[styles.bar, styles.barDone]} />
-              <View style={[styles.bar, styles.barActive]} />
-              <View style={styles.bar} />
-            </>
-          ) : (
-            <>
-              <View style={[styles.bar, styles.barActive]} />
-              <View style={styles.bar} />
-            </>
-          )}
-        </View>
-        <Pressable
-          onPress={() =>
-            Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Salir', style: 'destructive', onPress: () => signOut() },
-            ])
+        <OnboardingProgress
+          step={1}
+          right={
+            navigation.canGoBack() ? (
+              <ProgressAction label="‹ Atrás" onPress={() => navigation.goBack()} />
+            ) : (
+              <ProgressAction
+                label="Salir"
+                onPress={() =>
+                  Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Salir', style: 'destructive', onPress: () => signOut() },
+                  ])
+                }
+              />
+            )
           }
-          hitSlop={10}
-          style={{ paddingHorizontal: 6 }}
-        >
-          <Text style={styles.exitLink}>Salir</Text>
-        </Pressable>
+        />
       </View>
 
       <ScrollView
@@ -231,17 +229,48 @@ export const CreateTeamScreen = ({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>
-          {parentClub ? 'PASO 02 · EQUIPO DEL CLUB' : 'PASO 01 · EQUIPO'}
-        </Text>
         <Text style={styles.title}>
-          {parentClub
-            ? `Primer equipo de ${parentClub.name}`
-            : 'Crea tu equipo'}
+          {parentClub ? `Primer equipo de ${parentClub.name}` : 'Tu equipo'}
         </Text>
-        <Text style={styles.lede}>
-          Configura los datos de la competición. Lo podrás editar después.
-        </Text>
+
+        {/* Atajo destacado: búscate en la federación y nos ahorramos el
+            formulario (categoría, grupo y plantilla con puntos oficiales). */}
+        <Pressable
+          onPress={openFcpImport}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.fcpCard, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={styles.fcpCardTitle}>¿Juegas en la Liga Cántabra?</Text>
+          <Text style={styles.fcpCardText}>
+            Búscate y rellenamos categoría, grupo y plantilla con los puntos
+            oficiales.
+          </Text>
+          <View style={styles.fcpSearch}>
+            <IconSearch size={15} color={c.textFaint} />
+            <Text style={styles.fcpSearchText}>Nombre del equipo o del club…</Text>
+          </View>
+        </Pressable>
+
+        <View style={styles.orRow}>
+          <View style={styles.orLine} />
+          <Text style={styles.orText}>o</Text>
+          <View style={styles.orLine} />
+        </View>
+
+        <Section label="Nombre del equipo">
+          <View style={styles.nameInput}>
+            <View style={styles.accentBar} />
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Smash A"
+              placeholderTextColor={c.textFaint}
+              maxLength={50}
+              autoCapitalize="words"
+              style={styles.nameInputField}
+            />
+          </View>
+        </Section>
 
         <Section label="Competición">
           <ScrollView
@@ -255,22 +284,9 @@ export const CreateTeamScreen = ({
                 <Pressable
                   key={p.id}
                   onPress={() => setComp(p.id)}
-                  style={[
-                    styles.compCell,
-                    sel && {
-                      backgroundColor: c.accent,
-                      borderColor: c.accent,
-                    },
-                  ]}
+                  style={[styles.compCell, chipSel(sel)]}
                 >
-                  <Text
-                    style={[
-                      styles.compCellText,
-                      { color: sel ? '#000' : c.text },
-                    ]}
-                  >
-                    {p.label}
-                  </Text>
+                  <Text style={[styles.compCellText, chipText(sel)]}>{p.label}</Text>
                 </Pressable>
               );
             })}
@@ -306,19 +322,6 @@ export const CreateTeamScreen = ({
               </Pressable>
             </Section>
 
-            {showImport ? (
-              <Pressable
-                onPress={requestFcpImport}
-                style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
-              >
-                <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
-                <Text style={styles.fcpBannerText}>
-                  Busca tu equipo y créalo con su plantilla y sus puntos automáticamente.
-                  No hace falta rellenar lo de abajo.
-                </Text>
-              </Pressable>
-            ) : null}
-
             {!isFcp ? (
               <Section label="Liga · Opcional">
                 <PlainInput
@@ -332,81 +335,15 @@ export const CreateTeamScreen = ({
         ) : null}
 
         {comp === 'personalizada' ? (
-          <>
-            <Section label="Nombre de la liga · Opcional">
-              <PlainInput
-                value={league}
-                onChangeText={setLeague}
-                placeholder="Liga interempresas, liga del club…"
-              />
-            </Section>
-
-            <Section label="Partidos por jornada">
-              <View style={styles.catGrid}>
-                {[2, 3, 4, 5].map((n) => {
-                  const sel = customCourts === n;
-                  return (
-                    <Pressable
-                      key={n}
-                      onPress={() => setCustomCourts(n)}
-                      style={[
-                        styles.catCell,
-                        sel && {
-                          backgroundColor: c.accent,
-                          borderColor: c.accent,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.catCellText,
-                          { color: sel ? '#000' : c.text },
-                        ]}
-                      >
-                        {n}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </Section>
-
-            <Section
-              label="Orden de fuerza"
-              right={
-                <View style={styles.groupToggle}>
-                  <Toggle value={customOrder} onChange={setCustomOrder} size="sm" />
-                  <Text style={styles.groupToggleText}>
-                    {customOrder ? 'Se valida' : 'Libre'}
-                  </Text>
-                </View>
-              }
-            >
-              <Text style={styles.compHint}>
-                {customOrder
-                  ? 'La pareja 1 deberá sumar más puntos que la 2, y así sucesivamente.'
-                  : 'Podrás alinear las parejas en el orden que quieras.'}
-              </Text>
-            </Section>
-          </>
+          <Section label="Nombre de la liga · Opcional">
+            <PlainInput
+              value={league}
+              onChangeText={setLeague}
+              placeholder="Liga interempresas, liga del club…"
+            />
+          </Section>
         ) : null}
 
-        {showManual ? (
-        <>
-        <Section label="Nombre del equipo">
-          <View style={styles.nameInput}>
-            <View style={styles.accentBar} />
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Padel Club"
-              placeholderTextColor={c.textFaint}
-              maxLength={50}
-              autoCapitalize="words"
-              style={styles.nameInputField}
-            />
-          </View>
-        </Section>
         <Section label="Categoría">
           <ScrollView
             horizontal
@@ -419,23 +356,9 @@ export const CreateTeamScreen = ({
                 <Pressable
                   key={catValue}
                   onPress={() => setCat(catValue)}
-                  style={[
-                    styles.catCell,
-                    styles.catScrollCell,
-                    sel && {
-                      backgroundColor: c.accent,
-                      borderColor: c.accent,
-                    },
-                  ]}
+                  style={[styles.catCell, styles.catScrollCell, chipSel(sel)]}
                 >
-                  <Text
-                    style={[
-                      styles.catCellText,
-                      { color: sel ? '#000' : c.text },
-                    ]}
-                  >
-                    {catValue}
-                  </Text>
+                  <Text style={[styles.catCellText, chipText(sel)]}>{catValue}</Text>
                 </Pressable>
               );
             })}
@@ -450,21 +373,9 @@ export const CreateTeamScreen = ({
                 <Pressable
                   key={g.id}
                   onPress={() => setGender(g.id)}
-                  style={[
-                    styles.catCell,
-                    sel && {
-                      backgroundColor: c.accent,
-                      borderColor: c.accent,
-                    },
-                  ]}
+                  style={[styles.catCell, chipSel(sel)]}
                 >
-                  <Text
-                    style={[
-                      styles.catCellText,
-                      { fontSize: 14 },
-                      { color: sel ? '#000' : c.text },
-                    ]}
-                  >
+                  <Text style={[styles.catCellText, { fontSize: 14 }, chipText(sel)]}>
                     {g.label}
                   </Text>
                 </Pressable>
@@ -485,35 +396,80 @@ export const CreateTeamScreen = ({
           }
         >
           {hasGroup ? (
-            <View style={styles.catGrid}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.catScrollContent}
+            >
               {GROUPS.map((g) => {
                 const sel = group === g;
                 return (
                   <Pressable
                     key={g}
                     onPress={() => setGroup(g)}
-                    style={[
-                      styles.catCell,
-                      sel && {
-                        backgroundColor: c.accent,
-                        borderColor: c.accent,
-                      },
-                    ]}
+                    style={[styles.catCell, styles.catScrollCell, chipSel(sel)]}
                   >
-                    <Text
-                      style={[
-                        styles.catCellText,
-                        { color: sel ? '#000' : c.text },
-                      ]}
-                    >
-                      {g}
-                    </Text>
+                    <Text style={[styles.catCellText, chipText(sel)]}>{g}</Text>
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
           ) : null}
         </Section>
+
+        {comp === 'personalizada' ? (
+          <>
+            <Pressable
+              onPress={() => setMoreOpen((v) => !v)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: moreOpen }}
+              style={styles.moreToggle}
+            >
+              <Text style={styles.moreToggleText}>Más opciones</Text>
+              <View style={{ transform: [{ rotate: moreOpen ? '90deg' : '0deg' }] }}>
+                <IconChevron size={13} color={c.textMuted} />
+              </View>
+            </Pressable>
+            {moreOpen ? (
+              <>
+                <Section label="Partidos por jornada">
+                  <View style={styles.catGrid}>
+                    {[2, 3, 4, 5].map((n) => {
+                      const sel = customCourts === n;
+                      return (
+                        <Pressable
+                          key={n}
+                          onPress={() => setCustomCourts(n)}
+                          style={[styles.catCell, chipSel(sel)]}
+                        >
+                          <Text style={[styles.catCellText, chipText(sel)]}>{n}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </Section>
+
+                <Section
+                  label="Orden de fuerza"
+                  right={
+                    <View style={styles.groupToggle}>
+                      <Toggle value={customOrder} onChange={setCustomOrder} size="sm" />
+                      <Text style={styles.groupToggleText}>
+                        {customOrder ? 'Se valida' : 'Libre'}
+                      </Text>
+                    </View>
+                  }
+                >
+                  <Text style={styles.compHint}>
+                    {customOrder
+                      ? 'La pareja 1 deberá sumar más puntos que la 2, y así sucesivamente.'
+                      : 'Podrás alinear las parejas en el orden que quieras.'}
+                  </Text>
+                </Section>
+              </>
+            ) : null}
+          </>
+        ) : null}
 
         <View style={styles.preview}>
           <View style={styles.previewRow}>
@@ -540,35 +496,24 @@ export const CreateTeamScreen = ({
             </View>
           ) : null}
         </View>
-        </>
-        ) : null}
       </ScrollView>
 
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
-        {showImport ? (
-          <Pressable
-            onPress={requestFcpImport}
-            style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
-          >
-            <Text style={styles.ctaLabel}>Buscar mi equipo</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            disabled={!valid || submitting}
-            onPress={handleNext}
-            style={({ pressed }) => [
-              styles.ctaBtn,
-              (!valid || submitting) && { opacity: 0.4 },
-              pressed && valid && !submitting && { opacity: 0.85 },
-            ]}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#001810" />
-            ) : (
-              <Text style={styles.ctaLabel}>Continuar</Text>
-            )}
-          </Pressable>
-        )}
+        <Pressable
+          disabled={!valid || submitting}
+          onPress={handleNext}
+          style={({ pressed }) => [
+            styles.ctaBtn,
+            (!valid || submitting) && { opacity: 0.4 },
+            pressed && valid && !submitting && { opacity: 0.85 },
+          ]}
+        >
+          {submitting ? (
+            <ActivityIndicator color={c.textInverse} />
+          ) : (
+            <Text style={styles.ctaLabel}>Continuar</Text>
+          )}
+        </Pressable>
       </View>
 
       <FederationPickerSheet
@@ -578,11 +523,6 @@ export const CreateTeamScreen = ({
         onPick={(f) => {
           setFederation(f);
           setFederationPickerOpen(false);
-          setFcpManual(false);
-          // No auto-abrimos la importación al elegir la federación: el volcado
-          // es premium y debe ser una acción explícita (tocar «Importar» →
-          // aviso con opción de omitir). Elegir Cántabra solo muestra el
-          // banner/CTA de importar.
         }}
       />
 
@@ -590,7 +530,7 @@ export const CreateTeamScreen = ({
         open={fcpOpen}
         clubId={clubId ?? null}
         onClose={() => setFcpOpen(false)}
-        onImported={() => finishOnboarding()}
+        onImported={onFcpImported}
       />
     </KeyboardAvoidingView>
   );
@@ -687,62 +627,62 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progress: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  bar: {
-    width: 18,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: c.hairStrong,
-  },
-  barActive: {
-    width: 28,
-    backgroundColor: c.accent,
-    shadowColor: c.accent,
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
-  },
-  barDone: {
-    backgroundColor: c.accent50,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 22,
+    paddingHorizontal: 20,
+    paddingTop: 18,
     paddingBottom: 18,
-  },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 10,
   },
   title: {
     color: c.text,
     fontSize: 28,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: -0.7,
-    lineHeight: 30,
-    marginBottom: 6,
+    lineHeight: 31,
   },
-  lede: {
-    color: c.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+  // Tarjeta destacada «¿Juegas en la Liga Cántabra?»
+  fcpCard: {
+    marginTop: 16,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    borderRadius: Radius.lg,
+    padding: 14,
+    gap: 6,
   },
+  fcpCardTitle: { color: c.text, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  fcpCardText: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
+  fcpSearch: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
+  },
+  fcpSearchText: { color: c.textFaint, fontSize: 14 },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+    marginBottom: 2,
+  },
+  orLine: { flex: 1, height: 1, backgroundColor: c.hairStrong },
+  orText: { color: c.textFaint, fontSize: 12 },
+  moreToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: 18,
+    paddingVertical: 4,
+  },
+  moreToggleText: { color: c.textMuted, fontSize: 13.5, fontWeight: '600' },
   nameInput: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -831,16 +771,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: 8,
     lineHeight: 16,
   },
-  fcpBanner: {
-    marginTop: 18,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    borderRadius: Radius.md,
-    padding: 14,
-  },
-  fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
-  fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
   compHint: {
     color: c.textMuted,
     fontSize: 12,
@@ -922,15 +852,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   ctaLabel: {
-    color: '#001810',
+    color: c.textInverse,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
-  },
-  exitLink: {
-    color: c.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
   },
   selector: {
     flexDirection: 'row',

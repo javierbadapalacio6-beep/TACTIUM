@@ -13,7 +13,6 @@ const PRIVATE = [
   "/competir",
   "/connect",
   "/empezar",
-  "/bienvenida",
   "/entrar",
   "/equipo",
   "/jornada",

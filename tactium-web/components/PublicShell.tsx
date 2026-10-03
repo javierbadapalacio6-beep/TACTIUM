@@ -8,7 +8,7 @@ import { ICONS } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 import { Wordmark } from "./Wordmark";
 import { BtnLink } from "./ui";
-import { PUBLIC_NAV } from "@/lib/nav";
+import { PUBLIC_NAV, SIGNUP_HREF } from "@/lib/nav";
 import { APP_STORE_URL, CONTACT_EMAIL, PLAY_STORE_URL } from "@/lib/site";
 
 /**
@@ -81,7 +81,7 @@ export function PublicShell({
             Entrar
           </Link>
           <BtnLink
-            href="/empezar"
+            href={SIGNUP_HREF}
             variant="accent"
             className="tw-pub-cta tw-pub-deskonly"
           >
@@ -109,7 +109,7 @@ export function PublicShell({
               <Link href={`/entrar?next=${next}`} className="tw-pub-ghost">
                 Entrar
               </Link>
-              <BtnLink href="/empezar" variant="accent" className="tw-pub-cta">
+              <BtnLink href={SIGNUP_HREF} variant="accent" className="tw-pub-cta">
                 Crear cuenta
               </BtnLink>
             </div>
@@ -153,7 +153,7 @@ export function PublicShell({
           <h4>Cuenta</h4>
           <nav aria-label="Cuenta">
             <Link href={`/entrar?next=${next}`}>Entrar</Link>
-            <Link href="/empezar">Crear cuenta</Link>
+            <Link href={SIGNUP_HREF}>Crear cuenta</Link>
             <Link href="/legal/eliminar-cuenta">Eliminar cuenta</Link>
           </nav>
         </div>

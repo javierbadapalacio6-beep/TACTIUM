@@ -5,250 +5,293 @@ import Animated, {
   Easing,
   FadeIn,
   FadeInDown,
-  FadeInUp,
-  ZoomIn,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
 
-import { useColors, type Palette } from '@core/theme';
+import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { AmbientBackdrop, NeonDot, IconTrophy, IconTeam } from '@components/ui';
+import {
+  AmbientBackdrop,
+  IconChevron,
+  IconCourt,
+  IconTeam,
+  IconTicket,
+  IconTrophy,
+} from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useClubStore } from '@store/clubStore';
 import { useTeamStore } from '@store/teamStore';
+import { readStorePurchases, isClubTier } from '@core/services/storeSync';
+import { PLAN_BY_TIER } from '@core/subscriptions/plans';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
-const STAGGER_STEP = 90;
+const STAGGER_STEP = 70;
 
-// Bifurcación inicial del onboarding: ¿el usuario viene a ORGANIZAR TORNEOS o a
-// GESTIONAR EQUIPOS? Es la primera pantalla tras iniciar sesión.
-//   · Gestionar equipos → el onboarding de siempre (OnboardingChoice).
-//   · Organizar torneos → un club en modo "solo torneos" (paso mínimo: nombre)
-//     que aterriza en un menú recortado (Torneos + Perfil).
+// Pregunta única del onboarding, primera pantalla tras iniciar sesión: «¿Qué
+// vas a hacer en TACTIUM?». Antes eran dos (Intent: torneos vs equipos, y
+// Choice: equipo independiente vs club); ahora cada opción lleva a su paso 1:
+//   · Capitanear un equipo → CreateTeam (prueba de 14 días al crearlo).
+//   · Gestionar un club    → CreateClub (prueba de 14 días al crearlo).
+//   · Organizar torneos    → CreateTournamentClub (hasta 16 parejas, gratis).
+//   · Soy jugador · invitado → hoja de canjear invitación.
+//   · «Juego por mi cuenta» → modo suelto (amistosos y stats), gratis.
 export const OnboardingIntentScreen = ({
   navigation,
 }: OnboardingStackScreenProps<'OnboardingIntent'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
   const signOut = useAuthStore((s) => s.signOut);
   const clubs = useClubStore((s) => s.clubs);
   const soloUpgrade = useTeamStore((s) => s.soloUpgrade);
   const setSoloMode = useTeamStore((s) => s.setSoloMode);
+  const setSoloUpgrade = useTeamStore((s) => s.setSoloUpgrade);
   const [redeemOpen, setRedeemOpen] = useState(false);
 
-  // Casos en los que NO mostramos la bifurcación:
-  //  · "De jugador a gestor" (soloUpgrade) → directo a gestionar equipos.
-  //  · Ya tiene un club de gestión a medias (creado pero sin equipos) →
-  //    directo a crear sus equipos. Un club "solo torneos" no cuenta: ese
-  //    ya entra al menú (showMainTabs), no pasa por aquí.
+  // «De jugador a gestor» (soloUpgrade): solo equipo o club, y «Volver» deja
+  // al usuario en su modo suelto en vez de cerrar sesión.
+  const backToSolo = () => {
+    setSoloUpgrade(false);
+    setSoloMode(true);
+  };
+
+  // Ya tiene un club de gestión a medias (creado pero sin equipos) → directo
+  // a crear sus equipos. Un club «solo torneos» no cuenta: ese ya entra al
+  // menú recortado (showMainTabs), no pasa por aquí.
   useEffect(() => {
-    if (soloUpgrade) {
-      navigation.replace('OnboardingChoice');
-      return;
-    }
     if (clubs.some((cl) => !cl.tournaments_only)) {
       navigation.replace('CreateTeamsForClub');
     }
-  }, [soloUpgrade, clubs, navigation]);
+  }, [clubs, navigation]);
+
+  // La compra vive en la cuenta de la tienda, no en la de TACTIUM: quien
+  // rehace su cuenta llega aquí con un plan ya pagado. Si es de club, ese es
+  // su camino y el de capitán no le aplicaría.
+  const [paidClubPlan, setPaidClubPlan] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    readStorePurchases()
+      .then((ps) => {
+        const club = ps.find((p) => isClubTier(p.tier));
+        if (!cancelled && club) setPaidClubPlan(PLAN_BY_TIER[club.tier].displayName);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const goCaptain = () => {
+    if (!paidClubPlan) {
+      navigation.navigate('CreateTeam', {});
+      return;
+    }
+    Alert.alert(
+      'Tu plan es de club',
+      `Tienes ${paidClubPlan} activo, que cubre un club con varios equipos. ` +
+        'Un equipo independiente se cobra aparte con el plan Capitán.',
+      [
+        { text: 'Crear el club', onPress: () => navigation.navigate('CreateClub') },
+        {
+          text: 'Seguir con equipo suelto',
+          style: 'destructive',
+          onPress: () => navigation.navigate('CreateTeam', {}),
+        },
+      ],
+    );
+  };
+
+  const enter = (i: number) =>
+    reduced
+      ? undefined
+      : FadeInDown.delay(STAGGER_STEP * i)
+          .duration(340)
+          .easing(Easing.out(Easing.cubic));
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
       <AmbientBackdrop intensity={0.6} />
 
       <View style={styles.header}>
-        <Animated.View
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
-          entering={ZoomIn.duration(360).easing(Easing.out(Easing.cubic))}
+        <View style={styles.brandRow}>
+          <TactiumMark size={26} gradient />
+          <Text style={styles.brand}>TACTIUM</Text>
+        </View>
+        <Pressable
+          onPress={
+            soloUpgrade
+              ? backToSolo
+              : () =>
+                  Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Salir', style: 'destructive', onPress: () => signOut() },
+                  ])
+          }
+          hitSlop={10}
+          style={{ paddingHorizontal: 6 }}
         >
-          <TactiumMark size={28} gradient />
-          <Animated.Text
-            style={styles.brand}
-            entering={FadeIn.delay(180).duration(280)}
-          >
-            TACTIUM
-          </Animated.Text>
-        </Animated.View>
-        <Animated.View entering={FadeIn.delay(220).duration(220)}>
-          <Pressable
-            onPress={() =>
-              Alert.alert('Cerrar sesión', '¿Salir y volver a iniciar sesión?', [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Salir', style: 'destructive', onPress: () => signOut() },
-              ])
-            }
-            hitSlop={10}
-            style={{ paddingHorizontal: 6 }}
-          >
-            <Text style={styles.exitLink}>Cerrar sesión</Text>
-          </Pressable>
-        </Animated.View>
+          <Text style={styles.exitLink}>{soloUpgrade ? '← Volver' : 'Cerrar sesión'}</Text>
+        </Pressable>
       </View>
 
       <ScrollView
-        style={styles.bodyScroll}
+        style={{ flex: 1 }}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.Text
-          style={styles.eyebrow}
-          entering={FadeInDown.delay(STAGGER_STEP * 2)
-            .duration(320)
-            .easing(Easing.out(Easing.cubic))}
-        >
-          BIENVENIDO
-        </Animated.Text>
-        <Animated.Text
-          style={styles.title}
-          entering={FadeInDown.delay(STAGGER_STEP * 3)
-            .duration(380)
-            .easing(Easing.out(Easing.cubic))}
-        >
-          ¿Qué vas a hacer?
-        </Animated.Text>
-        <Animated.Text
-          style={styles.lede}
-          entering={FadeInDown.delay(STAGGER_STEP * 4)
-            .duration(320)
-            .easing(Easing.out(Easing.cubic))}
-        >
-          Puedes organizar torneos, gestionar tus equipos, o las dos cosas.
-          Elige por dónde empezar — lo otro lo activas cuando quieras.
-        </Animated.Text>
+        <Animated.View entering={enter(1)}>
+          <Text style={styles.eyebrow}>
+            {soloUpgrade ? 'DE JUGADOR A GESTOR' : 'BIENVENIDO'}
+          </Text>
+          <Text style={styles.title}>
+            {soloUpgrade ? 'Crea tu equipo o tu club' : '¿Qué vas a hacer en TACTIUM?'}
+          </Text>
+          {soloUpgrade ? (
+            <Text style={styles.lede}>
+              Tus amistosos y tus stats se conservan: es la misma cuenta, con más
+              poderes.
+            </Text>
+          ) : null}
+        </Animated.View>
+
+        {paidClubPlan ? (
+          <Animated.View entering={enter(2)} style={styles.paidPill}>
+            <View style={styles.paidPillDot} />
+            <Text style={styles.paidPillText}>
+              Ya tienes {paidClubPlan} activo · lo aplicamos al club que crees
+            </Text>
+          </Animated.View>
+        ) : null}
 
         <View style={styles.options}>
-          <Animated.View
-            entering={FadeInUp.delay(STAGGER_STEP * 5)
-              .duration(360)
-              .easing(Easing.out(Easing.cubic))}
-          >
-            <IntentCard
-              Icon={IconTrophy}
-              title="Organizar torneos"
-              description="Monta torneos, abre inscripciones y gestiona los cuadros. Listo en un minuto."
-              badge="TORNEOS"
-              onPress={() => navigation.navigate('CreateTournamentClub')}
-            />
-          </Animated.View>
-
-          <Animated.View
-            entering={FadeInUp.delay(STAGGER_STEP * 6)
-              .duration(360)
-              .easing(Easing.out(Easing.cubic))}
-          >
-            <IntentCard
+          <Animated.View entering={enter(3)}>
+            <OptionRow
               Icon={IconTeam}
-              title="Gestionar equipos"
-              description="Equipo independiente o club con varios equipos: alineaciones, jornadas y plantillas."
-              badge="EQUIPOS"
-              onPress={() => navigation.navigate('OnboardingChoice')}
+              title="Capitanear un equipo"
+              subtitle={
+                paidClubPlan
+                  ? 'Un solo equipo · tu plan de club no lo cubre'
+                  : 'Convocatoria, alineación y acta · 14 días gratis'
+              }
+              onPress={goCaptain}
             />
           </Animated.View>
+          <Animated.View entering={enter(4)}>
+            <OptionRow
+              Icon={IconCourt}
+              title="Gestionar un club"
+              subtitle={
+                paidClubPlan
+                  ? `Varios equipos en un panel · incluido en tu ${paidClubPlan}`
+                  : 'Varios equipos en un panel · 14 días gratis'
+              }
+              highlight={!!paidClubPlan}
+              onPress={() => navigation.navigate('CreateClub')}
+            />
+          </Animated.View>
+          {!soloUpgrade ? (
+            <Animated.View entering={enter(5)}>
+              <OptionRow
+                Icon={IconTrophy}
+                title="Organizar torneos"
+                subtitle="Hasta 16 parejas, gratis"
+                onPress={() => navigation.navigate('CreateTournamentClub')}
+              />
+            </Animated.View>
+          ) : null}
         </View>
 
-        {/* Vía JUGADOR: no gestiona nada, solo juega. Separada de las de gestión
-            porque es otra intención (y gratis). */}
-        <Animated.View
-          style={styles.divider}
-          entering={FadeIn.delay(STAGGER_STEP * 7).duration(280)}
-        >
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>O SOY JUGADOR</Text>
-          <View style={styles.dividerLine} />
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInUp.delay(STAGGER_STEP * 8)
-            .duration(320)
-            .easing(Easing.out(Easing.cubic))}
-        >
-          <Pressable
-            onPress={() => setRedeemOpen(true)}
-            style={({ pressed }) => [styles.redeem, pressed && { opacity: 0.85 }]}
-          >
-            <View style={styles.freeBadge}>
-              <Text style={styles.freeBadgeText}>ME HAN INVITADO</Text>
-            </View>
-            <Text style={styles.redeemTitle}>Me han invitado a un equipo</Text>
-            <Text style={styles.redeemHint}>
-              Mi capitán o club ya tiene equipo creado y me ha enviado una
-              invitación para unirme.
-            </Text>
-          </Pressable>
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInUp.delay(STAGGER_STEP * 8.5)
-            .duration(320)
-            .easing(Easing.out(Easing.cubic))}
-          style={{ marginTop: 10 }}
-        >
-          <Pressable
-            onPress={() => setSoloMode(true)}
-            style={({ pressed }) => [styles.redeem, pressed && { opacity: 0.85 }]}
-          >
-            <View style={styles.freeBadge}>
-              <Text style={styles.freeBadgeText}>GRATIS</Text>
-            </View>
-            <Text style={styles.redeemTitle}>Juego por mi cuenta</Text>
-            <Text style={styles.redeemHint}>
-              Registra amistosos con tus colegas, canjea un código de partido y
-              sigue tus estadísticas. Sin equipo ni invitación.
-            </Text>
-          </Pressable>
-        </Animated.View>
-
-        <Animated.View
-          style={styles.footer}
-          entering={FadeIn.delay(STAGGER_STEP * 9).duration(260)}
-        >
-          <Text style={styles.footnote}>
-            Los torneos necesitan una suscripción o el pago del propio torneo.{'\n'}
-            Podrás cambiar de modo más adelante sin perder nada.
-          </Text>
-        </Animated.View>
+        {!soloUpgrade ? (
+          <>
+            <Animated.Text
+              entering={reduced ? undefined : FadeIn.delay(STAGGER_STEP * 6).duration(260)}
+              style={styles.sectionLabel}
+            >
+              SOY JUGADOR
+            </Animated.Text>
+            <Animated.View entering={enter(7)}>
+              <OptionRow
+                Icon={IconTicket}
+                tone="warning"
+                title="Me han invitado a un equipo"
+                subtitle="Tengo un enlace o un código"
+                onPress={() => setRedeemOpen(true)}
+              />
+            </Animated.View>
+            <Animated.View entering={enter(8)}>
+              <Pressable
+                onPress={() => setSoloMode(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.soloLink, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={styles.soloLinkText}>Juego por mi cuenta · gratis →</Text>
+              </Pressable>
+            </Animated.View>
+          </>
+        ) : null}
       </ScrollView>
 
-      <RedeemInvitationSheet
-        open={redeemOpen}
-        onClose={() => setRedeemOpen(false)}
-      />
+      <RedeemInvitationSheet open={redeemOpen} onClose={() => setRedeemOpen(false)} />
     </View>
   );
 };
 
-const IntentCard: React.FC<{
+/** Opción de la lista: icono, título, subtítulo y chevron; escala al pulsar. */
+const OptionRow: React.FC<{
   Icon: React.ComponentType<{ size?: number; color?: string }>;
   title: string;
-  description: string;
-  badge: string;
+  subtitle: string;
   onPress: () => void;
-}> = ({ Icon, title, description, badge, onPress }) => {
+  tone?: 'accent' | 'warning';
+  highlight?: boolean;
+}> = ({ Icon, title, subtitle, onPress, tone = 'accent', highlight }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const reduced = useReducedMotion();
+  const scale = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const press = (to: number) => {
+    if (reduced) return;
+    scale.value = withTiming(to, { duration: to < 1 ? 90 : 160 });
+  };
+  const toneColor = tone === 'warning' ? c.warning : c.accent;
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+      onPressIn={() => press(0.975)}
+      onPressOut={() => press(1)}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${subtitle}`}
     >
-      <View style={styles.cardHeader}>
-        <View style={styles.cardIcon}>
-          <Icon size={20} color={c.accent} />
+      <Animated.View
+        style={[styles.option, highlight && styles.optionOn, pressStyle]}
+      >
+        <View
+          style={[
+            styles.optionIcon,
+            tone === 'warning' && {
+              backgroundColor: withAlpha(c.warning, 0.12),
+              borderColor: withAlpha(c.warning, 0.45),
+            },
+          ]}
+        >
+          <Icon size={18} color={toneColor} />
         </View>
-        <View style={styles.cardBadge}>
-          <Text style={styles.cardBadgeText}>{badge}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.optionTitle}>{title}</Text>
+          <Text style={styles.optionSub}>{subtitle}</Text>
         </View>
-        <NeonDot size={6} />
-      </View>
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.cardDesc}>{description}</Text>
-      <View style={styles.cardCta}>
-        <Text style={styles.cardCtaText}>Empezar</Text>
-        <Text style={styles.cardCtaArrow}>→</Text>
-      </View>
+        <IconChevron size={14} color={c.textFaint} />
+      </Animated.View>
     </Pressable>
   );
 };
@@ -262,20 +305,21 @@ const makeStyles = (c: Palette) =>
       alignItems: 'center',
       justifyContent: 'space-between',
     },
+    brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     brand: {
       color: c.text,
       fontSize: 14,
       fontWeight: '700',
       letterSpacing: 2,
     },
-    bodyScroll: {
-      flex: 1,
+    exitLink: {
+      color: c.textMuted,
+      fontSize: 13,
+      fontWeight: '600',
     },
     body: {
-      // flexGrow (no flex:1) para que fluya y haga scroll cuando no cabe, pero
-      // ocupe todo el alto (footer abajo) cuando sobra.
       flexGrow: 1,
-      paddingHorizontal: 24,
+      paddingHorizontal: 20,
       paddingTop: 28,
     },
     eyebrow: {
@@ -289,149 +333,99 @@ const makeStyles = (c: Palette) =>
     title: {
       color: c.text,
       fontSize: 30,
-      fontWeight: '600',
+      fontWeight: '700',
       letterSpacing: -0.7,
-      lineHeight: 32,
-      marginBottom: 8,
+      lineHeight: 33,
     },
     lede: {
       color: c.textMuted,
       fontSize: 14,
       lineHeight: 20,
-      marginBottom: 24,
+      marginTop: 8,
     },
-    options: { gap: 12 },
-    divider: {
+    paidPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
-      marginVertical: 18,
-    },
-    dividerLine: { flex: 1, height: 1, backgroundColor: c.hairStrong },
-    dividerText: {
-      fontFamily: Fonts.mono,
-      color: c.textFaint,
-      fontSize: 11,
-      letterSpacing: 2,
-      fontWeight: '500',
-    },
-    redeem: {
-      backgroundColor: 'transparent',
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: c.hair,
-      borderStyle: 'dashed',
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-    },
-    freeBadge: {
+      gap: 8,
       alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
       backgroundColor: c.accent10,
       borderWidth: 1,
       borderColor: c.accent40,
-      paddingHorizontal: 7,
-      paddingVertical: 3,
-      borderRadius: 5,
-      marginBottom: 6,
+      marginTop: 16,
     },
-    freeBadgeText: {
+    paidPillDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: c.accent,
+    },
+    paidPillText: {
       fontFamily: Fonts.mono,
       color: c.accent,
-      fontSize: 9,
-      fontWeight: '700',
-      letterSpacing: 1,
-    },
-    redeemTitle: {
-      color: c.text,
-      fontSize: 13,
-      fontWeight: '600',
-      letterSpacing: -0.2,
-    },
-    redeemHint: {
-      color: c.textMuted,
       fontSize: 11,
-      lineHeight: 15,
-      marginTop: 3,
+      fontWeight: '600',
+      letterSpacing: 0.4,
+      flexShrink: 1,
     },
-    card: {
-      backgroundColor: c.bgCard,
-      borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-      padding: 16,
-    },
-    cardHeader: {
+    options: { gap: 10, marginTop: 22 },
+    option: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
-      marginBottom: 10,
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      borderRadius: Radius.md,
     },
-    cardIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+    optionOn: {
+      borderColor: c.accent,
+      backgroundColor: c.accent10,
+    },
+    optionIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 11,
       backgroundColor: c.accent10,
       borderWidth: 1,
       borderColor: c.accent40,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cardBadge: {
-      flex: 1,
-      alignItems: 'flex-start',
-    },
-    cardBadgeText: {
-      fontFamily: Fonts.mono,
-      fontSize: 9,
-      fontWeight: '600',
-      letterSpacing: 1.2,
-      color: c.accent,
-    },
-    cardTitle: {
+    optionTitle: {
       color: c.text,
-      fontSize: 17,
+      fontSize: 15.5,
       fontWeight: '700',
-      letterSpacing: -0.3,
-      marginBottom: 4,
+      letterSpacing: -0.2,
     },
-    cardDesc: {
+    optionSub: {
       color: c.textMuted,
       fontSize: 12.5,
-      lineHeight: 18,
-    },
-    cardCta: {
-      marginTop: 12,
-      paddingTop: 10,
-      borderTopWidth: 1,
-      borderColor: c.hair,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    cardCtaText: {
-      color: c.accent,
-      fontSize: 12,
-      fontWeight: '600',
-      letterSpacing: -0.1,
-    },
-    cardCtaArrow: {
-      color: c.accent,
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    footer: {
-      marginTop: 'auto',
-      paddingTop: 20,
-    },
-    footnote: {
-      color: c.textFaint,
-      fontSize: 12,
-      textAlign: 'center',
       lineHeight: 17,
+      marginTop: 2,
     },
-    exitLink: {
+    sectionLabel: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 11,
+      letterSpacing: 2.4,
+      fontWeight: '500',
+      marginTop: 24,
+      marginBottom: 10,
+    },
+    soloLink: {
+      alignSelf: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      marginTop: 6,
+    },
+    soloLinkText: {
       color: c.textMuted,
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '600',
     },
   });

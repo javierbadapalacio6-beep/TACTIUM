@@ -352,6 +352,25 @@ export async function fetchTrialSubscription(
   };
 }
 
+/**
+ * ¿Este pagador ha tenido ALGUNA VEZ la prueba sin tarjeta (`trial_*`), en
+ * curso o ya gastada? Es el mismo criterio con el que el checkout decide si
+ * da otra prueba de Stripe (no la da) o cobra desde el primer día.
+ */
+export async function fetchHadTrial(
+  subjectType: "user" | "club",
+  subjectId: string,
+): Promise<boolean> {
+  const { count, error } = await supabaseBrowser()
+    .from("subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("subject_type", subjectType)
+    .eq("subject_id", subjectId)
+    .like("product_id", "trial_%");
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
 /* ── Vinculación usuario ↔ jugador de plantilla (claim) ──────────── */
 export interface DbClaimablePlayer {
   id: string;

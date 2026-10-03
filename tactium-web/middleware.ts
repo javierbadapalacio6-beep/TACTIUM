@@ -13,6 +13,8 @@ import { NextResponse, type NextRequest } from "next/server";
  *    cookies. Sin esto la sesión caduca en mitad de la sesión del usuario y
  *    los Server Components empiezan a ver `anon` — con lo que la RLS deja de
  *    devolver datos y las pantallas se vacían sin error visible.
+ *
+ * 3. `/empezar` sin sesión → `/entrar?modo=alta&next=…` (ver abajo).
  */
 export async function middleware(request: NextRequest) {
   const canonical = process.env.CANONICAL_HOST;
@@ -53,7 +55,22 @@ export async function middleware(request: NextRequest) {
   });
 
   // `getUser` es lo que dispara el refresco. No borrar.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // 3. El onboarding (`/empezar…`) exige cuenta. Sin sesión se va al alta y,
+  //    tras crearla, se vuelve aquí. Antes dejaba rellenar el equipo sin
+  //    cuenta y la pedía al final.
+  const path = request.nextUrl.pathname;
+  if (!user && (path === "/empezar" || path.startsWith("/empezar/"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/entrar";
+    url.search = "";
+    url.searchParams.set("modo", "alta");
+    url.searchParams.set("next", path + request.nextUrl.search);
+    return NextResponse.redirect(url);
+  }
 
   return response;
 }

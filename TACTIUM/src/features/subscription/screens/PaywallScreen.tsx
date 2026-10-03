@@ -11,7 +11,11 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useReducedMotion,
+} from 'react-native-reanimated';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
@@ -29,6 +33,8 @@ import {
   applySubscriptionToClub,
 } from '@core/services/storeSync';
 import {
+  CAPTAIN_BENEFITS,
+  CLUB_BENEFITS,
   CAPTAIN_PLAN,
   CLUB_PLANS,
   PREMIUM_STATUSES,
@@ -54,19 +60,20 @@ import {
   type PurchasesOffering,
   storeOffersFreeTrial,
 } from '@core/purchases';
+import {
+  paywallIntentFamily,
+  paywallReasonCopy,
+} from '@core/subscriptions/paywallReasons';
 import { TrialTimeline } from '../components/TrialTimeline';
+import {
+  AnimatedPlanCard,
+  BillingToggle,
+  ComparePlans,
+  DbTrialBlock,
+  PaywallReasonBanner,
+} from '../components/PaywallParts';
 
 import type { RootStackScreenProps } from '@navigation/types';
-
-// Value props centradas en el dolor real del capitán amateur (WhatsApp,
-// Excel, calendarios mal cuadrados), no en features genéricas. Mantener
-// entre 3-4 para no saturar.
-const VALUE_PROPS = [
-  'Convocatorias en 1 toque, sin chats de 80 mensajes',
-  'Parejas equilibradas por puntos automáticamente',
-  'Calendario y rankings escaneados desde la federación',
-  'Tus jugadores avisan si pueden o no, sin perseguir a nadie',
-];
 
 // Default tier highlighted en cada flow.
 const DEFAULT_CLUB_TIER: PlanTier = 'club_pro';
@@ -111,6 +118,10 @@ export const PaywallScreen = ({
       }
     | undefined;
   const isOnboarding = Boolean(params?.optional);
+  const reduced = useReducedMotion();
+  // Entrada escalonada de los bloques (apagada con «Reducir movimiento»).
+  const enter = (i: number) =>
+    reduced ? undefined : FadeInDown.duration(280).delay(60 + i * 60);
   // En onboarding `activeRole` puede ser null (justo tras CreateClub aún
   // no hay team, y deriveRawRole(null,…) = null). Usamos `intent` como
   // verdad para decidir qué familia de planes mostrar. Fuera de onboarding
@@ -133,14 +144,30 @@ export const PaywallScreen = ({
   // usa el onboarding y también «Cambiar de tipo de plan» desde Mi suscripción,
   // que es el único sitio desde el que se salta de club a capitán o al revés.
   // Otros intents ('upgrade', 'change') no eligen familia: manda el rol.
-  const showClubPlans =
-    intent === 'club'
+  // Algunos motivos solo existen en una familia (p. ej. importar las
+  // plantillas desde el panel del club) y la fijan igual que 'club'/'captain'.
+  const intentFamily = paywallIntentFamily(intent);
+  const roleShowsClub =
+    intentFamily === 'club'
       ? true
-      : intent === 'captain'
+      : intentFamily === 'captain'
         ? false
         : isOnboarding
           ? false
           : activeRole === 'club_admin' || ownsActiveTeamClub;
+  // «¿Llevas varios equipos? Ver planes de club»: el capitán puede pasar a ver
+  // los planes de club (y volver). Solo si tiene un club al que suscribir: un
+  // plan de club se cobra AL CLUB, sin club no hay a quién aplicarlo.
+  const [familyOverride, setFamilyOverride] = useState<'club' | 'captain' | null>(
+    null,
+  );
+  const showClubPlans =
+    familyOverride === 'club'
+      ? true
+      : familyOverride === 'captain'
+        ? false
+        : roleShowsClub;
+  const canSeeClubPlans = !isOnboarding && Boolean(club?.id);
 
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
   // Hoja de confirmación con la línea de tiempo del trial (Apple HIG).
@@ -324,6 +351,33 @@ export const PaywallScreen = ({
         : trialDaysLeft === 1
           ? 'te queda 1 día de prueba'
           : `te quedan ${trialDaysLeft} días de prueba`;
+
+  // ── Contexto ──────────────────────────────────────────────────────────────
+  // Por qué estás aquí (motivo del gate). Sin motivo, sin bloque.
+  // Para «Tu prueba acaba en N días»: la del sujeto y, si no, la del store.
+  const anyTrialDaysLeft = useSubscriptionStore((s) => s.trialDaysLeft());
+  const reason = paywallReasonCopy(intent, trialDaysLeft ?? anyTrialDaysLeft);
+  // EN la prueba sin tarjeta (BD) y sin compra de tienda: el hero se cambia por
+  // los días que quedan y la línea de tiempo de la prueba.
+  const inDbTrial = Boolean(dbTrialSub && !existingSubForSubject);
+  // ¿Ya gastó la prueba? Cualquier suscripción previa del sujeto (el servidor
+  // no da prueba a quien ya tuvo una) o una prueba de BD pagada por él.
+  const hasUsedTrial = useMemo(() => {
+    const subjectType = showClubPlans ? 'club' : 'user';
+    const subjectId = showClubPlans ? club?.id : userId;
+    return subscriptions.some(
+      (s) =>
+        (s.subject_type === subjectType && s.subject_id === subjectId) ||
+        ((s.product_id ?? '').startsWith('trial_') && s.payer_user_id === userId),
+    );
+  }, [subscriptions, showClubPlans, club?.id, userId]);
+  const benefits = showClubPlans ? CLUB_BENEFITS : CAPTAIN_BENEFITS;
+
+  /** Cambia de familia de planes (capitán ↔ club) sin salir del paywall. */
+  const switchFamily = (to: 'club' | 'captain') => {
+    setFamilyOverride(to === (roleShowsClub ? 'club' : 'captain') ? null : to);
+    setSelectedTier(to === 'club' ? DEFAULT_CLUB_TIER : 'captain');
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -785,13 +839,25 @@ export const PaywallScreen = ({
     }
   };
 
+  // Hitos de la prueba de BD (fechas de la propia suscripción).
+  const dbTrialStartIso =
+    dbTrialSub?.current_period_start ?? dbTrialSub?.created_at ?? null;
+  const dbTrialEndIso =
+    dbTrialSub?.trial_end ?? dbTrialSub?.current_period_end ?? null;
+
+  const eyebrow = inDbTrial
+    ? 'TU PRUEBA'
+    : familyOverride === 'club'
+      ? 'PLANES DE CLUB'
+      : 'TACTIUM PRO';
+
   return (
     <View style={styles.root}>
       <AmbientBackdrop intensity={0.35} />
 
       {/* === HEADER === */}
       <Animated.View
-        entering={FadeIn.duration(220)}
+        entering={reduced ? undefined : FadeIn.duration(220)}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <Pressable
@@ -807,7 +873,7 @@ export const PaywallScreen = ({
           <IconX size={14} color={c.text} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={styles.eyebrow}>TACTIUM PRO</Text>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
         </View>
         <View style={{ width: 36 }} />
       </Animated.View>
@@ -819,102 +885,85 @@ export const PaywallScreen = ({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* === HERO === */}
-        <Animated.View
-          entering={FadeInDown.duration(280).delay(60)}
-          style={styles.hero}
-        >
-          <TactiumMark size={64} />
-          {isInTrial && trialDaysLabel ? (
-            <View style={styles.trialPill}>
-              <Text style={styles.trialPillText}>
-                EN PRUEBA · {trialDaysLabel.toUpperCase()}
-              </Text>
-            </View>
-          ) : null}
-          <Text style={styles.heroTitle}>
-            {isInTrial
-              ? 'Mejora tu plan'
-              : showClubPlans
-                ? 'Tu club, sin Excel ni WhatsApp'
-                : 'Tu próxima alineación, en 90 segundos'}
-          </Text>
-          <Text style={styles.heroLede}>
-            {isInTrial
-              ? 'Sigues dentro de tu prueba gratuita: al cambiar de plan no empieza una nueva, mantienes los días que te quedan.'
-              : showClubPlans
-                ? 'Tus capitanes convocan, equilibran parejas y registran resultados desde un solo sitio. Tú lo ves todo.'
-                : 'Convoca, equilibra parejas por puntos y envía notificaciones en menos de 2 minutos por jornada.'}
-          </Text>
-        </Animated.View>
+        {/* === CONTEXTO: por qué estás aquí === */}
+        {reason ? (
+          <Animated.View entering={enter(0)} style={styles.block}>
+            <PaywallReasonBanner reason={reason} />
+          </Animated.View>
+        ) : null}
 
-        {/* === VALUE PROPS === */}
-        <Animated.View
-          entering={FadeInDown.duration(280).delay(140)}
-          style={styles.valueProps}
-        >
-          {VALUE_PROPS.map((label) => (
-            <View key={label} style={styles.valueRow}>
-              <View style={styles.checkDot}>
-                <IconCheck size={12} color={c.accent} />
-              </View>
-              <Text style={styles.valueText}>{label}</Text>
-            </View>
-          ))}
-        </Animated.View>
-
-        {/* === SOCIAL PROOF ===
-            Mientras no tengamos números reales (post-launch), un copy
-            honesto y específico es mejor que una métrica inventada. Lo
-            cambiaremos a algo como "+200 capitanes alinean en TACTIUM"
-            cuando lo tengamos. Hoy: el "para quién" sin mentir. */}
-        <Animated.View
-          entering={FadeInDown.duration(280).delay(180)}
-          style={styles.socialProof}
-        >
-          <Text style={styles.socialProofText}>
-            Hecho con capitanes federados de toda España
-          </Text>
-        </Animated.View>
-
-        {/* === BILLING TOGGLE === */}
-        <Animated.View
-          entering={FadeInDown.duration(280).delay(220)}
-          style={styles.billingToggle}
-        >
-          {(['monthly', 'yearly'] as const).map((opt) => {
-            const sel = billing === opt;
-            return (
-              <Pressable
-                key={opt}
-                onPress={() => setBilling(opt)}
-                style={[styles.billingChip, sel && styles.billingChipActive]}
-              >
-                <Text
-                  style={[
-                    styles.billingChipText,
-                    sel && styles.billingChipTextActive,
-                  ]}
-                >
-                  {opt === 'monthly' ? 'Mensual' : 'Anual'}
+        {inDbTrial && dbTrialEndIso ? (
+          /* === EN PRUEBA SIN TARJETA: días + línea de tiempo === */
+          <Animated.View entering={enter(1)} style={styles.block}>
+            <DbTrialBlock
+              startIso={dbTrialStartIso}
+              endIso={dbTrialEndIso}
+              trialDays={TRIAL_DURATION_DAYS}
+            />
+          </Animated.View>
+        ) : !reason ? (
+          /* === HERO (sin motivo) === */
+          <Animated.View entering={enter(1)} style={styles.hero}>
+            <TactiumMark size={56} />
+            {isInTrial && trialDaysLabel ? (
+              <View style={styles.trialPill}>
+                <Text style={styles.trialPillText}>
+                  EN PRUEBA · {trialDaysLabel.toUpperCase()}
                 </Text>
-                {opt === 'yearly' && yearlyDiscount > 0 ? (
-                  <View style={styles.discountBadge}>
-                    <Text style={styles.discountBadgeText}>
-                      -{yearlyDiscount}%
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
+              </View>
+            ) : null}
+            <Text style={styles.heroTitle}>
+              {isInTrial
+                ? 'Mejora tu plan'
+                : showClubPlans
+                  ? 'Tu club, sin Excel ni WhatsApp'
+                  : 'Convoca, alinea y cierra la jornada'}
+            </Text>
+            <Text style={styles.heroLede}>
+              {isInTrial
+                ? 'Sigues dentro de tu prueba: al cambiar de plan no empieza una nueva, mantienes los días que te quedan.'
+                : showClubPlans
+                  ? 'Tus capitanes convocan, hacen las parejas y apuntan resultados. Tú lo ves todo desde un panel.'
+                  : 'Convocatoria, parejas por puntos y acta de la jornada, en un par de minutos.'}
+            </Text>
+          </Animated.View>
+        ) : null}
+
+        {/* === VENTAJAS (según familia) === */}
+        {!inDbTrial ? (
+          <Animated.View entering={enter(2)} style={styles.valueProps}>
+            {benefits.map((label) => (
+              <View key={label} style={styles.valueRow}>
+                <View style={styles.checkDot}>
+                  <IconCheck size={12} color={c.accent} />
+                </View>
+                <Text style={styles.valueText}>{label}</Text>
+              </View>
+            ))}
+          </Animated.View>
+        ) : null}
+
+        {/* === PRUEBA SOCIAL ===
+            Honesta y concreta: hoy solo está activa la Liga Cántabra. */}
+        {!inDbTrial ? (
+          <Animated.View entering={enter(3)} style={styles.socialProof}>
+            <Text style={styles.socialProofText}>
+              Hecho con capitanes de la Liga Cántabra
+            </Text>
+          </Animated.View>
+        ) : null}
+
+        {/* === SELECTOR MENSUAL / ANUAL === */}
+        <Animated.View entering={enter(4)} style={styles.billingBlock}>
+          <BillingToggle
+            value={billing}
+            onChange={setBilling}
+            showYearlyChip={yearlyDiscount > 0}
+          />
         </Animated.View>
 
-        {/* === PLANS === */}
-        <Animated.View
-          entering={FadeInDown.duration(280).delay(300)}
-          style={styles.plansBlock}
-        >
+        {/* === PLANES === */}
+        <Animated.View entering={enter(5)} style={styles.plansBlock}>
           {visiblePlans.map((plan) => {
             const sel = plan.tier === selectedTier;
             const pYear = priceOf(plan, 'yearly');
@@ -924,31 +973,26 @@ export const PaywallScreen = ({
             const monthlyEquivLabel =
               pYear.perMonthString ?? formatEur(pYear.amount / 12);
             const showBadge = plan.tier === DEFAULT_CLUB_TIER && showClubPlans;
-            // Sub-line concreta de fit por tier — orienta al cap/admin
-            // indeciso hacia el tier que probablemente le toque.
+            // Qué incluye, en una línea, con los datos de plans.ts.
             const fitLine =
               plan.tier === 'captain'
-                ? 'Para 1 capitán · gestiona tu equipo'
-                : plan.tier === 'club_starter'
-                  ? 'Hasta 3 equipos · clubes pequeños'
-                  : plan.tier === 'club_pro'
-                    ? 'Hasta 10 equipos · la mayoría de clubes federados'
-                    : 'Hasta 25 equipos · escuelas y academias';
-            // Ahorro anual (concreto, mejor que solo "-20%"), con precios reales.
-            const yearlySavings =
-              billing === 'yearly' ? pMonth.amount * 12 - pYear.amount : 0;
+                ? '1 equipo · tus jugadores no pagan'
+                : `${plan.teamQuota} equipos · torneos hasta ${plan.tournamentPairCap} parejas`;
+            const billed =
+              billing === 'yearly'
+                ? `${pYear.formatted} al año`
+                : `${pMonth.formatted} al mes`;
             return (
-              <Pressable
+              <AnimatedPlanCard
                 key={plan.tier}
+                selected={sel}
                 onPress={() => setSelectedTier(plan.tier)}
-                style={({ pressed }) => [
-                  styles.planCard,
-                  sel && styles.planCardSelected,
-                  pressed && { opacity: 0.95 },
-                ]}
+                style={styles.planCard}
+                selectedStyle={styles.planCardSelected}
+                accessibilityLabel={`${plan.displayName}, ${billed}`}
               >
                 <View style={styles.planCardHeader}>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.planTitle}>{plan.displayName}</Text>
                     <Text style={styles.planQuota}>{fitLine}</Text>
                   </View>
@@ -982,21 +1026,42 @@ export const PaywallScreen = ({
                     ≈ {monthlyEquivLabel}/mes
                   </Text>
                 ) : null}
-                {billing === 'yearly' && yearlySavings > 0 ? (
-                  <Text style={styles.planSavings}>
-                    Ahorras {formatEur(yearlySavings)} al año
-                  </Text>
-                ) : null}
-              </Pressable>
+              </AnimatedPlanCard>
             );
           })}
+
+          {/* Capitán con varios equipos → planes de club (y vuelta). */}
+          {!showClubPlans && canSeeClubPlans ? (
+            <Pressable
+              onPress={() => switchFamily('club')}
+              hitSlop={8}
+              accessibilityRole="button"
+              style={styles.familyLink}
+            >
+              <Text style={styles.familyLinkText}>
+                ¿Llevas varios equipos?{' '}
+                <Text style={styles.familyLinkAccent}>Ver planes de club</Text>
+              </Text>
+            </Pressable>
+          ) : null}
+          {showClubPlans ? <ComparePlans plans={visiblePlans} /> : null}
+          {showClubPlans && familyOverride === 'club' ? (
+            <Pressable
+              onPress={() => switchFamily('captain')}
+              hitSlop={8}
+              accessibilityRole="button"
+              style={styles.familyLink}
+            >
+              <Text style={styles.familyLinkText}>
+                ¿Solo llevas un equipo?{' '}
+                <Text style={styles.familyLinkAccent}>Ver plan Capitán</Text>
+              </Text>
+            </Pressable>
+          ) : null}
         </Animated.View>
 
         {/* === DISCLAIMER (Apple/Google obligan visible) === */}
-        <Animated.View
-          entering={FadeInDown.duration(280).delay(360)}
-          style={styles.disclaimer}
-        >
+        <Animated.View entering={enter(6)} style={styles.disclaimer}>
           <Text style={styles.disclaimerText}>
             {dbTrialSub && !existingSubForSubject
               ? `Tu prueba gratis sin tarjeta acaba ${trialDaysLabel ?? 'pronto'}. Si te suscribes, ${storeTrial ? `pagarás ${billedLabel} tras ${TRIAL_DURATION_DAYS} días de prueba de la tienda` : `pagarás ${billedLabel} desde hoy`}, con renovación automática. Cancela en cualquier momento desde Ajustes.`
@@ -1088,9 +1153,17 @@ export const PaywallScreen = ({
               ? 'Como es anual y ya está pagado, el cambio se aplica al renovar.'
               : 'El mes que viene se te cobra ya el plan nuevo.'}
           </Text>
+        ) : inDbTrial && !storeTrial ? (
+          // Sin prueba de tienda, suscribirse durante la prueba de BD cobra AL
+          // MOMENTO. Se dice tal cual, y se ofrece esperar al aviso del día 11.
+          <Text style={[styles.trustLine, styles.trustLineMuted]}>
+            Se cobra al confirmar. Si prefieres, te avisamos el día{' '}
+            {TRIAL_DURATION_DAYS - 3} y decides entonces.
+          </Text>
         ) : !existingSubForSubject ? (
           <Text style={styles.trustLine}>
-            {storeTrial
+            {/* «14 días gratis» solo a quien no ha gastado la prueba. */}
+            {storeTrial && !hasUsedTrial
               ? `${TRIAL_DURATION_DAYS} días gratis · Sin compromiso · Cancela cuando quieras`
               : 'Sin permanencia · Cancela cuando quieras'}
           </Text>
@@ -1100,16 +1173,13 @@ export const PaywallScreen = ({
             onPress={() => navigation.goBack()}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel={
-              existingSubForSubject
-                ? 'Mantener plan actual'
-                : 'Continuar gratis'
-            }
           >
             <Text style={styles.footerLink}>
               {existingSubForSubject
                 ? 'Mantener plan actual'
-                : 'Continuar gratis'}
+                : inDbTrial
+                  ? 'Seguir con la prueba'
+                  : 'Continuar gratis'}
             </Text>
           </Pressable>
           <Text style={styles.footerLinkSep}>·</Text>
@@ -1232,6 +1302,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: 1,
   },
 
+  // Bloques de cabecera (contexto, prueba)
+  block: { marginBottom: 20 },
+  billingBlock: { marginBottom: 14 },
+
+  // Capitán ↔ club
+  familyLink: { alignItems: 'center', paddingVertical: 6 },
+  familyLinkText: { color: c.textMuted, fontSize: 13 },
+  familyLinkAccent: { color: c.accent, fontWeight: '600' },
+
   // Value props
   valueProps: {
     gap: 10,
@@ -1325,7 +1404,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   planCard: {
     backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
-    borderWidth: 1,
+    // Grosor fijo: el color del borde se anima al elegir (sin saltos de layout).
+    borderWidth: 2,
     borderColor: c.hairStrong,
     padding: 16,
     gap: 4,
@@ -1334,8 +1414,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     // Fondo sólido (bgRaised, ligeramente más claro que bgCard) + borde
     // accent doble grosor + sombra accent para destacar sin transparencia.
     backgroundColor: c.bgRaised,
-    borderColor: c.accent,
-    borderWidth: 2,
     shadowColor: c.accent,
     shadowOpacity: 0.25,
     shadowRadius: 12,
@@ -1469,6 +1547,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: 'center',
     marginTop: 10,
+  },
+  trustLineMuted: {
+    fontFamily: undefined,
+    color: c.textMuted,
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 17,
   },
   footerLinks: {
     flexDirection: 'row',

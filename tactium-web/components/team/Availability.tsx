@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { useSession } from "@/lib/session";
@@ -42,6 +43,7 @@ import {
   reasonLabel,
   timeLeft,
 } from "@/components/team/AvailabilityControls";
+import { proHref } from "@/lib/nav";
 
 type Tab = "pending" | "yes" | "maybe" | "no";
 
@@ -90,6 +92,7 @@ export function AvailabilityView({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>("pending");
   const [toast, setToast] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (data) {
@@ -190,7 +193,8 @@ export function AvailabilityView({ id }: { id: string }) {
           (out.withoutApp.length ? ` · Sin la app: ${out.withoutApp.join(", ")} (escríbeles por WhatsApp)` : ""),
       );
     } else if (out.kind === "premium") {
-      setToast("«Recordar ahora» es una función del plan. Mira los planes en Suscripción.");
+      // Igual que en la app: el gate abre el paywall con su motivo.
+      router.push(proHref("availability_remind"));
     } else if (out.kind === "cooldown") {
       setLastReminder(new Date());
       setToast("Ya recordaste hace menos de 12 horas.");

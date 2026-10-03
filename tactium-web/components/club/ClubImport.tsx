@@ -3,9 +3,9 @@
 import { fetchSubscription, fetchClub } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Card, Chip, IconTile } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { EmptyState, SkeletonPage } from "@/components/states";
-import { IconBuilding, IconFlag } from "@/components/Icon";
+import { IconBuilding } from "@/components/Icon";
 import { ClubFcpImport } from "@/components/entry/start";
 import { Paywall } from "@/components/subscription/Paywall";
 
@@ -49,35 +49,7 @@ export function ClubImport() {
 
   // Sin suscripción → paywall (la acción de más valor va tras el plan).
   if (!data?.hasSub) {
-    return (
-      <div className="tw-page">
-        <Card
-          style={{
-            marginBottom: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <IconTile>
-            <IconFlag size={17} />
-          </IconTile>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <h2 style={{ fontSize: 18 }}>Importar de la Federación es premium</h2>
-              <Chip plain>Función premium</Chip>
-            </div>
-            <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
-              Crea todos los equipos del club con su plantilla y sus puntos
-              oficiales de la Federación en un clic. Con suscripción es
-              automático; contrata un plan para desbloquearlo.
-            </p>
-          </div>
-        </Card>
-        <Paywall />
-      </div>
-    );
+    return <Paywall motivo="club_import" para="club" />;
   }
 
   // Con suscripción → importador multi-equipo (mismo componente del onboarding).

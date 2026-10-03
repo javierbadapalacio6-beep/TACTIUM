@@ -20,7 +20,6 @@ import { TactiumMark } from '@components/brand/TactiumMark';
 import {
   AmbientBackdrop,
   BottomSheet,
-  IconBack,
   IconChevron,
   IconCheck,
   NeonDot,
@@ -32,6 +31,10 @@ import {
 import { useClubStore } from '@store/clubStore';
 import { useAuthStore } from '@store/authStore';
 import { startOnboardingTrial } from '@core/services/subscriptions';
+import {
+  OnboardingProgress,
+  ProgressAction,
+} from '@features/onboarding/components/OnboardingProgress';
 
 import type { OnboardingStackScreenProps } from '@navigation/types';
 
@@ -82,18 +85,11 @@ export const CreateClubScreen = ({
       <AmbientBackdrop intensity={0.6} />
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={styles.headerBtn}
-        >
-          <IconBack size={18} color={c.text} />
-        </Pressable>
-        <View style={styles.progress}>
-          <View style={[styles.bar, styles.barActive]} />
-          <View style={styles.bar} />
-        </View>
-        <View style={styles.headerBtn} />
+        <OnboardingProgress
+          step={1}
+          sublabel="Club"
+          right={<ProgressAction label="‹ Atrás" onPress={() => navigation.goBack()} />}
+        />
       </View>
 
       <ScrollView
@@ -101,7 +97,6 @@ export const CreateClubScreen = ({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>PASO 01 · CLUB</Text>
         <Text style={styles.title}>Crea tu club</Text>
         <Text style={styles.lede}>
           Empieza por la entidad. Después podrás añadir equipos y asignar capitanes.
@@ -292,39 +287,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.background },
   header: {
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progress: { flexDirection: 'row', gap: 6 },
-  bar: {
-    width: 18,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: c.hairStrong,
-  },
-  barActive: {
-    width: 28,
-    backgroundColor: c.accent,
-    shadowColor: c.accent,
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
-  },
-  scroll: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18 },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 10,
-  },
+  scroll: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 18 },
   title: {
     color: c.text,
     fontSize: 28,

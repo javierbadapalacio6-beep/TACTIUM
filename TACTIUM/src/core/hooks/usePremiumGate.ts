@@ -9,6 +9,7 @@ import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { clubCoverage } from '@core/entitlements/coverage';
 import { PREMIUM_STATUSES, isLiveSub } from '@core/subscriptions/plans';
+import type { PaywallIntent } from '@core/subscriptions/paywallReasons';
 
 import type { RootStackParamList } from '@navigation/types';
 
@@ -38,7 +39,7 @@ function useGateRunner() {
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
   return useCallback(
-    (team: GateTeam | null, fn: GateFn, intent?: string) => {
+    (team: GateTeam | null, fn: GateFn, intent?: PaywallIntent) => {
       const result = isPremiumFn(
         userId,
         role === 'club_admin' ? 'admin' : role,
@@ -98,7 +99,7 @@ function useGateRunner() {
         return;
       }
 
-      // Sin sub → paywall normal.
+      // Sin sub → paywall con el motivo, para que diga por qué estás ahí.
       navigation.navigate('Paywall', { intent });
     },
     [userId, role, teams, subscriptions, coverTeamAction, isPremiumFn, navigation],
@@ -107,6 +108,8 @@ function useGateRunner() {
 
 /**
  * Gate del EQUIPO ACTIVO. Devuelve `gate(fn, intent?)` → onPress listo.
+ * `intent` es el MOTIVO (tipado, ver `paywallReasons.ts`): el paywall lo usa
+ * para su línea de contexto. Pásalo siempre.
  * Para CTAs de las pantallas del capitán (Home/Jornada/Lineup/Seasons), que
  * operan sobre el team activo.
  */
@@ -114,7 +117,7 @@ export function usePremiumGate() {
   const run = useGateRunner();
   const team = useTeamStore((s) => s.team);
   return useCallback(
-    (fn: GateFn, intent?: string) => () =>
+    (fn: GateFn, intent?: PaywallIntent) => () =>
       run(
         team
           ? {
@@ -140,7 +143,7 @@ export function usePremiumGate() {
 export function useTeamGate() {
   const run = useGateRunner();
   return useCallback(
-    (team: GateTeam, fn: GateFn, intent?: string) => () =>
+    (team: GateTeam, fn: GateFn, intent?: PaywallIntent) => () =>
       run(team, fn, intent),
     [run],
   );

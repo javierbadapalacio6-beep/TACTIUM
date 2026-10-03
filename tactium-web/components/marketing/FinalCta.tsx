@@ -3,6 +3,7 @@ import { LogoMark } from "@/components/LogoMark";
 import { TRIAL_DURATION_DAYS } from "@/lib/plans";
 import { Reveal } from "./Reveal";
 import { StoreBadges } from "./StoreBadges";
+import { SIGNUP_HREF } from "@/lib/nav";
 
 export function FinalCta() {
   return (
@@ -19,7 +20,7 @@ export function FinalCta() {
           con todo. Sin tarjeta para empezar, cancela cuando quieras.
         </p>
         <div className="mk-actions">
-          <BtnLink href="/empezar" variant="accent" size="lg">
+          <BtnLink href={SIGNUP_HREF} variant="accent" size="lg">
             Crear cuenta gratis
           </BtnLink>
         </div>
