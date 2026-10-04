@@ -76,3 +76,10 @@ tactium-web/.next
 *.jpeg
 *.pdf
 *.csv
+
+# Añadidos 2026-10-04 (no son de la app)
+MEMORIA-TPF/
+app-store-assets/
+.claude/
+.github/
+.playwright-mcp/
