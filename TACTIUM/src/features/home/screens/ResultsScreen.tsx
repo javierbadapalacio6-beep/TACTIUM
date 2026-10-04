@@ -5,17 +5,17 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
-  TextInput,
   ActivityIndicator,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconCheck, IconChevron } from '@components/ui';
+import { BottomSheet, IconBack, IconCheck, useCompactRail, useLayout } from '@components/ui';
+import { CardGrid } from '@components/layout';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as MatchResultsApi from '@core/services/matchResults';
 import * as LineupsApi from '@core/services/lineups';
@@ -23,7 +23,14 @@ import * as LineupVariantsApi from '@core/services/lineupVariants';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition } from '@core/data/federations';
 import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
+import { formatShortDay } from '@core/utils/format';
 import { useTeamStore, selectIsCaptain, selectIsPlayer } from '@store/teamStore';
+
+import { JornadaScoreHeader } from '../components/jornada/JornadaScoreHeader';
+import { SetsEditor, SetsTable } from '../components/match/GamesPicker';
+import { MatchRow } from '../components/match/MatchScoreboard';
+import { notifySuccess } from '../components/match/haptics';
+import type { SetScore } from '../components/match/setsLogic';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -38,7 +45,7 @@ interface Match {
   sets: SetCell[];
   forfeit: boolean;
   // Dirección del W.O.: true = no nos presentamos (derrota); false = no se
-  // presentó el rival (victoria, punto para nosotros). Solo si forfeit=true.
+  // presentó el rival (victoria). Solo si forfeit=true.
   forfeitUs: boolean;
 }
 
@@ -65,74 +72,73 @@ const matchOutcome = (m: Match): 'won' | 'lost' | null => {
   return null;
 };
 
-export const ResultsScreen = ({
-  navigation,
-  route,
-}: HomeStackScreenProps<'Results'>) => {
+const toScores = (m: Match): SetScore[] =>
+  m.sets.map((s) => ({
+    us: s.us === '' ? null : Number(s.us),
+    them: s.them === '' ? null : Number(s.them),
+  }));
+
+type WoChoice = 'favor' | 'contra' | 'played';
+
+/**
+ * Resultados de la jornada (rediseño bloque «Partido», 2026-10).
+ *
+ * Mismo marcador que la Jornada arriba; debajo, primero TU partido (jugador)
+ * y luego el resto, una línea por pista. Cada pista se apunta en una hoja con
+ * la botonera de juegos 0-7: se guarda sola por set («Guardado ✓»). El W.O.
+ * sale del camino normal: «Otro resultado».
+ *
+ * Apuntan el capitán y los jugadores con ficha vinculada (la RLS
+ * `match_results_member_*`). Cerrar el acta sigue siendo del capitán, en la
+ * Jornada.
+ */
+export const ResultsScreen = ({ navigation, route }: HomeStackScreenProps<'Results'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
-  // Capitán Y jugadores del equipo pueden cargar el resultado (feedback Smash
-  // 2026-07-21: quitar trabajo al capitán). CERRAR el acta sigue siendo del
-  // capitán (botón en JornadaScreen + el RPC close_matchday exige team_admin).
-  // La RLS `match_results_member_*` permite escribir a cualquier team_member.
   const isCaptain = useTeamStore(selectIsCaptain);
   const isPlayer = useTeamStore(selectIsPlayer);
-  // Un "player" SIN ficha vinculada no puede escribir (la RLS lo rechaza);
-  // sin esto los inputs salían activos y fallaban al guardar.
+  // Un jugador SIN ficha vinculada no puede escribir (la RLS lo rechaza).
   const myPlayerId = useTeamStore((s) => s.myPlayerId);
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const matchdayId = route.params.matchdayId;
-  const focus = route.params.focus ?? 0;
+  const focus = route.params.focus;
 
   const [matchday, setMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   const [matches, setMatches] = useState<Match[]>(() => buildEmptyMatches(courts));
   const [pairs, setPairs] = useState<LineupsApi.LineupPair[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [expanded, setExpanded] = useState(Math.min(focus, courts - 1));
-  // savingCells = SET de strings `${court}-${setIdx}` — varias celdas
-  // pueden estar guardando a la vez en pistas distintas. Antes era un
-  // string único y el spinner se "robaba" entre celdas.
+  // Pista abierta en la hoja (índice 0-based) y si se ve «Otro resultado».
+  const [openCourt, setOpenCourt] = useState<number | null>(null);
+  const [woMode, setWoMode] = useState(false);
+  const [woChoice, setWoChoice] = useState<WoChoice>('favor');
+  // Celdas guardando / guardadas (`${court}-${setIdx}`).
   const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
-  // savedCells = checkmark verde efímero tras guardar bien. Da feedback
-  // positivo cuando la red estuvo lenta y el spinner duró varios segundos.
   const [savedCells, setSavedCells] = useState<Set<string>>(new Set());
   const [savingForfeit, setSavingForfeit] = useState<number | null>(null);
-  // Debounce timers + requestId por celda. Map<key, { timer, seq }> donde
-  // `seq` se incrementa con cada llamada y permite descartar respuestas
-  // antiguas si llegan después de una nueva (race con red lenta).
-  const persistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
+  // Debounce + secuencia por celda (descarta respuestas viejas con red lenta).
+  const persistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const persistSeqRef = useRef<Map<string, number>>(new Map());
-  // Espejo síncrono de `matches`. Necesario porque `doPersistCell` se ejecuta
-  // dentro de un `setTimeout` programado en `persistCellDebounced` — el
-  // closure capturado al programar el timer vería `matches` del render
-  // PREVIO al keystroke, no del posterior. Leyendo de `matchesRef.current`
-  // siempre obtenemos los valores tipeados más recientes. Era el bug por
-  // el que sets 2/3 se perdían al salir antes del blur.
+  // Espejo síncrono de `matches`: el guardado diferido lee siempre lo último.
   const matchesRef = useRef<Match[]>(matches);
   matchesRef.current = matches;
+  const focusedRef = useRef(false);
+  // Tablet: las pistas en rejilla (3×2 en horizontal, 2 columnas en
+  // vertical), cada una con su botonera a la vista; sin hojas salvo el W.O.
+  useCompactRail();
+  const { isTablet } = useLayout();
+  // Pista que se está apuntando (borde verde en la rejilla).
+  const [activeCourt, setActiveCourt] = useState<number | null>(null);
 
-  useEffect(() => {
-    setExpanded((e) => Math.min(e, courts - 1));
-  }, [courts]);
-
-  // Refetch reusable: lo llama el mount inicial y también el realtime
-  // cuando llega un cambio externo (otro device metiendo sets, captain
-  // cerrando acta, lineup cambiando para repintar las parejas del header).
   const reload = useCallback(async () => {
     try {
-      const activeVariant =
-        await LineupVariantsApi.fetchActiveVariant(matchdayId);
+      const activeVariant = await LineupVariantsApi.fetchActiveVariant(matchdayId);
       const [md, results, lineup] = await Promise.all([
         MatchdaysApi.fetchMatchday(matchdayId),
         MatchResultsApi.fetchResults(matchdayId),
-        activeVariant
-          ? LineupsApi.fetchLineup(activeVariant.id)
-          : Promise.resolve([]),
+        activeVariant ? LineupsApi.fetchLineup(activeVariant.id) : Promise.resolve([]),
       ]);
       setMatchday(md);
       setPairs(lineup);
@@ -150,8 +156,11 @@ export const ResultsScreen = ({
           them: r.them !== null ? String(r.them) : '',
         };
       });
-      matchesRef.current = next;
-      setMatches(next);
+      // Con un guardado pendiente en la pista abierta, no pisamos lo tecleado.
+      const pending = new Set([...persistTimersRef.current.keys()].map((k) => Number(k.split('-')[0])));
+      const merged = next.map((m, i) => (pending.has(i) ? matchesRef.current[i] ?? m : m));
+      matchesRef.current = merged;
+      setMatches(merged);
       setLoadError(false);
     } catch (e) {
       console.warn('Results fetch', e);
@@ -175,9 +184,22 @@ export const ResultsScreen = ({
 
   const closed = matchday?.status === 'finished';
   const started = matchday ? isMatchStarted(matchday) : false;
+  const playerWithoutFicha = isPlayer && !myPlayerId;
   const canEdit = started && !closed && (isCaptain || (isPlayer && !!myPlayerId));
 
-  // ── Score agregado ──
+  // Desde la Jornada se puede llegar con una pista concreta (`focus`). La
+  // tarjeta general del resultado también manda `focus: 0`, así que la P1 no
+  // se abre sola: se ve la lista y se toca.
+  useEffect(() => {
+    if (loading || focusedRef.current || focus == null) return;
+    focusedRef.current = true;
+    if (focus > 0 && focus < courts && canEdit) {
+      // Tablet: no hay hoja; se marca la pista en la rejilla.
+      if (isTablet) setActiveCourt(focus);
+      else setOpenCourt(focus);
+    }
+  }, [loading, focus, courts, canEdit, isTablet]);
+
   const teamScore = useMemo(() => {
     let us = 0;
     let them = 0;
@@ -195,43 +217,22 @@ export const ResultsScreen = ({
     return { us, them, played };
   }, [matches]);
 
-  const anyFilled = teamScore.played > 0;
-
-  const updateSet = (
-    court: number,
-    setIdx: number,
-    side: 'us' | 'them',
-    value: string,
-  ) => {
+  const updateSet = (court: number, setIdx: number, side: 'us' | 'them', value: string) => {
     if (!canEdit) return;
-    if (value !== '' && !/^\d+$/.test(value)) return;
-    const sanitized = value.slice(0, 2);
-    // Actualizamos matchesRef PRIMERO de forma síncrona — así, si el user
-    // teclea y pulsa Back antes de que React aplique el re-render, el
-    // flush en cleanup todavía leerá el valor fresco desde el ref.
     const next = matchesRef.current.map((m, i) =>
       i !== court
         ? m
         : {
             ...m,
-            sets: m.sets.map((s, j) =>
-              j !== setIdx ? s : { ...s, [side]: sanitized },
-            ),
+            sets: m.sets.map((s, j) => (j !== setIdx ? s : { ...s, [side]: value })),
           },
     );
     matchesRef.current = next;
     setMatches(next);
   };
 
-  // El cierre del acta NO es automático tras introducir el último resultado.
-  // El capitán debe poder revisar y corregir antes de cerrar. La acción de
-  // cerrar vive como botón explícito en `JornadaScreen`.
-
-  // Guardado real al servidor (run inmediato — no chequear debounce aquí).
-  // Lee la celda DESDE `matchesRef.current` (no `matches` directo) para
-  // tener siempre los valores tipeados más recientes — `matches` capturado
-  // en closure puede estar stale cuando el timer dispara o el unmount
-  // flushea pendientes.
+  // Guardado real de una celda (set). Lee de `matchesRef` para no usar
+  // valores viejos cuando dispara el debounce o el flush al salir.
   const doPersistCell = async (court: number, setIdx: number) => {
     if (!canEdit) return;
     const key = `${court}-${setIdx}`;
@@ -245,19 +246,15 @@ export const ResultsScreen = ({
     setSavingCells((s) => new Set(s).add(key));
     try {
       await MatchResultsApi.upsertSet(matchdayId, court + 1, setIdx + 1, us, them);
-      // Si en el camino otra request más reciente arrancó (seq mayor),
-      // descartamos esta respuesta — no marcamos como guardada con
-      // valores potencialmente obsoletos.
       if (persistSeqRef.current.get(key) !== seq) return;
       setSavedCells((s) => new Set(s).add(key));
-      // El check verde desaparece tras 1.2 s.
       setTimeout(() => {
         setSavedCells((s) => {
           const n = new Set(s);
           n.delete(key);
           return n;
         });
-      }, 1200);
+      }, 1600);
     } catch (e: any) {
       if (persistSeqRef.current.get(key) === seq) {
         Alert.alert('No se pudo guardar', e?.message ?? '');
@@ -273,9 +270,7 @@ export const ResultsScreen = ({
     }
   };
 
-  // Versión debounced — la que llama el TextInput onChange. Programa el
-  // guardado 600 ms tras el último tecleo en esa misma celda. Si el user
-  // sigue tecleando, se cancela y reprograma.
+  // La botonera guarda sola: un toque reprograma el guardado de ese set.
   const persistCellDebounced = (court: number, setIdx: number) => {
     if (!canEdit) return;
     const key = `${court}-${setIdx}`;
@@ -284,33 +279,18 @@ export const ResultsScreen = ({
     const t = setTimeout(() => {
       persistTimersRef.current.delete(key);
       doPersistCell(court, setIdx);
-    }, 600);
+    }, 450);
     persistTimersRef.current.set(key, t);
   };
 
-  // Flush inmediato: usado en onBlur y en unmount para forzar el guardado
-  // de cualquier debounce pendiente. Si ya no hay timer, no hace nada.
-  const flushCell = (court: number, setIdx: number) => {
-    const key = `${court}-${setIdx}`;
-    const timer = persistTimersRef.current.get(key);
-    if (timer) {
-      clearTimeout(timer);
-      persistTimersRef.current.delete(key);
-      doPersistCell(court, setIdx);
-    }
-  };
-
-  // Al desmontar: flushea cualquier timer pendiente (dispara guardado
-  // inmediato con últimos valores). Sin esto, si el user sale a <600ms
-  // del último tecleo, esa edición se pierde porque el timer se cancela.
-  // Captura las keys en closure para no leer state stale.
+  // Al desmontar: guardar lo pendiente con los últimos valores.
   const flushAllRef = useRef<() => void>(() => {});
   flushAllRef.current = () => {
     const timers = persistTimersRef.current;
     timers.forEach((t, key) => {
       clearTimeout(t);
-      const [c, s] = key.split('-').map(Number);
-      doPersistCell(c, s);
+      const [ci, s] = key.split('-').map(Number);
+      doPersistCell(ci, s);
     });
     timers.clear();
   };
@@ -320,91 +300,68 @@ export const ResultsScreen = ({
     };
   }, []);
 
-  const toggleForfeit = async (court: number) => {
+  /** Marca/quita el W.O. de una pista con su dirección. */
+  const applyForfeit = async (court: number, forfeit: boolean, forfeitUs: boolean) => {
     if (!canEdit) return;
-    const cur = matchesRef.current[court];
-    const next = !cur.forfeit;
-    const hasSets = cur.sets.some((s) => s.us !== '' || s.them !== '');
-    const apply = async () => {
-      // Al activar, por defecto W.O. a NUESTRO favor (el rival no se presentó),
-      // que es el caso normal en el acta propia. Se conserva la dirección previa.
-      const forfeitUs = next ? cur.forfeitUs : false;
-      const nextMatches: Match[] = matchesRef.current.map((m, i) =>
-        i !== court
-          ? m
-          : {
-              ...m,
-              forfeit: next,
-              forfeitUs,
-              sets: next ? m.sets.map(() => ({ us: '', them: '' })) : m.sets,
-            },
-      );
-      matchesRef.current = nextMatches;
-      setMatches(nextMatches);
-      setSavingForfeit(court);
-      try {
-        await MatchResultsApi.setCourtForfeit(
-          matchdayId,
-          court + 1,
-          next,
-          forfeitUs,
-          SETS,
-        );
-      } catch (e: any) {
-        Alert.alert('No se pudo guardar', e?.message ?? '');
-        const rollback = matchesRef.current.map((m, i) =>
-          i !== court ? m : { ...m, forfeit: !next },
-        );
-        matchesRef.current = rollback;
-        setMatches(rollback);
-      } finally {
-        setSavingForfeit(null);
-      }
-    };
-    // Activar W.O. con marcador ya metido borraría los sets → confirmar antes.
-    if (next && hasSets) {
-      Alert.alert(
-        'Marcar W.O.',
-        'Esta pista tiene un marcador metido. Al marcar W.O. se borrará. ¿Continuar?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Marcar W.O.', style: 'destructive', onPress: apply },
-        ],
-      );
-      return;
-    }
-    await apply();
-  };
-
-  // Cambia la dirección del W.O. (ganado/perdido) sin desactivarlo.
-  const setForfeitDirection = async (court: number, forfeitUs: boolean) => {
-    if (!canEdit) return;
-    const cur = matchesRef.current[court];
-    if (!cur.forfeit || cur.forfeitUs === forfeitUs) return;
-    const nextMatches = matchesRef.current.map((m, i) =>
-      i !== court ? m : { ...m, forfeitUs },
+    const prev = matchesRef.current[court];
+    const nextMatches: Match[] = matchesRef.current.map((m, i) =>
+      i !== court
+        ? m
+        : {
+            ...m,
+            forfeit,
+            forfeitUs: forfeit ? forfeitUs : false,
+            sets: forfeit || prev.forfeit ? m.sets.map(() => ({ us: '', them: '' })) : m.sets,
+          },
     );
     matchesRef.current = nextMatches;
     setMatches(nextMatches);
     setSavingForfeit(court);
     try {
-      await MatchResultsApi.setCourtForfeit(
-        matchdayId,
-        court + 1,
-        true,
-        forfeitUs,
-        SETS,
-      );
+      await MatchResultsApi.setCourtForfeit(matchdayId, court + 1, forfeit, forfeitUs, SETS);
+      notifySuccess();
     } catch (e: any) {
       Alert.alert('No se pudo guardar', e?.message ?? '');
-      const rollback = matchesRef.current.map((m, i) =>
-        i !== court ? m : { ...m, forfeitUs: cur.forfeitUs },
-      );
+      const rollback = matchesRef.current.map((m, i) => (i !== court ? m : prev));
       matchesRef.current = rollback;
       setMatches(rollback);
     } finally {
       setSavingForfeit(null);
     }
+  };
+
+  const saveWo = (court: number) => {
+    const cur = matchesRef.current[court];
+    const hasSets = cur.sets.some((s) => s.us !== '' || s.them !== '');
+    const done = () => {
+      setWoMode(false);
+      // Tablet: la hoja solo sirve para el W.O.; la botonera está en la rejilla.
+      if (isTablet) setOpenCourt(null);
+    };
+    if (woChoice === 'played') {
+      if (cur.forfeit) void applyForfeit(court, false, false);
+      done();
+      return;
+    }
+    const forfeitUs = woChoice === 'contra';
+    const go = () => {
+      void applyForfeit(court, true, forfeitUs);
+      done();
+    };
+    // Marcar W.O. con marcador ya metido lo borra → confirmar antes.
+    if (!cur.forfeit && hasSets) {
+      Alert.alert('Marcar W.O.', 'Esta pista tiene juegos apuntados. Al marcar W.O. se borran. ¿Seguir?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Marcar W.O.', style: 'destructive', onPress: go },
+      ]);
+      return;
+    }
+    go();
+  };
+
+  const goBack = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('HomeRoot');
   };
 
   if (loading) {
@@ -415,37 +372,448 @@ export const ResultsScreen = ({
     );
   }
 
-  const playedLabel = `${String(teamScore.played).padStart(2, '0')} / ${String(courts).padStart(2, '0')}`;
   const opponentName = matchday?.opponent ?? 'Rival';
   const isHome = matchday?.is_home ?? true;
   const ourName = team?.name ?? 'Equipo';
-  const homeName = isHome ? ourName : opponentName;
-  const awayName = isHome ? opponentName : ourName;
+  const mdDate = matchday?.match_date ? new Date(`${matchday.match_date}T12:00:00`) : null;
+  const mdTime = matchday?.match_time ? matchday.match_time.slice(0, 5) : '';
+  const anyFilled = teamScore.played > 0;
+  const statusLabel = closed
+    ? teamScore.us > teamScore.them
+      ? 'Victoria'
+      : teamScore.us < teamScore.them
+        ? 'Derrota'
+        : 'Empate'
+    : `${teamScore.played} de ${courts}`;
+  const tint = closed
+    ? teamScore.us > teamScore.them
+      ? c.accent
+      : teamScore.us < teamScore.them
+        ? c.error
+        : c.warning
+    : c.text;
+
+  const pairOf = (ci: number) => pairs.find((p) => p.court_number === ci + 1) ?? null;
+  const labelOf = (ci: number) => {
+    const p = pairOf(ci);
+    if (!p) return 'Sin alineación';
+    const mine = (id: string | null) => !!myPlayerId && id === myPlayerId;
+    const a = mine(p.player_a_id) ? 'Tú' : p.player_a_name ?? '—';
+    const b = mine(p.player_b_id) ? 'Tú' : p.player_b_name ?? '—';
+    return `${a} / ${b}`;
+  };
+  const myCourt = myPlayerId
+    ? pairs.find((p) => p.player_a_id === myPlayerId || p.player_b_id === myPlayerId)?.court_number ?? null
+    : null;
+  const myIdx = myCourt != null ? myCourt - 1 : null;
+
+  const rowFor = (ci: number, me: boolean) => {
+    const m = matches[ci];
+    if (!m) return null;
+    const o = matchOutcome(m);
+    const setsTxt = m.sets
+      .filter((s) => s.us !== '' || s.them !== '')
+      .map((s) =>
+        formatSetScore(s.us !== '' ? Number(s.us) : null, s.them !== '' ? Number(s.them) : null, isHome),
+      )
+      .join(' ');
+    const started = setsTxt !== '';
+    const doneSets = m.sets.filter((s) => s.us !== '' && s.them !== '' && s.us !== s.them).length;
+    const sub = m.forfeit
+      ? m.forfeitUs
+        ? 'W.O. en contra'
+        : 'W.O. a favor'
+      : o
+        ? setsTxt
+        : started
+          ? `Set ${Math.min(doneSets + 1, 3)} en juego · ${setsTxt}`
+          : 'Sin empezar';
+    const right = o
+      ? o === 'won'
+        ? 'Ganado'
+        : 'Perdido'
+      : canEdit
+        ? started
+          ? 'Seguir ›'
+          : 'Apuntar ›'
+        : '—';
+    return (
+      <MatchRow
+        key={ci}
+        badge={`P${ci + 1}`}
+        title={labelOf(ci)}
+        sub={sub}
+        right={right}
+        rightTone={o === 'won' ? 'win' : o === 'lost' ? 'loss' : canEdit ? 'todo' : 'muted'}
+        me={me}
+        accessibilityLabel={`Pista ${ci + 1}. ${labelOf(ci)}. ${sub}`}
+        onPress={() => {
+          setWoMode(false);
+          setOpenCourt(ci);
+        }}
+      />
+    );
+  };
+
+  const order = Array.from({ length: courts }, (_, i) => i);
+  const rest = myIdx != null && !isCaptain ? order.filter((i) => i !== myIdx) : order;
+
+  // ── Hoja de una pista ────────────────────────────────────────────
+  const sheetCourt = openCourt;
+  const sheetMatch = sheetCourt != null ? matches[sheetCourt] : null;
+  const sheetSaving =
+    sheetCourt != null &&
+    ([...savingCells].some((k) => k.startsWith(`${sheetCourt}-`)) || savingForfeit === sheetCourt);
+  const sheetSaved =
+    sheetCourt != null && [...savedCells].some((k) => k.startsWith(`${sheetCourt}-`));
+
+  const courtSheet = (
+    <>
+      <BottomSheet open={sheetCourt != null} onClose={() => setOpenCourt(null)}>
+        {sheetCourt != null && sheetMatch ? (
+          <View style={{ gap: 10 }}>
+            <View style={styles.sheetHead}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.sheetEyebrow}>
+                  PISTA {sheetCourt + 1}
+                  {woMode ? ' · OTRO RESULTADO' : ''}
+                </Text>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  {woMode ? '¿No se jugó?' : labelOf(sheetCourt)}
+                </Text>
+              </View>
+              {sheetSaving ? (
+                <ActivityIndicator size="small" color={c.accent} />
+              ) : sheetSaved ? (
+                <Animated.Text entering={FadeIn.duration(160)} style={styles.saved}>
+                  Guardado ✓
+                </Animated.Text>
+              ) : null}
+            </View>
+
+            {woMode ? (
+              <>
+                <Text style={styles.sheetBody}>El W.O. da la pista entera a quien sí se presentó.</Text>
+                {(
+                  [
+                    { k: 'favor', t: 'W.O. a favor', s: `${opponentName} no se presentó · la pista es nuestra` },
+                    { k: 'contra', t: 'W.O. en contra', s: 'No nos presentamos · la pista es suya' },
+                    { k: 'played', t: 'Se jugó', s: 'Volver a apuntar los juegos' },
+                  ] as { k: WoChoice; t: string; s: string }[]
+                ).map((o) => (
+                  <Pressable
+                    key={o.k}
+                    onPress={() => setWoChoice(o.k)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: woChoice === o.k }}
+                    style={[styles.choice, woChoice === o.k && styles.choiceOn]}
+                  >
+                    <Text style={styles.choiceTitle}>{o.t}</Text>
+                    <Text style={styles.choiceSub}>{o.s}</Text>
+                  </Pressable>
+                ))}
+                <Pressable
+                  onPress={() => saveWo(sheetCourt)}
+                  style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.ctaLabel}>
+                    {woChoice === 'played'
+                      ? 'Volver a los juegos'
+                      : woChoice === 'favor'
+                        ? 'Guardar W.O. a favor'
+                        : 'Guardar W.O. en contra'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setWoMode(false);
+                    if (isTablet) setOpenCourt(null);
+                  }}
+                  style={styles.linkWrap}
+                >
+                  <Text style={styles.linkMuted}>Cancelar</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                {sheetMatch.forfeit ? (
+                  <View style={[styles.woCard, sheetMatch.forfeitUs && { borderColor: c.error }]}>
+                    <Text style={[styles.woText, { color: sheetMatch.forfeitUs ? c.error : c.accent }]}>
+                      {sheetMatch.forfeitUs ? 'W.O. en contra · la pista es suya' : 'W.O. a favor · la pista es nuestra'}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <SetsTable sets={toScores(sheetMatch)} usLabel={ourName} themLabel={opponentName} />
+                    {canEdit ? (
+                      <SetsEditor
+                        sets={toScores(sheetMatch)}
+                        usLabel="Nosotros"
+                        themLabel="Rival"
+                        allowSuperTiebreak
+                        onChange={(si, side, v) => {
+                          updateSet(sheetCourt, si, side, v === null ? '' : String(v));
+                          persistCellDebounced(sheetCourt, si);
+                        }}
+                      />
+                    ) : null}
+                  </>
+                )}
+
+                {!canEdit ? (
+                  <Text style={styles.sheetBody}>
+                    {closed
+                      ? 'Acta cerrada: no se puede cambiar.'
+                      : !started
+                        ? 'Aún no ha empezado el partido.'
+                        : playerWithoutFicha
+                          ? 'Vincula tu ficha para apuntar.'
+                          : 'Solo lectura.'}
+                  </Text>
+                ) : null}
+
+                <View style={styles.sheetFoot}>
+                  {canEdit ? (
+                    <Pressable
+                      onPress={() => {
+                        setWoChoice(sheetMatch.forfeit ? (sheetMatch.forfeitUs ? 'contra' : 'favor') : 'favor');
+                        setWoMode(true);
+                      }}
+                      hitSlop={6}
+                    >
+                      <Text style={styles.linkMuted}>Otro resultado (W.O.)</Text>
+                    </Pressable>
+                  ) : (
+                    <View />
+                  )}
+                  <Pressable
+                    onPress={() => setOpenCourt(null)}
+                    style={({ pressed }) => [styles.ctaSm, pressed && { opacity: 0.85 }]}
+                  >
+                    <IconCheck size={14} color={c.textInverse} />
+                    <Text style={styles.ctaSmLabel}>Listo</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        ) : null}
+      </BottomSheet>
+    </>
+  );
+
+  // ── Tablet: rejilla de pistas ─────────────────────────────────────
+  if (isTablet) {
+    const courtCard = (ci: number) => {
+      const m = matches[ci];
+      if (!m) return null;
+      const o = matchOutcome(m);
+      const saving =
+        [...savingCells].some((k) => k.startsWith(`${ci}-`)) || savingForfeit === ci;
+      const saved = [...savedCells].some((k) => k.startsWith(`${ci}-`));
+      const mine = myIdx === ci && !isCaptain;
+      const doneSets = m.sets.filter((x) => x.us !== '' && x.them !== '' && x.us !== x.them).length;
+      return (
+        <View
+          key={ci}
+          style={[
+            styles.tCard,
+            mine && { borderColor: c.accent40 },
+            activeCourt === ci && canEdit && styles.tCardOn,
+          ]}
+        >
+          <View style={styles.tHead}>
+            <View style={styles.tBadge}>
+              <Text style={styles.tBadgeText}>P{ci + 1}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.tTitle} numberOfLines={1}>
+                {labelOf(ci)}
+              </Text>
+              <Text style={styles.tSub} numberOfLines={1}>
+                {mine ? 'Tu partido · ' : ''}
+                {m.forfeit
+                  ? m.forfeitUs
+                    ? 'W.O. en contra'
+                    : 'W.O. a favor'
+                  : o
+                    ? `${o === 'won' ? 'Ganada' : 'Perdida'} en ${doneSets} sets`
+                    : doneSets > 0
+                      ? `Set ${Math.min(doneSets + 1, 3)} en juego`
+                      : 'Sin empezar'}
+              </Text>
+            </View>
+            {saving ? (
+              <ActivityIndicator size="small" color={c.accent} />
+            ) : saved ? (
+              <Animated.Text entering={FadeIn.duration(160)} style={styles.saved}>
+                Guardado ✓
+              </Animated.Text>
+            ) : o ? (
+              <Text style={[styles.tOutcome, { color: o === 'won' ? c.accent : c.error }]}>
+                {o === 'won' ? '✓' : '✕'}
+              </Text>
+            ) : null}
+          </View>
+
+          {m.forfeit ? (
+            <View style={[styles.woCard, m.forfeitUs && { borderColor: c.error }]}>
+              <Text style={[styles.woText, { color: m.forfeitUs ? c.error : c.accent }]}>
+                {m.forfeitUs ? 'W.O. en contra · la pista es suya' : 'W.O. a favor · la pista es nuestra'}
+              </Text>
+            </View>
+          ) : canEdit ? (
+            <SetsEditor
+              sets={toScores(m)}
+              usLabel="Nosotros"
+              themLabel="Rival"
+              allowSuperTiebreak
+              onChange={(si, side, v) => {
+                setActiveCourt(ci);
+                updateSet(ci, si, side, v === null ? '' : String(v));
+                persistCellDebounced(ci, si);
+              }}
+            />
+          ) : (
+            <SetsTable sets={toScores(m)} usLabel={ourName} themLabel={opponentName} />
+          )}
+
+          {canEdit ? (
+            <Pressable
+              onPress={() => {
+                setWoChoice(m.forfeit ? (m.forfeitUs ? 'contra' : 'favor') : 'favor');
+                setWoMode(true);
+                setOpenCourt(ci);
+              }}
+              hitSlop={6}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              <Text style={styles.linkMuted}>Otro resultado (W.O.)</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      );
+    };
+
+    const scoreCell = (
+      <View key="score" style={styles.tScore}>
+        <Text style={styles.sheetEyebrow}>MARCADOR DEL ENCUENTRO</Text>
+        <Text style={styles.tScoreBig}>
+          {teamScore.us}–{teamScore.them}
+        </Text>
+        <Text style={[styles.tScoreStatus, { color: tint }]}>{statusLabel}</Text>
+        <Text style={styles.tScoreNote}>
+          {canEdit
+            ? `Cada cambio se guarda solo. El acta se cierra en la Jornada${
+                isCaptain ? '' : ' (lo hace el capitán)'
+              }.`
+            : closed
+              ? 'Acta cerrada · solo lectura.'
+              : 'Cerrar el acta lo hace el capitán en la Jornada.'}
+        </Text>
+        <Pressable
+          onPress={goBack}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.tScoreBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.tScoreBtnText}>
+            {isCaptain && !closed ? 'Volver a la Jornada para cerrar el acta' : 'Volver a la Jornada'}
+          </Text>
+        </Pressable>
+      </View>
+    );
+
+    return (
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.tHeaderLeft}>
+            <Pressable
+              onPress={goBack}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+            >
+              <IconBack size={16} color={c.text} />
+              <Text style={styles.backLabel}>Jornada</Text>
+            </Pressable>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.tHeaderTitle} numberOfLines={1}>
+                J{String(matchday?.jornada_number ?? 0).padStart(2, '0')} · vs {opponentName}
+              </Text>
+              <Text style={styles.tHeaderSub} numberOfLines={1}>
+                {[mdDate ? formatShortDay(mdDate) : null, mdTime || null, isHome ? 'en casa' : 'fuera']
+                  .filter(Boolean)
+                  .join(' · ')}
+                {closed ? ' · acta cerrada' : started ? ' · en directo' : ''}
+              </Text>
+            </View>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.tHeaderScore}>
+              {teamScore.us}–{teamScore.them}
+            </Text>
+            <Text style={[styles.headerTag, { color: tint }]}>{statusLabel}</Text>
+          </View>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {loadError ? (
+            <Pressable
+              onPress={() => reload()}
+              style={({ pressed }) => [styles.errorBanner, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.errorBannerText}>
+                No se pudieron cargar los resultados. Toca para reintentar.
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {!started && !closed ? (
+            <Text style={styles.notice}>
+              Podrás apuntar a partir del{' '}
+              {mdDate ? formatShortDay(mdDate).toLowerCase() : 'día del partido'}
+              {mdTime ? ` · ${mdTime}` : ''}.
+            </Text>
+          ) : playerWithoutFicha && !closed ? (
+            <Text style={styles.notice}>
+              Vincula tu ficha para apuntar: pídele al capitán tu código de jugador.
+            </Text>
+          ) : null}
+
+          <CardGrid columns={{ tabletPortrait: 2, tabletLandscape: 3 }} gap={12}>
+            {order.map((ci) => courtCard(ci))}
+            {scoreCell}
+          </CardGrid>
+        </ScrollView>
+
+        {courtSheet}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
-      {/* === NAV === */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('HomeRoot');
-          }}
+          onPress={goBack}
+          accessibilityRole="button"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
           <IconBack size={16} color={c.text} />
           <Text style={styles.backLabel}>Jornada</Text>
         </Pressable>
-        <Text style={styles.headerCount}>{playedLabel}</Text>
+        {closed ? (
+          <Text style={styles.headerTag}>Acta cerrada</Text>
+        ) : started ? (
+          <Text style={[styles.headerTag, { color: c.accent }]}>● En directo</Text>
+        ) : null}
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
         {loadError ? (
           <Pressable
@@ -457,882 +825,221 @@ export const ResultsScreen = ({
             </Text>
           </Pressable>
         ) : null}
-        {/* === HERO === */}
-        <View style={styles.heroBlock}>
-          <Text style={styles.eyebrow}>
-            JORNADA {String(matchday?.jornada_number ?? 0).padStart(2, '0')}
-            {' · RESULTADO'}
-          </Text>
-          <Text style={styles.title}>
-            {closed
-              ? 'Acta cerrada'
-              : !started
-                ? 'Aún no disponible'
-                : 'Añade los marcadores'}
-          </Text>
-          <Text style={styles.lede}>
-            {closed
-              ? 'No se pueden modificar resultados.'
-              : !started
-                ? `Podrás introducir resultados a partir de ${
-                    matchday?.match_date
-                      ? `${matchday.match_date}${
-                          matchday.match_time
-                            ? ` · ${matchday.match_time.slice(0, 5)}`
-                            : ''
-                        }`
-                      : 'la fecha del partido'
-                  }.`
-              : 'Toca cada pareja para introducir sets. Se guarda automáticamente.'}
-          </Text>
-        </View>
 
-        {/* === SCORE AGREGADO === */}
-        <View style={styles.aggregateCard}>
-          <LinearGradient
-            colors={[c.bgCard, c.bgCard2]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.aggregateSide}>
-            <Text style={styles.aggregateSideLabel} numberOfLines={1}>
-              {team?.name ?? 'Equipo'}
-            </Text>
-            <Text style={styles.aggregateSideSub}>
-              {matchday?.is_home ? 'Local' : 'Visitante'}
-            </Text>
-          </View>
-          <View style={styles.aggregateScoreRow}>
-            <Text
-              style={[
-                styles.aggregateScore,
-                { color: anyFilled ? c.accent : c.textFaint },
-              ]}
-            >
-              {anyFilled ? teamScore.us : '—'}
-            </Text>
-            <View style={styles.aggregateDivider} />
-            <Text
-              style={[
-                styles.aggregateScore,
-                { color: anyFilled ? c.text : c.textFaint },
-              ]}
-            >
-              {anyFilled ? teamScore.them : '—'}
-            </Text>
-          </View>
-          <View style={[styles.aggregateSide, { alignItems: 'flex-end' }]}>
-            <Text style={styles.aggregateSideLabel} numberOfLines={1}>
-              {opponentName}
-            </Text>
-            <Text style={styles.aggregateSideSub}>
-              {matchday?.is_home ? 'Visitante' : 'Local'}
-            </Text>
-          </View>
-        </View>
+        <JornadaScoreHeader
+          jornadaNumber={matchday?.jornada_number ?? 0}
+          date={mdDate}
+          time={mdTime}
+          isHome={isHome}
+          teamName={ourName}
+          opponent={opponentName}
+          me={null}
+          rival={null}
+          hasResult={anyFilled || closed}
+          matchStarted={started}
+          us={teamScore.us}
+          them={teamScore.them}
+          tint={tint}
+          statusLabel={statusLabel}
+        />
 
-        {/* === LISTA === */}
-        <View style={{ gap: 8, marginTop: 14 }}>
-          {matches.map((m, ci) => {
-            const pair = pairs.find((p) => p.court_number === ci + 1);
-            const label = pair
-              ? `${pair.player_a_name ?? '—'} / ${pair.player_b_name ?? '—'}`
-              : 'Sin alineación';
-            return (
-              <ResultRow
-                key={ci}
-                court={ci}
-                match={m}
-                label={label}
-                expanded={expanded === ci}
-                disabled={!canEdit}
-                outcome={matchOutcome(m)}
-                savingCells={savingCells}
-                savedCells={savedCells}
-                savingForfeit={savingForfeit === ci}
-                isHome={isHome}
-                homeName={homeName}
-                awayName={awayName}
-                onToggleExpand={() =>
-                  setExpanded((e) => (e === ci ? -1 : ci))
-                }
-                onUpdateCell={(setIdx, side, value) => {
-                  updateSet(ci, setIdx, side, value);
-                  // Tras cada cambio, reprogramamos el debounce de esa
-                  // celda. Cuando el user deje de teclear 600 ms, se
-                  // dispara el guardado real con valores finales.
-                  persistCellDebounced(ci, setIdx);
-                }}
-                onPersistCell={(setIdx) => flushCell(ci, setIdx)}
-                onToggleForfeit={() => toggleForfeit(ci)}
-                onSetForfeitDirection={(fu) => setForfeitDirection(ci, fu)}
-              />
-            );
-          })}
-        </View>
+        {!started && !closed ? (
+          <Text style={styles.notice}>
+            Podrás apuntar a partir del{' '}
+            {mdDate ? formatShortDay(mdDate).toLowerCase() : 'día del partido'}
+            {mdTime ? ` · ${mdTime}` : ''}.
+          </Text>
+        ) : playerWithoutFicha && !closed ? (
+          <Text style={styles.notice}>
+            Vincula tu ficha para apuntar: pídele al capitán tu código de jugador.
+          </Text>
+        ) : null}
 
-        <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('HomeRoot');
-          }}
-          style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
-        >
-          <IconCheck size={18} color={c.textInverse} />
-          <Text style={styles.ctaLabel}>{canEdit ? 'Listo' : 'Volver'}</Text>
-        </Pressable>
+        {myIdx != null && !isCaptain ? (
+          <>
+            <Text style={styles.eyebrow}>TU PARTIDO</Text>
+            {rowFor(myIdx, true)}
+            <Text style={styles.eyebrow}>RESTO</Text>
+          </>
+        ) : null}
+        <View style={{ gap: 8 }}>{rest.map((ci) => rowFor(ci, false))}</View>
+
+        <Text style={styles.footNote}>
+          {canEdit
+            ? 'Se guarda solo · cerrar el acta lo hace el capitán en la Jornada'
+            : closed
+              ? 'Acta cerrada · solo lectura'
+              : 'Cerrar el acta lo hace el capitán en la Jornada'}
+        </Text>
       </ScrollView>
+
+      {courtSheet}
     </View>
   );
 };
 
-// ─── ResultRow ──────────────────────────────────────────────────────────────
-const ResultRow: React.FC<{
-  court: number;
-  match: Match;
-  label: string;
-  expanded: boolean;
-  disabled: boolean;
-  outcome: 'won' | 'lost' | null;
-  // Sets de keys `${court}-${setIdx}` para indicadores por celda.
-  // Pasar Sets en vez de un único string permite múltiples spinners
-  // simultáneos sin "robarse" entre celdas distintas.
-  savingCells: Set<string>;
-  savedCells: Set<string>;
-  savingForfeit: boolean;
-  isHome: boolean;
-  homeName: string;
-  awayName: string;
-  onToggleExpand: () => void;
-  onUpdateCell: (setIdx: number, side: 'us' | 'them', value: string) => void;
-  onPersistCell: (setIdx: number) => void;
-  onToggleForfeit: () => void;
-  onSetForfeitDirection: (forfeitUs: boolean) => void;
-}> = ({
-  court,
-  match,
-  label,
-  expanded,
-  disabled,
-  outcome,
-  savingCells,
-  savedCells,
-  savingForfeit,
-  isHome,
-  homeName,
-  awayName,
-  onToggleExpand,
-  onUpdateCell,
-  onPersistCell,
-  onToggleForfeit,
-  onSetForfeitDirection,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const tint =
-    outcome === 'won'
-      ? c.accent
-      : outcome === 'lost'
-        ? c.error
-        : c.textFaint;
-
-  // Marcador resumen: orden Local-Visitante, no Nos.-Riv.
-  const setSummary = match.sets
-    .filter((s) => s.us !== '' || s.them !== '')
-    .map((s) =>
-      formatSetScore(
-        s.us !== '' ? Number(s.us) : null,
-        s.them !== '' ? Number(s.them) : null,
-        isHome,
-      ),
-    )
-    .join('  ');
-
-  const summaryText = match.forfeit
-    ? match.forfeitUs
-      ? 'W.O. en contra'
-      : 'W.O. a favor'
-    : setSummary || 'Sin resultado';
-
-  return (
-    <View
-      style={[
-        styles.row,
-        { borderColor: expanded ? c.hairStrong : c.hair },
-      ]}
-    >
-      <Pressable
-        onPress={onToggleExpand}
-        accessibilityRole="button"
-        accessibilityLabel={`${label}. ${summaryText}`}
-        accessibilityState={{ expanded }}
-        hitSlop={4}
-        style={({ pressed }) => [styles.rowHeader, pressed && { opacity: 0.85 }]}
-      >
-        <View
-          style={[
-            styles.courtBadge,
-            court === 0 && {
-              backgroundColor: c.accent10,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.courtBadgeText,
-              { color: court === 0 ? c.accent : c.text },
-            ]}
-          >
-            P{court + 1}
-          </Text>
-        </View>
-
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.rowLabel} numberOfLines={1}>
-            {label}
-          </Text>
-          <Text style={styles.rowSummary} numberOfLines={1}>
-            {summaryText}
-          </Text>
-        </View>
-
-        {outcome ? (
-          <View
-            accessible
-            accessibilityLabel={outcome === 'won' ? 'Victoria' : 'Derrota'}
-            style={[
-              styles.outcomePill,
-              { backgroundColor: `${tint}15`, borderColor: `${tint}40` },
-            ]}
-          >
-            <Text style={[styles.outcomePillText, { color: tint }]}>
-              {outcome === 'won' ? 'V' : 'D'}
-            </Text>
-          </View>
-        ) : (
-          <View
-            accessible
-            accessibilityLabel="Sin resultado"
-            style={styles.outcomePill}
-          >
-            <Text style={styles.outcomePillTextMuted}>—</Text>
-          </View>
-        )}
-
-        <View
-          style={[
-            styles.chevWrap,
-            expanded && { transform: [{ rotate: '90deg' }] },
-          ]}
-        >
-          <IconChevron size={14} color={c.textFaint} />
-        </View>
-      </Pressable>
-
-      {expanded ? (
-        <View style={styles.rowBody}>
-          {/* Forfeit toggle */}
-          <Pressable
-            onPress={() => !disabled && !savingForfeit && onToggleForfeit()}
-            style={({ pressed }) => [
-              styles.forfeitRow,
-              pressed && !disabled && { opacity: 0.85 },
-              disabled && { opacity: 0.4 },
-            ]}
-          >
-            <View
-              style={[
-                styles.forfeitTrack,
-                {
-                  backgroundColor: match.forfeit
-                    ? c.accent
-                    : 'rgba(232,245,239,0.12)',
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.forfeitThumb,
-                  { left: match.forfeit ? 17 : 3 },
-                ]}
-              />
-            </View>
-            <Text
-              style={[
-                styles.forfeitLabel,
-                {
-                  color: match.forfeit ? c.accent : c.textMuted,
-                },
-              ]}
-            >
-              W.O. (no presentado)
-            </Text>
-            {savingForfeit ? (
-              <ActivityIndicator size="small" color={c.accent} />
-            ) : null}
-          </Pressable>
-
-          {/* Dirección del W.O.: ¿quién no se presentó? Define el punto. */}
-          {match.forfeit ? (
-            <View style={styles.foDirRow}>
-              <Pressable
-                disabled={disabled}
-                onPress={() =>
-                  !disabled && !savingForfeit && onSetForfeitDirection(false)
-                }
-                style={[
-                  styles.foDirBtn,
-                  !match.forfeitUs && styles.foDirBtnWon,
-                  disabled && { opacity: 0.4 },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.foDirText,
-                    !match.forfeitUs && { color: c.accent },
-                  ]}
-                >
-                  Ganado · no vino el rival
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={disabled}
-                onPress={() =>
-                  !disabled && !savingForfeit && onSetForfeitDirection(true)
-                }
-                style={[
-                  styles.foDirBtn,
-                  match.forfeitUs && styles.foDirBtnLost,
-                  disabled && { opacity: 0.4 },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.foDirText,
-                    match.forfeitUs && { color: c.error },
-                  ]}
-                >
-                  Perdido · no vinimos
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {!match.forfeit ? (
-            <>
-              {/* Cabecera equipos: Local · {nombre} | Visit. · {nombre} */}
-              <View style={styles.teamsHeader}>
-                <View style={styles.teamsHeaderSlot}>
-                  <Text style={styles.teamsHeaderTag}>LOCAL</Text>
-                  <Text
-                    style={[
-                      styles.teamsHeaderName,
-                      isHome && { color: c.accent },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {homeName}
-                  </Text>
-                </View>
-                <View style={styles.teamsHeaderSlot}>
-                  <Text style={styles.teamsHeaderTag}>VISITANTE</Text>
-                  <Text
-                    style={[
-                      styles.teamsHeaderName,
-                      !isHome && { color: c.accent },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {awayName}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Una fila por SET con marcador Local-Visitante */}
-              {match.sets.map((cell, i) => (
-                <SetLine
-                  key={i}
-                  setIdx={i}
-                  cell={cell}
-                  isHome={isHome}
-                  disabled={disabled}
-                  saving={savingCells.has(`${court}-${i}`)}
-                  saved={savedCells.has(`${court}-${i}`)}
-                  onChange={(side, value) =>
-                    onUpdateCell(i, side, value)
-                  }
-                  onBlurCell={() => onPersistCell(i)}
-                />
-              ))}
-            </>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-};
-
-// ─── SetLine ────────────────────────────────────────────────────────────────
-// Una fila por SET con marcador físico Local-Visitante.
-// La columna que mapea a "us" se pinta en accent para identificar fácilmente
-// nuestro equipo, sin importar de qué lado del marcador esté.
-const SetLine: React.FC<{
-  setIdx: number;
-  cell: SetCell;
-  isHome: boolean;
-  disabled: boolean;
-  saving: boolean;
-  saved: boolean;
-  onChange: (side: 'us' | 'them', value: string) => void;
-  onBlurCell: () => void;
-}> = ({ setIdx, cell, isHome, disabled, saving, saved, onChange, onBlurCell }) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const leftSide: 'us' | 'them' = isHome ? 'us' : 'them';
-  const rightSide: 'us' | 'them' = isHome ? 'them' : 'us';
-  const leftValue = cell[leftSide];
-  const rightValue = cell[rightSide];
-
-  // Ganador del set = el número MÁS ALTO, y solo cuando AMBOS están puestos
-  // (un 6-7 lo gana el 7; con un único valor todavía no hay ganador). El
-  // verde debe marcar al ganador del set, no "nuestro" lado.
-  const lNum = leftValue === '' ? null : Number(leftValue);
-  const rNum = rightValue === '' ? null : Number(rightValue);
-  const bothFilled = lNum !== null && rNum !== null;
-  const leftWins = bothFilled && (lNum as number) > (rNum as number);
-  const rightWins = bothFilled && (rNum as number) > (lNum as number);
-
-  // Validación de marcador padel:
-  //   - Sets 1 y 2: 0..7 (7 sólo con tiebreak desde 6-6).
-  //   - Set 3 ("OPC."): super-tiebreak, hasta 15 (cubre 10-X con diferencia
-  //     de 2; 15 es margen amplio).
-  // Cualquier entrada mayor se clampa al máximo del set en cuestión.
-  const maxForSet = setIdx === 2 ? 15 : 7;
-  const sanitize = (raw: string): string => {
-    const digits = raw.replace(/[^0-9]/g, '');
-    if (!digits) return '';
-    const n = Math.min(parseInt(digits, 10), maxForSet);
-    return String(n);
-  };
-
-  return (
-    <View style={styles.setLine}>
-      <Text style={styles.setLineLabel}>
-        SET {setIdx + 1}
-        {setIdx === 2 ? ' · OPC.' : ''}
-      </Text>
-      <View style={styles.setLineInputs}>
-        <ScoreCell
-          value={leftValue}
-          win={leftWins}
-          mine={leftSide === 'us'}
-          disabled={disabled}
-          saving={saving}
-          saved={saved}
-          onChange={(v) => onChange(leftSide, sanitize(v))}
-          onBlurCell={onBlurCell}
-        />
-        <Text style={styles.setLineSep}>·</Text>
-        <ScoreCell
-          value={rightValue}
-          win={rightWins}
-          mine={rightSide === 'us'}
-          disabled={disabled}
-          saving={saving}
-          saved={saved}
-          onChange={(v) => onChange(rightSide, sanitize(v))}
-          onBlurCell={onBlurCell}
-        />
-      </View>
-    </View>
-  );
-};
-
-// ─── ScoreCell ──────────────────────────────────────────────────────────────
-const ScoreCell: React.FC<{
-  value: string;
-  /** true = este lado GANÓ el set (número más alto, ambos puestos). */
-  win: boolean;
-  /** true = es el marcador de nuestro equipo (solo para accesibilidad). */
-  mine: boolean;
-  disabled: boolean;
-  saving: boolean;
-  saved: boolean;
-  onChange: (value: string) => void;
-  onBlurCell: () => void;
-}> = ({ value, win, mine, disabled, saving, saved, onChange, onBlurCell }) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-    <View style={styles.scoreCellWrap}>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        onBlur={onBlurCell}
-        keyboardType="number-pad"
-        maxLength={2}
-        editable={!disabled}
-        placeholder="·"
-        placeholderTextColor={c.textFaint}
-        accessibilityLabel={mine ? 'Juegos a favor' : 'Juegos del rival'}
-        style={[
-          styles.scoreCell,
-          // Verde = GANADOR del set (el número más alto), no nuestro lado. A
-          // nuestro equipo lo identifica la cabecera Local/Visitante.
-          win
-            ? { color: c.accent, fontWeight: '800' }
-            : { color: c.text },
-          disabled && { opacity: 0.5 },
-        ]}
-      />
-      {saving ? (
-        <View style={styles.scoreCellSaving}>
-          <ActivityIndicator size="small" color={c.accent} />
-        </View>
-      ) : saved ? (
-        // Check verde efímero (~1.2s) tras guardado exitoso — feedback
-        // positivo cuando la red fue lenta y el spinner duró un rato.
-        <View style={styles.scoreCellSaving}>
-          <IconCheck size={12} color={c.accent} />
-        </View>
-      ) : null}
-    </View>
-  );
-};
-
-// ─── Styles ─────────────────────────────────────────────────────────────────
-const makeStyles = (c: Palette) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.background },
-  center: { alignItems: 'center', justifyContent: 'center' },
-
-  // Nav
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  backBtn: {
-    height: 36,
-    paddingHorizontal: 12,
-    borderRadius: Radius.md,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
-  headerCount: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1.5,
-  },
-
-  scroll: { paddingHorizontal: 20, paddingTop: 18 },
-  errorBanner: {
-    backgroundColor: c.error + '1A',
-    borderWidth: 1,
-    borderColor: c.error + '55',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 14,
-  },
-  errorBannerText: { color: c.error, fontSize: 13, fontWeight: '600', textAlign: 'center' },
-
-  // Hero
-  heroBlock: { paddingHorizontal: 4, marginBottom: 6 },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 6,
-  },
-  title: {
-    color: c.text,
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: -0.7,
-    lineHeight: 30,
-  },
-  lede: {
-    color: c.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 6,
-  },
-
-  // Aggregate
-  aggregateCard: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.hair,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-  },
-  aggregateSide: { flex: 1, minWidth: 0 },
-  aggregateSideLabel: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10,
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
-    fontWeight: '500',
-  },
-  aggregateSideSub: {
-    color: c.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  aggregateScoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-  },
-  aggregateScore: {
-    fontFamily: Fonts.mono,
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: -1,
-  },
-  aggregateDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: c.hairStrong,
-  },
-
-  // Row card
-  row: {
-    backgroundColor: c.bgCard,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  rowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  courtBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: c.bgRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  courtBadgeText: {
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  rowLabel: {
-    color: c.text,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  rowSummary: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.textFaint,
-    marginTop: 3,
-    letterSpacing: 0.5,
-  },
-  outcomePill: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: c.hair,
-    minWidth: 32,
-    alignItems: 'center',
-  },
-  outcomePillText: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  outcomePillTextMuted: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.textFaint,
-    letterSpacing: 0.5,
-  },
-  chevWrap: { width: 14, alignItems: 'center' },
-  rowBody: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    borderTopWidth: 1,
-    borderColor: c.hair,
-  },
-
-  // Forfeit
-  forfeitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-  },
-  forfeitTrack: {
-    width: 32,
-    height: 18,
-    borderRadius: 9,
-    position: 'relative',
-  },
-  forfeitThumb: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
-    position: 'absolute',
-    top: 3,
-  },
-  forfeitLabel: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  foDirRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingBottom: 12,
-  },
-  foDirBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    backgroundColor: c.bgCard,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  foDirBtnWon: {
-    borderColor: c.accent,
-    backgroundColor: c.accent10,
-  },
-  foDirBtnLost: {
-    borderColor: c.error,
-    backgroundColor: c.error + '14',
-  },
-  foDirText: {
-    color: c.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-
-  // Cabecera con nombres de equipos (LOCAL · ... | VISIT. · ...)
-  teamsHeader: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 4,
-    marginBottom: 10,
-  },
-  teamsHeaderSlot: {
-    flex: 1,
-    minWidth: 0,
-  },
-  teamsHeaderTag: {
-    fontFamily: Fonts.mono,
-    fontSize: 9,
-    color: c.textFaint,
-    letterSpacing: 1.6,
-    fontWeight: '500',
-  },
-  teamsHeaderName: {
-    color: c.text,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-    marginTop: 2,
-  },
-
-  // Fila de un set: [SET N]   [input local]  ·  [input visit]
-  setLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 6,
-  },
-  setLineLabel: {
-    width: 64,
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 1,
-    fontWeight: '500',
-    color: c.textMuted,
-  },
-  setLineInputs: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  setLineSep: {
-    fontFamily: Fonts.mono,
-    fontSize: 18,
-    color: c.textFaint,
-  },
-  scoreCellWrap: {
-    flex: 1,
-    position: 'relative',
-  },
-  scoreCell: {
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hair,
-    fontFamily: Fonts.mono,
-    fontSize: 17,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingVertical: 0,
-  },
-  scoreCellSaving: {
-    position: 'absolute',
-    right: 4,
-    top: 4,
-  },
-
-  // CTA
-  cta: {
-    marginTop: 20,
-    height: 54,
-    borderRadius: Radius.lg,
-    backgroundColor: c.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    shadowColor: c.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  ctaLabel: {
-    color: c.textInverse,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.background },
+    // ── Tablet ──
+    tHeaderLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    tHeaderTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+    tHeaderSub: { color: c.textMuted, fontSize: 12, marginTop: 1 },
+    tHeaderScore: {
+      fontFamily: Fonts.mono,
+      fontSize: 24,
+      fontWeight: '700',
+      color: c.text,
+      letterSpacing: -0.5,
+    },
+    tCard: {
+      gap: 10,
+      padding: 12,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.bgCard,
+    },
+    tCardOn: { borderColor: c.accent, borderWidth: 1.5 },
+    tHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    tBadge: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: c.accent15,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tBadgeText: { fontFamily: Fonts.mono, fontSize: 12.5, fontWeight: '700', color: c.accent },
+    tTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
+    tSub: { color: c.textMuted, fontSize: 11.5, marginTop: 1 },
+    tOutcome: { fontSize: 16, fontWeight: '800' },
+    tScore: {
+      gap: 10,
+      padding: 16,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgRaised,
+      alignItems: 'center',
+    },
+    tScoreBig: {
+      fontFamily: Fonts.mono,
+      fontSize: 40,
+      fontWeight: '700',
+      letterSpacing: -1,
+      color: c.text,
+    },
+    tScoreStatus: { fontSize: 13, fontWeight: '700' },
+    tScoreNote: { color: c.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 17 },
+    tScoreBtn: {
+      alignSelf: 'stretch',
+      height: 42,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      backgroundColor: c.accent10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+    },
+    tScoreBtnText: { color: c.accent, fontSize: 13, fontWeight: '700' },
+    center: { alignItems: 'center', justifyContent: 'center' },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    backBtn: {
+      height: 36,
+      paddingHorizontal: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
+    headerTag: { fontFamily: Fonts.mono, fontSize: 11.5, color: c.textFaint, letterSpacing: 0.6 },
+    scroll: { paddingHorizontal: 16, gap: 10 },
+    errorBanner: {
+      padding: 12,
+      borderRadius: Radius.md,
+      backgroundColor: 'rgba(255,107,107,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,107,107,0.4)',
+    },
+    errorBannerText: { color: c.error, fontSize: 13, fontWeight: '600' },
+    notice: { color: c.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
+    eyebrow: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 2,
+      color: c.textFaint,
+      fontWeight: '500',
+      marginTop: 4,
+    },
+    footNote: { color: c.textFaint, fontSize: 12, textAlign: 'center', marginTop: 6 },
+    sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    sheetEyebrow: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 2,
+      color: c.accent,
+      fontWeight: '500',
+    },
+    sheetTitle: { color: c.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.3, marginTop: 2 },
+    sheetBody: { color: c.textMuted, fontSize: 13 },
+    saved: { fontFamily: Fonts.mono, fontSize: 11.5, color: c.accent },
+    sheetFoot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 4,
+    },
+    linkWrap: { alignSelf: 'center', paddingVertical: 6 },
+    linkMuted: { color: c.textMuted, fontSize: 13.5, fontWeight: '600' },
+    choice: {
+      padding: 12,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+    },
+    choiceOn: { borderColor: c.accent, backgroundColor: c.accent10 },
+    choiceTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
+    choiceSub: { color: c.textFaint, fontSize: 12, marginTop: 2 },
+    woCard: {
+      padding: 12,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      backgroundColor: c.bgCard,
+    },
+    woText: { fontSize: 14, fontWeight: '700' },
+    cta: {
+      height: 50,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 4,
+    },
+    ctaLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
+    ctaSm: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 38,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      backgroundColor: c.accent,
+    },
+    ctaSmLabel: { color: c.textInverse, fontSize: 14, fontWeight: '700' },
+  });

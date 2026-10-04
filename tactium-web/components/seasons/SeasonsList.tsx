@@ -1,9 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { type SeasonFormat } from "@/lib/team-data";
-import { createSeason, fetchSeasons, type DbSeason } from "@/lib/queries";
+import {
+  createSeason,
+  fetchAvailabilityDetail,
+  fetchMatchdays,
+  fetchPlayers,
+  fetchSeasons,
+  type DbMatchday,
+  type DbSeason,
+} from "@/lib/queries";
+import { fetchLeagueStatsBundle, computePlayerLeagueStats } from "@/lib/player-stats";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -11,7 +22,6 @@ import {
   Btn,
   BtnLink,
   Card,
-  CardHead,
   Chip,
   Field,
   IconTile,
@@ -22,9 +32,29 @@ import {
   PageHeader,
   SectionHead,
   Stat,
+  StatRow,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconCalendar, IconPlus } from "@/components/Icon";
+import { CountUp, EASE } from "@/components/entry/motion-bits";
+import {
+  IconCalendar,
+  IconCamera,
+  IconChevronRight,
+  IconFlag,
+  IconPlus,
+} from "@/components/Icon";
+import { fetchTeamStanding, shortGroupName } from "@/components/federation/fed-data";
+import {
+  PHASE_EYEBROW,
+  fetchSeasonsBalance,
+  fmtDay,
+  importFcpSeason,
+  outcomeVar,
+  pickNext,
+  playedChrono,
+  scoreText,
+  type SeasonBalance,
+} from "./season-data";
 
 const FORMATS: { key: SeasonFormat; note: string }[] = [
   { key: "Liga regular", note: "Jornadas en orden" },
@@ -45,32 +75,58 @@ const PHASE_LABEL: Record<DbSeason["phase"], string> = {
   mixto: "Liga + Playoff",
 };
 
+/**
+ * Competir › Liga. Igual que en la app: la temporada activa como un marcador
+ * (puesto y zona de la Federación, próxima jornada con la disponibilidad y la
+ * racha con resultado). Sin temporada, el capitán tiene los tres caminos; el
+ * jugador, el aviso y el salto a Federación.
+ */
 export function SeasonsList() {
-  const { activeTeam, role } = useSession();
+  const { activeTeam, role, user } = useSession();
   const teamId = activeTeam?.id ?? null;
   // Solo capitán/club crean temporadas; el jugador las consulta (Competir › Liga).
   const canManage = role === "capitan" || role === "club";
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync(
-    () => fetchSeasons(teamId!),
+    async () => {
+      const seasons = await fetchSeasons(teamId!);
+      const active = seasons.find((s) => s.active) ?? null;
+      const [matchdays, balances, players] = await Promise.all([
+        active ? fetchMatchdays(active.id) : Promise.resolve([] as DbMatchday[]),
+        fetchSeasonsBalance(seasons.filter((s) => !s.active).map((s) => s.id)).catch(
+          () => ({}) as Record<string, SeasonBalance>,
+        ),
+        fetchPlayers(teamId!).catch(() => []),
+      ]);
+      return { seasons, active, matchdays, balances, players };
+    },
     [teamId, reloadKey],
-    !!teamId
+    !!teamId,
   );
-  const SEASONS = data ?? [];
+  const SEASONS = data?.seasons ?? [];
+  const standing = useAsync(() => fetchTeamStanding(teamId!), [teamId], !!teamId);
 
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<SeasonFormat>("Liga + Playoff");
   const [name, setName] = useState("");
+  const [matchdaysStr, setMatchdaysStr] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const active = SEASONS.filter((s) => s.active);
+  const active = data?.active ?? null;
   const past = SEASONS.filter((s) => !s.active);
+  const myPlayerId =
+    (data?.players ?? []).find((p) => user && p.userId === user.id)?.id ?? null;
 
   async function saveSeason() {
     if (busy || !teamId) return;
     if (!name.trim()) {
       setToast("Ponle un nombre a la temporada.");
+      return;
+    }
+    const n = matchdaysStr.trim() ? Number(matchdaysStr) : null;
+    if (n != null && (!Number.isFinite(n) || n < 1 || n > 99)) {
+      setToast("El número de jornadas va de 1 a 99.");
       return;
     }
     setBusy(true);
@@ -79,12 +135,14 @@ export function SeasonsList() {
         name: name.trim(),
         phase: FORMAT_TO_PHASE[format],
         category: activeTeam?.category ?? null,
+        totalMatchdays: n,
       }),
     );
     setBusy(false);
     if (res.ok) {
       setOpen(false);
       setName("");
+      setMatchdaysStr("");
       setReloadKey((k) => k + 1);
       setToast("Temporada creada");
     } else {
@@ -92,17 +150,36 @@ export function SeasonsList() {
     }
   }
 
+  async function importFromFederation() {
+    if (busy || !teamId) return;
+    const fcpId = standing.data?.fcpId ?? null;
+    if (fcpId == null) {
+      setToast("Tu equipo no está vinculado a la Federación.");
+      return;
+    }
+    setBusy(true);
+    const res = await guardedWrite("traer la temporada de la Federación", () =>
+      importFcpSeason(teamId, fcpId),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(
+        `${res.data.newSeason ? "Temporada nueva creada" : "Temporada volcada"} · ${res.data.created} jornadas`,
+      );
+    } else setToast(res.reason);
+  }
+
   if (teamId && loading) return <SkeletonPage />;
 
   return (
     <div className="tw-page">
       <PageHeader
-        title="Temporadas"
-        lede="Cada temporada agrupa las jornadas de una liga o un playoff."
+        title="Liga"
         meta={[activeTeam?.name ?? null, activeTeam?.category ?? null]}
         actions={
-          canManage ? (
-            <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
+          canManage && active ? (
+            <Btn variant="ghost" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
               Nueva temporada
             </Btn>
           ) : undefined
@@ -125,66 +202,106 @@ export function SeasonsList() {
             body={error}
           />
         </Card>
-      ) : SEASONS.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<IconCalendar size={24} />}
-            title="Sin temporadas"
-            body={
-              canManage
-                ? "Crea la primera y empieza a planificar jornadas."
-                : "Tu capitán aún no ha creado ninguna temporada."
-            }
-            action={
-              canManage ? (
-                <Btn variant="accent" onClick={() => setOpen(true)} icon={<IconPlus size={14} />}>
-                  Crear temporada
-                </Btn>
-              ) : undefined
-            }
-          />
-        </Card>
       ) : (
         <>
-          {active.map((s) => (
-            <Card key={s.id} flush style={{ borderColor: "var(--accent-40)" }}>
-              <CardHead title={s.name} sub={PHASE_LABEL[s.phase]}>
-                <Chip>Activa</Chip>
-                <BtnLink href={`/temporadas/${s.id}`} variant="accent" size="sm">
-                  Abrir temporada
-                </BtnLink>
-              </CardHead>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                }}
-              >
-                <Stat label="Jornadas" value={s.totalMatchdays ?? "—"} />
-                <Stat label="Categoría" value={s.category ?? "—"} />
-                <Stat label="Formato" value={PHASE_LABEL[s.phase]} />
+          {active ? (
+            <>
+              <Scoreboard
+                season={active}
+                teamName={activeTeam?.name ?? null}
+                matchdays={data?.matchdays ?? []}
+                standing={standing.data ?? null}
+                canManage={canManage}
+                teamId={teamId}
+                myPlayerId={myPlayerId}
+              />
+              {!canManage && myPlayerId ? (
+                <MySeason seasonId={active.id} playerId={myPlayerId} />
+              ) : null}
+            </>
+          ) : canManage ? (
+            <Card>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Empieza la temporada</h2>
+              <p style={{ margin: "6px 0 8px", fontSize: 13.5, color: "var(--text-muted)" }}>
+                {standing.data?.fcpId != null
+                  ? "Tu equipo está en la Federación Cántabra: podemos traer el calendario con las jornadas, las fechas y los rivales."
+                  : "Elige cómo cargar el calendario de tu liga."}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {standing.data?.fcpId != null ? (
+                  <ListRow
+                    onClick={() => void importFromFederation()}
+                    icon={
+                      <IconTile>
+                        <IconFlag size={16} />
+                      </IconTile>
+                    }
+                    title="Traer de la Federación"
+                    sub="Calendario, rivales y clasificación"
+                  />
+                ) : null}
+                <ListRow
+                  href="/equipo"
+                  icon={
+                    <IconTile mute>
+                      <IconCamera size={16} />
+                    </IconTile>
+                  }
+                  title="Escanear el calendario"
+                  sub="Desde la app: foto del PDF o de la tabla"
+                />
+                <ListRow
+                  onClick={() => setOpen(true)}
+                  icon={
+                    <IconTile mute>
+                      <IconPlus size={16} />
+                    </IconTile>
+                  }
+                  title="Crear a mano"
+                  sub="Nombre, formato y nº de jornadas"
+                />
               </div>
             </Card>
-          ))}
+          ) : (
+            <Card>
+              <EmptyState
+                icon={<IconCalendar size={24} />}
+                title="Tu capitán aún no ha empezado la temporada"
+                body="Cuando la cree, aquí verás tu próxima jornada, el puesto y la racha. Mientras, mira la Federación."
+                action={
+                  <BtnLink href="/federacion/cantabra" size="sm">
+                    Ver la Federación
+                  </BtnLink>
+                }
+              />
+            </Card>
+          )}
 
           {past.length > 0 && (
             <>
               <SectionHead title="Histórico" count={past.length} />
               <Card flush>
-                {past.map((s) => (
-                  <ListRow
-                    key={s.id}
-                    href={`/temporadas/${s.id}`}
-                    icon={
-                      <IconTile mute>
-                        <IconCalendar size={16} />
-                      </IconTile>
-                    }
-                    title={s.name}
-                    sub={`${PHASE_LABEL[s.phase]} · ${s.totalMatchdays ?? "—"} jornadas`}
-                    right={<Chip tone="mute">Archivada</Chip>}
-                  />
-                ))}
+                {past.map((s) => {
+                  const b = data?.balances?.[s.id];
+                  return (
+                    <ListRow
+                      key={s.id}
+                      href={`/temporadas/${s.id}`}
+                      icon={
+                        <IconTile mute>
+                          <IconCalendar size={16} />
+                        </IconTile>
+                      }
+                      title={s.name}
+                      sub={
+                        b && b.total > 0
+                          ? `${PHASE_LABEL[s.phase]} · ${b.w}-${b.d}-${b.l}`
+                          : `${PHASE_LABEL[s.phase]} · sin jornadas`
+                      }
+                      right={<Chip tone="mute">Archivada</Chip>}
+                    />
+                  );
+                })}
               </Card>
             </>
           )}
@@ -204,14 +321,14 @@ export function SeasonsList() {
             <Btn variant="accent" disabled={busy} onClick={saveSeason}>
               {busy
                 ? "Creando…"
-                : active.length > 0
+                : active
                   ? "Cerrar y crear nueva"
                   : "Crear temporada"}
             </Btn>
           </>
         }
       >
-        {active.length > 0 && (
+        {active && (
           <Note tone="warning" style={{ marginBottom: 18 }}>
             Ya tienes una temporada activa. Al crear una nueva, la actual se
             cierra y pasa al histórico.
@@ -279,18 +396,233 @@ export function SeasonsList() {
             </div>
           </Field>
 
-          <div className="tw-form-grid">
-            <Field label="Número de jornadas" hint="Opcional" htmlFor="temporada-jornadas">
-              <Input id="temporada-jornadas" type="text" inputMode="numeric" className="mono" />
-            </Field>
-            <Field label="Número de eliminatorias" hint="Opcional" htmlFor="temporada-elim">
-              <Input id="temporada-elim" type="text" inputMode="numeric" className="mono" />
-            </Field>
-          </div>
+          <Field
+            label={format === "Eliminatorias" ? "Número de eliminatorias" : "Número de jornadas"}
+            hint="Opcional"
+            htmlFor="temporada-jornadas"
+          >
+            <Input
+              id="temporada-jornadas"
+              type="text"
+              inputMode="numeric"
+              className="mono"
+              value={matchdaysStr}
+              onChange={(e) => setMatchdaysStr(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+            />
+          </Field>
         </div>
       </Modal>
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
+  );
+}
+
+/* ── Marcador de la temporada activa ─────────────────────────────── */
+
+function Scoreboard({
+  season,
+  teamName,
+  matchdays,
+  standing,
+  canManage,
+  teamId,
+  myPlayerId,
+}: {
+  season: DbSeason;
+  teamName: string | null;
+  matchdays: DbMatchday[];
+  standing: Awaited<ReturnType<typeof fetchTeamStanding>> | null;
+  canManage: boolean;
+  teamId: string;
+  myPlayerId: string | null;
+}) {
+  const reduce = useReducedMotion();
+  const wins = matchdays.filter((m) => m.outcome === "win").length;
+  const draws = matchdays.filter((m) => m.outcome === "draw").length;
+  const losses = matchdays.filter((m) => m.outcome === "loss").length;
+  const played = wins + draws + losses;
+  const total = season.totalMatchdays ?? matchdays.length;
+  const last5 = playedChrono(matchdays).slice(-5);
+  const next = pickNext(matchdays);
+
+  // Disponibilidad de la próxima: cuántos van (capitán) o tu respuesta.
+  const avail = useAsync(
+    async () => {
+      const [detail, players] = await Promise.all([
+        fetchAvailabilityDetail(next!.id),
+        fetchPlayers(teamId),
+      ]);
+      const ids = players.filter((p) => p.active).map((p) => p.id);
+      return {
+        yes: ids.filter((id) => detail[id]?.status === "yes").length,
+        total: ids.length,
+        mine: myPlayerId ? detail[myPlayerId]?.status ?? null : null,
+      };
+    },
+    [next?.id, teamId, myPlayerId],
+    !!next,
+  );
+
+  const me = standing?.me ?? null;
+  const zone = standing?.zone ?? null;
+  const group = shortGroupName(standing?.grupo);
+  const mine = avail.data?.mine;
+
+  return (
+    <Card style={{ borderColor: "var(--accent-40)", background: "linear-gradient(135deg, var(--accent-10), var(--bg-card) 70%)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Chip>Activa · {PHASE_EYEBROW[season.phase]}</Chip>
+          <h2 style={{ margin: "10px 0 2px", fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>
+            {season.name}
+          </h2>
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>
+            {[teamName, group].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        <BtnLink href={`/temporadas/${season.id}`} size="sm" variant="accent">
+          Abrir temporada
+        </BtnLink>
+      </div>
+
+      <StatRow style={{ marginTop: 16 }}>
+        {me ? (
+          <Stat
+            label={zone ? zone.label : "Puesto"}
+            value={
+              <>
+                <CountUp to={me.posicion} duration={0.4} />º
+              </>
+            }
+            unit={`de ${standing?.rows.length ?? 0}`}
+            tone="accent"
+          />
+        ) : null}
+        <Stat label="Jornadas" value={`${played}/${total || "—"}`} />
+        <Stat label="Balance" value={`${wins}-${draws}-${losses}`} sub="Ganadas · empatadas · perdidas" />
+      </StatRow>
+
+      {next ? (
+        <div
+          className="divider-top"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 16,
+            paddingTop: 14,
+            borderTop: "1px solid var(--line)",
+            flexWrap: "wrap",
+          }}
+        >
+          <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>
+            J{String(next.round).padStart(2, "0")}
+          </span>
+          <Link href={`/jornada/${next.id}`} style={{ flex: 1, minWidth: 0, color: "inherit" }}>
+            <span style={{ display: "block", fontSize: 14.5, fontWeight: 700 }} className="truncate">
+              vs {next.opponent}
+            </span>
+            <span style={{ display: "block", fontSize: 12.5, color: "var(--text-muted)" }}>
+              {[fmtDay(next.date), next.time?.slice(0, 5), next.isHome ? "En casa" : "Fuera"]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </Link>
+          {avail.data ? (
+            canManage ? (
+              avail.data.total > 0 ? (
+                <Link href={`/jornada/${next.id}/disponibilidad`} className="chip chip-accent">
+                  {avail.data.yes}/{avail.data.total} van
+                </Link>
+              ) : null
+            ) : myPlayerId ? (
+              <Link
+                href={`/jornada/${next.id}/disponibilidad`}
+                className={mine ? "chip chip-accent" : "btn btn-accent btn-sm"}
+              >
+                {mine === "yes"
+                  ? "Tú: Voy"
+                  : mine === "maybe"
+                    ? "Tú: Duda"
+                    : mine === "no"
+                      ? "Tú: No"
+                      : "¿Puedes jugar?"}
+              </Link>
+            ) : null
+          ) : null}
+        </div>
+      ) : null}
+
+      {last5.length > 0 || standing?.idGrupo ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginTop: 14,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {last5.map((m, i) => (
+              <motion.span
+                key={m.id}
+                className="mono"
+                initial={reduce ? false : { opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.12 + i * 0.07, duration: 0.26, ease: EASE }}
+                title={`J${m.round} · ${m.opponent}`}
+                style={{
+                  minWidth: 40,
+                  padding: "4px 8px",
+                  borderRadius: "var(--r-sm)",
+                  textAlign: "center",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: outcomeVar(m.outcome),
+                  background: `color-mix(in srgb, ${outcomeVar(m.outcome)} 14%, transparent)`,
+                }}
+              >
+                {scoreText(m)}
+              </motion.span>
+            ))}
+          </div>
+          {standing?.idGrupo ? (
+            <Link
+              href={`/federacion/cantabra/grupo/${encodeURIComponent(standing.idGrupo)}`}
+              className="link-action"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+            >
+              Clasificación <IconChevronRight size={14} />
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+/* ── «Tu temporada» (jugador) ───────────────────────────────────── */
+
+function MySeason({ seasonId, playerId }: { seasonId: string; playerId: string }) {
+  const stats = useAsync(
+    async () => computePlayerLeagueStats(playerId, await fetchLeagueStatsBundle([seasonId])),
+    [seasonId, playerId],
+  );
+  const s = stats.data;
+  if (!s) return null;
+  // La pareja MÁS REPETIDA (no la de mejor porcentaje).
+  const partner = [...s.partners].sort((a, b) => b.played - a.played)[0];
+  return (
+    <>
+      <SectionHead title="Tu temporada" />
+      <StatRow>
+        <Stat label="Jugados" value={s.played} />
+        <Stat label="Ganados" value={s.won} tone="accent" />
+        <Stat label="Tu pareja" value={partner ? partner.name.split(/\s+/).slice(-1)[0] : "—"} sub={partner ? `${partner.played} partidos juntos` : undefined} />
+      </StatRow>
+    </>
   );
 }

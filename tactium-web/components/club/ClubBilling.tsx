@@ -2,6 +2,8 @@
 
 import { fetchClubTeams, fetchSubscription } from "@/lib/queries";
 import { CLUB_PLANS, formatEur } from "@/lib/plans";
+import { TOURNAMENT_EXTRA_PAIR_EUR, TOURNAMENT_FREE_PAIRS, TOURNAMENT_TIERS } from "@/lib/tournament-billing";
+import { CobrosCard } from "@/components/club/ClubCobros";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import {
@@ -60,8 +62,8 @@ export function ClubBilling() {
     return (
       <div className="tw-page">
         <PageHeader
-          title="Facturación del club"
-          lede="Tu plan, qué equipos cubre y qué pasa con los que se salen del límite."
+          title="Cobros y facturación"
+          lede="El plan del club y el cobro de inscripciones de tus torneos."
         />
         <Card>
           <EmptyState
@@ -86,8 +88,8 @@ export function ClubBilling() {
   return (
     <div className="tw-page">
       <PageHeader
-        title="Facturación del club"
-        lede="Tu plan, qué equipos cubre y qué pasa con los que se salen del límite."
+        title="Cobros y facturación"
+        lede="El plan del club, qué equipos cubre y el cobro de inscripciones de tus torneos."
       />
 
       {/* ── Plan actual ─────────────────────────────────────────── */}
@@ -97,8 +99,11 @@ export function ClubBilling() {
         <Card>
           <EmptyState
             icon={<IconBuilding size={24} />}
-            title="El club no tiene plan activo"
-            body="Sin plan, los equipos no están cubiertos y las acciones de gestión piden suscripción."
+            title="Tu plan: gratis"
+            body={`Torneos gratis hasta ${TOURNAMENT_FREE_PAIRS} parejas. Por encima, pagas según las parejas al cerrar la inscripción: ${TOURNAMENT_TIERS.filter((t) => t.priceEur > 0)
+              .slice(0, 2)
+              .map((t) => `${formatEur(t.priceEur)} hasta ${t.pairs}`)
+              .join(", ")}. Sin plan, los equipos no están cubiertos.`}
             action={
               <BtnLink href={proHref(undefined, "club")} variant="accent">
                 Ver planes
@@ -119,6 +124,12 @@ export function ClubBilling() {
               label={yearly ? "Precio al año" : "Precio al mes"}
               value={formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)}
               sub={yearly ? "Facturación anual" : "Facturación mensual"}
+            />
+            <Stat
+              label="Torneos incluidos"
+              value={plan.tournamentPairCap ?? "—"}
+              unit="parejas"
+              sub={`Por encima, ${formatEur(TOURNAMENT_EXTRA_PAIR_EUR)} por pareja al cerrar la inscripción`}
             />
             <Stat
               label="Equipos incluidos"
@@ -179,12 +190,25 @@ export function ClubBilling() {
               </span>
 
               <span style={{ display: "flex", justifyContent: "flex-end" }}>
-                {t.covered ? <Chip>Incluido</Chip> : <Chip tone="warning">No cubierto</Chip>}
+                {t.covered ? (
+                  <Chip>Incluido</Chip>
+                ) : plan ? (
+                  <BtnLink href="/club/facturacion/cubrir" size="sm" variant="tint">
+                    Cubrir
+                  </BtnLink>
+                ) : (
+                  <Chip tone="warning">Sin cubrir</Chip>
+                )}
               </span>
             </div>
           ))
         )}
       </Card>
+
+      {/* ── Cobro de inscripciones (antes /club/cobros) ─────────── */}
+      <div style={{ marginTop: 16 }}>
+        <CobrosCard />
+      </div>
 
       {/* ── Planes disponibles ──────────────────────────────────── */}
       <SectionHead title="Planes disponibles" />
@@ -228,9 +252,9 @@ export function ClubBilling() {
 
               <div style={{ marginTop: 12, display: "flex", alignItems: "baseline", gap: 4 }}>
                 <span className="mono" style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em" }}>
-                  {formatEur(p.priceMonthlyEur)}
+                  {formatEur(p.priceYearlyEur)}
                 </span>
-                <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>al mes</span>
+                <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>al año</span>
               </div>
 
               <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--text-muted)", flex: 1 }}>

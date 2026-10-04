@@ -36,3 +36,27 @@ export async function requestConnectOnboarding(clubId: string): Promise<string> 
   }
   return body.url;
 }
+
+export type ConnectStatus = 'none' | 'onboarding' | 'restricted' | 'active';
+
+// Estado REAL de la cuenta de cobros del club. Lo lee /api/connect/status (que
+// pregunta a Stripe y refresca la BD) con el token de la app. Si no se puede
+// consultar devuelve null: mejor no decir nada que decir «sin conectar» a un
+// club que sí lo está.
+export async function fetchConnectStatus(clubId: string): Promise<ConnectStatus | null> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(
+      `${TACTIUM_WEB_BASE_URL}/api/connect/status?clubId=${encodeURIComponent(clubId)}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as { status?: ConnectStatus };
+    return body.status ?? 'none';
+  } catch {
+    return null;
+  }
+}

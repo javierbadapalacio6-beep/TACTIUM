@@ -1,28 +1,56 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { useSession } from "@/lib/session";
-import { Btn, Card, Chip, IconTile, PageHeader } from "@/components/ui";
-import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconBuilding, IconCheckCircle, IconCreditCard } from "@/components/Icon";
+import { GATEWAY_FEE_LABEL } from "@/lib/club-ops";
+import { Btn, Card, CardHead, Chip } from "@/components/ui";
+import { SkeletonPage, Toast } from "@/components/states";
 
 type ConnectStatus = "none" | "onboarding" | "restricted" | "active";
 
-const LABEL: Record<ConnectStatus, { text: string; tone: "mute" | "warning" | "accent" }> = {
-  none: { text: "Sin conectar", tone: "mute" },
-  onboarding: { text: "Alta pendiente", tone: "warning" },
-  restricted: { text: "Faltan datos", tone: "warning" },
-  active: { text: "Conectado · listo para cobrar", tone: "accent" },
+/** Los cuatro estados que devuelve /api/connect/status, cada uno con su botón. */
+const STATE: Record<
+  ConnectStatus,
+  { text: string; tone: "mute" | "warning" | "accent"; body: string; cta: string | null }
+> = {
+  none: {
+    text: "Sin conectar",
+    tone: "mute",
+    body: "Conecta Stripe y el dinero de las inscripciones va directo a la cuenta del club. También puedes cobrar en el club.",
+    cta: "Conectar con Stripe",
+  },
+  onboarding: {
+    text: "Alta pendiente",
+    tone: "warning",
+    body: "Empezaste el alta en Stripe y falta terminarla. Hasta entonces, las inscripciones con pago online no se pueden abrir.",
+    cta: "Continuar alta",
+  },
+  restricted: {
+    text: "Faltan datos",
+    tone: "warning",
+    body: "Stripe necesita algún dato más (por ejemplo, tu IBAN) para poder ingresarte lo cobrado. Hasta entonces, las inscripciones con pago online no se pueden abrir.",
+    cta: "Completar en Stripe",
+  },
+  active: {
+    text: "Listo para cobrar",
+    tone: "accent",
+    body: "Ya puedes poner cuota a tus torneos y cobrarla online. Stripe ingresa el dinero en la cuenta del club automáticamente.",
+    cta: null,
+  },
 };
 
 /**
- * Cobros del club (Stripe Connect Express). Conecta la cuenta del club para
- * cobrar inscripciones de torneo online (la pareja paga al club; TACTIUM se
- * queda un 3%). Ver TACTIUM/docs/plan-inscripciones-connect.md.
+ * Tarjeta «Cobro de inscripciones» (Stripe Connect Express) con el estado REAL.
+ * Vive dentro de «Cobros y facturación». El texto de la comisión sale de las
+ * constantes de `lib/connect.ts`: TACTIUM no se queda nada; lo que se retiene
+ * es el coste de la pasarela.
  */
-export function ClubCobros() {
+export function CobrosCard() {
   const { clubId } = useSession();
+  const reduce = useReducedMotion();
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -30,27 +58,26 @@ export function ClubCobros() {
 
   const refresh = useCallback(async () => {
     if (!clubId) return;
-    setLoading(true);
     try {
       const r = await fetch(`/api/connect/status?clubId=${clubId}`);
       const d = (await r.json().catch(() => ({}))) as { status?: ConnectStatus };
-      setStatus(d.status ?? "none");
+      setStatus(r.ok ? (d.status ?? "none") : null);
     } catch {
-      setStatus("none");
+      setStatus(null);
     } finally {
       setLoading(false);
     }
   }, [clubId]);
 
   useEffect(() => {
-    refresh();
-    // Al volver del alta de Stripe (?connect=done) refresca el estado.
-    if (typeof window !== "undefined") {
-      const q = new URLSearchParams(window.location.search);
-      if (q.get("connect")) {
-        window.history.replaceState({}, "", window.location.pathname);
-      }
-    }
+    void refresh();
+    // Al volver del alta de Stripe (?connect=done) se limpia la URL.
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("connect")) window.history.replaceState({}, "", window.location.pathname + "#cobros");
+    // Y al volver a la pestaña, el estado se actualiza solo.
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
 
   async function connect() {
@@ -75,75 +102,69 @@ export function ClubCobros() {
     }
   }
 
-  if (!clubId) {
-    return (
-      <div className="tw-page">
-        <Card>
-          <EmptyState
-            icon={<IconBuilding size={24} />}
-            title="Sin club activo"
-            body="Necesitas gestionar un club para configurar los cobros."
-          />
-        </Card>
-      </div>
-    );
-  }
-  if (loading || status === null) return <SkeletonPage />;
-
-  const active = status === "active";
-  const l = LABEL[status];
+  const s = status ? STATE[status] : null;
 
   return (
-    <div className="tw-page-narrow">
-      <PageHeader
-        title="Cobrar inscripciones"
-        lede="Conecta tu club con Stripe para cobrar online las inscripciones de tus torneos. El dinero va a tu cuenta: TACTIUM no cobra comisión y solo se descuenta el coste de la pasarela (2 % + 0,25 € por cobro)."
-        actions={
-          !active ? (
-            <Btn variant="accent" onClick={connect} disabled={busy}>
-              {busy
-                ? "Abriendo…"
-                : status === "none"
-                  ? "Conectar con Stripe"
-                  : "Continuar alta"}
-            </Btn>
-          ) : undefined
-        }
-      />
-
-      <Card>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <IconTile mute={!active}>
-            {active ? <IconCheckCircle size={17} /> : <IconCreditCard size={17} />}
-          </IconTile>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>Stripe Connect</div>
-            <div style={{ marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
-              Cuenta de cobros del club
-            </div>
-          </div>
-          <Chip tone={l.tone}>{l.text}</Chip>
-        </div>
-
-        <div className="divider" />
-
+    <Card flush style={{ scrollMarginTop: 80 }}>
+      <div id="cobros" />
+      <CardHead title="Cobro de inscripciones" sub="Stripe · cuenta del club">
+        <AnimatePresence mode="wait" initial={false}>
+          {s && (
+            <motion.span
+              key={status}
+              initial={reduce ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={reduce ? undefined : { opacity: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <Chip tone={s.tone}>{s.text}</Chip>
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </CardHead>
+      <div style={{ padding: "0 18px 18px" }}>
         <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
-          {active
-            ? "Ya puedes poner cuota de inscripción a tus torneos y cobrarla online. Stripe ingresa el dinero en tu cuenta bancaria automáticamente."
-            : "El alta la gestiona Stripe (te pedirá tus datos y una cuenta bancaria). Cuando termines, vuelve aquí; el estado se actualiza solo."}
+          {loading
+            ? "Consultando el estado en Stripe…"
+            : s
+              ? s.body
+              : "No se pudo consultar el estado de Stripe ahora mismo. Vuelve a intentarlo en un rato."}
         </p>
-      </Card>
-
-      {toast && (
-        <Toast tone="error" title={toast} onClose={() => setToast(null)} />
-      )}
-    </div>
+        <div className="divider" />
+        <div style={{ display: "grid", gap: 8, fontSize: 13.5 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "var(--text-muted)" }}>Comisión de TACTIUM</span>
+            <span className="mono">0 €</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "var(--text-muted)" }}>Coste de la pasarela</span>
+            <span className="mono">{GATEWAY_FEE_LABEL}</span>
+          </div>
+          <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+            Por cada inscripción cobrada online. Lo cobra Stripe, no TACTIUM.
+          </span>
+        </div>
+        {s?.cta && (
+          <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <Btn variant="accent" onClick={() => void connect()} disabled={busy}>
+              {busy ? "Abriendo…" : `${s.cta} ↗`}
+            </Btn>
+            <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+              Se abre la página segura de Stripe. Al volver, el estado se actualiza solo.
+            </span>
+          </div>
+        )}
+      </div>
+      {toast && <Toast tone="error" title={toast} onClose={() => setToast(null)} />}
+    </Card>
   );
+}
+
+/** /club/cobros ya no es una página aparte: lleva a la tarjeta de cobros. */
+export function ClubCobros() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(`/club/facturacion${window.location.search}#cobros`);
+  }, [router]);
+  return <SkeletonPage />;
 }

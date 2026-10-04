@@ -63,6 +63,23 @@ import {
   IconUsers,
 } from "@/components/Icon";
 import { PayTournamentButton } from "@/components/tournaments/PayTournamentButton";
+import {
+  Champions,
+  FollowButton,
+  GENDER_LABEL,
+  MatchesByDay,
+  MySummary,
+  NextMatch,
+  YouAreIn,
+  buildPath,
+  championsOf,
+  divShort,
+  pairLabel as pairFull,
+  summarize,
+  useLivePolling,
+  useMyPayments,
+  useSignupOnline,
+} from "@/components/tournaments/SpectatorParts";
 
 /* ── Formas de los datos reales (RPC públicas, espejo de la app) ──────
    Ver TACTIUM/src/core/services/tournaments.ts: publicGetTournament /
@@ -366,6 +383,7 @@ function computeIndividual(
 }
 
 type Tab =
+  | "partidos"
   | "inscripciones"
   | "grupos"
   | "clasificacion"
@@ -374,6 +392,9 @@ type Tab =
   | "config";
 
 const TABS: [Tab, string][] = [
+  // «Partidos» por día es la vista del espectador/jugador (paridad con la app);
+  // el organizador sigue con la rejilla de «Horario».
+  ["partidos", "Partidos"],
   ["inscripciones", "Inscripciones"],
   ["grupos", "Grupos"],
   ["clasificacion", "Clasificación"],
@@ -1532,7 +1553,9 @@ export function TournamentDetail({
   spectator?: boolean;
 }) {
   const { clubs, user } = useSession();
-  const [tab, setTab] = useState<Tab>(spectator ? "cuadro" : "inscripciones");
+  // null = la primera pestaña visible (el espectador abre en «Partidos» si ya
+  // hay partidos; el organizador, en «Inscripciones»).
+  const [tab, setTab] = useState<Tab | null>(null);
   // Inscripciones del usuario en ESTE torneo (para «Tu camino» en el cuadro).
   const uid = user?.id ?? null;
   const myRegsQ = useAsync(
@@ -1540,7 +1563,6 @@ export function TournamentDetail({
     [id, uid],
     !!uid,
   );
-  const [followed, setFollowed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -1639,6 +1661,19 @@ export function TournamentDetail({
     !!data?.tour?.club_id && clubs.some((c) => c.id === data.tour!.club_id);
   const esEspectador = spectator || !miembroDelClub;
 
+  // Espectador/jugador: recarga cada 60 s mientras está abierta (sin
+  // Realtime y sin volver al esqueleto), su estado de pago y cómo se cobra.
+  const poll = useLivePolling<RealMatch, RealReg>(
+    id,
+    esEspectador && !!data?.tour && data.tour.status !== "finished" && data.tour.status !== "canceled",
+    data ?? null,
+  );
+  const myPays = useMyPayments(id, esEspectador ? uid : null);
+  const feeOnline = useSignupOnline(
+    id,
+    esEspectador && !!data?.tour && Number(data.tour.entry_fee ?? 0) > 0,
+  );
+
   const backLink = {
     href: esEspectador ? "/torneos" : "/club/torneos",
     label: "Torneos",
@@ -1676,8 +1711,8 @@ export function TournamentDetail({
     );
   }
 
-  const matches = data?.matches ?? [];
-  const regs = data?.regs ?? [];
+  const matches = poll.matches ?? data?.matches ?? [];
+  const regs = poll.regs ?? data?.regs ?? [];
 
   // Pestañas según el FORMATO: un cuadro KO no tiene grupos ni clasificación;
   // una liga/social no tiene cuadro. Se ocultan las que no aplican (antes salían
@@ -1695,20 +1730,37 @@ export function TournamentDetail({
     fmt === "ko_consolation" ||
     fmt === "groups_ko" ||
     matches.some((m) => !["grp", "rr", "amer", "mex"].includes(m.bracket));
-  const visibleTabs = TABS.filter(([k]) => {
+  const visibleTabsRaw = TABS.filter(([k]) => {
     // Las parejas inscritas son públicas (la RPC no expone contacto a anónimos).
     // Solo la configuración del torneo queda para el organizador.
     if (esEspectador && k === "config") return false;
+    // Espectador: «Partidos» por día (si ya hay partidos) en vez de la rejilla.
+    if (k === "partidos") return esEspectador && matches.length > 0;
+    if (k === "horario") return !esEspectador;
     if (k === "grupos") return showGrupos;
     if (k === "clasificacion") return showClasificacion;
     if (k === "cuadro") return showCuadro;
-    return true; // inscripciones, horario, config
+    return true; // inscripciones, config
   });
+  // Orden del espectador (como en la app): con partidos, Partidos · cuadro ·
+  // Parejas; antes del sorteo, Parejas primero y el cuadro en estado vacío.
+  const visibleTabs: [Tab, string][] = esEspectador
+    ? [...visibleTabsRaw]
+        .map(([k, l]): [Tab, string] => [k, k === "inscripciones" ? "Parejas" : l])
+        .sort(([a], [b]) => {
+          const order: Tab[] =
+            matches.length > 0
+              ? ["partidos", "grupos", "clasificacion", "cuadro", "inscripciones"]
+              : ["inscripciones", "grupos", "clasificacion", "cuadro"];
+          return order.indexOf(a) - order.indexOf(b);
+        })
+    : visibleTabsRaw;
   // Si el tab activo no está entre los visibles (p.ej. arranca en 'cuadro' pero
   // es una liga), cae al primero disponible.
-  const curTab: Tab = visibleTabs.some(([k]) => k === tab)
-    ? tab
-    : (visibleTabs[0]?.[0] ?? tab);
+  const curTab: Tab =
+    tab && visibleTabs.some(([k]) => k === tab)
+      ? tab
+      : (visibleTabs[0]?.[0] ?? "inscripciones");
 
   /* ── Cabecera ─────────────────────────────────────────────────── */
   const typeLabel = FORMAT_LABEL[t.format] ?? t.format;
@@ -2113,6 +2165,45 @@ export function TournamentDetail({
   });
 
   const paidCount = regs.filter((r) => r.payment_status === "paid").length;
+
+  /* ── Lo del espectador / jugador (paridad con la app) ─────────── */
+  const myRegs = regs.filter((r) => myRegIds.has(r.id));
+  const myReg = myRegs[0] ?? null;
+  const regByIdFull = new Map(regs.map((r) => [r.id, r]));
+  const nowTs = Date.now();
+  const myNext =
+    esEspectador && myRegIds.size
+      ? (matches
+          .filter(
+            (m) =>
+              m.status !== "finished" &&
+              m.status !== "bye" &&
+              !!m.home_reg &&
+              !!m.away_reg &&
+              [m.home_reg, m.away_reg, m.home_reg2, m.away_reg2].some((x) => x && myRegIds.has(x)),
+          )
+          .sort((a, b) => (a.scheduled_at ?? "zz").localeCompare(b.scheduled_at ?? "zz"))[0] ?? null)
+      : null;
+  const myPath = myNext ? buildPath(t.format, matches, myRegIds, regByIdFull, nowTs) : null;
+  const mySummary =
+    esEspectador && t.status === "finished" && myRegIds.size ? summarize(matches, myRegIds) : null;
+  const champs =
+    esEspectador && t.status === "finished"
+      ? genDivs
+          .map(([g, c]) => ({ g, c, ch: championsOf(matches, g, c) }))
+          .filter((x) => x.ch)
+      : [];
+  // Apuntarse solo si el torneo está abierto y aún no estás dentro (antes
+  // salía siempre, incluso terminado o ya inscrito).
+  const canJoin = esEspectador && t.status === "open" && myRegIds.size === 0;
+  const feeNote =
+    t.entry_fee && t.entry_fee > 0
+      ? feeOnline === true
+        ? "Por persona · se paga al apuntarte"
+        : feeOnline === false
+          ? "Por persona · se paga en el club"
+          : "Por persona"
+      : undefined;
   const playedCount = matches.filter((m) => m.status === "finished").length;
 
   return (
@@ -2130,18 +2221,21 @@ export function TournamentDetail({
         actions={
           esEspectador ? (
             <>
-              {/* Apuntarse es la acción principal: seguir el torneo es
-                  secundario y no puede competir con ella en el acento. */}
-              <Btn
-                variant="quiet"
-                icon={followed ? <IconCheck size={15} /> : undefined}
-                onClick={() => setFollowed((v) => !v)}
-              >
-                {followed ? "Siguiendo" : "Seguir torneo"}
-              </Btn>
-              <BtnLink href={`/torneos/${t.id}/inscripcion`} variant="accent">
-                Apuntarme
-              </BtnLink>
+              {/* Seguir = favorito de tipo torneo (antes era un estado local
+                  que no guardaba nada). Apuntarse sigue las reglas de la app. */}
+              <FollowButton
+                tournamentId={t.id}
+                label={t.name}
+                meta={[dateStr || null, t.location ?? null].filter(Boolean).join(" · ") || null}
+                userId={uid}
+              />
+              {canJoin && (
+                <BtnLink href={`/torneos/${t.id}/inscripcion`} variant="accent">
+                  {t.entry_fee && t.entry_fee > 0
+                    ? `Apuntarme · ${formatFee(t.entry_fee, t.fee_currency)}/pers.`
+                    : "Apuntarme"}
+                </BtnLink>
+              )}
             </>
           ) : t.status === "draft" ? (
             // Borrador: no publicado. Hasta pagar/publicar, NADIE se inscribe
@@ -2171,7 +2265,7 @@ export function TournamentDetail({
           ))}
           {gens.map((g) => (
             <Chip key={g} tone="mute" plain>
-              {g}
+              {GENDER_LABEL[g] ?? g}
             </Chip>
           ))}
         </div>
@@ -2244,7 +2338,12 @@ export function TournamentDetail({
           icon={<IconTrophy size={14} />}
           sub={matches.length > 0 ? `${playedCount} jugados` : "Aún sin generar"}
         />
-        <Stat label="Cuota" value={feeLabel} icon={<IconTicket size={14} />} />
+        <Stat
+          label="Cuota"
+          value={feeLabel}
+          icon={<IconTicket size={14} />}
+          sub={esEspectador ? feeNote : undefined}
+        />
         {!esEspectador && (
           <Stat
             label="Cobradas"
@@ -2261,6 +2360,52 @@ export function TournamentDetail({
           />
         )}
       </StatRow>
+
+      {/* ── Lo tuyo: próximo partido, «Estás dentro», campeones ───── */}
+      {esEspectador && (myNext || (myReg && t.status !== "finished") || champs.length > 0 || mySummary) && (
+        <div style={{ display: "grid", gap: 16, marginBottom: 16, gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}>
+          {myNext && t.status !== "finished" && (
+            <NextMatch
+              match={myNext}
+              matches={matches}
+              regById={regByIdFull}
+              myIds={myRegIds}
+              slotMinutes={Number(t.slot_minutes ?? 90)}
+              path={myPath?.current?.id === myNext.id ? myPath.steps : []}
+              consolNote={myPath?.current?.id === myNext.id ? myPath.consolNote : null}
+              onSeeBracket={showCuadro ? () => setTab("cuadro") : undefined}
+              onSeeMatches={() => setTab("partidos")}
+            />
+          )}
+          {myReg && t.status !== "finished" && (
+            <YouAreIn
+              tournamentName={t.name}
+              reg={myReg}
+              entryFee={t.entry_fee}
+              feeCurrency={t.fee_currency}
+              payment={myPays[myReg.id] ?? null}
+              hasBracket={matches.length > 0}
+              isP1={!!uid && myReg.p1_user_id === uid}
+            />
+          )}
+          {champs.map(({ g, c, ch }) => (
+            <Champions
+              key={`${g}|${c}`}
+              divName={genDivs.length > 1 ? divShort(g, c) : null}
+              winner={pairFull(regByIdFull.get(ch!.winner))}
+              runnerUp={ch!.runner ? pairFull(regByIdFull.get(ch!.runner)) : null}
+              consol={ch!.consol ? pairFull(regByIdFull.get(ch!.consol)) : null}
+              score={ch!.score}
+            />
+          ))}
+          {mySummary && (
+            <MySummary
+              summary={mySummary}
+              shareText={`${t.name}: ${mySummary.reached}. ${mySummary.wins} ${mySummary.wins === 1 ? "victoria" : "victorias"}, ${mySummary.losses} ${mySummary.losses === 1 ? "derrota" : "derrotas"}. https://tactium.io/torneos/${t.id}`}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── Pestañas ─────────────────────────────────────────────── */}
       <div className="tw-toolbar">
@@ -2287,8 +2432,55 @@ export function TournamentDetail({
             <EmptyState
               icon={<IconTrophy size={24} />}
               title="Sin inscripciones todavía"
-              body="Comparte el código para que las parejas se apunten desde la app."
+              body={
+                esEspectador
+                  ? "Aún no se ha apuntado ninguna pareja."
+                  : "Comparte el código para que las parejas se apunten desde la app."
+              }
             />
+          </Card>
+        ) : esEspectador ? (
+          // Espectador: Pareja · Categoría · Puntos (sin las columnas de cuota
+          // y contacto, que solo ve el organizador y aquí salían vacías).
+          <Card flush>
+            <CardHead title="Parejas inscritas" count={regs.length} />
+            {[...regs]
+              .sort((a, b) =>
+                a.seed != null && b.seed != null
+                  ? a.seed - b.seed
+                  : a.seed != null
+                    ? -1
+                    : b.seed != null
+                      ? 1
+                      : (b.seed_points ?? 0) - (a.seed_points ?? 0),
+              )
+              .map((r) => (
+                <div
+                  key={r.id}
+                  className="list-row"
+                  style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gap: 12, alignItems: "center" }}
+                >
+                  <span className="truncate" style={{ fontSize: 13.5, fontWeight: 700 }}>
+                    {r.seed ? (
+                      <span className="mono" style={{ color: "var(--text-faint)", marginRight: 8 }}>
+                        {r.seed}
+                      </span>
+                    ) : null}
+                    {pairFull(r)}
+                    {myRegIds.has(r.id) && (
+                      <Chip tone="accent" plain style={{ marginLeft: 8 }}>
+                        Tú
+                      </Chip>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                    {divShort(r.gender, r.category)}
+                  </span>
+                  <span className="mono" style={{ fontSize: 13, minWidth: 56, textAlign: "right" }}>
+                    {r.seed_points != null ? `${r.seed_points} pts` : "—"}
+                  </span>
+                </div>
+              ))}
           </Card>
         ) : (
           <Card flush>
@@ -2612,6 +2804,18 @@ export function TournamentDetail({
             ))}
           </div>
         ))}
+
+      {curTab === "partidos" && (
+        <MatchesByDay
+          format={t.format}
+          slotMinutes={Number(t.slot_minutes ?? 90)}
+          matches={matches}
+          regs={regs}
+          myRegIds={myRegIds}
+          updatedAt={poll.updatedAt}
+          fresh={poll.fresh}
+        />
+      )}
 
       {curTab === "horario" && (
         <>

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { initials } from "@/lib/account-data";
 import { ALL_PLANS, formatEur } from "@/lib/plans";
+import { fetchMyDbTrialEnd, fetchTeamPro } from "@/lib/account-queries";
 import {
   fetchSubscription,
   fetchActiveSeason,
@@ -33,14 +34,12 @@ import { InvitePanel } from "@/components/invite/InvitePanel";
 import { InlineInvitePreview } from "@/components/invite/InviteJoin";
 import {
   IconCalendar,
+  IconCheck,
+  IconInfo,
   IconFile,
   IconLock,
   IconMail,
-  IconPlus,
-  IconSearch,
   IconShield,
-  IconTicket,
-  IconTrophy,
   IconUsers,
 } from "@/components/Icon";
 
@@ -283,8 +282,8 @@ export function Invitaciones() {
             />
           ) : (
             <Note>
-              Necesitas gestionar un equipo para invitar. Crea uno desde
-              «Equipo actual».
+              Necesitas gestionar un equipo para invitar. Crea uno en
+              «Tu equipo».
             </Note>
           )}
         </div>
@@ -315,11 +314,50 @@ export function Invitaciones() {
   );
 }
 
-/* ═══ SUSCRIPCIÓN · resumen ═══════════════════════════════════════ */
+/* ═══ SUSCRIPCIÓN · resumen (según el rol) ═══════════════════════ */
+/**
+ * El jugador no compra nada: se le dice si su equipo tiene Pro, sin nombrar
+ * quién paga. El club va a su facturación. El capitán ve su plan y, si está
+ * en la prueba sin tarjeta, los días que le quedan (ámbar a 3 o menos).
+ */
 export function SuscripcionResumen() {
-  // Datos reales: antes pintaba el plan de maqueta (10 equipos a 29,99 €,
-  // que no es ningún plan que exista) para cualquier usuario.
-  const { data, loading } = useAsync(() => fetchSubscription(), []);
+  const { role, activeTeam } = useSession();
+  const isPlayer = role === "jugador";
+  const isClub = role === "club";
+
+  const { data: teamPro } = useAsync(
+    () => fetchTeamPro(activeTeam!.id),
+    [activeTeam?.id],
+    isPlayer && !!activeTeam,
+  );
+  const { data, loading } = useAsync(() => fetchSubscription(), [], !isPlayer);
+  const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), [], role === "capitan");
+
+  if (isPlayer) {
+    const name = activeTeam?.name ?? "Tu equipo";
+    return (
+      <Card flush>
+        <CardHead title="Tu plan">
+          {teamPro && <Chip tone="accent">Pro</Chip>}
+        </CardHead>
+        <ListRow
+          href="/suscripcion"
+          icon={
+            <span className="tile-icon">
+              <IconCheck size={16} />
+            </span>
+          }
+          title={teamPro === false ? `${name} está en el plan gratis` : "Te cubre tu equipo"}
+          sub={
+            teamPro === false
+              ? "Lo activa tu capitán. Tú no pagas nada."
+              : `${name} tiene Pro. No pagas nada.`
+          }
+        />
+      </Card>
+    );
+  }
+
   const plan = ALL_PLANS.find((p) => p.tier === data?.planTier) ?? null;
   const yearly = data?.billingPeriod === "yearly";
   const renews = data?.currentPeriodEnd
@@ -328,24 +366,55 @@ export function SuscripcionResumen() {
         month: "long",
       })
     : null;
+  const daysLeft = trialEnd
+    ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000))
+    : null;
 
   return (
     <Card flush>
-      <CardHead title="Suscripción">
+      <CardHead title="Tu plan">
         <Chip tone={!plan ? "mute" : data?.status === "trialing" ? "warning" : "accent"}>
           {!plan ? "Sin plan" : data?.status === "trialing" ? "En prueba" : "Activa"}
         </Chip>
       </CardHead>
       <div
         className="card-body"
-        style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}
+        style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}
       >
+        {daysLeft !== null && (
+          <div
+            aria-label={`${daysLeft} días de prueba`}
+            style={{
+              width: 52,
+              height: 52,
+              flex: "none",
+              borderRadius: 12,
+              display: "grid",
+              placeItems: "center",
+              alignContent: "center",
+              background: daysLeft <= 3 ? "var(--warning-soft)" : "var(--accent-10)",
+              border: `1px solid ${daysLeft <= 3 ? "var(--warning)" : "var(--accent-40)"}`,
+              color: daysLeft <= 3 ? "var(--warning)" : "var(--accent)",
+            }}
+          >
+            <span className="mono" style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
+              {daysLeft}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>{daysLeft === 1 ? "día" : "días"}</span>
+          </div>
+        )}
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>
-            {loading ? "…" : (plan?.displayName ?? "Plan gratuito")}
+            {loading
+              ? "…"
+              : daysLeft !== null
+                ? `Prueba de Pro · ${plan?.displayName ?? "Capitán"}`
+                : (plan?.displayName ?? (isClub ? "El club está en el plan gratis" : "Plan gratuito"))}
           </div>
           <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>
-            {plan ? (
+            {daysLeft !== null && trialEnd ? (
+              `Termina el ${new Date(trialEnd).toLocaleDateString("es-ES", { day: "numeric", month: "long" })} · sin tarjeta`
+            ) : plan ? (
               <>
                 <span className="mono">
                   {formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)}
@@ -358,57 +427,12 @@ export function SuscripcionResumen() {
             )}
           </div>
         </div>
-        <BtnLink href="/suscripcion">Gestionar plan</BtnLink>
+        {isClub ? (
+          <BtnLink href="/club/facturacion">Facturación del club</BtnLink>
+        ) : (
+          <BtnLink href="/suscripcion">Gestionar plan</BtnLink>
+        )}
       </div>
-    </Card>
-  );
-}
-
-/* ═══ TORNEOS ═════════════════════════════════════════════════════ */
-const TOURNEY_LINKS = [
-  {
-    label: "Mis torneos",
-    body: "Los que organizas o en los que juegas",
-    Icon: IconTrophy,
-    href: "/torneos?tab=mios",
-  },
-  {
-    label: "Explorar torneos",
-    body: "Por zona, club o fecha",
-    Icon: IconSearch,
-    href: "/torneos",
-  },
-  {
-    label: "Organizar un torneo",
-    body: "Con tu club, o sin él: creamos tu espacio de organizador",
-    Icon: IconPlus,
-    href: "/torneos/organizar",
-  },
-  {
-    label: "Entrar con código",
-    body: "Si te han pasado uno de inscripción",
-    Icon: IconTicket,
-    href: "/torneos?codigo=1",
-  },
-];
-
-export function Torneos() {
-  return (
-    <Card flush>
-      <CardHead title="Torneos" />
-      {TOURNEY_LINKS.map(({ label, body, Icon, href }) => (
-        <ListRow
-          key={label}
-          href={href}
-          icon={
-            <span className="tile-icon">
-              <Icon size={16} />
-            </span>
-          }
-          title={label}
-          sub={body}
-        />
-      ))}
     </Card>
   );
 }
@@ -422,7 +446,7 @@ export function Soporte() {
 
   return (
     <Card flush>
-      <CardHead title="Soporte" />
+      <CardHead title="Ayuda y contacto" />
       <a href={mailto} className="list-row" style={{ color: "inherit" }}>
         <span className="tile-icon">
           <IconMail size={16} />
@@ -433,6 +457,15 @@ export function Soporte() {
         </span>
         <span className="mono" style={{ fontSize: 12.5, color: "var(--accent)" }}>
           hola@tactium.io
+        </span>
+      </a>
+      <a href="/#faq" className="list-row" style={{ color: "inherit" }}>
+        <span className="tile-icon tile-icon-mute">
+          <IconInfo size={16} />
+        </span>
+        <span className="list-row-main">
+          <span className="list-row-title">Preguntas frecuentes</span>
+          <span className="list-row-sub">Lo que más nos preguntan, en la portada.</span>
         </span>
       </a>
       <ListRow

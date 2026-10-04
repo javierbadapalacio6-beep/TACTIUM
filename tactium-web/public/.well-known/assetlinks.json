@@ -4,7 +4,7 @@
     "target": {
       "namespace": "android_app",
       "package_name": "io.tactium.app",
-      "sha256_cert_fingerprints": ["PENDIENTE_SHA256_PLAY_APP_SIGNING"]
+      "sha256_cert_fingerprints": ["65:19:0B:D6:ED:D8:0E:AB:05:5C:94:AD:91:7B:41:6B:4A:A0:91:C5:F0:3B:D0:63:87:BE:46:0E:BC:8D:8D:28"]
     }
   }
 ]

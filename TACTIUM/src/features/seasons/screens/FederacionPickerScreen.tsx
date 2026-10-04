@@ -12,10 +12,10 @@ import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import type { CompetirStackScreenProps } from '@navigation/types';
 
-// De momento solo la Cántabra tiene datos scrapeados (tablas fcp_*). El resto
-// se listan como "Próximamente" para que se vea que existen y se puedan explorar
-// cuando se integren.
-const AVAILABLE = new Set(['FCantP']);
+// Solo la Cántabra tiene datos (tablas fcp_*). El selector ya no lista una a
+// una las federaciones sin datos («Próximamente» daba a entender un alcance que
+// no hay): dice cuál es la tuya, que aún no está, y lleva a la que sí.
+const AVAILABLE_CODE = 'FCantP';
 
 export const FederacionPickerScreen = ({
   navigation,
@@ -36,16 +36,12 @@ export const FederacionPickerScreen = ({
   const clubFed = useClubStore(selectActiveClub)?.federation ?? null;
   const myFed = activeRole === 'club_admin' ? clubFed : teamFed;
 
-  // La federación del equipo primero; luego el resto por región.
-  const list = useMemo(() => {
-    const arr = [...FEDERATIONS];
-    arr.sort((a, b) => {
-      if (a.code === myFed) return -1;
-      if (b.code === myFed) return 1;
-      return a.region.localeCompare(b.region);
-    });
-    return arr;
-  }, [myFed]);
+  const mine = useMemo(
+    () => (myFed && myFed !== AVAILABLE_CODE ? FEDERATIONS.find((f) => f.code === myFed) ?? null : null),
+    [myFed],
+  );
+  const fcp = FEDERATIONS.find((f) => f.code === AVAILABLE_CODE)!;
+  const fcpLogo = federationLogo(AVAILABLE_CODE);
 
   return (
     <View style={styles.root}>
@@ -72,56 +68,39 @@ export const FederacionPickerScreen = ({
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.eyebrow}>FEDERACIONES</Text>
-        <Text style={styles.title}>Explorar</Text>
+        <Text style={styles.title}>
+          {mine ? 'Tu federación aún no está' : 'Explorar'}
+        </Text>
         <Text style={styles.lede}>
-          Consulta las clasificaciones, jornadas y actas de tu federación.
+          {mine
+            ? `${mine.name}: de momento leemos los datos de la Cántabra. El resto de federaciones irán entrando.`
+            : 'Consulta las clasificaciones, jornadas y actas de la federación.'}
         </Text>
 
-        <View style={{ gap: 8, marginTop: 22 }}>
-          {list.map((f) => {
-            const available = AVAILABLE.has(f.code);
-            const mine = f.code === myFed;
-            const logo = federationLogo(f.code);
-            return (
-              <Pressable
-                key={f.code}
-                disabled={!available}
-                onPress={() => navigation.navigate('Federacion')}
-                style={({ pressed }) => [
-                  styles.row,
-                  mine && styles.rowMine,
-                  !available && { opacity: 0.55 },
-                  pressed && available && { opacity: 0.85 },
-                ]}
-              >
-                {/* Avatar: logo de la federación si lo tenemos, si no sus siglas. */}
-                {logo ? (
-                  <Image source={logo} style={styles.avatar} resizeMode="contain" />
-                ) : (
-                  <View style={styles.avatarFallback}>
-                    <Text style={styles.avatarInitials} numberOfLines={1}>
-                      {f.shortName}
-                    </Text>
-                  </View>
-                )}
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {f.name}
-                  </Text>
-                  <Text style={styles.region} numberOfLines={1}>
-                    {f.region}
-                    {mine ? ' · tu federación' : ''}
-                  </Text>
-                </View>
-                {available ? (
-                  <IconChevron size={15} color={c.textFaint} />
-                ) : (
-                  <Text style={styles.soon}>Próximamente</Text>
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+        <Text style={styles.section}>DISPONIBLE</Text>
+        <Pressable
+          onPress={() => navigation.navigate('Federacion')}
+          accessibilityRole="button"
+          accessibilityLabel={`Abrir ${fcp.name}`}
+          style={({ pressed }) => [styles.row, styles.rowMine, pressed && { opacity: 0.85 }]}
+        >
+          {fcpLogo ? (
+            <Image source={fcpLogo} style={styles.avatar} resizeMode="contain" />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarInitials}>FCP</Text>
+            </View>
+          )}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.name} numberOfLines={1}>
+              {fcp.name}
+            </Text>
+            <Text style={styles.region} numberOfLines={1}>
+              Clasificaciones, equipos y jugadores
+            </Text>
+          </View>
+          <IconChevron size={15} color={c.textFaint} />
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -142,6 +121,15 @@ const makeStyles = (c: Palette) =>
     },
     title: { color: c.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.6, marginTop: 4 },
     lede: { color: c.textMuted, fontSize: 13.5, lineHeight: 20, marginTop: 8 },
+    section: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 2.4,
+      color: c.textFaint,
+      fontWeight: '600',
+      marginTop: 26,
+      marginBottom: 10,
+    },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -181,11 +169,4 @@ const makeStyles = (c: Palette) =>
     },
     name: { color: c.text, fontSize: 14.5, fontWeight: '700' },
     region: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 11, marginTop: 2 },
-    soon: {
-      fontFamily: Fonts.mono,
-      color: c.textFaint,
-      fontSize: 10,
-      letterSpacing: 0.5,
-      fontWeight: '700',
-    },
   });

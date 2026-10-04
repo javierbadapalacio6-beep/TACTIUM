@@ -1897,6 +1897,13 @@ export async function createTournament(input: {
   maxRemovableHours?: number | null;
   /** Condiciones de participación que el inscrito tiene que aceptar. */
   terms?: string | null;
+  /** Lugar del torneo (opcional). */
+  location?: string | null;
+  /** Límites por categoría (puntos ≤ / nivel ≥), igual que en la app. */
+  categoryRules?: {
+    mode: "both" | "points" | "nivel";
+    byCategory: Record<string, { puntos: number | null; nivel: number | null } | null>;
+  } | null;
 }): Promise<{ id: string; code: string }> {
   const code = genTournamentCode();
   const social = input.format === "americano" || input.format === "mexicano";
@@ -1926,9 +1933,13 @@ export async function createTournament(input: {
         ? { max_removable_hours: input.maxRemovableHours }
         : {}),
       ...(input.terms?.trim() ? { terms: input.terms.trim() } : {}),
-      // Nace como BORRADOR: hay que publicarlo (pagar la cuota) antes de que
-      // nadie se inscriba. El boton "Pagar / publicar" lo pasa a 'open'.
-      status: "draft",
+      ...(input.location?.trim() ? { location: input.location.trim() } : {}),
+      ...(input.categoryRules ? { category_rules: input.categoryRules } : {}),
+      // Nace PUBLICADO, como en la app (modelo «cobro al cerrar la
+      // inscripción», 20260904b): la inscripción corre desde el primer día y
+      // el peaje está al generar los cuadros. Antes la web lo creaba en
+      // borrador y quedaba retenido esperando un pago que ya no toca.
+      status: "open",
     })
     .select("id")
     .single();
@@ -1947,13 +1958,19 @@ export interface DbClubTournament {
   ends_on: string | null;
   categories: string[] | null;
   genders: string[] | null;
+  billing_status?: string | null;
+  location?: string | null;
+  max_pairs?: number | null;
+  signup_code?: string | null;
 }
 export async function fetchClubTournaments(
   clubId: string,
 ): Promise<DbClubTournament[]> {
   const { data, error } = await supabaseBrowser()
     .from("tournaments")
-    .select("id, name, format, status, starts_on, ends_on, categories, genders")
+    .select(
+      "id, name, format, status, starts_on, ends_on, categories, genders, billing_status, location, max_pairs, signup_code",
+    )
     .eq("club_id", clubId)
     .order("created_at", { ascending: false });
   if (error) throw error;

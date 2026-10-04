@@ -10,7 +10,9 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
+import Animated, { ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
@@ -18,9 +20,14 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
   AmbientBackdrop,
-  IconBack,
+  IconChevron,
   Toggle,
 } from '@components/ui';
+import * as InvitationsApi from '@core/services/invitations';
+import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
+import { FcpImportSheet } from '@features/club/components/FcpImportSheet';
+import { TeamCrest } from '@features/team/components/TeamCrest';
+import { lightTap } from '@features/team/components/TeamMotion';
 import {
   FEDERATIONS,
   COMPETITION_PRESETS,
@@ -84,6 +91,44 @@ export const CreateTeamFromClubScreen = ({
   // tiene grupos (A/B/C/D). La mayoría de ligas amateurs no.
   const [hasGroup, setHasGroup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Rediseño 2026-10: lo raro va plegado en «Más ajustes» (con sus valores
+  // por defecto) y, tras crear, el paso 2 es lo que de verdad falta: un
+  // capitán. Antes la pantalla volvía atrás sin más.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [fcpOpen, setFcpOpen] = useState(false);
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
+  const [captainCode, setCaptainCode] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const reduced = useReducedMotion();
+  const isFcpClub = club?.federation === FCP_FEDERATION_CODE;
+
+  useEffect(() => {
+    if (!created) return;
+    let alive = true;
+    setCodeError(null);
+    InvitationsApi.createInvitation(created.id, 'captain')
+      .then((inv) => alive && setCaptainCode(inv.code))
+      .catch((e: any) => alive && setCodeError(e?.message ?? 'No se pudo generar el código'));
+    return () => {
+      alive = false;
+    };
+  }, [created]);
+
+  const close = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('HomeRoot');
+  };
+
+  const shareCaptainCode = async () => {
+    if (!created || !captainCode) return;
+    try {
+      await Share.share({
+        message: InvitationsApi.buildInviteMessage(created.name, captainCode, 'captain'),
+      });
+    } catch {
+      /* cancelado */
+    }
+  };
 
   const preset = getCompetitionPreset(comp);
   const isFederada = comp === 'federada';
@@ -102,12 +147,11 @@ export const CreateTeamFromClubScreen = ({
     () =>
       Boolean(
         name.trim() &&
-          (!isFederada || league.trim()) &&
           cat &&
           gender &&
           (!hasGroup || group),
       ),
-    [name, isFederada, league, cat, gender, group, hasGroup],
+    [name, cat, gender, group, hasGroup],
   );
 
   const handleSave = async () => {
@@ -118,7 +162,7 @@ export const CreateTeamFromClubScreen = ({
     // de cobertura se encarga al gestionar cada equipo desde el ClubDashboard.
     setSubmitting(true);
     try {
-      await createTeam({
+      const team = await createTeam({
         name: name.trim(),
         federation: effFederation,
         league: effLeague || undefined,
@@ -135,7 +179,8 @@ export const CreateTeamFromClubScreen = ({
         // (HomeStack/Jornada/Lineup) perderían historial al remontar.
         keepOnboardingState: true,
       });
-      navigation.goBack();
+      lightTap();
+      setCreated({ id: team.id, name: team.name });
     } catch (e: any) {
       Alert.alert('Error al crear equipo', e?.message ?? 'Inténtalo de nuevo.');
     } finally {
@@ -151,6 +196,73 @@ export const CreateTeamFromClubScreen = ({
     );
   }
 
+  if (created) {
+    return (
+      <View style={styles.root}>
+        <AmbientBackdrop intensity={0.5} />
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <Text style={styles.stepLabel}>PASO 2 DE 2</Text>
+          <Pressable onPress={close} hitSlop={10} accessibilityRole="button">
+            <Text style={styles.headerLink}>Lo haré luego</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={[styles.scroll, { alignItems: 'center' }]}>
+          <Animated.View
+            entering={reduced ? undefined : ZoomIn.springify().damping(11).mass(0.8)}
+            style={{ marginTop: 24 }}
+          >
+            <TeamCrest name={created.name} size={76} />
+          </Animated.View>
+          <Text style={[styles.title, { textAlign: 'center', marginTop: 18 }]}>
+            {created.name}, creado
+          </Text>
+          <Text style={[styles.lede, { textAlign: 'center' }]}>
+            Ahora, ¿quién lo capitanea?
+          </Text>
+
+          <View style={styles.codeCard}>
+            {captainCode ? (
+              <Text style={styles.code} selectable>
+                {captainCode}
+              </Text>
+            ) : codeError ? (
+              <Text style={styles.codeError}>{codeError}</Text>
+            ) : (
+              <ActivityIndicator color={c.accent} />
+            )}
+            <Text style={styles.codeSub}>Código de capitán · un solo uso</Text>
+          </View>
+
+          <Pressable
+            disabled={!captainCode}
+            onPress={shareCaptainCode}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.ctaBtn,
+              { alignSelf: 'stretch', marginTop: 18 },
+              !captainCode && { opacity: 0.4 },
+              pressed && !!captainCode && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={styles.ctaLabel}>Enviar al capitán por WhatsApp</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={close}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.moreRow, { alignSelf: 'stretch' }, pressed && { opacity: 0.85 }]}
+          >
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.moreTitle}>Lo capitaneo yo</Text>
+              <Text style={styles.moreSub}>El club ya te hace capitán de sus equipos</Text>
+            </View>
+            <IconChevron size={14} color={c.textFaint} />
+          </Pressable>
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -159,20 +271,10 @@ export const CreateTeamFromClubScreen = ({
       <AmbientBackdrop intensity={0.5} />
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('HomeRoot');
-          }}
-          hitSlop={10}
-          style={styles.headerBtn}
-        >
-          <IconBack size={18} color={c.text} />
+        <Text style={styles.stepLabel}>PASO 1 DE 2</Text>
+        <Pressable onPress={close} hitSlop={10} accessibilityRole="button">
+          <Text style={styles.headerLink}>Cancelar</Text>
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          Nuevo equipo
-        </Text>
-        <View style={styles.headerBtn} />
       </View>
 
       <ScrollView
@@ -180,11 +282,33 @@ export const CreateTeamFromClubScreen = ({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>CLUB · {club.name.toUpperCase()}</Text>
-        <Text style={styles.title}>Configura el equipo</Text>
+        <Text style={styles.title}>Nuevo equipo del club</Text>
         <Text style={styles.lede}>
-          Pertenecerá a {club.name}. Podrás asignarle capitán después.
+          Pertenecerá a {club.name}. En el siguiente paso le pones capitán.
         </Text>
+
+        {isFcpClub ? (
+          <>
+            <Pressable
+              onPress={() => setFcpOpen(true)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.fcpCard, pressed && { opacity: 0.85 }]}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.fcpTitle}>¿Ya juega en la Liga Cántabra?</Text>
+                <Text style={styles.fcpText}>
+                  Búscalo y rellenamos categoría, grupo y género.
+                </Text>
+              </View>
+              <IconChevron size={14} color={c.accent} />
+            </Pressable>
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>o a mano</Text>
+              <View style={styles.orLine} />
+            </View>
+          </>
+        ) : null}
 
         <Section label="Nombre del equipo">
           <View style={styles.nameInput}>
@@ -199,165 +323,6 @@ export const CreateTeamFromClubScreen = ({
             />
           </View>
         </Section>
-
-        <Section label="Competición">
-          {club?.federation ? (
-            <View style={styles.federationReadonly}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.selectorValue} numberOfLines={1}>
-                  Federada{clubFederation ? ` · ${clubFederation.shortName}` : ''}
-                </Text>
-              </View>
-              <Text style={styles.federationLockedHint}>
-                HEREDADA DEL CLUB
-              </Text>
-            </View>
-          ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.catRowScroll}
-          >
-            {COMPETITION_PRESETS.filter((p) => p.id !== 'federada').map((p) => {
-              const sel = comp === p.id;
-              return (
-                <Pressable
-                  key={p.id}
-                  onPress={() => setComp(p.id)}
-                  style={[
-                    styles.compCell,
-                    sel && {
-                      backgroundColor: c.accent,
-                      borderColor: c.accent,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.compCellText,
-                      { color: sel ? '#000' : c.text },
-                    ]}
-                  >
-                    {p.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          )}
-          <Text style={styles.compBlurb}>
-            {preset.blurb} · {formatHint}
-          </Text>
-        </Section>
-
-        {isFederada ? (
-          <>
-            <Section label="Federación">
-              <View style={styles.federationReadonly}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  {clubFederation ? (
-                    <>
-                      <Text style={styles.selectorValue} numberOfLines={1}>
-                        {clubFederation.name}
-                      </Text>
-                      <Text style={styles.selectorMeta}>
-                        {clubFederation.region} · {clubFederation.shortName}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.selectorPlaceholder}>
-                      El club no tiene federación asignada
-                    </Text>
-                  )}
-                </View>
-                <Text style={styles.federationLockedHint}>
-                  HEREDADA DEL CLUB
-                </Text>
-              </View>
-            </Section>
-
-            <Section label="Liga">
-              <View style={styles.plainInput}>
-                <TextInput
-                  value={league}
-                  onChangeText={setLeague}
-                  placeholder="Liga por equipos absoluta"
-                  placeholderTextColor={c.textFaint}
-                  style={styles.plainInputField}
-                />
-              </View>
-            </Section>
-          </>
-        ) : null}
-
-        {comp === 'personalizada' ? (
-          <>
-            <Section label="Nombre de la liga · Opcional">
-              <View style={styles.plainInput}>
-                <TextInput
-                  value={league}
-                  onChangeText={setLeague}
-                  placeholder="Liga interempresas, liga del club…"
-                  placeholderTextColor={c.textFaint}
-                  style={styles.plainInputField}
-                />
-              </View>
-            </Section>
-
-            <Section label="Partidos por jornada">
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                {[2, 3, 4, 5].map((n) => {
-                  const sel = customCourts === n;
-                  return (
-                    <Pressable
-                      key={n}
-                      onPress={() => setCustomCourts(n)}
-                      style={[
-                        styles.compCell,
-                        { flex: 1, paddingHorizontal: 0 },
-                        sel && {
-                          backgroundColor: c.accent,
-                          borderColor: c.accent,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.compCellText,
-                          { color: sel ? '#000' : c.text },
-                        ]}
-                      >
-                        {n}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </Section>
-
-            <Section
-              label="Orden de fuerza"
-              right={
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Toggle
-                    value={customOrder}
-                    onChange={setCustomOrder}
-                    size="sm"
-                  />
-                  <Text style={styles.compBlurb}>
-                    {customOrder ? 'Se valida' : 'Libre'}
-                  </Text>
-                </View>
-              }
-            >
-              <Text style={styles.compBlurb}>
-                {customOrder
-                  ? 'La pareja 1 deberá sumar más puntos que la 2, y así sucesivamente.'
-                  : 'Podrás alinear las parejas en el orden que quieras.'}
-              </Text>
-            </Section>
-          </>
-        ) : null}
 
         <Section label="Categoría">
           {/* 10 categorías no caben con flex:1; pasamos a scroll horizontal
@@ -429,47 +394,226 @@ export const CreateTeamFromClubScreen = ({
           </View>
         </Section>
 
-        <Section
-          label="Grupo"
-          right={
-            <View style={styles.groupToggle}>
-              <Toggle value={hasGroup} onChange={setHasGroup} size="sm" />
-              <Text style={styles.groupToggleText}>
-                {hasGroup ? 'Sí' : 'Sin grupos'}
-              </Text>
-            </View>
-          }
+
+        <Pressable
+          onPress={() => setMoreOpen((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: moreOpen }}
+          style={({ pressed }) => [styles.moreRow, pressed && { opacity: 0.85 }]}
         >
-          {hasGroup ? (
-            <View style={styles.catGrid}>
-              {GROUPS.map((g) => {
-                const sel = group === g;
-                return (
-                  <Pressable
-                    key={g}
-                    onPress={() => setGroup(g)}
-                    style={[
-                      styles.catCell,
-                      sel && {
-                        backgroundColor: c.accent,
-                        borderColor: c.accent,
-                      },
-                    ]}
-                  >
-                    <Text
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.moreTitle}>Más ajustes</Text>
+            <Text style={styles.moreSub} numberOfLines={1}>
+              Grupo, partidos por jornada, orden de fuerza
+            </Text>
+          </View>
+          <View style={{ transform: [{ rotate: moreOpen ? '90deg' : '0deg' }] }}>
+            <IconChevron size={14} color={c.textFaint} />
+          </View>
+        </Pressable>
+        {moreOpen ? (
+          <>
+            <Section label="Competición">
+              {club?.federation ? (
+                <View style={styles.federationReadonly}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.selectorValue} numberOfLines={1}>
+                      Federada{clubFederation ? ` · ${clubFederation.shortName}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={styles.federationLockedHint}>
+                    HEREDADA DEL CLUB
+                  </Text>
+                </View>
+              ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.catRowScroll}
+              >
+                {COMPETITION_PRESETS.filter((p) => p.id !== 'federada').map((p) => {
+                  const sel = comp === p.id;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => setComp(p.id)}
                       style={[
-                        styles.catCellText,
-                        { color: sel ? '#000' : c.text },
+                        styles.compCell,
+                        sel && {
+                          backgroundColor: c.accent,
+                          borderColor: c.accent,
+                        },
                       ]}
                     >
-                      {g}
+                      <Text
+                        style={[
+                          styles.compCellText,
+                          { color: sel ? '#000' : c.text },
+                        ]}
+                      >
+                        {p.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              )}
+              <Text style={styles.compBlurb}>
+                {preset.blurb} · {formatHint}
+              </Text>
+            </Section>
+
+            {isFederada ? (
+              <>
+                <Section label="Federación">
+                  <View style={styles.federationReadonly}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      {clubFederation ? (
+                        <>
+                          <Text style={styles.selectorValue} numberOfLines={1}>
+                            {clubFederation.name}
+                          </Text>
+                          <Text style={styles.selectorMeta}>
+                            {clubFederation.region} · {clubFederation.shortName}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.selectorPlaceholder}>
+                          El club no tiene federación asignada
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.federationLockedHint}>
+                      HEREDADA DEL CLUB
                     </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-        </Section>
+                  </View>
+                </Section>
+
+                <Section label="Liga">
+                  <View style={styles.plainInput}>
+                    <TextInput
+                      value={league}
+                      onChangeText={setLeague}
+                      placeholder="Liga por equipos absoluta"
+                      placeholderTextColor={c.textFaint}
+                      style={styles.plainInputField}
+                    />
+                  </View>
+                </Section>
+              </>
+            ) : null}
+
+            {comp === 'personalizada' ? (
+              <>
+                <Section label="Nombre de la liga · Opcional">
+                  <View style={styles.plainInput}>
+                    <TextInput
+                      value={league}
+                      onChangeText={setLeague}
+                      placeholder="Liga interempresas, liga del club…"
+                      placeholderTextColor={c.textFaint}
+                      style={styles.plainInputField}
+                    />
+                  </View>
+                </Section>
+
+                <Section label="Partidos por jornada">
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {[2, 3, 4, 5].map((n) => {
+                      const sel = customCourts === n;
+                      return (
+                        <Pressable
+                          key={n}
+                          onPress={() => setCustomCourts(n)}
+                          style={[
+                            styles.compCell,
+                            { flex: 1, paddingHorizontal: 0 },
+                            sel && {
+                              backgroundColor: c.accent,
+                              borderColor: c.accent,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.compCellText,
+                              { color: sel ? '#000' : c.text },
+                            ]}
+                          >
+                            {n}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </Section>
+
+                <Section
+                  label="Orden de fuerza"
+                  right={
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Toggle
+                        value={customOrder}
+                        onChange={setCustomOrder}
+                        size="sm"
+                      />
+                      <Text style={styles.compBlurb}>
+                        {customOrder ? 'Se valida' : 'Libre'}
+                      </Text>
+                    </View>
+                  }
+                >
+                  <Text style={styles.compBlurb}>
+                    {customOrder
+                      ? 'La pareja 1 deberá sumar más puntos que la 2, y así sucesivamente.'
+                      : 'Podrás alinear las parejas en el orden que quieras.'}
+                  </Text>
+                </Section>
+              </>
+            ) : null}
+            <Section
+              label="Grupo"
+              right={
+                <View style={styles.groupToggle}>
+                  <Toggle value={hasGroup} onChange={setHasGroup} size="sm" />
+                  <Text style={styles.groupToggleText}>
+                    {hasGroup ? 'Sí' : 'Sin grupos'}
+                  </Text>
+                </View>
+              }
+            >
+              {hasGroup ? (
+                <View style={styles.catGrid}>
+                  {GROUPS.map((g) => {
+                    const sel = group === g;
+                    return (
+                      <Pressable
+                        key={g}
+                        onPress={() => setGroup(g)}
+                        style={[
+                          styles.catCell,
+                          sel && {
+                            backgroundColor: c.accent,
+                            borderColor: c.accent,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.catCellText,
+                            { color: sel ? '#000' : c.text },
+                          ]}
+                        >
+                          {g}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </Section>
+          </>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.cta, { paddingBottom: insets.bottom + 22 }]}>
@@ -490,6 +634,15 @@ export const CreateTeamFromClubScreen = ({
         </Pressable>
       </View>
 
+      <FcpImportSheet
+        open={fcpOpen}
+        clubId={club.id}
+        onClose={() => setFcpOpen(false)}
+        onImported={() => {
+          setFcpOpen(false);
+          close();
+        }}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -514,6 +667,63 @@ const Section: React.FC<{
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.background },
+  stepLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: c.accent,
+    fontWeight: '500',
+  },
+  headerLink: { color: c.textMuted, fontSize: 14, fontWeight: '600' },
+  fcpCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 18,
+    padding: 16,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
+  },
+  fcpTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+  fcpText: { color: c.textMuted, fontSize: 12.5, marginTop: 3, lineHeight: 18 },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
+  orLine: { flex: 1, height: 1, backgroundColor: c.hair },
+  orText: { color: c.textFaint, fontSize: 12.5 },
+  moreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 22,
+    padding: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hair,
+  },
+  moreTitle: { color: c.text, fontSize: 14.5, fontWeight: '700' },
+  moreSub: { color: c.textMuted, fontSize: 12.5, marginTop: 2 },
+  codeCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    marginTop: 24,
+    paddingVertical: 20,
+    borderRadius: Radius.lg,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    gap: 8,
+  },
+  code: {
+    fontFamily: Fonts.mono,
+    color: c.text,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 4,
+  },
+  codeSub: { color: c.textFaint, fontSize: 12.5 },
+  codeError: { color: c.error, fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
   reqTag: {
     fontFamily: Fonts.mono,
     fontSize: 10,

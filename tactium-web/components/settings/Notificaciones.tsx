@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { NOTIF_PREFS } from "@/lib/account-data";
+import { fetchNotificationsEnabled, setNotificationsEnabled } from "@/lib/account-queries";
+import { guardedWrite } from "@/lib/writes";
 import { Btn, Card, CardHead, IconTile, Toggle } from "@/components/ui";
+import { Toast } from "@/components/states";
 import { IconBrowser } from "@/components/Icon";
 
 type PermState = "default" | "granted" | "denied" | "unsupported";
@@ -14,11 +16,39 @@ function readPermission(): PermState {
   return Notification.permission as PermState;
 }
 
+/**
+ * Avisos: UN interruptor real, el mismo que la app
+ * (`profiles.notifications_enabled`). Antes había 4 interruptores por tipo
+ * que no guardaban nada; se quitan hasta que existan en la base.
+ */
 export function Notificaciones() {
-  const [master, setMaster] = useState(true);
-  const [prefs, setPrefs] = useState(() =>
-    Object.fromEntries(NOTIF_PREFS.map((n) => [n.key, n.on]))
-  );
+  const [master, setMaster] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchNotificationsEnabled()
+      .then((v) => !cancelled && setMaster(v))
+      .catch(() => !cancelled && setMaster(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggleMaster() {
+    if (master === null || saving) return;
+    const next = !master;
+    setMaster(next); // optimista
+    setSaving(true);
+    const res = await guardedWrite("guardar los avisos", () => setNotificationsEnabled(next));
+    setSaving(false);
+    if (!res.ok) {
+      setMaster(!next);
+      setToast(res.blocked ? res.reason : "No se ha podido guardar. Inténtalo de nuevo.");
+    }
+  }
+
   // Se lee de forma perezosa en el primer render del cliente: `Notification`
   // no existe en el servidor.
   const [perm, setPerm] = useState<PermState>(readPermission);
@@ -52,39 +82,17 @@ export function Notificaciones() {
 
   return (
     <Card flush>
-      <CardHead title="Notificaciones del equipo" sub="Activar o desactivar los avisos del equipo">
+      <CardHead
+        title="Avisos del equipo"
+        sub="Convocatoria, alineación publicada y recordatorios para confirmar tu disponibilidad. Llegan al móvil."
+      >
         <Toggle
-          on={master}
-          onChange={() => setMaster((v) => !v)}
-          label="Notificaciones del equipo"
+          on={!!master}
+          disabled={master === null || saving}
+          onChange={() => void toggleMaster()}
+          label="Avisos del equipo"
         />
       </CardHead>
-
-      {NOTIF_PREFS.map((n) => {
-        const on = master && prefs[n.key];
-        return (
-          <div
-            key={n.key}
-            className="list-row"
-            style={{
-              opacity: master ? 1 : 0.4,
-              transition: "opacity var(--dur-base) var(--ease)",
-            }}
-          >
-            <span className="list-row-main" style={{ fontSize: 14, fontWeight: 500 }}>
-              {n.label}
-            </span>
-            <Toggle
-              on={!!on}
-              disabled={!master}
-              label={n.label}
-              onChange={() =>
-                setPrefs((p) => ({ ...p, [n.key]: !p[n.key] }))
-              }
-            />
-          </div>
-        );
-      })}
 
       {/* Propio de la web: los avisos del navegador necesitan permiso. */}
       <div className="card-foot" style={{ flexWrap: "wrap" }}>
@@ -112,6 +120,7 @@ export function Notificaciones() {
           {permLabel}
         </Btn>
       </div>
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </Card>
   );
 }

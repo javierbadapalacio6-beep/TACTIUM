@@ -7,7 +7,7 @@ import { BtnLink, Card, Segmented } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { SeasonsList } from "@/components/seasons/SeasonsList";
 import { ClubSchedule } from "@/components/club/ClubSchedule";
-import { FederationPicker } from "@/components/federation/Federation";
+import { FederationForMe } from "@/components/federation/Federation";
 import { ExploreTournaments } from "@/components/tournaments/ExploreTournaments";
 import { IconCalendar, IconCreditCard, IconPlus, IconTrophy, IconUsers } from "@/components/Icon";
 
@@ -79,7 +79,7 @@ export function Compete() {
       ) : vista === "liga" ? (
         <Liga role={role} tournamentsOnly={tournamentsOnly} />
       ) : vista === "federacion" ? (
-        <FederationPicker />
+        <FederationForMe />
       ) : (
         <Torneos isClub={role === "club"} tournamentsOnly={tournamentsOnly} />
       )}
@@ -109,12 +109,17 @@ function Liga({ role, tournamentsOnly }: { role: string; tournamentsOnly: boolea
         ) : (
           <EmptyState
             icon={<IconUsers size={22} />}
-            title="Aún no juegas en ninguna liga"
-            body="Crea tu equipo o únete al de tus compañeros y aquí verás las temporadas y jornadas."
+            title="La liga es cosa de equipos"
+            body="Temporadas, jornadas y alineaciones viven en tu equipo. Únete con el enlace de tu capitán o crea uno."
             action={
-              <BtnLink href="/empezar" variant="accent" size="sm">
-                Crear o unirme
-              </BtnLink>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                <BtnLink href="/empezar" variant="accent" size="sm">
+                  Crear o unirme
+                </BtnLink>
+                <BtnLink href="/federacion/cantabra" size="sm">
+                  Mientras, mira la Federación
+                </BtnLink>
+              </div>
             }
           />
         )}

@@ -17,19 +17,32 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { motion, useReducedMotion } from "motion/react";
 
 import {
   cloneLineupVariantPairs,
   createLineupVariant,
   deleteLineupVariant,
+  fetchAvailabilityDetail,
   fetchLineup,
   fetchMatchdayBundle,
+  fetchTeamPairStats,
   renameLineupVariant,
+  respondAvailability,
   saveLineupVariant,
   setActiveLineupVariant,
+  type AvailRow,
+  type AvailStatus,
   type DbPlayer,
   type MatchdayBundle,
 } from "@/lib/queries";
+import { notifyLineupPublished } from "@/lib/match-data";
+import {
+  generateLineupOptions,
+  pairKey,
+  type LineupOption,
+  type PairStatsMap,
+} from "@/lib/lineup-generator";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -40,12 +53,10 @@ import {
   Card,
   CardHead,
   Chip,
-  Field,
   Input,
   InputWrap,
   Modal,
   Note,
-  Segmented,
   Toggle,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
@@ -55,33 +66,30 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronRight,
+  IconClock,
   IconLock,
   IconSearch,
   IconZap,
 } from "@/components/Icon";
 
 /**
- * Alineación — el lienzo ancho.
+ * Alineación (rediseño bloque «Partido», 2026-10; espejo de
+ * TACTIUM/src/features/home/screens/LineupScreen.tsx).
  *
- * En el móvil la alineación se monta tocando dos jugadores. Aquí se ARRASTRA,
- * con todo a la vista: cinco pistas a la izquierda y el banquillo a la derecha.
+ *  · Capitán: una línea de estado («4/5 parejas · orden correcto ✓»), «≥»
+ *    entre pistas, banquillo de la CONVOCATORIA (Voy · Duda · Sin contestar;
+ *    los «No» plegados), Generar con las estrategias de la app y Publicar
+ *    con «Avisar al equipo».
+ *  · Jugador: lectura con «Tu pareja» arriba.
+ *  · Club: lectura con aviso de cómo editar.
  *
- * El arrastre va con dnd-kit: sensores de puntero, táctil y teclado, y una
- * copia flotante (`DragOverlay`) que sigue al cursor sin el fantasma nativo.
- * El modo tap-para-intercambiar se mantiene: es la alternativa accesible y la
- * que funciona con lectores de pantalla.
+ * En la web se mantiene arrastrar y soltar (dnd-kit) además de tocar y tocar.
  */
 
 type Slot = { court: number; idx: 0 | 1 };
-/** Pareja de una pista: dos ids o hueco vacío. */
 type Pair = [string | null, string | null];
 type Lock = "none" | "notCaptain" | "closed" | "archived";
-
-const LOCK_COPY: Record<Exclude<Lock, "none">, string> = {
-  notCaptain: "Solo el capitán puede editar la alineación.",
-  closed: "Acta cerrada: la alineación es de solo lectura.",
-  archived: "Temporada archivada: la alineación es de solo lectura.",
-};
+type Group = "yes" | "maybe" | "pending" | "no";
 
 const BENCH_ID = "bench";
 const slotId = (s: Slot) => `slot-${s.court}-${s.idx}`;
@@ -98,9 +106,31 @@ function initials(n: string) {
     .slice(0, 2)
     .toUpperCase();
 }
+const firstName = (n: string) => n.split(" ")[0];
+const lastName = (n: string) => {
+  const p = n.trim().split(/\s+/);
+  return p.length > 1 ? p[p.length - 1] : p[0];
+};
+const fmt = (n: number) => n.toLocaleString("es-ES");
 
-function firstName(n: string) {
-  return n.split(" ")[0];
+const GROUP_DOT: Record<Group, React.CSSProperties> = {
+  yes: { background: "var(--accent)" },
+  maybe: { background: "var(--warning)" },
+  pending: { border: "1px dashed var(--text-faint)" },
+  no: { background: "var(--error)" },
+};
+const GROUP_LABEL: Record<Group, string> = {
+  yes: "Voy",
+  maybe: "Duda",
+  pending: "Sin contestar",
+  no: "No puede",
+};
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "Fecha por confirmar";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
 }
 
 /* ── Ficha de jugador ─────────────────────────────────────────────── */
@@ -111,6 +141,8 @@ function PlayerChipView({
   ghost,
   overlay,
   readOnly,
+  group,
+  me,
 }: {
   p: DbPlayer;
   inSlot?: boolean;
@@ -118,6 +150,8 @@ function PlayerChipView({
   ghost?: boolean;
   overlay?: boolean;
   readOnly?: boolean;
+  group?: Group;
+  me?: boolean;
 }) {
   return (
     <div
@@ -125,27 +159,37 @@ function PlayerChipView({
       style={{
         cursor: readOnly ? "default" : overlay ? "grabbing" : "grab",
         opacity: ghost ? 0.35 : 1,
+        padding: inSlot ? "6px 8px" : undefined,
         borderColor: selected ? "var(--accent)" : overlay ? "var(--accent-40)" : undefined,
         background: selected ? "var(--accent-10)" : overlay ? "var(--bg-card-3)" : undefined,
         boxShadow: overlay ? "var(--shadow-md)" : undefined,
         transform: overlay ? "scale(1.02)" : undefined,
       }}
     >
-      <Avatar initials={initials(p.name)} src={p.photoUrl} size={30} />
+      {group && (
+        <span
+          aria-hidden="true"
+          title={GROUP_LABEL[group]}
+          style={{ width: 7, height: 7, borderRadius: 999, flex: "none", ...GROUP_DOT[group] }}
+        />
+      )}
+      <Avatar initials={initials(p.name)} src={p.photoUrl} size={inSlot ? 24 : 28} />
       <span style={{ flex: 1, minWidth: 0 }}>
         <span
           className="truncate"
-          style={{ display: "block", fontSize: 13.5, fontWeight: 700, letterSpacing: "-0.01em" }}
+          style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: me ? "var(--accent)" : undefined }}
         >
-          {inSlot ? firstName(p.name) : p.name}
+          {me ? "Tú" : inSlot ? firstName(p.name) : p.name}
         </span>
-        <span style={{ display: "block", marginTop: 1, fontSize: 11.5, color: "var(--text-faint)" }}>
-          {p.position}
-          {!p.active ? " · baja" : ""}
-        </span>
+        {!inSlot && (
+          <span style={{ display: "block", marginTop: 1, fontSize: 12, color: "var(--text-faint)" }}>
+            {p.position}
+            {group ? ` · ${GROUP_LABEL[group]}` : ""}
+          </span>
+        )}
       </span>
-      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-        {p.pts}
+      <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)" }}>
+        {fmt(p.pts)}
       </span>
     </div>
   );
@@ -157,6 +201,8 @@ function DraggableChip({
   slot,
   selected,
   readOnly,
+  group,
+  me,
   onTap,
 }: {
   p: DbPlayer;
@@ -164,6 +210,8 @@ function DraggableChip({
   slot?: Slot;
   selected: boolean;
   readOnly: boolean;
+  group?: Group;
+  me?: boolean;
   onTap: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -174,17 +222,13 @@ function DraggableChip({
   return (
     <div
       ref={setNodeRef}
-      style={{
-        transform: CSS.Translate.toString(transform),
-        outline: "none",
-        borderRadius: "var(--r-md)",
-      }}
+      style={{ transform: CSS.Translate.toString(transform), outline: "none", borderRadius: "var(--r-md)" }}
       {...attributes}
       {...listeners}
       role="button"
       tabIndex={readOnly ? -1 : 0}
       aria-pressed={selected}
-      aria-label={`${p.name}, ${p.position}, ${p.pts} puntos`}
+      aria-label={`${p.name}, ${p.position}, ${p.pts} puntos${group ? `, ${GROUP_LABEL[group]}` : ""}`}
       onClick={onTap}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
@@ -193,7 +237,7 @@ function DraggableChip({
         }
       }}
     >
-      <PlayerChipView p={p} inSlot={inSlot} selected={selected} ghost={isDragging} readOnly={readOnly} />
+      <PlayerChipView p={p} inSlot={inSlot} selected={selected} ghost={isDragging} readOnly={readOnly} group={group} me={me} />
     </div>
   );
 }
@@ -203,41 +247,48 @@ function SlotBox({
   slot,
   player,
   dragging,
-  selected,
+  selectedName,
+  selectedId,
   readOnly,
+  me,
   onTapChip,
   onTapEmpty,
 }: {
   slot: Slot;
   player: DbPlayer | null;
   dragging: string | null;
-  selected: string | null;
+  selectedName: string | null;
+  selectedId: string | null;
   readOnly: boolean;
+  me?: boolean;
   onTapChip: (pid: string) => void;
   onTapEmpty: () => void;
 }) {
+  const reduce = useReducedMotion();
   const { isOver, setNodeRef } = useDroppable({ id: slotId(slot), disabled: readOnly });
   const willSwap = isOver && !!player && player.id !== dragging;
   const empty = !player;
+  const target = empty && !!selectedName && !readOnly;
 
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
       onClick={() => {
         if (empty) onTapEmpty();
       }}
+      animate={target && !reduce ? { opacity: [0.6, 1, 0.6] } : { opacity: 1 }}
+      transition={target && !reduce ? { duration: 1.6, repeat: Infinity } : { duration: 0.15 }}
       style={{
         position: "relative",
         borderRadius: "var(--r-md)",
-        minHeight: 50,
+        minHeight: 42,
         border: `1.5px ${empty ? "dashed" : "solid"} ${
-          isOver ? "var(--accent)" : empty ? "var(--line-strong)" : "transparent"
+          isOver || target ? "var(--accent-40)" : empty ? "var(--line-strong)" : "transparent"
         }`,
-        background: isOver && empty ? "var(--accent-10)" : "transparent",
+        background: (isOver || target) && empty ? "var(--accent-10)" : "transparent",
         display: "flex",
         alignItems: "center",
-        cursor: empty && selected && !readOnly ? "pointer" : "default",
-        transition: "border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease)",
+        cursor: target ? "pointer" : "default",
       }}
     >
       {player ? (
@@ -246,8 +297,9 @@ function SlotBox({
             p={player}
             inSlot
             slot={slot}
-            selected={selected === player.id}
+            selected={selectedId === player.id}
             readOnly={readOnly}
+            me={me}
             onTap={() => onTapChip(player.id)}
           />
           {willSwap && (
@@ -258,7 +310,6 @@ function SlotBox({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 6,
                 background: "color-mix(in srgb, var(--accent-16) 100%, var(--bg-card))",
                 border: "1.5px solid var(--accent)",
                 borderRadius: "var(--r-md)",
@@ -278,14 +329,14 @@ function SlotBox({
             flex: 1,
             textAlign: "center",
             fontSize: 12.5,
-            color: isOver ? "var(--accent)" : "var(--text-faint)",
-            fontWeight: isOver ? 700 : 500,
+            color: isOver || target ? "var(--accent)" : "var(--text-faint)",
+            fontWeight: isOver || target ? 700 : 500,
           }}
         >
-          {isOver ? "Suelta aquí" : selected ? "Colocar aquí" : "Hueco libre"}
+          {isOver ? "Suelta aquí" : target ? `Colocar a ${selectedName}` : "Vacío"}
         </span>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -298,8 +349,7 @@ function BenchDrop({ children, readOnly }: { children: React.ReactNode; readOnly
         borderRadius: "var(--r-md)",
         outline: isOver ? "1.5px dashed var(--accent)" : "1.5px dashed transparent",
         outlineOffset: 4,
-        transition: "outline-color var(--dur-fast) var(--ease)",
-        minHeight: 80,
+        minHeight: 60,
       }}
     >
       {children}
@@ -307,26 +357,123 @@ function BenchDrop({ children, readOnly }: { children: React.ReactNode; readOnly
   );
 }
 
+/* ── Pista compacta (lectura y edición) ──────────────────────────── */
+function CourtLine({
+  n,
+  pts,
+  sub,
+  broken,
+  me,
+  children,
+}: {
+  n: number;
+  pts: number;
+  sub?: string | null;
+  broken?: boolean;
+  me?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "30px minmax(0,1fr) auto",
+        gap: 10,
+        alignItems: "center",
+        padding: "8px 10px",
+        borderRadius: 12,
+        background: "var(--bg-card)",
+        border: me
+          ? "1.5px solid var(--accent)"
+          : `1px solid ${broken ? "color-mix(in srgb, var(--warning) 55%, transparent)" : "var(--line)"}`,
+      }}
+    >
+      <span className="mono" style={{ textAlign: "center", fontSize: 12.5, fontWeight: 700, color: broken ? "var(--warning)" : "var(--accent)" }}>
+        P{n}
+      </span>
+      <div className="tw-slot-pair" style={{ gap: 6 }}>
+        {children}
+      </div>
+      <span style={{ textAlign: "right", minWidth: 52 }}>
+        <span className="mono" style={{ display: "block", fontSize: 13, fontWeight: 700, color: pts ? (broken ? "var(--warning)" : "var(--text)") : "var(--text-faint)" }}>
+          {pts ? fmt(pts) : "—"}
+        </span>
+        {sub && (
+          <span className="mono" style={{ display: "block", fontSize: 11, color: "var(--text-faint)" }}>
+            {sub}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function Gap({ broken }: { broken: boolean }) {
+  return (
+    <div
+      className="mono"
+      aria-hidden="true"
+      style={{ textAlign: "center", fontSize: 12, lineHeight: "12px", margin: "-2px 0", color: broken ? "var(--warning)" : "var(--text-faint)", fontWeight: broken ? 700 : 400 }}
+    >
+      {broken ? "‹" : "≥"}
+    </div>
+  );
+}
+
+function ReadSlot({ p, name, me }: { p: DbPlayer | null; name: string | null; me?: boolean }) {
+  const label = me ? "Tú" : p ? firstName(p.name) : name;
+  return (
+    <div className="tw-player-chip" style={{ padding: "6px 8px", cursor: "default" }}>
+      {label ? (
+        <>
+          <Avatar initials={initials(p?.name ?? label)} src={p?.photoUrl ?? null} size={24} />
+          <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: me ? "var(--accent)" : undefined }}>
+            {label}
+          </span>
+        </>
+      ) : (
+        <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>Vacío</span>
+      )}
+    </div>
+  );
+}
+
 export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
-  const { activeTeam, role } = useSession();
+  const { activeTeam, role, user } = useSession();
   const teamId = activeTeam?.id ?? null;
+  const reduce = useReducedMotion();
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
     () => fetchMatchdayBundle(id, teamId!),
     [id, teamId, reloadKey],
-    !!teamId
+    !!teamId,
   );
+  // Convocatoria de ESTA jornada (Voy · Duda · No). null = no se pudo leer.
+  const [availKey, setAvailKey] = useState(0);
+  const { data: availDetail, error: availError } = useAsync<Record<string, AvailRow>>(
+    () => fetchAvailabilityDetail(id),
+    [id, availKey],
+    true,
+  );
+  const { data: pairStatsRaw } = useAsync(
+    () => fetchTeamPairStats(teamId!).catch(() => []),
+    [teamId],
+    !!teamId,
+  );
+  const pairStats = useMemo<PairStatsMap | undefined>(() => {
+    if (!pairStatsRaw || pairStatsRaw.length === 0) return undefined;
+    const m: PairStatsMap = new Map();
+    for (const r of pairStatsRaw) m.set(pairKey(r.a, r.b), { wins: r.wins, played: r.played });
+    return m;
+  }, [pairStatsRaw]);
 
   const PLAYERS: DbPlayer[] = useMemo(() => data?.players ?? [], [data]);
   const byId = useMemo(() => new Map(PLAYERS.map((p) => [p.id, p])), [PLAYERS]);
-  const playerById = useCallback(
-    (pid: string | null) => (pid ? (byId.get(pid) ?? null) : null),
-    [byId]
-  );
+  const playerById = useCallback((pid: string | null) => (pid ? byId.get(pid) ?? null : null), [byId]);
   const pairPoints = useCallback(
     (pair: Pair) => pair.reduce((sum, pid) => sum + (playerById(pid)?.pts ?? 0), 0),
-    [playerById]
+    [playerById],
   );
 
   /** Cinco pistas por defecto; si la alineación guardada tiene más, se respeta. */
@@ -348,10 +495,9 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
       }
       return next;
     },
-    [courtCount]
+    [courtCount],
   );
 
-  // Al llegar los datos se monta el tablero con la variante activa.
   useEffect(() => {
     if (!data) return;
     const active = data.variants.find((v) => v.isActive) ?? data.variants[0];
@@ -360,8 +506,6 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     setDirty(false);
   }, [data, buildCourts]);
 
-  // Cambiar de pestaña carga las parejas de ESA variante (cada una es una
-  // alineación distinta guardada en servidor).
   const [switching, setSwitching] = useState(false);
   async function switchVariant(vid: string) {
     if (!data || vid === variantId) return;
@@ -383,36 +527,58 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [genOpen, setGenOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [mix, setMix] = useState(true);
-  const [order, setOrder] = useState<"Drive + Revés" | "Por fuerza">("Drive + Revés");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [usePosition, setUsePosition] = useState(true);
+  const [includeMaybe, setIncludeMaybe] = useState(false);
   const [notify, setNotify] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<"success" | "warning">("success");
   const [variantBusy, setVariantBusy] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteVariant, setConfirmDeleteVariant] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [showUnavailable, setShowUnavailable] = useState(false);
+  const [showNo, setShowNo] = useState(false);
+  const [genKey, setGenKey] = useState(0);
+  const [rsvpBusy, setRsvpBusy] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
-    useSensor(KeyboardSensor)
+    useSensor(KeyboardSensor),
   );
 
-  async function addVariant() {
-    if (variantBusy) return;
+  function say(msg: string, tone: "success" | "warning" = "success") {
+    setToastTone(tone);
+    setToast(msg);
+  }
+
+  function nextLabel() {
+    const used = new Set<number>();
+    for (const v of variants) {
+      const m = v.label.match(/^Variante (\d+)$/);
+      if (m) used.add(Number(m[1]));
+    }
+    let n = 1;
+    while (used.has(n)) n++;
+    return `Variante ${n}`;
+  }
+
+  async function addVariant(cloneFrom?: { id: string; label: string }) {
+    if (variantBusy || variants.length >= 5) return;
     setVariantBusy(true);
-    const res = await guardedWrite("crear la variante", () =>
-      createLineupVariant(id, `Variante ${variants.length + 1}`),
-    );
+    const res = await guardedWrite(cloneFrom ? "duplicar la variante" : "crear la variante", async () => {
+      const created = await createLineupVariant(id, nextLabel());
+      if (cloneFrom) await cloneLineupVariantPairs(cloneFrom.id, created.id);
+      return created;
+    });
     setVariantBusy(false);
     if (res.ok) {
       setReloadKey((k) => k + 1);
       setVariantId(res.data.id);
-      setToast(`«${res.data.label}» creada`);
-    } else setToast(res.reason);
+      say(cloneFrom ? `«${res.data.label}»: copia de «${cloneFrom.label}»` : `«${res.data.label}» creada`);
+    } else say(res.reason, "warning");
   }
 
   async function saveVariantName() {
@@ -420,96 +586,101 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     const label = renameValue.trim();
     if (!label) return;
     setVariantBusy(true);
-    const res = await guardedWrite("renombrar la variante", () =>
-      renameLineupVariant(variant.id, label),
-    );
+    const res = await guardedWrite("renombrar la variante", () => renameLineupVariant(variant.id, label));
     setVariantBusy(false);
     setRenameOpen(false);
     if (res.ok) {
       setReloadKey((k) => k + 1);
-      setToast("Variante renombrada");
-    } else setToast(res.reason);
+      say("Variante renombrada");
+    } else say(res.reason, "warning");
   }
 
   async function removeVariant() {
     if (!variant || variantBusy || variant.isActive) return;
     setVariantBusy(true);
-    const res = await guardedWrite("borrar la variante", () =>
-      deleteLineupVariant(variant.id),
-    );
+    const res = await guardedWrite("borrar la variante", () => deleteLineupVariant(variant.id));
     setVariantBusy(false);
     setConfirmDeleteVariant(false);
     if (res.ok) {
       setVariantId(null);
       setReloadKey((k) => k + 1);
-      setToast("Variante borrada");
-    } else setToast(res.reason);
+      say("Variante borrada");
+    } else say(res.reason, "warning");
   }
 
   async function makeOfficial() {
     if (!variant || variantBusy || variant.isActive) return;
     setVariantBusy(true);
-    const res = await guardedWrite("hacer oficial la alineación", () =>
-      setActiveLineupVariant(variant.id),
-    );
+    const res = await guardedWrite("hacer oficial la alineación", () => setActiveLineupVariant(variant.id));
     setVariantBusy(false);
     if (res.ok) {
       setReloadKey((k) => k + 1);
-      setToast(`«${variant.label}» es ahora la alineación oficial`);
-    } else setToast(res.reason);
+      say(`«${variant.label}» es ahora la alineación oficial`);
+    } else say(res.reason, "warning");
   }
 
   async function copyFrom(sourceId: string, sourceLabel: string) {
     if (!variant || variantBusy) return;
     setVariantBusy(true);
-    const res = await guardedWrite("copiar las parejas", () =>
-      cloneLineupVariantPairs(sourceId, variant.id),
-    );
+    const res = await guardedWrite("copiar las parejas", () => cloneLineupVariantPairs(sourceId, variant.id));
     setVariantBusy(false);
     if (res.ok) {
       setReloadKey((k) => k + 1);
-      setToast(`Parejas copiadas de «${sourceLabel}»`);
-    } else setToast(res.reason);
+      say(`Parejas copiadas de «${sourceLabel}»`);
+    } else say(res.reason, "warning");
   }
 
+  // Solo el capitán edita. El club ve la de cualquiera de sus equipos en
+  // lectura (como en la app: el club_admin no edita).
   const derivedLock: Lock =
-    lock ??
-    (role !== "capitan" && role !== "club"
-      ? "notCaptain"
-      : data?.matchday.status === "finished"
-        ? "closed"
-        : "none");
+    lock ?? (role !== "capitan" ? "notCaptain" : data?.matchday.status === "finished" ? "closed" : "none");
   const readOnly = derivedLock !== "none";
 
-  const placed = useMemo(
-    () => new Set(courts.flat().filter(Boolean) as string[]),
-    [courts]
+  const placed = useMemo(() => new Set(courts.flat().filter(Boolean) as string[]), [courts]);
+
+  // Convocatoria: sin poder leerla, cae a la marca general de la jornada.
+  const availMap = availError ? null : availDetail ?? null;
+  const noReplies = !availMap || Object.keys(availMap).length === 0;
+  const groupOf = useCallback(
+    (p: DbPlayer): Group => {
+      if (!availMap) {
+        const legacy = data && p.id in data.availability ? data.availability[p.id] : p.available;
+        return legacy === true ? "yes" : legacy === false ? "no" : "pending";
+      }
+      const st = availMap[p.id]?.status;
+      return st === "yes" ? "yes" : st === "maybe" ? "maybe" : st === "no" ? "no" : "pending";
+    },
+    [availMap, data],
   );
 
-  const isAvailable = useCallback(
-    (p: DbPlayer) =>
-      data && p.id in data.availability ? data.availability[p.id] : p.available === true,
-    [data]
-  );
+  const counts = useMemo(() => {
+    const r = { yes: 0, maybe: 0, pending: 0, no: 0 };
+    PLAYERS.filter((p) => p.active).forEach((p) => {
+      r[groupOf(p)] += 1;
+    });
+    return r;
+  }, [PLAYERS, groupOf]);
 
-  const bench = PLAYERS.filter((p) => !placed.has(p.id) && p.active && isAvailable(p));
-  const unavailable = PLAYERS.filter(
-    (p) => !placed.has(p.id) && (!p.active || !isAvailable(p))
-  );
+  const bench = useMemo(() => {
+    const g: Record<Group, DbPlayer[]> = { yes: [], maybe: [], pending: [], no: [] };
+    PLAYERS.filter((p) => !placed.has(p.id) && p.active)
+      .sort((a, b) => b.pts - a.pts)
+      .forEach((p) => g[groupOf(p)].push(p));
+    return g;
+  }, [PLAYERS, placed, groupOf]);
 
   const filtered = (list: DbPlayer[]) =>
     query.trim()
-      ? list.filter((p) =>
-          (p.name + " " + (p.alias ?? "")).toLowerCase().includes(query.trim().toLowerCase())
-        )
+      ? list.filter((p) => (p.name + " " + (p.alias ?? "")).toLowerCase().includes(query.trim().toLowerCase()))
       : list;
 
   const points = courts.map((p) => pairPoints(p));
-  const maxPoints = Math.max(1, ...points);
-  const breaks = points.map((pt, i) => i > 0 && pt > points[i - 1]);
-  const filledCourts = courts.filter((p) => p[0] && p[1]).length;
+  const filledArr = courts.map((p) => !!p[0] && !!p[1]);
+  const breaks = points.map((pt, i) => i > 0 && filledArr[i] && filledArr[i - 1] && pt > points[i - 1]);
+  const filledCourts = filledArr.filter(Boolean).length;
   const complete = courts.length > 0 && filledCourts === courts.length;
-  const breakCount = breaks.filter(Boolean).length;
+  const firstBreak = breaks.findIndex(Boolean);
+  const teamPts = points.reduce((a, b) => a + b, 0);
 
   function setPairs(next: Pair[]) {
     setCourts(next);
@@ -518,9 +689,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
 
   function slotOf(pid: string): Slot | null {
     for (let c = 0; c < courts.length; c++) {
-      for (const i of [0, 1] as const) {
-        if (courts[c][i] === pid) return { court: c, idx: i };
-      }
+      for (const i of [0, 1] as const) if (courts[c][i] === pid) return { court: c, idx: i };
     }
     return null;
   }
@@ -536,6 +705,11 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     if (from) next[from.court][from.idx] = occupant ?? null;
     setPairs(next);
     setSelected(null);
+    // Aviso (no bloquea) si alguien que dijo «No» entra a pista.
+    const p = playerById(pid);
+    if (!from && p && !noReplies && groupOf(p) === "no") {
+      say(`${firstName(p.name)} dijo que no puede ir a esta jornada`, "warning");
+    }
   }
 
   function clearSlot(target: Slot) {
@@ -552,7 +726,6 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     setSelected(null);
   }
 
-  /** Tap sobre una ficha: selecciona, deselecciona o intercambia. */
   function tapChip(pid: string, slot?: Slot) {
     if (readOnly) return;
     if (!selected) {
@@ -586,61 +759,116 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     if (target) place(pid, target);
   }
 
-  /** Genera parejas: ordena por puntos y, si procede, cruza drive con revés. */
-  function generate() {
-    const pool = PLAYERS.filter((p) => p.active && isAvailable(p)).sort((a, b) => b.pts - a.pts);
-    const next: Pair[] = [];
-
-    if (mix && order === "Drive + Revés") {
-      const drives = pool.filter((p) => p.position === "Drive" || p.position === "Ambos");
-      const reves = pool.filter((p) => p.position === "Revés");
-      const used = new Set<string>();
-      for (let c = 0; c < courts.length; c++) {
-        const d = drives.find((p) => !used.has(p.id));
-        const r =
-          reves.find((p) => !used.has(p.id)) ??
-          pool.find((p) => !used.has(p.id) && p.id !== d?.id);
-        if (d) used.add(d.id);
-        if (r) used.add(r.id);
-        next.push([d?.id ?? null, r?.id ?? null]);
-      }
-    } else {
-      for (let c = 0; c < courts.length; c++) {
-        next.push([pool[c * 2]?.id ?? null, pool[c * 2 + 1]?.id ?? null]);
-      }
-    }
-
-    next.sort((a, b) => pairPoints(b) - pairPoints(a));
+  /** Ordena las parejas por puntos (la más fuerte en la pista 1). */
+  function sortByPoints() {
+    const next = courts
+      .map((p) => {
+        const a = playerById(p[0]);
+        const b = playerById(p[1]);
+        return (a && b && b.pts > a.pts ? [p[1], p[0]] : p) as Pair;
+      })
+      .sort((x, y) => {
+        const fx = (x[0] ? 1 : 0) + (x[1] ? 1 : 0);
+        const fy = (y[0] ? 1 : 0) + (y[1] ? 1 : 0);
+        if (fx !== fy) return fy - fx;
+        return pairPoints(y) - pairPoints(x);
+      });
     setPairs(next);
-    setGenOpen(false);
-    setToast(
-      next.some((p) => !p[0] || !p[1]) ? "Alineación generada con huecos" : "Alineación generada"
-    );
   }
 
-  async function confirmLineup() {
-    if (!variantId) {
-      setConfirmOpen(false);
-      setToast("No hay una variante de alineación activa para guardar.");
+  /** «Rellenar con los que van»: huecos vacíos con los Voy, por puntos. */
+  function fillWithGoers() {
+    const pool = (noReplies ? [...bench.yes, ...bench.pending] : bench.yes).slice();
+    if (pool.length === 0) {
+      say("No queda nadie que vaya en el banquillo", "warning");
       return;
     }
-    const res = await guardedWrite("guardar la alineación", () =>
-      saveLineupVariant(id, variantId, courts),
-    );
-    setConfirmOpen(false);
-    if (res.ok) setDirty(false);
-    setToast(res.ok ? "Alineación guardada" : res.reason);
+    const next = courts.map((p) => [...p] as Pair);
+    for (const pair of next) {
+      for (const i of [0, 1] as const) {
+        if (!pair[i] && pool.length) pair[i] = pool.shift()!.id;
+      }
+    }
+    setPairs(next);
+  }
+
+  // Generador: parte de quienes dijeron Voy; Duda con un toque.
+  const genOptions = useMemo<LineupOption[]>(() => {
+    if (!genOpen) return [];
+    const pool = PLAYERS.map((p) => {
+      const g = groupOf(p);
+      const available = noReplies ? g === "yes" || g === "pending" : g === "yes" || (includeMaybe && g === "maybe");
+      return { id: p.id, pts: p.pts, position: p.position, active: p.active, available };
+    });
+    return generateLineupOptions(pool, courts.length, { stats: pairStats, usePosition, mustOrder: true });
+  }, [genOpen, PLAYERS, groupOf, noReplies, includeMaybe, courts.length, pairStats, usePosition]);
+
+  function chemistryLine(opt: LineupOption): string | null {
+    if (opt.key !== "quimica" || !pairStats) return null;
+    let best: { a: DbPlayer; b: DbPlayer; wins: number; played: number } | null = null;
+    for (const s of opt.result.slots) {
+      if (!s.playerAId || !s.playerBId) continue;
+      const st = pairStats.get(pairKey(s.playerAId, s.playerBId));
+      const a = playerById(s.playerAId);
+      const b = playerById(s.playerBId);
+      if (!st || !a || !b || !st.played) continue;
+      if (!best || st.wins > best.wins) best = { a, b, wins: st.wins, played: st.played };
+    }
+    return best ? `${lastName(best.a.name)} y ${lastName(best.b.name)}: ${best.wins} de ${best.played}` : null;
+  }
+
+  function applyOption(opt: LineupOption) {
+    const next: Pair[] = Array.from({ length: courts.length }, () => [null, null]);
+    for (const s of opt.result.slots) {
+      if (s.court - 1 < next.length) next[s.court - 1] = [s.playerAId, s.playerBId];
+    }
+    setPairs(next);
+    setGenOpen(false);
+    setGenKey((k) => k + 1);
+    if (opt.result.warnings.length) say(opt.result.warnings.join(" · "), "warning");
+    else say(`Alineación generada · ${opt.label}`);
+  }
+
+  function openPublish() {
+    setNotify(dirty || !variant?.isActive);
+    setPublishOpen(true);
+  }
+
+  async function publish() {
+    if (!variantId) {
+      setPublishOpen(false);
+      say("No hay una variante de alineación para guardar.", "warning");
+      return;
+    }
+    setPublishing(true);
+    const wasActive = !!variant?.isActive;
+    const res = await guardedWrite("publicar la alineación", async () => {
+      await saveLineupVariant(id, variantId, courts);
+      if (!wasActive) await setActiveLineupVariant(variantId);
+    });
+    setPublishing(false);
+    setPublishOpen(false);
+    if (res.ok) {
+      setDirty(false);
+      if (notify) void notifyLineupPublished(id);
+      setReloadKey((k) => k + 1);
+      say(notify ? "Publicada · el equipo recibe el aviso" : "Publicada");
+    } else say(res.reason, "warning");
+  }
+
+  async function respond(status: AvailStatus, playerId: string) {
+    setRsvpBusy(true);
+    const res = await guardedWrite("guardar tu respuesta", () => respondAvailability(id, playerId, status));
+    setRsvpBusy(false);
+    if (res.ok) setAvailKey((k) => k + 1);
+    else say(res.reason, "warning");
   }
 
   if (!teamId) {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconCalendar size={24} />}
-            title="Sin equipo activo"
-            body="Entra con una cuenta que pertenezca a un equipo."
-          />
+          <EmptyState icon={<IconCalendar size={24} />} title="Sin equipo activo" body="Entra con una cuenta que pertenezca a un equipo." />
         </Card>
       </div>
     );
@@ -650,11 +878,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconAlert size={24} />}
-            title="No se pudo cargar la alineación"
-            body={error}
-          />
+          <EmptyState icon={<IconAlert size={24} />} title="No se pudo cargar la alineación" body={error} />
         </Card>
       </div>
     );
@@ -663,80 +887,220 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconCalendar size={24} />}
-            title="Jornada no encontrada"
-            body="Puede que se haya borrado o que no sea de tu equipo."
-          />
+          <EmptyState icon={<IconCalendar size={24} />} title="Jornada no encontrada" body="Puede que se haya borrado o que no sea de tu equipo." />
         </Card>
       </div>
     );
   }
+
   const m = data.matchday;
   const dragged = dragId ? playerById(dragId) : null;
   const otherVariants = variant ? variants.filter((v) => v.id !== variant.id) : [];
+  const stripSub = [formatDate(m.date), m.time ? m.time.slice(0, 5) : null, m.isHome ? "local" : "visitante"]
+    .filter(Boolean)
+    .join(" · ");
+  const selectedName = selected ? firstName(playerById(selected)?.name ?? "") : null;
+  const myPlayer = user ? PLAYERS.find((p) => p.userId === user.id) ?? null : null;
 
+  const statusLine = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13.5 }}>
+      <strong>
+        {filledCourts}/{courts.length} parejas
+      </strong>
+      <span style={{ color: "var(--text-faint)" }}>·</span>
+      {firstBreak === -1 ? (
+        <span style={{ color: "var(--accent)", fontWeight: 700 }}>orden correcto ✓</span>
+      ) : (
+        <span style={{ color: "var(--warning)", fontWeight: 700 }}>P{firstBreak + 1} rompe el orden</span>
+      )}
+      {teamPts > 0 && (
+        <>
+          <span style={{ color: "var(--text-faint)" }}>·</span>
+          <span className="mono" style={{ color: "var(--text-muted)" }}>
+            {fmt(teamPts)} pts
+          </span>
+        </>
+      )}
+    </div>
+  );
+
+  const strip = (pill?: string | null) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+      <Avatar initials={initials(activeTeam?.name ?? "")} size={36} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <h1 className="tw-page-title truncate" style={{ margin: 0 }}>
+          J{m.round} · vs {m.opponent}
+        </h1>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>{stripSub}</div>
+      </div>
+      {pill && <Chip>{pill}</Chip>}
+    </div>
+  );
+  const goersPill = !noReplies && counts.yes > 0 ? `${counts.yes} van` : null;
+
+  /* ── Vista de lectura (jugador y club) ─────────────────────────── */
+  if (role !== "capitan") {
+    const isClub = role === "club";
+    const active = variants.find((v) => v.isActive) ?? null;
+    const published = !!active && courts.some((p) => p[0] || p[1]);
+    const myCourt = myPlayer ? courts.findIndex((p) => p[0] === myPlayer.id || p[1] === myPlayer.id) : -1;
+    const partnerId = myCourt >= 0 ? (courts[myCourt][0] === myPlayer!.id ? courts[myCourt][1] : courts[myCourt][0]) : null;
+    const partner = playerById(partnerId);
+    const st = myPlayer && partnerId && pairStats ? pairStats.get(pairKey(myPlayer.id, partnerId)) : undefined;
+    const myStatus = myPlayer && availMap ? availMap[myPlayer.id]?.status ?? null : null;
+    const roles =
+      myPlayer && partner
+        ? myPlayer.position === "Drive" && partner.position === "Revés"
+          ? `Tú de drive y ${firstName(partner.name)} de revés`
+          : myPlayer.position === "Revés" && partner.position === "Drive"
+            ? `Tú de revés y ${firstName(partner.name)} de drive`
+            : null
+        : null;
+
+    return (
+      <div className="tw-page-narrow">
+        <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 8 }}>
+          <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
+          Jornada {m.round}
+        </Link>
+        <Card style={{ marginBottom: 16 }}>{strip(published ? null : goersPill)}</Card>
+
+        {isClub && (
+          <Note icon={<IconLock size={15} />} style={{ marginBottom: 16 }}>
+            Vista del club, solo lectura. Para editarla, pasa a modo capitán desde tu perfil.
+          </Note>
+        )}
+
+        {!published ? (
+          <>
+            <Card quiet>
+              <EmptyState
+                icon={<IconClock size={22} />}
+                title="Aún no hay alineación"
+                body="El capitán la publica cuando cierre la convocatoria. Te llegará un aviso."
+              />
+            </Card>
+            {!isClub && myPlayer && m.status !== "finished" && (
+              <Card style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Tu respuesta</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8 }}>
+                  {(["yes", "maybe", "no"] as AvailStatus[]).map((s) => (
+                    <Btn
+                      key={s}
+                      variant={myStatus === s ? (s === "yes" ? "accent" : "tint") : "ghost"}
+                      disabled={rsvpBusy}
+                      onClick={() => void respond(s, myPlayer.id)}
+                      aria-pressed={myStatus === s}
+                    >
+                      {s === "yes" ? "Voy" : s === "maybe" ? "Duda" : "No puedo"}
+                    </Btn>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>
+        ) : (
+          <>
+            {!isClub && myCourt >= 0 && (
+              <motion.div
+                initial={reduce ? false : { opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className="card"
+                style={{
+                  padding: 16,
+                  marginBottom: 16,
+                  borderColor: "var(--accent-40)",
+                  background: "radial-gradient(120% 90% at 0% 0%, var(--accent-16), var(--bg-card) 60%)",
+                }}
+              >
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent)", marginBottom: 10 }}>
+                  Tu pareja · pista {myCourt + 1}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ display: "flex" }}>
+                    <Avatar initials={initials(myPlayer!.name)} src={myPlayer!.photoUrl} size={40} />
+                    <Avatar
+                      initials={initials(partner?.name ?? "?")}
+                      src={partner?.photoUrl ?? null}
+                      size={40}
+                      style={{ marginLeft: -14, boxShadow: "0 0 0 2px var(--bg-card)" }}
+                    />
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>Con {partner?.name ?? "tu pareja"}</span>
+                    <span style={{ display: "block", fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+                      {[roles, points[myCourt] ? `${fmt(points[myCourt])} pts` : null].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                </div>
+                {st && st.played > 0 && (
+                  <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 10 }}>
+                    Habéis jugado {st.played} {st.played === 1 ? "partido" : "partidos"} juntos y ganado {st.wins}
+                  </div>
+                )}
+              </motion.div>
+            )}
+            {isClub && <div style={{ marginBottom: 10 }}>{statusLine}</div>}
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Alineación oficial</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {courts.map((pair, c) => {
+                const a = playerById(pair[0]);
+                const b = playerById(pair[1]);
+                const mine = !isClub && c === myCourt;
+                return (
+                  <div key={c} style={{ display: "contents" }}>
+                    {c > 0 && <Gap broken={breaks[c]} />}
+                    <CourtLine n={c + 1} pts={points[c]} broken={breaks[c]} me={mine}>
+                      <ReadSlot p={a} name={null} me={!!myPlayer && a?.id === myPlayer.id && !isClub} />
+                      <ReadSlot p={b} name={null} me={!!myPlayer && b?.id === myPlayer.id && !isClub} />
+                    </CourtLine>
+                  </div>
+                );
+              })}
+            </div>
+            {isClub && !noReplies && (
+              <p style={{ marginTop: 12, textAlign: "center", fontSize: 12.5, color: "var(--text-faint)" }}>
+                Convocatoria: {counts.yes} van · {counts.maybe} con duda · {counts.no} no
+                {counts.pending ? ` · ${counts.pending} sin contestar` : ""}
+              </p>
+            )}
+          </>
+        )}
+
+        {toast && <Toast tone={toastTone} title={toast} onClose={() => setToast(null)} />}
+      </div>
+    );
+  }
+
+  /* ── Editor del capitán ────────────────────────────────────────── */
   return (
     <div className="tw-lineup-wrap">
-      {/* ══ Cabecera de herramienta ═══════════════════════════════ */}
       <div className="tw-lineup-head">
-        <div style={{ minWidth: 0, flex: "1 1 260px" }}>
-          <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 4 }}>
+        <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+          <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 6 }}>
             <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
             Jornada {m.round}
           </Link>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <h1 className="tw-page-title" style={{ fontSize: 22 }}>
-              Alineación vs {m.opponent}
-            </h1>
-            <Chip tone={complete ? "accent" : "mute"} plain>
-              {filledCourts}/{courts.length} pistas
-            </Chip>
-            {dirty && !readOnly && (
-              <Chip tone="warning" plain>
-                Sin guardar
-              </Chip>
-            )}
-          </div>
+          {strip(goersPill)}
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <Btn
-            variant="ghost"
-            disabled={readOnly}
-            onClick={() => setGenOpen(true)}
-            icon={<IconZap size={15} />}
-          >
+          {dirty && !readOnly && (
+            <Chip tone="warning" plain>
+              Sin guardar
+            </Chip>
+          )}
+          <Btn variant="ghost" disabled={readOnly || !variantId} onClick={() => setGenOpen(true)} icon={<IconZap size={15} />}>
             Generar
           </Btn>
-          <Btn
-            variant="quiet"
-            disabled={readOnly || placed.size === 0}
-            onClick={() => setPairs(courts.map(() => [null, null]))}
-          >
-            Vaciar
-          </Btn>
-          <Btn
-            variant="accent"
-            disabled={readOnly || !complete}
-            onClick={() => setConfirmOpen(true)}
-            icon={<IconCheck size={15} />}
-          >
-            Confirmar
+          <Btn variant="accent" disabled={readOnly || !complete} onClick={openPublish} icon={<IconCheck size={15} />}>
+            {complete ? "Publicar" : `Faltan ${courts.length - filledCourts}`}
           </Btn>
         </div>
 
-        {/* Variantes */}
         {variants.length > 0 && (
-          <div
-            style={{
-              flexBasis: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
+          <div style={{ flexBasis: "100%", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div className="seg" role="tablist" aria-label="Variantes de alineación">
               {variants.map((v) => {
                 const on = variant?.id === v.id;
@@ -749,100 +1113,66 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
                     disabled={switching}
                     onClick={() => void switchVariant(v.id)}
                     className={"seg-item" + (on ? " is-on" : "")}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                    title={v.isActive ? "Alineación oficial" : undefined}
                   >
+                    {v.isActive && <span style={{ color: "var(--accent)" }}>★ </span>}
                     {v.label}
-                    {v.isActive && (
-                      <span
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 999,
-                          background: "var(--accent)",
-                        }}
-                        title="Alineación oficial"
-                      />
-                    )}
                   </button>
                 );
               })}
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => void addVariant()}
-                  disabled={variantBusy}
-                  className="seg-item"
-                  title="Preparar otra alineación para esta jornada"
-                >
-                  + Nueva
+              {!readOnly && variants.length < 5 && (
+                <button type="button" onClick={() => void addVariant()} disabled={variantBusy} className="seg-item" aria-label="Nueva variante">
+                  ＋
                 </button>
               )}
             </div>
-            {variant?.isActive ? (
-              <Chip plain>Oficial</Chip>
-            ) : (
-              !readOnly &&
-              variant && (
-                <Btn size="sm" variant="tint" disabled={variantBusy} onClick={() => void makeOfficial()}>
-                  Hacer oficial
-                </Btn>
-              )
-            )}
             {!readOnly && variant && (
               <div style={{ position: "relative" }}>
-                <Btn
-                  size="sm"
-                  variant="quiet"
-                  onClick={() => setMoreOpen((v) => !v)}
-                  aria-expanded={moreOpen}
-                  icon={<IconChevronDown size={14} />}
-                >
+                <Btn size="sm" variant="quiet" onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} icon={<IconChevronDown size={14} />}>
                   Más
                 </Btn>
                 {moreOpen && (
-                  <div
-                    className="tw-popover"
-                    style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, width: 240, padding: 6 }}
-                  >
+                  <div className="tw-popover" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, width: 260, padding: 6, zIndex: 40 }}>
+                    {!variant.isActive && (
+                      <button type="button" className="tw-popitem" disabled={variantBusy} onClick={() => { setMoreOpen(false); void makeOfficial(); }}>
+                        ★ Marcar oficial
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="tw-popitem"
-                      disabled={variantBusy}
-                      onClick={() => {
-                        setRenameValue(variant.label);
-                        setRenameOpen(true);
-                        setMoreOpen(false);
-                      }}
+                      disabled={variantBusy || variants.length >= 5}
+                      onClick={() => { setMoreOpen(false); void addVariant({ id: variant.id, label: variant.label }); }}
                     >
-                      Renombrar «{variant.label}»
+                      Duplicar «{variant.label}»
+                    </button>
+                    <button type="button" className="tw-popitem" disabled={variantBusy} onClick={() => { setRenameValue(variant.label); setRenameOpen(true); setMoreOpen(false); }}>
+                      Renombrar
                     </button>
                     {otherVariants.map((v) => (
-                      <button
-                        key={v.id}
-                        type="button"
-                        className="tw-popitem"
-                        disabled={variantBusy}
-                        onClick={() => {
-                          setMoreOpen(false);
-                          void copyFrom(v.id, v.label);
-                        }}
-                      >
+                      <button key={v.id} type="button" className="tw-popitem" disabled={variantBusy} onClick={() => { setMoreOpen(false); void copyFrom(v.id, v.label); }}>
                         Copiar parejas de «{v.label}»
                       </button>
                     ))}
+                    <div className="tw-pop-sep" />
+                    <button type="button" className="tw-popitem" onClick={() => { setMoreOpen(false); sortByPoints(); }}>
+                      Ordenar por puntos
+                    </button>
+                    <button type="button" className="tw-popitem" onClick={() => { setMoreOpen(false); fillWithGoers(); }}>
+                      Rellenar con los que van
+                    </button>
+                    <button
+                      type="button"
+                      className="tw-popitem"
+                      disabled={placed.size === 0}
+                      onClick={() => { setMoreOpen(false); setPairs(courts.map(() => [null, null])); }}
+                    >
+                      Vaciar alineación
+                    </button>
                     {!variant.isActive && (
                       <>
                         <div className="tw-pop-sep" />
-                        <button
-                          type="button"
-                          className="tw-popitem"
-                          style={{ color: "var(--error)" }}
-                          disabled={variantBusy}
-                          onClick={() => {
-                            setMoreOpen(false);
-                            setConfirmDeleteVariant(true);
-                          }}
-                        >
+                        <button type="button" className="tw-popitem" style={{ color: "var(--error)" }} disabled={variantBusy} onClick={() => { setMoreOpen(false); setConfirmDeleteVariant(true); }}>
                           Borrar esta variante
                         </button>
                       </>
@@ -851,32 +1181,17 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
                 )}
               </div>
             )}
+            <span style={{ marginLeft: "auto" }}>{statusLine}</span>
           </div>
         )}
       </div>
 
       {readOnly && (
         <Note icon={<IconLock size={15} />} style={{ marginBottom: 14 }}>
-          {LOCK_COPY[derivedLock as Exclude<Lock, "none">]}
+          {derivedLock === "archived" ? "Temporada archivada: la alineación es de solo lectura." : "Acta cerrada: la alineación es de solo lectura."}
         </Note>
       )}
 
-      {selected && !readOnly && (
-        <Note tone="accent" style={{ marginBottom: 14 }}>
-          Toca otro jugador o un hueco para colocar a {firstName(playerById(selected)?.name ?? "")}.
-          Toca el banquillo para retirarlo.
-        </Note>
-      )}
-
-      {breakCount > 0 && !readOnly && (
-        <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 14 }}>
-          {breakCount === 1
-            ? "Una pista suma más puntos que la de arriba: el orden de fuerza no se cumple."
-            : `${breakCount} pistas suman más que la anterior: el orden de fuerza no se cumple.`}
-        </Note>
-      )}
-
-      {/* ══ Lienzo ════════════════════════════════════════════════ */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -885,182 +1200,85 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         onDragCancel={() => setDragId(null)}
       >
         <div className="tw-lineup-grid">
-          {/* Pistas. En pantalla ancha van a dos columnas: apiladas, cinco
-              pistas no caben sin scroll, y montar una alineación obliga a
-              ver el banquillo y el hueco a la vez. */}
-          <div className="tw-courts">
+          <div className="tw-courts" style={{ gridTemplateColumns: "minmax(0,1fr)", gap: 6 }}>
             {courts.map((pair, c) => {
               const a = playerById(pair[0]);
               const b = playerById(pair[1]);
-              const full = !!a && !!b;
               return (
-                <Card
-                  key={c}
-                  style={{
-                    padding: "14px 16px 16px",
-                    borderColor: breaks[c] ? "color-mix(in srgb, var(--warning) 55%, transparent)" : undefined,
-                  }}
+                <motion.div
+                  key={`${genKey}-${c}`}
+                  initial={genKey > 0 && !reduce ? { opacity: 0, y: 6 } : false}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, delay: c * 0.04 }}
+                  style={{ display: "grid", gap: 6 }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 8,
-                        background: full ? "var(--accent-10)" : "var(--bg-card-2)",
-                        color: full ? "var(--accent)" : "var(--text-faint)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {c + 1}
-                    </span>
-                    <span style={{ fontSize: 13.5, fontWeight: 700 }}>Pista {c + 1}</span>
-                    {breaks[c] && (
-                      <Chip tone="warning" plain>
-                        Rompe el orden
-                      </Chip>
-                    )}
-                    <span style={{ flex: 1 }} />
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 700,
-                        color: points[c] ? "var(--text)" : "var(--text-faint)",
-                      }}
-                    >
-                      {points[c]}
-                      <span style={{ fontSize: 11.5, color: "var(--text-faint)", fontWeight: 500 }}> pts</span>
-                    </span>
-                  </div>
-
-                  <div className="tw-slot-pair">
-                    <SlotBox
-                      slot={{ court: c, idx: 0 }}
-                      player={a}
-                      dragging={dragId}
-                      selected={selected}
-                      readOnly={readOnly}
-                      onTapChip={(pid) => tapChip(pid, { court: c, idx: 0 })}
-                      onTapEmpty={() => selected && place(selected, { court: c, idx: 0 })}
-                    />
-                    <SlotBox
-                      slot={{ court: c, idx: 1 }}
-                      player={b}
-                      dragging={dragId}
-                      selected={selected}
-                      readOnly={readOnly}
-                      onTapChip={(pid) => tapChip(pid, { court: c, idx: 1 })}
-                      onTapEmpty={() => selected && place(selected, { court: c, idx: 1 })}
-                    />
-                  </div>
-
-                  {/* Fuerza relativa de la pareja respecto a la más fuerte */}
-                  <div
-                    className="progress"
-                    style={{ marginTop: 12, height: 3 }}
-                    aria-hidden="true"
-                  >
-                    <span
-                      style={{
-                        width: `${Math.round((points[c] / maxPoints) * 100)}%`,
-                        background: breaks[c] ? "var(--warning)" : "var(--accent)",
-                        opacity: points[c] ? 0.9 : 0,
-                      }}
-                    />
-                  </div>
-                </Card>
+                  {c > 0 && <Gap broken={breaks[c]} />}
+                  <CourtLine n={c + 1} pts={points[c]} sub={a && b ? `${fmt(a.pts)}·${fmt(b.pts)}` : null} broken={breaks[c]}>
+                    {([0, 1] as const).map((idx) => (
+                      <SlotBox
+                        key={idx}
+                        slot={{ court: c, idx }}
+                        player={idx === 0 ? a : b}
+                        dragging={dragId}
+                        selectedName={selectedName}
+                        selectedId={selected}
+                        readOnly={readOnly}
+                        onTapChip={(pid) => tapChip(pid, { court: c, idx })}
+                        onTapEmpty={() => selected && place(selected, { court: c, idx })}
+                      />
+                    ))}
+                  </CourtLine>
+                </motion.div>
               );
             })}
-
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-faint)", textAlign: "center" }}>
-              La pista 1 es la pareja más fuerte: el orden se comprueba por puntos.
-            </p>
+            {selected && !readOnly && (
+              <Note tone="accent" style={{ marginTop: 6 }}>
+                Toca un hueco o a otro jugador para colocar a {selectedName}. Toca el banquillo para retirarlo.
+              </Note>
+            )}
           </div>
 
-          {/* Banquillo */}
           <Card flush className="tw-bench">
-            <CardHead title="Banquillo" count={bench.length} />
+            <CardHead title={`Banquillo · convocatoria J${m.round}`} count={bench.yes.length + bench.maybe.length + bench.pending.length} />
             <div style={{ padding: "12px 14px 0" }}>
               <InputWrap icon={<IconSearch size={14} />}>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filtrar por nombre"
-                  aria-label="Filtrar jugadores"
-                />
+                <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrar por nombre" aria-label="Filtrar jugadores" />
               </InputWrap>
             </div>
-
             <div style={{ padding: 14 }}>
               <BenchDrop readOnly={readOnly}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {filtered(bench).map((p) => (
-                    <DraggableChip
-                      key={p.id}
-                      p={p}
-                      selected={selected === p.id}
-                      readOnly={readOnly}
-                      onTap={() => tapChip(p.id)}
-                    />
-                  ))}
-                  {filtered(bench).length === 0 && (
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 12.5,
-                        color: "var(--text-faint)",
-                        textAlign: "center",
-                        padding: "18px 0",
-                      }}
-                    >
-                      {bench.length === 0 ? "Todos los disponibles están en pista" : "Sin coincidencias"}
+                  {(["yes", "maybe", "pending"] as Group[]).flatMap((g) =>
+                    filtered(bench[g]).map((p) => (
+                      <DraggableChip key={p.id} p={p} group={g} selected={selected === p.id} readOnly={readOnly} onTap={() => tapChip(p.id)} />
+                    )),
+                  )}
+                  {bench.yes.length + bench.maybe.length + bench.pending.length === 0 && (
+                    <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-faint)", textAlign: "center", padding: "18px 0" }}>
+                      Los que van ya están en pista
                     </p>
                   )}
                 </div>
               </BenchDrop>
 
-              {unavailable.length > 0 && (
+              {bench.no.length > 0 && (
                 <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
                   <button
                     type="button"
-                    onClick={() => setShowUnavailable((v) => !v)}
+                    onClick={() => setShowNo((v) => !v)}
                     className="btn btn-quiet btn-sm"
-                    style={{ width: "100%", justifyContent: "space-between", padding: "0 8px" }}
-                    aria-expanded={showUnavailable}
+                    style={{ width: "100%", justifyContent: "space-between" }}
+                    aria-expanded={showNo}
                   >
-                    <span>No disponibles · {unavailable.length}</span>
-                    <IconChevronDown
-                      size={14}
-                      style={{
-                        transform: showUnavailable ? "rotate(180deg)" : "none",
-                        transition: "transform var(--dur-base) var(--ease)",
-                      }}
-                    />
+                    <span>
+                      {bench.no.length} {bench.no.length === 1 ? "no puede" : "no pueden"}
+                    </span>
+                    <IconChevronDown size={14} style={{ transform: showNo ? "rotate(180deg)" : "none" }} />
                   </button>
-                  {showUnavailable && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, opacity: 0.6 }}>
-                      {filtered(unavailable).map((p) => (
-                        <DraggableChip
-                          key={p.id}
-                          p={p}
-                          selected={selected === p.id}
-                          readOnly={readOnly}
-                          onTap={() => tapChip(p.id)}
-                        />
+                  {showNo && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, opacity: 0.65 }}>
+                      {filtered(bench.no).map((p) => (
+                        <DraggableChip key={p.id} p={p} group="no" selected={selected === p.id} readOnly={readOnly} onTap={() => tapChip(p.id)} />
                       ))}
                     </div>
                   )}
@@ -1075,115 +1293,157 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         </DragOverlay>
       </DndContext>
 
-      {/* ══ Generador ═════════════════════════════════════════════ */}
+      {/* ══ Generar ═══════════════════════════════════════════════ */}
       <Modal
         open={genOpen}
         onClose={() => setGenOpen(false)}
         labelledBy="gen-titulo"
-        width={520}
-        title="Generar alineación"
-        lede="Por puntos en un segundo. Luego ajusta pista a pista si hace falta."
-        footer={
-          <>
-            <Btn onClick={() => setGenOpen(false)}>Cancelar</Btn>
-            <Btn variant="accent" onClick={generate} icon={<IconZap size={15} />}>
-              Generar
-            </Btn>
-          </>
-        }
+        width={560}
+        title="Generar con los que van"
+        lede="Elige cómo armarla. No se aplica hasta que tocas «Usar»."
+        footer={<Btn onClick={() => setGenOpen(false)}>Cancelar</Btn>}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            padding: 14,
-            borderRadius: "var(--r-md)",
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--line)",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: 14, borderRadius: "var(--r-md)", background: "var(--bg-card-2)", border: "1px solid var(--line)" }}>
           <span style={{ flex: 1 }}>
-            <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
-              Emparejar drive con revés
-            </span>
-            <span style={{ display: "block", marginTop: 3, fontSize: 12.5, color: "var(--text-muted)" }}>
-              Si lo desactivas, empareja solo por nivel.
-            </span>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>Emparejar drive y revés</span>
+            <span style={{ display: "block", marginTop: 3, fontSize: 12.5, color: "var(--text-muted)" }}>Si lo quitas, empareja solo por puntos.</span>
           </span>
-          <Toggle on={mix} onChange={() => setMix((v) => !v)} label="Emparejar drive y revés" />
+          <Toggle on={usePosition} onChange={() => setUsePosition((v) => !v)} label="Emparejar drive y revés" />
         </div>
 
-        <Field label="Orden de parejas" style={{ marginTop: 16 }}>
-          <Segmented
-            label="Orden de parejas"
-            value={order}
-            onChange={setOrder}
-            options={[
-              { value: "Drive + Revés", label: "Drive + revés" },
-              { value: "Por fuerza", label: "Por fuerza" },
-            ]}
-          />
-        </Field>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          {genOptions.map((opt, i) => {
+            const chem = chemistryLine(opt);
+            return (
+              <div
+                key={opt.key}
+                style={{
+                  padding: 14,
+                  borderRadius: "var(--r-md)",
+                  background: "var(--bg-card-2)",
+                  border: `1px solid ${i === 0 ? "var(--accent-40)" : "var(--line)"}`,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <span>
+                    <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>{opt.label}</span>
+                    <span style={{ display: "block", fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+                      {opt.hint}
+                      {chem ? ` · ${chem}` : ""}
+                    </span>
+                  </span>
+                  <Btn size="sm" variant={i === 0 ? "accent" : "ghost"} onClick={() => applyOption(opt)}>
+                    Usar
+                  </Btn>
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gap: 2 }}>
+                  {opt.result.slots.map((s) => {
+                    const a = playerById(s.playerAId);
+                    const b = playerById(s.playerBId);
+                    return (
+                      <div key={s.court} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--text-muted)" }}>
+                        <span className="truncate">
+                          {s.court} · {a ? lastName(a.name) : "—"} / {b ? lastName(b.name) : "—"}
+                        </span>
+                        <span className="mono" style={{ color: "var(--text-faint)" }}>
+                          {a && b ? fmt(a.pts + b.pts) : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {opt.result.warnings.length > 0 && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: "var(--warning)" }}>{opt.result.warnings.join(" · ")}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "var(--text-faint)", textAlign: "center" }}>
+          {noReplies ? (
+            "Nadie ha contestado aún: se usa la disponibilidad general."
+          ) : (
+            <>
+              {includeMaybe ? "Con los de Voy y Duda" : `Solo con los que han dicho Voy (${counts.yes})`}
+              {counts.maybe > 0 && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="link-action"
+                    style={{ background: "none", border: 0, padding: 0, cursor: "pointer", fontSize: "inherit" }}
+                    onClick={() => setIncludeMaybe((v) => !v)}
+                  >
+                    {includeMaybe ? "quitar a los de Duda" : `incluir a los de Duda (${counts.maybe})`}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </p>
       </Modal>
 
-      {/* ══ Confirmar ═════════════════════════════════════════════ */}
+      {/* ══ Publicar ══════════════════════════════════════════════ */}
       <Modal
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        labelledBy="conf-titulo"
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        labelledBy="pub-titulo"
         width={520}
-        title="Confirmar alineación"
-        lede={`Jornada ${m.round} vs ${m.opponent}. Revisa las parejas antes de publicarla.`}
+        title={`Publicar la alineación de la J${m.round}`}
+        lede={`vs ${m.opponent} · ${stripSub}`}
         footer={
           <>
-            <Btn onClick={() => setConfirmOpen(false)}>Cancelar</Btn>
-            <Btn variant="accent" onClick={() => void confirmLineup()} icon={<IconCheck size={15} />}>
-              {notify ? "Guardar y avisar" : "Guardar"}
+            <Btn onClick={() => setPublishOpen(false)}>Seguir editando</Btn>
+            <Btn
+              variant={firstBreak === -1 ? "accent" : "tint"}
+              disabled={publishing}
+              onClick={() => void publish()}
+              icon={<IconCheck size={15} />}
+            >
+              {publishing ? "Publicando…" : firstBreak === -1 ? "Publicar" : "Publicar igualmente"}
             </Btn>
           </>
         }
       >
+        {firstBreak > 0 && (
+          <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 12 }}>
+            <strong>
+              La P{firstBreak + 1} suma más que la P{firstBreak}
+            </strong>
+            {" · "}
+            {fmt(points[firstBreak])} frente a {fmt(points[firstBreak - 1])}. La federación puede rechazar el acta.
+          </Note>
+        )}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           {courts.map((pair, c) => {
             const a = playerById(pair[0]);
             const b = playerById(pair[1]);
+            const warn = breaks[c] || breaks[c + 1];
             return (
-              <div
-                key={c}
-                className="list-row"
-                style={{ minHeight: 44, padding: "8px 14px" }}
-              >
-                <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)", width: 22 }}>
+              <div key={c} className="list-row" style={{ minHeight: 40, padding: "8px 14px", color: warn ? "var(--warning)" : undefined }}>
+                <span className="mono" style={{ fontSize: 12.5, width: 26 }}>
                   P{c + 1}
                 </span>
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>
-                  {a && b ? `${firstName(a.name)} · ${firstName(b.name)}` : "Vacío"}
+                  {a && b ? `${lastName(a.name)} / ${lastName(b.name)}` : "Vacío"}
                 </span>
-                <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                  {points[c]}
+                <span className="mono" style={{ fontSize: 12.5 }}>
+                  {fmt(points[c])}
                 </span>
               </div>
             );
           })}
         </div>
-
-        <div
-          style={{
-            marginTop: 14,
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            padding: 14,
-            borderRadius: "var(--r-md)",
-            background: "var(--bg-card-2)",
-            border: "1px solid var(--line)",
-          }}
-        >
+        {firstBreak > 0 && (
+          <Btn size="sm" variant="ghost" style={{ marginTop: 10 }} onClick={sortByPoints} icon={<IconZap size={14} />}>
+            Ordenar por puntos
+          </Btn>
+        )}
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 16, padding: 14, borderRadius: "var(--r-md)", background: "var(--bg-card-2)", border: "1px solid var(--line)" }}>
           <span style={{ flex: 1 }}>
             <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>Avisar al equipo</span>
             <span style={{ display: "block", marginTop: 3, fontSize: 12.5, color: "var(--text-muted)" }}>
-              Cada jugador recibe su pista y su pareja.
+              A los {filledCourts * 2} convocados les llega «Ya está la alineación».
             </span>
           </span>
           <Toggle on={notify} onChange={() => setNotify((v) => !v)} label="Avisar al equipo" />
@@ -1200,11 +1460,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
           footer={
             <>
               <Btn onClick={() => setRenameOpen(false)}>Cancelar</Btn>
-              <Btn
-                variant="accent"
-                disabled={variantBusy || !renameValue.trim()}
-                onClick={() => void saveVariantName()}
-              >
+              <Btn variant="accent" disabled={variantBusy || !renameValue.trim()} onClick={() => void saveVariantName()}>
                 Guardar
               </Btn>
             </>
@@ -1241,13 +1497,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
         <span />
       </Modal>
 
-      {toast && (
-        <Toast
-          tone={toast.includes("huecos") ? "warning" : "success"}
-          title={toast}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast tone={toastTone} title={toast} onClose={() => setToast(null)} />}
 
       <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <BtnLink href={`/jornada/${m.id}`} variant="quiet">

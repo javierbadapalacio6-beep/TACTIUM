@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** `/ajustes` no tiene contenido propio: entra por la primera sección. */
+/** `/ajustes` no tiene contenido propio: entra por «Perfil y plan». */
 export default function AjustesIndex() {
-  redirect("/ajustes/apariencia");
+  redirect("/ajustes/perfil");
 }

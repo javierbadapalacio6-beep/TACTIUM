@@ -96,6 +96,7 @@ import {
 } from '@core/entitlements/tournamentBilling';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
+import { MatchesByDay, TrophyShine } from '../components/PlayerTournamentParts';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
@@ -483,11 +484,17 @@ export const MatchCard: React.FC<{
 };
 
 // Hero de campeón (torneo finalizado): tarjeta glass con la pareja ganadora.
-export const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette }> = ({
-  info,
-  styles,
-  c,
-}) => (
+// Con los datos opcionales enseña además la final, los subcampeones y el
+// ganador de la consolación de la categoría elegida (cambia con el chip).
+export const ChampionHero: React.FC<{
+  info: RegInfo;
+  styles: Styles;
+  c: Palette;
+  divName?: string | null;
+  finalScore?: string | null;
+  runnerUp?: RegInfo | null;
+  consolWinner?: RegInfo | null;
+}> = ({ info, styles, c, divName, finalScore, runnerUp, consolWinner }) => (
   <LinearGradient
     colors={[c.accent15, c.bgCard]}
     start={{ x: 0, y: 0 }}
@@ -495,8 +502,10 @@ export const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette 
     style={styles.heroCard}
   >
     <View style={styles.heroTop}>
-      <IconTrophy size={18} color={c.accent} />
-      <Text style={styles.heroEyebrow}>CAMPEONES</Text>
+      <TrophyShine size={18} />
+      <Text style={styles.heroEyebrow} numberOfLines={1}>
+        CAMPEONES{divName ? ` · ${divName.toUpperCase()}` : ''}
+      </Text>
     </View>
     <View style={styles.heroBody}>
       <View style={styles.heroAvatars}>
@@ -518,10 +527,43 @@ export const ChampionHero: React.FC<{ info: RegInfo; styles: Styles; c: Palette 
         ) : null}
       </View>
     </View>
+    {finalScore || runnerUp ? (
+      <Text style={{ color: c.textMuted, fontSize: 12.5, marginTop: 12, lineHeight: 18 }}>
+        Final{finalScore ? `: ${finalScore}` : ''}
+        {runnerUp ? ` a ${runnerUp.name}${runnerUp.partner ? ` / ${runnerUp.partner}` : ''}` : ''}
+      </Text>
+    ) : null}
+    {runnerUp || consolWinner ? (
+      <View style={{ marginTop: 12, borderTopWidth: 1, borderColor: c.hair }}>
+        {[
+          runnerUp ? { k: '2º', label: 'Subcampeones', r: runnerUp } : null,
+          consolWinner ? { k: 'C', label: 'Consolación', r: consolWinner } : null,
+        ]
+          .filter((x): x is { k: string; label: string; r: RegInfo } => !!x)
+          .map((x) => (
+            <View
+              key={x.k}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 10 }}
+            >
+              <Text style={{ flex: 1, minWidth: 0, color: c.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                <Text style={{ color: c.textFaint }}>{x.label} · </Text>
+                {x.r.name}
+                {x.r.partner ? ` / ${x.r.partner}` : ''}
+              </Text>
+              <Text style={{ color: c.textFaint, fontFamily: Fonts.mono, fontSize: 12, fontWeight: '700' }}>
+                {x.k}
+              </Text>
+            </View>
+          ))}
+      </View>
+    ) : null}
   </LinearGradient>
 );
 
-// Barra de pestañas de contenido: Cuadro/Clasificación · Jugadores · Info.
+// Barra de pestañas de contenido, SUBRAYADA (las píldoras quedan para elegir
+// categoría y cuadro). «Horario» se llama «Partidos» y lleva los resultados.
+// `order` permite al jugador/visitante su propio orden: antes del sorteo
+// Info · Parejas · Cuadro; con cuadro Partidos · Cuadro · Parejas · Info.
 export const ContentTabs: React.FC<{
   tab: TabKey;
   setTab: (t: TabKey) => void;
@@ -529,26 +571,66 @@ export const ContentTabs: React.FC<{
   showSchedule: boolean;
   styles: Styles;
   c: Palette;
-}> = ({ tab, setTab, mainLabel, showSchedule, styles, c }) => {
-  const items: { key: TabKey; label: string }[] = [
-    { key: 'main', label: mainLabel },
-    ...(showSchedule ? [{ key: 'schedule' as TabKey, label: 'Horario' }] : []),
-    { key: 'players', label: 'Jugadores' },
-    { key: 'info', label: 'Info' },
-  ];
+  order?: TabKey[];
+  playersLabel?: string;
+  playersCount?: number;
+}> = ({ tab, setTab, mainLabel, showSchedule, c, order, playersLabel, playersCount }) => {
+  const label: Record<TabKey, string> = {
+    main: mainLabel,
+    schedule: 'Partidos',
+    players: playersLabel ?? 'Parejas',
+    info: 'Info',
+  };
+  const keys = (order ?? (['main', 'schedule', 'players', 'info'] as TabKey[])).filter(
+    (k) => k !== 'schedule' || showSchedule,
+  );
   return (
-    <View style={styles.contentTabs}>
-      {items.map((it) => {
-        const sel = tab === it.key;
+    <View
+      accessibilityRole="tablist"
+      style={{
+        flexDirection: 'row',
+        marginHorizontal: 22,
+        marginTop: 14,
+        marginBottom: 12,
+        borderBottomWidth: 1,
+        borderColor: c.hairStrong,
+      }}
+    >
+      {keys.map((k) => {
+        const sel = tab === k;
         return (
           <Pressable
-            key={it.key}
-            onPress={() => setTab(it.key)}
-            style={[styles.contentTab, sel && { backgroundColor: c.text }]}
+            key={k}
+            onPress={() => setTab(k)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: sel }}
+            style={{ flex: 1, alignItems: 'center', paddingTop: 10, paddingBottom: 9 }}
           >
-            <Text style={[styles.contentTabText, { color: sel ? c.background : c.textMuted }]}>
-              {it.label}
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 13.5,
+                fontWeight: sel ? '800' : '600',
+                letterSpacing: -0.2,
+                color: sel ? c.text : c.textMuted,
+              }}
+            >
+              {label[k]}
+              {k === 'players' && playersCount ? (
+                <Text style={{ color: c.textFaint, fontWeight: '600' }}> {playersCount}</Text>
+              ) : null}
             </Text>
+            <View
+              style={{
+                position: 'absolute',
+                left: 10,
+                right: 10,
+                bottom: -1,
+                height: 2,
+                borderRadius: 1,
+                backgroundColor: sel ? c.accent : 'transparent',
+              }}
+            />
           </Pressable>
         );
       })}
@@ -569,7 +651,9 @@ export const PlayersView: React.FC<{
   maxPairs: number | null;
   styles: Styles;
   c: Palette;
-}> = ({ regs, social, canEdit, onAdd, onRemove, onSelect, divName, maxPairs, styles, c }) => {
+  /** Mis inscripciones (vista del jugador): se marcan con «TÚ». */
+  myRegIds?: string[];
+}> = ({ regs, social, canEdit, onAdd, onRemove, onSelect, divName, maxPairs, styles, c, myRegIds }) => {
   const ordered = [...regs].sort((a, b) => {
     if (a.seed != null && b.seed != null) return a.seed - b.seed;
     if (a.seed != null) return -1;
@@ -594,7 +678,9 @@ export const PlayersView: React.FC<{
       {ordered.length === 0 ? (
         <Text style={styles.emptyText}>
           Aún no hay {social ? 'jugadores' : 'parejas'}
-          {divName ? ` en ${divName}` : ''}. Añádelos a mano o comparte el código.
+          {divName ? ` en ${divName}` : ''}.
+          {/* La indicación de dar de alta es SOLO para el organizador. */}
+          {canEdit ? ' Añádelos a mano o comparte el código.' : ''}
         </Text>
       ) : (
         <View style={{ gap: 8 }}>
@@ -638,6 +724,21 @@ export const PlayersView: React.FC<{
                     </Text>
                   ) : null}
                 </View>
+                {myRegIds?.includes(r.id) ? (
+                  <View
+                    style={{
+                      paddingHorizontal: 6,
+                      height: 18,
+                      borderRadius: 5,
+                      backgroundColor: c.accent15,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: c.accent, fontFamily: Fonts.mono, fontSize: 9.5, fontWeight: '800', letterSpacing: 1 }}>
+                      TÚ
+                    </Text>
+                  </View>
+                ) : null}
                 {canEdit ? (
                   <Pressable onPress={() => onRemove(r)} hitSlop={8}>
                     <IconTrash size={15} color={c.textFaint} />
@@ -660,7 +761,13 @@ export const InfoView: React.FC<{
   onShareCode: () => void;
   styles: Styles;
   c: Palette;
-}> = ({ t, onShareCode, styles, c }) => {
+  /** Quién mira: el organizador ve «Código de inscripción»; el jugador o el
+   *  visitante, «Invita a otra pareja». */
+  audience?: 'organizer' | 'player';
+  /** Cómo se cobra la cuota («se paga al apuntarte» / «se paga en el club»).
+   *  Sin dato no se afirma nada: antes decía siempre «en el club». */
+  feeNote?: string | null;
+}> = ({ t, onShareCode, styles, c, audience = 'organizer', feeNote }) => {
   if (!t) return null;
   // Valor de "Partidos": si el club fijó formato por cuadro y difieren, se
   // listan (Principal / Consolación / Grupos); si no, un único formato.
@@ -709,7 +816,7 @@ export const InfoView: React.FC<{
     {
       label: 'Cuota',
       value: t.entry_fee
-        ? `${formatFee(t.entry_fee, t.fee_currency)} · se paga en el club`
+        ? `${formatFee(t.entry_fee, t.fee_currency)} por persona${feeNote ? ` · ${feeNote}` : ''}`
         : 'Gratis',
     },
     { label: 'Estado', value: tournamentStatusLabel(t.status, t.starts_on) },
@@ -794,12 +901,18 @@ export const InfoView: React.FC<{
         </>
       ) : null}
 
-      {t.signup_code ? (
+      {t.signup_code && (audience === 'organizer' || t.status === 'open') ? (
         <View style={[styles.codeCard, { marginTop: 14 }]}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.codeLabel}>CÓDIGO DE INSCRIPCIÓN</Text>
+            <Text style={styles.codeLabel}>
+              {audience === 'player' ? 'INVITA A OTRA PAREJA' : 'CÓDIGO DE INSCRIPCIÓN'}
+            </Text>
             <Text style={styles.code}>{t.signup_code}</Text>
-            <Text style={styles.codeHint}>Compártelo para que se apunten desde la app.</Text>
+            <Text style={styles.codeHint}>
+              {audience === 'player'
+                ? 'Pásales el código del torneo para que se apunten.'
+                : 'Compártelo para que se apunten desde la app.'}
+            </Text>
           </View>
           <Pressable
             onPress={onShareCode}
@@ -814,8 +927,32 @@ export const InfoView: React.FC<{
   );
 };
 
-// Pestaña HORARIO: partidos agrupados por hora, con pista y avisos de conflicto.
-export const ScheduleView: React.FC<{
+// Pestaña PARTIDOS (antes «Horario»): por DÍA y hora, con lo que está en pista
+// según el horario y los resultados. Jugador/visitante (readOnly) solo ven la
+// lista; el organizador ve además sus herramientas de horario encima.
+type ScheduleViewProps = React.ComponentProps<typeof OrganizerScheduleView> & {
+  /** Mis inscripciones (filtro «Los míos» y etiqueta «TÚ»). */
+  myRegIds?: string[];
+  /** Partidos con resultado recién llegado (se iluminan 2 s). */
+  fresh?: Set<string>;
+  /** Última recarga, para «Act. hace N s». */
+  updatedAt?: number | null;
+};
+export const ScheduleView: React.FC<ScheduleViewProps> = (p) =>
+  p.readOnly ? (
+    <MatchesByDay
+      tournament={p.tournament}
+      matches={p.matches}
+      regs={p.regs}
+      myRegIds={p.myRegIds}
+      fresh={p.fresh}
+      updatedAt={p.updatedAt}
+    />
+  ) : (
+    <OrganizerScheduleView {...p} />
+  );
+
+const OrganizerScheduleView: React.FC<{
   tournament: Tournament;
   matches: TournamentMatch[];
   // Todos los partidos del torneo (todas las divisiones) — para la rejilla, que
@@ -893,13 +1030,6 @@ export const ScheduleView: React.FC<{
     const prefix = m.bracket === 'main' ? '' : `${bracketLabel(m.bracket)} · `;
     return `${divPrefix}${prefix}${roundLabel(m.round, maxRoundOf(m.bracket, m.gender, m.category))}`;
   };
-  const [collapsedPh, setCollapsedPh] = useState<Set<string>>(new Set());
-  const togglePh = (k: string) =>
-    setCollapsedPh((prev) => {
-      const n = new Set(prev);
-      n.has(k) ? n.delete(k) : n.add(k);
-      return n;
-    });
   const scheduled = useMemo(
     () =>
       matches
@@ -913,42 +1043,6 @@ export const ScheduleView: React.FC<{
         ),
     [matches],
   );
-  // Agrupa el horario por FASE (colapsable) → DÍA (navegable) → hora.
-  type TimeGroup = { time: string; items: TournamentMatch[] };
-  type DayGroup = { iso: string; label: string; timeGroups: TimeGroup[] };
-  type PhaseGroup = { key: string; label: string; earliest: string; count: number; dayGroups: DayGroup[] };
-  const phaseGroups: PhaseGroup[] = [];
-  const isoLabel = (iso: string) => {
-    const [y, mo, d] = iso.split('-').map(Number);
-    return `${DOW_ABBR[new Date(y, mo - 1, d).getDay()]} ${d}`;
-  };
-  for (const m of scheduled) {
-    // Con varias divisiones, la clave incluye género+categoría para que cada
-    // categoría tenga su propia sección de fase (no se mezclan los "Cuartos").
-    const key =
-      (multiDiv ? `${m.gender ?? ''}~${m.category ?? ''}~` : '') + matchPhaseKey(m);
-    let pg = phaseGroups.find((x) => x.key === key);
-    if (!pg) {
-      pg = { key, label: phaseLabelOf(m) || 'Partidos', earliest: m.scheduled_at as string, count: 0, dayGroups: [] };
-      phaseGroups.push(pg);
-    }
-    pg.count++;
-    if ((m.scheduled_at as string) < pg.earliest) pg.earliest = m.scheduled_at as string;
-    const iso = (m.scheduled_at as string).slice(0, 10);
-    let dg = pg.dayGroups.find((x) => x.iso === iso);
-    if (!dg) {
-      dg = { iso, label: dayLabelOf(iso) ?? isoLabel(iso), timeGroups: [] };
-      pg.dayGroups.push(dg);
-    }
-    const time = fmtTime(m.scheduled_at) ?? '—';
-    const tg = dg.timeGroups.find((x) => x.time === time);
-    if (tg) tg.items.push(m);
-    else dg.timeGroups.push({ time, items: [m] });
-  }
-  phaseGroups.sort((a, b) => (a.earliest < b.earliest ? -1 : 1));
-  for (const pg of phaseGroups) pg.dayGroups.sort((a, b) => (a.iso < b.iso ? -1 : 1));
-  // Día seleccionado dentro de cada fase.
-  const [selDayByPhase, setSelDayByPhase] = useState<Record<string, string>>({});
   // Partidos con jugadores conocidos que quedaron SIN hora (no cabían en un
   // hueco donde todos pudieran).
   const unplacedList = matches.filter(
@@ -1069,95 +1163,26 @@ export const ScheduleView: React.FC<{
         </Text>
       ) : (
         <View style={{ marginTop: 8 }}>
-          {phaseGroups.map((pg) => {
-            const isCol = collapsedPh.has(pg.key);
-            const multipleDays = pg.dayGroups.length > 1;
-            const selIso = selDayByPhase[pg.key] ?? pg.dayGroups[0]?.iso;
-            const activeDay =
-              pg.dayGroups.find((d) => d.iso === selIso) ?? pg.dayGroups[0];
-            return (
-              <View key={pg.key} style={{ marginTop: 14 }}>
-                <Pressable
-                  onPress={() => togglePh(pg.key)}
-                  style={({ pressed }) => [styles.schedPhaseHead, pressed && { opacity: 0.7 }]}
-                >
-                  <Text style={styles.schedPhaseTitle} numberOfLines={1}>
-                    {pg.label}
-                    <Text style={styles.schedPhaseCount}> · {pg.count}</Text>
-                  </Text>
-                  <Text style={styles.roundPillChevron}>{isCol ? '›' : '⌄'}</Text>
-                </Pressable>
-                {isCol ? null : (
-                  <>
-                    {multipleDays ? (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingTop: 10 }}
-                      >
-                        {pg.dayGroups.map((dg) => {
-                          const on = dg.iso === activeDay?.iso;
-                          return (
-                            <Pressable
-                              key={dg.iso}
-                              onPress={() =>
-                                setSelDayByPhase((prev) => ({ ...prev, [pg.key]: dg.iso }))
-                              }
-                              style={[styles.dayTab, on && { backgroundColor: c.accent, borderColor: c.accent }]}
-                            >
-                              <Text style={[styles.dayTabText, { color: on ? c.textInverse : c.textMuted }]}>
-                                {dg.label} · {dg.timeGroups.reduce((n, t) => n + t.items.length, 0)}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </ScrollView>
-                    ) : null}
-                    {(activeDay?.timeGroups ?? []).map((g) => (
-                      <View key={g.time} style={{ marginTop: 10 }}>
-                        <Text style={styles.schedTime}>
-                          {multipleDays ? `${activeDay?.label} · ${g.time}` : g.time}
-                        </Text>
-                        <View style={{ gap: 8 }}>
-                          {g.items.map((m) => {
-                            const noPuede =
-                              !readOnly && matchScheduleConflict(m, regs, tournament);
-                            const clash = readOnly
-                              ? []
-                              : matchPairClashes(m, everyMatch, tournament);
-                            const dobles = clash.some((x) => x.kind === 'overlap');
-                            const conf = noPuede || clash.length > 0;
-                            return (
-                              <View key={m.id}>
-                                {conf ? (
-                                  <Text style={styles.conflictTag}>
-                                    {noPuede
-                                      ? '⚠️ Conflicto de horario'
-                                      : dobles
-                                        ? '⚠️ Una pareja juega otro partido a esta hora'
-                                        : '⚠️ Una pareja no descansa lo mínimo'}
-                                  </Text>
-                                ) : null}
-                                <MatchCard
-                                  m={m}
-                                  info={info}
-                                  onEdit={onEdit}
-                                  social={isSocialFormat(tournament.format)}
-                                  readOnly={readOnly}
-                                  styles={styles}
-                                  c={c}
-                                />
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            );
-          })}
+          {/* Misma lista por día que ve el jugador, con el toque para meter
+              el resultado y los avisos de conflicto del organizador. */}
+          <MatchesByDay
+            bare
+            tournament={tournament}
+            matches={matches}
+            regs={regs}
+            onEdit={readOnly ? undefined : onEdit}
+            conflictOf={(m) => {
+              if (readOnly) return null;
+              const noPuede = matchScheduleConflict(m, regs, tournament);
+              const clash = matchPairClashes(m, everyMatch, tournament);
+              if (!noPuede && clash.length === 0) return null;
+              return noPuede
+                ? '⚠️ Conflicto de horario'
+                : clash.some((x) => x.kind === 'overlap')
+                  ? '⚠️ Una pareja juega otro partido a esta hora'
+                  : '⚠️ Una pareja no descansa lo mínimo';
+            }}
+          />
 
           {readOnly ? null : (
             <Pressable onPress={onClear} hitSlop={8} style={{ marginTop: 22 }}>
@@ -2812,7 +2837,13 @@ const EditTournamentSheet: React.FC<{
 export const TournamentDetailScreen = ({
   navigation,
   route,
-}: HomeStackScreenProps<'TournamentDetail'>) => {
+  embedded = false,
+  onDeleted: onDeletedProp,
+}: HomeStackScreenProps<'TournamentDetail'> & {
+  /** Tablet: detalle a la derecha de la lista de torneos (sin «Atrás»). */
+  embedded?: boolean;
+  onDeleted?: () => void;
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -3571,13 +3602,17 @@ export const TournamentDetailScreen = ({
         style={[styles.heroControls, { top: insets.top + 6 }]}
         pointerEvents="box-none"
       >
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={({ pressed }) => [styles.heroCtrlBtn, pressed && { opacity: 0.7 }]}
-        >
-          <IconBack size={20} color="#fff" />
-        </Pressable>
+        {embedded ? (
+          <View />
+        ) : (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={10}
+            style={({ pressed }) => [styles.heroCtrlBtn, pressed && { opacity: 0.7 }]}
+          >
+            <IconBack size={20} color="#fff" />
+          </Pressable>
+        )}
         {t && !loading ? (
           <Pressable
             onPress={() => setEditOpen(true)}
@@ -3704,7 +3739,8 @@ export const TournamentDetailScreen = ({
         onSaved={load}
         onDeleted={() => {
           setEditOpen(false);
-          navigation.goBack();
+          if (onDeletedProp) onDeletedProp();
+          else navigation.goBack();
         }}
         styles={styles}
         c={c}

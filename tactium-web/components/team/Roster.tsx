@@ -1,18 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { type Position } from "@/lib/team-data";
 import {
   captainUnclaimPlayer,
   createPlayer,
   deletePlayer,
+  fetchNextMatchday,
+  fetchActiveSeason,
   fetchPlayers,
+  fetchSeasons,
+  fetchTeamFcpGroup,
+  setSelfAvailability,
   updatePlayer,
   fetchSubscription,
   fetchTeamInscripcion,
   type DbPlayer,
 } from "@/lib/queries";
+import { fetchLeagueStatsBundle, type LeagueStatsBundle } from "@/lib/player-stats";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -36,6 +44,7 @@ import {
   Modal,
   Note,
   PageHeader,
+  Progress,
   Segmented,
   Stat,
   StatRow,
@@ -44,21 +53,34 @@ import {
 import { EmptyState, SkeletonCard, Toast } from "@/components/states";
 import {
   IconCalendar,
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
   IconFlag,
+  IconPlus,
   IconSearch,
   IconSettings,
+  IconShare,
   IconUpload,
   IconUserPlus,
   IconUsers,
+  IconX,
 } from "@/components/Icon";
 import { EditTeamModal } from "@/components/team/EditTeamModal";
+import { PairStats } from "@/components/team/PairStats";
+import { ACCOUNT_DOT, PlayerCard } from "@/components/team/PlayerCard";
 import { Crest } from "@/components/Crest";
 import { InvitePanel } from "@/components/invite/InvitePanel";
+import { EASE } from "@/components/entry/motion-bits";
 import { proHref } from "@/lib/nav";
 
 type SortKey = "name" | "pts" | "pos";
+type Tab = "plantilla" | "parejas";
+type Filter = "todos" | "disponibles" | "bajas";
 
 const POSITIONS: Position[] = ["Drive", "Revés", "Ambos"];
+/** Liga Cántabra: 5 parejas por encuentro = 10 jugadores. */
+const MATCHDAY_PLAYERS = 10;
 
 function initials(n: string) {
   return n
@@ -85,12 +107,151 @@ function niceName(s: string): string {
     .join(" ");
 }
 
-export function Roster() {
-  const { activeTeam } = useSession();
+function shortDate(iso: string | null): string {
+  if (!iso) return "Fecha por confirmar";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
+}
 
-  // Inscripción a la temporada que viene: el club ya lo veía en su panel, un
-  // equipo independiente no tenía dónde. Devuelve null fuera del periodo de
-  // inscripción, así que la tarjeta se esconde sola el resto del año.
+const ROLE_LABEL: Record<string, string> = {
+  captain: "Capitán",
+  admin: "Capitán",
+  player: "Jugador",
+};
+
+/** Menú desplegable con su propio cierre (clic fuera y Escape). */
+function Dropdown({
+  open,
+  onClose,
+  children,
+  align = "right",
+  width = 300,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  align?: "left" | "right";
+  width?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const id = setTimeout(() => document.addEventListener("mousedown", onDown), 0);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          ref={ref}
+          role="menu"
+          initial={reduce ? false : { opacity: 0, y: -6, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+          transition={{ duration: 0.18, ease: EASE }}
+          className="card"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            [align]: 0,
+            zIndex: 30,
+            width: `min(${width}px, calc(100vw - 32px))`,
+            padding: 6,
+            boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
+          }}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function MenuItem({
+  icon,
+  title,
+  sub,
+  pro,
+  onClick,
+  href,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+  pro?: boolean;
+  onClick?: () => void;
+  href?: string;
+}) {
+  const inner = (
+    <>
+      <IconTile small>{icon}</IconTile>
+      <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>{sub}</span>
+      </span>
+      {pro && (
+        <Chip tone="accent" plain>
+          Pro
+        </Chip>
+      )}
+    </>
+  );
+  const style: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "9px 10px",
+    borderRadius: 8,
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    textDecoration: "none",
+    fontFamily: "var(--font-ui)",
+  };
+  return href ? (
+    <a role="menuitem" href={href} style={style} className="tw-menu-item">
+      {inner}
+    </a>
+  ) : (
+    <button role="menuitem" type="button" onClick={onClick} style={style} className="tw-menu-item">
+      {inner}
+    </button>
+  );
+}
+
+/**
+ * /equipo (capitán y jugador). Rediseño 2026-10, a la par que la app:
+ *  · «Invitar» y «Plantilla ▾» con nombre; el resto de acciones va dentro.
+ *  · Cifras iguales que en la app: jugadores, en TACTIUM y media.
+ *  · La fila abre la FICHA del jugador, no el formulario.
+ *  · El JUGADOR ve la pestaña en solo lectura, con su fila «Tú» arriba y el
+ *    interruptor de baja (antes veía los botones del capitán).
+ *  · «Parejas» es una pestaña aquí dentro (/stats se queda).
+ *  · La inscripción pasa a la sección «Federación».
+ */
+export function Roster() {
+  const { activeTeam, teams, setActiveTeam, role, user } = useSession();
+  const reduce = useReducedMotion();
+  const teamId = activeTeam?.id ?? null;
+  // El jugador (o el capitán que entra en modo jugador) no gestiona. Decisión
+  // 1: sin «Invitar» para el jugador, la RLS de `team_invitations` solo deja
+  // leer el código al admin del equipo.
+  const canManage =
+    (activeTeam?.role === "captain" || activeTeam?.role === "admin") && role !== "jugador";
+
+  // Inscripción a la temporada que viene (null fuera del periodo).
   const inscripcion = useAsync(
     () =>
       fetchTeamInscripcion({
@@ -101,7 +262,14 @@ export function Roster() {
     [activeTeam?.id, activeTeam?.name, activeTeam?.gender, activeTeam?.category],
     !!activeTeam?.name
   );
-  const teamId = activeTeam?.id ?? null;
+  const fcpGroup = useAsync(
+    () => fetchTeamFcpGroup(teamId!).catch(() => null),
+    [teamId],
+    !!teamId
+  );
+  const grupoHref = fcpGroup.data
+    ? `/federacion/${fcpGroup.data.fed}/grupo/${encodeURIComponent(fcpGroup.data.idGrupo)}`
+    : null;
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync(
@@ -111,16 +279,75 @@ export function Roster() {
   );
   const PLAYERS: DbPlayer[] = data ?? [];
 
+  // Capitanes del equipo (para «CAP» y «capitán: …»). Lectura bajo RLS.
+  const captains = useAsync(
+    async () => {
+      const { data: rows } = await supabaseBrowser()
+        .from("team_members")
+        .select("user_id, role")
+        .eq("team_id", teamId!)
+        .in("role", ["captain", "admin"]);
+      return new Set(((rows ?? []) as { user_id: string }[]).map((r) => r.user_id));
+    },
+    [teamId],
+    !!teamId
+  );
+  const captainIds = captains.data ?? new Set<string>();
+
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("pts");
   const [asc, setAsc] = useState(false);
+  const [tab, setTab] = useState<Tab>("plantilla");
+  const [filter, setFilter] = useState<Filter>("todos");
   const [editing, setEditing] = useState<DbPlayer | null>(null);
+  const [cardId, setCardId] = useState<string | null>(null);
   const [editTeamOpen, setEditTeamOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [noticeHidden, setNoticeHidden] = useState(false);
 
-  // Importar de la Federación al equipo QUE YA EXISTE. Antes este botón era un
-  // enlace a /federacion: te dejaba en el explorador y no importaba nada.
+  // Ficha: el bundle de liga de todas las temporadas, una vez por equipo.
+  const [bundle, setBundle] = useState<LeagueStatsBundle | null>(null);
+  const [bundleLoading, setBundleLoading] = useState(false);
+  const bundleFor = useRef<string | null>(null);
+  useEffect(() => {
+    setBundle(null);
+    bundleFor.current = null;
+  }, [teamId]);
+  function openCard(p: DbPlayer) {
+    setCardId(p.id);
+    if (!teamId || bundleFor.current === teamId) return;
+    bundleFor.current = teamId;
+    setBundleLoading(true);
+    fetchSeasons(teamId)
+      .then((ss) => fetchLeagueStatsBundle(ss.map((s) => s.id)))
+      .then(setBundle)
+      .catch(() => {
+        bundleFor.current = null;
+      })
+      .finally(() => setBundleLoading(false));
+  }
+
+  // Próxima jornada de cada equipo, para el selector «▾».
+  const nextByTeam = useAsync(
+    async () => {
+      const out = new Map<string, string>();
+      await Promise.all(
+        teams.map(async (t) => {
+          const s = await fetchActiveSeason(t.id).catch(() => null);
+          const n = s ? await fetchNextMatchday(s.id).catch(() => null) : null;
+          if (n) out.set(t.id, `${shortDate(n.date)}${n.time ? ` · ${n.time.slice(0, 5)}` : ""} vs ${n.opponent}`);
+        }),
+      );
+      return out;
+    },
+    [switchOpen, teams.length],
+    switchOpen && teams.length > 1
+  );
+
+  // Importar de la Federación al equipo QUE YA EXISTE.
   const [fcpOpen, setFcpOpen] = useState(false);
   const [fcpQuery, setFcpQuery] = useState("");
   const [fcpResults, setFcpResults] = useState<FcpClubGroup[]>([]);
@@ -128,9 +355,8 @@ export function Roster() {
   const [fcpBusy, setFcpBusy] = useState(false);
   const [fcpErr, setFcpErr] = useState<string | null>(null);
 
-  // El volcado masivo es premium en las cinco superficies; aquí no iba a ser
-  // la excepción. Se consulta al abrir, no en cada render.
-  const sub = useAsync(() => fetchSubscription(), [fcpOpen], fcpOpen);
+  // El volcado masivo es premium en las cinco superficies.
+  const sub = useAsync(() => fetchSubscription(), [fcpOpen, menuOpen], fcpOpen || menuOpen);
 
   useEffect(() => {
     if (!fcpOpen || fcpQuery.trim().length < 2) {
@@ -211,10 +437,7 @@ export function Roster() {
     }
   }
 
-  /**
-   * Suelta la ficha de la cuenta a la que está vinculada. Útil cuando alguien
-   * se vincula al jugador equivocado: la ficha se queda, la cuenta se va.
-   */
+  /** Suelta la ficha de la cuenta a la que está vinculada. */
   async function unlinkAccount() {
     if (busy || !editing || editing.id === "new" || !editing.userId) return;
     setBusy(true);
@@ -229,15 +452,15 @@ export function Roster() {
     } else setToast(res.reason);
   }
 
-  async function removePlayer() {
-    if (!editing || editing.id === "new" || busy) return;
+  async function removePlayer(target: DbPlayer | null = editing) {
+    if (!target || target.id === "new" || busy) return;
+    if (!window.confirm(`Vas a quitar a «${target.name}» de la plantilla. No se puede deshacer.`)) return;
     setBusy(true);
-    const res = await guardedWrite("eliminar el jugador", () =>
-      deletePlayer(editing.id),
-    );
+    const res = await guardedWrite("eliminar el jugador", () => deletePlayer(target.id));
     setBusy(false);
     if (res.ok) {
       setEditing(null);
+      setCardId(null);
       setReloadKey((k) => k + 1);
       setToast("Jugador eliminado");
     } else {
@@ -245,24 +468,48 @@ export function Roster() {
     }
   }
 
+  /** «Disponible / De baja»: el capitán con updatePlayer; el jugador, la suya
+   *  con la RPC `set_player_self_availability` (la misma que usa la app). */
+  async function setAvailable(p: DbPlayer, v: boolean, self: boolean) {
+    const res = await guardedWrite("guardar la disponibilidad", async () => {
+      if (self) await setSelfAvailability(p.id, v);
+      else {
+        const { error: e } = await supabaseBrowser()
+          .from("players")
+          .update({ available: v })
+          .eq("id", p.id);
+        if (e) throw e;
+      }
+    });
+    if (res.ok) setReloadKey((k) => k + 1);
+    else setToast(res.reason);
+  }
+
+  const me = user ? PLAYERS.find((p) => p.userId === user.id) ?? null : null;
+  const myPlayerId = me?.id ?? null;
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
-      ? PLAYERS.filter((p) =>
-          (p.name + " " + (p.alias ?? "")).toLowerCase().includes(q)
-        )
-      : PLAYERS;
+    const filtered = PLAYERS.filter((p) => {
+      if (!canManage && me && p.id === me.id) return false;
+      if (filter === "disponibles" && (p.available === false || !p.active)) return false;
+      if (filter === "bajas" && p.available !== false && p.active) return false;
+      return !q || (p.name + " " + (p.alias ?? "")).toLowerCase().includes(q);
+    });
     const dir = asc ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (sort === "pts") return (a.pts - b.pts) * dir;
       if (sort === "name") return a.name.localeCompare(b.name) * dir;
       return a.position.localeCompare(b.position) * dir;
     });
-  }, [PLAYERS, query, sort, asc]);
+  }, [PLAYERS, query, sort, asc, filter, canManage, me]);
 
   const avg = PLAYERS.length
     ? Math.round(PLAYERS.reduce((s, p) => s + p.pts, 0) / PLAYERS.length)
     : 0;
+  const linked = PLAYERS.filter((p) => !!p.userId).length;
+  const availableCount = PLAYERS.filter((p) => p.available !== false && p.active).length;
+  const bajasCount = PLAYERS.length - availableCount;
 
   function toggleSort(k: SortKey) {
     if (sort === k) setAsc((v) => !v);
@@ -272,316 +519,650 @@ export function Roster() {
     }
   }
 
-  const availableCount = PLAYERS.filter((p) => p.available === true).length;
-  const inactiveCount = PLAYERS.filter((p) => !p.active).length;
+  const newPlayer = () =>
+    setEditing({
+      id: "new",
+      name: "",
+      alias: null,
+      pts: 0,
+      position: "Ambos",
+      active: true,
+      available: null,
+      userId: null,
+      photoUrl: null,
+    });
+
+  const isPro = !!sub.data;
+  const card = cardId ? PLAYERS.find((p) => p.id === cardId) ?? null : null;
+  const multi = teams.length > 1;
+  const insc = inscripcion.data;
+  const showNotice = !!insc && !insc.confirmado && !noticeHidden;
+  const captainName = (() => {
+    const cap = PLAYERS.find((p) => p.userId && captainIds.has(p.userId));
+    return cap ? cap.alias?.trim() || cap.name : null;
+  })();
 
   return (
     <div className="tw-page">
       <PageHeader
         title={
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+          <span style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 12 }}>
             <Crest src={activeTeam?.logoUrl} size={40} />
-            {activeTeam?.name ?? "Equipo"}
+            {multi ? (
+              <button
+                type="button"
+                onClick={() => setSwitchOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={switchOpen}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  border: "none",
+                  background: "transparent",
+                  color: "inherit",
+                  font: "inherit",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                {activeTeam?.name ?? "Equipo"}
+                <IconChevronDown size={18} style={{ color: "var(--text-muted)" }} />
+              </button>
+            ) : (
+              activeTeam?.name ?? "Equipo"
+            )}
+            <Dropdown open={switchOpen} onClose={() => setSwitchOpen(false)} align="left" width={340}>
+              <div style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                Tus equipos
+              </div>
+              {teams.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="menuitem"
+                  className="tw-menu-item"
+                  onClick={() => {
+                    setSwitchOpen(false);
+                    if (t.id !== teamId) setActiveTeam(t.id);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    padding: "9px 10px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: t.id === teamId ? "var(--accent-10)" : "transparent",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "var(--font-ui)",
+                    color: "var(--text)",
+                  }}
+                >
+                  <Crest src={t.logoUrl} size={30} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="truncate" style={{ display: "block", fontSize: 13.5, fontWeight: 700 }}>
+                      {t.name}
+                    </span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--text-muted)" }}>
+                      {[ROLE_LABEL[t.role] ?? "Equipo", t.category].filter(Boolean).join(" · ")}
+                    </span>
+                    {nextByTeam.data?.get(t.id) && (
+                      <span style={{ display: "block", fontSize: 12, color: "var(--accent)", marginTop: 1 }}>
+                        Próxima {nextByTeam.data.get(t.id)}
+                      </span>
+                    )}
+                  </span>
+                  {t.id === teamId && <IconCheck size={15} style={{ color: "var(--accent)" }} />}
+                </button>
+              ))}
+              <a
+                href="/empezar"
+                role="menuitem"
+                className="tw-menu-item"
+                style={{
+                  display: "block",
+                  padding: "9px 10px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--accent)",
+                  textDecoration: "none",
+                }}
+              >
+                + Unirme a otro equipo
+              </a>
+            </Dropdown>
           </span>
         }
-        lede="La plantilla del equipo: puntos, posición y disponibilidad de cada jugador."
         meta={[
           [activeTeam?.category, activeTeam?.gender].filter(Boolean).join(" · ") || null,
+          !canManage && captainName ? `capitán: ${captainName}` : null,
         ]}
         actions={
-          teamId ? (
+          teamId && canManage ? (
             <>
-              <Btn variant="quiet" onClick={() => setInviteOpen(true)} icon={<IconUserPlus size={15} />}>
-                Invitar con código
+              <Btn variant="accent" onClick={() => setInviteOpen(true)} icon={<IconUserPlus size={15} />}>
+                Invitar
               </Btn>
-              <Btn onClick={() => setEditTeamOpen(true)} icon={<IconSettings size={15} />}>
-                Editar equipo
-              </Btn>
+              <span style={{ position: "relative" }}>
+                <Btn
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  icon={<IconChevronDown size={15} />}
+                >
+                  Plantilla
+                </Btn>
+                <Dropdown open={menuOpen} onClose={() => setMenuOpen(false)}>
+                  <div style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                    Plantilla
+                  </div>
+                  <MenuItem
+                    icon={<IconFlag size={14} />}
+                    title="Traer de la Federación"
+                    sub="Jugadores y puntos oficiales"
+                    pro={!isPro}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setFcpOpen(true);
+                    }}
+                  />
+                  <MenuItem
+                    icon={<IconUpload size={14} />}
+                    title="Escanear el ranking"
+                    sub="Una foto de la lista de puntos"
+                    pro={!isPro}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setScanOpen(true);
+                    }}
+                  />
+                  <MenuItem
+                    icon={<IconPlus size={14} />}
+                    title="Añadir a mano"
+                    sub="Nombre, posición y puntos"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      newPlayer();
+                    }}
+                  />
+                  <div style={{ padding: "8px 10px 6px", fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                    Equipo
+                  </div>
+                  <MenuItem
+                    icon={<IconSettings size={14} />}
+                    title="Editar el equipo"
+                    sub="Escudo, categoría y grupo"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setEditTeamOpen(true);
+                    }}
+                  />
+                  <MenuItem
+                    icon={<IconCalendar size={14} />}
+                    title="Mi grupo en la Federación"
+                    sub="Jornadas y clasificación"
+                    href={grupoHref ?? "/federacion"}
+                  />
+                </Dropdown>
+              </span>
             </>
           ) : undefined
         }
       />
 
-      {/* Cifras */}
+      {/* Cifras: las mismas que en la app */}
       <StatRow compact style={{ marginBottom: 16 }}>
         <Stat label="Jugadores" value={PLAYERS.length} icon={<IconUsers size={14} />} />
-        <Stat label="Media de puntos" value={avg} tone="accent" />
-        <Stat
-          label="Disponibles"
-          value={availableCount}
-          unit={`/ ${PLAYERS.length}`}
-          sub="Para la próxima jornada"
-        />
-        <Stat
-          label="Bajas"
-          value={inactiveCount}
-          tone={inactiveCount > 0 ? "warning" : undefined}
-          sub={inactiveCount > 0 ? "Fuera del banquillo" : "Toda la plantilla activa"}
-        />
+        <Stat label="En TACTIUM" value={linked} unit={`/ ${PLAYERS.length}`} tone="accent" />
+        <Stat label="Media de puntos" value={avg} />
       </StatRow>
 
-      {/* Inscripción a la temporada que viene. Sólo aparece mientras la
-          Federación tiene abierta la inscripción y este equipo figura en
-          ella; el resto del año no se pinta nada. */}
-      {inscripcion.data ? (
-        <Card style={{ marginBottom: 16 }}>
-          <CardHead title={`Inscripción · ${inscripcion.data.temporada}`}>
-            <Chip tone={inscripcion.data.confirmado ? "accent" : "warning"}>
-              {inscripcion.data.confirmado ? "Confirmado" : "Sin confirmar"}
-            </Chip>
-          </CardHead>
-          <div style={{ padding: "0 16px 14px" }}>
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
-              {inscripcion.data.confirmado
-                ? "La Federación te tiene inscrito y confirmado."
-                : "Estás apuntado, pero la Federación todavía no lo ha confirmado."}{" "}
-              Cuando publique el calendario podrás volcar la temporada con sus
-              jornadas.
-            </p>
-            <dl className="tw-insc-facts">
-              <div className="tw-insc-fact">
-                <dt>Categoría</dt>
-                <dd>
-                  {inscripcion.data.categoria ?? "—"}
-                  <small>
-                    {inscripcion.data.categoriaActual &&
-                    inscripcion.data.categoria &&
-                    inscripcion.data.categoriaActual !== inscripcion.data.categoria
-                      ? `Ahora en ${inscripcion.data.categoriaActual}`
-                      : "Sin cambio"}
-                  </small>
-                </dd>
-              </div>
-              <div className="tw-insc-fact">
-                <dt>Sede de local</dt>
-                <dd>{inscripcion.data.sede ? niceName(inscripcion.data.sede) : "Sin asignar"}</dd>
-              </div>
-              <div className="tw-insc-fact">
-                <dt>Plantilla inscrita</dt>
-                <dd>
-                  {inscripcion.data.roster.length}
-                  <small>Según la Federación</small>
-                </dd>
-              </div>
-            </dl>
-            {inscripcion.data.roster.length > 0 ? (
-              <details style={{ marginTop: 12 }}>
-                <summary
-                  style={{
-                    cursor: "pointer",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Ver la plantilla inscrita
-                </summary>
-                <div className="tw-insc-roster">
-                  {inscripcion.data.roster.map((j, i) => (
-                    <div key={j.idJugador} className="tw-insc-roster-row">
-                      <span className="pos">{i + 1}</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                        <Avatar initials={initials(j.name)} src={j.avatarUrl} size={24} />
-                        <span className="truncate">{niceName(j.name)}</span>
-                      </span>
-                      <span className="pts">{j.puntos}</span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            ) : (
-              <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--text-faint)" }}>
-                La Federación todavía no publica jugadores en tu equipo.
-              </p>
-            )}
-          </div>
-        </Card>
-      ) : null}
-
-      {/* Barra de acciones */}
-      <div className="tw-toolbar">
-        <InputWrap icon={<IconSearch size={15} />}>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar jugador"
-            aria-label="Buscar jugador"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Limpiar búsqueda"
-              className="btn btn-icon"
-              style={{ width: 24, minHeight: 24, fontSize: 15, lineHeight: 1 }}
-            >
-              ×
-            </button>
-          )}
-        </InputWrap>
-        <span className="tw-toolbar-spacer" />
-        <Btn variant="quiet" onClick={() => setScanOpen(true)} icon={<IconUpload size={15} />}>
-          Escanear ranking
-        </Btn>
-        <BtnLink href="/temporadas" variant="quiet" icon={<IconCalendar size={15} />}>
-          Escanear calendario
-        </BtnLink>
-        <Btn onClick={() => setFcpOpen(true)} icon={<IconFlag size={15} />}>
-          Importar de la Federación
-        </Btn>
-        <Btn
-          variant="accent"
-          icon={<IconUserPlus size={15} />}
-          onClick={() =>
-            setEditing({
-              id: "new",
-              name: "",
-              alias: null,
-              pts: 0,
-              position: "Ambos",
-              active: true,
-              available: null,
-              userId: null,
-              photoUrl: null,
-            })
-          }
+      {showNotice && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 16,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid var(--accent-40)",
+            background: "var(--accent-10)",
+          }}
         >
-          Añadir jugador
-        </Btn>
-      </div>
+          <span style={{ width: 7, height: 7, borderRadius: 4, background: "var(--accent)", flex: "none" }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13.5 }}>
+            <strong>Inscripción {insc!.temporada}</strong>
+            <span style={{ color: "var(--text-muted)" }}> · la Federación aún no la ha confirmado</span>
+          </span>
+          <a href="#federacion" className="link-action" style={{ fontSize: 13 }}>
+            Revisar
+          </a>
+          <button
+            type="button"
+            onClick={() => setNoticeHidden(true)}
+            aria-label="Cerrar aviso"
+            className="btn btn-icon"
+            style={{ width: 28, minHeight: 28 }}
+          >
+            <IconX size={13} />
+          </button>
+        </div>
+      )}
 
-      {/* Tabla */}
-      {!teamId ? (
-        <Card>
-          <EmptyState
-            icon={<IconUsers size={24} />}
-            title="Sin equipo activo"
-            body="Entra con una cuenta que pertenezca a un equipo."
-          />
-        </Card>
-      ) : loading ? (
-        <SkeletonCard />
-      ) : error ? (
-        <Card>
-          <EmptyState
-            icon={<IconUsers size={24} />}
-            title="No se pudo cargar la plantilla"
-            body={error}
-          />
-        </Card>
-      ) : rows.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<IconUsers size={24} />}
-            title={query ? "Sin coincidencias" : "Plantilla vacía"}
-            body={
-              query
-                ? "Prueba con otro nombre o alias."
-                : "Añade jugadores a mano o escanea el ranking de la federación."
-            }
-          />
-        </Card>
-      ) : (
-        <Card flush>
-          <CardHead title="Plantilla" count={rows.length} />
-          <div className="tw-roster-scroll">
-            <div className="tw-roster-head">
-              {(
-                [
-                  ["name", "Nombre"],
-                  ["pos", "Posición"],
-                  ["pts", "Puntos de la federación"],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => toggleSort(k)}
-                  aria-sort={
-                    sort === k ? (asc ? "ascending" : "descending") : "none"
-                  }
-                  className="tw-sort-btn"
-                  style={{ color: sort === k ? "var(--accent)" : undefined }}
-                >
-                  {label}
-                  {sort === k && <span>{asc ? " ↑" : " ↓"}</span>}
-                </button>
-              ))}
-              <span>Disponibilidad</span>
-              <span />
-            </div>
+      {/* ── Federación: inscripción y grupo en un sitio ─────────── */}
+      {(insc || grupoHref) && (
+        <section id="federacion" style={{ marginBottom: 16 }}>
+          <Card flush>
+            <CardHead title="Federación" sub={`${activeTeam?.name ?? "Tu equipo"} en la Liga Cántabra`}>
+              {insc && (
+                <Chip tone={insc.confirmado ? "accent" : "warning"}>
+                  {insc.confirmado ? "Inscripción confirmada" : "Sin confirmar"}
+                </Chip>
+              )}
+            </CardHead>
+            {grupoHref && (
+              <a href={grupoHref} className="list-row">
+                <IconTile small>
+                  <IconCalendar size={14} />
+                </IconTile>
+                <span className="list-row-main">
+                  <span className="list-row-title">Clasificación y jornadas</span>
+                  <span className="list-row-sub">Tu grupo en la Federación</span>
+                </span>
+                <span className="list-row-chev">
+                  <IconChevronRight size={16} />
+                </span>
+              </a>
+            )}
+            {insc && (
+              <div style={{ padding: "12px 16px 14px" }}>
+                <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
+                  Inscripción {insc.temporada}.{" "}
+                  {insc.confirmado
+                    ? "La Federación te tiene inscrito y confirmado."
+                    : "Estás apuntado, pero la Federación todavía no lo ha confirmado."}{" "}
+                  Cuando publique el calendario podrás volcar la temporada con sus jornadas.
+                </p>
+                <dl className="tw-insc-facts">
+                  <div className="tw-insc-fact">
+                    <dt>Categoría</dt>
+                    <dd>
+                      {insc.categoria ?? "—"}
+                      <small>
+                        {insc.categoriaActual && insc.categoria && insc.categoriaActual !== insc.categoria
+                          ? `Ahora en ${insc.categoriaActual}`
+                          : "Sin cambio"}
+                      </small>
+                    </dd>
+                  </div>
+                  <div className="tw-insc-fact">
+                    <dt>Sede de local</dt>
+                    <dd>{insc.sede ? niceName(insc.sede) : "Sin asignar"}</dd>
+                  </div>
+                  <div className="tw-insc-fact">
+                    <dt>Plantilla inscrita</dt>
+                    <dd>
+                      {insc.roster.length}
+                      <small>Según la Federación</small>
+                    </dd>
+                  </div>
+                </dl>
+                {insc.roster.length > 0 ? (
+                  <details style={{ marginTop: 12 }}>
+                    <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}>
+                      Ver la plantilla inscrita
+                    </summary>
+                    <div className="tw-insc-roster">
+                      {insc.roster.map((j, i) => (
+                        <div key={j.idJugador} className="tw-insc-roster-row">
+                          <span className="pos">{i + 1}</span>
+                          <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <Avatar initials={initials(j.name)} src={j.avatarUrl} size={24} />
+                            <span className="truncate">{niceName(j.name)}</span>
+                          </span>
+                          <span className="pts">{j.puntos}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : (
+                  <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--text-faint)" }}>
+                    La Federación todavía no publica jugadores en tu equipo.
+                  </p>
+                )}
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
 
-            {rows.map((p) => (
-              <div key={p.id} className="tw-roster-row">
-                <span
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 11,
-                    minWidth: 0,
-                  }}
-                >
-                  <Avatar initials={initials(p.name)} src={p.photoUrl} size={30} />
-                  <span style={{ minWidth: 0 }}>
-                    <span
-                      className="truncate"
-                      style={{
-                        display: "block",
-                        fontSize: 13.5,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {p.name}
-                    </span>
-                    {p.alias && (
-                      <span
-                        className="truncate"
-                        style={{
-                          display: "block",
-                          marginTop: 2,
-                          fontSize: 12,
-                          color: "var(--text-faint)",
-                        }}
-                      >
-                        {p.alias}
-                      </span>
-                    )}
+      {/* Tú (jugador): tu baja larga a un toque */}
+      {!canManage && me && (
+        <motion.div
+          animate={{ opacity: me.available === false ? 0.6 : 1 }}
+          transition={{ duration: reduce ? 0 : 0.22 }}
+          style={{ marginBottom: 16 }}
+        >
+          <Card style={{ borderColor: "var(--accent-40)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)" }}>Tú</span>
+              <button
+                type="button"
+                onClick={() => openCard(me)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flex: 1,
+                  minWidth: 180,
+                  border: "none",
+                  background: "transparent",
+                  color: "inherit",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  fontFamily: "var(--font-ui)",
+                }}
+              >
+                <Avatar initials={initials(me.name)} src={me.photoUrl} size={36} />
+                <span style={{ minWidth: 0 }}>
+                  <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: 700 }}>
+                    {me.alias?.trim() || me.name}
+                  </span>
+                  <span style={{ display: "block", fontSize: 12.5, color: "var(--text-muted)" }}>
+                    {me.position} · {me.pts} pts
                   </span>
                 </span>
+              </button>
+              <span style={{ fontSize: 13, fontWeight: 700, color: me.available === false ? "var(--warning)" : "var(--accent)" }}>
+                {me.available === false ? "De baja" : "Disponible"}
+              </span>
+              <Toggle
+                on={me.available !== false}
+                onChange={() => void setAvailable(me, me.available === false, true)}
+                label="Estoy disponible"
+              />
+            </div>
+            <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--text-faint)" }}>
+              Es la baja larga (lesión, una temporada fuera). Para cada jornada sigue el Voy / Duda / No.
+            </p>
+          </Card>
+        </motion.div>
+      )}
 
-                <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                  {p.position}
-                </span>
+      {PLAYERS.length > 0 && (
+        <div className="tw-toolbar">
+          <Segmented<Tab>
+            label="Vista"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "plantilla", label: `Plantilla · ${PLAYERS.length}` },
+              { value: "parejas", label: "Parejas" },
+            ]}
+          />
+          {tab === "plantilla" && (
+            <>
+              <InputWrap icon={<IconSearch size={15} />}>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar jugador"
+                  aria-label="Buscar jugador"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Limpiar búsqueda"
+                    className="btn btn-icon"
+                    style={{ width: 24, minHeight: 24, fontSize: 15, lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                )}
+              </InputWrap>
+              <span className="tw-toolbar-spacer" />
+              <Segmented<Filter>
+                label="Filtro"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "todos", label: "Todos" },
+                  { value: "disponibles", label: `Disponibles · ${availableCount}` },
+                  { value: "bajas", label: `Bajas · ${bajasCount}` },
+                ]}
+              />
+            </>
+          )}
+        </div>
+      )}
 
-                <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
-                  {p.pts}
-                </span>
-
-                <span>
-                  {!p.active ? (
-                    <Chip tone="warning">Baja</Chip>
-                  ) : p.available === true ? (
-                    <Chip>Disponible</Chip>
-                  ) : p.available === false ? (
-                    <Chip tone="error">No puede</Chip>
-                  ) : (
-                    <Chip tone="mute">Sin marcar</Chip>
-                  )}
-                </span>
-
-                <Btn
-                  size="sm"
-                  variant="quiet"
-                  onClick={() => setEditing(p)}
-                  aria-label={`Editar ${p.name}`}
-                >
-                  Editar
-                </Btn>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reduce ? undefined : { opacity: 0 }}
+          transition={{ duration: 0.18, ease: EASE }}
+        >
+          {tab === "parejas" ? (
+            <PairStats embedded myPlayerId={myPlayerId} />
+          ) : !teamId ? (
+            <Card>
+              <EmptyState
+                icon={<IconUsers size={24} />}
+                title="Sin equipo activo"
+                body="Entra con una cuenta que pertenezca a un equipo."
+              />
+            </Card>
+          ) : loading ? (
+            <SkeletonCard />
+          ) : error ? (
+            <Card>
+              <EmptyState icon={<IconUsers size={24} />} title="No se pudo cargar la plantilla" body={error} />
+            </Card>
+          ) : PLAYERS.length === 0 ? (
+            <Card>
+              <div style={{ maxWidth: 520 }}>
+                <div className="eyebrow eyebrow-accent">Plantilla vacía</div>
+                <h2 style={{ fontSize: 19, margin: "6px 0 0" }}>
+                  {canManage
+                    ? `Para jugar una jornada hacen falta ${MATCHDAY_PLAYERS}`
+                    : "Tu capitán todavía no ha añadido jugadores"}
+                </h2>
+                {canManage && (
+                  <>
+                    <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
+                      Una jornada de la Liga Cántabra son 5 parejas. Trae la plantilla de la
+                      Federación o manda el enlace al grupo.
+                    </p>
+                    <Progress value={0} style={{ marginTop: 16 }} />
+                    <div className="mono" style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 6 }}>
+                      0 de {MATCHDAY_PLAYERS}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+                      <Btn variant="accent" icon={<IconFlag size={15} />} onClick={() => setFcpOpen(true)}>
+                        Traer de la Federación
+                      </Btn>
+                      <Btn icon={<IconShare size={15} />} onClick={() => setInviteOpen(true)}>
+                        Enviar el enlace
+                      </Btn>
+                      <Btn variant="quiet" onClick={newPlayer}>
+                        o añádelos a mano
+                      </Btn>
+                    </div>
+                  </>
+                )}
               </div>
-            ))}
-          </div>
-        </Card>
+            </Card>
+          ) : (
+            <>
+              {canManage && PLAYERS.length < MATCHDAY_PLAYERS && (
+                <Card style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>
+                        Faltan {MATCHDAY_PLAYERS - PLAYERS.length} para una jornada
+                      </div>
+                      <Progress value={(PLAYERS.length / MATCHDAY_PLAYERS) * 100} style={{ marginTop: 8 }} />
+                    </div>
+                    <Btn size="sm" icon={<IconShare size={14} />} onClick={() => setInviteOpen(true)}>
+                      Enviar el enlace
+                    </Btn>
+                  </div>
+                </Card>
+              )}
+              {rows.length === 0 ? (
+                <Card>
+                  <EmptyState
+                    icon={<IconUsers size={24} />}
+                    title="Sin coincidencias"
+                    body="Prueba con otro nombre, alias o filtro."
+                  />
+                </Card>
+              ) : (
+                <Card flush>
+                  <CardHead title="Plantilla" count={rows.length} />
+                  <div className="tw-roster-scroll">
+                    <div className="tw-roster-head">
+                      {(
+                        [
+                          ["name", "Nombre"],
+                          ["pos", "Posición"],
+                          ["pts", "Puntos de la federación"],
+                        ] as const
+                      ).map(([k, label]) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => toggleSort(k)}
+                          aria-sort={sort === k ? (asc ? "ascending" : "descending") : "none"}
+                          className="tw-sort-btn"
+                          style={{ color: sort === k ? "var(--accent)" : undefined }}
+                        >
+                          {label}
+                          {sort === k && <span>{asc ? " ↑" : " ↓"}</span>}
+                        </button>
+                      ))}
+                      <span>Disponibilidad</span>
+                      <span />
+                    </div>
+
+                    {rows.map((p, i) => {
+                      const isCap = !!p.userId && captainIds.has(p.userId);
+                      return (
+                        <motion.div
+                          key={p.id}
+                          className="tw-roster-row"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openCard(p)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openCard(p);
+                            }
+                          }}
+                          initial={reduce ? false : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, ease: EASE, delay: Math.min(i, 12) * 0.03 }}
+                          style={{ cursor: "pointer" }}
+                          aria-label={`Ficha de ${p.name}`}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                            <span style={{ position: "relative", display: "inline-flex" }}>
+                              <Avatar initials={initials(p.name)} src={p.photoUrl} size={30} />
+                              {p.userId && <span aria-hidden="true" style={ACCOUNT_DOT} />}
+                            </span>
+                            <span style={{ minWidth: 0 }}>
+                              <span
+                                className="truncate"
+                                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 700 }}
+                              >
+                                {p.name}
+                                {isCap && (
+                                  <Chip tone="accent" plain>
+                                    Capitán
+                                  </Chip>
+                                )}
+                              </span>
+                              {(p.alias || (!p.userId && canManage)) && (
+                                <span
+                                  className="truncate"
+                                  style={{ display: "block", marginTop: 2, fontSize: 12, color: "var(--text-faint)" }}
+                                >
+                                  {[p.alias, !p.userId && canManage ? "sin cuenta" : null].filter(Boolean).join(" · ")}
+                                </span>
+                              )}
+                            </span>
+                          </span>
+
+                          <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.position}</span>
+
+                          <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
+                            {p.pts}
+                          </span>
+
+                          <span>
+                            {!p.active || p.available === false ? (
+                              <Chip tone="warning">De baja</Chip>
+                            ) : (
+                              <Chip>Disponible</Chip>
+                            )}
+                          </span>
+
+                          <span style={{ display: "flex", justifyContent: "flex-end" }}>
+                            {canManage && !p.userId ? (
+                              <Btn
+                                size="sm"
+                                variant="tint"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInviteOpen(true);
+                                }}
+                                aria-label={`Invitar a ${p.name}`}
+                              >
+                                Invitar
+                              </Btn>
+                            ) : (
+                              <IconChevronRight size={15} style={{ color: "var(--text-faint)" }} />
+                            )}
+                          </span>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      {card && (
+        <PlayerCard
+          player={card}
+          teamName={activeTeam?.name ?? "Equipo"}
+          canManage={canManage}
+          isCaptainRow={!!card.userId && captainIds.has(card.userId)}
+          myPlayerId={myPlayerId}
+          bundle={bundle}
+          loading={bundleLoading}
+          onClose={() => setCardId(null)}
+          onEdit={() => {
+            setCardId(null);
+            setEditing(card);
+          }}
+          onToggleAvailable={(v) => void setAvailable(card, v, false)}
+          onRemove={() => void removePlayer(card)}
+          profileHref={card.userId ? `/u/${card.userId}` : null}
+        />
       )}
 
       {/* ── Editar jugador ───────────────────────────────────────── */}
@@ -598,7 +1179,7 @@ export function Roster() {
                 <Btn
                   variant="danger-ghost"
                   disabled={busy}
-                  onClick={removePlayer}
+                  onClick={() => void removePlayer()}
                   style={{ marginRight: "auto" }}
                 >
                   Eliminar
@@ -663,6 +1244,24 @@ export function Roster() {
                 }
               />
             </Field>
+
+            {editing.id !== "new" && !editing.userId && (
+              <Note tone="accent">
+                Todavía no está en TACTIUM. Mándale el enlace y su ficha queda unida a su
+                cuenta.{" "}
+                <button
+                  type="button"
+                  className="link-action"
+                  onClick={() => {
+                    setEditing(null);
+                    setInviteOpen(true);
+                  }}
+                  style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer" }}
+                >
+                  Invitar
+                </button>
+              </Note>
+            )}
 
             <div
               style={{
@@ -862,6 +1461,7 @@ export function Roster() {
           teamId={teamId}
           teamName={activeTeam?.name ?? "Equipo"}
           initialCategory={activeTeam?.category ?? null}
+          isClubTeam={!!activeTeam?.clubId}
           onDeleted={() => {
             // Recarga completa: la sesión cachea equipos y el que acabamos de
             // borrar seguiría apareciendo en el selector.

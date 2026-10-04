@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 import {
   createMatchday,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { useDismiss } from "@/lib/use-dismiss";
 import { guardedWrite } from "@/lib/writes";
 import {
   Btn,
@@ -28,8 +30,26 @@ import {
   Stat,
   StatRow,
 } from "@/components/ui";
-import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import { EmptyState, SkeletonCard, SkeletonPage, Toast } from "@/components/states";
+import { EASE } from "@/components/entry/motion-bits";
 import { IconCalendar, IconChevronRight, IconLock, IconPlus } from "@/components/Icon";
+import { FcpBracketPanel, FcpStandingsTable } from "@/components/federation/Federation";
+import {
+  fetchTeamPlayoffGroup,
+  fetchTeamStanding,
+  shortGroupName,
+} from "@/components/federation/fed-data";
+import {
+  closeSeason,
+  fetchSeasonEndDate,
+  fmtDay,
+  importFcpSeason,
+  isUpcoming,
+  outcomeVar,
+  pickNext,
+  playedChrono,
+  scoreText,
+} from "./season-data";
 
 /** Etiqueta de formato a partir de la fase que guarda la base de datos. */
 const PHASE_FORMAT: Record<DbSeason["phase"], string> = {
@@ -38,48 +58,23 @@ const PHASE_FORMAT: Record<DbSeason["phase"], string> = {
   mixto: "Liga + Playoff",
 };
 
-/** Fecha del partido: «sáb 12 jul», o vacío si no hay o no es válida. */
-function fmtDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleDateString("es-ES", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      });
-}
+type Tab = "jornadas" | "clasif" | "cuadro";
 
-/** Cuadro de eliminatorias: columnas por ronda con conectores. */
-const BRACKET = [
-  {
-    round: "Cuartos",
-    ties: [
-      { a: "Halcones A", b: "CP Castro", score: "3–2", winner: 0 },
-      { a: "Bahía", b: "Astillero", score: "2–3", winner: 1 },
-      { a: "CD Norte", b: "Pádel Sur", score: "3–2", winner: 0 },
-      { a: "Raqueta", b: "Indoor", score: "2–3", winner: 1 },
-    ],
-  },
-  {
-    round: "Semifinales",
-    ties: [
-      { a: "Halcones A", b: "Astillero", score: "3–2", winner: 0 },
-      { a: "CD Norte", b: "Indoor", score: "2–3", winner: 1 },
-    ],
-  },
-  {
-    round: "Final",
-    ties: [{ a: "Halcones A", b: "Indoor", score: "", winner: -1 }],
-  },
-];
-
+/**
+ * Detalle de temporada, a la par con la app: abre en Jornadas (agrupadas en
+ * Próxima · Jugadas · Pendientes, con el marcador en color), Clasificación con
+ * la tabla de la Federación y Cuadro con el cuadro real del playoff. Las
+ * acciones son solo del capitán: «Añadir» y «···» (renumerar, cerrar).
+ */
 export function SeasonDetail({ id }: { id: string }) {
-  const { user, activeTeam } = useSession();
+  const { user, activeTeam, role } = useSession();
   const teamId = activeTeam?.id ?? null;
-  const [tab, setTab] = useState<"jornadas" | "cuadro">("jornadas");
+  // Solo el capitán (o el club) gestiona; el jugador consulta.
+  const canManage = role === "capitan" || role === "club";
+  const [tab, setTab] = useState<Tab>("jornadas");
   const [newOpen, setNewOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [showPending, setShowPending] = useState(false);
   // Formulario de nueva jornada.
   const [jorRival, setJorRival] = useState("");
   const [jorDate, setJorDate] = useState("");
@@ -104,6 +99,41 @@ export function SeasonDetail({ id }: { id: string }) {
     }
   }, []);
 
+  const { data, loading, error } = useAsync(
+    async () => {
+      const [seasons, matchdays, endDate] = await Promise.all([
+        teamId ? fetchSeasons(teamId) : Promise.resolve<DbSeason[]>([]),
+        fetchMatchdays(id),
+        fetchSeasonEndDate(id).catch(() => null),
+      ]);
+      return { season: seasons.find((s) => s.id === id) ?? null, matchdays, endDate };
+    },
+    [id, teamId, user?.id, reloadKey],
+    !!user,
+  );
+  const standing = useAsync(() => fetchTeamStanding(teamId!), [teamId], !!teamId);
+  const playoff = useAsync(
+    () => fetchTeamPlayoffGroup(standing.data!),
+    [standing.data?.idGrupo, standing.data?.me?.equipo],
+    !!standing.data?.me,
+  );
+
+  const matchdays = useMemo(() => data?.matchdays ?? [], [data?.matchdays]);
+  const next = useMemo(() => pickNext(matchdays), [matchdays]);
+  const playedList = useMemo(
+    () =>
+      matchdays
+        .filter((m) => !isUpcoming(m))
+        .sort((a, b) =>
+          a.date && b.date && a.date !== b.date ? b.date.localeCompare(a.date) : b.round - a.round,
+        ),
+    [matchdays],
+  );
+  const pendingList = useMemo(
+    () => matchdays.filter((m) => isUpcoming(m) && m.id !== next?.id).sort((a, b) => a.round - b.round),
+    [matchdays, next],
+  );
+
   /**
    * Renumera las jornadas 1..N por fecha. Tras borrar una en medio, la
    * numeración queda con huecos y no hay forma de arreglarla a mano.
@@ -111,9 +141,7 @@ export function SeasonDetail({ id }: { id: string }) {
   async function renumber() {
     if (busy) return;
     setBusy(true);
-    const res = await guardedWrite("renumerar las jornadas", () =>
-      renumberSeasonMatchdays(id),
-    );
+    const res = await guardedWrite("renumerar las jornadas", () => renumberSeasonMatchdays(id));
     setBusy(false);
     if (res.ok) {
       setReloadKey((k) => k + 1);
@@ -121,19 +149,31 @@ export function SeasonDetail({ id }: { id: string }) {
     } else setToast(res.reason);
   }
 
-  // La temporada vive bajo el equipo; las jornadas se piden por su id. Ambas van
-  // en paralelo porque son independientes bajo RLS.
-  const { data, loading, error } = useAsync(
-    async () => {
-      const [seasons, matchdays] = await Promise.all([
-        teamId ? fetchSeasons(teamId) : Promise.resolve<DbSeason[]>([]),
-        fetchMatchdays(id),
-      ]);
-      return { season: seasons.find((s) => s.id === id) ?? null, matchdays };
-    },
-    [id, teamId, user?.id, reloadKey],
-    !!user,
-  );
+  async function doClose() {
+    if (busy) return;
+    setBusy(true);
+    const res = await guardedWrite("cerrar la temporada", () => closeSeason(id));
+    setBusy(false);
+    setCloseOpen(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast("Temporada cerrada");
+    } else setToast(res.reason);
+  }
+
+  async function importFromFederation() {
+    const fcpId = standing.data?.fcpId ?? null;
+    if (busy || !teamId || fcpId == null) return;
+    setBusy(true);
+    const res = await guardedWrite("traer el calendario de la Federación", () =>
+      importFcpSeason(teamId, fcpId),
+    );
+    setBusy(false);
+    if (res.ok) {
+      setReloadKey((k) => k + 1);
+      setToast(`${res.data.created} jornadas creadas · ${res.data.updated} actualizadas`);
+    } else setToast(res.reason);
+  }
 
   if (loading) return <SkeletonPage />;
   if (error) {
@@ -165,13 +205,9 @@ export function SeasonDetail({ id }: { id: string }) {
     );
   }
 
-  const matchdays = data?.matchdays ?? [];
   const format = PHASE_FORMAT[dbSeason.phase] ?? "Liga regular";
-  const hasBracket = format !== "Liga regular";
   const archived = !dbSeason.active;
-
-  const rounds = [...matchdays].sort((a, b) => a.round - b.round);
-  const nextRound = rounds.find((r) => r.status !== "finished");
+  const canEdit = canManage && !archived;
 
   async function saveJornada() {
     if (busy) return;
@@ -179,8 +215,7 @@ export function SeasonDetail({ id }: { id: string }) {
       setToast("Pon el rival de la jornada.");
       return;
     }
-    const nextNum =
-      matchdays.reduce((m, j) => Math.max(m, j.round), 0) + 1;
+    const nextNum = matchdays.reduce((m, j) => Math.max(m, j.round), 0) + 1;
     setBusy(true);
     const res = await guardedWrite("crear la jornada", () =>
       createMatchday(id, {
@@ -207,93 +242,106 @@ export function SeasonDetail({ id }: { id: string }) {
     }
   }
 
-  // Balance y tasa de victorias a partir de las jornadas con acta cerrada.
-  const finished = matchdays.filter((m) => m.status === "finished");
-  const seasonWon = finished.filter((m) => m.outcome === "win").length;
-  const seasonDrawn = finished.filter((m) => m.outcome === "draw").length;
-  const seasonLost = finished.filter((m) => m.outcome === "loss").length;
-  const played = finished.length;
+  // Balance y tasa de victorias con las jornadas que tienen resultado.
+  const seasonWon = matchdays.filter((m) => m.outcome === "win").length;
+  const seasonDrawn = matchdays.filter((m) => m.outcome === "draw").length;
+  const seasonLost = matchdays.filter((m) => m.outcome === "loss").length;
+  const played = seasonWon + seasonDrawn + seasonLost;
   const totalRounds = dbSeason.totalMatchdays ?? matchdays.length;
   const winRatePct = played ? Math.round((seasonWon / played) * 100) : 0;
+
+  const tabs: { value: Tab; label: string }[] = [
+    { value: "jornadas", label: "Jornadas" },
+    ...(standing.data?.idGrupo ? [{ value: "clasif" as Tab, label: "Clasificación" }] : []),
+    ...(playoff.data ? [{ value: "cuadro" as Tab, label: "Cuadro" }] : []),
+  ];
+
+  const isFcp = standing.data?.fcpId != null;
 
   return (
     <div className="tw-page">
       <PageHeader
-        back={{ href: "/temporadas", label: "Temporadas" }}
+        back={{ href: "/competir", label: "Liga" }}
         title={dbSeason.name}
-        meta={[
-          format,
-          activeTeam?.name ?? null,
-          activeTeam?.category ?? null,
-          "Federación Cántabra de Pádel",
-        ]}
+        meta={[format, activeTeam?.name ?? null, activeTeam?.category ?? null]}
         actions={
           <>
             <Chip tone={dbSeason.active ? "accent" : "mute"}>
               {dbSeason.active ? "Activa" : "Archivada"}
             </Chip>
-            {!archived && tab === "jornadas" && (
-              <Btn variant="quiet" onClick={() => void renumber()} disabled={busy}>
-                Renumerar
-              </Btn>
+            {canEdit && (
+              <Menu
+                label="Añadir"
+                accent
+                items={[
+                  { label: "Nueva jornada", sub: "Rival, casa o fuera, fecha y hora", onClick: () => setNewOpen(true) },
+                  ...(isFcp
+                    ? [
+                        {
+                          label: "Traer de la Federación",
+                          sub: "Calendario y resultados del grupo",
+                          onClick: () => void importFromFederation(),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             )}
-            {!archived && (
-              <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={15} />}>
-                Añadir jornada
-              </Btn>
+            {canEdit && (
+              <Menu
+                label="···"
+                ariaLabel="Más opciones de la temporada"
+                items={[
+                  { label: "Renumerar jornadas", sub: "Vuelve a numerarlas por fecha", onClick: () => void renumber() },
+                  {
+                    label: "Cerrar temporada",
+                    sub: "Pasa al histórico; avisa si quedan jornadas",
+                    danger: true,
+                    onClick: () => setCloseOpen(true),
+                  },
+                ]}
+              />
             )}
           </>
         }
       />
 
-      {archived && (
-        <Note icon={<IconLock size={15} />} style={{ marginBottom: 16 }}>
-          Temporada archivada: solo lectura.
-        </Note>
+      {archived ? (
+        <ArchivedSummary matchdays={matchdays} endDate={data?.endDate ?? null} />
+      ) : (
+        <StatRow style={{ marginBottom: 16 }}>
+          <Stat label="Jornadas" value={played} unit={`/ ${totalRounds}`} icon={<IconCalendar size={14} />} />
+          <Stat
+            label="Balance"
+            value={`${seasonWon}-${seasonDrawn}-${seasonLost}`}
+            sub="Ganadas · empatadas · perdidas"
+          />
+          <Stat
+            label="Victorias"
+            value={winRatePct}
+            unit="%"
+            tone={played > 0 && winRatePct >= 50 ? "accent" : undefined}
+            sub={played > 0 ? `${seasonWon} de ${played} jugadas` : "Aún sin actas"}
+          />
+        </StatRow>
       )}
 
-      <StatRow style={{ marginBottom: 16 }}>
-        <Stat label="Jornadas" value={totalRounds} icon={<IconCalendar size={14} />} />
-        <Stat label="Jugadas" value={played} unit={`/ ${totalRounds}`} />
-        <Stat
-          label="Balance"
-          value={`${seasonWon}-${seasonDrawn}-${seasonLost}`}
-          sub="Ganadas · empatadas · perdidas"
-        />
-        <Stat
-          label="Victorias"
-          value={winRatePct}
-          unit="%"
-          tone={played > 0 && winRatePct >= 50 ? "accent" : undefined}
-          sub={played > 0 ? `${seasonWon} de ${played} jugadas` : "Aún sin actas"}
-        />
-      </StatRow>
-
-      {/* Pestañas */}
-      {hasBracket && (
+      {tabs.length > 1 && (
         <div className="tw-toolbar">
-          <Segmented
-            label="Vista de la temporada"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: "jornadas", label: "Jornadas" },
-              { value: "cuadro", label: "Cuadro" },
-            ]}
-          />
+          <Segmented label="Vista de la temporada" value={tab} onChange={setTab} options={tabs} />
         </div>
       )}
 
       {/* ── Jornadas ─────────────────────────────────────────────── */}
       {tab === "jornadas" &&
-        (rounds.length === 0 ? (
+        (matchdays.length === 0 ? (
           <Card>
             <EmptyState
               icon={<IconCalendar size={24} />}
               title="Aún no hay jornadas"
-              body="Añade la primera para empezar a planificar."
+              body={canEdit ? "Añádelas a mano o tráelas de la Federación." : "El capitán aún no ha añadido jornadas."}
               action={
-                !archived ? (
+                canEdit ? (
                   <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={14} />}>
                     Añadir jornada
                   </Btn>
@@ -302,167 +350,76 @@ export function SeasonDetail({ id }: { id: string }) {
             />
           </Card>
         ) : (
-          <Card flush>
-            <CardHead title="Jornadas" count={rounds.length} />
-            {rounds.map((j: DbMatchday) => {
-              const isNext = j.id === nextRound?.id;
-              const hasScore =
-                j.scoreFor !== null && j.scoreAgainst !== null;
-              const won = hasScore && j.scoreFor! > j.scoreAgainst!;
-              const drew = hasScore && j.scoreFor === j.scoreAgainst;
-              const meta = [fmtDate(j.date), j.time?.slice(0, 5), j.location]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <Link
-                  key={j.id}
-                  href={`/jornada/${j.id}`}
-                  className="tw-md-row"
-                  style={{
-                    boxShadow: isNext ? "inset 2px 0 0 var(--accent)" : "none",
-                  }}
-                >
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: isNext ? "var(--accent)" : "var(--text-faint)",
-                    }}
-                  >
-                    J{j.round}
-                  </span>
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>
-                    vs {j.opponent}
-                  </span>
-                  <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                    {meta || "Fecha por confirmar"}
-                  </span>
-                  <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <Chip tone={j.isHome ? "accent" : "mute"} plain>
-                      {j.isHome ? "En casa" : "Fuera"}
-                    </Chip>
-                    {hasScore ? (
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 700,
-                          color: won
-                            ? "var(--accent)"
-                            : drew
-                              ? "var(--warning)"
-                              : "var(--error)",
-                        }}
-                      >
-                        {j.scoreFor}–{j.scoreAgainst}
-                      </span>
-                    ) : isNext ? (
-                      <Chip>Próxima</Chip>
-                    ) : j.status === "finished" ? (
-                      <Chip tone="mute" plain>
-                        Acta
-                      </Chip>
-                    ) : null}
-                  </span>
-                  <span style={{ color: "var(--text-faint)", display: "flex" }}>
-                    <IconChevronRight size={16} />
-                  </span>
-                </Link>
-              );
-            })}
-          </Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {next && (
+              <Card flush>
+                <CardHead title="Próxima" />
+                <MatchdayRow j={next} isNext />
+              </Card>
+            )}
+            {playedList.length > 0 && (
+              <Card flush>
+                <CardHead title="Jugadas" count={playedList.length} />
+                {playedList.map((j) => (
+                  <MatchdayRow key={j.id} j={j} />
+                ))}
+              </Card>
+            )}
+            {pendingList.length > 0 && (
+              <Card flush>
+                <CardHead title="Pendientes" count={pendingList.length}>
+                  <Btn size="sm" variant="quiet" onClick={() => setShowPending((v) => !v)}>
+                    {showPending ? "Ocultar" : "Ver"}
+                  </Btn>
+                </CardHead>
+                {showPending && pendingList.map((j) => <MatchdayRow key={j.id} j={j} />)}
+              </Card>
+            )}
+          </div>
         ))}
 
-      {/* ── Cuadro ───────────────────────────────────────────────── */}
-      {tab === "cuadro" && (
-        <Card flush>
-          <CardHead title="Cuadro de eliminatorias" sub="Maqueta: los cruces reales llegarán con el playoff." />
-          <div className="tw-bracket-scroll">
-            <div className="tw-bracket">
-              {BRACKET.map((col) => (
-                <div key={col.round} className="tw-bracket-col">
-                  <div
-                    className="grid-head"
-                    style={{ textAlign: "center", marginBottom: 14 }}
-                  >
-                    {col.round}
-                  </div>
-                  <div className="tw-bracket-ties">
-                    {col.ties.map((t, i) => (
-                      <div key={i} className="tw-tie">
-                        {[t.a, t.b].map((name, side) => {
-                          const isWinner = t.winner === side;
-                          const decided = t.winner >= 0;
-                          return (
-                            <div
-                              key={side}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                padding: "10px 12px",
-                                borderBottom:
-                                  side === 0 ? "1px solid var(--line)" : "none",
-                                boxShadow: isWinner
-                                  ? "inset 2px 0 0 var(--accent)"
-                                  : "none",
-                                opacity: decided && !isWinner ? 0.5 : 1,
-                              }}
-                            >
-                              <span
-                                className="truncate"
-                                style={{
-                                  flex: 1,
-                                  fontSize: 13,
-                                  fontWeight: isWinner ? 700 : 500,
-                                }}
-                              >
-                                {name}
-                              </span>
-                              {decided && side === 0 && (
-                                <span
-                                  className="mono"
-                                  style={{ fontSize: 12.5, fontWeight: 700 }}
-                                >
-                                  {t.score}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              <div className="tw-bracket-col">
-                <div
-                  className="grid-head"
-                  style={{ textAlign: "center", marginBottom: 14 }}
-                >
-                  Campeón
-                </div>
-                <div
-                  style={{
-                    padding: "16px 14px",
-                    borderRadius: 10,
-                    background: "var(--accent-10)",
-                    border: "1px solid var(--accent-40)",
-                    textAlign: "center",
-                    color: "var(--accent)",
-                    fontSize: 13.5,
-                    fontWeight: 700,
-                  }}
-                >
-                  Por determinar
-                </div>
-              </div>
-            </div>
+      {/* ── Clasificación (la de la Federación) ──────────────────── */}
+      {tab === "clasif" && standing.data?.idGrupo && (
+        <>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 10,
+            }}
+          >
+            <span style={{ fontSize: 13.5, color: "var(--text-muted)" }}>
+              {shortGroupName(standing.data.grupo)}
+            </span>
           </div>
-        </Card>
+          {matchdays.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<IconCalendar size={22} />}
+                title="Aún no hay clasificación"
+                body="Esta temporada está vacía. La clasificación aparecerá al traer la liga de la Federación o al añadir jornadas."
+              />
+            </Card>
+          ) : (
+            <FcpStandingsTable
+              slug="cantabra"
+              rows={standing.data.rows}
+              zones={standing.data.zones}
+              myFcpId={standing.data.me ? Number(standing.data.me.idEquipo) : standing.data.fcpId}
+            />
+          )}
+        </>
       )}
+
+      {/* ── Cuadro (el real del playoff) ─────────────────────────── */}
+      {tab === "cuadro" &&
+        (playoff.loading ? (
+          <SkeletonCard />
+        ) : playoff.data ? (
+          <FcpBracketPanel idGrupo={playoff.data.idGrupo} />
+        ) : null)}
 
       {/* ── Crear jornada ────────────────────────────────────────── */}
       <Modal
@@ -493,20 +450,10 @@ export function SeasonDetail({ id }: { id: string }) {
           </Field>
           <div className="tw-form-grid">
             <Field label="Fecha del partido" htmlFor="jor-fecha">
-              <Input
-                id="jor-fecha"
-                type="date"
-                value={jorDate}
-                onChange={(e) => setJorDate(e.target.value)}
-              />
+              <Input id="jor-fecha" type="date" value={jorDate} onChange={(e) => setJorDate(e.target.value)} />
             </Field>
             <Field label="Hora del partido" htmlFor="jor-hora">
-              <Input
-                id="jor-hora"
-                type="time"
-                value={jorTime}
-                onChange={(e) => setJorTime(e.target.value)}
-              />
+              <Input id="jor-hora" type="time" value={jorTime} onChange={(e) => setJorTime(e.target.value)} />
             </Field>
           </div>
           <Field label="Lugar" hint="Opcional" htmlFor="jor-lugar">
@@ -534,7 +481,183 @@ export function SeasonDetail({ id }: { id: string }) {
         </div>
       </Modal>
 
+      {/* ── Cerrar temporada ─────────────────────────────────────── */}
+      <Modal
+        open={closeOpen}
+        onClose={() => setCloseOpen(false)}
+        labelledBy="cerrar-temp"
+        width={480}
+        title="Cerrar temporada"
+        lede={`«${dbSeason.name}» pasará al histórico. No podrás añadir jornadas nuevas, pero los resultados pendientes se podrán registrar.`}
+        footer={
+          <>
+            <Btn onClick={() => setCloseOpen(false)}>Cancelar</Btn>
+            <Btn variant="danger" disabled={busy} onClick={() => void doClose()}>
+              {busy ? "Cerrando…" : "Cerrar temporada"}
+            </Btn>
+          </>
+        }
+      >
+        {pendingList.length + (next ? 1 : 0) > 0 ? (
+          <Note tone="warning">
+            Quedan {pendingList.length + (next ? 1 : 0)} jornadas por jugar.
+          </Note>
+        ) : (
+          <Note>Todas las jornadas están disputadas.</Note>
+        )}
+      </Modal>
+
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+/* ── Fila de jornada ─────────────────────────────────────────────── */
+
+function MatchdayRow({ j, isNext }: { j: DbMatchday; isNext?: boolean }) {
+  const score = scoreText(j);
+  const pendingActa = !score && !isUpcoming(j);
+  const meta = [fmtDay(j.date, !!isNext), isNext ? j.time?.slice(0, 5) : null, j.location]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Link
+      href={`/jornada/${j.id}`}
+      className="tw-md-row"
+      style={{ boxShadow: isNext ? "inset 2px 0 0 var(--accent)" : "none" }}
+    >
+      <span
+        className="mono"
+        style={{ fontSize: 12, fontWeight: 600, color: isNext ? "var(--accent)" : "var(--text-faint)" }}
+      >
+        J{j.round}
+      </span>
+      <span style={{ fontSize: 14, fontWeight: 700 }}>vs {j.opponent}</span>
+      <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+        {[j.isHome ? "Casa" : "Fuera", meta || "Fecha por confirmar"].join(" · ")}
+      </span>
+      <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {score ? (
+          <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: outcomeVar(j.outcome) }}>
+            {score}
+          </span>
+        ) : pendingActa ? (
+          <Chip tone="warning" plain>
+            Acta
+          </Chip>
+        ) : isNext ? (
+          <Chip>Próxima</Chip>
+        ) : null}
+      </span>
+      <span style={{ color: "var(--text-faint)", display: "flex" }}>
+        <IconChevronRight size={16} />
+      </span>
+    </Link>
+  );
+}
+
+/* ── Resumen de una temporada archivada ──────────────────────────── */
+
+function ArchivedSummary({ matchdays, endDate }: { matchdays: DbMatchday[]; endDate: string | null }) {
+  const reduce = useReducedMotion();
+  const seq = playedChrono(matchdays);
+  const w = seq.filter((m) => m.outcome === "win").length;
+  const d = seq.filter((m) => m.outcome === "draw").length;
+  const l = seq.filter((m) => m.outcome === "loss").length;
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <CardHead title="Resumen final" sub={`Solo lectura${endDate ? ` · cerrada el ${fmtDay(endDate, false)}` : ""}`}>
+        <IconLock size={15} />
+      </CardHead>
+      <StatRow>
+        <Stat label="Jornadas" value={seq.length} />
+        <Stat label="Balance" value={`${w}-${d}-${l}`} sub="Ganadas · empatadas · perdidas" />
+      </StatRow>
+      {seq.length > 0 && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 14 }}>
+          {seq.map((m, i) => (
+            <motion.span
+              key={m.id}
+              className="mono"
+              title={`J${m.round} · ${m.opponent}`}
+              initial={reduce ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03, duration: 0.2, ease: EASE }}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: "var(--r-xs)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11,
+                fontWeight: 700,
+                color: outcomeVar(m.outcome),
+                background: `color-mix(in srgb, ${outcomeVar(m.outcome)} 14%, transparent)`,
+              }}
+            >
+              {m.outcome === "win" ? "V" : m.outcome === "loss" ? "D" : "E"}
+            </motion.span>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ── Menú desplegable de acciones («Añadir», «···») ──────────────── */
+
+function Menu({
+  label,
+  ariaLabel,
+  accent,
+  items,
+}: {
+  label: ReactNode;
+  ariaLabel?: string;
+  accent?: boolean;
+  items: { label: string; sub?: string; danger?: boolean; onClick: () => void }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <Btn
+        variant={accent ? "accent" : "ghost"}
+        icon={accent ? <IconPlus size={15} /> : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label}
+      </Btn>
+      {open && (
+        <div
+          className="tw-popover"
+          role="menu"
+          style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", minWidth: 260, zIndex: 30 }}
+        >
+          {items.map((it) => (
+            <button
+              key={it.label}
+              type="button"
+              role="menuitem"
+              className="tw-popitem"
+              onClick={() => {
+                setOpen(false);
+                it.onClick();
+              }}
+              style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}
+            >
+              <span style={{ fontWeight: 600, color: it.danger ? "var(--error)" : undefined }}>
+                {it.label}
+              </span>
+              {it.sub && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{it.sub}</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

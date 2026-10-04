@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 
-import { Btn, Field, Input, Modal } from "@/components/ui";
+import { Btn, Field, Input, Modal, Note } from "@/components/ui";
 import { Toast } from "@/components/states";
 import { LogoField } from "@/components/LogoField";
 import { FederationSelect } from "@/components/entry/start";
-import { updateClub } from "@/lib/queries";
-import { guardedWrite } from "@/lib/writes";
+import { deleteClub, updateClub } from "@/lib/queries";
+import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import { FEDERATIONS, type Federation } from "@/lib/federations";
 
 /**
- * Editar club — nombre y federación. La federación usa el mismo selector por
+ * Editar club — escudo, nombre y federación, y «Borrar club» (que antes
+ * estaba en la portada del panel: es irreversible y no pinta nada en Inicio). La federación usa el mismo selector por
  * botones que el alta (paridad con la app).
  */
 export function EditClubModal({
@@ -40,6 +41,19 @@ export function EditClubModal({
   const [logoDirty, setLogoDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Borrar club: confirmación fuerte escribiendo el nombre exacto.
+  const [deleting, setDeleting] = useState(false);
+  const [typed, setTyped] = useState("");
+  const nameOk = typed.trim() === initialName;
+
+  async function doDelete() {
+    if (busy || !nameOk) return;
+    setBusy(true);
+    const res = await guardedWrite("borrar el club", () => deleteClub(clubId));
+    setBusy(false);
+    if (res.ok) window.location.href = "/";
+    else setToast(res.reason);
+  }
 
   // Rehidrata al abrir para no arrastrar estado entre aperturas.
   useEffect(() => {
@@ -48,6 +62,8 @@ export function EditClubModal({
     setFederation(fedOf(initialFederation));
     setLogo(initialLogo);
     setLogoDirty(false);
+    setDeleting(false);
+    setTyped("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialName, initialFederation, initialLogo]);
 
@@ -79,12 +95,21 @@ export function EditClubModal({
       title={initialName || "Club"}
       lede="Escudo, nombre y federación del club."
       footer={
-        <>
-          <Btn onClick={close}>{logoDirty ? "Cerrar" : "Cancelar"}</Btn>
-          <Btn variant="accent" disabled={busy || !valid} onClick={save}>
-            {busy ? "Guardando…" : "Guardar"}
-          </Btn>
-        </>
+        deleting ? (
+          <>
+            <Btn onClick={() => setDeleting(false)}>Cancelar</Btn>
+            <Btn variant="danger" disabled={!nameOk || !WRITES_ENABLED || busy} onClick={() => void doDelete()}>
+              {busy ? "Borrando…" : "Borrar club"}
+            </Btn>
+          </>
+        ) : (
+          <>
+            <Btn onClick={close}>{logoDirty ? "Cerrar" : "Cancelar"}</Btn>
+            <Btn variant="accent" disabled={busy || !valid} onClick={save}>
+              {busy ? "Guardando…" : "Guardar"}
+            </Btn>
+          </>
+        )
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -114,6 +139,38 @@ export function EditClubModal({
         <Field label="Federación">
           <FederationSelect value={federation} onChange={setFederation} />
         </Field>
+
+        {/* Zona de peligro */}
+        <div className="divider" style={{ margin: "4px 0" }} />
+        {!deleting ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>Borrar club</div>
+              <div style={{ marginTop: 3, fontSize: 12.5, color: "var(--text-muted)" }}>
+                Se eliminan el club, sus equipos, sus jornadas y sus actas. No se puede deshacer.
+              </div>
+            </div>
+            <Btn variant="danger-ghost" onClick={() => setDeleting(true)}>
+              Borrar club
+            </Btn>
+          </div>
+        ) : (
+          <Field label={`Escribe «${initialName}» para confirmar`} htmlFor="edit-club-delete">
+            <Input
+              id="edit-club-delete"
+              type="text"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={initialName}
+              style={{ borderColor: nameOk ? "var(--error)" : undefined }}
+            />
+            {!WRITES_ENABLED && (
+              <Note tone="warning" style={{ marginTop: 10 }}>
+                {READ_ONLY_MESSAGE}
+              </Note>
+            )}
+          </Field>
+        )}
       </div>
 
       {toast && (

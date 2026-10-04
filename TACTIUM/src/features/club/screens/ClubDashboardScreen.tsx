@@ -8,6 +8,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  useReducedMotion,
+} from 'react-native-reanimated';
 import { useFocusEffect, useScrollToTop, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +22,18 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconPlus, IconPencil, IconClock } from '@components/ui';
+import {
+  BottomSheet,
+  IconCheck,
+  IconChevron,
+  IconClock,
+  IconPlus,
+  IconTrophy,
+  IconTicket,
+  IconFile,
+  IconPencil,
+  useLayout,
+} from '@components/ui';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
@@ -26,28 +43,57 @@ import { FCP_FEDERATION_CODE, hasFcpLinkedTeams } from '@core/services/fcpOnboar
 import { FeedPreview } from '@features/social/components/FeedPreview';
 import { TeamMembersSheet } from '@features/club/components/TeamMembersSheet';
 import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
-import { DeleteClubSheet } from '@features/club/components/DeleteClubSheet';
 import { toast } from '@store/toastStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { clubCoverage } from '@core/entitlements/coverage';
 import { useTeamGate } from '@core/hooks/usePremiumGate';
+import { PLAN_BY_TIER, isLiveSub } from '@core/subscriptions/plans';
 import * as ClubDashboardApi from '@core/services/clubDashboard';
 import type { ClubTeamOverview } from '@core/services/clubDashboard';
+import {
+  getClubHomeSchedule,
+  getVenueHomeSchedule,
+  fetchUnconfirmedVenues,
+  currentRoundMatches,
+  type ClubHomeMatch,
+} from '@core/services/clubSchedule';
+import { listTournaments, type Tournament } from '@core/services/tournaments';
 import { fetchClubInscripciones, refreshInscripcionRoster } from '@core/services/fcpInscripciones';
 import type { FcpInscripcionesResumen } from '@core/services/fcpInscripciones';
+import { fetchTournamentStats, tournamentPhase } from '../clubOps';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 import type { PaywallIntent } from '@core/subscriptions/paywallReasons';
 
-const MONTH_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTH_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const WEEKDAY_ES = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 const fmtPts = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-const WEEKDAY_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
-function formatShortDate(iso: string | null): string {
-  if (!iso) return '—';
+const localIso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** «SÁB 10» de una fecha ISO. */
+function dayLabel(iso: string | null): { dow: string; day: string } {
+  if (!iso) return { dow: 'SIN', day: 'FECHA' };
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return { dow: '—', day: iso };
+  return { dow: WEEKDAY_ES[d.getDay()], day: String(d.getDate()) };
+}
+
+function shortDate(iso: string | null): string {
+  if (!iso) return '';
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  return `${WEEKDAY_ES[d.getDay()]} ${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
+  return `${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
+}
+
+/** Una fila de «Por hacer». */
+interface TodoItem {
+  key: string;
+  count: number;
+  title: string;
+  sub: string;
+  onPress: () => void;
 }
 
 export const ClubDashboardScreen = ({
@@ -56,6 +102,9 @@ export const ClubDashboardScreen = ({
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  // Tablet: 3 columnas en horizontal y 2 en vertical. En móvil, la lista.
+  const layout = useLayout();
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
 
@@ -65,27 +114,19 @@ export const ClubDashboardScreen = ({
   } | null>(null);
   const [overviews, setOverviews] = useState<ClubTeamOverview[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [fcpOpen, setFcpOpen] = useState(false);
-  const deleteClub = useClubStore((s) => s.deleteClub);
-  const reloadTeams = useTeamStore((s) => s.loadForUser);
   const isFcpClub = club?.federation === FCP_FEDERATION_CODE;
 
-  const handleDeleteClub = async () => {
-    if (!club || deleting) return;
-    setDeleting(true);
-    try {
-      await deleteClub(club.id);
-      await reloadTeams();
-      setDeleteOpen(false);
-      toast.success('Club borrado', 'Se ha eliminado el club y su contenido.');
-    } catch (e: any) {
-      toast.error('No se pudo borrar', e?.message ?? 'Inténtalo de nuevo.');
-    } finally {
-      setDeleting(false);
-    }
-  };
+  // Datos de «Por hacer» y de «Gestión del club». Cada fuente va por su lado y
+  // ninguna tumba el panel si falla.
+  const [homeMatches, setHomeMatches] = useState<ClubHomeMatch[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [unpaid, setUnpaid] = useState<{ count: number; tournamentId: string | null; name: string | null }>({
+    count: 0,
+    tournamentId: null,
+    name: null,
+  });
+  const [todoReady, setTodoReady] = useState(false);
 
   const clubTeams = useMemo(
     () => (club ? teams.filter((t) => t.club_id === club.id) : []),
@@ -96,7 +137,7 @@ export const ClubDashboardScreen = ({
   // que haya calendario). Null casi todo el año: solo aparece cuando hay una
   // liga en inscripción con equipos de este club.
   const [inscripciones, setInscripciones] = useState<FcpInscripcionesResumen | null>(null);
-  // Qué plantilla está desplegada (índice de fila). Solo una a la vez.
+  // Plantilla abierta en la hoja (índice de fila).
   const [abierta, setAbierta] = useState<number | null>(null);
   const [refrescando, setRefrescando] = useState(false);
 
@@ -160,6 +201,12 @@ export const ClubDashboardScreen = ({
       alive = false;
     };
   }, [isFcpClub, clubTeams]);
+
+  // ¿La Federación ha publicado ya una temporada más nueva que la que tienen
+  // vinculada los equipos del club? El vínculo caduca cada año (los ids de la
+  // FCP cambian por temporada), así que toca re-volcar. Basta con preguntar por
+  // un equipo: todos van en la misma liga.
+  const [newSeason, setNewSeason] = useState(false);
   useEffect(() => {
     const probe = clubTeams.find((t) => t.federation === FCP_FEDERATION_CODE);
     if (!isFcpClub || !probe) {
@@ -176,16 +223,11 @@ export const ClubDashboardScreen = ({
       cancelled = true;
     };
   }, [isFcpClub, clubTeams]);
+
   // ¿Ya se importó de la Federación? Se mira por VÍNCULOS reales
   // (fcp_team_links), no por el campo `federation`: un equipo creado a mano en
-  // un club FCP hereda federation='FCantP' pero NO está importado, y antes eso
-  // ocultaba el banner de importar por error.
+  // un club FCP hereda federation='FCantP' pero NO está importado.
   const [hasFcpTeams, setHasFcpTeams] = useState(false);
-  // ¿La Federación ha publicado ya una temporada más nueva que la que tienen
-  // vinculada los equipos del club? El vínculo caduca cada año (los ids de la
-  // FCP cambian por temporada), así que toca re-volcar. Basta con preguntar por
-  // un equipo: todos van en la misma liga.
-  const [newSeason, setNewSeason] = useState(false);
   useEffect(() => {
     if (!isFcpClub || !club) {
       setHasFcpTeams(false);
@@ -198,20 +240,26 @@ export const ClubDashboardScreen = ({
     return () => {
       alive = false;
     };
-    // Recalcula al cambiar los equipos (p.ej. tras importar → banner se oculta).
   }, [isFcpClub, club?.id, teams]);
 
   // Cobertura dura: cuántos equipos cubre el plan y cuántos van usados.
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
   const coverage = clubCoverage(club?.id ?? null, teams, subscriptions);
+  const clubPlan = useMemo(() => {
+    if (!club) return null;
+    const sub = subscriptions.find(
+      (s) => s.subject_type === 'club' && s.subject_id === club.id && isLiveSub(s),
+    );
+    return sub ? PLAN_BY_TIER[sub.plan_tier] : null;
+  }, [subscriptions, club]);
   // Gate POR EQUIPO (no el activo): tocar un equipo no cubierto ofrece cubrirlo.
   const teamGate = useTeamGate();
 
   // AUTO-COBERTURA: al detectar una sub de club activa, cubrimos los equipos
   // solos para que el gestor no tenga que ir uno a uno. Regla segura: solo si
   // TODO cabe (nº de equipos ≤ cupo del plan); si hay más equipos que plazas,
-  // hay que elegir cuáles → se deja manual (cubrir es permanente). El efecto se
-  // autotermina: tras cubrir, `loadForUser` marca `covered` y no queda ninguno.
+  // hay que elegir cuáles (pantalla «Elige qué equipos cubre»), porque cubrir
+  // es permanente.
   const coverTeams = useTeamStore((s) => s.coverTeams);
   const autoCovering = useRef(false);
   useEffect(() => {
@@ -226,7 +274,7 @@ export const ClubDashboardScreen = ({
   }, [club?.id, coverage.hasActiveSub, coverage.quota, clubTeams, coverTeams]);
 
   // El VOLCADO desde la Federación es premium (acción de más valor). Si el club
-  // no tiene suscripción activa, el banner lleva al paywall en vez de importar.
+  // no tiene suscripción activa, lleva al paywall en vez de importar.
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const openFcpImport = () => {
@@ -250,15 +298,9 @@ export const ClubDashboardScreen = ({
     );
   };
 
-  // Refresh con cancellation guard: si el user navega tabs rápido, el
-  // useFocusEffect dispara reload() varias veces. Sin guard, el primer
-  // fetch que termina con datos stale puede pisar el state correcto y
-  // dejar la pantalla con loading colgado o data desfasada. El cleanup
-  // del useFocusEffect marca `cancelled = true` cuando la screen pierde
-  // foco; los setState posteriores se ignoran.
-  // Spinner solo en la 1ª carga; los refrescos al volver a foco van en 2º plano
-  // (no ocultar EQUIPOS/Crear/Borrar en cada visita). Estado de error para no
-  // tragarnos un fallo de red y dejar la pantalla incoherente.
+  // Spinner solo en la 1ª carga; los refrescos al volver a foco van en 2º plano.
+  // Guard de cancelación: si el usuario cambia de pestaña rápido, un fetch
+  // viejo no pisa al nuevo.
   const didLoadRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
   useFocusEffect(
@@ -296,23 +338,49 @@ export const ClubDashboardScreen = ({
     }, [clubTeams]),
   );
 
-  const retryOverviews = useCallback(async () => {
-    if (clubTeams.length === 0) return;
-    setLoading(true);
-    try {
-      const data = await ClubDashboardApi.fetchClubOverview(clubTeams);
-      setOverviews(data);
-      setLoadError(false);
-    } catch (e) {
-      console.warn('club overview', e);
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [clubTeams]);
+  // «Por hacer» y gestión: horarios de local, sedes por confirmar, torneos y
+  // parejas sin pagar. Se refresca al volver a la pantalla (p. ej. tras poner
+  // una hora) para que la fila resuelta se tache y desaparezca.
+  useFocusEffect(
+    useCallback(() => {
+      if (!club) return;
+      let cancelled = false;
+      (async () => {
+        const [own, guests, tours] = await Promise.all([
+          getClubHomeSchedule(club.id).catch(() => [] as ClubHomeMatch[]),
+          getVenueHomeSchedule(club.id).catch(() => [] as ClubHomeMatch[]),
+          listTournaments(club.id).catch(() => [] as Tournament[]),
+        ]);
+        const all = [...own, ...guests];
+        const pending = await fetchUnconfirmedVenues(all.map((m) => m.matchday_id)).catch(
+          () => new Set<string>(),
+        );
+        const openTours = tours.filter((t) => t.status === 'open' || t.status === 'draft');
+        const stats = await fetchTournamentStats(openTours);
+        if (cancelled) return;
+        setHomeMatches(all.map((m) => ({ ...m, home_unconfirmed: pending.has(m.matchday_id) })));
+        setTournaments(tours);
+        let count = 0;
+        let top: Tournament | null = null;
+        let topCount = 0;
+        for (const t of openTours) {
+          const n = stats[t.id]?.pendingClub ?? 0;
+          count += n;
+          if (n > topCount) {
+            topCount = n;
+            top = t;
+          }
+        }
+        setUnpaid({ count, tournamentId: top?.id ?? null, name: top?.name ?? null });
+        setTodoReady(true);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [club]),
+  );
 
-  // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco
-  // desde otra pantalla (tab o stack nested).
+  // Scroll-to-top al pulsar la pestaña activa + al recuperar el foco.
   const scrollRef = useRef<ScrollView | null>(null);
   useScrollToTop(scrollRef);
   const didMountRef = useRef(false);
@@ -330,10 +398,9 @@ export const ClubDashboardScreen = ({
     setMembersSheet({ teamId, teamName });
   };
 
-  // Tap en una card de Próxima jornada o Último resultado: fijamos el
-  // team activo al del card (para que JornadaScreen lo lea desde el store)
-  // y navegamos al detalle. Como activeRole sigue siendo club_admin, las
-  // pantallas Jornada/Lineup/Results quedan read-only.
+  // Tap en una jornada: fijamos el equipo activo al de la tarjeta (JornadaScreen
+  // lo lee del store) y navegamos. Como el rol sigue siendo club_admin, la
+  // jornada queda en solo lectura.
   const setActiveTeam = useTeamStore((s) => s.setActiveTeam);
   const openMatchday = useCallback(
     async (teamId: string, matchdayId: string) => {
@@ -347,6 +414,81 @@ export const ClubDashboardScreen = ({
     [navigation, setActiveTeam],
   );
 
+  const openTournaments = useCallback(
+    () => navigation.navigate('Competir', { screen: 'ClubTournaments' }),
+    [navigation],
+  );
+
+  // ── «Por hacer» ───────────────────────────────────────────────────────────
+  const round = useMemo(() => currentRoundMatches(homeMatches), [homeMatches]);
+  const todo = useMemo<TodoItem[]>(() => {
+    const out: TodoItem[] = [];
+    const noTime = round.filter((m) => !m.match_time);
+    if (noTime.length) {
+      const names = noTime.slice(0, 3).map((m) => m.team_name + (m.is_guest ? ' (invitado)' : ''));
+      const j = noTime.find((m) => m.jornada_number)?.jornada_number;
+      out.push({
+        key: 'noTime',
+        count: noTime.length,
+        title: noTime.length === 1 ? 'Partido de local sin hora' : 'Partidos de local sin hora',
+        sub: [j ? `J${j}` : null, names.join(', ') + (noTime.length > 3 ? '…' : '')]
+          .filter(Boolean)
+          .join(' · '),
+        onPress: () => navigation.navigate('ClubSchedule'),
+      });
+    }
+    const venues = homeMatches.filter((m) => m.home_unconfirmed);
+    if (venues.length) {
+      const first = venues[0];
+      out.push({
+        key: 'venues',
+        count: venues.length,
+        title: venues.length === 1 ? 'Sede de playoff por confirmar' : 'Sedes de playoff por confirmar',
+        sub: [first.team_name, first.match_date ? shortDate(first.match_date) : null]
+          .filter(Boolean)
+          .join(' · '),
+        onPress: () => navigation.navigate('ClubSchedule'),
+      });
+    }
+    if (unpaid.count > 0) {
+      out.push({
+        key: 'unpaid',
+        count: unpaid.count,
+        title: unpaid.count === 1 ? 'Pareja sin pagar en el club' : 'Parejas sin pagar en el club',
+        sub: unpaid.name ?? 'Tus torneos',
+        onPress: () =>
+          unpaid.tournamentId
+            ? navigation.navigate('TournamentDetail', { tournamentId: unpaid.tournamentId })
+            : openTournaments(),
+      });
+    }
+    const uncovered = coverage.hasActiveSub ? clubTeams.filter((t) => !t.covered) : [];
+    if (uncovered.length) {
+      out.push({
+        key: 'cover',
+        count: uncovered.length,
+        title: uncovered.length === 1 ? 'Equipo sin cubrir por el plan' : 'Equipos sin cubrir por el plan',
+        sub: uncovered
+          .slice(0, 2)
+          .map((t) => [t.name, t.category].filter(Boolean).join(' · '))
+          .join(', '),
+        onPress: () => rootNav.navigate('ClubCoverTeams'),
+      });
+    }
+    if (isFcpClub && hasFcpTeams && newSeason) {
+      out.push({
+        key: 'season',
+        count: 1,
+        title: 'Volcar la temporada nueva',
+        sub: 'La Federación ya publicó la liga: revisa y vuelve a volcar tus equipos',
+        onPress: openFcpImport,
+      });
+    }
+    return out;
+    // openFcpImport depende de la cobertura, ya incluida.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round, homeMatches, unpaid, coverage.hasActiveSub, clubTeams, isFcpClub, hasFcpTeams, newSeason, navigation, rootNav, openTournaments]);
+
   if (!club) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + 18 }]}>
@@ -355,8 +497,364 @@ export const ClubDashboardScreen = ({
     );
   }
 
-  const upcomingCards = overviews.filter((o) => o.nextMatchday !== null);
-  const lastResultCards = overviews.filter((o) => o.lastResult !== null);
+  // ── Esta semana: la próxima jornada de cada equipo dentro de 7 días ────────
+  const today = localIso(new Date());
+  const in7 = localIso(new Date(Date.now() + 6 * 86400000));
+  const upcoming = overviews
+    .filter((o) => o.nextMatchday)
+    .sort((a, b) =>
+      (a.nextMatchday!.match_date ?? 'z').localeCompare(b.nextMatchday!.match_date ?? 'z'),
+    );
+  const thisWeek = upcoming.filter(
+    (o) => o.nextMatchday!.match_date && o.nextMatchday!.match_date >= today && o.nextMatchday!.match_date <= in7,
+  );
+  const weekList = thisWeek.length ? thisWeek : upcoming.slice(0, 4);
+  const weekJ = weekList[0]?.nextMatchday?.jornada_number;
+
+  // ── Última jornada: V/E/D de los últimos resultados ───────────────────────
+  const results = overviews.filter((o) => o.lastResult);
+  const tally = { win: 0, draw: 0, loss: 0 };
+  for (const o of results) {
+    const out = o.lastResult!.outcome;
+    if (out === 'win') tally.win++;
+    else if (out === 'loss') tally.loss++;
+    else if (out) tally.draw++;
+  }
+  const latest = results
+    .slice()
+    .sort((a, b) => (b.lastResult!.match_date ?? '').localeCompare(a.lastResult!.match_date ?? ''))[0];
+
+  const live = tournaments.filter((t) => tournamentPhase(t) === 3).length;
+  const openSignup = tournaments.filter((t) => tournamentPhase(t) === 0).length;
+  const toursSub =
+    tournaments.length === 0
+      ? 'Crea el primero: gratis hasta 16 parejas'
+      : [
+          live ? `${live} en juego` : null,
+          openSignup ? `${openSignup} con inscripción abierta` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || `${tournaments.length} ${tournaments.length === 1 ? 'torneo' : 'torneos'}`;
+
+  const isEmptyClub = clubTeams.length === 0;
+
+  // ── Bloques del panel (los mismos en móvil y tablet; solo cambia dónde van) ──
+  const errorNode = (
+    <>
+      {loadError ? (
+        <Pressable
+          onPress={() => {
+            didLoadRef.current = false;
+            setLoading(true);
+            ClubDashboardApi.fetchClubOverview(clubTeams)
+              .then((d) => {
+                setOverviews(d);
+                setLoadError(false);
+              })
+              .catch(() => setLoadError(true))
+              .finally(() => setLoading(false));
+          }}
+          style={({ pressed }) => [styles.errorBanner, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.errorBannerText}>
+            No se pudieron cargar los datos de los equipos. Toca para reintentar.
+          </Text>
+        </Pressable>
+      ) : null}
+    </>
+  );
+  const todoNode = (
+    <>
+      {/* POR HACER: solo lo que pide una acción, con su enlace. */}
+      {todoReady ? (
+        todo.length > 0 ? (
+          <View style={styles.todoCard}>
+            <View style={styles.todoHead}>
+              <Text style={styles.todoEyebrow}>POR HACER</Text>
+              <Text style={styles.todoCount}>
+                {todo.reduce((n, t) => n + t.count, 0)}
+              </Text>
+            </View>
+            {todo.map((t, i) => (
+              <Animated.View
+                key={t.key}
+                layout={reduced ? undefined : LinearTransition.duration(300)}
+                exiting={reduced ? undefined : FadeOut.duration(300)}
+              >
+                <Pressable
+                  onPress={t.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t.count} ${t.title}. ${t.sub}`}
+                  style={({ pressed }) => [
+                    styles.todoRow,
+                    i > 0 && styles.todoRowDivider,
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  <Text style={styles.todoNum}>{t.count}</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.todoTitle} numberOfLines={1}>
+                      {t.title}
+                    </Text>
+                    <Text style={styles.todoSub} numberOfLines={1}>
+                      {t.sub}
+                    </Text>
+                  </View>
+                  <IconChevron size={14} color={c.textFaint} />
+                </Pressable>
+              </Animated.View>
+            ))}
+          </View>
+        ) : (
+          <Animated.View
+            entering={reduced ? undefined : FadeIn.duration(300)}
+            style={styles.allGood}
+          >
+            <View style={styles.allGoodDot}>
+              <IconCheck size={14} color={c.textInverse} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.allGoodTitle}>Todo al día</Text>
+              <Text style={styles.allGoodSub}>
+                Horarios puestos, equipos cubiertos y torneos sin pagos pendientes.
+              </Text>
+            </View>
+          </Animated.View>
+        )
+      ) : null}
+    </>
+  );
+  const inscripNode = (
+    <>
+      {/* PRETEMPORADA: inscripciones de la liga que viene, en el sitio de
+          «Esta semana». */}
+      {inscripciones ? (
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardEyebrow}>
+              TEMPORADA {inscripciones.temporada} · INSCRIPCIONES
+            </Text>
+          </View>
+          <Text style={styles.inscripLead}>
+            {inscripciones.confirmados === inscripciones.total
+              ? `Tus ${inscripciones.total} equipos están confirmados por la Federación`
+              : `${inscripciones.confirmados} de ${inscripciones.total} equipos confirmados por la Federación`}
+          </Text>
+          <View style={styles.inscripBar}>
+            <View
+              style={[
+                styles.inscripFill,
+                {
+                  width: `${inscripciones.total ? Math.round((inscripciones.confirmados / inscripciones.total) * 100) : 0}%`,
+                },
+              ]}
+            />
+          </View>
+          {inscripciones.rows.map((r, i) => (
+            <Pressable
+              key={`${r.equipo}-${r.genero}`}
+              onPress={() => setAbierta(i)}
+              style={({ pressed }) => [styles.inscripRow, pressed && { opacity: 0.7 }]}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.inscripTeam} numberOfLines={1}>
+                  {r.equipo}
+                </Text>
+                <Text style={styles.inscripMeta} numberOfLines={1}>
+                  {[
+                    r.genero === 'F' ? 'Femenino' : 'Masculino',
+                    r.categoriaActual && r.categoria && r.categoriaActual !== r.categoria
+                      ? `${r.categoriaActual} → ${r.categoria}`
+                      : r.categoria,
+                    r.enTactium ? null : 'nuevo',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+              <View style={[styles.pill, !r.confirmado && styles.pillWarn]}>
+                <Text style={[styles.pillText, !r.confirmado && { color: c.warning }]}>
+                  {r.confirmado ? 'Confirmado' : 'Pendiente'}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+          <Text style={styles.cardFoot}>
+            Toca un equipo para ver la plantilla inscrita y actualizarla desde la
+            Federación. Cuando salga el calendario, te avisaremos para volcar la
+            temporada.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+  const weekNode = (
+    <>
+      {/* ESTA SEMANA */}
+      {!inscripciones && weekList.length > 0 ? (
+        <View style={styles.block}>
+          <View style={styles.blockHead}>
+            <Text style={styles.blockLabel}>
+              {thisWeek.length ? 'ESTA SEMANA' : 'PRÓXIMAS JORNADAS'}
+              {weekJ ? ` · J${weekJ}` : ''}
+            </Text>
+            <Pressable
+              onPress={() =>
+                navigation.navigate('Competir', {
+                  screen: 'CompetirRoot',
+                  params: { segment: 'liga' },
+                })
+              }
+              hitSlop={8}
+            >
+              <Text style={styles.blockLink}>Ver liga ›</Text>
+            </Pressable>
+          </View>
+          <View style={{ gap: 8 }}>
+            {weekList.map((o) => (
+              <WeekRow
+                key={o.team.id}
+                overview={o}
+                onPress={() => openMatchday(o.team.id, o.nextMatchday!.id)}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </>
+  );
+  const lastNode = (
+    <>
+      {/* ÚLTIMA JORNADA, en una línea */}
+      {latest ? (
+        <View style={styles.block}>
+          <View style={styles.blockHead}>
+            <Text style={styles.blockLabel}>ÚLTIMA JORNADA</Text>
+            <Text style={styles.tally}>
+              {tally.win}V · {tally.draw}E · {tally.loss}D
+            </Text>
+          </View>
+          <LastResultRow
+            overview={latest}
+            onPress={() => openMatchday(latest.team.id, latest.lastResult!.id)}
+          />
+        </View>
+      ) : null}
+    </>
+  );
+  const teamsNode = (
+    <>
+      {/* EQUIPOS, con su cupo */}
+      <View style={styles.block}>
+        <View style={styles.blockHead}>
+          <Text style={styles.blockLabel}>EQUIPOS · {clubTeams.length}</Text>
+          <Pressable
+            onPress={() => navigation.navigate('CreateTeamFromClub')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Crear nuevo equipo"
+            style={({ pressed }) => [styles.newBtn, pressed && { opacity: 0.75 }]}
+          >
+            <IconPlus size={12} color={c.accent} />
+            <Text style={styles.newBtnText}>Nuevo</Text>
+          </Pressable>
+        </View>
+        {coverage.hasActiveSub ? (
+          <CoverageMeter
+            planName={clubPlan?.displayName ?? 'tu plan'}
+            used={coverage.used}
+            quota={coverage.quota}
+            reduced={!!reduced}
+          />
+        ) : null}
+        <View style={styles.teamList}>
+          {overviews.map((o, idx) => {
+            const uncovered = coverage.hasActiveSub && !o.team.covered;
+            return (
+              <TeamRow
+                key={o.team.id}
+                overview={o}
+                last={idx === overviews.length - 1}
+                uncovered={uncovered}
+                onCover={() => rootNav.navigate('ClubCoverTeams')}
+                onManage={teamGate(
+                  o.team,
+                  () => openManage(o.team.id, o.team.name),
+                  'club_manage_team',
+                )}
+              />
+            );
+          })}
+        </View>
+      </View>
+    </>
+  );
+  const manageNode = (
+    <>
+      {/* GESTIÓN DEL CLUB: los accesos que ya tenía la web. */}
+      <View style={styles.block}>
+        <Text style={[styles.blockLabel, { marginBottom: 8 }]}>GESTIÓN DEL CLUB</Text>
+        <View style={styles.teamList}>
+          <ManageRow
+            icon={<IconTrophy size={16} color={c.accent} />}
+            title="Torneos"
+            sub={toursSub}
+            onPress={openTournaments}
+          />
+          <ManageRow
+            icon={<IconTicket size={16} color={c.accent} />}
+            title="Cobros y facturación"
+            sub={clubPlan ? `${clubPlan.displayName} · cobro de inscripciones` : 'Plan del club y cobro de inscripciones'}
+            onPress={() => rootNav.navigate('ClubBilling')}
+          />
+          {isFcpClub ? (
+            <ManageRow
+              icon={<IconFile size={16} color={c.accent} />}
+              title="Importar de la Federación"
+              sub="Equipos, plantillas y puntos"
+              onPress={openFcpImport}
+            />
+          ) : null}
+          <ManageRow
+            icon={<IconPencil size={16} color={c.accent} />}
+            title="Ajustes del club"
+            sub="Nombre, federación y borrar club"
+            onPress={() => rootNav.navigate('ClubSettings')}
+            last
+          />
+        </View>
+      </View>
+    </>
+  );
+  // Tablet: la última jornada entera (todos los equipos), no solo la más reciente.
+  const lastAllNode = latest ? (
+    <View style={styles.block}>
+      <View style={styles.blockHead}>
+        <Text style={styles.blockLabel}>
+          ÚLTIMA JORNADA{latest.lastResult?.jornada_number ? ` · J${latest.lastResult.jornada_number}` : ''}
+        </Text>
+        <Text style={styles.tally}>
+          {tally.win}V · {tally.draw}E · {tally.loss}D
+        </Text>
+      </View>
+      <View style={{ gap: 8 }}>
+        {results
+          .slice()
+          .sort((a, b) =>
+            (b.lastResult!.match_date ?? '').localeCompare(a.lastResult!.match_date ?? ''),
+          )
+          .map((o) => (
+            <LastResultRow
+              key={o.team.id}
+              overview={o}
+              onPress={() => openMatchday(o.team.id, o.lastResult!.id)}
+            />
+          ))}
+      </View>
+    </View>
+  ) : null;
+  const feedNode = <FeedPreview style={{ marginHorizontal: 22, marginTop: 18 }} />;
+
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
@@ -388,9 +886,6 @@ export const ClubDashboardScreen = ({
         ref={scrollRef}
         contentContainerStyle={[
           styles.scroll,
-          // Tab bar flotante: ~64px alto + 12px bottom offset + safe-area.
-          // Sumamos colchón visual de 32px para que el último equipo no
-          // quede pegado al pill cristal.
           { paddingBottom: insets.bottom + 64 + 12 + 32 },
         ]}
         showsVerticalScrollIndicator={false}
@@ -399,252 +894,72 @@ export const ClubDashboardScreen = ({
           <View style={styles.loaderBox}>
             <ActivityIndicator color={c.accent} />
           </View>
-        ) : (
+        ) : isEmptyClub ? (
           <>
-            {/* Prueba gratis de 14 días del club (solo quien la paga). */}
             <TrialHomeCard containerPadding={0} />
-            {loadError ? (
-              <Pressable
-                onPress={retryOverviews}
-                style={({ pressed }) => [styles.errorBanner, pressed && { opacity: 0.85 }]}
-              >
-                <Text style={styles.errorBannerText}>
-                  No se pudieron cargar los datos de los equipos. Toca para reintentar.
-                </Text>
-              </Pressable>
-            ) : null}
-            {/* PRÓXIMAS JORNADAS */}
-            {upcomingCards.length > 0 ? (
-              <View>
-                <SectionHeader
-                  label="PRÓXIMAS JORNADAS"
-                  count={upcomingCards.length}
-                />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.hScrollContent}
-                >
-                  {upcomingCards.map((o) => (
-                    <NextMatchdayCard
-                      key={o.team.id}
-                      overview={o}
-                      onPress={() =>
-                        openMatchday(o.team.id, o.nextMatchday!.id)
-                      }
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {/* ÚLTIMOS RESULTADOS */}
-            {lastResultCards.length > 0 ? (
-              <View>
-                <SectionHeader
-                  label="ÚLTIMOS RESULTADOS"
-                  count={lastResultCards.length}
-                />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.hScrollContent}
-                >
-                  {lastResultCards.map((o) => (
-                    <LastResultCard
-                      key={o.team.id}
-                      overview={o}
-                      onPress={() =>
-                        openMatchday(o.team.id, o.lastResult!.id)
-                      }
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {/* EQUIPOS */}
-            <SectionHeader
-              label="EQUIPOS"
-              count={overviews.length}
-              padded
-              onAdd={() => navigation.navigate('CreateTeamFromClub')}
-              addLabel="Crear nuevo equipo"
+            <SetupChecklist
+              clubName={club.name}
+              isFcp={isFcpClub}
+              onImport={openFcpImport}
+              onCreateTeam={() => navigation.navigate('CreateTeamFromClub')}
+              onInvite={() => navigation.navigate('Team')}
+              onSlots={() => navigation.navigate('ClubSchedule')}
+              onTournaments={openTournaments}
             />
-            {isFcpClub && club && hasFcpTeams && newSeason ? (
-              <Pressable
-                onPress={openFcpImport}
-                style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
-              >
-                <Text style={styles.fcpBannerTitle}>Temporada nueva publicada</Text>
-                <Text style={styles.fcpBannerText}>
-                  La Federación ya tiene la liga nueva. Revisa tus equipos y vuelve a
-                  volcarlos: cada temporada cambian los identificadores, y también los
-                  nombres y las categorías (el equipo I puede ser ahora el C).
-                </Text>
-              </Pressable>
-            ) : null}
-            {inscripciones ? (
-              <View style={styles.inscripCard}>
-                <Text style={styles.fcpBannerTitle}>
-                  Inscripciones · {inscripciones.temporada}
-                </Text>
-                <Text style={styles.fcpBannerText}>
-                  {inscripciones.confirmados === inscripciones.total
-                    ? `Tus ${inscripciones.total} equipos están inscritos y confirmados.`
-                    : `${inscripciones.confirmados} de ${inscripciones.total} confirmados por la Federación.`}
-                </Text>
-                {inscripciones.rows.map((r, i) => (
-                  <Pressable
-                    key={`${r.equipo}-${r.genero}`}
-                    onPress={() => setAbierta(abierta === i ? null : i)}
-                    style={({ pressed }) => [styles.inscripRow, pressed && { opacity: 0.7 }]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.inscripTeam} numberOfLines={1}>
-                        {r.equipo}
-                      </Text>
-                      <Text style={styles.inscripMeta} numberOfLines={1}>
-                        {[
-                          r.genero === 'F' ? 'Femenino' : 'Masculino',
-                          // Cuando cambia de categoría se enseñan las dos: es lo
-                          // primero que mira un club al salir la liga nueva.
-                          r.categoriaActual && r.categoria && r.categoriaActual !== r.categoria
-                            ? `${r.categoriaActual} → ${r.categoria}`
-                            : r.categoria,
-                          r.enTactium ? null : 'nuevo',
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </Text>
-                    </View>
-                    <Text style={[styles.inscripState, !r.confirmado && styles.inscripPending]}>
-                      {r.confirmado ? 'CONFIRMADO' : 'PENDIENTE'}
-                    </Text>
-                  </Pressable>
-                ))}
-                {/* Plantilla del equipo elegido. Los clubes tienen muchos
-                    equipos y enseñarlas todas a la vez haría ilegible el panel,
-                    así que se abre una cada vez. */}
-                {abierta != null && inscripciones.rows[abierta] ? (
-                  <View style={styles.rosterBox}>
-                    <Text style={styles.rosterTitle} numberOfLines={1}>
-                      {inscripciones.rows[abierta].equipo}
-                      {inscripciones.rows[abierta].sede
-                        ? ` · juega en ${inscripciones.rows[abierta].sede}`
-                        : ''}
-                    </Text>
-                    {inscripciones.rows[abierta].jugadores.length === 0 ? (
-                      <Text style={styles.inscripFoot}>
-                        La Federación todavía no publica jugadores en este equipo.
-                      </Text>
-                    ) : (
-                      inscripciones.rows[abierta].jugadores.map((j, i) => (
-                        <View key={j.idJugador} style={styles.rosterRow}>
-                          <Text style={styles.rosterNum}>{i + 1}</Text>
-                          <Text style={styles.rosterName} numberOfLines={1}>
-                            {j.nombre}
-                          </Text>
-                          <Text style={styles.rosterPts}>{fmtPts(j.puntos)}</Text>
-                        </View>
-                      ))
-                    )}
-                    <Pressable
-                      onPress={() => refrescarPlantilla(abierta)}
-                      disabled={refrescando}
-                      style={({ pressed }) => [
-                        styles.rosterBtn,
-                        (pressed || refrescando) && { opacity: 0.6 },
-                      ]}
-                    >
-                      <Text style={styles.rosterBtnText}>
-                        {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-                <Text style={styles.inscripFoot}>
-                  Todavía no hay calendario. Cuando la Federación lo publique, podrás
-                  volcar la temporada.
-                </Text>
-              </View>
-            ) : null}
-            {isFcpClub && club && !hasFcpTeams ? (
-              <Pressable
-                onPress={openFcpImport}
-                style={({ pressed }) => [styles.fcpBanner, pressed && { opacity: 0.9 }]}
-              >
-                <Text style={styles.fcpBannerTitle}>Importar de la Federación Cántabra</Text>
-                <Text style={styles.fcpBannerText}>
-                  Busca tu club y crea sus equipos con la plantilla real y los puntos ya
-                  cargados.
-                </Text>
-              </Pressable>
-            ) : null}
-            {coverage.hasActiveSub ? (
-              <Text style={styles.coverageLine}>
-                Cubiertos por tu plan: {coverage.used}/{coverage.quota}
-                {!coverage.hasFreeSlot ? ' · mejora el plan para más' : ''}
-              </Text>
-            ) : null}
-            {clubTeams.length === 0 ? (
-              // "Sin equipos" REAL (por clubTeams, no por overviews): si la carga
-              // de overviews falla con equipos existentes, no decimos "no hay
-              // equipos" — el banner de error de arriba lo cubre.
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>Aún no hay equipos</Text>
-                <Text style={styles.emptyText}>
-                  Crea el primer equipo del club para empezar.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.teamList}>
-                {overviews.map((o, idx) => (
-                  <TeamRow
-                    key={o.team.id}
-                    overview={o}
-                    last={idx === overviews.length - 1}
-                    uncovered={coverage.hasActiveSub && !o.team.covered}
-                    onManage={teamGate(
-                      o.team,
-                      () => openManage(o.team.id, o.team.name),
-                      'club_manage_team',
-                    )}
-                  />
-                ))}
-              </View>
-            )}
-
+            <FeedPreview style={{ marginHorizontal: 22, marginTop: 18 }} />
+          </>
+        ) : !layout.isTablet ? (
+          <>
+            <TrialHomeCard containerPadding={0} />
+            {errorNode}
+            {todoNode}
+            {inscripNode}
+            {weekNode}
+            {lastNode}
+            {teamsNode}
+            {manageNode}
             {/* TU GENTE: el feed de quien sigue el club, con kudos. */}
-            <FeedPreview style={{ marginHorizontal: 22 }} />
-
-            {/* ZONA DE PELIGRO · borrar club (cascada irreversible) */}
-            {club ? (
-              <View style={styles.dangerZone}>
-                <Text style={styles.dangerEyebrow}>ZONA DE PELIGRO</Text>
-                <Pressable
-                  onPress={() =>
-                    coverage.hasActiveSub
-                      ? Alert.alert(
-                          'Cancela primero la suscripción',
-                          'No se puede borrar un club con una suscripción activa. Cancélala en la tienda (App Store / Google Play) y, cuando caduque, podrás borrar el club.',
-                        )
-                      : setDeleteOpen(true)
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel="Borrar club"
-                  style={({ pressed }) => [
-                    styles.deleteClubBtn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Text style={styles.deleteClubLabel}>Borrar club</Text>
-                </Pressable>
-                <Text style={styles.dangerHint}>
-                  Elimina el club y todo su contenido. No se puede deshacer.
-                </Text>
+            {feedNode}
+          </>
+        ) : layout.mode === 'tabletLandscape' ? (
+          // TABLET HORIZONTAL: tres columnas que se ven sin mover nada.
+          <>
+            <TrialHomeCard containerPadding={0} />
+            {errorNode}
+            <View style={styles.tCols}>
+              <View style={styles.tCol}>
+                {todoNode}
+                {lastAllNode}
+                {feedNode}
               </View>
-            ) : null}
+              <View style={styles.tCol}>
+                {inscripNode}
+                {weekNode}
+              </View>
+              <View style={styles.tCol}>
+                {teamsNode}
+                {manageNode}
+              </View>
+            </View>
+          </>
+        ) : (
+          // TABLET VERTICAL: dos columnas y el feed debajo.
+          <>
+            <TrialHomeCard containerPadding={0} />
+            {errorNode}
+            <View style={styles.tCols}>
+              <View style={styles.tCol}>
+                {todoNode}
+                {inscripNode}
+                {weekNode}
+                {lastAllNode}
+              </View>
+              <View style={styles.tCol}>
+                {teamsNode}
+                {manageNode}
+              </View>
+            </View>
+            {feedNode}
           </>
         )}
       </ScrollView>
@@ -656,188 +971,243 @@ export const ClubDashboardScreen = ({
         onClose={() => setMembersSheet(null)}
       />
 
-      <DeleteClubSheet
-        visible={deleteOpen}
-        clubName={club?.name ?? ''}
-        loading={deleting}
-        onConfirm={handleDeleteClub}
-        onCancel={() => setDeleteOpen(false)}
-      />
+      {/* Plantilla inscrita de un equipo (pretemporada), en hoja. */}
+      <BottomSheet open={abierta != null} onClose={() => setAbierta(null)}>
+        {abierta != null && inscripciones?.rows[abierta] ? (
+          <View>
+            <Text style={styles.cardEyebrow}>PLANTILLA INSCRITA</Text>
+            <Text style={styles.sheetTitle} numberOfLines={1}>
+              {inscripciones.rows[abierta].equipo}
+            </Text>
+            {inscripciones.rows[abierta].sede ? (
+              <Text style={styles.sheetSub}>Juega en {inscripciones.rows[abierta].sede}</Text>
+            ) : null}
+            <View style={{ marginTop: 12 }}>
+              {inscripciones.rows[abierta].jugadores.length === 0 ? (
+                <Text style={styles.cardFoot}>
+                  La Federación todavía no publica jugadores en este equipo.
+                </Text>
+              ) : (
+                inscripciones.rows[abierta].jugadores.map((j, i) => (
+                  <View key={j.idJugador} style={styles.rosterRow}>
+                    <Text style={styles.rosterNum}>{i + 1}</Text>
+                    <Text style={styles.rosterName} numberOfLines={1}>
+                      {j.nombre}
+                    </Text>
+                    <Text style={styles.rosterPts}>{fmtPts(j.puntos)}</Text>
+                  </View>
+                ))
+              )}
+            </View>
+            <Pressable
+              onPress={() => refrescarPlantilla(abierta)}
+              disabled={refrescando}
+              style={({ pressed }) => [
+                styles.rosterBtn,
+                (pressed || refrescando) && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={styles.rosterBtnText}>
+                {refrescando ? 'Consultando…' : 'Actualizar desde la Federación'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </BottomSheet>
 
-      {club ? (
-        <FcpImportSheet
-          open={fcpOpen}
-          clubId={club.id}
-          onClose={() => setFcpOpen(false)}
-        />
-      ) : null}
+      <FcpImportSheet open={fcpOpen} clubId={club.id} onClose={() => setFcpOpen(false)} />
     </View>
   );
 };
 
-// ─── SectionHeader ──────────────────────────────────────────────────────────
-const SectionHeader: React.FC<{
-  label: string;
-  count: number;
-  padded?: boolean;
-  onAdd?: () => void;
-  addLabel?: string;
-}> = ({ label, count, padded, onAdd, addLabel }) => {
+// ─── Lista de arranque (club sin equipos) ───────────────────────────────────
+const SetupChecklist: React.FC<{
+  clubName: string;
+  isFcp: boolean;
+  onImport: () => void;
+  onCreateTeam: () => void;
+  onInvite: () => void;
+  onSlots: () => void;
+  onTournaments: () => void;
+}> = ({ clubName, isFcp, onImport, onCreateTeam, onInvite, onSlots, onTournaments }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const steps = [
+    { key: 'club', title: 'Crear el club', sub: isFcp ? `${clubName} · Federación Cántabra` : clubName, done: true, onPress: undefined as undefined | (() => void) },
+    isFcp
+      ? { key: 'teams', title: 'Importar tus equipos de la Federación', sub: 'Plantillas y puntos oficiales, en un paso', done: false, onPress: onImport }
+      : { key: 'teams', title: 'Crear el primer equipo', sub: 'Nombre, categoría y género', done: false, onPress: onCreateTeam },
+    { key: 'invite', title: 'Invitar a los capitanes', sub: 'Un código por equipo, por WhatsApp', done: false, onPress: onInvite },
+    { key: 'slots', title: 'Poner las franjas de tus pistas', sub: 'Sábado 10:00 y 12:00, por ejemplo', done: false, onPress: onSlots },
+  ];
+  const doneCount = steps.filter((s) => s.done).length;
+  const next = steps.find((s) => !s.done);
   return (
-  <View
-    style={[
-      styles.sectionHeader,
-      padded && { paddingHorizontal: 22 },
-    ]}
-  >
-    <Text style={styles.sectionLabel}>{label}</Text>
-    <View style={styles.sectionRight}>
-      <Text style={styles.sectionCount}>{String(count).padStart(2, '0')}</Text>
-      {onAdd ? (
+    <View style={styles.card}>
+      <Text style={styles.setupTitle}>Pon en marcha el club</Text>
+      <Text style={styles.setupSub}>
+        {steps.length} pasos. Puedes hacerlos en cualquier orden.
+      </Text>
+      <View style={styles.inscripBar}>
+        <View style={[styles.inscripFill, { width: `${(doneCount / steps.length) * 100}%` }]} />
+      </View>
+      {steps.map((s) => (
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={addLabel ?? 'Añadir'}
-          onPress={onAdd}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.sectionAddBtn,
-            pressed && { opacity: 0.75 },
-          ]}
+          key={s.key}
+          onPress={s.onPress}
+          disabled={!s.onPress}
+          style={({ pressed }) => [styles.setupRow, pressed && { opacity: 0.75 }]}
         >
-          <IconPlus size={14} color={c.accent} />
+          <View style={[styles.setupCheck, s.done && styles.setupCheckDone]}>
+            {s.done ? <IconCheck size={12} color={c.textInverse} /> : null}
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.todoTitle, s.done && { color: c.textMuted }]} numberOfLines={1}>
+              {s.title}
+            </Text>
+            <Text style={styles.todoSub} numberOfLines={1}>
+              {s.sub}
+            </Text>
+          </View>
+          {s.onPress ? <IconChevron size={14} color={c.textFaint} /> : null}
+        </Pressable>
+      ))}
+      <Pressable
+        onPress={onTournaments}
+        style={({ pressed }) => [styles.setupAside, pressed && { opacity: 0.8 }]}
+      >
+        <Text style={styles.todoTitle}>¿También organizas torneos?</Text>
+        <Text style={styles.todoSub}>
+          Gratis hasta 16 parejas. Para cobrar la inscripción online, conecta Stripe.
+        </Text>
+      </Pressable>
+      {next?.onPress ? (
+        <Pressable
+          onPress={next.onPress}
+          style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.primaryBtnText}>{next.title}</Text>
         </Pressable>
       ) : null}
     </View>
-  </View>
   );
 };
 
-// ─── NextMatchdayCard ───────────────────────────────────────────────────────
-const NextMatchdayCard: React.FC<{
-  overview: ClubTeamOverview;
-  onPress: () => void;
-}> = ({ overview, onPress }) => {
+// ─── Medidor de cupo («Cubiertos por Club Pro 4/10») ────────────────────────
+const CoverageMeter: React.FC<{
+  planName: string;
+  used: number;
+  quota: number;
+  reduced: boolean;
+}> = ({ planName, used, quota, reduced }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const cells = Math.max(quota, used);
+  return (
+    <View style={styles.meter}>
+      <View style={styles.meterHead}>
+        <Text style={styles.meterLabel}>Cubiertos por {planName}</Text>
+        <Text style={styles.meterValue}>
+          {used} / {quota}
+        </Text>
+      </View>
+      <View style={styles.meterCells}>
+        {Array.from({ length: cells }).map((_, i) => (
+          <Animated.View
+            key={i}
+            entering={reduced || i >= used ? undefined : FadeIn.delay(i * 40).duration(180)}
+            style={[styles.meterCell, i < used && { backgroundColor: c.accent }]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// ─── Fila de la semana ──────────────────────────────────────────────────────
+const WeekRow: React.FC<{ overview: ClubTeamOverview; onPress: () => void }> = ({
+  overview,
+  onPress,
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const md = overview.nextMatchday!;
-  const dateLabel = formatShortDate(md.match_date);
-  const timeLabel = md.match_time ? md.match_time.slice(0, 5) : null;
-
+  const { dow, day } = dayLabel(md.match_date);
+  const time = md.match_time ? md.match_time.slice(0, 5) : null;
+  const noTime = md.is_home && !time;
+  const tag = noTime ? 'Sin hora' : md.is_home ? 'Casa' : 'Fuera';
+  const line = md.is_home
+    ? `${overview.team.name} vs ${md.opponent}${time ? ` · ${time}` : ' · —'}${md.location ? ` · ${md.location}` : ''}`
+    : `${overview.team.name} @ ${md.opponent}${time ? ` · ${time}` : ''}`;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Ver jornada ${md.jornada_number} de ${overview.team.name} vs ${md.opponent}`}
-      style={({ pressed }) => [
-        styles.upcomingCard,
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityLabel={`Jornada ${md.jornada_number}: ${line}`}
+      style={({ pressed }) => [styles.weekRow, pressed && { opacity: 0.85 }]}
     >
-      <View style={styles.cardTopRow}>
-        <Text style={styles.cardJornada}>
-          J·{String(md.jornada_number).padStart(2, '0')}
-        </Text>
-        <View
-          style={[
-            styles.venueDot,
-            { backgroundColor: md.is_home ? c.accent : c.textFaint },
-          ]}
-        />
+      <View style={styles.weekDate}>
+        <Text style={styles.weekDow}>{dow}</Text>
+        <Text style={styles.weekDay}>{day}</Text>
       </View>
-      <Text style={styles.cardDate}>{dateLabel}</Text>
-      {timeLabel ? <Text style={styles.cardTime}>{timeLabel}</Text> : null}
-      <Text style={styles.cardOpponent} numberOfLines={2}>
-        {md.is_home ? 'vs.' : '@ '}
-        {md.opponent}
+      <Text style={styles.weekLine} numberOfLines={2}>
+        {line}
       </Text>
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardTeamName} numberOfLines={1}>
-          {overview.team.name}
+      <View style={[styles.pill, noTime && styles.pillWarn, !md.is_home && styles.pillMute]}>
+        <Text
+          style={[
+            styles.pillText,
+            noTime && { color: c.warning },
+            !md.is_home && { color: c.textMuted },
+          ]}
+        >
+          {tag}
         </Text>
       </View>
     </Pressable>
   );
 };
 
-// ─── LastResultCard ─────────────────────────────────────────────────────────
-const LastResultCard: React.FC<{
-  overview: ClubTeamOverview;
-  onPress: () => void;
-}> = ({ overview, onPress }) => {
+// ─── Último resultado, en una línea ─────────────────────────────────────────
+const LastResultRow: React.FC<{ overview: ClubTeamOverview; onPress: () => void }> = ({
+  overview,
+  onPress,
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const md = overview.lastResult!;
-  const tint =
-    md.outcome === 'win'
-      ? c.accent
-      : md.outcome === 'loss'
-        ? c.error
-        : c.warning;
-  const label =
-    md.outcome === 'win' ? 'V' : md.outcome === 'loss' ? 'D' : 'E';
+  const tint = md.outcome === 'win' ? c.accent : md.outcome === 'loss' ? c.error : c.warning;
+  const label = md.outcome === 'win' ? 'V' : md.outcome === 'loss' ? 'D' : 'E';
   const hasScore = md.score_for != null && md.score_against != null;
-  const isHome = md.is_home;
-  const leftScore = isHome ? md.score_for : md.score_against;
-  const rightScore = isHome ? md.score_against : md.score_for;
-
+  const left = md.is_home ? overview.team.name : md.opponent;
+  const right = md.is_home ? md.opponent : overview.team.name;
+  const ls = md.is_home ? md.score_for : md.score_against;
+  const rs = md.is_home ? md.score_against : md.score_for;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Ver detalle de jornada ${md.jornada_number} ${overview.team.name} vs ${md.opponent}`}
-      style={({ pressed }) => [
-        styles.resultCard,
-        { borderColor: `${tint}66` },
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityLabel={`Jornada ${md.jornada_number}: ${left} ${ls ?? ''} ${right} ${rs ?? ''}`}
+      style={({ pressed }) => [styles.weekRow, pressed && { opacity: 0.85 }]}
     >
-      <View style={styles.cardTopRow}>
-        <Text
-          style={[
-            styles.cardOutcomePill,
-            { color: tint, borderColor: `${tint}80` },
-          ]}
-        >
-          {label}
+      <View style={[styles.outcome, { borderColor: tint + '80' }]}>
+        <Text style={[styles.outcomeText, { color: tint }]}>{label}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.weekLine} numberOfLines={1}>
+          {left}{' '}
+          <Text style={styles.score}>
+            {hasScore ? `${ls} · ${rs}` : '—'}
+          </Text>{' '}
+          {right}
         </Text>
-        <Text style={styles.cardJornadaSmall}>
-          J·{String(md.jornada_number).padStart(2, '0')}
+        <Text style={styles.todoSub} numberOfLines={1}>
+          J{md.jornada_number}
+          {overview.team.category ? ` · ${overview.team.category}` : ''}
+          {overview.team.group_name ? ` · Grupo ${overview.team.group_name}` : ''}
         </Text>
       </View>
-      {hasScore ? (
-        <View style={styles.resultScoreRow}>
-          <Text
-            style={[
-              styles.resultScoreNum,
-              { color: isHome ? tint : c.text },
-            ]}
-          >
-            {leftScore}
-          </Text>
-          <Text style={styles.resultScoreSep}>·</Text>
-          <Text
-            style={[
-              styles.resultScoreNum,
-              { color: isHome ? c.text : tint },
-            ]}
-          >
-            {rightScore}
-          </Text>
-        </View>
-      ) : (
-        <Text style={styles.resultScoreEmpty}>—</Text>
-      )}
-      <Text style={styles.cardOpponent} numberOfLines={2}>
-        {isHome ? 'vs.' : '@ '}
-        {md.opponent}
-      </Text>
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardTeamName} numberOfLines={1}>
-          {overview.team.name}
-        </Text>
-      </View>
+      <IconChevron size={14} color={c.textFaint} />
     </Pressable>
   );
 };
@@ -848,25 +1218,23 @@ const TeamRow: React.FC<{
   last: boolean;
   uncovered?: boolean;
   onManage: () => void;
-}> = ({ overview, last, uncovered, onManage }) => {
+  onCover: () => void;
+}> = ({ overview, last, uncovered, onManage, onCover }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { team, playersCount } = overview;
   const meta =
-    [team.category, team.gender, team.group_name && `Grupo ${team.group_name}`]
+    [team.gender, team.category, team.group_name && `Grupo ${team.group_name}`]
       .filter(Boolean)
       .join(' · ') || 'Sin configurar';
+  const players = `${playersCount} ${playersCount === 1 ? 'jugador' : 'jugadores'}`;
 
   return (
     <Pressable
       onPress={onManage}
       accessibilityRole="button"
-      accessibilityLabel={`Gestionar equipo ${team.name}. ${meta}. ${playersCount} ${playersCount === 1 ? 'jugador' : 'jugadores'}.`}
-      style={({ pressed }) => [
-        styles.row,
-        last ? null : styles.rowDivider,
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityLabel={`Gestionar equipo ${team.name}. ${meta}. ${players}.`}
+      style={({ pressed }) => [styles.row, last ? null : styles.rowDivider, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.teamBadge}>
         <Text style={styles.teamBadgeText}>
@@ -877,21 +1245,53 @@ const TeamRow: React.FC<{
         <Text style={styles.teamName} numberOfLines={1}>
           {team.name}
         </Text>
+        <Text style={[styles.teamMeta, uncovered && { color: c.warning }]} numberOfLines={1}>
+          {uncovered ? `Sin cubrir · ${players}` : `${meta} · ${players}`}
+        </Text>
+      </View>
+      {uncovered ? (
+        <Pressable
+          onPress={onCover}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`Cubrir ${team.name}`}
+          style={({ pressed }) => [styles.coverBtn, pressed && { opacity: 0.75 }]}
+        >
+          <Text style={styles.coverBtnText}>Cubrir</Text>
+        </Pressable>
+      ) : (
+        <IconChevron size={14} color={c.textFaint} />
+      )}
+    </Pressable>
+  );
+};
+
+const ManageRow: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+  onPress: () => void;
+  last?: boolean;
+}> = ({ icon, title, sub, onPress, last }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${sub}`}
+      style={({ pressed }) => [styles.row, !last && styles.rowDivider, pressed && { opacity: 0.85 }]}
+    >
+      <View style={styles.manageIcon}>{icon}</View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.teamName} numberOfLines={1}>
+          {title}
+        </Text>
         <Text style={styles.teamMeta} numberOfLines={1}>
-          {meta}
+          {sub}
         </Text>
-        <Text style={styles.teamKpi} numberOfLines={1}>
-          {playersCount} {playersCount === 1 ? 'jugador' : 'jugadores'}
-        </Text>
-        {uncovered ? (
-          <Text style={styles.uncoveredBadge} numberOfLines={1}>
-            NO CUBIERTO · toca para cubrir
-          </Text>
-        ) : null}
       </View>
-      <View style={styles.manageBtn}>
-        <IconPencil size={14} color={uncovered ? c.warning : c.accent} />
-      </View>
+      <IconChevron size={14} color={c.textFaint} />
     </Pressable>
   );
 };
@@ -907,11 +1307,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 4,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerIconBtn: {
     width: 40,
     height: 40,
@@ -922,13 +1318,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.hairStrong,
   },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-    minWidth: 0,
-  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
   eyebrow: {
     fontFamily: Fonts.mono,
     color: c.accent,
@@ -936,178 +1326,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     letterSpacing: 1.6,
     fontWeight: '500',
   },
-  brandName: {
-    color: c.text,
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    marginTop: 2,
-  },
+  brandName: { color: c.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.4, marginTop: 2 },
 
-  scroll: { paddingTop: 22 },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 18,
-    marginBottom: 8,
-    paddingHorizontal: 22,
-  },
-  sectionLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.text,
-    letterSpacing: 2,
-    fontWeight: '500',
-  },
-  sectionCount: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.textFaint,
-    letterSpacing: 1,
-  },
-  sectionRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  sectionAddBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  hScrollContent: {
-    paddingHorizontal: 22,
-    paddingVertical: 4,
-    gap: 10,
-  },
-
-  // Cards
-  upcomingCard: {
-    width: 160,
-    minHeight: 168,
-    borderRadius: 16,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    padding: 14,
-    justifyContent: 'space-between',
-  },
-  resultCard: {
-    width: 160,
-    minHeight: 168,
-    borderRadius: 16,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    padding: 14,
-    justifyContent: 'space-between',
-  },
-  cardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  cardJornada: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  cardJornadaSmall: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  venueDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  cardDate: {
-    fontFamily: Fonts.mono,
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    marginTop: 8,
-  },
-  cardTime: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 11,
-    letterSpacing: 0.4,
-    marginTop: 2,
-  },
-  cardOpponent: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-    marginTop: 8,
-  },
-  cardFooter: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderColor: c.hair,
-  },
-  cardTeamName: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  cardOutcomePill: {
-    fontFamily: Fonts.mono,
-    fontSize: 13,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 7,
-    borderWidth: 1,
-    overflow: 'hidden',
-    letterSpacing: 0.5,
-  },
-  resultScoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  resultScoreNum: {
-    fontFamily: Fonts.mono,
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: -1,
-  },
-  resultScoreSep: {
-    fontFamily: Fonts.mono,
-    fontSize: 18,
-    color: c.textFaint,
-  },
-  resultScoreEmpty: {
-    color: c.textFaint,
-    fontFamily: Fonts.mono,
-    fontSize: 18,
-    marginTop: 8,
-  },
-
-  loaderBox: {
-    paddingVertical: 36,
-    alignItems: 'center',
-  },
+  scroll: { paddingTop: 18 },
+  loaderBox: { paddingVertical: 36, alignItems: 'center' },
   errorBanner: {
     marginHorizontal: 22,
     marginBottom: 14,
@@ -1120,176 +1342,280 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   errorBannerText: { color: c.error, fontSize: 13, fontWeight: '600', textAlign: 'center' },
 
-  emptyCard: {
+  // Por hacer
+  todoCard: {
     marginHorizontal: 22,
+    marginBottom: 6,
     backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: c.hair,
-    paddingVertical: 24,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    gap: 6,
+    borderColor: c.warning + '55',
+    overflow: 'hidden',
   },
-  emptyTitle: { color: c.text, fontSize: 15, fontWeight: '600' },
-  emptyText: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
+  todoHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  todoEyebrow: {
+    fontFamily: Fonts.mono,
+    color: c.warning,
+    fontSize: 11,
+    letterSpacing: 2,
+    fontWeight: '600',
+  },
+  todoCount: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 11 },
+  todoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 56,
+  },
+  todoRowDivider: { borderTopWidth: 1, borderTopColor: c.hair },
+  todoNum: {
+    fontFamily: Fonts.mono,
+    color: c.warning,
+    fontSize: 20,
+    fontWeight: '700',
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  todoTitle: { color: c.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.2 },
+  todoSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+  allGood: {
+    marginHorizontal: 22,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+  },
+  allGoodDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: c.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  allGoodTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
+  allGoodSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+
+  // Bloques
+  block: { marginHorizontal: 22, marginTop: 20 },
+  // Tablet: columnas. Los bloques llevan su margen de 22; el negativo lo
+  // recorta para que entre columnas queden 32 y al borde 20.
+  tCols: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 4 },
+  tCol: { flex: 1, minWidth: 0, marginHorizontal: -6 },
+  blockHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  blockLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: c.text,
+    letterSpacing: 2,
+    fontWeight: '500',
+  },
+  blockLink: { color: c.accent, fontSize: 12.5, fontWeight: '600' },
+  tally: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11.5, letterSpacing: 0.5 },
+  newBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+  },
+  newBtnText: { color: c.accent, fontSize: 12, fontWeight: '700' },
+
+  weekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: c.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 56,
+  },
+  weekDate: { width: 40, alignItems: 'center' },
+  weekDow: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10, letterSpacing: 1 },
+  weekDay: { fontFamily: Fonts.mono, color: c.text, fontSize: 18, fontWeight: '700' },
+  weekLine: { flex: 1, minWidth: 0, color: c.text, fontSize: 13.5, fontWeight: '600' },
+  score: { fontFamily: Fonts.mono, color: c.text, fontWeight: '700' },
+  outcome: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outcomeText: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700' },
+
+  pill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: c.accent10,
+    borderWidth: 1,
+    borderColor: c.accent40,
+  },
+  pillWarn: { backgroundColor: c.warning + '1A', borderColor: c.warning + '66' },
+  pillMute: { backgroundColor: 'transparent', borderColor: c.hairStrong },
+  pillText: { color: c.accent, fontSize: 11, fontWeight: '700' },
+
+  // Tarjetas genéricas
+  card: {
+    marginHorizontal: 22,
+    marginTop: 14,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    borderRadius: Radius.lg,
+    padding: 16,
+  },
+  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardEyebrow: {
+    fontFamily: Fonts.mono,
+    color: c.accent,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    fontWeight: '500',
+  },
+  cardFoot: { color: c.textFaint, fontSize: 12, lineHeight: 17, marginTop: 12 },
+
+  inscripLead: { color: c.text, fontSize: 15, fontWeight: '700', marginTop: 8 },
+  inscripBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: c.hairStrong,
+    marginTop: 10,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  inscripFill: { height: 6, borderRadius: 3, backgroundColor: c.accent },
+  inscripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: c.hair,
+    minHeight: 48,
+  },
+  inscripTeam: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+  inscripMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+
+  sheetTitle: { color: c.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.4, marginTop: 4 },
+  sheetSub: { color: c.textMuted, fontSize: 13, marginTop: 2 },
+  rosterRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  rosterNum: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 11, width: 20 },
+  rosterName: { flex: 1, minWidth: 0, color: c.text, fontSize: 14 },
+  rosterPts: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 12 },
+  rosterBtn: {
+    marginTop: 14,
+    height: 46,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    backgroundColor: c.accent10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rosterBtnText: { color: c.accent, fontSize: 14, fontWeight: '700' },
+
+  // Lista de arranque
+  setupTitle: { color: c.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  setupSub: { color: c.textMuted, fontSize: 13, marginTop: 4 },
+  setupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: c.hair,
+    minHeight: 56,
+  },
+  setupCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: c.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setupCheckDone: { backgroundColor: c.accent, borderColor: c.accent },
+  setupAside: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: Radius.md,
+    backgroundColor: c.bgCard2,
+  },
+  primaryBtn: {
+    marginTop: 14,
+    height: 50,
+    borderRadius: Radius.lg,
+    backgroundColor: c.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
+
+  // Medidor
+  meter: {
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    borderRadius: Radius.md,
+    padding: 12,
+    marginBottom: 8,
+  },
+  meterHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  meterLabel: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
+  meterValue: { fontFamily: Fonts.mono, color: c.text, fontSize: 13, fontWeight: '700' },
+  meterCells: { flexDirection: 'row', gap: 4, marginTop: 8 },
+  meterCell: { flex: 1, height: 8, borderRadius: 2, backgroundColor: c.hairStrong },
 
   teamList: {
-    marginHorizontal: 22,
     backgroundColor: c.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: c.hair,
     overflow: 'hidden',
   },
-  dangerZone: {
-    marginHorizontal: 22,
-    marginTop: 34,
-    alignItems: 'center',
-  },
-  dangerEyebrow: {
-    fontFamily: Fonts.mono,
-    color: c.error,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '500',
-    marginBottom: 12,
-  },
-  deleteClubBtn: {
-    alignSelf: 'stretch',
-    height: 50,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: c.error + '66',
-    backgroundColor: c.error + '14',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteClubLabel: {
-    color: c.error,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  dangerHint: {
-    color: c.textFaint,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  coverageLine: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 11,
-    letterSpacing: 0.3,
-    marginHorizontal: 22,
-    marginTop: -4,
-    marginBottom: 10,
-  },
-  fcpBanner: {
-    marginHorizontal: 22,
-    marginTop: 4,
-    marginBottom: 12,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    borderRadius: Radius.md,
-    padding: 14,
-  },
-  fcpBannerTitle: { color: c.text, fontSize: 14.5, fontWeight: '800' },
-  fcpBannerText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
-  inscripCard: {
-    marginHorizontal: 22,
-    marginTop: 4,
-    marginBottom: 12,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    borderRadius: Radius.md,
-    padding: 14,
-  },
-  inscripRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: c.hair,
-    marginTop: 8,
-  },
-  inscripTeam: { color: c.text, fontSize: 13.5, fontWeight: '700' },
-  inscripMeta: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10.5,
-    letterSpacing: 0.4,
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
-  inscripState: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 9.5,
-    letterSpacing: 0.6,
-  },
-  inscripPending: { color: c.warning },
-  rosterBox: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: c.hairStrong,
-  },
-  rosterTitle: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 10.5,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  rosterRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  rosterNum: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10.5, width: 18 },
-  rosterName: { flex: 1, minWidth: 0, color: c.text, fontSize: 13 },
-  rosterPts: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11.5 },
-  rosterBtn: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    backgroundColor: c.accent10,
-  },
-  rosterBtnText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-  inscripFoot: {
-    color: c.textFaint,
-    fontSize: 11.5,
-    lineHeight: 16,
-    marginTop: 12,
-  },
-  uncoveredBadge: {
-    fontFamily: Fonts.mono,
-    color: c.warning,
-    fontSize: 10,
-    letterSpacing: 0.5,
-    fontWeight: '700',
-    marginTop: 3,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 60,
   },
-  rowDivider: {
-    borderBottomWidth: 1,
-    borderColor: c.hair,
-  },
+  rowDivider: { borderBottomWidth: 1, borderColor: c.hair },
   teamBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 11,
     backgroundColor: c.bgRaised,
     borderWidth: 1,
     borderColor: c.hairStrong,
@@ -1303,50 +1629,25 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  teamName: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  teamMeta: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.textMuted,
-    marginTop: 3,
-    letterSpacing: 0.4,
-  },
-  teamKpi: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.textFaint,
-    marginTop: 3,
-    letterSpacing: 0.4,
-  },
-  manageBtn: {
+  manageIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  cta: {
-    marginTop: 16,
-    marginHorizontal: 22,
-    height: 52,
-    borderRadius: Radius.md,
-    backgroundColor: c.accent10,
+  teamName: { color: c.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.2 },
+  teamMeta: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+  coverBtn: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: c.warning + '1F',
     borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: c.accent50,
-    flexDirection: 'row',
+    borderColor: c.warning + '77',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
-  ctaLabel: { color: c.accent, fontSize: 14, fontWeight: '600' },
+  coverBtnText: { color: c.warning, fontSize: 12.5, fontWeight: '700' },
 });

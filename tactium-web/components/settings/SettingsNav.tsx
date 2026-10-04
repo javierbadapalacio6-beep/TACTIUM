@@ -7,7 +7,7 @@ import { SETTINGS_SECTIONS } from "@/lib/account-data";
 import { ICONS } from "@/components/Icon";
 
 /** Navegación de secciones de Ajustes. Sticky en escritorio, scroll
- *  horizontal en móvil (no se apila: son 10 entradas).
+ *  horizontal en móvil. Son 5 entradas, los mismos grupos que la app.
  *
  *  La etiqueta y el icono salen de `SETTINGS_SECTIONS`: una sola fuente para
  *  el menú, el título de cada sección y las migas. */
@@ -19,18 +19,13 @@ export function SettingsNav() {
       {SETTINGS_SECTIONS.map((s) => {
         const href = `/ajustes/${s.slug}`;
         const active = pathname === href;
-        const danger = s.slug === "peligro";
         const Icon = ICONS[s.icon as keyof typeof ICONS];
         return (
           <Link
             key={s.slug}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={
-              "tw-settings-link" +
-              (active ? " is-active" : "") +
-              (danger && !active ? " is-danger" : "")
-            }
+            className={"tw-settings-link" + (active ? " is-active" : "")}
           >
             {Icon && <Icon size={16} />}
             {s.label}

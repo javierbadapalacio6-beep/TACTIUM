@@ -150,6 +150,10 @@ export type RootStackParamList = {
   Paywall: { intent?: string } | undefined;
   Subscription: undefined;
   ClubBilling: undefined;
+  // Ajustes del club (nombre, federación y borrar club) y elegir qué equipos
+  // cubre el plan cuando hay más equipos que plazas.
+  ClubSettings: undefined;
+  ClubCoverTeams: undefined;
   // Activar la gestión de equipos en un club "solo torneos": elige federación
   // (opcional) → desbloquea → paywall de suscripción (upsell).
   ActivateTeamManagement: undefined;

@@ -18,11 +18,17 @@ import {
 import {
   combineRecord,
   fetchMyLeagueStats,
+  summarize,
+  type PlayerLeagueStats,
   type RecordGame,
   type RecordSummary,
 } from "@/lib/player-stats";
+import { fetchTeamRanking } from "@/lib/account-queries";
+import { CodeRedeem } from "@/components/settings/CodeRedeem";
+import { PairStats } from "@/components/team/PairStats";
 import { fetchPeopleYouKnow, profileHref, type PersonSuggestion } from "@/lib/people";
 import { useSession } from "@/lib/session";
+import { whatsappShareUrl } from "@/lib/invite";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import {
@@ -404,6 +410,8 @@ function KudosButton({
 }
 
 /* ═══ BUSCAR EN LA COMUNIDAD ══════════════════════════════════════ */
+const INVITE_TEXT =
+  "Te espero en TACTIUM para seguirnos y apuntar los partidos 🎾\nhttps://tactium.io";
 type CommunityFilter = "todos" | "user" | "club";
 
 export function Community() {
@@ -489,13 +497,24 @@ export function Community() {
       </div>
 
       {query.trim().length < 2 ? (
-        <Card>
-          <EmptyState
-            icon={<IconSearch size={22} />}
-            title="Escribe para buscar"
-            body="Busca por nombre de usuario, nombre real o nombre de club."
-          />
-        </Card>
+        // Nunca en blanco: antes de escribir, la gente que conoces (tu
+        // equipo y tu club) con «Seguir» en cada tarjeta.
+        <>
+          {user && filter !== "club" && <PeopleYouKnow />}
+          <Card style={{ marginTop: 16 }}>
+            <EmptyState
+              compact
+              icon={<IconSearch size={22} />}
+              title="Busca a tu gente"
+              body="Por nombre de usuario, nombre real o nombre de club. Si aún no está, invítale."
+              action={
+                <BtnLink href={whatsappShareUrl(INVITE_TEXT)} size="sm" target="_blank" rel="noopener noreferrer">
+                  Invitar por WhatsApp
+                </BtnLink>
+              }
+            />
+          </Card>
+        </>
       ) : loading ? (
         <SkeletonCard />
       ) : error ? (
@@ -506,8 +525,13 @@ export function Community() {
         <Card>
           <EmptyState
             icon={<IconUsers size={22} />}
-            title="Sin resultados"
-            body="Prueba con otro nombre o cambia el filtro."
+            title="¿No está?"
+            body="Pásale un enlace y, cuando entre, os seguís."
+            action={
+              <BtnLink href={whatsappShareUrl(INVITE_TEXT)} size="sm" variant="accent" target="_blank" rel="noopener noreferrer">
+                Invitar por WhatsApp
+              </BtnLink>
+            }
           />
         </Card>
       ) : (
@@ -580,13 +604,64 @@ export function PublicProfileView({ username }: { username: string }) {
     );
   }
 
-  const p = data as Record<string, unknown>;
+  return <PublicProfileBody data={data as Record<string, unknown>} />;
+}
+
+/** Perfil público: Seguir a lo ancho con Compartir, números, récord de
+ *  amistosos, equipos y fotos (mismo orden que la app). */
+function PublicProfileBody({ data: p }: { data: Record<string, unknown> }) {
+  const { user } = useSession();
+  const id = String(p.id ?? "");
   const name = (p.full_name as string) ?? (p.username as string) ?? "Jugador";
-  // `get_public_user_profile` trae los amistosos como casual_played/casual_won
-  // (los matches_* antiguos no existen: se dejan de reserva).
+  // `get_public_user_profile` trae los amistosos como casual_played/casual_won.
   const played = Number(p.casual_played ?? p.matches_played ?? 0);
   const won = Number(p.casual_won ?? p.matches_won ?? 0);
   const rate = played ? Math.round((won / played) * 100) : null;
+  const isMe = Boolean(p.is_me) || (!!user && user.id === id);
+  const [following, setFollowing] = useState(Boolean(p.is_following));
+  const [followers, setFollowers] = useState(Number(p.followers_count ?? 0));
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const teams = (Array.isArray(p.teams) ? p.teams : []) as { name: string; role: string }[];
+  const photos = (Array.isArray(p.photos) ? p.photos : []) as {
+    match_id?: string;
+    photo_url: string;
+    played_on: string | null;
+  }[];
+
+  async function toggle() {
+    if (busy) return;
+    if (!user) {
+      window.location.href = `/entrar?next=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    const now = following;
+    setBusy(true);
+    setFollowing(!now);
+    setFollowers((n) => Math.max(0, n + (now ? -1 : 1)));
+    const res = await guardedWrite(now ? "dejar de seguir" : "seguir", () =>
+      now ? unfollowTarget("user", id) : followTarget("user", id),
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setFollowing(now);
+      setFollowers((n) => Math.max(0, n + (now ? 1 : -1)));
+      setToast(res.reason);
+    }
+  }
+
+  async function share() {
+    const url = `https://tactium.io/u/${(p.username as string) || id}`;
+    try {
+      if (navigator.share) await navigator.share({ title: `${name} en TACTIUM`, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setToast("Enlace copiado");
+      }
+    } catch {
+      /* cancelado */
+    }
+  }
 
   return (
     <div className="tw-page-narrow">
@@ -599,14 +674,37 @@ export function PublicProfileView({ username }: { username: string }) {
         }
         meta={[
           (p.username as string) ? `@${p.username as string}` : null,
-          (p.home_club as string) ?? null,
+          p.level_display ? `Nivel ${String(p.level_display)}` : null,
         ].filter(Boolean) as string[]}
       />
+      {p.bio ? (
+        <p style={{ margin: "-4px 0 16px", fontSize: 14 }}>{String(p.bio)}</p>
+      ) : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8, marginBottom: 16 }}>
+        {isMe ? (
+          <BtnLink href="/ajustes/perfil#editar-perfil" block>
+            Editar perfil
+          </BtnLink>
+        ) : (
+          <Btn
+            block
+            variant={following ? "ghost" : "accent"}
+            aria-pressed={following}
+            disabled={busy}
+            icon={following ? <IconCheck size={15} /> : undefined}
+            onClick={() => void toggle()}
+          >
+            {following ? "Siguiendo" : "Seguir"}
+          </Btn>
+        )}
+        <Btn onClick={() => void share()}>Compartir</Btn>
+      </div>
 
       <StatRow>
-        <Stat label="Seguidores" value={Number(p.followers_count ?? 0)} />
+        <Stat label="Seguidores" value={followers} />
         <Stat label="Siguiendo" value={Number(p.following_count ?? 0)} />
-        <Stat label="Partidos jugados" value={played} />
+        <Stat label="Amistosos" value={played} />
       </StatRow>
 
       {played > 0 && (
@@ -628,11 +726,62 @@ export function PublicProfileView({ username }: { username: string }) {
           />
         </div>
       )}
-      {p.level_display ? (
-        <StatRow style={{ marginTop: played > 0 ? 0 : 16 }}>
-          <Stat label="Nivel" value={String(p.level_display)} />
-        </StatRow>
-      ) : null}
+
+      {teams.length > 0 && (
+        <Card flush style={{ marginTop: 16 }}>
+          <CardHead title="Equipos" count={teams.length} />
+          {teams.map((t, i) => (
+            <ListRow
+              key={`${t.name}-${i}`}
+              icon={<span className="tile-icon"><IconUsers size={16} /></span>}
+              title={t.name}
+              sub={t.role === "captain" || t.role === "admin" ? "Capitán" : "Jugador"}
+            />
+          ))}
+        </Card>
+      )}
+
+      {photos.length > 0 && (
+        <Card flush style={{ marginTop: 16 }}>
+          <CardHead title="Fotos de partidos" count={photos.length} />
+          <div className="card-body">
+            <div className="tw-photo-grid">
+              {photos.slice(0, 12).map((ph, i) =>
+                ph.match_id ? (
+                  <Link
+                    key={ph.match_id}
+                    href={`/amistosos/${ph.match_id}`}
+                    aria-label="Ver el partido"
+                    style={{
+                      display: "block",
+                      aspectRatio: "1 / 1",
+                      borderRadius: "var(--r-md)",
+                      border: "1px solid var(--line)",
+                      backgroundImage: `url(${ph.photo_url})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                  />
+                ) : (
+                  <span
+                    key={`${ph.photo_url}-${i}`}
+                    style={{
+                      display: "block",
+                      aspectRatio: "1 / 1",
+                      borderRadius: "var(--r-md)",
+                      border: "1px solid var(--line)",
+                      backgroundImage: `url(${ph.photo_url})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                  />
+                ),
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
@@ -761,8 +910,18 @@ function casualRecordGames(matches: DbCasual[], uid: string | undefined): Record
   return out;
 }
 
+/**
+ * Mis números: una sola barra «Liga · Amistosos · Plantilla» (como en la
+ * app). Liga lleva el récord, las pistas y «Por pareja»; Amistosos, lo de
+ * siempre y el campo para canjear un código de partido; Plantilla, el
+ * ranking interno con tu fila resaltada.
+ */
 export function MyStats() {
-  const { user } = useSession();
+  const { user, activeTeam } = useSession();
+  const [tab, setTab] = useState<"liga" | "amistosos" | "plantilla">(
+    activeTeam ? "liga" : "amistosos",
+  );
+  const [reload, setReload] = useState(0);
   const { data, loading, error } = useAsync(
     async () => {
       const [matches, league] = await Promise.all([
@@ -772,11 +931,13 @@ export function MyStats() {
       ]);
       return { matches, league };
     },
-    [user?.id],
+    [user?.id, reload],
     !!user
   );
   const matches: DbCasual[] = data?.matches ?? [];
   const league = data?.league ?? null;
+  const showTabs = !!activeTeam;
+  const current = showTabs ? tab : "amistosos";
 
   if (loading) return <SkeletonPage />;
   if (error) {
@@ -802,7 +963,7 @@ export function MyStats() {
   const lost = casualGames.length - won;
   const played = casualGames;
   const rate = played.length ? Math.round((won / played.length) * 100) : 0;
-  const record = combineRecord(league?.games ?? [], casualGames);
+  const record = combineRecord([], casualGames);
 
   const byType = ["amistoso", "entreno", "torneo"].map((t) => ({
     label: t.charAt(0).toUpperCase() + t.slice(1),
@@ -830,9 +991,8 @@ export function MyStats() {
   return (
     <div className="tw-page">
       <PageHeader
-        title="Mis estadísticas"
-        lede="Tus partidos, con quién los juegas y cómo se te dan."
-        meta={[`${matches.length} ${matches.length === 1 ? "partido" : "partidos"}`]}
+        title="Mis números"
+        lede="Tu récord, con quién juegas y cómo se te da."
         actions={
           <BtnLink href="/amistosos/nuevo" variant="accent" icon={<IconPlus size={15} />}>
             Registrar amistoso
@@ -840,15 +1000,28 @@ export function MyStats() {
         }
       />
 
-      {record.played > 0 && (
-        <RecordBlock
-          record={record}
-          sub={
-            league && league.played > 0
-              ? `Liga y amistosos · ${league.played} de liga y ${casualGames.length} amistosos`
-              : "Amistosos con resultado"
-          }
+      {showTabs && (
+        <Segmented
+          label="Qué números ver"
+          value={tab}
+          onChange={setTab}
+          style={{ marginBottom: 16 }}
+          options={[
+            { value: "liga", label: "Liga" },
+            { value: "amistosos", label: "Amistosos" },
+            { value: "plantilla", label: "Plantilla" },
+          ]}
         />
+      )}
+
+      {current === "liga" ? (
+        <LeagueTab league={league} />
+      ) : current === "plantilla" ? (
+        <SquadTab teamId={activeTeam!.id} />
+      ) : (
+      <>
+      {record.played > 0 && (
+        <RecordBlock record={record} sub="Amistosos con resultado" />
       )}
 
       {matches.length === 0 ? (
@@ -966,6 +1139,114 @@ export function MyStats() {
           )}
         </>
       )}
+
+      <div style={{ marginTop: 16 }}>
+        <CodeRedeem mode="casual" onClaimed={() => setReload((k) => k + 1)} />
+      </div>
+      </>
+      )}
     </div>
+  );
+}
+
+/* ── Mis números › Liga ─────────────────────────────────────────── */
+function LeagueTab({ league }: { league: PlayerLeagueStats | null }) {
+  if (!league || league.played === 0) {
+    return (
+      <>
+        <Card>
+          <EmptyState
+            icon={<IconUsers size={22} />}
+            title="Sin partidos de liga todavía"
+            body="Cuando juegues jornadas con alineación y resultado, tus números aparecerán aquí solos."
+          />
+        </Card>
+        <div style={{ marginTop: 16 }}>
+          <PairStats />
+        </div>
+      </>
+    );
+  }
+  const streak = league.currentStreak;
+  return (
+    <>
+      <RecordBlock record={summarize(league.games)} sub="Liga · todas tus temporadas" />
+      <StatRow style={{ marginBottom: 16 }}>
+        <Stat label="Partidos" value={league.played} />
+        <Stat label="Sets" value={`${league.setsWon}–${league.setsLost}`} />
+        <Stat
+          label="Racha"
+          value={streak === 0 ? "—" : streak > 0 ? `${streak}V` : `${Math.abs(streak)}D`}
+          tone={streak >= 3 ? "accent" : undefined}
+        />
+        <Stat label="Mejor racha" value={league.bestStreak > 0 ? `${league.bestStreak}V` : "—"} />
+      </StatRow>
+      {league.byCourt.length > 0 && (
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead title="Por pista" sub="Victorias sobre partidos en cada pista" />
+          <div className="card-body">
+            <BarList
+              data={league.byCourt.map((c) => ({ label: `Pista ${c.court}`, value: c.won }))}
+              valueLabel="victorias"
+            />
+          </div>
+        </Card>
+      )}
+      <PairStats />
+    </>
+  );
+}
+
+/* ── Mis números › Plantilla ────────────────────────────────────── */
+const RANK_TOP = 6;
+function SquadTab({ teamId }: { teamId: string }) {
+  const { user } = useSession();
+  const { data, loading, error } = useAsync(() => fetchTeamRanking(teamId), [teamId]);
+  if (loading) return <SkeletonCard />;
+  const rows = data ?? [];
+  if (error || rows.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<IconUsers size={22} />}
+          title="Sin partidos todavía"
+          body="El ranking de la plantilla se llena solo con las jornadas de liga que tengan alineación y resultado."
+        />
+      </Card>
+    );
+  }
+  const myIdx = rows.findIndex((r) => r.userId && r.userId === user?.id);
+  const shown = rows.slice(0, RANK_TOP).map((r, i) => ({ r, pos: i }));
+  if (myIdx >= RANK_TOP) shown.push({ r: rows[myIdx], pos: myIdx });
+  return (
+    <Card flush>
+      <CardHead title="Ranking de la plantilla" sub="Por % de victorias en liga" count={rows.length} />
+      {shown.map(({ r, pos }) => {
+        const mine = pos === myIdx;
+        return (
+          <ListRow
+            key={r.playerId}
+            icon={
+              <span className="mono" style={{ width: 22, textAlign: "center", color: pos === 0 ? "var(--accent)" : "var(--text-faint)", fontWeight: 700 }}>
+                {pos + 1}
+              </span>
+            }
+            title={
+              <span style={{ color: mine ? "var(--accent)" : undefined }}>
+                {r.name}
+                {mine ? " · tú" : ""}
+              </span>
+            }
+            sub={`${r.played} PJ · ${r.won}V–${r.lost}D${r.currentStreak >= 3 ? ` · 🔥${r.currentStreak}` : ""}`}
+            right={
+              <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: mine ? "var(--accent)" : undefined }}>
+                {r.winRate}%
+              </span>
+            }
+            style={mine ? { background: "var(--accent-10)" } : undefined}
+          />
+        );
+      })}
+    </Card>
   );
 }

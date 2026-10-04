@@ -1,25 +1,21 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import {
+  LEGACY_SETTINGS_REDIRECTS,
   SETTINGS_SECTIONS,
   isSettingsSlug,
   type SettingsSlug,
 } from "@/lib/account-data";
-import { Apariencia } from "@/components/settings/Apariencia";
-import { Notificaciones } from "@/components/settings/Notificaciones";
-import { MisDatos } from "@/components/settings/MisDatos";
-import { ZonaPeligro } from "@/components/settings/ZonaPeligro";
 import {
-  EquipoActual,
-  Invitaciones,
-  MiJugador,
-  Soporte,
-  SuscripcionResumen,
-  Torneos,
-} from "@/components/settings/simple-sections";
+  SeccionAyuda,
+  SeccionCuenta,
+  SeccionEquipo,
+  SeccionPerfil,
+  SeccionPreferencias,
+} from "@/components/settings/sections";
 
-/** Prerenderiza las 10 secciones: son fijas y conocidas. */
+/** Prerenderiza las 5 secciones: son fijas y conocidas. */
 export function generateStaticParams() {
   return SETTINGS_SECTIONS.map((s) => ({ seccion: s.slug }));
 }
@@ -32,21 +28,15 @@ export async function generateMetadata({
   const { seccion } = await params;
   const match = SETTINGS_SECTIONS.find((s) => s.slug === seccion);
   if (!match) return { title: "Ajustes" };
-  // El label ya viene en frase normal, igual que en el menú lateral.
   return { title: `${match.label} · Ajustes` };
 }
 
 const SECTION_VIEWS: Record<SettingsSlug, () => React.ReactElement> = {
-  apariencia: Apariencia,
-  notificaciones: Notificaciones,
-  jugador: MiJugador,
-  equipo: EquipoActual,
-  invitaciones: Invitaciones,
-  suscripcion: SuscripcionResumen,
-  torneos: Torneos,
-  soporte: Soporte,
-  datos: MisDatos,
-  peligro: ZonaPeligro,
+  perfil: SeccionPerfil,
+  equipo: SeccionEquipo,
+  preferencias: SeccionPreferencias,
+  cuenta: SeccionCuenta,
+  ayuda: SeccionAyuda,
 };
 
 export default async function SeccionAjustes({
@@ -55,6 +45,11 @@ export default async function SeccionAjustes({
   params: Promise<{ seccion: string }>;
 }) {
   const { seccion } = await params;
+  // Las 10 secciones antiguas se juntaron en 5: sus URLs siguen funcionando.
+  const legacy = Object.prototype.hasOwnProperty.call(LEGACY_SETTINGS_REDIRECTS, seccion)
+    ? LEGACY_SETTINGS_REDIRECTS[seccion]
+    : null;
+  if (legacy) permanentRedirect(legacy);
   if (!isSettingsSlug(seccion)) notFound();
 
   const View = SECTION_VIEWS[seccion];

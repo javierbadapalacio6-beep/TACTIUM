@@ -6,53 +6,106 @@ import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import {
   fetchMyTournaments,
-  claimTournamentPartner,
+  fetchRegsPayments,
+  fetchTournamentMatches,
+  fetchTournamentRegs,
   type MyTournament,
 } from "@/lib/queries";
+import {
+  countdown,
+  divShort,
+  localIso,
+  roundNameOf,
+  summarize,
+  type PMatch,
+  type PReg,
+} from "@/components/tournaments/SpectatorParts";
+import {
+  CodeBox,
+  TournamentRow,
+  bucketOf,
+  type RowTournament,
+} from "@/components/tournaments/TournamentRow";
 import {
   Btn,
   BtnLink,
   Card,
   CardHead,
-  Chip,
-  Field,
-  IconTile,
-  Input,
-  Note,
   PageHeader,
 } from "@/components/ui";
-import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import { EmptyState, SkeletonPage } from "@/components/states";
 import { GoogleLogo } from "@/components/GoogleLogo";
 import { IconTrophy } from "@/components/Icon";
 import { canonicalOrigin } from "@/lib/site";
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return "Fecha por confirmar";
-  const d = new Date(iso + "T00:00:00");
-  return Number.isNaN(d.getTime())
-    ? "Fecha por confirmar"
-    : d.toLocaleDateString("es-ES", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      });
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Borrador",
-  open: "Inscripción abierta",
-  upcoming: "Próximo",
-  in_progress: "En juego",
-  finished: "Finalizado",
-  cancelled: "Cancelado",
-  canceled: "Cancelado",
+/** Lo tuyo en cada torneo: tu partido, tu pago o hasta dónde llegaste. */
+type Digest = {
+  meta: string;
+  line: string;
+  tone: "accent" | "warning" | "muted";
+  badge: string | null;
+  today: boolean;
 };
 
-/** Tono del chip de estado: sólo lo vivo va en acento. */
-function statusTone(status: string): "accent" | "warning" | "mute" {
-  if (status === "open" || status === "in_progress") return "accent";
-  if (status === "upcoming" || status === "draft") return "warning";
-  return "mute";
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DOW = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const shortDate = (iso: string | null) => {
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  return y && m && d ? `${d} ${MESES[m - 1]}` : null;
+};
+
+async function digestOf(t: MyTournament, uid: string): Promise<Digest | null> {
+  const [mm, rr, pays] = await Promise.all([
+    fetchTournamentMatches(t.id),
+    fetchTournamentRegs(t.id),
+    fetchRegsPayments(t.id).catch(() => ({}) as Record<string, { paymentStatus: string | null }>),
+  ]);
+  const matches = mm as unknown as PMatch[];
+  const regs = rr as unknown as PReg[];
+  const mine = regs.filter((r) => r.p1_user_id === uid || r.p2_user_id === uid);
+  const me = mine[0];
+  if (!me) return null;
+  const ids = new Set(mine.map((r) => r.id));
+  const partnerFull = me.p1_user_id === uid ? me.p2_name : me.p1_name;
+  const partner = partnerFull ? partnerFull.split(/\s+/).slice(0, 2).join(" ") : null;
+  const pending = mine.some((r) => (pays as Record<string, { paymentStatus: string | null }>)[r.id]?.paymentStatus === "pending_club");
+  const bucket = bucketOf(t.status, t.starts_on);
+  let next: PMatch | undefined;
+  for (const m of matches) {
+    if (m.status === "finished" || m.status === "bye" || !m.scheduled_at) continue;
+    if (![m.home_reg, m.away_reg, m.home_reg2, m.away_reg2].some((x) => x && ids.has(x))) continue;
+    if (!next || m.scheduled_at < (next.scheduled_at ?? "")) next = m;
+  }
+  let line: string;
+  let tone: Digest["tone"] = "muted";
+  if (bucket === "finished") {
+    const sm = summarize(matches, ids);
+    line = sm
+      ? `${sm.reached} · ${sm.wins} ${sm.wins === 1 ? "victoria" : "victorias"}, ${sm.losses} ${sm.losses === 1 ? "derrota" : "derrotas"}`
+      : "Terminado";
+  } else if (next?.scheduled_at) {
+    line = [roundNameOf(next, matches), next.court, countdown(next.scheduled_at, Date.now()).text]
+      .filter(Boolean)
+      .join(" · ");
+    tone = "accent";
+  } else if (pending) {
+    line = "Pago pendiente en el club";
+    tone = "warning";
+  } else {
+    line = matches.length ? "Inscrito · tu horario aún no está" : "Inscrito · el cuadro sale al cerrar la inscripción";
+  }
+  return {
+    meta: [shortDate(t.starts_on), divShort(me.gender, me.category), partner ? `con ${partner}` : null]
+      .filter(Boolean)
+      .join(" · "),
+    line,
+    tone,
+    badge: pending && bucket !== "finished" ? "PAGO" : null,
+    today:
+      bucket === "live" ||
+      (!!next?.scheduled_at && localIso(new Date(next.scheduled_at)) === localIso(new Date())),
+  };
 }
 
 export default function MisTorneosPage() {
@@ -62,16 +115,27 @@ export default function MisTorneosPage() {
   const [list, setList] = useState<MyTournament[] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  const [code, setCode] = useState("");
-  const [claiming, setClaiming] = useState(false);
-  const [claimMsg, setClaimMsg] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  );
+  const [uid, setUid] = useState<string | null>(null);
+  const [digests, setDigests] = useState<Record<string, Digest>>({});
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (userId: string) => {
     setLoadErr(null);
     try {
-      setList(await fetchMyTournaments());
+      const l = await fetchMyTournaments();
+      setList(l);
+      // Cada fila dice lo tuyo; si un torneo falla, se queda con lo básico.
+      const out: Record<string, Digest> = {};
+      await Promise.all(
+        l.slice(0, 12).map(async (t) => {
+          try {
+            const d = await digestOf(t, userId);
+            if (d) out[t.id] = d;
+          } catch {
+            /* fila básica */
+          }
+        }),
+      );
+      setDigests(out);
     } catch (e) {
       setLoadErr(
         e instanceof Error ? e.message : "No se pudieron cargar tus torneos.",
@@ -89,7 +153,10 @@ export default function MisTorneosPage() {
         const on = !!data.user;
         setLogged(on);
         setAuthKnown(true);
-        if (on) load();
+        if (on && data.user) {
+          setUid(data.user.id);
+          load(data.user.id);
+        }
       })
       .catch(() => {
         if (alive) {
@@ -101,29 +168,6 @@ export default function MisTorneosPage() {
       alive = false;
     };
   }, [load]);
-
-  async function claim() {
-    const c = code.trim().toUpperCase();
-    if (c.length < 4 || claiming) return;
-    setClaiming(true);
-    setClaimMsg(null);
-    try {
-      await claimTournamentPartner(c);
-      setClaimMsg({ ok: true, text: "Vinculado. Ya está en tus torneos." });
-      setCode("");
-      await load();
-    } catch (e) {
-      setClaimMsg({
-        ok: false,
-        text:
-          e instanceof Error
-            ? e.message
-            : "No se pudo vincular. Revisa el código.",
-      });
-    } finally {
-      setClaiming(false);
-    }
-  }
 
   const login = () => {
     // redirectTo FIJADO al dominio canónico (salvo local): una URL …vercel.app
@@ -174,7 +218,7 @@ export default function MisTorneosPage() {
     <div className="tw-page-narrow">
       <PageHeader
         title="Mis torneos"
-        lede="Los torneos en los que juegas, con su cuadro y tu horario."
+        lede="Los torneos en los que juegas, con tu hora, tu pago y hasta dónde llegaste."
         actions={
           <>
             <BtnLink href="/torneos">Explorar torneos</BtnLink>
@@ -185,37 +229,11 @@ export default function MisTorneosPage() {
         }
       />
 
-      {/* Vincularse con el código del compañero */}
+      {/* Un solo «Tengo un código»: el del torneo o el de tu pareja. */}
       <Card flush style={{ marginBottom: 16 }}>
-        <CardHead
-          title="¿Te han apuntado?"
-          sub="Si tu compañero te ha inscrito, mete su código para que el torneo aparezca también en tu cuenta."
-        />
+        <CardHead title="Tengo un código" />
         <div className="card-body">
-          <Field label="Código de la pareja" htmlFor="codigo-pareja">
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Input
-                id="codigo-pareja"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="ABCD-12"
-                className="mono"
-                style={{ flex: 1, minWidth: 160, letterSpacing: "0.12em" }}
-              />
-              <Btn
-                variant="accent"
-                disabled={claiming || code.trim().length < 4}
-                onClick={claim}
-              >
-                {claiming ? "Vinculando…" : "Vincularme"}
-              </Btn>
-            </div>
-          </Field>
-          {claimMsg && !claimMsg.ok && (
-            <Note tone="error" style={{ marginTop: 12 }}>
-              {claimMsg.text}
-            </Note>
-          )}
+          <CodeBox loggedIn={!!uid} />
         </div>
       </Card>
 
@@ -237,43 +255,57 @@ export default function MisTorneosPage() {
           <EmptyState
             icon={<IconTrophy size={22} />}
             title="Aún no juegas ningún torneo"
-            body="Cuando te inscribas a uno, o te vincules con un código, aparecerá aquí con su cuadro y tu horario."
+            body="Si tu pareja ya te apuntó, mete su código arriba y aparecerá aquí."
             action={
               <BtnLink href="/torneos" variant="accent">
-                Explorar torneos
+                Ver torneos abiertos
               </BtnLink>
             }
           />
         </Card>
       ) : (
-        <Card flush>
-          <CardHead title="Tus torneos" count={list.length} />
-          {list.map((t) => (
-            <Link key={t.id} href={`/torneos/${t.id}`} className="list-row">
-              <IconTile>
-                <IconTrophy size={16} />
-              </IconTile>
-              <span className="list-row-main">
-                <span className="list-row-title truncate">{t.name}</span>
-                <span className="list-row-sub">
-                  {[t.club_name, t.location].filter(Boolean).join(" · ") || "Sin sede"}
-                  {t.categories.length > 0 ? ` · ${t.categories.join(", ")}` : ""}
-                </span>
-              </span>
-              <span style={{ fontSize: 12.5, color: "var(--text-muted)", flex: "none" }}>
-                {fmtDate(t.starts_on)}
-              </span>
-              <Chip tone={statusTone(t.status)}>
-                {STATUS_LABEL[t.status] ?? t.status}
-              </Chip>
-            </Link>
-          ))}
-        </Card>
+        <div style={{ display: "grid", gap: 16 }}>
+          {(() => {
+            const d = new Date();
+            const today = list.filter(
+              (t) => bucketOf(t.status, t.starts_on) !== "finished" && digests[t.id]?.today,
+            );
+            const next = list
+              .filter((t) => bucketOf(t.status, t.starts_on) !== "finished" && !digests[t.id]?.today)
+              .sort((a, b) => (a.starts_on ?? "zz").localeCompare(b.starts_on ?? "zz"));
+            const played = list
+              .filter((t) => bucketOf(t.status, t.starts_on) === "finished")
+              .sort((a, b) => (b.starts_on ?? "").localeCompare(a.starts_on ?? ""));
+            return (
+              [
+                [`Hoy · ${DOW[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`, today],
+                ["Próximos", next],
+                ["Jugados", played],
+              ] as [string, MyTournament[]][]
+            )
+              .filter(([, l]) => l.length > 0)
+              .map(([title, l]) => (
+                <Card key={title} flush>
+                  <CardHead title={title} count={l.length} />
+                  {l.map((t) => {
+                    const dg = digests[t.id];
+                    return (
+                      <TournamentRow
+                        key={t.id}
+                        t={t as unknown as RowTournament}
+                        meta={dg?.meta}
+                        line={dg?.line}
+                        tone={dg?.tone}
+                        badge={dg?.badge}
+                      />
+                    );
+                  })}
+                </Card>
+              ));
+          })()}
+        </div>
       )}
 
-      {claimMsg?.ok && (
-        <Toast title={claimMsg.text} onClose={() => setClaimMsg(null)} />
-      )}
     </div>
   );
 }

@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@core/theme/useColors';
 import type { Palette } from '@core/theme/colors';
 import { Spacing } from '@core/theme/spacing';
+import { PanelModal } from '@components/layout/PanelModal';
+import { MODAL_ORIENTATIONS, useLayout } from './ResponsiveFrame';
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -25,6 +27,14 @@ interface Props {
    * Cuando el teclado abre, el KAV lo empuja arriba pegado al teclado.
    */
   footer?: React.ReactNode;
+  /**
+   * Solo TABLET. 'side' (por defecto) = panel lateral derecho de 420;
+   * 'modal' = modal centrado de 560 (confirmaciones, formularios cortos).
+   * En móvil se ignora: siempre hoja inferior.
+   */
+  variant?: 'side' | 'modal';
+  /** Solo TABLET: título en la cabecera del panel (junto a «cerrar»). */
+  title?: string;
 }
 // Altura aproximada del home indicator / barra de navegación. Lo usamos
 // como FALLBACK cuando estamos dentro de un <Modal> y no podemos leer
@@ -32,6 +42,38 @@ interface Props {
 // del árbol normal y `useSafeAreaInsets()` puede devolver 0).
 const HOME_INDICATOR_FALLBACK = Platform.OS === 'ios' ? 34 : 24;
 export const BottomSheet: React.FC<Props> = ({
+  open,
+  onClose,
+  children,
+  scrollable = true,
+  footer,
+  variant = 'side',
+  title,
+}) => {
+  const { isTablet } = useLayout();
+  if (isTablet) {
+    return (
+      <PanelModal
+        open={open}
+        onClose={onClose}
+        variant={variant}
+        title={title}
+        footer={footer}
+        scrollable={scrollable}
+      >
+        {children}
+      </PanelModal>
+    );
+  }
+  return (
+    <PhoneSheet open={open} onClose={onClose} scrollable={scrollable} footer={footer}>
+      {children}
+    </PhoneSheet>
+  );
+};
+
+/** Hoja inferior de MÓVIL (comportamiento de siempre, sin cambios). */
+const PhoneSheet: React.FC<Omit<Props, 'variant' | 'title'>> = ({
   open,
   onClose,
   children,
@@ -57,6 +99,7 @@ export const BottomSheet: React.FC<Props> = ({
       onRequestClose={onClose}
       statusBarTranslucent
       presentationStyle="overFullScreen"
+      supportedOrientations={MODAL_ORIENTATIONS}
     >
       <View style={styles.root}>
         {/* Scrim ocupa SOLO el espacio por encima del sheet (flex: 1 en

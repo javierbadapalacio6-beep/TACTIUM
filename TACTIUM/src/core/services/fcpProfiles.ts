@@ -66,16 +66,25 @@ export interface FcpTeamProfile {
   /** Racha de la temporada (cronológica, del más antiguo al más nuevo). */
   form: ('V' | 'D')[];
   roster: FcpRosterPlayer[];
+  /** Grupo de liga (null si solo está inscrito: aún no hay sorteo). */
+  idGrupo?: string | null;
+  /** Pretemporada: inscrito sin grupo. Sede de local y si el club lo confirmó. */
+  preseason?: { confirmado: boolean; sede: string | null } | null;
 }
 
 /** Ficha de un equipo que solo está INSCRITO: plantilla sí, competición no. */
 async function fetchFcpTeamInscrito(idEquipo: number): Promise<FcpTeamProfile | null> {
   const { data: insc } = await rawFrom('fcp_inscripciones')
-    .select('equipo, grupo_nombre')
+    .select('equipo, grupo_nombre, confirmado, sede')
     .eq('id_equipo', idEquipo)
     .maybeSingle();
   if (!insc) return null;
-  const i = insc as { equipo: string | null; grupo_nombre: string | null };
+  const i = insc as {
+    equipo: string | null;
+    grupo_nombre: string | null;
+    confirmado: boolean | null;
+    sede: string | null;
+  };
 
   const { data: jug } = await rawFrom('fcp_jugadores')
     .select('id_jugador, nombre_pila, apellido1, apellido2, nombre, puntos, categoria')
@@ -94,6 +103,8 @@ async function fetchFcpTeamInscrito(idEquipo: number): Promise<FcpTeamProfile | 
     setsFavor: 0,
     setsContra: 0,
     form: [],
+    idGrupo: null,
+    preseason: { confirmado: i.confirmado === true, sede: i.sede ?? null },
     roster: ((jug ?? []) as JugRow[]).map((r) => ({
       idJugador: r.id_jugador,
       name: displayName(r),
@@ -179,6 +190,8 @@ export async function fetchFcpTeamProfile(idEquipo: number): Promise<FcpTeamProf
     setsContra: c?.sets_contra ?? 0,
     form,
     roster,
+    idGrupo: grupoId,
+    preseason: null,
   };
 }
 

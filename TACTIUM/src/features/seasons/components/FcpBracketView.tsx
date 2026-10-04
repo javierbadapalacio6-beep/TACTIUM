@@ -16,6 +16,7 @@ import {
   type FcpBracketLeg,
 } from '@core/services/fcpBracket';
 import type { FcpActaPartido } from '@core/services/fcpSeason';
+import { MODAL_ORIENTATIONS } from '@components/ui/ResponsiveFrame';
 
 interface Props {
   idGrupo: string;
@@ -317,7 +318,7 @@ const TieActaModal: React.FC<{
   }, [tie]);
 
   return (
-    <Modal visible={!!tie} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={!!tie} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.sheetHandle} />

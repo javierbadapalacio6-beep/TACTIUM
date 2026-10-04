@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -19,7 +20,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
-import { IconBack, IconTeam } from '@components/ui';
+import { IconBack, IconShare, IconTeam } from '@components/ui';
+import { EditProfileSheet } from '@features/profile/components/EditProfileSheet';
+import { lightTap } from '@features/profile/components/CodeRedeemCard';
 import {
   getPublicUserProfile,
   getPublicClubProfile,
@@ -53,6 +56,7 @@ export const PublicProfileScreen = () => {
   const [followers, setFollowers] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [sheet, setSheet] = useState<FollowListMode | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +94,7 @@ export const PublicProfileScreen = () => {
     try {
       if (next) await followTarget(type, id);
       else await unfollowTarget(type, id);
+      if (next) lightTap();
     } catch (e) {
       setFollowing(!next);
       setFollowers((n) => Math.max(0, n + (next ? -1 : 1)));
@@ -106,13 +111,30 @@ export const PublicProfileScreen = () => {
     type === 'user'
       ? user?.username?.trim() || user?.full_name?.trim() || 'Jugador'
       : club?.name ?? 'Club';
-  const secondary =
-    type === 'user'
-      ? user?.username && user?.full_name
-        ? user.full_name
-        : 'Jugador'
-      : 'Club';
   const isMe = type === 'user' && !!user?.is_me;
+  const handle = type === 'user' && user?.username ? `@${user.username}` : null;
+  const metaLine =
+    type === 'user'
+      ? [
+          handle,
+          user?.username && user?.full_name ? user.full_name : null,
+          user?.level_display != null ? `Nivel ${user.level_display}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || 'Jugador'
+      : 'Club';
+
+  const onShare = async () => {
+    const url =
+      type === 'user'
+        ? `https://tactium.io/u/${user?.username ?? id}`
+        : 'https://tactium.io/comunidad';
+    try {
+      await Share.share({ message: `${name} en TACTIUM 🎾\n${url}` });
+    } catch {
+      // cancelado
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -142,34 +164,44 @@ export const PublicProfileScreen = () => {
           ]}
           showsVerticalScrollIndicator={false}
         >
+          {/* Cabecera: foto, nombre y @usuario a la izquierda. */}
           <View style={styles.hero}>
-            <CommunityAvatar name={name} avatarUrl={user?.avatar_url ?? null} size={96} />
-            <Text style={styles.name} numberOfLines={1}>
-              {name}
-            </Text>
-            <Text style={styles.secondary} numberOfLines={1}>
-              {type === 'user' && user?.level_display != null
-                ? `Nivel ${user.level_display} · ${secondary}`
-                : secondary}
-            </Text>
+            <CommunityAvatar name={name} avatarUrl={user?.avatar_url ?? null} size={64} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.name} numberOfLines={1}>
+                {name}
+              </Text>
+              <Text style={styles.secondary} numberOfLines={1}>
+                {metaLine}
+              </Text>
+            </View>
+          </View>
+          {type === 'user' && user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
 
-            {type === 'user' && user?.bio ? (
-              <Text style={styles.bio}>{user.bio}</Text>
-            ) : null}
-
-            {!isMe ? (
-              <View style={{ marginTop: 16 }}>
-                <FollowButton
-                  following={following}
-                  busy={followBusy}
-                  onPress={toggleFollow}
-                />
-              </View>
+          {/* Seguir a lo ancho, compartir al lado. En tu perfil: Editar. */}
+          <View style={styles.actionsRow}>
+            {isMe ? (
+              <Pressable
+                onPress={() => setEditOpen(true)}
+                style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.85 }]}
+                accessibilityRole="button"
+              >
+                <Text style={styles.editBtnLabel}>Editar perfil</Text>
+              </Pressable>
             ) : (
-              <View style={styles.mePill}>
-                <Text style={styles.mePillText}>ESTE ERES TÚ</Text>
+              <View style={{ flex: 1 }}>
+                <FollowButton following={following} busy={followBusy} onPress={toggleFollow} />
               </View>
             )}
+            <Pressable
+              onPress={onShare}
+              style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.8 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Compartir perfil"
+            >
+              <IconShare size={15} color={c.text} />
+              <Text style={styles.shareBtnLabel}>Compartir</Text>
+            </Pressable>
           </View>
 
           {/* Contadores */}
@@ -214,6 +246,31 @@ export const PublicProfileScreen = () => {
                 </View>
               ) : null}
 
+              {user?.teams && user.teams.length > 0 ? (
+                <>
+                  <Text style={styles.sectionLabel}>EQUIPOS</Text>
+                  <View style={styles.teamsCard}>
+                    {user.teams.map((tm, i) => (
+                      <View
+                        key={`${tm.name}-${i}`}
+                        style={[
+                          styles.teamRow,
+                          i < user.teams.length - 1 && styles.teamRowDivider,
+                        ]}
+                      >
+                        <Text style={styles.teamNameTxt} numberOfLines={1}>
+                          {tm.name}
+                        </Text>
+                        <Text style={styles.teamRoleTxt}>
+                          {tm.role === 'captain' || tm.role === 'admin'
+                            ? 'Capitán'
+                            : 'Jugador'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
               {user?.photos && user.photos.length > 0 ? (
                 <>
                   <Text style={styles.sectionLabel}>FOTOS DE PARTIDOS</Text>
@@ -260,31 +317,6 @@ export const PublicProfileScreen = () => {
                 </>
               ) : null}
 
-              {user?.teams && user.teams.length > 0 ? (
-                <>
-                  <Text style={styles.sectionLabel}>EQUIPOS</Text>
-                  <View style={styles.teamsCard}>
-                    {user.teams.map((tm, i) => (
-                      <View
-                        key={`${tm.name}-${i}`}
-                        style={[
-                          styles.teamRow,
-                          i < user.teams.length - 1 && styles.teamRowDivider,
-                        ]}
-                      >
-                        <Text style={styles.teamNameTxt} numberOfLines={1}>
-                          {tm.name}
-                        </Text>
-                        <Text style={styles.teamRoleTxt}>
-                          {tm.role === 'captain' || tm.role === 'admin'
-                            ? 'Capitán'
-                            : 'Jugador'}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              ) : null}
             </>
           ) : (
             <>
@@ -313,6 +345,10 @@ export const PublicProfileScreen = () => {
         targetType={type}
         onOpenProfile={openProfile}
       />
+
+      {isMe ? (
+        <EditProfileSheet open={editOpen} onClose={() => setEditOpen(false)} onSaved={load} />
+      ) : null}
     </View>
   );
 };
@@ -368,23 +404,43 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 22, paddingTop: 14 },
 
-  hero: { alignItems: 'center', marginBottom: 22 },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   name: {
     color: c.text,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.5,
-    marginTop: 14,
   },
-  secondary: { color: c.textMuted, fontSize: 13, marginTop: 4 },
+  secondary: { color: c.textMuted, fontSize: 12.5, marginTop: 3 },
   bio: {
     color: c.text,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 12,
-    textAlign: 'center',
-    paddingHorizontal: 8,
   },
+  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 14, marginBottom: 18 },
+  editBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBtnLabel: { color: c.text, fontSize: 14, fontWeight: '700' },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+  },
+  shareBtnLabel: { color: c.text, fontSize: 13.5, fontWeight: '600' },
   photoRow: { gap: 10, paddingVertical: 2, paddingRight: 8 },
   photoItem: {
     width: 116,
@@ -412,20 +468,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.textInverse,
     fontSize: 11,
     fontWeight: '800',
-  },
-  mePill: {
-    marginTop: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 9999,
-    backgroundColor: c.accent15,
-  },
-  mePillText: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 10,
-    letterSpacing: 1.5,
-    fontWeight: '700',
   },
 
   countsRow: { flexDirection: 'row', gap: 8 },

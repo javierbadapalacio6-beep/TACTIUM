@@ -24,6 +24,7 @@ import type { Subscription } from '@core/entitlements/hasPremiumAccess';
 // dos veces para la misma trial).
 const SEEN_KEY_PREFIX = 'tactium-trial-greeted-';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MODAL_ORIENTATIONS } from '@components/ui/ResponsiveFrame';
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -163,6 +164,7 @@ export const TrialStartedModal: React.FC = () => {
 
   return (
     <Modal
+      supportedOrientations={MODAL_ORIENTATIONS}
       visible={visible}
       // Sin `transparent`: queremos un fondo SÓLIDO de la app para que no
       // se vea por debajo el screen anterior (el bug que se notaba durante

@@ -9,6 +9,7 @@
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": false,
       "bundleIdentifier": "io.tactium.app",
       "buildNumber": "1",
       "usesAppleSignIn": true,
@@ -65,6 +66,7 @@
         }
       ],
       "expo-web-browser",
+      "expo-screen-orientation",
       "expo-apple-authentication",
       [
         "expo-notifications",

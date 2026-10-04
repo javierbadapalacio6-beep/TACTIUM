@@ -156,6 +156,8 @@ export const PUBLIC_ROUTES = [
   // Enlaces de invitación (tactium.io/i/CÓDIGO). Con barra: "/i" a secas
   // sería prefijo de cualquier ruta futura que empiece por «i».
   "/i/",
+  // Detalle público de una jornada de liga (RPC public_get_matchday, anon).
+  "/partido/",
 ];
 
 /**
@@ -180,6 +182,7 @@ const KNOWN_ROUTE_PREFIXES = [
   "/pro",
   "/legal",
   "/i/",
+  "/partido/",
   "/entrar",
   "/empezar",
   "/auth",

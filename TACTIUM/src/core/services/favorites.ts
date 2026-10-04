@@ -47,10 +47,31 @@ export async function syncFavorites(userId: string): Promise<void> {
   const local = store.items;
 
   try {
-    if (local.length) {
+    // Los torneos seguidos van APARTE y sin bloquear: si la migración que
+    // admite kind='tournament' aún no está aplicada, el check los rechaza y no
+    // deben tumbar la subida del resto de favoritos.
+    const tournaments = local.filter((f) => f.kind === 'tournament');
+    const rest = local.filter((f) => f.kind !== 'tournament');
+    if (tournaments.length) {
+      try {
+        await rawFrom('favorites').upsert(
+          tournaments.map((f) => ({
+            user_id: userId,
+            kind: f.kind,
+            ref_id: f.refId,
+            label: f.label,
+            meta: f.meta ?? null,
+          })),
+          { onConflict: 'user_id,kind,ref_id', ignoreDuplicates: true },
+        );
+      } catch {
+        /* sin migración: siguen en el dispositivo */
+      }
+    }
+    if (rest.length) {
       // `upsert` sobre (user_id, kind, ref_id): reintentar no duplica.
       const { error } = await rawFrom('favorites').upsert(
-        local.map((f) => ({
+        rest.map((f) => ({
           user_id: userId,
           kind: f.kind,
           ref_id: f.refId,

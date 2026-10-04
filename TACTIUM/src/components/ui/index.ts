@@ -60,4 +60,13 @@ export { OfflineBanner } from './OfflineBanner';
 export { UpdateBanner } from './UpdateBanner';
 export { PremiumGateButton } from './PremiumGateButton';
 export { TrialExpiringBanner } from './TrialExpiringBanner';
-export { ResponsiveFrame } from './ResponsiveFrame';
+export {
+  ResponsiveFrame,
+  useLayout,
+  useCompactRail,
+  useCompactRailRequested,
+  computeLayoutMode,
+  LayoutMetrics,
+  type Layout,
+  type LayoutMode,
+} from './ResponsiveFrame';

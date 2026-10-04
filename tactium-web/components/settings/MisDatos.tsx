@@ -29,9 +29,8 @@ import { IconDownload, IconFile, IconLock } from "@/components/Icon";
  * portabilidad, es una captura. Se pide el volcado completo al servidor con la
  * RPC `export_my_data`, la misma que usa la app.
  */
-export function MisDatos() {
-  const { user, role, teams, clubId, refresh } = useSession();
-  const [downloading, setDownloading] = useState(false);
+export function TuPerfil() {
+  const { user, refresh } = useSession();
 
   const [fullName, setFullName] = useState(user?.name ?? "");
   const [username, setUsername] = useState(user?.username ?? "");
@@ -86,56 +85,8 @@ export function MisDatos() {
     } else setToast(res.reason);
   }
 
-  // Datos REALES de la sesión (no maqueta). Un usuario nuevo ve lo suyo (o
-  // vacío), nunca los de una cuenta demo.
-  const rows = useMemo(
-    () =>
-      [
-        { label: "Nombre", value: user?.name || "—", mono: false },
-        { label: "Email", value: user?.email || "—", mono: false },
-        { label: "Rol", value: ROLE_LABELS[role] ?? role, mono: false },
-        {
-          label: "Equipos a los que perteneces",
-          value: String(teams.length),
-          mono: true,
-        },
-        { label: "Club", value: clubId ? "Sí" : "No", mono: false },
-        { label: "Identificador interno", value: user?.id || "—", mono: true },
-      ] as { label: string; value: string; mono: boolean }[],
-    [user, role, teams, clubId],
-  );
-
-  async function exportJson() {
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      const datos = await exportMyData();
-      const payload = {
-        exportadoEl: new Date().toISOString(),
-        origen: "TACTIUM web",
-        datos,
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "mis-datos-tactium.json";
-      a.click();
-      // Liberamos el object URL: si no, el blob se queda en memoria toda la sesión.
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setToast(
-        e instanceof Error ? e.message : "No se han podido exportar tus datos",
-      );
-    } finally {
-      setDownloading(false);
-    }
-  }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <>
       {/* ── Perfil ────────────────────────────────────────────────── */}
       <Card flush>
         <CardHead title="Tu perfil" sub="Cómo te ven los demás en TACTIUM" />
@@ -220,6 +171,67 @@ export function MisDatos() {
         </div>
       </Card>
 
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+    </>
+  );
+}
+
+/**
+ * Mis datos (RGPD): resumen de lo que guardamos y descarga del volcado
+ * completo. Los recuentos a 0 no salen: solo lo que la persona tiene.
+ */
+export function MisDatos() {
+  const { user, role, teams, clubId } = useSession();
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Datos REALES de la sesión (no maqueta). Un usuario nuevo ve lo suyo (o
+  // vacío), nunca los de una cuenta demo.
+  const rows = useMemo(
+    () =>
+      [
+        { label: "Nombre", value: user?.name || "—", mono: false },
+        { label: "Email", value: user?.email || "—", mono: false },
+        { label: "Rol", value: ROLE_LABELS[role] ?? role, mono: false },
+        ...(teams.length > 0
+          ? [{ label: "Equipos a los que perteneces", value: String(teams.length), mono: true }]
+          : []),
+        ...(clubId ? [{ label: "Club", value: "Sí", mono: false }] : []),
+        { label: "Identificador interno", value: user?.id || "—", mono: true },
+      ] as { label: string; value: string; mono: boolean }[],
+    [user, role, teams, clubId],
+  );
+
+  async function exportJson() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const datos = await exportMyData();
+      const payload = {
+        exportadoEl: new Date().toISOString(),
+        origen: "TACTIUM web",
+        datos,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tactium-mis-datos.json";
+      a.click();
+      // Liberamos el object URL: si no, el blob se queda en memoria toda la sesión.
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn("exportMyData", e);
+      setToast("No se han podido exportar tus datos. Inténtalo de nuevo en unos segundos.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* ── Resumen de datos ──────────────────────────────────────── */}
       <Card flush>
         <CardHead title="Resumen de tus datos" />

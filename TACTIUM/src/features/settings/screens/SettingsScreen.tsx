@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
@@ -19,35 +20,50 @@ import { useColors } from '@core/theme/useColors';
 import type { Palette } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconBack, IconChevron, Toggle } from '@components/ui';
+import {
+  BottomSheet,
+  IconBack,
+  IconChevron,
+  IconCheck,
+  IconLink,
+  IconMail,
+  IconFile,
+  IconPlus,
+  IconTeam,
+  IconUser,
+  IconBell,
+  IconTicket,
+  Toggle,
+} from '@components/ui';
+import { SegmentedControl } from '@components/ui/SegmentedControl';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import { useThemeStore } from '@store/themeStore';
-import { PLAN_BY_TIER, PREMIUM_STATUSES, isLiveSub } from '@core/subscriptions/plans';
-import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
-import { supabase } from '@core/supabase/client';
-import * as SeasonsApi from '@core/services/seasons';
-import * as MatchdaysApi from '@core/services/matchdays';
+import { PLAN_BY_TIER, isLiveSub } from '@core/subscriptions/plans';
+import { displayNameOf } from '@core/utils/format';
 import * as PlayersApi from '@core/services/players';
 import * as ProfileApi from '@core/services/profile';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
-import type { Database } from '@core/supabase/database.types';
+import { EditProfileSheet } from '@features/profile/components/EditProfileSheet';
+import { CommunityAvatar } from '@features/social/components/social-ui';
+import { lightTap } from '@features/profile/components/CodeRedeemCard';
+import { useTeamPro } from '@features/settings/useTeamPro';
 import type { RootStackParamList } from '@navigation/types';
+import { SplitView, useIsSplit } from '@components/layout';
+import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
 
-type TeamRole = Database['public']['Enums']['team_role'];
+/** Sección abierta a la derecha en tablet (lista + detalle). */
+type SettingsSection = 'subscription' | 'help';
 
 /** Número de build REAL del binario. `Constants.nativeBuildVersion` está
- *  obsoleto y llega vacío (en Android siempre; en iOS bajo una OTA también),
- *  y entonces caíamos al valor de la config, que es el del repo (1) y no el
- *  del build. La fuente buena es `expo-application`. Se pide con require +
- *  try/catch para que, si el módulo nativo no estuviera enlazado, la pantalla
- *  no se caiga: es solo una etiqueta de diagnóstico. */
+ *  obsoleto y llega vacío (en Android siempre; en iOS bajo una OTA también).
+ *  La fuente buena es `expo-application`, con require + try/catch para que,
+ *  si el módulo nativo no estuviera enlazado, la pantalla no se caiga. */
 function buildNumber(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -60,94 +76,109 @@ function buildNumber(): string {
   return native ? String(native) : '?';
 }
 
+/** Qué bundle corre: el embebido o una OTA (id corto + fecha). Solo soporte. */
+function otaLabel(): string {
+  if (Updates.isEmbeddedLaunch || !Updates.updateId) return 'sin OTA';
+  const date = Updates.createdAt
+    ? ` ${Updates.createdAt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`
+    : '';
+  return `OTA ${Updates.updateId.slice(-6)}${date}`;
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  club_admin: 'Club',
+  captain: 'Capitán',
+  player: 'Jugador',
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Ajustes en 5 grupos: tu tarjeta arriba (con «Editar»), el plan, y luego
+ * Tu equipo · Preferencias · Cuenta y ayuda · Salir. Fuera las estadísticas
+ * repetidas del equipo, «Explorar torneos» (está en Competir) y la firma.
+ */
 export const SettingsScreen = () => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
   const insets = useSafeAreaInsets();
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const user    = useAuthStore((s) => s.user);
-  const userId  = useAuthStore((s) => s.user?.id ?? null);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const user = useAuthStore((s) => s.user);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const signOut = useAuthStore((s) => s.signOut);
-  const team    = useTeamStore((s) => s.team);
+  const team = useTeamStore((s) => s.team);
+  const teams = useTeamStore((s) => s.teams);
   const setSoloMode = useTeamStore((s) => s.setSoloMode);
   const setSoloUpgrade = useTeamStore((s) => s.setSoloUpgrade);
   const players = useTeamStore((s) => s.players);
-  const activeRole              = useTeamStore((s) => s.activeRole);
-  const memberships             = useTeamStore((s) => s.memberships);
-  const setActiveRoleOverride   = useTeamStore((s) => s.setActiveRoleOverride);
-  const myPlayerId              = useTeamStore((s) => s.myPlayerId);
-  const myPlayerTeamIds         = useTeamStore((s) => s.myPlayerTeamIds);
-  const refreshMyPlayer         = useTeamStore((s) => s.refreshMyPlayer);
-  const clubs                   = useClubStore((s) => s.clubs);
+  const activeRole = useTeamStore((s) => s.activeRole);
+  const memberships = useTeamStore((s) => s.memberships);
+  const setActiveRoleOverride = useTeamStore((s) => s.setActiveRoleOverride);
+  const myPlayerId = useTeamStore((s) => s.myPlayerId);
+  const myPlayerTeamIds = useTeamStore((s) => s.myPlayerTeamIds);
+  const refreshMyPlayer = useTeamStore((s) => s.refreshMyPlayer);
+  const clubs = useClubStore((s) => s.clubs);
+  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
   const availableRoles = useMemo(
-    () =>
-      computeAvailableRoles(
-        memberships,
-        clubs.map((c) => c.id),
-        myPlayerTeamIds,
-      ),
+    () => computeAvailableRoles(memberships, clubs.map((cl) => cl.id), myPlayerTeamIds),
     [memberships, clubs, myPlayerTeamIds],
   );
 
-  const [role, setRole]                 = useState<TeamRole | null>(null);
-  const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
-  const [matchdays, setMatchdays]       = useState<MatchdaysApi.Matchday[]>([]);
-  const [loadingStats, setLoadingStats] = useState(true);
-  const [redeemOpen, setRedeemOpen]     = useState(false);
-  const [claimOpen, setClaimOpen]       = useState(false);
-  const [inviteOpen, setInviteOpen]     = useState(false);
-  // Invitar jugadores es GRATIS (lo premium es la gestión), igual que canjear.
-  const openInvite = () => setInviteOpen(true);
-  const [unlinking, setUnlinking]       = useState(false);
-  const [deleting, setDeleting]         = useState(false);
-  // Toggle de notificaciones push (profiles.notifications_enabled). El backend
-  // YA lo respeta: send-push y el cron diario de recordatorios filtran por él.
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [claimOpen, setClaimOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [profile, setProfile] = useState<ProfileApi.Profile | null>(null);
+  // Interruptor de avisos (profiles.notifications_enabled). El backend YA lo
+  // respeta: send-push y el cron de recordatorios filtran por él.
   const [notifEnabled, setNotifEnabled] = useState(true);
-  const [notifLoaded, setNotifLoaded]   = useState(false);
+  // La versión con la OTA se ve con 5 toques (para soporte).
+  const [showOta, setShowOta] = useState(false);
+  const taps = useRef(0);
+  // TABLET: como los Ajustes del iPad. La lista a la izquierda y la sección
+  // elegida a la derecha, sin tapar la lista. En móvil se navega como siempre.
+  const split = useIsSplit();
+  const [section, setSection] = useState<SettingsSection | null>(null);
 
-  // Hidratamos el flag de notificaciones del profile una vez por ciclo de
-  // focus. El state es la fuente de verdad.
+  const loadProfile = useCallback(async () => {
+    try {
+      const p = await ProfileApi.fetchMyProfile();
+      setProfile(p);
+      setNotifEnabled(p?.notifications_enabled ?? true);
+    } catch {
+      /* se queda con lo que había */
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      if (notifLoaded) return;
-      let cancelled = false;
-      (async () => {
-        try {
-          const p = await ProfileApi.fetchMyProfile();
-          if (!cancelled) {
-            setNotifEnabled(p?.notifications_enabled ?? true);
-            setNotifLoaded(true);
-          }
-        } catch {
-          if (!cancelled) setNotifLoaded(true);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [notifLoaded]),
+      loadProfile();
+    }, [loadProfile]),
   );
 
   const openExternalUrl = (url: string) => {
-    Linking.openURL(url).catch(() =>
-      toast.error('No se pudo abrir', 'Comprueba tu conexión.'),
-    );
+    Linking.openURL(url).catch(() => toast.error('No se pudo abrir', 'Comprueba tu conexión.'));
   };
 
   const isPlayer = activeRole === 'player';
+  const isCaptain = activeRole === 'captain';
   const myPlayer = useMemo(
     () => (myPlayerId ? players.find((p) => p.id === myPlayerId) ?? null : null),
     [myPlayerId, players],
   );
+  const teamPro = useTeamPro(team, isPlayer);
 
-  // Toggle de notificaciones: update optimista + persistencia; revierte si
-  // falla. El backend (send-push + cron) ya filtra por notifications_enabled.
+  // Optimista + persistencia; revierte si falla.
   const handleToggleNotifications = useCallback((next: boolean) => {
     setNotifEnabled(next);
+    lightTap();
     ProfileApi.setNotificationsEnabled(next).catch(() => {
       setNotifEnabled(!next);
       toast.error('No se pudo guardar', 'Inténtalo de nuevo.');
@@ -157,12 +188,12 @@ export const SettingsScreen = () => {
   const handleUnlink = () => {
     if (!myPlayerId || unlinking) return;
     Alert.alert(
-      'Desvincular jugador',
-      `Vas a soltar la vinculación con "${myPlayer?.name ?? ''}". Después podrás elegir otro jugador de la plantilla.`,
+      'Cambiar de ficha',
+      `Vas a soltar «${myPlayer?.name ?? ''}». Después podrás elegir otra ficha de la plantilla.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Desvincular',
+          text: 'Soltar y elegir otra',
           style: 'destructive',
           onPress: async () => {
             setUnlinking(true);
@@ -170,8 +201,8 @@ export const SettingsScreen = () => {
               await PlayersApi.unclaimPlayer(myPlayerId);
               await refreshMyPlayer();
               setClaimOpen(true);
-            } catch (e: any) {
-              Alert.alert('Error', e?.message ?? 'Inténtalo de nuevo.');
+            } catch {
+              Alert.alert('No se pudo cambiar', 'Inténtalo de nuevo en unos segundos.');
             } finally {
               setUnlinking(false);
             }
@@ -181,107 +212,82 @@ export const SettingsScreen = () => {
     );
   };
 
-  // Carga de role + season + matchdays. Refetcha en CADA focus + cuando
-  // cambian team o user.
-  useFocusEffect(
-    useCallback(() => {
-      if (!team || !user) {
-        setLoadingStats(false);
-        return;
-      }
-      let cancelled = false;
-      const load = async () => {
-        setLoadingStats(true);
-        try {
-          const { data: memberData } = await supabase
-            .from('team_members')
-            .select('role')
-            .eq('team_id', team.id)
-            .eq('user_id', user.id)
-            .maybeSingle();
-          if (cancelled) return;
-          setRole((memberData?.role as TeamRole) ?? null);
-
-          const season = await SeasonsApi.fetchActiveSeason(team.id);
-          if (cancelled) return;
-          setActiveSeason(season);
-          if (season) {
-            const list = await MatchdaysApi.fetchMatchdays(season.id);
-            if (cancelled) return;
-            setMatchdays(list);
-          } else {
-            setMatchdays([]);
-          }
-        } catch (e) {
-          console.warn('SettingsScreen load error', e);
-        } finally {
-          if (!cancelled) setLoadingStats(false);
-        }
-      };
-      load();
-      return () => {
-        cancelled = true;
-      };
-    }, [team, user]),
-  );
-
-  const played  = matchdays.filter((m) => m.outcome !== null).length;
-  const wins    = matchdays.filter((m) => m.outcome === 'win').length;
-  const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
-
   const confirmLogout = () => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro?', [
+    Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Cerrar sesión', style: 'destructive', onPress: () => signOut() },
     ]);
   };
 
-  const confirmDeleteAccount = () => {
+  const doDelete = async () => {
     if (deleting) return;
-    Alert.alert(
-      'Eliminar cuenta',
-      'Esto borrará tu perfil, equipos, jornadas, alineaciones, resultados e invitaciones.\n\nESTA ACCIÓN ES IRREVERSIBLE.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Continuar',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              '¿Seguro al 100%?',
-              'No podremos recuperar tus datos. Si tienes una suscripción activa, seguirá activa: cancélala en App Store o Google Play para dejar de pagar.',
-              [
-                { text: 'Volver', style: 'cancel' },
-                {
-                  text: 'Sí, eliminar cuenta',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setDeleting(true);
-                    try {
-                      await ProfileApi.deleteMyAccount();
-                      await signOut();
-                    } catch (e: any) {
-                      Alert.alert(
-                        'No se puede eliminar',
-                        e?.message ?? 'Inténtalo de nuevo.',
-                      );
-                    } finally {
-                      setDeleting(false);
-                    }
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
+    setDeleting(true);
+    try {
+      await ProfileApi.deleteMyAccount();
+      setDeleteOpen(false);
+      await signOut();
+    } catch {
+      Alert.alert(
+        'No se ha podido eliminar',
+        'Tu cuenta sigue activa. Inténtalo de nuevo o escríbenos a hola@tactium.io.',
+      );
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const teamMeta = [team?.category, team?.league].filter(Boolean).join(' · ') || null;
+  // ── Qué se pierde al borrar la cuenta (según el rol) ────────────────────
+  const ownedTeams = teams.filter((t) => t.owner_id === userId && !t.club_id);
+  const storeSub = subscriptions.find(
+    (s) =>
+      s.payer_user_id === userId &&
+      isLiveSub(s) &&
+      (s.platform === 'ios' || s.platform === 'android') &&
+      !(s.product_id ?? '').startsWith('trial_'),
+  );
+  const deleteItems: string[] = [
+    'Tu perfil, tu foto y tus amistosos',
+    ...clubs.map((cl) => `${cl.name}, con sus equipos`),
+    ...ownedTeams.map((t) => `${t.name}, con sus jornadas y alineaciones`),
+    'Tus invitaciones pendientes',
+  ];
 
-  return (
-    <View style={styles.root}>
+  // ── Tarjeta de la persona ───────────────────────────────────────────────
+  const displayName = profile?.full_name?.trim() || displayNameOf(user);
+  const roleLabel = activeRole ? ROLE_LABEL[activeRole] : null;
+  // `username` vive en profiles pero no está en los tipos generados; se
+  // espeja en user_metadata (fuente síncrona de toda la app).
+  const uname =
+    ((profile as { username?: string | null } | null)?.username ??
+      ((user?.user_metadata ?? {}) as { username?: string }).username ??
+      '').trim();
+  const handle = uname ? `@${uname}` : null;
+  const meLine =
+    [handle, roleLabel ? (team ? `${roleLabel} de ${team.name}` : roleLabel) : null]
+      .filter(Boolean)
+      .join(' · ') || 'Tu cuenta';
+
+  // Qué se abre a la derecha si aún no se ha elegido nada: «Mi suscripción»
+  // cuando hay tarjeta de plan; si no, la ayuda.
+  const hasPlanCard = !!team && (isPlayer || !(isCaptain && team.club_id));
+  const openSection: SettingsSection = section ?? (hasPlanCard ? 'subscription' : 'help');
+  const goSubscription = () =>
+    split ? setSection('subscription') : navigation.navigate('Subscription');
+  const openHelp = () => (split ? setSection('help') : setHelpOpen(true));
+
+  const version = `TACTIUM ${Constants.expoConfig?.version ?? ''} (${buildNumber()})${
+    showOta ? ` · ${otaLabel()}` : ''
+  }`;
+  const onVersionTap = () => {
+    taps.current += 1;
+    if (taps.current >= 5) {
+      taps.current = 0;
+      setShowOta((v) => !v);
+    }
+  };
+
+  const listBody = (
+    <>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -297,413 +303,337 @@ export const SettingsScreen = () => {
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 64 + 12 + 32 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 64 + 12 + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Team (oculto en modo jugador suelto) */}
-        {team ? (
-          <>
-            <Text style={styles.sectionLabel}>EQUIPO ACTUAL</Text>
-            <View style={styles.teamCard}>
-              <TactiumMark size={42} gradient />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.teamName}>{team?.name ?? '—'}</Text>
-                <Text style={styles.teamMeta} numberOfLines={1}>
-                  {[teamMeta, activeSeason?.name].filter(Boolean).join(' · ') || 'Sin temporada activa'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Stats */}
-            {loadingStats ? (
-              <View style={styles.statsLoading}>
-                <ActivityIndicator color={c.accent} size="small" />
-              </View>
-            ) : activeSeason ? (
-              <View style={styles.statsGrid}>
-                <ProfileStat label="Jornadas" value={`${played}/${matchdays.length}`} />
-                <ProfileStat label="Victorias" value={String(wins)} highlight />
-                <ProfileStat label="Tasa V"    value={winRate !== null ? `${winRate}%` : '—'} />
-              </View>
-            ) : (
-              <View style={styles.noSeasonBox}>
-                <Text style={styles.noSeasonText}>Sin temporada activa</Text>
-              </View>
-            )}
-          </>
-        ) : null}
-
-        {/* Mi jugador (solo en rol player) */}
-        {isPlayer ? (
-          <>
-            <Text style={styles.sectionLabel}>MI JUGADOR</Text>
-            {myPlayer ? (
-              <View style={styles.myPlayerCard}>
-                <View style={styles.myPlayerAvatar}>
-                  <Text style={styles.myPlayerAvatarText}>
-                    {myPlayer.name.slice(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.myPlayerName} numberOfLines={1}>
-                    {myPlayer.name}
-                  </Text>
-                  <Text style={styles.myPlayerMeta} numberOfLines={1}>
-                    {myPlayer.position} · {myPlayer.pts} pts
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={handleUnlink}
-                  disabled={unlinking}
-                  style={({ pressed }) => [
-                    styles.myPlayerBtn,
-                    pressed && { opacity: 0.85 },
-                    unlinking && { opacity: 0.5 },
-                  ]}
-                >
-                  {unlinking ? (
-                    <ActivityIndicator size="small" color={c.accent} />
-                  ) : (
-                    <Text style={styles.myPlayerBtnLabel}>Cambiar</Text>
-                  )}
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => setClaimOpen(true)}
-                style={({ pressed }) => [
-                  styles.claimCard,
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <View style={styles.redeemBadge}>
-                  <Text style={styles.redeemBadgeText}>+</Text>
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.redeemTitle}>Vincúlate a un jugador</Text>
-                  <Text style={styles.redeemHint} numberOfLines={1}>
-                    Elige tu nombre en la plantilla
-                  </Text>
-                </View>
-                <IconChevron size={14} color={c.textFaint} />
-              </Pressable>
-            )}
-          </>
-        ) : null}
-
-        {/* Modo (selector de rol) — solo si el usuario tiene varios disponibles */}
-        {availableRoles.length > 1 ? (
-          <>
-            <Text style={styles.sectionLabel}>MODO</Text>
-            <View style={styles.modeRow}>
-              {(['club_admin', 'captain', 'player'] as const).map((r) => {
-                const enabled = availableRoles.includes(r);
-                if (!enabled) return null;
-                const sel = activeRole === r;
-                const label =
-                  r === 'club_admin' ? 'Club' :
-                  r === 'captain'    ? 'Capitán' : 'Jugador';
-                return (
-                  <Pressable
-                    key={r}
-                    onPress={() => setActiveRoleOverride(r as ActiveRole)}
-                    style={[
-                      styles.modePill,
-                      sel && {
-                        backgroundColor: c.accent10,
-                        borderColor: c.accent50,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.modePillText,
-                        { color: sel ? c.accent : c.textMuted },
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text style={styles.modeHint}>
-              Cambia entre los modos disponibles. La interfaz se adaptará al
-              rol que elijas.
+        {/* Tú arriba */}
+        <View style={styles.meCard}>
+          <CommunityAvatar name={displayName} avatarUrl={profile?.avatar_url ?? null} size={46} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.meName} numberOfLines={1}>
+              {displayName}
             </Text>
-          </>
-        ) : null}
-
-        {/* Suscripción · NO se muestra a los jugadores (rol player): para
-            ellos la app es gratis, son participantes y no pagan ningún plan.
-            También oculta para captains invitados por un club
-            (team.club_id !== null): ese capitán está cubierto por la sub del
-            club que lo invitó. */}
-        {team && activeRole !== 'player' && !(activeRole === 'captain' && team.club_id) ? (
-          <SubscriptionCard
-            activeRole={activeRole}
-            userId={userId}
-            canBeClubAdmin={availableRoles.includes('club_admin')}
-            onSwitchToClubMode={() => setActiveRoleOverride('club_admin')}
-            onPressUser={() => navigation.navigate('Subscription')}
-            onPressClub={() => navigation.navigate('ClubBilling')}
-          />
-        ) : null}
-
-        {/* Invitaciones */}
-        <Text style={styles.sectionLabel}>INVITACIONES</Text>
-        <View style={styles.invitationsStack}>
-          {/* Jugador suelto → gestor: vuelve a la elección inicial para
-              crear su equipo o su club (sus amistosos se conservan). */}
-          {!team ? (
-            <Pressable
-              onPress={() => {
-                setSoloUpgrade(true);
-                setSoloMode(false);
-              }}
-              style={({ pressed }) => [
-                styles.redeemCard,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <View style={styles.redeemBadge}>
-                <Text style={styles.redeemBadgeText}>+</Text>
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.redeemTitle}>Crear un equipo o club</Text>
-                <Text style={styles.redeemHint} numberOfLines={1}>
-                  Pasa a gestionar: plantilla, alineaciones y liga
-                </Text>
-              </View>
-              <IconChevron size={14} color={c.textFaint} />
-            </Pressable>
-          ) : null}
-          {activeRole === 'captain' && team ? (
-            <Pressable
-              onPress={openInvite}
-              style={({ pressed }) => [
-                styles.redeemCard,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <View style={styles.redeemBadge}>
-                <Text style={styles.redeemBadgeText}>↗</Text>
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.redeemTitle}>Invitar jugadores</Text>
-                <Text style={styles.redeemHint} numberOfLines={1}>
-                  Genera códigos para que se unan a tu equipo
-                </Text>
-              </View>
-              <IconChevron size={14} color={c.textFaint} />
-            </Pressable>
-          ) : null}
+            <Text style={styles.meSub} numberOfLines={1}>
+              {meLine}
+            </Text>
+          </View>
           <Pressable
-            onPress={() => setRedeemOpen(true)}
-            style={({ pressed }) => [
-              styles.redeemCard,
-              pressed && { opacity: 0.85 },
-            ]}
+            onPress={() => setEditOpen(true)}
+            style={({ pressed }) => [styles.pill, pressed && { opacity: 0.8 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Editar perfil"
           >
-            <View style={styles.redeemBadge}>
-              <Text style={styles.redeemBadgeText}>+</Text>
+            <Text style={styles.pillText}>Editar</Text>
+          </Pressable>
+        </View>
+
+        {/* El plan debajo */}
+        {isPlayer && team ? (
+          <Pressable
+            onPress={goSubscription}
+            style={({ pressed }) => [
+              styles.planCard,
+              styles.planCardCov,
+              split && openSection === 'subscription' && styles.planCardSel,
+              pressed && { opacity: 0.88 },
+            ]}
+            accessibilityRole="button"
+          >
+            <View style={styles.planDays}>
+              <IconCheck size={16} color={c.accent} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.redeemTitle}>Unirme con código</Text>
-              <Text style={styles.redeemHint} numberOfLines={1}>
-                Si te han invitado a otro equipo
+              <Text style={styles.planTitle}>
+                {teamPro === false ? `${team.name} está en el plan gratis` : 'Te cubre tu equipo'}
+              </Text>
+              <Text style={styles.planSub} numberOfLines={1}>
+                {teamPro === false
+                  ? 'Lo activa tu capitán. Tú no pagas nada.'
+                  : `${team.name} tiene Pro. No pagas nada.`}
               </Text>
             </View>
             <IconChevron size={14} color={c.textFaint} />
           </Pressable>
-        </View>
-
-        {/* Apariencia (tema claro/oscuro/automático) */}
-        <Text style={styles.sectionLabel}>APARIENCIA</Text>
-        <View style={styles.modeRow}>
-          {(
-            [
-              { key: 'light', label: 'Claro' },
-              { key: 'dark', label: 'Oscuro' },
-              { key: 'system', label: 'Automático' },
-            ] as const
-          ).map((opt) => {
-            const sel = themeMode === opt.key;
-            return (
-              <Pressable
-                key={opt.key}
-                onPress={() => setThemeMode(opt.key)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: sel }}
-                accessibilityLabel={`Tema ${opt.label}`}
-                style={[
-                  styles.modePill,
-                  sel && {
-                    backgroundColor: c.accent10,
-                    borderColor: c.accent50,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.modePillText,
-                    { color: sel ? c.accent : c.textMuted },
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.modeHint}>
-          Elige el aspecto de la app. «Automático» sigue el modo claro u oscuro
-          de tu iPhone.
-        </Text>
-
-        {/* Notificaciones */}
-        <Text style={styles.sectionLabel}>NOTIFICACIONES</Text>
-        <SettingsList
-          items={[
-            {
-              label: 'Avisos del equipo',
-              trailing: 'toggle',
-              value: notifEnabled,
-              onToggle: handleToggleNotifications,
-              accessibilityLabel: 'Activar o desactivar las notificaciones del equipo',
-            },
-          ]}
-        />
-        <Text style={styles.notifHint}>
-          Nueva jornada, alineación publicada y recordatorios para confirmar tu
-          disponibilidad. Puedes desactivarlos cuando quieras.
-        </Text>
-
-        {/* Cuenta */}
-        <Text style={styles.sectionLabel}>CUENTA</Text>
-        <SettingsList
-          items={[
-            {
-              label: 'Mis estadísticas',
-              onPress: () => navigation.navigate('MyStats'),
-            },
-            {
-              label: 'Mis datos',
-              onPress: () => navigation.navigate('MyData'),
-            },
-          ]}
-        />
-
-        {TOURNAMENTS_ENABLED ? (
-          <>
-            <Text style={styles.sectionLabel}>TORNEOS</Text>
-            <SettingsList
-              items={[
-                {
-                  label: 'Explorar torneos',
-                  onPress: () => navigation.navigate('ExploreTournaments'),
-                },
-              ]}
-            />
-          </>
+        ) : team && !isPlayer && !(isCaptain && team.club_id) ? (
+          <PlanCard
+            activeRole={activeRole}
+            userId={userId}
+            canBeClubAdmin={availableRoles.includes('club_admin')}
+            onSwitchToClubMode={() => setActiveRoleOverride('club_admin')}
+            onPressUser={goSubscription}
+            selected={split && openSection === 'subscription'}
+            onPressClub={() => navigation.navigate('ClubBilling')}
+          />
         ) : null}
 
-        <Text style={styles.sectionLabel}>SOPORTE</Text>
-        <SettingsList
-          items={[
-            {
-              label: 'Preguntas frecuentes',
-              onPress: () => openExternalUrl('https://tactium.io/#faq'),
-            },
-            {
-              label: 'Contactar con soporte',
-              onPress: () =>
-                openExternalUrl('mailto:hola@tactium.io?subject=Soporte%20TACTIUM'),
-            },
-            {
-              label: 'Términos de uso',
-              onPress: () =>
-                openExternalUrl('https://tactium.io/legal/terminos'),
-            },
-            {
-              label: 'Política de privacidad',
-              onPress: () =>
-                openExternalUrl('https://tactium.io/legal/privacidad'),
-            },
-            {
-              label: 'Versión',
-              // Versión nativa + build, y qué bundle corre: el embebido en el
-              // build o una actualización OTA (id corto + fecha). Sirve para
-              // saber al instante si el móvil ha aplicado la última OTA.
-              detail: `${Constants.expoConfig?.version ?? '1.2.0'} (${buildNumber()}) · ${
-                Updates.isEmbeddedLaunch || !Updates.updateId
-                  ? 'sin OTA'
-                  : `OTA ${Updates.updateId.slice(-6)}${
-                      Updates.createdAt
-                        ? ` ${Updates.createdAt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`
-                        : ''
-                    }`
-              }`,
-              trailing: 'static',
-            },
-          ]}
-        />
+        {/* ── TU EQUIPO ── */}
+        <Text style={styles.groupLabel}>TU EQUIPO</Text>
+        <Group>
+          {!team ? (
+            <Row
+              icon={<IconPlus size={14} color={c.accent} />}
+              accent
+              title="Crear un equipo o club"
+              sub="Plantilla, alineaciones y liga"
+              onPress={() => {
+                setSoloUpgrade(true);
+                setSoloMode(false);
+              }}
+            />
+          ) : null}
+          {isCaptain && team ? (
+            <Row
+              icon={<IconLink size={14} color={c.accent} />}
+              accent
+              title="Invitar jugadores"
+              sub={`Enlace para ${team.name}`}
+              onPress={() => setInviteOpen(true)}
+            />
+          ) : null}
+          {isPlayer && team ? (
+            myPlayer ? (
+              <Row
+                icon={<CommunityAvatar name={myPlayer.name} size={24} />}
+                title={`Tu ficha: ${myPlayer.name}`}
+                sub={[
+                  myPlayer.position,
+                  myPlayer.pts != null ? `${myPlayer.pts} puntos de la federación` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                right={
+                  unlinking ? (
+                    <ActivityIndicator size="small" color={c.accent} />
+                  ) : (
+                    <Text style={styles.rowAction}>Cambiar</Text>
+                  )
+                }
+                onPress={handleUnlink}
+              />
+            ) : (
+              <Row
+                icon={<IconUser size={14} color={c.accent} />}
+                accent
+                title="Elige tu ficha"
+                sub="Tu nombre en la plantilla"
+                onPress={() => setClaimOpen(true)}
+              />
+            )
+          ) : null}
+          <Row
+            icon={<IconTicket size={14} color={c.textMuted} />}
+            title="Unirme con código"
+            sub="Si te invitan a otro equipo"
+            onPress={() => setRedeemOpen(true)}
+          />
+          {availableRoles.length > 1 ? (
+            <View style={[styles.row, styles.rowStack]}>
+              <Text style={styles.rowTitle}>Ver como</Text>
+              <SegmentedControl<'club_admin' | 'captain' | 'player'>
+                options={(['club_admin', 'captain', 'player'] as const)
+                  .filter((r) => availableRoles.includes(r))
+                  .map((r) => ({ key: r, label: ROLE_LABEL[r] }))}
+                value={activeRole ?? 'player'}
+                onChange={(r) => {
+                  lightTap();
+                  setActiveRoleOverride(r);
+                }}
+              />
+            </View>
+          ) : null}
+        </Group>
 
-        <Pressable
-          onPress={confirmLogout}
-          style={({ pressed }) => [styles.logout, pressed && { opacity: 0.85 }]}
-        >
-          <Text style={styles.logoutLabel}>Cerrar sesión</Text>
+        {/* ── PREFERENCIAS ── */}
+        <Text style={styles.groupLabel}>PREFERENCIAS</Text>
+        <Group>
+          <Row
+            icon={<IconBell size={14} color={c.textMuted} />}
+            title="Avisos del equipo"
+            sub="Convocatoria, alineación y recordatorios"
+            right={
+              <Toggle
+                size="sm"
+                value={notifEnabled}
+                onChange={handleToggleNotifications}
+                accessibilityLabel="Activar o desactivar los avisos del equipo"
+              />
+            }
+          />
+          <View style={[styles.row, styles.rowStack]}>
+            <Text style={styles.rowTitle}>Apariencia</Text>
+            <SegmentedControl<'light' | 'dark' | 'system'>
+              options={[
+                { key: 'light', label: 'Claro' },
+                { key: 'dark', label: 'Oscuro' },
+                { key: 'system', label: 'Auto' },
+              ]}
+              value={themeMode}
+              onChange={(m) => {
+                lightTap();
+                setThemeMode(m);
+              }}
+            />
+            <Text style={styles.rowHint}>«Auto» sigue el modo claro u oscuro de tu móvil.</Text>
+          </View>
+        </Group>
+
+        {/* ── CUENTA Y AYUDA ── */}
+        <Text style={styles.groupLabel}>CUENTA Y AYUDA</Text>
+        <Group>
+          <Row
+            icon={<IconFile size={14} color={c.textMuted} />}
+            title="Mis datos"
+            onPress={() => navigation.navigate('MyData')}
+          />
+          <Row
+            icon={<IconMail size={14} color={c.textMuted} />}
+            title="Ayuda y contacto"
+            sub="Preguntas, soporte, términos y privacidad"
+            onPress={openHelp}
+          />
+        </Group>
+
+        {/* ── Salir ── */}
+        <Group style={{ marginTop: 18 }}>
+          <Row title="Cerrar sesión" onPress={confirmLogout} chevron={false} />
+          <Row
+            title="Eliminar cuenta"
+            danger
+            chevron={false}
+            onPress={() => setDeleteOpen(true)}
+          />
+        </Group>
+
+        <Pressable onPress={onVersionTap} accessibilityRole="text" style={{ marginTop: 18 }}>
+          <Text style={styles.version}>{version}</Text>
         </Pressable>
-
-        {/* ── ZONA DE PELIGRO · Eliminar cuenta ───────────────────────────
-            Requisito Apple Guideline 5.1.1(v) y Google equivalente: si la
-            app permite registro, DEBE permitir eliminar la cuenta desde la
-            propia app. Doble confirmación para evitar accidentes. */}
-        <Text style={styles.dangerLabel}>ZONA DE PELIGRO</Text>
-        <Pressable
-          onPress={confirmDeleteAccount}
-          disabled={deleting}
-          accessibilityRole="button"
-          accessibilityLabel="Eliminar mi cuenta"
-          style={({ pressed }) => [
-            styles.deleteAccount,
-            pressed && !deleting && { opacity: 0.85 },
-            deleting && { opacity: 0.5 },
-          ]}
-        >
-          {deleting ? (
-            <ActivityIndicator size="small" color={c.error} />
-          ) : (
-            <Text style={styles.deleteAccountLabel}>Eliminar cuenta</Text>
-          )}
-        </Pressable>
-        <Text style={styles.deleteAccountHint}>
-          Borrarás tu perfil y todos tus datos. Si tienes una suscripción
-          activa, recuerda cancelarla en App Store o Google Play para dejar
-          de pagar.
-        </Text>
-
-        <Text style={styles.signature}>
-          {'TACTIUM · ' + players.length + ' JUGADORES' + (activeSeason ? ' · ' + activeSeason.name.toUpperCase() : '')}
-        </Text>
       </ScrollView>
+    </>
+  );
 
-      <RedeemInvitationSheet
-        open={redeemOpen}
-        onClose={() => setRedeemOpen(false)}
+  const helpRows = (
+    <Group style={{ marginTop: 12 }}>
+      <Row title="Preguntas frecuentes" onPress={() => openExternalUrl('https://tactium.io/#faq')} />
+      <Row
+        title="Escribir a soporte"
+        sub="hola@tactium.io"
+        onPress={() => openExternalUrl('mailto:hola@tactium.io?subject=Soporte%20TACTIUM')}
       />
+      <Row title="Términos de uso" onPress={() => openExternalUrl('https://tactium.io/legal/terminos')} />
+      <Row
+        title="Política de privacidad"
+        onPress={() => openExternalUrl('https://tactium.io/legal/privacidad')}
+      />
+    </Group>
+  );
 
+  return (
+    <View style={styles.root}>
+      {split ? (
+        <SplitView
+          list={<View style={{ flex: 1 }}>{listBody}</View>}
+          detail={
+            openSection === 'subscription' ? (
+              <SubscriptionScreen embedded />
+            ) : (
+              <ScrollView
+                contentContainerStyle={[
+                  styles.scroll,
+                  { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 32 },
+                ]}
+              >
+                <Text style={styles.sheetEyebrow}>AYUDA Y CONTACTO</Text>
+                {helpRows}
+              </ScrollView>
+            )
+          }
+        />
+      ) : (
+        listBody
+      )}
+
+      {/* Ayuda y contacto */}
+      <BottomSheet open={helpOpen} onClose={() => setHelpOpen(false)}>
+        <Text style={styles.sheetEyebrow}>AYUDA Y CONTACTO</Text>
+        {helpRows}
+      </BottomSheet>
+
+      {/* Eliminar cuenta: una hoja que explica qué se pierde. Requisito Apple
+          5.1.1(v): si la app permite registro, debe permitir borrar la cuenta. */}
+      <BottomSheet
+        open={deleteOpen}
+        onClose={() => (deleting ? undefined : setDeleteOpen(false))}
+        footer={
+          <View style={{ gap: 8 }}>
+            <Pressable
+              onPress={doDelete}
+              disabled={deleting}
+              style={({ pressed }) => [
+                styles.dangerBtn,
+                pressed && !deleting && { opacity: 0.88 },
+                deleting && { opacity: 0.6 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Eliminar mi cuenta"
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color="#2a0905" />
+              ) : (
+                <Text style={styles.dangerBtnLabel}>Eliminar mi cuenta</Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => setDeleteOpen(false)}
+              disabled={deleting}
+              style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.8 }]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.ghostBtnLabel}>Volver</Text>
+            </Pressable>
+          </View>
+        }
+      >
+        <Text style={styles.sheetTitle}>¿Eliminar tu cuenta?</Text>
+        <Text style={styles.sheetLede}>Se borra para siempre y no se puede deshacer:</Text>
+        <View style={{ gap: 6, marginTop: 10 }}>
+          {deleteItems.map((it) => (
+            <View key={it} style={styles.lossRow}>
+              <Text style={styles.lossBullet}>✕</Text>
+              <Text style={styles.lossText}>{it}</Text>
+            </View>
+          ))}
+        </View>
+        {storeSub ? (
+          <View style={styles.warnBox}>
+            <Text style={styles.warnTitle}>Tu suscripción no se cancela sola</Text>
+            <Text style={styles.warnText}>
+              La pagas en {storeSub.platform === 'ios' ? 'App Store' : 'Google Play'}:
+              cancélala allí. Borrar la cuenta no la cancela.
+            </Text>
+            <Pressable
+              onPress={() =>
+                openExternalUrl(
+                  Platform.OS === 'ios'
+                    ? 'https://apps.apple.com/account/subscriptions'
+                    : 'https://play.google.com/store/account/subscriptions',
+                )
+              }
+              hitSlop={6}
+            >
+              <Text style={styles.warnLink}>Abrir mis suscripciones</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </BottomSheet>
+
+      <EditProfileSheet open={editOpen} onClose={() => setEditOpen(false)} onSaved={loadProfile} />
+      <RedeemInvitationSheet open={redeemOpen} onClose={() => setRedeemOpen(false)} />
       <InvitePlayersSheet
         open={inviteOpen}
         teamId={team?.id ?? null}
         teamName={team?.name ?? null}
         onClose={() => setInviteOpen(false)}
       />
-
       <ClaimPlayerSheet
         open={claimOpen}
         teamId={team?.id ?? null}
@@ -714,30 +644,77 @@ export const SettingsScreen = () => {
   );
 };
 
-const ProfileStat: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
-  label, value, highlight,
-}) => {
+// ─── Grupo de filas con separadores ────────────────────────────────────────
+const Group: React.FC<{ children: React.ReactNode; style?: object }> = ({ children, style }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const items = React.Children.toArray(children).filter(Boolean);
   return (
-    <View style={styles.statBox}>
-      <Text style={[styles.statValue, highlight && { color: c.accent }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={[styles.group, style]}>
+      {items.map((child, i) => (
+        <React.Fragment key={i}>
+          {i > 0 ? <View style={styles.divider} /> : null}
+          {child}
+        </React.Fragment>
+      ))}
     </View>
   );
 };
 
-// ─── SubscriptionCard ──────────────────────────────────────────────────────
-// Resume el estado de la suscripción del user + entry-point a la pantalla
-// de gestión. Para club_admin lleva a `ClubBillingScreen`; para el resto a
-// `SubscriptionScreen`. Si no hay sub activa, el copy invita a probar Pro.
-const SubscriptionCard: React.FC<{
+// ─── Fila de un grupo ──────────────────────────────────────────────────────
+const Row: React.FC<{
+  title: string;
+  sub?: string;
+  icon?: React.ReactNode;
+  accent?: boolean;
+  danger?: boolean;
+  right?: React.ReactNode;
+  chevron?: boolean;
+  onPress?: () => void;
+}> = ({ title, sub, icon, accent, danger, right, chevron = true, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const content = (
+    <>
+      {icon ? <View style={[styles.rowIcon, accent && styles.rowIconAccent]}>{icon}</View> : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.rowTitle, danger && { color: c.error }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {sub ? (
+          <Text style={styles.rowSub} numberOfLines={1}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      {right ?? (onPress && chevron ? <IconChevron size={14} color={c.textFaint} /> : null)}
+    </>
+  );
+  if (!onPress) return <View style={styles.row}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={sub ? `${title}. ${sub}` : title}
+      style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}
+    >
+      {content}
+    </Pressable>
+  );
+};
+
+// ─── Tarjeta del plan (capitán y club) ─────────────────────────────────────
+// Contador de días de la prueba (verde; ámbar a 3 días o menos) y entrada a
+// «Mi suscripción» o a la facturación del club.
+const PlanCard: React.FC<{
   activeRole: ActiveRole | null;
   userId: string | null;
   canBeClubAdmin: boolean;
   onSwitchToClubMode: () => void;
   onPressUser: () => void;
   onPressClub: () => void;
+  /** Tablet: «Mi suscripción» está abierta a la derecha. */
+  selected?: boolean;
 }> = ({
   activeRole,
   userId,
@@ -745,530 +722,280 @@ const SubscriptionCard: React.FC<{
   onSwitchToClubMode,
   onPressUser,
   onPressClub,
+  selected = false,
 }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
 
-  // Sub activa propia o del club: mostramos lo más relevante.
-  const activeSub = React.useMemo(() => {
-    const candidates = subscriptions.filter((s) =>
-      isLiveSub(s),
-    );
-    // Preferimos sub de club si el user es club_admin.
+  const activeSub = useMemo(() => {
+    const live = subscriptions.filter((s) => isLiveSub(s));
     if (activeRole === 'club_admin') {
       return (
-        candidates.find((s) => s.subject_type === 'club') ??
-        candidates.find((s) => s.subject_type === 'user' && s.subject_id === userId) ??
+        live.find((s) => s.subject_type === 'club') ??
+        live.find((s) => s.subject_type === 'user' && s.subject_id === userId) ??
         null
       );
     }
     return (
-      candidates.find((s) => s.subject_type === 'user' && s.subject_id === userId) ??
-      candidates.find((s) => s.subject_type === 'club') ??
+      live.find((s) => s.subject_type === 'user' && s.subject_id === userId) ??
+      live.find((s) => s.subject_type === 'club') ??
       null
     );
   }, [subscriptions, activeRole, userId]);
 
   const plan = activeSub ? PLAN_BY_TIER[activeSub.plan_tier] : null;
   const isClubAdmin = activeRole === 'club_admin';
-  // Caso especial: el usuario es club_admin a nivel de permisos pero está
-  // operando en modo capitán. La gestión de suscripción del club vive en
-  // Modo Club, así que en vez de abrir SubscriptionScreen le proponemos
-  // cambiar de modo. Evita pagar dos planes.
   const isClubAdminInCaptainMode = canBeClubAdmin && activeRole === 'captain';
+
   const handlePress = () => {
     if (isClubAdminInCaptainMode) {
       Alert.alert(
-        'Estás en modo capitán',
-        'La suscripción del club se gestiona desde Modo Club. ¿Cambiamos de modo?',
+        'Estás viendo como capitán',
+        'La suscripción del club se gestiona viendo la app como Club. ¿Cambiamos?',
         [
           { text: 'Ahora no', style: 'cancel' },
-          {
-            text: 'Cambiar a Modo Club',
-            onPress: () => {
-              onSwitchToClubMode();
-            },
-          },
+          { text: 'Ver como Club', onPress: onSwitchToClubMode },
         ],
       );
       return;
     }
-    if (isClubAdmin) {
-      onPressClub();
-    } else {
-      onPressUser();
-    }
+    if (isClubAdmin) onPressClub();
+    else onPressUser();
   };
 
-  // Días restantes si la sub está en trial. `null` si no aplica.
-  const trialDaysLeft = React.useMemo(() => {
+  const trialDaysLeft = useMemo(() => {
     if (!activeSub || activeSub.status !== 'trialing') return null;
     const endIso = activeSub.trial_end ?? activeSub.current_period_end;
     if (!endIso) return null;
-    const ms = new Date(endIso).getTime() - Date.now();
-    return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+    return Math.max(0, Math.ceil((new Date(endIso).getTime() - Date.now()) / DAY_MS));
   }, [activeSub]);
+  const urgent = trialDaysLeft != null && trialDaysLeft <= 3;
+  const tint = urgent ? c.warning : c.accent;
+  const endDate = activeSub
+    ? new Date(activeSub.trial_end ?? activeSub.current_period_end).toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'short',
+      })
+    : null;
+  const noCard = !!activeSub && (activeSub.product_id ?? '').startsWith('trial_');
 
-  // Color del contador según urgencia: ≤3 días → warning amarillo,
-  // resto → accent verde.
-  const trialTint =
-    trialDaysLeft != null && trialDaysLeft <= 3
-      ? c.warning
-      : c.accent;
-  const trialBgTint =
-    trialDaysLeft != null && trialDaysLeft <= 3
-      ? 'rgba(242,201,76,0.12)'
-      : c.accent10;
-  const trialBorderTint =
-    trialDaysLeft != null && trialDaysLeft <= 3
-      ? 'rgba(242,201,76,0.45)'
-      : c.accent40;
+  const title = activeSub
+    ? trialDaysLeft != null
+      ? `Prueba de Pro · ${plan?.displayName ?? 'Pro'}`
+      : plan?.displayName ?? 'TACTIUM Pro'
+    : isClubAdmin
+      ? 'Suscribir el club'
+      : 'Probar TACTIUM Pro';
+  const sub = activeSub
+    ? activeSub.cancel_at_period_end
+      ? `No se renovará · termina el ${endDate}`
+      : trialDaysLeft != null
+        ? `Termina el ${endDate}${noCard ? ' · sin tarjeta' : ''}`
+        : 'Activa · Gestionar plan'
+    : isClubAdmin
+      ? 'Cubre a todos los capitanes del club'
+      : '14 días de prueba, sin compromiso';
 
   return (
-    <>
-      <Text style={styles.sectionLabel}>SUSCRIPCIÓN</Text>
-      <Pressable
-        onPress={handlePress}
-        accessibilityRole="button"
-        accessibilityLabel={
-          activeSub
-            ? `Plan ${plan?.displayName ?? ''}. Gestionar.`
-            : 'Activar plan premium'
-        }
-        style={({ pressed }) => [
-          styles.subCard,
-          pressed && { opacity: 0.85 },
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${sub}`}
+      style={({ pressed }) => [
+        styles.planCard,
+        selected && !isClubAdmin && styles.planCardSel,
+        pressed && { opacity: 0.88 },
+      ]}
+    >
+      <View
+        style={[
+          styles.planDays,
+          urgent && { borderColor: 'rgba(242,201,76,0.45)', backgroundColor: 'rgba(242,201,76,0.12)' },
         ]}
       >
-        <View
-          style={[
-            styles.subBadge,
-            activeSub && {
-              backgroundColor: c.accent10,
-              borderColor: c.accent40,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.subBadgeText,
-              activeSub && { color: c.accent },
-            ]}
-          >
-            {activeSub ? 'PRO' : 'FREE'}
-          </Text>
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.subTitle}>
-            {activeSub
-              ? plan?.displayName ?? 'TACTIUM Pro'
-              : isClubAdmin
-                ? 'Suscribir el club'
-                : 'Probar TACTIUM Pro'}
-          </Text>
-          <Text style={styles.subHint} numberOfLines={1}>
-            {activeSub
-              ? activeSub.cancel_at_period_end
-                ? 'No se renovará · Gestionar'
-                : activeSub.status === 'trialing'
-                ? trialDaysLeft === 0
-                  ? 'Tu prueba termina hoy · Gestionar'
-                  : trialDaysLeft === 1
-                    ? 'Tu prueba termina mañana · Gestionar'
-                    : `Te quedan ${trialDaysLeft} días de prueba · Gestionar`
-                : 'Activa · Gestionar plan'
-              : isClubAdmin
-                ? 'Cubre a todos los capitanes del club'
-                : 'Prueba 14 días · Sin compromiso'}
-          </Text>
-        </View>
         {trialDaysLeft != null ? (
-          <View
-            style={[
-              styles.trialCounter,
-              {
-                backgroundColor: trialBgTint,
-                borderColor: trialBorderTint,
-              },
-            ]}
-          >
-            <Text style={[styles.trialCounterNum, { color: trialTint }]}>
-              {trialDaysLeft}
+          <>
+            <Text style={[styles.planDaysNum, { color: tint }]}>{trialDaysLeft}</Text>
+            <Text style={[styles.planDaysUnit, { color: tint }]}>
+              {trialDaysLeft === 1 ? 'DÍA' : 'DÍAS'}
             </Text>
-            <Text style={[styles.trialCounterUnit, { color: trialTint }]}>
-              d
-            </Text>
-          </View>
-        ) : null}
-        <IconChevron size={14} color={c.textFaint} />
-      </Pressable>
-    </>
+          </>
+        ) : activeSub ? (
+          <Text style={[styles.planDaysUnit, { color: c.accent, fontSize: 10 }]}>PRO</Text>
+        ) : (
+          <IconTeam size={16} color={c.accent} />
+        )}
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.planTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.planSub} numberOfLines={1}>
+          {sub}
+        </Text>
+      </View>
+      <IconChevron size={14} color={c.textFaint} />
+    </Pressable>
   );
 };
 
-interface SettingItem {
-  label: string;
-  detail?: string;
-  trailing?: 'chevron' | 'static' | 'toggle' | 'soon';
-  value?: boolean;
-  onToggle?: (next: boolean) => void;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-}
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+    },
+    backBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
+    scroll: { paddingHorizontal: 20, paddingTop: 8 },
 
-const SettingsList: React.FC<{ items: SettingItem[] }> = ({ items }) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-  <View style={styles.settingsList}>
-    {items.map((it, i) => {
-      const trailing = it.trailing ?? 'chevron';
-      const interactive = trailing === 'chevron' && !!it.onPress;
-      return (
-        <Pressable
-          key={it.label}
-          disabled={!interactive}
-          onPress={it.onPress}
-          accessibilityRole={interactive ? 'button' : undefined}
-          accessibilityLabel={it.accessibilityLabel ?? it.label}
-          style={({ pressed }) => [
-            styles.settingRow,
-            i < items.length - 1 && styles.settingDivider,
-            pressed && interactive && { opacity: 0.85 },
-          ]}
-        >
-          <Text
-            style={[
-              styles.settingLabel,
-              trailing === 'soon' && { color: c.textMuted },
-            ]}
-          >
-            {it.label}
-          </Text>
-          {it.detail ? <Text style={styles.settingDetail}>{it.detail}</Text> : null}
-          {trailing === 'chevron' ? (
-            <IconChevron size={14} color={c.textFaint} />
-          ) : trailing === 'toggle' ? (
-            <Toggle
-              size="sm"
-              value={!!it.value}
-              onChange={it.onToggle ?? (() => {})}
-              accessibilityLabel={it.accessibilityLabel ?? it.label}
-            />
-          ) : trailing === 'soon' ? (
-            <View style={styles.soonBadge}>
-              <Text style={styles.soonBadgeText}>PRONTO</Text>
-            </View>
-          ) : null}
-        </Pressable>
-      );
-    })}
-  </View>
-  );
-};
+    meCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 14,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    meName: { color: c.text, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
+    meSub: { color: c.textFaint, fontSize: 12, marginTop: 2 },
+    pill: {
+      paddingHorizontal: 12,
+      height: 30,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pillText: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
 
-const makeStyles = (c: Palette) => StyleSheet.create({
-  root:   { flex: 1, backgroundColor: c.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
-  scroll:  { paddingHorizontal: 22, paddingTop: 8 },
+    planCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 10,
+      padding: 12,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    planCardCov: { borderColor: c.hairStrong },
+    planCardSel: { borderColor: c.accent, borderWidth: 1.5 },
+    planDays: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    planDaysNum: { fontFamily: Fonts.mono, fontSize: 17, fontWeight: '800', lineHeight: 19 },
+    planDaysUnit: { fontFamily: Fonts.mono, fontSize: 8, fontWeight: '700', letterSpacing: 0.5 },
+    planTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
+    planSub: { color: c.textFaint, fontSize: 12, marginTop: 2 },
 
-  sectionLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.textFaint, fontWeight: '500', marginTop: 18, marginBottom: 10 },
+    groupLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 2.2,
+      color: c.textFaint,
+      marginTop: 22,
+      marginBottom: 8,
+      marginLeft: 2,
+    },
+    group: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      overflow: 'hidden',
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: c.hair, marginLeft: 14 },
+    rowStack: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
+    rowIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowIconAccent: { backgroundColor: c.accent10, borderColor: c.accent40 },
+    rowTitle: { color: c.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
+    rowSub: { color: c.textFaint, fontSize: 12, marginTop: 2 },
+    rowHint: { color: c.textFaint, fontSize: 11.5 },
+    rowAction: { color: c.accent, fontSize: 13, fontWeight: '700' },
 
-  teamCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.bgCard, borderRadius: 16, borderWidth: 1, borderColor: c.hair },
-  teamName:  { color: c.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
-  teamMeta:  { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    version: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 10.5,
+      letterSpacing: 0.5,
+      textAlign: 'center',
+    },
 
-  statsGrid:    { flexDirection: 'row', gap: 8, marginTop: 12 },
-  statsLoading: { marginTop: 12, height: 70, alignItems: 'center', justifyContent: 'center' },
-  noSeasonBox:  { marginTop: 12, height: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bgCard, borderRadius: 12, borderWidth: 1, borderColor: c.hair },
-  noSeasonText: { color: c.textMuted, fontSize: 13 },
-  statBox:      { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: c.bgCard, borderWidth: 1, borderColor: c.hair, alignItems: 'center' },
-  statValue:    { fontFamily: Fonts.mono, fontSize: 18, fontWeight: '700', color: c.text },
-  statLabel:    { fontFamily: Fonts.mono, fontSize: 10, color: c.textFaint, letterSpacing: 1.5, marginTop: 6, textTransform: 'uppercase' },
-
-  modeRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  modePill: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modePillText: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  modeHint: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 0.4,
-    marginTop: 8,
-    lineHeight: 16,
-  },
-  invitationsStack: {
-    gap: 10,
-  },
-  redeemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.accent50,
-  },
-  subCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-  },
-  subBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-  },
-  subBadgeText: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  subTitle: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  subHint: {
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  trialCounter: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 9,
-    borderWidth: 1,
-    minWidth: 38,
-    justifyContent: 'center',
-  },
-  trialCounterNum: {
-    fontFamily: Fonts.mono,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  trialCounterUnit: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    fontWeight: '600',
-    marginLeft: 1,
-    opacity: 0.85,
-  },
-  claimCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.accent50,
-  },
-  myPlayerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.hair,
-  },
-  myPlayerAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  myPlayerAvatarText: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  myPlayerName: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  myPlayerMeta: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 11,
-    letterSpacing: 0.4,
-    marginTop: 3,
-  },
-  myPlayerBtn: {
-    paddingHorizontal: 12,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  myPlayerBtnLabel: {
-    color: c.accent,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  redeemBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  redeemBadgeText: {
-    color: c.accent,
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 24,
-  },
-  redeemTitle: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  redeemHint: {
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  settingsList:   { backgroundColor: c.bgCard, borderRadius: 16, borderWidth: 1, borderColor: c.hair, overflow: 'hidden' },
-  settingRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  settingDivider: { borderBottomWidth: 1, borderColor: c.hair },
-  settingLabel:   { flex: 1, color: c.text, fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
-  settingDetail:  { color: c.textMuted, fontSize: 13, marginRight: 8 },
-  soonBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 5,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-  },
-  soonBadgeText: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  notifHint: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10,
-    letterSpacing: 0.4,
-    lineHeight: 14,
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-
-  logout:      { marginTop: 24, height: 52, borderRadius: Radius.lg, borderWidth: 1, borderColor: 'rgba(255,107,107,0.4)', alignItems: 'center', justifyContent: 'center' },
-  logoutLabel: { color: c.error, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
-
-  dangerLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: c.error,
-    fontWeight: '500',
-    marginTop: 36,
-    marginBottom: 10,
-    opacity: 0.7,
-  },
-  deleteAccount: {
-    height: 48,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,107,0.25)',
-    backgroundColor: 'rgba(255,107,107,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteAccountLabel: {
-    color: c.error,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  deleteAccountHint: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10,
-    letterSpacing: 0.4,
-    lineHeight: 14,
-    marginTop: 8,
-    textAlign: 'center',
-    paddingHorizontal: 12,
-  },
-
-  signature:   { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10, letterSpacing: 1.5, textAlign: 'center', marginTop: 20 },
-});
+    sheetEyebrow: { fontFamily: Fonts.mono, color: c.accent, fontSize: 11, letterSpacing: 2 },
+    sheetTitle: { color: c.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+    sheetLede: { color: c.textMuted, fontSize: 13, marginTop: 4 },
+    lossRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+    lossBullet: { color: c.error, fontSize: 12, fontWeight: '800', marginTop: 1 },
+    lossText: { color: c.text, fontSize: 13.5, flex: 1, lineHeight: 19 },
+    warnBox: {
+      marginTop: 14,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: 'rgba(242,180,75,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(242,180,75,0.45)',
+      gap: 4,
+    },
+    warnTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
+    warnText: { color: c.textMuted, fontSize: 12.5, lineHeight: 17 },
+    warnLink: { color: c.warning, fontSize: 12.5, fontWeight: '700', marginTop: 4 },
+    dangerBtn: {
+      height: 50,
+      borderRadius: Radius.lg,
+      backgroundColor: c.error,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dangerBtnLabel: { color: '#2a0905', fontSize: 15, fontWeight: '700' },
+    ghostBtn: {
+      height: 48,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    ghostBtnLabel: { color: c.text, fontSize: 14, fontWeight: '600' },
+  });

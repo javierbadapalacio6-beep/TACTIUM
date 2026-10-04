@@ -30,6 +30,8 @@ import { TeamStack } from './TeamStack';
 import { ProfileStack } from './ProfileStack';
 import { CreateSheet } from '@features/create/components/CreateSheet';
 import { useNavRole } from './navRole';
+import { TabletRail } from './TabletRail';
+import { useLayout } from '@components/ui/ResponsiveFrame';
 
 import type { TabParamList } from './types';
 
@@ -37,16 +39,19 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Icono del tab — sólo cambia color según foco. El halo accent se renderiza
 // en el botón (AnimatedTabButton) para englobar icono + label.
+// `color` lo pasa la barra (en móvil coincide con tabBarActive/Inactive;
+// en el rail de tablet es el acento).
 const TabIcon: React.FC<{
   Icon: React.ComponentType<{ size?: number; color?: string }>;
   focused: boolean;
-}> = ({ Icon, focused }) => {
+  color?: string;
+}> = ({ Icon, focused, color }) => {
   const c = useColors();
   return (
     <View style={styles.icon}>
       <Icon
         size={22}
-        color={focused ? c.tabBarActive : c.tabBarInactive}
+        color={color ?? (focused ? c.tabBarActive : c.tabBarInactive)}
       />
     </View>
   );
@@ -278,13 +283,23 @@ export const TabNavigator = () => {
   // stacks se recalcula solo; aquí solo se usa para el texto de Equipo.
   const role = useNavRole();
   const teamLabel = role === 'club' || role === 'organizer' ? 'Equipos' : 'Equipo';
+  // Tablet: la barra pasa a ser un rail a la izquierda (TabletRail). En
+  // móvil todo sigue igual: isla flotante inferior.
+  const { isTablet } = useLayout();
 
   return (
     <>
       <Tab.Navigator
-        tabBar={(props) => <FloatingTabBar {...props} />}
+        tabBar={(props) =>
+          isTablet ? (
+            <TabletRail {...props} onCreate={() => setCreateOpen(true)} />
+          ) : (
+            <FloatingTabBar {...props} />
+          )
+        }
         screenOptions={{
           headerShown: false,
+          tabBarPosition: isTablet ? 'left' : 'bottom',
           tabBarActiveTintColor: c.tabBarActive,
           tabBarInactiveTintColor: c.tabBarInactive,
           // El BottomTabBar interno se renderiza encima del pill cristal.
@@ -313,8 +328,8 @@ export const TabNavigator = () => {
           component={HomeStack}
           options={{
             tabBarLabel: 'Inicio',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon Icon={IconHome} focused={focused} />
+            tabBarIcon: ({ focused, color }) => (
+              <TabIcon color={color} Icon={IconHome} focused={focused} />
             ),
           }}
         />
@@ -323,8 +338,8 @@ export const TabNavigator = () => {
           component={CompetirStack}
           options={{
             tabBarLabel: 'Competir',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon Icon={IconTrophy} focused={focused} />
+            tabBarIcon: ({ focused, color }) => (
+              <TabIcon color={color} Icon={IconTrophy} focused={focused} />
             ),
           }}
         />
@@ -350,8 +365,8 @@ export const TabNavigator = () => {
           component={TeamStack}
           options={{
             tabBarLabel: teamLabel,
-            tabBarIcon: ({ focused }) => (
-              <TabIcon Icon={IconTeam} focused={focused} />
+            tabBarIcon: ({ focused, color }) => (
+              <TabIcon color={color} Icon={IconTeam} focused={focused} />
             ),
           }}
         />
@@ -360,8 +375,8 @@ export const TabNavigator = () => {
           component={ProfileStack}
           options={{
             tabBarLabel: 'Perfil',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon Icon={IconUser} focused={focused} />
+            tabBarIcon: ({ focused, color }) => (
+              <TabIcon color={color} Icon={IconUser} focused={focused} />
             ),
           }}
         />

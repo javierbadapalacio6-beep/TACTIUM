@@ -1,4 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   View,
   Text,
@@ -12,7 +18,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useColors, type Palette } from '@core/theme';
+import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import {
@@ -28,6 +34,8 @@ import {
   dateToIsoTime,
   isoDateToDate,
   isoTimeToDate, IconCamera, IconHome, IconPlane } from '@components/ui';
+import { useLayout } from '@components/ui/ResponsiveFrame';
+import { useIsSplit } from '@components/layout';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as SeasonsApi from '@core/services/seasons';
 import * as LineupsApi from '@core/services/lineups';
@@ -44,10 +52,23 @@ import { toast } from '@store/toastStore';
 import type { ScannedMatchday } from '@core/services/imageRecognition';
 
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 
 import type { CompetirStackScreenProps } from '@navigation/types';
 import { FcpStandings } from '../components/FcpStandings';
 import { FcpBracketView } from '../components/FcpBracketView';
+import {
+  useFcpStanding,
+  fmtDay,
+  scoreLabel,
+  outcomeColor,
+  phaseLabel,
+  playedChrono,
+  pickNextMatchday,
+  shortGroupName,
+  ActionRow,
+  Glyph,
+} from '../components/ligaParts';
 import {
   fetchTeamPlayoff,
   playoffFamilyKey,
@@ -56,7 +77,6 @@ import {
 } from '@core/services/fcpBracket';
 
 // ─── Types ──────────────────────────────────────────────────────────
-type FilterKey = 'all' | 'pending' | 'played';
 type SeasonTab = 'clasif' | 'jornadas' | 'cuadro';
 
 // ─── Screen ─────────────────────────────────────────────────────────
@@ -74,11 +94,14 @@ export const SeasonDetailScreen = ({
   const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
   const [matchdays, setMatchdays] = useState<MatchdaysApi.Matchday[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterKey>('all');
   // Ligas federadas: la temporada se parte en dos pestañas (Clasificación |
   // Jornadas). Otras federaciones/manual: solo jornadas, como siempre.
   const isFcp = team?.federation === 'FCantP';
-  const [tab, setTab] = useState<SeasonTab>('clasif');
+  // Abre en Jornadas: el marcador de la Liga ya enseña el puesto.
+  const [tab, setTab] = useState<SeasonTab>('jornadas');
+  const [addMenu, setAddMenu] = useState(false);
+  const [moreMenu, setMoreMenu] = useState(false);
+  const { data: standing } = useFcpStanding(team?.id, isFcp);
   // Cuadro(s) de playoff del equipo (si la fase eliminatoria ya existe en la FCP).
   const [playoff, setPlayoff] = useState<FcpTeamPlayoff | null>(null);
   const [selPlayoffGroup, setSelPlayoffGroup] = useState<string | null>(null);
@@ -405,202 +428,146 @@ export const SeasonDetailScreen = ({
   const playedOrPendingCount = matchdays.length - upcomingCount;
 
   // ── Next matchday: primera futura por fecha, no la más antigua sin acta ──
-  const nextMatchday = React.useMemo(() => {
-    const upcoming = matchdays.filter(
-      (m) => stateById.get(m.id) === 'upcoming',
-    );
-    if (upcoming.length === 0) return undefined;
-    return upcoming.slice().sort((a, b) => {
-      // Sin fecha al final
-      if (!a.match_date && !b.match_date) return a.jornada_number - b.jornada_number;
-      if (!a.match_date) return 1;
-      if (!b.match_date) return -1;
-      return a.match_date.localeCompare(b.match_date);
-    })[0];
-  }, [matchdays, stateById]);
+  const nextMatchday = React.useMemo(
+    () => pickNextMatchday(matchdays, (m) => stateById.get(m.id) === 'upcoming'),
+    [matchdays, stateById],
+  );
 
-  // ── Filtered list ─────────────────────────────────────────────────
-  const filtered = matchdays.filter((m) => {
-    const s = stateById.get(m.id) ?? 'upcoming';
-    if (filter === 'pending') return s === 'upcoming';
-    // "Jugadas" = ya disputadas (con o sin acta cargada todavía)
-    if (filter === 'played')  return s !== 'upcoming';
-    return true;
-  });
+  // ── Secciones de jornadas: Próxima · Jugadas · Pendientes ──────────
+  // «Jugadas» incluye las de fecha pasada sin acta (salen con «ACTA»), de la
+  // más reciente a la más antigua. Las pendientes van plegadas.
+  const playedList = React.useMemo(
+    () =>
+      matchdays
+        .filter((m) => (stateById.get(m.id) ?? 'upcoming') !== 'upcoming')
+        .slice()
+        .sort((a, b) => {
+          if (a.match_date && b.match_date && a.match_date !== b.match_date) {
+            return b.match_date.localeCompare(a.match_date);
+          }
+          return b.jornada_number - a.jornada_number;
+        }),
+    [matchdays, stateById],
+  );
+  const pendingList = React.useMemo(
+    () =>
+      matchdays.filter(
+        (m) => stateById.get(m.id) === 'upcoming' && m.id !== nextMatchday?.id,
+      ),
+    [matchdays, stateById, nextMatchday],
+  );
+  const [showPending, setShowPending] = useState(false);
+  // Disponibilidad de la próxima («8/10») para el capitán.
+  const nextAvail = useMatchdayAvailability(
+    isCaptain && season?.active ? nextMatchday?.id ?? null : null,
+  );
 
-  return (
-    <View style={styles.root}>
-      {/* ── Nav bar ── */}
-      <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
-        <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('CompetirRoot');
-          }}
-          style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
-        >
-          <IconBack size={16} color={c.text} />
-          <Text style={styles.navBtnLabel}>Temporadas</Text>
-        </Pressable>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {canEditSeason ? (
-            <>
-              <Pressable
-                onPress={openScan}
-                style={({ pressed }) => [
-                  styles.scanBtn,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <IconCamera size={16} color={c.accent} />
-              </Pressable>
-              <Pressable
-                onPress={openAddMatchday}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Añadir jornada"
-                style={({ pressed }) => [
-                  styles.addBtn,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <IconPlus size={16} color={c.accent} />
-              </Pressable>
-            </>
-          ) : null}
-        </View>
-      </View>
+  const editHandler = (m: MatchdaysApi.Matchday) =>
+    canEditSeason ? gate(() => setEditing(m), 'matchday_edit') : undefined;
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 30 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
+  // Pestañas: Jornadas primero (lo que más se consulta); Clasificación y
+  // Cuadro solo en ligas de la Federación.
+  const tabItems: [SeasonTab, string][] = isFcp
+    ? playoff
+      ? [
+          ['jornadas', 'Jornadas'],
+          ['clasif', 'Clasificación'],
+          ['cuadro', 'Cuadro'],
+        ]
+      : [
+          ['jornadas', 'Jornadas'],
+          ['clasif', 'Clasificación'],
+        ]
+    : [];
+
+  const renderRows = (list: MatchdaysApi.Matchday[]) => (
+    <View style={styles.list}>
+      {list.map((m, idx) => (
+        <MatchdayRow
+          key={m.id}
+          matchday={m}
+          state={stateById.get(m.id) ?? 'upcoming'}
+          isNext={m.id === nextMatchday?.id}
+          isLast={idx === list.length - 1}
+          onOpen={() => navigation.navigate('Jornada', { matchdayId: m.id })}
+          onEdit={editHandler(m)}
+        />
+      ))}
+    </View>
+  );
+
+  // Piezas de la pantalla. En el móvil van una debajo de otra (con pestañas);
+  // en tablet horizontal, jornadas a la izquierda y la clasificación (o el
+  // cuadro) a la derecha, a la vez.
+  const headerBlock = (
+    <>
         {/* ── Header ── */}
         <View style={styles.header}>
-          {/* Eyebrow */}
           <View style={styles.eyebrowRow}>
             {season?.active && <NeonDot size={6} />}
             <Text style={styles.eyebrow}>
               {season?.active ? 'ACTIVA' : 'HISTÓRICA'}
-              {season?.phase ? ` · ${season.phase.toUpperCase()}` : ''}
+              {season?.phase ? ` · ${phaseLabel(season.phase)}` : ''}
             </Text>
           </View>
 
-          {/* Title */}
           <Text style={styles.title}>{season?.name ?? 'Temporada'}</Text>
 
-          {/* Stat strip */}
-          <View style={styles.statStrip}>
-            <StatCell label="Jornadas" value={`${played}/${matchdays.length}`} />
-            <View style={styles.statDivider} />
-            <StatCell label="V" value={String(wins)} color={c.accent} />
-            <StatCell label="E" value={String(draws)} />
-            <StatCell label="D" value={String(losses)} color={c.error} />
-            <View style={styles.statDivider} />
-            <StatCell label="Tasa V" value={winRate !== null ? `${winRate}%` : '—'} color={c.warning} />
-          </View>
+          {/* Stat strip (las activas; la archivada lleva su resumen) */}
+          {season && !season.active ? null : (
+            <View style={styles.statStrip}>
+              <StatCell label="Jorn." value={`${played}/${season?.total_matchdays ?? matchdays.length}`} />
+              <View style={styles.statDivider} />
+              <StatCell label="V" value={String(wins)} color={c.accent} />
+              <StatCell label="E" value={String(draws)} />
+              <StatCell label="D" value={String(losses)} color={c.error} />
+              <View style={styles.statDivider} />
+              <StatCell label="Tasa V" value={winRate !== null ? `${winRate}%` : '—'} color={c.warning} />
+            </View>
+          )}
         </View>
 
-        {/* ── Section tabs (Clasificación | Jornadas) · solo ligas FCP ── */}
-        {isFcp ? (
-          <View style={styles.sectionTabs}>
-            {(
-              (playoff
-                ? [
-                    ['clasif', 'Clasificación'],
-                    ['jornadas', 'Jornadas'],
-                    ['cuadro', 'Cuadro'],
-                  ]
-                : [
-                    ['clasif', 'Clasificación'],
-                    ['jornadas', 'Jornadas'],
-                  ]) as [SeasonTab, string][]
-            ).map(([key, label]) => {
-              const on = tab === key;
-              return (
-                <Pressable
-                  key={key}
-                  onPress={() => setTab(key)}
-                  style={[styles.sectionTab, on && styles.sectionTabOn]}
-                >
-                  <Text style={[styles.sectionTabText, on && styles.sectionTabTextOn]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        {/* ── Archivada · resumen final ── */}
+        {!loading && season && !season.active ? (
+          <ArchivedSummary season={season} matchdays={matchdays} />
         ) : null}
 
-        {isFcp && tab === 'clasif' && team ? (
-          matchdays.length > 0 ? (
-            <View style={{ marginHorizontal: 20, marginTop: 16 }}>
+    </>
+  );
+
+  const clasifBlock = team ? (
+          <View style={{ marginHorizontal: 20, marginTop: 16 }}>
+            {standing.idGrupo ? (
+              <View style={styles.clasifHead}>
+                <Text style={styles.clasifHeadText} numberOfLines={1}>
+                  {(shortGroupName(standing.grupo) ?? '').toUpperCase()}
+                  {played > 0 ? ` · J${played}/${season?.total_matchdays ?? matchdays.length}` : ''}
+                </Text>
+              </View>
+            ) : null}
+            {matchdays.length > 0 ? (
               <FcpStandings
                 teamId={team.id}
                 onTeamPress={(idEquipo, teamName) =>
                   navigation.navigate('FcpTeam', { idEquipo, name: teamName })
                 }
               />
-            </View>
-          ) : (
-            // Temporada recién creada (sin jornadas) → NO heredar la
-            // clasificación de la federación (que va ligada al equipo). Vacía
-            // hasta vincular la liga (volcado de la Federación / añadir jornadas).
-            <View
-              style={{
-                marginHorizontal: 20,
-                marginTop: 16,
-                padding: 22,
-                borderRadius: Radius.lg,
-                borderWidth: 1,
-                borderColor: c.hairStrong,
-                backgroundColor: c.bgCard,
-              }}
-            >
-              <Text
-                style={{ color: c.text, fontSize: 15, fontWeight: '700' }}
-              >
-                Aún no hay clasificación
-              </Text>
-              <Text
-                style={{
-                  color: c.textMuted,
-                  fontSize: 13,
-                  lineHeight: 19,
-                  marginTop: 6,
-                }}
-              >
-                Esta temporada está vacía. La clasificación aparecerá al vincular
-                la liga de la Federación (volcado) o al añadir jornadas.
-              </Text>
-            </View>
-          )
-        ) : isFcp && tab === 'cuadro' && playoff ? (
-          <View style={{ marginHorizontal: 20, marginTop: 16 }}>
-            {/* Los cruces del playoff no existían como jornadas: solo se veían
-                aquí. Sin ellas el club no puede cuadrar sus pistas. */}
-            {isCaptain ? (
-            <Pressable
-              onPress={importPlayoff}
-              disabled={importingPlayoff}
-              style={({ pressed }) => [
-                styles.playoffImportBtn,
-                importingPlayoff && { opacity: 0.5 },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              {importingPlayoff ? (
-                <ActivityIndicator size="small" color={c.accent} />
-              ) : (
-                <Text style={styles.playoffImportText}>
-                  Llevar mis eliminatorias al calendario
+            ) : (
+              // Temporada recién creada (sin jornadas) → NO heredar la
+              // clasificación de la federación (que va ligada al equipo).
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyCardTitle}>Aún no hay clasificación</Text>
+                <Text style={styles.emptyCardText}>
+                  Esta temporada está vacía. La clasificación aparecerá al vincular
+                  la liga de la Federación (volcado) o al añadir jornadas.
                 </Text>
-              )}
-            </Pressable>
-            ) : null}
+              </View>
+            )}
+          </View>
+  ) : null;
+
+  const cuadroBlock = playoff ? (
+          <View style={{ marginHorizontal: 20, marginTop: 16 }}>
             {playoffFamilies.length > 1 ? (
               <ScrollView
                 horizontal
@@ -628,141 +595,252 @@ export const SeasonDetailScreen = ({
               highlightTeam={playoff.teamName}
             />
           </View>
-        ) : (
-          <>
-        {/* Reconstruir el histórico desde las actas. Las jornadas que llegan de
-            la Federación traen el marcador global, pero ni las parejas ni los
-            sets, y nadie teclea a mano 19 × 5 partidos para completarlas. */}
-        {isFcp && isCaptain && matchdays.length > 0 ? (
-          <Pressable
-            onPress={traerAlineaciones}
-            disabled={trayendoAlineaciones}
-            accessibilityRole="button"
-            accessibilityLabel="Traer alineaciones y resultados desde las actas de la Federación"
-            style={({ pressed }) => [
-              styles.playoffImportBtn,
-              trayendoAlineaciones && { opacity: 0.5 },
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            {trayendoAlineaciones ? (
-              <ActivityIndicator size="small" color={c.accent} />
-            ) : (
-              <Text style={styles.playoffImportText}>
-                Traer las actas: alineaciones y resultados
-              </Text>
-            )}
-          </Pressable>
-        ) : null}
+  ) : null;
 
-        {/* ── Filter tabs ── */}
-        <View style={styles.filterWrap}>
-          {([
-            ['all',     'Todas',      matchdays.length],
-            ['pending', 'Pendientes', upcomingCount],
-            ['played',  'Jugadas',    playedOrPendingCount],
-          ] as [FilterKey, string, number][]).map(([key, label, count]) => (
-            <Pressable
-              key={key}
-              onPress={() => setFilter(key)}
-              style={[styles.filterTab, filter === key && styles.filterTabActive]}
-            >
-              <Text style={[styles.filterTabLabel, filter === key && styles.filterTabLabelActive]}>
-                {label}
-              </Text>
-              <Text style={[styles.filterTabCount, filter === key && { color: c.accent }]}>
-                {count}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* ── List ── */}
-        {loading ? (
+  const jornadasBlock = loading ? (
           <ActivityIndicator color={c.accent} style={{ marginVertical: 32 }} />
-        ) : filtered.length === 0 ? (
+        ) : matchdays.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
-              {filter === 'all'
-                ? canEditSeason
-                  ? 'Aún no hay jornadas. Crea la primera.'
-                  : 'El capitán aún no ha añadido jornadas.'
-                : filter === 'pending'
-                ? 'No hay jornadas pendientes.'
-                : 'No hay jornadas jugadas todavía.'}
+              {canEditSeason
+                ? 'Aún no hay jornadas. Añádelas con «＋»: a mano, escaneando el calendario o desde la Federación.'
+                : 'El capitán aún no ha añadido jornadas.'}
             </Text>
           </View>
         ) : (
-          <View style={styles.list}>
-            {filtered.map((m, idx) => (
-              <MatchdayRow
-                key={m.id}
-                matchday={m}
-                state={stateById.get(m.id) ?? 'upcoming'}
-                isNext={m.id === nextMatchday?.id}
-                isLast={idx === filtered.length - 1}
-                onOpen={() => navigation.navigate('Jornada', { matchdayId: m.id })}
-                onEdit={
-                  canEditSeason
-                    ? gate(() => setEditing(m), 'matchday_edit')
-                    : undefined
-                }
-              />
-            ))}
-          </View>
-        )}
+          <>
+            {nextMatchday ? (
+              <>
+                <SectionLabel title="PRÓXIMA" />
+                <View style={styles.list}>
+                  <MatchdayRow
+                    matchday={nextMatchday}
+                    state="upcoming"
+                    isNext
+                    isLast
+                    availability={
+                      nextAvail.counts.total > 0
+                        ? `${nextAvail.counts.yes}/${nextAvail.counts.total}`
+                        : undefined
+                    }
+                    onOpen={() => navigation.navigate('Jornada', { matchdayId: nextMatchday.id })}
+                    onEdit={editHandler(nextMatchday)}
+                  />
+                </View>
+              </>
+            ) : null}
 
-        {/* ── Dashed add button (solo si captain + temporada activa) ── */}
-        {!loading && canEditSeason ? (
-          <Pressable
-            onPress={openAddMatchday}
-            style={({ pressed }) => [styles.dashedAdd, pressed && { opacity: 0.7 }]}
-          >
-            <IconPlus size={14} color={c.accent} />
-            <Text style={styles.dashedAddText}>Crear nueva jornada</Text>
-          </Pressable>
-        ) : null}
+            {playedList.length > 0 ? (
+              <>
+                <SectionLabel title={`JUGADAS · ${playedList.length}`} />
+                {renderRows(playedList)}
+              </>
+            ) : null}
 
-        {/* ── Cerrar temporada (solo captain con temporada activa) ──
-            Disponible siempre que esté activa; si quedan jornadas sin
-            disputar se avisa en el Alert pero se permite. */}
-        {!loading && canEditSeason ? (
-          <Pressable
-            onPress={confirmCloseSeason}
-            disabled={closingSeason}
-            style={({ pressed }) => [
-              styles.closeSeasonBtn,
-              closingSeason && { opacity: 0.5 },
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            {closingSeason ? (
-              <ActivityIndicator color={c.error} size="small" />
-            ) : (
-              <Text style={styles.closeSeasonLabel}>
-                {allDisputed
-                  ? 'Cerrar temporada · todas disputadas'
-                  : 'Cerrar temporada'}
+            {pendingList.length > 0 ? (
+              <>
+                <SectionLabel
+                  title={`PENDIENTES · ${pendingList.length}`}
+                  action={showPending ? 'OCULTAR' : 'VER ›'}
+                  onAction={() => setShowPending((v) => !v)}
+                />
+                {showPending ? renderRows(pendingList) : null}
+              </>
+            ) : null}
+
+            {canEditSeason ? (
+              <Text style={styles.editHint}>
+                Mantén pulsada una jornada para editarla.
               </Text>
-            )}
-          </Pressable>
-        ) : null}
+            ) : null}
+          </>
+  );
 
-        {/* ── Archivada · resumen final ──
-            Cuando la temporada está cerrada, una banda discreta indica
-            cuándo se cerró y refuerza que la pantalla es solo lectura.
-            Los stats agregados ya viven en el strip de arriba. */}
-        {!loading && season && !season.active ? (
-          <View style={styles.archivedNote}>
-            <Text style={styles.archivedNoteTitle}>Temporada archivada</Text>
-            <Text style={styles.archivedNoteText}>
-              {`Cerrada${season.end_date ? ` el ${season.end_date}` : ''}. Jornadas y resultados visibles en solo lectura.`}
-            </Text>
+  const { isTablet } = useLayout();
+  // Lista de 400 + al menos 420 para la tabla.
+  const split = useIsSplit(400, 420) && isFcp;
+  const rightTab: SeasonTab = tab === 'cuadro' && playoff ? 'cuadro' : 'clasif';
+
+  return (
+    <View style={styles.root}>
+      {/* ── Nav bar ── */}
+      <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
+        <Pressable
+          onPress={() => {
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate('CompetirRoot');
+          }}
+          style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
+        >
+          <IconBack size={16} color={c.text} />
+          <Text style={styles.navBtnLabel}>Liga</Text>
+        </Pressable>
+        {canEditSeason ? (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={() => setAddMenu(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Añadir a la temporada"
+              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+            >
+              <IconPlus size={16} color={c.accent} />
+            </Pressable>
+            <Pressable
+              onPress={() => setMoreMenu(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Más opciones de la temporada"
+              style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.moreBtnText}>···</Text>
+            </Pressable>
           </View>
         ) : null}
-          </>
-        )}
+      </View>
+
+      {split ? (
+        <View style={styles.splitRow}>
+          <ScrollView
+            style={styles.splitLeft}
+            contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 30 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {headerBlock}
+            {jornadasBlock}
+          </ScrollView>
+          <ScrollView
+            style={styles.splitRight}
+            contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 30 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            <SlidingTabs
+              items={
+                playoff
+                  ? ([
+                      ['clasif', 'Clasificación'],
+                      ['cuadro', 'Cuadro'],
+                    ] as [SeasonTab, string][])
+                  : ([['clasif', 'Clasificación']] as [SeasonTab, string][])
+              }
+              value={rightTab}
+              onChange={setTab}
+            />
+            {rightTab === 'cuadro' ? cuadroBlock : clasifBlock}
+          </ScrollView>
+        </View>
+      ) : (
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 30 },
+          isTablet && styles.tabletColumn,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {headerBlock}
+
+        {/* ── Pestañas (solo ligas FCP) con subrayado que se desliza ── */}
+        {tabItems.length > 0 ? (
+          <SlidingTabs items={tabItems} value={tab} onChange={setTab} />
+        ) : null}
+
+        {isFcp && tab === 'clasif' && team
+          ? clasifBlock
+          : isFcp && tab === 'cuadro' && playoff
+            ? cuadroBlock
+            : jornadasBlock}
       </ScrollView>
+      )}
+
+      {/* ── «＋»: todo lo que añade a la temporada ── */}
+      <BottomSheet open={addMenu} onClose={() => setAddMenu(false)}>
+        <Text style={styles.sheetEyebrow}>AÑADIR A LA TEMPORADA</Text>
+        <View style={{ marginTop: 6 }}>
+          <ActionRow
+            glyph={<IconPlus size={16} color={c.accent} />}
+            title="Nueva jornada"
+            sub="Rival, casa o fuera, fecha y hora"
+            onPress={() => {
+              setAddMenu(false);
+              openAddMatchday();
+            }}
+          />
+          <ActionRow
+            glyph={<IconCamera size={16} color={c.accent} />}
+            title="Escanear el calendario"
+            sub="Foto del PDF de la federación"
+            onPress={() => {
+              setAddMenu(false);
+              openScan();
+            }}
+            last={!(isFcp && matchdays.length > 0) && !(isFcp && playoff)}
+          />
+          {isFcp && matchdays.length > 0 ? (
+            <ActionRow
+              glyph={
+                trayendoAlineaciones ? (
+                  <ActivityIndicator size="small" color={c.accent} />
+                ) : (
+                  <Glyph ch="↓" />
+                )
+              }
+              title="Traer las actas"
+              sub="Alineaciones y resultados de lo jugado"
+              disabled={trayendoAlineaciones}
+              onPress={() => {
+                setAddMenu(false);
+                traerAlineaciones();
+              }}
+              last={!playoff}
+            />
+          ) : null}
+          {isFcp && playoff ? (
+            <ActionRow
+              glyph={
+                importingPlayoff ? (
+                  <ActivityIndicator size="small" color={c.accent} />
+                ) : (
+                  <Glyph ch="⇢" />
+                )
+              }
+              title="Llevar las eliminatorias al calendario"
+              sub="Con su día, su hora y su pista"
+              disabled={importingPlayoff}
+              onPress={() => {
+                setAddMenu(false);
+                importPlayoff();
+              }}
+              last
+            />
+          ) : null}
+        </View>
+      </BottomSheet>
+
+      {/* ── «···»: lo que cierra, lejos del dedo ── */}
+      <BottomSheet open={moreMenu} onClose={() => setMoreMenu(false)}>
+        <Text style={styles.sheetEyebrow}>TEMPORADA</Text>
+        <View style={{ marginTop: 6 }}>
+          <ActionRow
+            glyph={
+              closingSeason ? (
+                <ActivityIndicator size="small" color={c.error} />
+              ) : (
+                <Glyph ch="■" color={c.error} />
+              )
+            }
+            title={allDisputed ? 'Cerrar temporada · todas disputadas' : 'Cerrar temporada'}
+            sub="Pasa al histórico; avisa si quedan jornadas"
+            danger
+            disabled={closingSeason}
+            onPress={() => {
+              setMoreMenu(false);
+              confirmCloseSeason();
+            }}
+            last
+          />
+        </View>
+      </BottomSheet>
 
       {/* ── Sheets ── */}
       <AddMatchdaySheet
@@ -793,6 +871,114 @@ export const SeasonDetailScreen = ({
   );
 };
 
+// ─── Cabecera de sección (PRÓXIMA · JUGADAS · PENDIENTES) ─────────────
+const SectionLabel: React.FC<{ title: string; action?: string; onAction?: () => void }> = ({
+  title,
+  action,
+  onAction,
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.sectionLabelRow}>
+      <Text style={styles.sectionLabel}>{title}</Text>
+      {action ? (
+        <Pressable onPress={onAction} hitSlop={8} accessibilityRole="button">
+          <Text style={styles.sectionAction}>{action}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+};
+
+// ─── Pestañas con subrayado deslizante (180 ms) ───────────────────────
+function SlidingTabs<T extends string>({
+  items,
+  value,
+  onChange,
+}: {
+  items: [T, string][];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const reduced = useReducedMotion();
+  const [w, setW] = useState(0);
+  const idx = Math.max(0, items.findIndex(([k]) => k === value));
+  const x = useSharedValue(0);
+  const tabW = items.length > 0 ? w / items.length : 0;
+  useEffect(() => {
+    x.value = reduced ? idx * tabW : withTiming(idx * tabW, { duration: 180 });
+  }, [idx, tabW, reduced, x]);
+  const bar = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  return (
+    <View style={styles.tabsWrap} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      {items.map(([key, label]) => {
+        const on = value === key;
+        return (
+          <Pressable
+            key={key}
+            onPress={() => onChange(key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            style={styles.tabItem}
+          >
+            <Text style={[styles.tabText, on && styles.tabTextOn]}>{label}</Text>
+          </Pressable>
+        );
+      })}
+      {tabW > 0 ? (
+        <Animated.View style={[styles.tabBar, { width: tabW }, bar]} />
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Resumen de una temporada archivada ──────────────────────────────
+const ArchivedSummary: React.FC<{
+  season: SeasonsApi.Season;
+  matchdays: MatchdaysApi.Matchday[];
+}> = ({ season, matchdays }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const w = matchdays.filter((m) => m.outcome === 'win').length;
+  const d = matchdays.filter((m) => m.outcome === 'draw').length;
+  const l = matchdays.filter((m) => m.outcome === 'loss').length;
+  const seq = playedChrono(matchdays);
+  return (
+    <View style={styles.archCard}>
+      <Text style={styles.archLabel}>RESUMEN FINAL</Text>
+      <View style={styles.archStats}>
+        <StatCell label="Jorn." value={String(w + d + l)} />
+        <StatCell label="V" value={String(w)} color={c.accent} />
+        <StatCell label="E" value={String(d)} />
+        <StatCell label="D" value={String(l)} color={c.error} />
+      </View>
+      {seq.length > 0 ? (
+        <View style={styles.archSeq}>
+          {seq.map((m) => {
+            const col = outcomeColor(c, m.outcome);
+            return (
+              <View
+                key={m.id}
+                style={[styles.archDot, { backgroundColor: withAlpha(col, 0.15) }]}
+              >
+                <Text style={[styles.archDotText, { color: col }]}>
+                  {m.outcome === 'win' ? 'V' : m.outcome === 'loss' ? 'D' : 'E'}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+      <Text style={styles.archFoot}>
+        Solo lectura{season.end_date ? ` · cerrada el ${fmtDay(season.end_date, false)}` : ''}
+      </Text>
+    </View>
+  );
+};
+
 // ─── StatCell ────────────────────────────────────────────────────────
 const StatCell: React.FC<{ label: string; value: string; highlight?: boolean; color?: string }> = ({
   label, value, highlight, color,
@@ -814,30 +1000,32 @@ const shortDate = (d: string): string => {
 };
 
 // ─── MatchdayRow ─────────────────────────────────────────────────────
+// El resultado va en mono y en color («3–2»); sin acta, «ACTA». Editar es un
+// gesto largo (antes, un lápiz en cada fila).
 const MatchdayRow: React.FC<{
   matchday: MatchdaysApi.Matchday;
   state: MatchdayVisualState;
   isNext: boolean;
   isLast: boolean;
   onOpen: () => void;
-  // onEdit es opcional: temporadas archivadas no muestran el botón pencil.
+  /** «8/10» en la próxima (capitán). */
+  availability?: string;
+  // onEdit es opcional: temporadas archivadas o jugador → sin edición.
   onEdit?: () => void;
-}> = ({ matchday: m, state, isNext, isLast, onOpen, onEdit }) => {
+}> = ({ matchday: m, state, isNext, isLast, onOpen, availability, onEdit }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const outcomeMeta = m.outcome
-    ? {
-        win:  { color: c.accent,  bg: c.accent15,              border: c.accent40, label: 'V' },
-        draw: { color: c.warning, bg: 'rgba(242,201,76,0.15)',       border: 'rgba(242,201,76,0.40)', label: 'E' },
-        loss: { color: c.error,   bg: 'rgba(255,107,107,0.15)',      border: 'rgba(255,107,107,0.40)', label: 'D' },
-      }[m.outcome]
-    : null;
+  const score = scoreLabel(m);
+  const scoreColor = outcomeColor(c, m.outcome);
 
   return (
     <View style={[styles.row, !isLast && styles.rowDivider]}>
-      {/* Tap area → open Jornada */}
       <Pressable
         onPress={onOpen}
+        onLongPress={onEdit}
+        delayLongPress={350}
+        accessibilityRole="button"
+        accessibilityHint={onEdit ? 'Mantén pulsado para editar la jornada' : undefined}
         style={({ pressed }) => [styles.rowMain, pressed && { opacity: 0.8 }]}
       >
         {/* Badge J## */}
@@ -864,45 +1052,35 @@ const MatchdayRow: React.FC<{
               <IconPlane size={12} color={c.textFaint} />
             )}
             <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
-              {m.is_home ? 'Casa' : 'Fuera'}
-              {m.match_date ? ` · ${shortDate(m.match_date)}` : ''}
-              {m.match_time ? ` · ${m.match_time.slice(0, 5)}` : ''}
+              {[
+                m.is_home ? 'Casa' : 'Fuera',
+                fmtDay(m.match_date, isNext),
+                isNext && m.match_time ? m.match_time.slice(0, 5) : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           </View>
         </View>
 
-        {/* Outcome / state badge */}
-        {outcomeMeta ? (
-          <View style={[
-            styles.outcomeBadge,
-            { backgroundColor: outcomeMeta.bg, borderColor: outcomeMeta.border },
-          ]}>
-            <Text style={[styles.outcomeBadgeText, { color: outcomeMeta.color }]}>
-              {outcomeMeta.label}
-            </Text>
-          </View>
+        {/* Resultado / estado */}
+        {score ? (
+          <Text style={[styles.scoreText, { color: scoreColor }]}>{score}</Text>
         ) : state === 'pending-acta' ? (
           <View style={styles.actaBadge}>
             <Text style={styles.actaBadgeText}>ACTA</Text>
           </View>
-        ) : (
+        ) : availability ? (
+          <View style={styles.upcomingBadge}>
+            <Text style={styles.upcomingText}>{availability}</Text>
+          </View>
+        ) : isNext ? (
           <View style={styles.upcomingBadge}>
             <NeonDot size={4} />
             <Text style={styles.upcomingText}>PRÓXIMA</Text>
           </View>
-        )}
+        ) : null}
       </Pressable>
-
-      {/* Edit button — solo si onEdit existe (temporada activa). */}
-      {onEdit ? (
-        <Pressable
-          onPress={onEdit}
-          hitSlop={8}
-          style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.5 }]}
-        >
-          <IconPencil size={14} color={c.textFaint} />
-        </Pressable>
-      ) : null}
     </View>
   );
 };
@@ -1364,6 +1542,16 @@ const TandasPicker: React.FC<{
 
 // ─── Styles ──────────────────────────────────────────────────────────
 const makeStyles = (c: Palette) => StyleSheet.create({
+    // ── Tablet ──
+    splitRow: { flex: 1, flexDirection: 'row' },
+    splitLeft: {
+      width: 400,
+      flexGrow: 0,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderRightColor: c.hairStrong,
+    },
+    splitRight: { flex: 1 },
+    tabletColumn: { width: '100%', maxWidth: 720, alignSelf: 'center' },
   root: { flex: 1, backgroundColor: c.background },
 
   // Nav
@@ -1405,6 +1593,121 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  moreBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.md,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreBtnText: { color: c.text, fontSize: 16, fontWeight: '800', marginTop: -6 },
+  tabsWrap: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: c.hair,
+  },
+  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 11 },
+  tabText: { color: c.textMuted, fontSize: 14, fontWeight: '600' },
+  tabTextOn: { color: c.text, fontWeight: '800' },
+  tabBar: {
+    position: 'absolute',
+    left: 0,
+    bottom: -1,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: c.accent,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 22,
+    marginTop: 22,
+    marginBottom: 8,
+  },
+  sectionLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    letterSpacing: 2.4,
+    color: c.textFaint,
+    fontWeight: '600',
+  },
+  sectionAction: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: c.accent,
+    fontWeight: '700',
+  },
+  scoreText: {
+    fontFamily: Fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  editHint: {
+    color: c.textFaint,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 14,
+  },
+  clasifHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  clasifHeadText: {
+    flex: 1,
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    letterSpacing: 1.6,
+    color: c.textMuted,
+    fontWeight: '600',
+  },
+  emptyCard: {
+    padding: 22,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
+  },
+  emptyCardTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+  emptyCardText: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  archCard: {
+    marginHorizontal: 20,
+    marginTop: 4,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+  },
+  archLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    letterSpacing: 2.4,
+    color: c.textFaint,
+    fontWeight: '600',
+  },
+  archStats: { flexDirection: 'row', gap: 22, marginTop: 12 },
+  archSeq: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 14 },
+  archDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archDotText: { fontFamily: Fonts.mono, fontSize: 9.5, fontWeight: '800' },
+  archFoot: { color: c.textFaint, fontSize: 12, marginTop: 14 },
 
   scroll: { paddingTop: 20 },
 

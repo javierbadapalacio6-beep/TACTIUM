@@ -1,39 +1,43 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Share,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
 
-import { useColors, darkColors, type Palette } from '@core/theme';
+import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { FeedPreview } from '@features/social/components/FeedPreview';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { IconBall, IconTicket, IconGift, IconTrophy } from '@components/ui';
-import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
+import { IconCheck, IconChevron, IconPlus, useLayout } from '@components/ui';
+import { ContentColumn } from '@components/layout';
+import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
-import { DOWNLOAD_URL } from '@core/config/referral';
 import {
   fetchMyCasualMatches,
+  fetchMyCasualStats,
   type CasualMatchSummary,
+  type MyCasualStats,
 } from '@core/services/casualMatches';
+import { getPublicUserProfile } from '@core/services/social';
+import { CodeRedeemCard } from '@features/profile/components/CodeRedeemCard';
+import { WinRing, StreakPips } from '@features/profile/components/StatsVisuals';
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
-// Home del JUGADOR SUELTO (F8): usuario sin equipo. Tres acciones:
-// registrar un amistoso, canjear un código de partido (en Mis estadísticas) e
-// invitar colegas. Es la landing del loop de adquisición: quien llega
-// por el código de un amistoso aterriza aquí.
+// Inicio del JUGADOR SIN EQUIPO. Con partidos: tus números arriba, el botón
+// de registrar, los 2 últimos resultados y el feed de tu gente. Sin partidos:
+// una lista de 3 pasos que se termina. El código (de partido o de equipo) y el
+// puente al equipo van al final.
+//
+// TABLET: las mismas piezas en una columna de 720 centrada (también en
+// horizontal), emparejadas de dos en dos: récord + «Registrar» en una banda,
+// pasos + código, resultados + tu gente, código + puente al equipo.
 
 type Nav = HomeStackScreenProps<'HomeRoot'>['navigation'];
+
+/** Personas a seguir para dar el paso por hecho. */
+const FOLLOW_GOAL = 3;
 
 const formatShortDate = (iso: string | null): string => {
   if (!iso) return '';
@@ -44,426 +48,402 @@ const formatShortDate = (iso: string | null): string => {
 export const SoloHomeScreen = () => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  // La tarjeta "registrar amistoso" es una pieza destacada de degradado
-  // verde con texto claro: se mantiene SIEMPRE oscura (también en claro).
-  const heroStyles = useMemo(() => makeStyles(darkColors), []);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
-  const rootNav =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useAuthStore((s) => s.user);
   const setSoloMode = useTeamStore((s) => s.setSoloMode);
   const setSoloUpgrade = useTeamStore((s) => s.setSoloUpgrade);
+  const { isTablet } = useLayout();
   const [matches, setMatches] = useState<CasualMatchSummary[]>([]);
+  const [stats, setStats] = useState<MyCasualStats | null>(null);
+  const [following, setFollowing] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
-  // Últimos partidos: se refresca al volver (p. ej. tras guardar uno).
+  const load = useCallback(() => {
+    if (!user?.id) return;
+    Promise.all([
+      fetchMyCasualMatches(user.id).catch(() => [] as CasualMatchSummary[]),
+      fetchMyCasualStats(user.id).catch(() => null),
+      getPublicUserProfile(user.id)
+        .then((p) => p?.following_count ?? 0)
+        .catch(() => 0),
+    ]).then(([m, s, f]) => {
+      setMatches(m);
+      setStats(s);
+      setFollowing(f);
+      setLoaded(true);
+    });
+  }, [user?.id]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!user?.id) return;
-      fetchMyCasualMatches(user.id)
-        .then((all) => setMatches(all.slice(0, 4)))
-        .catch(() => setMatches([]));
-    }, [user?.id]),
+      load();
+    }, [load]),
   );
 
   const firstName = (() => {
-    const meta = (user?.user_metadata ?? {}) as {
-      full_name?: string;
-      username?: string;
-    };
-    // El nombre de usuario (nombre corto) manda sobre el completo.
+    const meta = (user?.user_metadata ?? {}) as { full_name?: string; username?: string };
     const uname = (meta.username ?? '').trim();
     if (uname) return uname;
     const n = (meta.full_name ?? '').trim();
     return n ? n.split(' ')[0] : null;
   })();
 
-  const inviteFriends = async () => {
-    try {
-      await Share.share({
-        message: [
-          'Únete a TACTIUM y registramos nuestros partidos de pádel 🎾',
-          `Descárgala aquí: ${DOWNLOAD_URL}`,
-        ].join('\n'),
-      });
-    } catch {
-      // cancelado
-    }
+  const hasMatches = (stats?.played ?? 0) > 0 || matches.length > 0;
+  const lastFive = matches.slice(0, 5).reverse().map((m) => (m.won ? 'W' : 'L') as 'W' | 'L');
+  const goStats = () => rootNav.navigate('MyStats');
+  const goAmistoso = () => navigation.navigate('Amistoso');
+  const goUpgrade = () => {
+    setSoloUpgrade(true);
+    setSoloMode(false);
   };
+
+  // ── Piezas (las mismas en móvil y tablet; solo cambia cómo se colocan) ──
+  const recordCard = (
+    <Pressable
+      onPress={goStats}
+      style={({ pressed }) => [styles.recordCard, pressed && { opacity: 0.92 }]}
+      accessibilityRole="button"
+      accessibilityLabel="Ver mis estadísticas"
+    >
+      <WinRing pct={stats?.winRate ?? null} size={64} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <Text style={styles.recordText}>
+          {stats?.won ?? 0}
+          <Text style={{ color: c.textFaint }}> V · </Text>
+          {stats?.lost ?? 0}
+          <Text style={{ color: c.textFaint }}> D</Text>
+        </Text>
+        {lastFive.length > 0 ? <StreakPips results={lastFive} /> : null}
+        <Text style={styles.recordLink}>Amistosos · ver todo ›</Text>
+      </View>
+    </Pressable>
+  );
+
+  const amistosoBtn = (
+    <Pressable
+      onPress={goAmistoso}
+      style={({ pressed }) => [
+        styles.primaryBtn,
+        isTablet && styles.tBtn,
+        pressed && { opacity: 0.88 },
+      ]}
+      accessibilityRole="button"
+    >
+      <IconPlus size={16} color={c.textInverse} />
+      <Text style={styles.primaryBtnLabel}>Registrar un amistoso</Text>
+    </Pressable>
+  );
+
+  const lastResults =
+    matches.length > 0 ? (
+      <View style={[styles.card, { paddingVertical: 4 }]}>
+        {matches.slice(0, isTablet ? 3 : 2).map((cm, i) => (
+          <Pressable
+            key={cm.id}
+            onPress={() => rootNav.navigate('CasualMatchDetail', { matchId: cm.id })}
+            style={({ pressed }) => [
+              styles.resultRow,
+              i > 0 && styles.rowDivider,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <View
+              style={[
+                styles.resultBadge,
+                { backgroundColor: cm.won ? c.accent15 : 'rgba(255,107,107,0.12)' },
+              ]}
+            >
+              <Text style={[styles.resultBadgeTxt, { color: cm.won ? c.accent : c.error }]}>
+                {cm.won ? 'V' : 'D'}
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.resultName} numberOfLines={1}>
+                vs {cm.rivals || 'rival'}
+              </Text>
+              <Text style={styles.resultMeta} numberOfLines={1}>
+                {cm.partner ? `con ${cm.partner} · ` : ''}
+                {formatShortDate(cm.playedOn)}
+              </Text>
+            </View>
+            <Text style={styles.resultSets}>{cm.sets}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
+
+  const steps = (
+    <View style={[styles.card, { paddingVertical: 4 }]}>
+      <Step first done label="Crear tu cuenta" />
+      <Step label="Registrar tu primer amistoso" action="Empezar" onPress={goAmistoso} />
+      <Step
+        label={`Seguir a ${FOLLOW_GOAL} personas`}
+        sub={`${Math.min(following, FOLLOW_GOAL)} de ${FOLLOW_GOAL}`}
+        done={following >= FOLLOW_GOAL}
+        onPress={() => rootNav.navigate('SearchCommunity')}
+      />
+    </View>
+  );
+
+  const codeCard = <CodeRedeemCard mode="any" onClaimed={load} />;
+
+  /* Puente al modo equipo */
+  const teamBox = (
+    <View style={[styles.teamBox, isTablet && { marginTop: 0 }]}>
+      <Text style={styles.teamBoxTitle}>¿Juegas liga con un equipo?</Text>
+      <Text style={styles.teamBoxText}>
+        Si tu capitán usa TACTIUM, pídele el enlace de invitación o su código y
+        escríbelo aquí arriba.
+      </Text>
+      <Pressable onPress={goUpgrade} hitSlop={8} accessibilityRole="button">
+        <Text style={styles.teamBoxLink}>¿Capitaneas tú? Crea tu equipo →</Text>
+      </Pressable>
+    </View>
+  );
+
+  const header = (
+    <>
+      <Text style={styles.eyebrow}>
+        {firstName ? `HOLA, ${firstName.toUpperCase()}` : 'TU PÁDEL'}
+      </Text>
+      <Text style={styles.title}>
+        {!loaded || hasMatches ? 'Tu pádel, tus números' : 'Empieza en 3 pasos'}
+      </Text>
+    </>
+  );
 
   return (
     <View style={styles.root}>
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
-        <TactiumMark size={30} gradient />
-        <Text style={styles.brand}>TACTIUM</Text>
+        <View style={styles.brandRow}>
+          <TactiumMark size={30} gradient />
+          <Text style={styles.brand}>TACTIUM</Text>
+        </View>
+        <NotificationBell />
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 64 + 12 + 32 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 64 + 12 + 32 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>
-          {firstName ? `HOLA, ${firstName.toUpperCase()}` : 'TU PÁDEL'}
-        </Text>
-        <Text style={styles.title}>Tus partidos,{'\n'}tus números.</Text>
-
-        {/* Hero: registrar amistoso */}
-        <Pressable
-          onPress={() => navigation.navigate('Amistoso')}
-          style={({ pressed }) => [heroStyles.hero, pressed && { opacity: 0.95 }]}
-        >
-          <LinearGradient
-            colors={[darkColors.primary, '#062520', darkColors.background]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={heroStyles.heroIcon}>
-            <IconBall size={26} color={darkColors.accent} />
-          </View>
-          <Text style={heroStyles.heroTitle}>Registrar un amistoso</Text>
-          <Text style={heroStyles.heroText}>
-            Apunta el partido con tus colegas: marcador en sets, foto y
-            resumen para el grupo de WhatsApp.
-          </Text>
-          <View style={heroStyles.heroCta}>
-            <Text style={heroStyles.heroCtaText}>EMPEZAR</Text>
-          </View>
-        </Pressable>
-
-        {TOURNAMENTS_ENABLED ? (
-          <Pressable
-            onPress={() => rootNav.navigate('ExploreTournaments')}
-            style={({ pressed }) => [
-              {
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-                backgroundColor: c.bgCard,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: c.hairStrong,
-                padding: 14,
-                marginTop: 12,
-              },
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: c.accent15,
-              }}
-            >
-              <IconTrophy size={18} color={c.accent} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ color: c.text, fontSize: 15, fontWeight: '700' }}>
-                Explorar torneos
-              </Text>
-              <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 2 }}>
-                Busca por zona, club o fecha · o entra con tu código
-              </Text>
-            </View>
-          </Pressable>
-        ) : null}
-
-        {/* Últimos partidos (si ya tiene alguno) */}
-        {matches.length > 0 ? (
-          <>
-            <Text style={styles.sectionLabel}>ÚLTIMOS PARTIDOS</Text>
-            <Pressable
-              onPress={() => rootNav.navigate('MyStats')}
-              style={({ pressed }) => [
-                styles.resultsCard,
-                pressed && { opacity: 0.92 },
-              ]}
-            >
-              {matches.map((cm) => (
-                <View key={cm.id} style={styles.resultRow}>
-                  <View
-                    style={[
-                      styles.resultBadge,
-                      {
-                        backgroundColor: cm.won
-                          ? 'rgba(0,255,170,0.12)'
-                          : 'rgba(255,107,107,0.12)',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.resultBadgeTxt,
-                        { color: cm.won ? c.accent : c.error },
-                      ]}
-                    >
-                      {cm.won ? 'V' : 'D'}
-                    </Text>
+        {isTablet ? (
+          <ContentColumn>
+            {header}
+            {!loaded ? null : hasMatches ? (
+              <>
+                <View style={styles.tBand}>
+                  <View style={{ flex: 1.4, minWidth: 0 }}>{recordCard}</View>
+                  <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                    {amistosoBtn}
                   </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.resultName} numberOfLines={1}>
-                      vs {cm.rivals || 'rival'}
-                    </Text>
-                    <Text style={styles.resultMeta} numberOfLines={1}>
-                      {cm.partner ? `con ${cm.partner} · ` : ''}
-                      {formatShortDate(cm.playedOn)}
-                    </Text>
-                  </View>
-                  <Text style={styles.resultSets}>{cm.sets}</Text>
                 </View>
-              ))}
-              <Text style={styles.resultsAll}>Ver todas mis stats →</Text>
-            </Pressable>
+                <View style={styles.tPair}>
+                  <View style={styles.tCol}>{lastResults}</View>
+                  {/* TU GENTE: el feed de quien sigues, con kudos. */}
+                  <View style={styles.tCol}>
+                    <FeedPreview />
+                  </View>
+                </View>
+                <View style={styles.tPair}>
+                  <View style={styles.tCol}>{codeCard}</View>
+                  <View style={styles.tCol}>{teamBox}</View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.tPair, { marginTop: 0 }]}>
+                  <View style={styles.tCol}>{steps}</View>
+                  <View style={styles.tCol}>{codeCard}</View>
+                </View>
+                <View style={{ marginTop: 14 }}>{teamBox}</View>
+              </>
+            )}
+          </ContentColumn>
+        ) : (
+          <>
+            {header}
+
+            {!loaded ? null : hasMatches ? (
+              <>
+                {recordCard}
+
+                {amistosoBtn}
+
+                {lastResults}
+
+                {/* TU GENTE: el feed de quien sigues, con kudos. */}
+                <FeedPreview />
+              </>
+            ) : (
+              steps
+            )}
+
+            <View style={{ marginTop: 14 }}>{codeCard}</View>
+
+            {teamBox}
           </>
-        ) : null}
-
-        {/* Canje de código */}
-        <Pressable
-          onPress={() => rootNav.navigate('MyStats')}
-          style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
-        >
-          <View style={styles.cardIcon}>
-            <IconTicket size={20} color={c.accent} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.cardTitle}>¿Tienes un código de partido?</Text>
-            <Text style={styles.cardText}>
-              Canjéalo en Mis estadísticas y ese partido contará en tus números.
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Invitar colegas */}
-        <Pressable
-          onPress={inviteFriends}
-          style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
-        >
-          <View style={styles.cardIcon}>
-            <IconGift size={20} color={c.accent} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.cardTitle}>Invita a tus colegas</Text>
-            <Text style={styles.cardText}>
-              Con TACTIUM los partidos cuentan para todos.
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Puente al modo equipo */}
-        <View style={styles.teamBox}>
-          <Text style={styles.teamBoxTitle}>¿Juegas en un equipo?</Text>
-          <Text style={styles.teamBoxText}>
-            Si tu capitán usa TACTIUM, pídele una invitación y canjéala en
-            Perfil ("Canjear invitación"). Verás tu liga, tus alineaciones y
-            tus stats oficiales.
-          </Text>
-          {/* De jugador a gestor: apagar el modo suelto devuelve a la
-              elección inicial (crear equipo / club). Sin equipo creado se
-              puede volver eligiendo "Juego por mi cuenta" otra vez. */}
-          <Pressable
-            onPress={() => {
-              setSoloUpgrade(true);
-              setSoloMode(false);
-            }}
-            hitSlop={8}
-          >
-            <Text style={styles.teamBoxLink}>
-              ¿Capitaneas o gestionas un club? Crea tu equipo →
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* TU GENTE: el feed de quien sigues, con kudos. */}
-        <FeedPreview />
+        )}
       </ScrollView>
     </View>
   );
 };
 
-const makeStyles = (c: Palette) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.background },
-  topbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  brand: {
-    color: c.text,
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 2,
-  },
-  scroll: { paddingHorizontal: 20, paddingTop: 10 },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 11,
-    letterSpacing: 2,
-    marginBottom: 6,
-  },
-  title: {
-    color: c.text,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    lineHeight: 33,
-    marginBottom: 18,
-  },
-  hero: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    padding: 20,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,255,170,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,255,170,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  heroTitle: {
-    color: c.text,
-    fontSize: 19,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  heroText: {
-    color: c.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 6,
-  },
-  heroCta: {
-    alignSelf: 'flex-start',
-    marginTop: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: c.accent,
-  },
-  heroCtaText: {
-    color: '#000',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  sectionLabel: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 10.5,
-    letterSpacing: 2,
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  resultsCard: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginBottom: 12,
-  },
-  resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: c.hair,
-  },
-  resultBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resultBadgeTxt: { fontSize: 12, fontWeight: '800' },
-  resultName: { color: c.text, fontSize: 13.5, fontWeight: '700' },
-  resultMeta: { color: c.textFaint, fontSize: 11.5, marginTop: 1 },
-  resultSets: {
-    fontFamily: Fonts.mono,
-    color: c.text,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  resultsAll: {
-    color: c.accent,
-    fontSize: 12.5,
-    fontWeight: '700',
-    textAlign: 'center',
-    paddingVertical: 10,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    padding: 16,
-    marginBottom: 12,
-  },
-  cardIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,255,170,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardTitle: {
-    color: c.text,
-    fontSize: 14.5,
-    fontWeight: '700',
-  },
-  cardText: {
-    color: c.textMuted,
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  teamBox: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    borderStyle: 'dashed',
-    padding: 16,
-    marginTop: 6,
-  },
-  teamBoxTitle: {
-    color: c.text,
-    fontSize: 13.5,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  teamBoxText: {
-    color: c.textFaint,
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-  teamBoxLink: {
-    color: c.accent,
-    fontSize: 12.5,
-    fontWeight: '700',
-    marginTop: 10,
-  },
-});
+/** Paso de la lista de inicio: círculo (relleno si está hecho) y acción. */
+const Step: React.FC<{
+  label: string;
+  sub?: string;
+  done?: boolean;
+  first?: boolean;
+  action?: string;
+  onPress?: () => void;
+}> = ({ label, sub, done, first, action, onPress }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const content = (
+    <>
+      <View style={[styles.stepDot, done && styles.stepDotDone]}>
+        {done ? <IconCheck size={11} color={c.textInverse} /> : null}
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.stepLabel, done && styles.stepLabelDone]}>{label}</Text>
+        {sub ? <Text style={styles.stepSub}>{sub}</Text> : null}
+      </View>
+      {!done && action ? (
+        <View style={styles.stepBtn}>
+          <Text style={styles.stepBtnLabel}>{action}</Text>
+        </View>
+      ) : !done && onPress ? (
+        <IconChevron size={14} color={c.textFaint} />
+      ) : null}
+    </>
+  );
+  if (done || !onPress) {
+    return <View style={[styles.stepRow, !first && styles.stepDivider]}>{content}</View>;
+  }
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.stepRow, !first && styles.stepDivider, pressed && { opacity: 0.7 }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {content}
+    </Pressable>
+  );
+};
+
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.background },
+    topbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingBottom: 10,
+    },
+    brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    brand: { color: c.text, fontSize: 15, fontWeight: '800', letterSpacing: 2 },
+    scroll: { paddingHorizontal: 20, paddingTop: 10 },
+    eyebrow: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 11,
+      letterSpacing: 2,
+      marginBottom: 6,
+    },
+    title: {
+      color: c.text,
+      fontSize: 26,
+      fontWeight: '800',
+      letterSpacing: -0.6,
+      marginBottom: 16,
+    },
+    recordCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      padding: 14,
+    },
+    recordText: { fontFamily: Fonts.mono, color: c.text, fontSize: 17, fontWeight: '800' },
+    recordLink: { color: c.textFaint, fontSize: 12 },
+    primaryBtn: {
+      flexDirection: 'row',
+      gap: 8,
+      height: 50,
+      borderRadius: Radius.lg,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 12,
+      marginBottom: 12,
+    },
+    primaryBtnLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
+    card: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      paddingHorizontal: 14,
+    },
+    rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: c.hair },
+    resultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+    resultBadge: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    resultBadgeTxt: { fontSize: 12, fontWeight: '800' },
+    resultName: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+    resultMeta: { color: c.textFaint, fontSize: 11.5, marginTop: 1 },
+    resultSets: { fontFamily: Fonts.mono, color: c.text, fontSize: 12, fontWeight: '600' },
+    stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
+    stepDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: c.hair },
+    stepDot: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepDotDone: { backgroundColor: c.accent, borderColor: c.accent },
+    stepLabel: { color: c.text, fontSize: 14, fontWeight: '600' },
+    stepLabelDone: { color: c.textFaint, textDecorationLine: 'line-through' },
+    stepSub: { color: c.textFaint, fontSize: 11.5, marginTop: 1 },
+    stepBtn: {
+      height: 32,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepBtnLabel: { color: c.textInverse, fontSize: 12.5, fontWeight: '700' },
+    teamBox: {
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      borderStyle: 'dashed',
+      padding: 16,
+      marginTop: 14,
+    },
+    teamBoxTitle: { color: c.text, fontSize: 13.5, fontWeight: '700', marginBottom: 4 },
+    teamBoxText: { color: c.textFaint, fontSize: 12.5, lineHeight: 18 },
+    teamBoxLink: { color: c.accent, fontSize: 12.5, fontWeight: '700', marginTop: 10 },
+    // Tablet (columna de 720)
+    tBand: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
+    tBtn: { marginTop: 0, marginBottom: 0, height: 56 },
+    tPair: { flexDirection: 'row', gap: 14, alignItems: 'flex-start', marginTop: 14 },
+    tCol: { flex: 1, minWidth: 0 },
+  });

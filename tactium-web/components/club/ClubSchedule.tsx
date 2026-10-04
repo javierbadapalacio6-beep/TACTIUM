@@ -9,6 +9,7 @@ import {
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
+import { fetchUnconfirmedVenues } from "@/lib/club-ops";
 import {
   importFcpTeams,
   searchFcpClubs,
@@ -26,9 +27,10 @@ import {
   Modal,
   Note,
   PageHeader,
+  Segmented,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconCheck, IconClock, IconPlus } from "@/components/Icon";
+import { IconAlert, IconCheck, IconClock, IconPlus } from "@/components/Icon";
 
 /**
  * Horarios de local.
@@ -132,7 +134,10 @@ const DEFAULT_HOURS = [
 ];
 
 /** Un partido de local, de un equipo propio o de uno invitado. */
-type Fixture = DbClubHomeMatch & { is_guest: boolean };
+type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean };
+
+const sameCourt = (a: string, b: string) =>
+  !!a.trim() && !!b.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function ClubSchedule() {
   const { clubId } = useSession();
@@ -146,10 +151,15 @@ export function ClubSchedule() {
         fetchClubHomeSchedule(clubId!),
         fetchVenueHomeSchedule(clubId!).catch(() => [] as DbClubHomeMatch[]),
       ]);
-      return [
+      const all = [
         ...propios.map((m) => ({ ...m, is_guest: false })),
         ...invitados.map((m) => ({ ...m, is_guest: true })),
-      ] as Fixture[];
+      ];
+      // Playoff: sede propuesta, sin confirmar. Ponerle hora la confirma.
+      const pending = await fetchUnconfirmedVenues(all.map((m) => m.matchday_id)).catch(
+        () => new Set<string>(),
+      );
+      return all.map((m) => ({ ...m, unconfirmed: pending.has(m.matchday_id) })) as Fixture[];
     },
     [clubId, reloadKey],
     !!clubId,
@@ -239,10 +249,44 @@ export function ClubSchedule() {
   }
 
   const [picking, setPicking] = useState<string | null>(null);
+  const [tab, setTab] = useState<"partidos" | "equipos">("partidos");
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const assigned = fixtures.filter((f) => slots[f.matchday_id]).length;
+
+  // Pistas que el club ya ha usado: se ofrecen en una lista al escribir.
+  const courts = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of fixtures) if (f.location?.trim()) m.set(f.location.trim().toLowerCase(), f.location.trim());
+    for (const v of Object.values(slots)) if (v?.court.trim()) m.set(v.court.trim().toLowerCase(), v.court.trim());
+    return [...m.values()].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+  }, [fixtures, slots]);
+
+  // Choques: dos partidos el mismo día, a la misma hora y en la misma pista.
+  // Se comprueba aquí, con lo ya cargado, antes de guardar.
+  const clashWith = useMemo(() => {
+    const out: Record<string, Fixture> = {};
+    const placed = fixtures
+      .map((f) => ({ f, s: slots[f.matchday_id] }))
+      .filter((x): x is { f: Fixture; s: Slot } => !!x.s && !!x.s.court.trim());
+    for (const a of placed)
+      for (const b of placed) {
+        if (a.f.matchday_id === b.f.matchday_id) continue;
+        if (
+          dateForSlot(a.f.match_date, a.s.day) === dateForSlot(b.f.match_date, b.s.day) &&
+          a.s.hour === b.s.hour &&
+          sameCourt(a.s.court, b.s.court)
+        )
+          out[a.f.matchday_id] = b.f;
+      }
+    return out;
+  }, [fixtures, slots]);
+  const clashCount = Object.keys(clashWith).length;
+
+  // Primero lo que falta (sin hora o sede por confirmar), después lo demás.
+  const missing = fixtures.filter((f) => !slots[f.matchday_id] || f.unconfirmed);
+  const ready = fixtures.filter((f) => slots[f.matchday_id] && !f.unconfirmed);
 
   /**
    * Guarda de verdad. Antes este botón solo enseñaba el aviso de éxito: el
@@ -253,7 +297,7 @@ export function ClubSchedule() {
    * (propia o invitada) y porque así un fallo en una no tumba a las demás.
    */
   async function guardar() {
-    if (saving) return;
+    if (saving || clashCount > 0) return;
     setSaving(true);
     let ok = 0;
     const fallos: string[] = [];
@@ -383,11 +427,97 @@ export function ClubSchedule() {
     );
   }
 
+  const renderRow = (f: Fixture) => {
+    const s = slots[f.matchday_id];
+    const clash = clashWith[f.matchday_id];
+    return (
+      <div key={f.matchday_id} className="tw-sched-row">
+        <span style={{ minWidth: 0 }}>
+          <span
+            className="truncate"
+            style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}
+          >
+            <span className="truncate">{f.team_name}</span>
+            {/* El club no administra a un invitado: solo le pone hora. */}
+            {f.is_guest && (
+              <Chip tone="mute" plain>
+                Invitado
+              </Chip>
+            )}
+          </span>
+          <span style={{ display: "block", marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
+            {f.jornada_number != null ? `Jornada ${f.jornada_number} · ` : ""}
+            vs {f.opponent ?? "—"}
+            {f.unconfirmed ? " · sede de playoff por confirmar" : ""}
+          </span>
+          {clash && (
+            <span style={{ display: "block", marginTop: 2, fontSize: 12, color: "var(--warning)" }}>
+              Choca con {clash.team_name} vs {clash.opponent ?? "—"}
+            </span>
+          )}
+        </span>
+
+        <Btn
+          size="sm"
+          variant={s ? "tint" : "ghost"}
+          onClick={() => setPicking(f.matchday_id)}
+          aria-label={`Elegir día y hora para ${f.team_name}`}
+          style={{ justifyContent: "flex-start" }}
+        >
+          {s ? slotLabel(s.day, s.hour) : "Poner hora"}
+        </Btn>
+
+        <Input
+          type="text"
+          list="tw-club-courts"
+          value={s?.court ?? ""}
+          disabled={!s}
+          onChange={(e) => setCourt(f.matchday_id, e.target.value)}
+          placeholder="Pista 1, Central…"
+          aria-label={`Pista para ${f.team_name}`}
+          aria-invalid={!!clash}
+          style={{ borderColor: clash ? "var(--warning)" : undefined }}
+        />
+
+        <span>
+          {clash ? (
+            <Chip tone="warning">Pista ocupada</Chip>
+          ) : s && !f.unconfirmed ? (
+            <Chip>Listo</Chip>
+          ) : f.unconfirmed && s ? (
+            <Chip tone="warning">Por confirmar</Chip>
+          ) : (
+            <Chip tone="warning">Sin hora</Chip>
+          )}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="tw-page">
       {header}
 
-      <div className="tw-schedule-grid">
+      <datalist id="tw-club-courts">
+        {courts.map((ct) => (
+          <option key={ct} value={ct} />
+        ))}
+      </datalist>
+
+      <div style={{ marginBottom: 16, maxWidth: 420 }}>
+        <Segmented
+          label="Vista de horarios"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "partidos", label: "Partidos" },
+            { value: "equipos", label: "Equipos y franjas" },
+          ]}
+        />
+      </div>
+
+      <div className="tw-schedule-grid" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+        {tab === "partidos" && (
         <Card flush>
           <CardHead title="Partidos de local" count={fixtures.length}>
             <Chip tone={assigned === fixtures.length ? "accent" : "warning"}>
@@ -403,77 +533,34 @@ export function ClubSchedule() {
               <span>Estado</span>
             </div>
 
-            {fixtures.map((f) => {
-              const s = slots[f.matchday_id];
-              return (
-                <div key={f.matchday_id} className="tw-sched-row">
-                  <span style={{ minWidth: 0 }}>
-                    <span
-                      className="truncate"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        fontSize: 14,
-                        fontWeight: 700,
-                        letterSpacing: "-0.01em",
-                      }}
-                    >
-                      <span className="truncate">{f.team_name}</span>
-                      {/* El club no administra a un invitado: solo le pone
-                          hora. Decirlo evita que alguien espere aquí su
-                          plantilla o su alineación. */}
-                      {f.is_guest && (
-                        <Chip tone="mute" plain>
-                          Invitado
-                        </Chip>
-                      )}
-                    </span>
-                    <span
-                      style={{
-                        display: "block",
-                        marginTop: 2,
-                        fontSize: 12.5,
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {f.jornada_number != null ? `Jornada ${f.jornada_number} · ` : ""}
-                      vs {f.opponent ?? "—"}
-                    </span>
-                  </span>
-
-                  <Btn
-                    size="sm"
-                    variant={s ? "tint" : "ghost"}
-                    onClick={() => setPicking(f.matchday_id)}
-                    aria-label={`Elegir día y hora para ${f.team_name}`}
-                    style={{ justifyContent: "flex-start" }}
-                  >
-                    {s ? slotLabel(s.day, s.hour) : "Elegir hora"}
-                  </Btn>
-
-                  <Input
-                    type="text"
-                    value={s?.court ?? ""}
-                    disabled={!s}
-                    onChange={(e) => setCourt(f.matchday_id, e.target.value)}
-                    placeholder="Pista 1, Central…"
-                    aria-label={`Pista para ${f.team_name}`}
-                  />
-
-                  <span>
-                    {s ? <Chip>Listo</Chip> : <Chip tone="warning">Sin horario</Chip>}
-                  </span>
-                </div>
-              );
-            })}
+            {missing.length > 0 && (
+              <div className="grid-head" style={{ padding: "10px 18px", color: "var(--warning)" }}>
+                Falta la hora · {missing.length}
+              </div>
+            )}
+            {missing.map(renderRow)}
+            {ready.length > 0 && missing.length > 0 && (
+              <div className="grid-head" style={{ padding: "10px 18px" }}>
+                Con hora · {ready.length}
+              </div>
+            )}
+            {ready.map(renderRow)}
           </div>
+
+          {clashCount > 0 && (
+            <div style={{ padding: "0 18px 12px" }}>
+              <Note tone="warning" icon={<IconAlert size={15} />}>
+                Hay partidos en la misma pista, el mismo día y a la misma hora. Elige otra pista u
+                otra hora para poder guardar.
+              </Note>
+            </div>
+          )}
 
           <div className="card-foot">
             <Btn
               variant="accent"
               onClick={() => void guardar()}
-              disabled={saving || assigned === 0}
+              disabled={saving || assigned === 0 || clashCount > 0}
               icon={<IconCheck size={15} />}
             >
               {saving ? "Guardando…" : "Guardar y avisar"}
@@ -484,10 +571,16 @@ export function ClubSchedule() {
             </span>
           </div>
         </Card>
+        )}
 
-        {/* ── Franjas favoritas ──────────────────────────────────── */}
+        {/* ── Equipos y franjas ──────────────────────────────────── */}
+        {tab === "equipos" && (
         <Card flush>
-          <CardHead title="Franjas favoritas" sub="Las que cada equipo ha marcado" />
+          <CardHead title="Franjas favoritas" sub="Las que cada equipo ha marcado">
+            <Btn size="sm" variant="quiet" icon={<IconPlus size={14} />} onClick={() => setAddOpen(true)}>
+              Añadir invitado
+            </Btn>
+          </CardHead>
           {fixtures.map((f) => {
             const list = favByMatch[f.matchday_id] ?? [];
             return (
@@ -515,7 +608,12 @@ export function ClubSchedule() {
               </div>
             );
           })}
+          <div className="card-foot" style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+            Al pasar el código al capitán de un invitado, el equipo pasa a ser suyo. Los horarios en
+            tus pistas los sigues poniendo tú.
+          </div>
         </Card>
+        )}
       </div>
 
       {/* ── Selector día × hora ──────────────────────────────────── */}
@@ -643,6 +741,16 @@ export function ClubSchedule() {
               </span>
               {gridHours.map((h) => {
                 const fav = favKeys.has(slotKey(d, h));
+                const busyBy = pickingFixture
+                  ? fixtures.find((o) => {
+                      if (o.matchday_id === pickingFixture.matchday_id) return false;
+                      const os = slots[o.matchday_id];
+                      if (!os || os.hour !== h) return false;
+                      if (dateForSlot(o.match_date, os.day) !== dateForSlot(pickingFixture.match_date, d)) return false;
+                      const myCourt = slots[pickingFixture.matchday_id]?.court ?? "";
+                      return !myCourt.trim() || sameCourt(myCourt, os.court);
+                    })
+                  : undefined;
                 const cur =
                   picking && slots[picking]?.day === d && slots[picking]?.hour === h;
                 return (
@@ -650,12 +758,21 @@ export function ClubSchedule() {
                     key={slotKey(d, h)}
                     type="button"
                     onClick={() => picking && assign(picking, d, h)}
-                    aria-label={`${WEEKDAY[d]} ${h}${fav ? ", franja favorita" : ""}`}
+                    aria-label={`${WEEKDAY[d]} ${h}${fav ? ", franja favorita" : ""}${busyBy ? `, ocupada por ${busyBy.team_name}` : ""}`}
+                    title={busyBy ? `Ocupada: ${busyBy.team_name} vs ${busyBy.opponent ?? "—"}${slots[busyBy.matchday_id]?.court ? ` · ${slots[busyBy.matchday_id]!.court}` : ""}` : undefined}
                     aria-pressed={!!cur}
                     className={
                       "tw-hour-cell" +
                       (fav ? " is-fav" : "") +
                       (cur ? " is-on" : "")
+                    }
+                    style={
+                      busyBy && !cur
+                        ? {
+                            background:
+                              "repeating-linear-gradient(135deg, var(--line-strong) 0 4px, transparent 4px 9px)",
+                          }
+                        : undefined
                     }
                   >
                     {cur ? <IconCheck size={15} /> : fav ? "★" : ""}
@@ -672,6 +789,13 @@ export function ClubSchedule() {
           </span>
           <span>
             <i className="tw-slot-dot is-on" /> Hora asignada
+          </span>
+          <span>
+            <i
+              className="tw-slot-dot"
+              style={{ background: "repeating-linear-gradient(135deg, var(--line-strong) 0 3px, transparent 3px 6px)" }}
+            />{" "}
+            Ocupada por otro partido
           </span>
         </div>
       </Modal>

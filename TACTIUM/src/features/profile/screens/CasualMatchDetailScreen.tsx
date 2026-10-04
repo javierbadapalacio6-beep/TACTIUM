@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Image,
   Alert,
   Share,
 } from 'react-native';
@@ -21,7 +20,7 @@ import {
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack } from '@components/ui';
+import { BottomSheet, IconBack, IconMenu } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import {
   fetchCasualMatchDetail,
@@ -39,20 +38,17 @@ import {
 import { DOWNLOAD_URL } from '@core/config/referral';
 import type { RootStackParamList } from '@navigation/types';
 
+import { MatchScoreboard } from '@features/home/components/match/MatchScoreboard';
+import { SetsTable } from '@features/home/components/match/GamesPicker';
+import { KudosButton } from '@features/home/components/match/KudosButton';
+
 const formatDate = (iso: string | null): string => {
   if (!iso) return '';
   const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString('es-ES', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 };
 
-const pairNames = (
-  parts: CasualMatchDetail['participants'],
-  side: number,
-): string => {
+const pairNames = (parts: CasualMatchDetail['participants'], side: number): string => {
   const names = parts
     .filter((p) => p.side === side)
     .sort((a, b) => a.slot - b.slot)
@@ -61,20 +57,28 @@ const pairNames = (
   return names.join(' / ') || (side === 0 ? 'Nosotros' : 'Rival');
 };
 
+/** Campos que añade la migración 20261004_partido_kudos_detalle (sin aplicar). */
+type WithKudos = CasualMatchDetail & { kudos_count?: number | null; i_gave_kudos?: boolean | null };
+
+/**
+ * Detalle de amistoso (rediseño bloque «Partido»): marcador con la misma
+ * cabecera que la liga, sets en tabla, kudos, cara a cara en una barra y el
+ * código de reclamo solo si alguien no tiene cuenta. Foto y compartir, en ⋯.
+ */
 export const CasualMatchDetailScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const route =
-    useRoute<RouteProp<RootStackParamList, 'CasualMatchDetail'>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'CasualMatchDetail'>>();
   const { matchId } = route.params;
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
 
   const [loading, setLoading] = useState(true);
-  const [detail, setDetail] = useState<CasualMatchDetail | null>(null);
+  const [detail, setDetail] = useState<WithKudos | null>(null);
   const [h2h, setH2h] = useState<CasualH2H | null>(null);
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const cardRef = useRef<View>(null);
 
   const load = useCallback(async () => {
@@ -85,7 +89,7 @@ export const CasualMatchDetailScreen = () => {
     setLoading(true);
     try {
       const d = await fetchCasualMatchDetail(matchId, userId);
-      setDetail(d);
+      setDetail(d as WithKudos | null);
       fetchCasualH2H(userId, matchId)
         .then(setH2h)
         .catch(() => setH2h(null));
@@ -113,17 +117,13 @@ export const CasualMatchDetailScreen = () => {
       if (a > b) s0++;
       else if (b > a) s1++;
     }
-    const ourScore = mySide === 0 ? s0 : s1;
-    const rivalScore = mySide === 0 ? s1 : s0;
-    const setsStr = sets
-      .map(([a, b]) => (mySide === 0 ? `${a}-${b}` : `${b}-${a}`))
-      .join(' ');
     return {
       ourPair: pairNames(participants, mySide),
       rivalPair: pairNames(participants, otherSide),
-      ourScore,
-      rivalScore,
-      setsStr,
+      ourScore: mySide === 0 ? s0 : s1,
+      rivalScore: mySide === 0 ? s1 : s0,
+      setsStr: sets.map(([a, b]) => (mySide === 0 ? `${a}-${b}` : `${b}-${a}`)).join(' '),
+      setScores: sets.map(([a, b]) => (mySide === 0 ? { us: a, them: b } : { us: b, them: a })),
       won: winnerSide != null && winnerSide === mySide,
       decided: winnerSide != null,
     };
@@ -131,13 +131,11 @@ export const CasualMatchDetailScreen = () => {
 
   const isMine = !!detail && !!userId && detail.createdBy === userId;
   const typeLabel = detail?.type === 'entreno' ? 'Entreno' : 'Amistoso';
-
-  // ¿Hay alguien que jugó y NO está en la app? Ese es a quien le sirve el
-  // código para reclamar sus stats.
-  const canClaim = useMemo(
-    () => !!detail?.participants.some((p) => !p.user_id && p.name.trim()),
+  const unclaimed = useMemo(
+    () => (detail?.participants ?? []).filter((p) => !p.user_id && p.name.trim()),
     [detail],
   );
+  const canClaim = unclaimed.length > 0;
 
   const shareText = useMemo(() => {
     if (!detail || !view) return '';
@@ -152,6 +150,7 @@ export const CasualMatchDetailScreen = () => {
   }, [detail, view, canClaim]);
 
   const onAddPhoto = async () => {
+    setMenuOpen(false);
     if (!userId) return;
     const uri = await pickMatchPhoto();
     if (!uri) return;
@@ -167,6 +166,7 @@ export const CasualMatchDetailScreen = () => {
   };
 
   const onRemovePhoto = () => {
+    setMenuOpen(false);
     if (!userId) return;
     Alert.alert('Quitar foto', '¿Seguro que quieres quitar la foto?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -188,41 +188,62 @@ export const CasualMatchDetailScreen = () => {
     ]);
   };
 
-  const onShare = () => {
-    if (!detail?.photoUrl) return;
-    shareCardImage(cardRef, detail.photoUrl, shareText);
-  };
-
-  // Compartir SOLO el texto (con el código) — para cuando no hay foto o se
-  // quiere mandar el código suelto a quien jugó y no tiene la app.
-  const shareCode = async () => {
+  const onShare = async () => {
+    setMenuOpen(false);
+    if (detail?.photoUrl) {
+      shareCardImage(cardRef, detail.photoUrl, shareText);
+      return;
+    }
     try {
       await Share.share({ message: shareText });
     } catch {
-      // cancelado por el usuario
+      // cancelado
     }
   };
 
+  const shareText2 = async () => {
+    setMenuOpen(false);
+    try {
+      await Share.share({ message: shareText });
+    } catch {
+      // cancelado
+    }
+  };
+
+  const tint = view?.decided ? (view.won ? c.accent : c.error) : c.text;
+  const pair = h2h?.pair ?? null;
+  const pairPct = pair && pair.total > 0 ? Math.round((pair.wins / pair.total) * 100) : 0;
+  // Quien aparece como actor en el feed recibe el aviso del kudos.
+  const kudosTarget = detail && detail.createdBy !== userId ? detail.createdBy : null;
+
   return (
     <View style={styles.root}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + 12,
-            paddingBottom: insets.bottom + 32,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable
           onPress={() => navigation.goBack()}
           hitSlop={10}
-          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          style={styles.iconBtn}
         >
-          <IconBack size={20} color={c.text} />
+          <IconBack size={18} color={c.text} />
         </Pressable>
-
+        {detail ? (
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Más opciones"
+            style={styles.iconBtn}
+          >
+            <IconMenu size={16} color={c.text} />
+          </Pressable>
+        ) : null}
+      </View>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+        showsVerticalScrollIndicator={false}
+      >
         {loading ? (
           <View style={styles.loader}>
             <ActivityIndicator color={c.accent} />
@@ -233,478 +254,252 @@ export const CasualMatchDetailScreen = () => {
           </View>
         ) : (
           <>
-            <Text style={styles.eyebrow}>
-              {typeLabel.toUpperCase()} · {formatDate(detail.playedOn)}
-            </Text>
+            <MatchScoreboard
+              eyebrow={`${typeLabel} · ${formatDate(detail.playedOn)}`.toUpperCase()}
+              left={view.ourPair}
+              right={view.rivalPair}
+              crests={false}
+              us={view.ourScore}
+              them={view.rivalScore}
+              status={view.decided ? (view.won ? 'Victoria' : 'Derrota') : 'Sin decidir'}
+              tint={tint}
+            />
 
-            {/* Tarjeta estilo liga: pareja/resultado sobre pareja/resultado.
-                Con foto → tarjeta Strava (overlay). Sin foto → scoreboard. */}
-            {detail.photoUrl ? (
-              <View style={styles.cardWrap}>
-                <PhotoShareCard
-                  ref={cardRef}
-                  photoUri={detail.photoUrl}
-                  title={`${view.ourPair} ${view.ourScore} – ${view.rivalScore} ${view.rivalPair}`}
-                  subtitle={`${typeLabel} · ${formatDate(detail.playedOn)}`}
-                  detail={
-                    view.decided
-                      ? `${view.won ? 'VICTORIA' : 'DERROTA'}${
-                          view.setsStr ? ` · ${view.setsStr}` : ''
-                        }`
-                      : view.setsStr
-                  }
-                  homeName={view.ourPair}
-                  homeScore={view.ourScore}
-                  awayName={view.rivalPair}
-                  awayScore={view.rivalScore}
-                  highlight={
-                    view.decided ? (view.won ? 'home' : 'away') : 'home'
-                  }
-                />
+            {detail.sets.length > 0 ? (
+              <View style={styles.card}>
+                <SetsTable sets={view.setScores} usLabel={view.ourPair} themLabel={view.rivalPair} />
               </View>
-            ) : (
-              <View style={styles.scoreCard}>
-                <ScoreRow
-                  name={view.ourPair}
-                  score={view.ourScore}
-                  win={view.decided && view.won}
-                />
-                <View style={styles.scoreDivider} />
-                <ScoreRow
-                  name={view.rivalPair}
-                  score={view.rivalScore}
-                  win={view.decided && !view.won}
-                />
-              </View>
-            )}
+            ) : null}
 
-            {/* Sets, set a set (desde mi perspectiva) */}
-            <Text style={styles.sectionLabel}>SETS</Text>
-            <View style={styles.setsCard}>
-              {detail.sets.length > 0 ? (
-                detail.sets.map(([a, b], i) => {
-                  const us = detail.mySide === 0 ? a : b;
-                  const them = detail.mySide === 0 ? b : a;
-                  return (
-                    <View key={i} style={styles.setRow}>
-                      <Text style={styles.setLabel}>SET {i + 1}</Text>
-                      <Text style={styles.setScore}>
-                        <Text
-                          style={us > them ? styles.setWin : styles.setLose}
-                        >
-                          {us}
-                        </Text>
-                        <Text style={styles.setSep}> – </Text>
-                        <Text
-                          style={them > us ? styles.setWin : styles.setLose}
-                        >
-                          {them}
-                        </Text>
-                      </Text>
-                    </View>
-                  );
-                })
-              ) : (
-                <Text style={styles.emptyText}>Sin sets registrados.</Text>
-              )}
-            </View>
+            <KudosButton
+              kind="casual"
+              targetId={detail.id}
+              targetUserId={kudosTarget}
+              userId={userId}
+              initialCount={detail.kudos_count ?? null}
+              initialGiven={detail.i_gave_kudos ?? null}
+            />
 
-            {/* Head-to-head PAREJA vs PAREJA (encuentros anteriores) */}
-            {h2h?.pair ? (
+            {pair ? (
               <>
                 <Text style={styles.sectionLabel}>
-                  CARA A CARA · TU PAREJA VS ELLOS
+                  CARA A CARA · {pair.total} {pair.total === 1 ? 'PARTIDO' : 'PARTIDOS'}
                 </Text>
-                <View style={styles.h2hCard}>
-                  <View style={styles.h2hHeadline}>
-                    <Text style={styles.h2hBig}>
-                      <Text style={{ color: c.accent }}>
-                        {h2h.pair.wins}
-                      </Text>
-                      <Text style={styles.h2hSep}> – </Text>
-                      <Text style={{ color: c.error }}>
-                        {h2h.pair.losses}
-                      </Text>
-                    </Text>
-                    <Text style={styles.h2hMeta}>
-                      {h2h.pair.total}{' '}
-                      {h2h.pair.total === 1 ? 'encuentro previo' : 'encuentros previos'}
-                    </Text>
+                <View style={styles.h2h}>
+                  <Text style={[styles.h2hNum, { color: c.accent }]}>{pair.wins}</Text>
+                  <View style={styles.bar} accessibilityLabel={`${pair.wins} ganados y ${pair.losses} perdidos`}>
+                    <View style={[styles.barFill, { width: `${pairPct}%` }]} />
                   </View>
-                  <Text style={styles.h2hPairs} numberOfLines={2}>
-                    {h2h.pair.usNames.join(' / ')}{'  vs  '}
-                    {h2h.pair.themNames.join(' / ')}
-                  </Text>
+                  <Text style={[styles.h2hNum, { color: c.error }]}>{pair.losses}</Text>
                 </View>
               </>
             ) : null}
 
-            {/* Head-to-head INDIVIDUAL contra cada rival */}
             {h2h && h2h.individuals.length > 0 ? (
-              <>
-                <Text style={styles.sectionLabel}>
-                  CARA A CARA · TÚ VS CADA RIVAL
-                </Text>
-                <View style={styles.card}>
-                  {h2h.individuals.map((iv) => (
-                    <View
-                      key={iv.user_id ?? iv.name.toLowerCase()}
-                      style={styles.indivRow}
-                    >
+              <View style={styles.card}>
+                {h2h.individuals.map((iv, i) => (
+                  <View
+                    key={iv.user_id ?? iv.name.toLowerCase()}
+                    style={[styles.indivRow, i === h2h.individuals.length - 1 && { borderBottomWidth: 0 }]}
+                  >
+                    <View style={styles.av}>
+                      <Text style={styles.avText}>{iv.name.trim().slice(0, 2).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.indivName} numberOfLines={1}>
-                        {iv.name}
+                        Contra {iv.name}
                       </Text>
-                      <Text style={styles.indivRecord}>
-                        <Text style={{ color: c.accent }}>{iv.wins}</Text>
-                        <Text style={styles.h2hSep}>–</Text>
-                        <Text style={{ color: c.error }}>{iv.losses}</Text>
+                      <Text style={styles.indivSub}>
+                        {iv.wins} {iv.wins === 1 ? 'ganado' : 'ganados'} · {iv.losses}{' '}
+                        {iv.losses === 1 ? 'perdido' : 'perdidos'}
                       </Text>
                     </View>
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            {/* Código del partido: para que quien jugó y no está en la app
-                reclame sus stats. Solo lo ve el creador y solo si hay algún
-                participante sin cuenta. */}
-            {isMine && canClaim && detail.claimCode ? (
-              <>
-                <Text style={styles.sectionLabel}>CÓDIGO DEL PARTIDO</Text>
-                <View style={styles.codeCard}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.codeValue} selectable>
-                      {detail.claimCode}
-                    </Text>
-                    <Text style={styles.codeHint}>
-                      Compártelo con quien jugó y no tiene TACTIUM: al
-                      registrarse, mete el código en Perfil › Mi récord y este partido cuenta
-                      en sus estadísticas.
-                    </Text>
                   </View>
-                  <Pressable
-                    onPress={shareCode}
-                    style={({ pressed }) => [
-                      styles.codeShareBtn,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                  >
-                    <Text style={styles.codeShareLabel}>Compartir</Text>
-                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            {isMine && canClaim && detail.claimCode ? (
+              <Pressable
+                onPress={shareText2}
+                accessibilityRole="button"
+                accessibilityLabel="Compartir el código del partido"
+                style={({ pressed }) => [styles.code, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.codeHint} numberOfLines={2}>
+                  {unclaimed.length === 1
+                    ? `${unclaimed[0].name} aún no tiene TACTIUM`
+                    : `${unclaimed.length} jugadores aún no tienen TACTIUM`}
+                  {' · toca para compartir'}
+                </Text>
+                <Text style={styles.codeValue} selectable>
+                  {detail.claimCode}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {detail.photoUrl ? (
+              <>
+                <Text style={styles.sectionLabel}>FOTO DEL PARTIDO</Text>
+                <View style={{ alignItems: 'center' }}>
+                  <PhotoShareCard
+                    ref={cardRef}
+                    photoUri={detail.photoUrl}
+                    title={`${view.ourPair} ${view.ourScore} – ${view.rivalScore} ${view.rivalPair}`}
+                    subtitle={`${typeLabel} · ${formatDate(detail.playedOn)}`}
+                    detail={
+                      view.decided
+                        ? `${view.won ? 'VICTORIA' : 'DERROTA'}${view.setsStr ? ` · ${view.setsStr}` : ''}`
+                        : view.setsStr
+                    }
+                    homeName={view.ourPair}
+                    homeScore={view.ourScore}
+                    awayName={view.rivalPair}
+                    awayScore={view.rivalScore}
+                    highlight={view.decided ? (view.won ? 'home' : 'away') : 'home'}
+                  />
                 </View>
               </>
             ) : null}
-
-            {/* Acciones de foto (solo el creador puede escribir) */}
-            {isMine ? (
-              <View style={styles.actions}>
-                {detail.photoUrl ? (
-                  <>
-                    <Pressable
-                      onPress={onShare}
-                      disabled={busy}
-                      style={({ pressed }) => [
-                        styles.primaryBtn,
-                        pressed && { opacity: 0.85 },
-                      ]}
-                    >
-                      <Text style={styles.primaryBtnLabel}>Compartir foto</Text>
-                    </Pressable>
-                    <View style={styles.actionRow}>
-                      <Pressable
-                        onPress={onAddPhoto}
-                        disabled={busy}
-                        style={({ pressed }) => [
-                          styles.secondaryBtn,
-                          pressed && { opacity: 0.7 },
-                        ]}
-                      >
-                        <Text style={styles.secondaryBtnLabel}>
-                          Cambiar foto
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={onRemovePhoto}
-                        disabled={busy}
-                        style={({ pressed }) => [
-                          styles.secondaryBtn,
-                          pressed && { opacity: 0.7 },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.secondaryBtnLabel,
-                            { color: c.error },
-                          ]}
-                        >
-                          Quitar foto
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </>
-                ) : (
-                  <Pressable
-                    onPress={onAddPhoto}
-                    disabled={busy}
-                    style={({ pressed }) => [
-                      styles.primaryBtn,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                  >
-                    <Text style={styles.primaryBtnLabel}>
-                      Añadir foto del partido
-                    </Text>
-                  </Pressable>
-                )}
-                {busy ? (
-                  <ActivityIndicator
-                    color={c.accent}
-                    style={{ marginTop: 10 }}
-                  />
-                ) : null}
-              </View>
-            ) : detail.photoUrl ? (
-              <View style={styles.actions}>
-                <Image
-                  source={{ uri: detail.photoUrl }}
-                  style={styles.readonlyPhoto}
-                  resizeMode="cover"
-                />
-              </View>
-            ) : null}
+            {busy ? <ActivityIndicator color={c.accent} /> : null}
           </>
         )}
       </ScrollView>
+
+      <BottomSheet open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <View style={styles.menu}>
+          <MenuItem label={detail?.photoUrl ? 'Compartir foto' : 'Compartir resultado'} onPress={onShare} />
+          {detail?.photoUrl ? <MenuItem label="Compartir solo el texto" onPress={shareText2} /> : null}
+          {isMine ? (
+            <MenuItem label={detail?.photoUrl ? 'Cambiar foto' : 'Añadir foto del partido'} onPress={onAddPhoto} />
+          ) : null}
+          {isMine && detail?.photoUrl ? <MenuItem label="Quitar foto" danger onPress={onRemovePhoto} /> : null}
+        </View>
+      </BottomSheet>
     </View>
   );
 };
 
-const ScoreRow: React.FC<{ name: string; score: number; win: boolean }> = ({
-  name,
-  score,
-  win,
+const MenuItem: React.FC<{ label: string; onPress: () => void; danger?: boolean }> = ({
+  label,
+  onPress,
+  danger,
 }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.scoreRow}>
-      <Text
-        style={[styles.scoreName, win && { color: c.text }]}
-        numberOfLines={1}
-      >
-        {name}
-      </Text>
-      <Text style={[styles.scoreValue, win && { color: c.accent }]}>
-        {score}
-      </Text>
-    </View>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: c.accent10 }]}
+    >
+      <Text style={[styles.menuText, danger && { color: c.error }]}>{label}</Text>
+    </Pressable>
   );
 };
 
-const makeStyles = (c: Palette) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.background },
-  content: { paddingHorizontal: 20 },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  loader: { paddingTop: 60, alignItems: 'center' },
-  emptyBox: {
-    marginTop: 24,
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    padding: 20,
-  },
-  emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
-  emptyText: { color: c.textMuted, fontSize: 13 },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 12,
-  },
-  cardWrap: { alignItems: 'center', marginBottom: 4 },
-  scoreCard: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    padding: 18,
-    gap: 4,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  scoreName: {
-    flex: 1,
-    color: c.textMuted,
-    fontSize: 19,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  scoreValue: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 26,
-    fontWeight: '800',
-    minWidth: 30,
-    textAlign: 'right',
-  },
-  scoreDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: c.hair,
-    marginVertical: 6,
-  },
-  sectionLabel: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '500',
-    marginTop: 22,
-    marginBottom: 8,
-  },
-  codeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  codeValue: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: 4,
-  },
-  codeHint: {
-    color: c.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 6,
-  },
-  codeShareBtn: {
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: c.accent10,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  codeShareLabel: {
-    color: c.accent,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  setsCard: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: c.hair,
-  },
-  setLabel: {
-    fontFamily: Fonts.mono,
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1.5,
-  },
-  setScore: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '700' },
-  setWin: { color: c.accent },
-  setLose: { color: c.textMuted },
-  setSep: { color: c.textFaint },
-  h2hCard: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    padding: 16,
-    gap: 8,
-  },
-  h2hHeadline: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  h2hBig: { fontFamily: Fonts.mono, fontSize: 30, fontWeight: '800' },
-  h2hSep: { color: c.textFaint },
-  h2hMeta: { color: c.textFaint, fontSize: 12, fontFamily: Fonts.mono },
-  h2hPairs: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
-  card: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hair,
-    paddingHorizontal: 16,
-  },
-  indivRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: c.hair,
-  },
-  indivName: { flex: 1, color: c.text, fontSize: 15, fontWeight: '600' },
-  indivRecord: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '800' },
-  actions: { marginTop: 24 },
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  primaryBtn: {
-    height: 50,
-    borderRadius: Radius.lg,
-    backgroundColor: c.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryBtnLabel: { color: '#001810', fontSize: 15, fontWeight: '700' },
-  secondaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryBtnLabel: {
-    color: c.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  readonlyPhoto: {
-    width: '100%',
-    height: 220,
-    borderRadius: Radius.lg,
-    backgroundColor: c.bgCard,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    iconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    content: { paddingHorizontal: 16, gap: 10 },
+    loader: { paddingTop: 60, alignItems: 'center' },
+    emptyBox: {
+      marginTop: 24,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      padding: 20,
+    },
+    emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
+    card: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hair,
+      padding: 12,
+    },
+    sectionLabel: {
+      fontFamily: Fonts.mono,
+      color: c.textFaint,
+      fontSize: 10.5,
+      letterSpacing: 2,
+      fontWeight: '500',
+      marginTop: 6,
+    },
+    h2h: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    h2hNum: { fontFamily: Fonts.mono, fontSize: 18, fontWeight: '800', minWidth: 22, textAlign: 'center' },
+    bar: {
+      flex: 1,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: 'rgba(255,107,107,0.45)',
+      overflow: 'hidden',
+    },
+    barFill: { height: '100%', backgroundColor: c.accent },
+    indivRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.hair,
+    },
+    av: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: c.bgCard2,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avText: { fontFamily: Fonts.mono, fontSize: 10.5, fontWeight: '700', color: c.textMuted },
+    indivName: { color: c.text, fontSize: 14, fontWeight: '600' },
+    indivSub: { color: c.textFaint, fontSize: 12, marginTop: 1 },
+    code: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      padding: 12,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.hairStrong,
+    },
+    codeHint: { flex: 1, color: c.textFaint, fontSize: 12 },
+    codeValue: { fontFamily: Fonts.mono, color: c.text, fontSize: 16, fontWeight: '700', letterSpacing: 3 },
+    menu: {
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.bgCard,
+      overflow: 'hidden',
+    },
+    menuItem: {
+      minHeight: 50,
+      justifyContent: 'center',
+      paddingHorizontal: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.hair,
+    },
+    menuText: { color: c.text, fontSize: 15, fontWeight: '600' },
+  });

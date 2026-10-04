@@ -33,12 +33,14 @@ export function defaultJornadaTab(s: {
 export const JornadaPhaseTabs: React.FC<{
   value: JornadaTab;
   onChange: (t: JornadaTab) => void;
-}> = ({ value, onChange }) => {
+  /** Pestañas que no se pintan (tablet: «Alineación» va junto a la Previa). */
+  hidden?: JornadaTab[];
+}> = ({ value, onChange, hidden }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.row} accessibilityRole="tablist">
-      {JORNADA_TABS.map((t) => {
+      {JORNADA_TABS.filter((t) => !hidden?.includes(t.key)).map((t) => {
         const active = t.key === value;
         return (
           <Pressable

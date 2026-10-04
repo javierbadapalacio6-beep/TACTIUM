@@ -12,8 +12,16 @@ import {
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { BottomSheet, Toggle } from '@components/ui';
+import * as ImagePicker from 'expo-image-picker';
+import { BottomSheet, IconChevron, Toggle } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
+import { useAuthStore } from '@store/authStore';
+import { TeamCrest } from '@features/team/components/TeamCrest';
+import {
+  removeTeamLogo,
+  teamLogoOf,
+  uploadTeamLogo,
+} from '@features/team/teamData';
 import { toast } from '@store/toastStore';
 import { PreferredSlotsEditor } from '@features/team/components/PreferredSlotsEditor';
 import {
@@ -39,6 +47,94 @@ export const EditTeamSheet: React.FC<{
   const styles = useMemo(() => makeStyles(c), [c]);
   const team = useTeamStore((s) => s.team);
   const updateTeamSettings = useTeamStore((s) => s.updateTeamSettings);
+  const deleteTeam = useTeamStore((s) => s.deleteTeam);
+  const loadForUser = useTeamStore((s) => s.loadForUser);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  // Borrar desde la app (decisión 3): solo el DUEÑO y solo si el equipo no es
+  // de un club; los de un club los borra el club. La RPC `delete_team` ya
+  // exige ser el propietario.
+  const canDelete =
+    !!team && !team.club_id && !!userId && team.owner_id === userId;
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [slotsOpen, setSlotsOpen] = useState(false);
+  const logo = teamLogoOf(team);
+
+  const pickLogo = async () => {
+    if (!team || logoBusy) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (res.canceled || !res.assets?.[0]?.uri) return;
+    setLogoBusy(true);
+    try {
+      await uploadTeamLogo(team.id, res.assets[0].uri);
+      await loadForUser();
+      toast.success('Escudo actualizado');
+    } catch (e: any) {
+      toast.error('No se pudo subir el escudo', e?.message ?? '');
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
+  const onLogoPress = () => {
+    if (!team) return;
+    if (!logo) {
+      void pickLogo();
+      return;
+    }
+    Alert.alert('Escudo del equipo', undefined, [
+      { text: 'Cambiar escudo', onPress: () => void pickLogo() },
+      {
+        text: 'Quitar escudo',
+        style: 'destructive',
+        onPress: async () => {
+          setLogoBusy(true);
+          try {
+            await removeTeamLogo(team.id);
+            await loadForUser();
+          } catch (e: any) {
+            toast.error('No se pudo quitar', e?.message ?? '');
+          } finally {
+            setLogoBusy(false);
+          }
+        },
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const confirmDelete = () => {
+    if (!team) return;
+    Alert.alert(
+      'Borrar el equipo',
+      `Se borra «${team.name}» con su plantilla, temporadas, jornadas y resultados. No se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTeam(team.id);
+              toast.success('Equipo borrado', team.name);
+              onClose();
+            } catch (e: any) {
+              toast.error('No se pudo borrar', e?.message ?? '');
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const [cat, setCat] = useState(team?.category ?? '2ª');
   const [hasGroup, setHasGroup] = useState(!!team?.group_name);
@@ -138,9 +234,26 @@ export const EditTeamSheet: React.FC<{
       }
     >
       <Text style={styles.eyebrow}>EDITAR EQUIPO</Text>
-      <Text style={styles.title} numberOfLines={1}>
-        {team?.name ?? 'Equipo'}
-      </Text>
+      {/* Escudo arriba: la web ya lo subía; ahora también la app. */}
+      <Pressable
+        onPress={onLogoPress}
+        disabled={logoBusy}
+        accessibilityRole="button"
+        accessibilityLabel="Cambiar escudo"
+        style={({ pressed }) => [styles.crestRow, pressed && { opacity: 0.85 }]}
+      >
+        <TeamCrest name={team?.name ?? 'Equipo'} logo={logo} size={56} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.title} numberOfLines={1}>
+            {team?.name ?? 'Equipo'}
+          </Text>
+          {logoBusy ? (
+            <ActivityIndicator color={c.accent} style={{ alignSelf: 'flex-start', marginTop: 4 }} />
+          ) : (
+            <Text style={styles.crestLink}>{logo ? 'Cambiar escudo' : 'Añadir escudo'}</Text>
+          )}
+        </View>
+      </Pressable>
       <Text style={styles.lede}>
         Corrige la categoría o el grupo si te confundiste al crear el equipo, o
         completa el grupo cuando se sortee la liga.
@@ -210,29 +323,68 @@ export const EditTeamSheet: React.FC<{
         </Text>
       )}
 
-      {/* Club sede: quién pone los horarios de local, si no es el propio equipo. */}
-      {team && venueId ? (
-        <View style={styles.venueBlock}>
-          <Text style={styles.venueTitle}>HORARIOS DE LOCAL</Text>
-          <Text style={styles.venueText}>
-            Los pone {venueName ?? 'el club donde juegas'}, que es donde juegas de
-            local. Te avisa cada vez que fija uno. Solo puede tocar día, hora y
-            pista.
-          </Text>
-          <Pressable onPress={removeVenue} hitSlop={6} style={{ marginTop: 10 }}>
-            <Text style={styles.venueRemove}>Prefiero ponerlos yo</Text>
-          </Pressable>
-        </View>
+      {/* Horarios de local y franjas favoritas en una fila propia, para que
+          la hoja no sea tan larga. */}
+      {team ? (
+        <Pressable
+          onPress={() => setSlotsOpen((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: slotsOpen }}
+          style={({ pressed }) => [styles.slotsRow, pressed && { opacity: 0.85 }]}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.slotsTitle}>Horarios de local</Text>
+            <Text style={styles.slotsSub} numberOfLines={1}>
+              {venueId
+                ? `Los pone ${venueName ?? 'el club donde juegas'}`
+                : teamSlotsOf(team).length
+                  ? `${teamSlotsOf(team).length} franjas favoritas`
+                  : 'Tus franjas favoritas'}
+            </Text>
+          </View>
+          <View style={{ transform: [{ rotate: slotsOpen ? '90deg' : '0deg' }] }}>
+            <IconChevron size={14} color={c.textFaint} />
+          </View>
+        </Pressable>
+      ) : null}
+      {slotsOpen ? (
+        <>
+        {/* Club sede: quién pone los horarios de local, si no es el propio equipo. */}
+        {team && venueId ? (
+          <View style={styles.venueBlock}>
+            <Text style={styles.venueTitle}>HORARIOS DE LOCAL</Text>
+            <Text style={styles.venueText}>
+              Los pone {venueName ?? 'el club donde juegas'}, que es donde juegas de
+              local. Te avisa cada vez que fija uno. Solo puede tocar día, hora y
+              pista.
+            </Text>
+            <Pressable onPress={removeVenue} hitSlop={6} style={{ marginTop: 10 }}>
+              <Text style={styles.venueRemove}>Prefiero ponerlos yo</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* Franjas favoritas de local (las usa el club para poner los horarios). */}
+        {team ? (
+          <View style={styles.slotsBlock}>
+            <PreferredSlotsEditor
+              teamId={team.id}
+              initialSlots={teamSlotsOf(team)}
+            />
+          </View>
+        ) : null}
+        </>
       ) : null}
 
-      {/* Franjas favoritas de local (las usa el club para poner los horarios). */}
-      {team ? (
-        <View style={styles.slotsBlock}>
-          <PreferredSlotsEditor
-            teamId={team.id}
-            initialSlots={teamSlotsOf(team)}
-          />
-        </View>
+      {canDelete ? (
+        <Pressable
+          onPress={confirmDelete}
+          accessibilityRole="button"
+          hitSlop={6}
+          style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.deleteText}>Borrar el equipo</Text>
+        </Pressable>
       ) : null}
     </BottomSheet>
   );
@@ -240,6 +392,31 @@ export const EditTeamSheet: React.FC<{
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
+    crestRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 10 },
+    crestLink: { color: c.accent, fontSize: 13, fontWeight: '700', marginTop: 4 },
+    slotsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 22,
+      padding: 14,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hair,
+    },
+    slotsTitle: { color: c.text, fontSize: 14.5, fontWeight: '700' },
+    slotsSub: { color: c.textMuted, fontSize: 12.5, marginTop: 2 },
+    deleteBtn: {
+      marginTop: 28,
+      height: 48,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: c.error,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    deleteText: { color: c.error, fontSize: 14.5, fontWeight: '700' },
     venueBlock: {
       marginTop: 22,
       padding: 14,

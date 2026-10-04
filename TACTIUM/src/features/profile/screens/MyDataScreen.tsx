@@ -100,17 +100,38 @@ export const MyDataScreen = () => {
     }, [user]),
   );
 
+  // Se guarda como FICHERO `tactium-mis-datos.json` y se abre la hoja de
+  // compartir con él (antes se pegaba el JSON entero como texto). Si el
+  // binario no trae expo-sharing o falla, se cae al texto de siempre.
   const handleExport = async () => {
     if (!rawData || exporting) return;
     setExporting(true);
+    const json = JSON.stringify(rawData, null, 2);
     try {
-      const json = JSON.stringify(rawData, null, 2);
-      await Share.share({
-        message: json,
-        title: 'Mis datos · TACTIUM',
-      });
-    } catch (e: any) {
-      Alert.alert('No se pudo compartir', e?.message ?? 'Inténtalo de nuevo.');
+      let shared = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const Sharing = require('expo-sharing') as typeof import('expo-sharing');
+        if (FS.cacheDirectory && (await Sharing.isAvailableAsync())) {
+          const uri = `${FS.cacheDirectory}tactium-mis-datos.json`;
+          await FS.writeAsStringAsync(uri, json, { encoding: FS.EncodingType.UTF8 });
+          await Sharing.shareAsync(uri, {
+            mimeType: 'application/json',
+            dialogTitle: 'Mis datos · TACTIUM',
+            UTI: 'public.json',
+          });
+          shared = true;
+        }
+      } catch {
+        shared = false;
+      }
+      if (!shared) {
+        await Share.share({ message: json, title: 'Mis datos · TACTIUM' });
+      }
+    } catch {
+      Alert.alert('No se pudo compartir', 'Inténtalo de nuevo en unos segundos.');
     } finally {
       setExporting(false);
     }
@@ -191,39 +212,41 @@ export const MyDataScreen = () => {
               />
             </View>
 
-            <Text style={styles.sectionLabel}>RESUMEN DE TUS DATOS</Text>
-            <View style={styles.card}>
-              <CountRow label="Clubes que diriges" value={summary.clubsOwned} />
-              <CountRow
-                label="Clubes a los que perteneces"
-                value={summary.clubMemberships}
-              />
-              <CountRow label="Equipos que diriges" value={summary.teamsOwned} />
-              <CountRow
-                label="Equipos a los que perteneces"
-                value={summary.teamMemberships}
-              />
-              <CountRow
-                label="Jugadores vinculados a ti"
-                value={summary.playersLinked}
-              />
-              <CountRow
-                label="Suscripciones"
-                value={summary.subscriptions}
-              />
-              <CountRow
-                label="Invitaciones creadas"
-                value={summary.invitationsCreated}
-                isLast
-              />
-            </View>
+            {/* Solo lo que la persona tiene de verdad: los recuentos a 0 no salen. */}
+            {(() => {
+              const counts = [
+                { label: 'Clubes que diriges', value: summary.clubsOwned },
+                { label: 'Clubes a los que perteneces', value: summary.clubMemberships },
+                { label: 'Equipos que diriges', value: summary.teamsOwned },
+                { label: 'Equipos a los que perteneces', value: summary.teamMemberships },
+                { label: 'Jugadores vinculados a ti', value: summary.playersLinked },
+                { label: 'Suscripciones', value: summary.subscriptions },
+                { label: 'Invitaciones creadas', value: summary.invitationsCreated },
+              ].filter((r) => r.value > 0);
+              if (counts.length === 0) return null;
+              return (
+                <>
+                  <Text style={styles.sectionLabel}>RESUMEN DE TUS DATOS</Text>
+                  <View style={styles.card}>
+                    {counts.map((r, i) => (
+                      <CountRow
+                        key={r.label}
+                        label={r.label}
+                        value={r.value}
+                        isLast={i === counts.length - 1}
+                      />
+                    ))}
+                  </View>
+                </>
+              );
+            })()}
 
             <Text style={styles.sectionLabel}>EXPORTAR</Text>
             <Pressable
               onPress={handleExport}
               disabled={exporting}
               accessibilityRole="button"
-              accessibilityLabel="Compartir mis datos como JSON"
+              accessibilityLabel="Descargar mis datos en un archivo JSON"
               style={({ pressed }) => [
                 styles.exportBtn,
                 pressed && !exporting && { opacity: 0.85 },
@@ -234,13 +257,13 @@ export const MyDataScreen = () => {
                 <ActivityIndicator size="small" color={c.accent} />
               ) : (
                 <Text style={styles.exportBtnLabel}>
-                  Compartir mis datos (JSON)
+                  Exportar mis datos (archivo JSON)
                 </Text>
               )}
             </Pressable>
             <Text style={styles.exportHint}>
-              Se abrirá el menú de compartir de iOS/Android. Puedes guardar
-              el archivo en Notas, Drive, Mail o cualquier app que aceptes.
+              Se crea el archivo tactium-mis-datos.json y se abre el menú de
+              compartir: guárdalo en Archivos, Drive o mándalo por correo.
             </Text>
 
             <Text style={styles.sectionLabel}>POLÍTICAS</Text>

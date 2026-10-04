@@ -74,6 +74,9 @@ import {
 } from '@core/utils/format';
 import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
 
+import { JornadaSeasonList } from '../components/jornada/JornadaSeasonList';
+import { SplitView, useIsSplit } from '@components/layout';
+
 import type { HomeStackScreenProps } from '@navigation/types';
 
 type Status =
@@ -199,10 +202,54 @@ const matchOutcome = (
   return { state: 'pending', summary: '' };
 };
 
-export const JornadaScreen = ({
+/**
+ * Jornada. En móvil (y tablet estrecha) es la pantalla de siempre. En tablet
+ * con sitio, lista + detalle: las jornadas de la temporada a la izquierda
+ * (360) y la jornada elegida a la derecha; tocar otra cambia el detalle sin
+ * navegar.
+ */
+export const JornadaScreen = (props: HomeStackScreenProps<'Jornada'>) => {
+  const { navigation, route } = props;
+  const split = useIsSplit();
+  const team = useTeamStore((s) => s.team);
+  const [selId, setSelId] = useState<string | null>(route.params?.matchdayId ?? null);
+
+  if (!split) return <JornadaDetail {...props} />;
+
+  const goBack = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('HomeRoot');
+  };
+
+  return (
+    <SplitView
+      list={
+        <JornadaSeasonList
+          teamId={team?.id}
+          anchorMatchdayId={route.params?.matchdayId ?? null}
+          selectedId={selId}
+          onPick={setSelId}
+          onBack={goBack}
+        />
+      }
+      detail={
+        selId ? <JornadaDetail key={selId} {...props} selectedId={selId} split /> : null
+      }
+    />
+  );
+};
+
+const JornadaDetail = ({
   navigation,
   route,
-}: HomeStackScreenProps<'Jornada'>) => {
+  selectedId,
+  split = false,
+}: HomeStackScreenProps<'Jornada'> & {
+  /** Tablet (lista + detalle): la jornada elegida en la lista. */
+  selectedId?: string | null;
+  /** Tablet: Previa y Alineación van juntas, lado a lado. */
+  split?: boolean;
+}) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
@@ -234,7 +281,7 @@ export const JornadaScreen = ({
   const [tabPicked, setTabPicked] = useState<JornadaTab | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const targetMatchdayId = route.params?.matchdayId;
+  const targetMatchdayId = selectedId ?? route.params?.matchdayId;
   // Spinner solo en la 1ª carga; los refrescos al volver a foco van en segundo
   // plano para no parpadear a spinner con la jornada ya en pantalla.
   const didLoadRef = useRef(false);
@@ -486,8 +533,10 @@ export const JornadaScreen = ({
   useEffect(() => {
     setTabPicked(null);
   }, [matchday?.id]);
-  const tab: JornadaTab =
+  const rawTab: JornadaTab =
     tabPicked ?? defaultJornadaTab({ closed, matchStarted, lineupReady });
+  // Tablet (split): no hay pestaña «Alineación»; va junto a la Previa.
+  const tab: JornadaTab = split && rawTab === 'alineacion' ? 'previa' : rawTab;
 
   const closeMatch = () => {
     if (!matchday) return;
@@ -753,113 +802,9 @@ export const JornadaScreen = ({
     status === 'pending' || status === 'scheduled' ? 'in-progress' : status
   ];
 
-  return (
-    <View style={styles.root}>
-      {/* === NAV === */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('HomeRoot');
-          }}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
-        >
-          <IconBack size={16} color={c.text} />
-          <Text style={styles.backLabel}>Atrás</Text>
-        </Pressable>
-        <View style={styles.navRight}>
-          {!closed && isCaptain ? (
-            <Pressable
-              onPress={() => setEditing(true)}
-              hitSlop={6}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <IconPencil size={14} color={c.text} />
-            </Pressable>
-          ) : null}
-          {isCaptain && lineupReady ? (
-            // Compartir la alineación es una acción "de capitán" — solo
-            // el cap decide cuándo notificar al equipo. Players ya la
-            // reciben/ven via realtime; no necesitan re-compartirla y
-            // mostrarles el botón sugería ambigüedad sobre quién manda.
-            <Pressable
-              onPress={() => setShowShare(true)}
-              hitSlop={6}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <IconShare size={14} color={c.accent} />
-            </Pressable>
-          ) : null}
-          {canDelete ? (
-            <Pressable
-              onPress={() => setMoreOpen(true)}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel="Más opciones de la jornada"
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={styles.moreDots}>⋯</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* === CABECERA MARCADOR ===
-            Nuestro equipo · centro (cuenta atrás o marcador) · rival. Sustituye
-            a la antigua info card: la sede y las tandas pasan a la Previa y la
-            temporada va al pie de la cabecera. */}
-        <JornadaScoreHeader
-          jornadaNumber={matchday.jornada_number}
-          date={dateObj}
-          time={time}
-          isHome={isHome}
-          teamName={teamName}
-          opponent={matchday.opponent}
-          me={fcp.me}
-          rival={fcp.rival}
-          hasResult={headerHasResult}
-          matchStarted={matchStarted}
-          us={score.won}
-          them={score.lost}
-          tint={headerCfg.tint}
-          statusLabel={headerCfg.label}
-          footer={season?.name ?? null}
-        />
-
-        {/* === PESTAÑAS POR FASE === */}
-        <JornadaPhaseTabs value={tab} onChange={setTabPicked} />
-
-        {/* === PREVIA === */}
-        {tab === 'previa' ? (
-          <JornadaPrevia
-            matchdayId={matchday.id}
-            lastCrossing={fcp.lastCrossing}
-            venue={venueLabel}
-            tandas={matchday.tandas}
-            onOpenAvailability={() =>
-              navigation.navigate('Availability', { matchdayId: matchday.id })
-            }
-          />
-        ) : null}
-
-        {/* === ALINEACIÓN === */}
-        {tab === 'alineacion' ? (
+  // Bloque ALINEACIÓN (cabecera, «Traer el acta», parejas y regla de orden).
+  // En móvil es su pestaña; en tablet (split) va al lado de la Previa.
+  const alineacionBlock = (
           <>
             {/* === ALINEACIÓN HEADER === */}
             <View style={styles.lineupHeader}>
@@ -982,7 +927,137 @@ export const JornadaScreen = ({
             ) : null}
 
           </>
+  );
+
+  return (
+    <View style={styles.root}>
+      {/* === NAV === */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          onPress={() => {
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate('HomeRoot');
+          }}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+        >
+          <IconBack size={16} color={c.text} />
+          <Text style={styles.backLabel}>Atrás</Text>
+        </Pressable>
+        <View style={styles.navRight}>
+          {!closed && isCaptain ? (
+            <Pressable
+              onPress={() => setEditing(true)}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <IconPencil size={14} color={c.text} />
+            </Pressable>
+          ) : null}
+          {isCaptain && lineupReady ? (
+            // Compartir la alineación es una acción "de capitán" — solo
+            // el cap decide cuándo notificar al equipo. Players ya la
+            // reciben/ven via realtime; no necesitan re-compartirla y
+            // mostrarles el botón sugería ambigüedad sobre quién manda.
+            <Pressable
+              onPress={() => setShowShare(true)}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <IconShare size={14} color={c.accent} />
+            </Pressable>
+          ) : null}
+          {canDelete ? (
+            <Pressable
+              onPress={() => setMoreOpen(true)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Más opciones de la jornada"
+              style={({ pressed }) => [
+                styles.iconBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.moreDots}>⋯</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* === CABECERA MARCADOR ===
+            Nuestro equipo · centro (cuenta atrás o marcador) · rival. Sustituye
+            a la antigua info card: la sede y las tandas pasan a la Previa y la
+            temporada va al pie de la cabecera. */}
+        <JornadaScoreHeader
+          jornadaNumber={matchday.jornada_number}
+          date={dateObj}
+          time={time}
+          isHome={isHome}
+          teamName={teamName}
+          opponent={matchday.opponent}
+          me={fcp.me}
+          rival={fcp.rival}
+          hasResult={headerHasResult}
+          matchStarted={matchStarted}
+          us={score.won}
+          them={score.lost}
+          tint={headerCfg.tint}
+          statusLabel={headerCfg.label}
+          footer={season?.name ?? null}
+        />
+
+        {/* === PESTAÑAS POR FASE === */}
+        <JornadaPhaseTabs
+          value={tab}
+          onChange={setTabPicked}
+          hidden={split ? ['alineacion'] : undefined}
+        />
+
+        {/* === PREVIA === */}
+        {tab === 'previa' ? (
+          split ? (
+            // Tablet: convocatoria (Previa) y alineación, lado a lado.
+            <View style={styles.splitRow}>
+              <View style={styles.splitCol}>
+                <JornadaPrevia
+                  matchdayId={matchday.id}
+                  lastCrossing={fcp.lastCrossing}
+                  venue={venueLabel}
+                  tandas={matchday.tandas}
+                  onOpenAvailability={() =>
+                    navigation.navigate('Availability', { matchdayId: matchday.id })
+                  }
+                />
+              </View>
+              <View style={styles.splitCol}>{alineacionBlock}</View>
+            </View>
+          ) : (
+            <JornadaPrevia
+              matchdayId={matchday.id}
+              lastCrossing={fcp.lastCrossing}
+              venue={venueLabel}
+              tandas={matchday.tandas}
+              onOpenAvailability={() =>
+                navigation.navigate('Availability', { matchdayId: matchday.id })
+              }
+            />
+          )
         ) : null}
+
+        {/* === ALINEACIÓN === */}
+        {tab === 'alineacion' ? alineacionBlock : null}
 
         {/* === RESULTADO === */}
         {tab === 'resultado' ? (
@@ -1970,6 +2045,8 @@ const ShareLineupSheet: React.FC<{
 // ============= STYLES =============
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  splitRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
+  splitCol: { flex: 1, minWidth: 0 },
   root: { flex: 1, backgroundColor: c.background },
   center: { alignItems: 'center', justifyContent: 'center' },
   emptyTitle: {

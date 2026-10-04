@@ -9,7 +9,18 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  Share,
 } from 'react-native';
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -27,6 +38,8 @@ import {
   IconBack,
   BottomSheet,
 } from '@components/ui';
+import { SplitView, useIsSplit } from '@components/layout';
+import { TournamentDetailScreen } from './TournamentDetailScreen';
 import { DateField, dateToIsoDate } from '@components/ui/DateTimeField';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
@@ -57,6 +70,17 @@ import {
 } from '@core/entitlements/tournamentBilling';
 import { requestTournamentPayment } from '@core/services/tournamentCheckout';
 import { useSubscriptionStore } from '@store/subscriptionStore';
+import { fetchConnectStatus, type ConnectStatus } from '@core/services/connectOnboarding';
+import {
+  fetchTournamentStats,
+  tournamentPhase,
+  tournamentSignupUrl,
+  PHASES,
+  PHASE_LABEL,
+  PHASE_ACTION,
+  type PhaseIndex,
+  type TournamentStats,
+} from '@features/club/clubOps';
 
 import type {
   HomeStackScreenProps,
@@ -139,29 +163,37 @@ const CREATE_STEPS: { key: string; title: string; sub: string }[] = [
   { key: 'dates', title: 'Fechas', sub: 'Cuándo se juega. Si dura varios días, reparte las fases.' },
   { key: 'signup', title: 'Inscripción', sub: 'Plazas, disponibilidad horaria y cuota.' },
   { key: 'prizes', title: 'Premios e info', sub: 'Premios, datos del evento y observaciones.' },
+  { key: 'review', title: 'Revisar', sub: 'Repasa el torneo antes de publicarlo. Toca «Editar» para volver a un paso.' },
 ];
+const REVIEW_STEP = CREATE_STEPS.length - 1;
 
 // Gestión de torneos del club. Vive en DOS sitios: raíz de Inicio del
 // ORGANIZADOR (club «solo torneos») y, para el club con equipos, empujada desde
 // Competir › Torneos («Gestionar torneos»; ahí lleva «Atrás»).
 // `route.params.createTournament` (nonce) abre el asistente de crear torneo —
 // lo manda el botón ＋.
+//
+// Cada torneo dice en qué fase está (Inscripción → Pago → Cuadros → En juego →
+// Final) y lleva UN botón con lo siguiente que toca.
 export const ClubTournamentsScreen = ({
   navigation,
   route,
 }: HomeStackScreenProps<'HomeRoot'>) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const ls = useMemo(() => makeListStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
-  // Navegación a nivel Root (para abrir la pantalla de activación, que vive
-  // sobre las tabs junto al paywall). El nav de la stack de torneos no la ve.
+  // Navegación a nivel Root (activar equipos, facturación, explorar).
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [items, setItems] = useState<Tournament[]>([]);
+  const [stats, setStats] = useState<Record<string, TournamentStats>>({});
+  const [connect, setConnect] = useState<ConnectStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [showDone, setShowDone] = useState(false);
   // Empujada desde Competir (club con equipos) → «Atrás». Como raíz de Inicio
   // del organizador no hay a dónde volver.
   const showBack = navigation.canGoBack();
@@ -172,31 +204,15 @@ export const ClubTournamentsScreen = ({
     if (createNonce) setCreating(true);
   }, [createNonce]);
 
-  // Club en modo "solo torneos": el CTA abre el paso de activación (elegir
-  // federación + desbloquear + paywall). El desbloqueo real ocurre allí.
+  // Club en modo "solo torneos": el CTA abre el paso de activación.
   const handleUnlock = () => rootNav.navigate('ActivateTeamManagement');
-
-  // Agrupa los torneos del club por estado (calendario).
-  const clubSections = useMemo(() => {
-    const bucket = (t: Tournament) => tournamentBucket(t.status, t.starts_on);
-    const live = items.filter((t) => bucket(t) === 'live');
-    const soon = items
-      .filter((t) => bucket(t) === 'upcoming')
-      .sort((a, b) => (a.starts_on ?? 'z').localeCompare(b.starts_on ?? 'z'));
-    const done = items
-      .filter((t) => bucket(t) === 'finished')
-      .sort((a, b) => (b.starts_on ?? '').localeCompare(a.starts_on ?? ''));
-    return [
-      { label: 'En juego', data: live },
-      { label: 'Próximamente', data: soon },
-      { label: 'Finalizados', data: done },
-    ].filter((s) => s.data.length);
-  }, [items]);
 
   const load = useCallback(async () => {
     if (!club) return;
     try {
-      setItems(await listTournaments(club.id));
+      const list = await listTournaments(club.id);
+      setItems(list);
+      setStats(await fetchTournamentStats(list));
     } catch (e: any) {
       toast.error('No se pudieron cargar', e?.message ?? 'Inténtalo de nuevo.');
     } finally {
@@ -210,8 +226,76 @@ export const ClubTournamentsScreen = ({
     }, [load]),
   );
 
-  return (
-    <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+  // Estado REAL de Stripe, solo para el estado vacío (la primera duda del
+  // organizador es cómo cobrar).
+  useEffect(() => {
+    if (!club || items.length > 0) return;
+    let alive = true;
+    fetchConnectStatus(club.id).then((s) => alive && setConnect(s));
+    return () => {
+      alive = false;
+    };
+  }, [club, items.length]);
+
+  const active = useMemo(
+    () =>
+      items
+        .filter((t) => tournamentPhase(t) < 4)
+        .sort(
+          (a, b) =>
+            tournamentPhase(b) - tournamentPhase(a) ||
+            (a.starts_on ?? 'z').localeCompare(b.starts_on ?? 'z'),
+        ),
+    [items],
+  );
+  const finished = useMemo(
+    () =>
+      items
+        .filter((t) => tournamentPhase(t) === 4)
+        .sort((a, b) => (b.starts_on ?? '').localeCompare(a.starts_on ?? '')),
+    [items],
+  );
+
+  const totals = useMemo(() => {
+    let pairs = 0;
+    let pending = 0;
+    let online = 0;
+    for (const t of active) {
+      const s = stats[t.id];
+      if (!s) continue;
+      pairs += s.pairs;
+      pending += s.pendingClub;
+      online += s.paidOnline;
+    }
+    return { pairs, pending, online };
+  }, [active, stats]);
+
+  const share = async (t: Tournament) => {
+    try {
+      await Share.share({
+        message:
+          `Apúntate al torneo "${t.name}" en TACTIUM.\n` +
+          `${tournamentSignupUrl(t.id)}` +
+          (t.signup_code ? `\nCódigo de inscripción: ${t.signup_code}` : ''),
+      });
+    } catch {
+      /* cancelado */
+    }
+  };
+
+  // TABLET: lista + detalle. Tocar un torneo lo abre a la derecha (con borde
+  // verde en la lista); en vertical estrecha o móvil, se navega como siempre.
+  const split = useIsSplit();
+  const [selId, setSelId] = useState<string | null>(null);
+  const selected = split
+    ? items.find((t) => t.id === selId) ?? active[0] ?? finished[0] ?? null
+    : null;
+
+  const openDetail = (t: Tournament) =>
+    split ? setSelId(t.id) : navigation.navigate('TournamentDetail', { tournamentId: t.id });
+
+  const body = (
+    <>
       <View style={styles.topbar}>
         <View style={styles.brandRow}>
           {showBack ? (
@@ -228,7 +312,9 @@ export const ClubTournamentsScreen = ({
             <TactiumMark size={34} gradient />
           )}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.eyebrow}>CLUB · TORNEOS</Text>
+            <Text style={styles.eyebrow}>
+              {club?.tournaments_only ? 'ORGANIZADOR' : 'CLUB · TORNEOS'}
+            </Text>
             <Text style={styles.brandName} numberOfLines={1}>
               {club?.name ?? 'Club'}
             </Text>
@@ -236,25 +322,6 @@ export const ClubTournamentsScreen = ({
         </View>
         <NotificationBell />
       </View>
-
-      {club?.tournaments_only ? (
-        <Pressable
-          onPress={handleUnlock}
-          style={({ pressed }) => [
-            styles.unlockCard,
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.unlockTitle}>¿También gestionas equipos?</Text>
-            <Text style={styles.unlockHint}>
-              Actívalo y tendrás alineaciones, jornadas y plantillas — sin perder
-              tus torneos.
-            </Text>
-          </View>
-          <Text style={styles.unlockCta}>Activar →</Text>
-        </Pressable>
-      ) : null}
 
       {loading ? (
         <View style={styles.center}>
@@ -264,98 +331,548 @@ export const ClubTournamentsScreen = ({
         <ScrollView
           contentContainerStyle={{
             paddingHorizontal: 22,
+            paddingTop: 12,
             paddingBottom: insets.bottom + 64 + 12 + 32,
           }}
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            onPress={() => setCreating(true)}
-            style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
-          >
-            <IconPlus size={16} color={c.textInverse} />
-            <Text style={styles.createLabel}>Crear torneo</Text>
-          </Pressable>
-          {TOURNAMENTS_ENABLED ? (
-            <Pressable
-              onPress={() => rootNav.navigate('ExploreTournaments')}
-              hitSlop={8}
-              style={({ pressed }) => [styles.exploreLink, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.exploreLinkText}>Explorar torneos de otros clubes →</Text>
-            </Pressable>
-          ) : null}
-
           {items.length === 0 ? (
-            <View style={styles.empty}>
-              <IconTrophy size={30} color={c.textFaint} />
-              <Text style={styles.emptyTitle}>Aún no hay torneos</Text>
-              <Text style={styles.emptyText}>
-                Crea un torneo, comparte el código para que se apunten y la app
-                arma el cuadro con las cabezas de serie.
-              </Text>
-            </View>
+            <FirstTournament
+              connect={connect}
+              onCreate={() => setCreating(true)}
+              onConnect={() => rootNav.navigate('ClubBilling')}
+              onExplore={TOURNAMENTS_ENABLED ? () => rootNav.navigate('ExploreTournaments') : undefined}
+            />
           ) : (
-            <View style={{ marginTop: 10 }}>
-              {clubSections.map((s) => (
-                <View key={s.label} style={{ marginTop: 12 }}>
-                  <Text style={styles.groupLabel}>{s.label.toUpperCase()}</Text>
-                  <View style={{ gap: 10, marginTop: 8 }}>
-                    {s.data.map((t) => (
-                      <Pressable
-                        key={t.id}
-                        onPress={() =>
-                          navigation.navigate('TournamentDetail', { tournamentId: t.id })
-                        }
-                        style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
-                      >
-                        {t.cover_url ? (
-                          <Image source={{ uri: t.cover_url }} style={styles.cardCover} />
-                        ) : null}
-                        <View style={styles.cardRow}>
-                          {t.cover_url ? null : (
-                            <View style={styles.cardIcon}>
-                              <IconTrophy size={18} color={c.accent} />
-                            </View>
-                          )}
+            <>
+              {/* Tres cifras: parejas, pendientes en el club y pagadas online. */}
+              <View style={ls.figures}>
+                <Figure value={totals.pairs} label="parejas en tus torneos" />
+                <Figure value={totals.pending} label="pagan en el club" warn={totals.pending > 0} />
+                <Figure value={totals.online} label="pagadas online" />
+              </View>
+
+              <View style={{ gap: 12, marginTop: 14 }}>
+                {active.map((t) => (
+                  <TournamentCard
+                    key={t.id}
+                    t={t}
+                    stats={stats[t.id]}
+                    selected={selected?.id === t.id}
+                    onOpen={() => openDetail(t)}
+                    onAction={() => (tournamentPhase(t) === 0 ? share(t) : openDetail(t))}
+                  />
+                ))}
+              </View>
+
+              {finished.length > 0 ? (
+                <View style={{ marginTop: 14 }}>
+                  <Pressable
+                    onPress={() => setShowDone((v) => !v)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showDone }}
+                    style={({ pressed }) => [ls.doneHead, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={ls.doneHeadText}>Finalizados ({finished.length})</Text>
+                    <IconChevron size={14} color={c.textFaint} />
+                  </Pressable>
+                  {showDone ? (
+                    <View style={{ gap: 8 }}>
+                      {finished.map((t) => (
+                        <Pressable
+                          key={t.id}
+                          onPress={() => openDetail(t)}
+                          style={({ pressed }) => [
+                            ls.doneRow,
+                            selected?.id === t.id && ls.cardSel,
+                            pressed && { opacity: 0.85 },
+                          ]}
+                        >
+                          <IconTrophy size={16} color={c.textFaint} />
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.cardName} numberOfLines={1}>
+                            <Text style={ls.doneName} numberOfLines={1}>
                               {t.name}
                             </Text>
-                            <Text style={styles.cardMeta} numberOfLines={1}>
-                              {[
-                                formatStartsOn(t.starts_on),
-                                t.location,
-                                t.genders?.length
-                                  ? t.genders.map((g) => GENDER_LABEL[g] ?? g).join(' / ')
-                                  : null,
-                                t.categories?.length ? t.categories.join(' / ') : null,
-                                t.entry_fee ? formatFee(t.entry_fee, t.fee_currency) : null,
-                              ]
+                            <Text style={ls.meta} numberOfLines={1}>
+                              {[formatStartsOn(t.starts_on), `${stats[t.id]?.pairs ?? 0} parejas`]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </Text>
                           </View>
-                          <IconChevron size={16} color={c.textFaint} />
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
+                          <IconChevron size={14} color={c.textFaint} />
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
-              ))}
-            </View>
+              ) : null}
+
+              <Pressable
+                onPress={() => setCreating(true)}
+                style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
+              >
+                <IconPlus size={16} color={c.textInverse} />
+                <Text style={styles.createLabel}>Crear torneo</Text>
+              </Pressable>
+              {TOURNAMENTS_ENABLED ? (
+                <Pressable
+                  onPress={() => rootNav.navigate('ExploreTournaments')}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.exploreLink, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.exploreLinkText}>Explorar torneos de otros clubes ›</Text>
+                </Pressable>
+              ) : null}
+            </>
           )}
+
+          {/* «¿También gestionas equipos?» baja al final, como una fila más. */}
+          {club?.tournaments_only ? (
+            <Pressable
+              onPress={handleUnlock}
+              style={({ pressed }) => [ls.unlockRow, pressed && { opacity: 0.85 }]}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.unlockTitle}>¿También gestionas equipos?</Text>
+                <Text style={styles.unlockHint}>
+                  Alineaciones, jornadas y plantillas, sin perder tus torneos.
+                </Text>
+              </View>
+              <Text style={styles.unlockCta}>Activar ›</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       )}
+    </>
+  );
 
-      <CreateTournamentSheet
-        open={creating}
-        clubId={club?.id ?? null}
-        onClose={() => setCreating(false)}
-        onCreated={load}
-      />
+  const createSheet = (
+    <CreateTournamentSheet
+      open={creating}
+      clubId={club?.id ?? null}
+      onClose={() => setCreating(false)}
+      onCreated={load}
+    />
+  );
+
+  if (split) {
+    return (
+      <View style={styles.root}>
+        <SplitView
+          list={<View style={{ flex: 1, paddingTop: insets.top + 12 }}>{body}</View>}
+          detail={
+            selected ? (
+              <TournamentDetailScreen
+                key={selected.id}
+                embedded
+                navigation={
+                  navigation as unknown as HomeStackScreenProps<'TournamentDetail'>['navigation']
+                }
+                route={
+                  {
+                    key: `embedded-${selected.id}`,
+                    name: 'TournamentDetail',
+                    params: { tournamentId: selected.id },
+                  } as HomeStackScreenProps<'TournamentDetail'>['route']
+                }
+                onDeleted={() => {
+                  setSelId(null);
+                  load();
+                }}
+              />
+            ) : null
+          }
+          emptyDetail={
+            <View style={[styles.center, { paddingHorizontal: 40 }]}>
+              <IconTrophy size={28} color={c.textFaint} />
+              <Text style={[ls.meta, { textAlign: 'center', marginTop: 10 }]}>
+                {loading ? '' : 'Crea tu primer torneo y aquí verás su inscripción, el pago y los cuadros.'}
+              </Text>
+            </View>
+          }
+        />
+        {createSheet}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+      {body}
+      {createSheet}
     </View>
   );
 };
+
+// ─── Cifra con cuenta hacia arriba (0,6 s) ──────────────────────────────────
+const Figure: React.FC<{ value: number; label: string; warn?: boolean }> = ({
+  value,
+  label,
+  warn,
+}) => {
+  const c = useColors();
+  const ls = useMemo(() => makeListStyles(c), [c]);
+  const reduced = useReducedMotion();
+  const [shown, setShown] = useState(reduced ? value : 0);
+  const v = useSharedValue(reduced ? value : 0);
+  useEffect(() => {
+    v.value = reduced
+      ? value
+      : withTiming(value, { duration: 600, easing: Easing.out(Easing.cubic) });
+  }, [value, reduced, v]);
+  useAnimatedReaction(
+    () => Math.round(v.value),
+    (cur, prev) => {
+      if (cur !== prev) runOnJS(setShown)(cur);
+    },
+  );
+  return (
+    <View style={ls.figure}>
+      <Text style={[ls.figureNum, warn && { color: c.warning }]}>{shown}</Text>
+      <Text style={ls.figureLabel}>{label}</Text>
+    </View>
+  );
+};
+
+// ─── Punto «en directo» que late ────────────────────────────────────────────
+const LiveDot: React.FC = () => {
+  const c = useColors();
+  const reduced = useReducedMotion();
+  const o = useSharedValue(1);
+  useEffect(() => {
+    if (reduced) return;
+    o.value = withRepeat(withTiming(0.25, { duration: 700 }), -1, true);
+  }, [reduced, o]);
+  const st = useAnimatedStyle(() => ({ opacity: o.value }));
+  return (
+    <Animated.View
+      style={[{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.accent }, st]}
+    />
+  );
+};
+
+// ─── Barra de 5 fases ───────────────────────────────────────────────────────
+const PhaseBar: React.FC<{ phase: PhaseIndex }> = ({ phase }) => {
+  const c = useColors();
+  const ls = useMemo(() => makeListStyles(c), [c]);
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Fase: ${PHASE_LABEL[phase]}, ${phase + 1} de 5`}
+      style={{ marginTop: 12 }}
+    >
+      <View style={ls.phaseTrack}>
+        {PHASES.map((p, i) => (
+          <View
+            key={p}
+            style={[
+              ls.phaseSeg,
+              i < phase && { backgroundColor: c.accent },
+              i === phase && { backgroundColor: phase === 1 ? c.warning : c.accent },
+            ]}
+          />
+        ))}
+      </View>
+      <View style={ls.phaseLabels}>
+        {PHASES.map((p, i) => (
+          <Text
+            key={p}
+            style={[ls.phaseLabel, i === phase && { color: c.text, fontWeight: '700' }]}
+            numberOfLines={1}
+          >
+            {p}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+const TournamentCard: React.FC<{
+  t: Tournament;
+  stats: TournamentStats | undefined;
+  onOpen: () => void;
+  onAction: () => void;
+  /** Tablet: el torneo abierto a la derecha. */
+  selected?: boolean;
+}> = ({ t, stats, onOpen, onAction, selected = false }) => {
+  const c = useColors();
+  const ls = useMemo(() => makeListStyles(c), [c]);
+  const phase = tournamentPhase(t);
+  const s = stats ?? { pairs: 0, pendingClub: 0, paidOnline: 0, matches: 0, played: 0 };
+  const divisions = Math.max(1, (t.genders?.length || 1) * (t.categories?.length || 1));
+  const dates = [formatStartsOn(t.starts_on), t.ends_on && t.ends_on !== t.starts_on ? formatStartsOn(t.ends_on) : null]
+    .filter(Boolean)
+    .join(' – ');
+  const unit = isSocialFormat(t.format) ? 'jugadores' : 'parejas';
+  const meta = [
+    t.max_pairs ? `${s.pairs} / ${t.max_pairs} ${unit}` : `${s.pairs} ${unit}`,
+    s.pendingClub ? `${s.pendingClub} sin pagar` : divisions > 1 ? `${divisions} categorías` : null,
+    dates || null,
+  ].filter(Boolean);
+  const progress =
+    phase === 3
+      ? `${s.played} de ${s.matches} partidos jugados`
+      : phase === 0
+        ? tournamentSignupUrl(t.id).replace('https://', '')
+        : phase === 1
+          ? 'Falta cerrar el pago del torneo'
+          : phase === 2
+            ? 'Listo para los cuadros'
+            : '';
+  const chipTone = phase === 1 ? c.warning : c.accent;
+  return (
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`${t.name}. ${PHASE_LABEL[phase]}. ${meta.join(', ')}`}
+      style={({ pressed }) => [
+        ls.card,
+        phase === 3 && ls.cardLive,
+        selected && ls.cardSel,
+        pressed && { opacity: 0.92 },
+      ]}
+    >
+      <View style={ls.cardTop}>
+        <Text style={ls.cardName} numberOfLines={1}>
+          {t.name}
+        </Text>
+        <View style={[ls.chip, { borderColor: chipTone + '66', backgroundColor: chipTone + '14' }]}>
+          {phase === 3 ? <LiveDot /> : null}
+          <Text style={[ls.chipText, { color: chipTone }]}>{PHASE_LABEL[phase]}</Text>
+        </View>
+      </View>
+      <Text style={ls.meta} numberOfLines={1}>
+        {meta.join(' · ')}
+      </Text>
+      <PhaseBar phase={phase} />
+      <View style={ls.cardFoot}>
+        <Text style={[ls.progress, phase === 1 && { color: c.warning }]} numberOfLines={1}>
+          {progress}
+        </Text>
+        <Pressable
+          onPress={onAction}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`${PHASE_ACTION[phase]}: ${t.name}`}
+          style={({ pressed }) => [ls.action, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={ls.actionText}>{PHASE_ACTION[phase]}</Text>
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+};
+
+// ─── Estado vacío: el camino en 3 pasos + Stripe ────────────────────────────
+const CONNECT_LABEL: Record<ConnectStatus, string> = {
+  none: 'Sin conectar',
+  onboarding: 'Alta pendiente',
+  restricted: 'Faltan datos',
+  active: 'Listo para cobrar',
+};
+
+const FirstTournament: React.FC<{
+  connect: ConnectStatus | null;
+  onCreate: () => void;
+  onConnect: () => void;
+  onExplore?: () => void;
+}> = ({ connect, onCreate, onConnect, onExplore }) => {
+  const c = useColors();
+  const ls = useMemo(() => makeListStyles(c), [c]);
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const steps = [
+    { n: 1, title: 'Crea el torneo', sub: 'Formato, categorías, fechas y cuota · 7 pasos cortos' },
+    { n: 2, title: 'Comparte el enlace', sub: 'Se apuntan en 3 pasos, desde la app o la web' },
+    { n: 3, title: 'Genera los cuadros', sub: 'Con cabezas de serie por puntos de la federación' },
+  ];
+  return (
+    <View>
+      <View style={ls.card}>
+        <Text style={ls.firstTitle}>Tu primer torneo, en 3 pasos</Text>
+        <Text style={ls.meta}>Gratis hasta 16 parejas, sin tarjeta.</Text>
+        {steps.map((s) => (
+          <View key={s.n} style={ls.stepRow}>
+            <View style={ls.stepNum}>
+              <Text style={ls.stepNumText}>{s.n}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={ls.doneName}>{s.title}</Text>
+              <Text style={ls.meta}>{s.sub}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+      <Pressable
+        onPress={onConnect}
+        accessibilityRole="button"
+        accessibilityLabel="Cobro de inscripciones"
+        style={({ pressed }) => [ls.card, { marginTop: 12 }, pressed && { opacity: 0.9 }]}
+      >
+        <View style={ls.cardTop}>
+          <Text style={ls.doneName}>¿Vas a cobrar la inscripción?</Text>
+          {connect ? (
+            <View
+              style={[
+                ls.chip,
+                connect === 'active'
+                  ? { borderColor: c.accent40, backgroundColor: c.accent10 }
+                  : { borderColor: c.hairStrong },
+              ]}
+            >
+              <Text style={[ls.chipText, { color: connect === 'active' ? c.accent : c.textMuted }]}>
+                {CONNECT_LABEL[connect]}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={[ls.meta, { marginTop: 6 }]}>
+          Conecta Stripe y el dinero va directo a tu cuenta. También puedes cobrar en el club.
+        </Text>
+      </Pressable>
+      {onExplore ? (
+        <Pressable onPress={onExplore} hitSlop={8} style={styles.exploreLink}>
+          <Text style={styles.exploreLinkText}>Explorar torneos de otros clubes ›</Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        onPress={onCreate}
+        style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
+      >
+        <IconPlus size={16} color={c.textInverse} />
+        <Text style={styles.createLabel}>Crear mi primer torneo</Text>
+      </Pressable>
+    </View>
+  );
+};
+
+const makeListStyles = (c: Palette) =>
+  StyleSheet.create({
+    figures: { flexDirection: 'row', gap: 8 },
+    figure: {
+      flex: 1,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      padding: 12,
+    },
+    figureNum: { fontFamily: Fonts.mono, color: c.text, fontSize: 22, fontWeight: '700' },
+    figureLabel: { color: c.textMuted, fontSize: 11.5, marginTop: 2, lineHeight: 15 },
+    card: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      padding: 14,
+    },
+    cardLive: { borderColor: c.accent40 },
+    cardSel: { borderColor: c.accent, borderWidth: 1.5 },
+    cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'space-between' },
+    cardName: { flex: 1, minWidth: 0, color: c.text, fontSize: 16, fontWeight: '700', letterSpacing: -0.3 },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 999,
+      borderWidth: 1,
+    },
+    chipText: { fontSize: 11.5, fontWeight: '700' },
+    meta: { color: c.textMuted, fontSize: 12.5, marginTop: 4 },
+    phaseTrack: { flexDirection: 'row', gap: 4 },
+    phaseSeg: { flex: 1, height: 5, borderRadius: 3, backgroundColor: c.hairStrong },
+    phaseLabels: { flexDirection: 'row', gap: 4, marginTop: 5 },
+    phaseLabel: { flex: 1, color: c.textFaint, fontSize: 10, textAlign: 'center' },
+    cardFoot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.hair,
+    },
+    progress: { flex: 1, minWidth: 0, color: c.textMuted, fontSize: 12.5, fontFamily: Fonts.mono },
+    action: {
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actionText: { color: c.textInverse, fontSize: 13, fontWeight: '700' },
+    doneHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+    },
+    doneHeadText: { color: c.textMuted, fontSize: 13.5, fontWeight: '600' },
+    doneRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hair,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    doneName: { color: c.text, fontSize: 14.5, fontWeight: '600' },
+    unlockRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 22,
+      padding: 14,
+      borderRadius: Radius.lg,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    firstTitle: { color: c.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+    stepRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.hair,
+      marginTop: 8,
+    },
+    stepNum: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepNumText: { fontFamily: Fonts.mono, color: c.accent, fontSize: 13, fontWeight: '700' },
+    // Paso «Revisar» del asistente
+    reviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.hair,
+    },
+    reviewTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+    reviewEdit: { color: c.accent, fontSize: 13, fontWeight: '700' },
+    costBox: {
+      marginTop: 14,
+      padding: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard2,
+    },
+  });
 
 const CreateTournamentSheet: React.FC<{
   open: boolean;
@@ -635,7 +1152,7 @@ const CreateTournamentSheet: React.FC<{
         <View>
           {/* Cómo se cobra este torneo (dormido tras el flag). No hay importe
               todavía: se paga al cerrar la inscripción, por parejas reales. */}
-          {billingLabel ? (
+          {billingLabel && step !== REVIEW_STEP ? (
             <View style={styles.billingChip}>
               <View style={[styles.billingDot, { backgroundColor: c.textMuted }]} />
               <Text style={styles.billingChipText}>{billingLabel}</Text>
@@ -677,7 +1194,7 @@ const CreateTournamentSheet: React.FC<{
               {saving ? (
                 <ActivityIndicator size="small" color={c.textInverse} />
               ) : (
-                <Text style={styles.saveLabel}>Crear torneo</Text>
+                <Text style={styles.saveLabel}>Publicar y abrir inscripción</Text>
               )}
             </Pressable>
           )}
@@ -1245,6 +1762,25 @@ const CreateTournamentSheet: React.FC<{
           />
         </View>
       ) : null}
+
+      {/* ── PASO 7 · REVISAR ───────────────────────────────────────────── */}
+      {step === REVIEW_STEP ? (
+        <ReviewStep
+          name={name}
+          location={location}
+          format={format}
+          phaseFmt={phaseFmt}
+          genders={genders}
+          cats={cats}
+          catThresh={catThresh}
+          startsOn={startsOn}
+          endsOn={endsOn}
+          maxPairs={maxPairs}
+          fee={fee}
+          costRule={billingLabel}
+          onEdit={setStep}
+        />
+      ) : null}
     </BottomSheet>
   );
 };
@@ -1588,3 +2124,107 @@ const makeStyles = (c: Palette) =>
       letterSpacing: -0.2,
     },
   });
+
+// ─── Paso «Revisar» del asistente ───────────────────────────────────────────
+// Un resumen por bloque; cada fila vuelve a su paso. La regla de coste, que
+// antes era una línea escondida en el pie, se ve aquí.
+const FMT_SHORT: Record<string, string> = {
+  bo3_stb: 'al mejor de 3 con super tie-break',
+  bo3_full: 'al mejor de 3',
+  bo1: 'a 1 set',
+};
+const fmtDate = (d: Date | null) =>
+  d ? `${['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}` : null;
+
+const ReviewStep: React.FC<{
+  name: string;
+  location: string;
+  format: TournamentFormat;
+  phaseFmt: Record<string, MatchFormat>;
+  genders: TournamentGender[];
+  cats: string[];
+  catThresh: Record<string, { nivel: string; puntos: string }>;
+  startsOn: Date | null;
+  endsOn: Date | null;
+  maxPairs: string;
+  fee: string;
+  costRule: string | null;
+  onEdit: (step: number) => void;
+}> = (p) => {
+  const c = useColors();
+  const ls = useMemo(() => makeListStyles(c), [c]);
+  const type = TYPES.find((t) => t.id === p.format);
+  const cuadros = cuadrosForFormat(p.format);
+  const fmtLine = isSocialFormat(p.format)
+    ? type?.sub ?? ''
+    : cuadros
+        .map((cu) => `${cu.label || 'Partidos'} ${FMT_SHORT[p.phaseFmt[cu.key] ?? 'bo3_stb']}`)
+        .join(' · ');
+  const limits = Object.entries(p.catThresh)
+    .filter(([, v]) => v?.puntos || v?.nivel)
+    .map(([k, v]) => `${k.split('|').pop()}: ${v.puntos ? `puntos ≤ ${v.puntos}` : `nivel ≥ ${v.nivel}`}`);
+  const divisions = p.genders.length * Math.max(1, p.cats.length);
+  const rows: { step: number; title: string; sub: string }[] = [
+    { step: 0, title: p.name.trim() || 'Sin nombre', sub: p.location.trim() || 'Sin lugar' },
+    { step: 1, title: type?.label ?? p.format, sub: fmtLine },
+    {
+      step: 2,
+      title: [
+        p.genders.map((g) => GENDER_LABEL[g] ?? g).join(' y '),
+        p.cats.length ? p.cats.join(', ') : 'categoría única',
+      ].join(' · '),
+      sub: [`${divisions} ${divisions === 1 ? 'cuadro' : 'cuadros'}`, ...limits.slice(0, 2)].join(' · '),
+    },
+    {
+      step: 3,
+      title:
+        [fmtDate(p.startsOn), p.endsOn && p.startsOn && p.endsOn.getTime() !== p.startsOn.getTime() ? fmtDate(p.endsOn) : null]
+          .filter(Boolean)
+          .join(' – ') || 'Sin fechas',
+      sub: 'Los días de cada fase se pueden cambiar luego en Horario',
+    },
+    {
+      step: 4,
+      title: [
+        p.maxPairs ? `Máx. ${p.maxPairs} parejas` : 'Sin tope de parejas',
+        p.fee && parseFloat(p.fee) > 0 ? `${p.fee.replace('.', ',')} € de cuota` : 'Gratis',
+      ].join(' · '),
+      sub: p.fee && parseFloat(p.fee) > 0 ? 'Online con Stripe o en el club' : 'Sin cobro de inscripción',
+    },
+  ];
+  return (
+    <View style={{ marginTop: 14 }}>
+      {rows.map((r) => (
+        <View key={r.step} style={ls.reviewRow}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={ls.reviewTitle} numberOfLines={2}>
+              {r.title}
+            </Text>
+            {r.sub ? (
+              <Text style={ls.meta} numberOfLines={2}>
+                {r.sub}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={() => p.onEdit(r.step)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Editar ${CREATE_STEPS[r.step].title}`}
+          >
+            <Text style={ls.reviewEdit}>Editar</Text>
+          </Pressable>
+        </View>
+      ))}
+      {p.costRule ? (
+        <View style={ls.costBox}>
+          <Text style={ls.reviewTitle}>Coste del torneo para el club</Text>
+          <Text style={ls.meta}>
+            {p.costRule}. Se paga al cerrar la inscripción, por las parejas que hayan entrado.
+            Sin pagar no se generan los cuadros.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+};

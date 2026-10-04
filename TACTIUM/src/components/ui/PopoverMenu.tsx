@@ -13,6 +13,7 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconChevron } from './Icon';
+import { MODAL_ORIENTATIONS } from '@components/ui/ResponsiveFrame';
 
 export interface PopoverOption {
   eyebrow?: string;
@@ -58,6 +59,7 @@ export const PopoverMenu: React.FC<Props> = ({
 
   return (
     <Modal
+      supportedOrientations={MODAL_ORIENTATIONS}
       visible={open}
       transparent
       animationType="none"

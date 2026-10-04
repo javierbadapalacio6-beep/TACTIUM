@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,94 +10,158 @@ import {
   Image,
   RefreshControl,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconSearch, IconTrophy, IconChevron, BottomSheet } from '@components/ui';
+import { IconBack, IconSearch, IconTrophy, IconChevron, IconTicket, BottomSheet } from '@components/ui';
 import { toast } from '@store/toastStore';
+import { useAuthStore } from '@store/authStore';
 import {
   exploreTournaments,
   myTournaments,
   tournamentBucket,
-  tournamentStatusLabel,
   formatFee,
   claimPartnerByCode,
+  lookupTournament,
+  publicListRegistrations,
+  publicListMatches,
   type ExploreTournament,
+  type TournamentMatch,
 } from '@core/services/tournaments';
+import {
+  LiveDot,
+  countdown,
+  divShort,
+  fetchMyRegPayments,
+  localIso,
+  roundNameOf,
+  summarizeMyTournament,
+  useNow,
+} from '../components/PlayerTournamentParts';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
-const GENDER_LABEL: Record<string, string> = {
-  masculino: 'Masc',
-  femenino: 'Fem',
-  mixto: 'Mixto',
-};
-const STATUS_LABEL: Record<string, string> = {
-  open: 'Inscripción abierta',
-  in_progress: 'En juego',
-  finished: 'Finalizado',
-};
+/**
+ * Competir › Torneos. Primero lo que está pasando:
+ *   Explorar → «En juego ahora» · «Inscripción abierta» · «Próximamente» ·
+ *              «Terminados» (plegados), con tarjetas de una línea.
+ *   Mis torneos → por fecha, y cada fila dice lo tuyo (hora de tu partido,
+ *              si falta pagar, hasta dónde llegaste).
+ * Un solo «Tengo un código»: prueba primero como código de torneo y, si no
+ * existe, como código de pareja. Son dos RPC que ya había.
+ */
+
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const formatStartsOn = (iso: string | null): string | null => {
+const DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const shortDate = (iso: string | null): string | null => {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getDate()} ${MESES[d.getMonth()]}`;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return `${d} ${MESES[m - 1]}`;
 };
 
-const TournamentCard: React.FC<{
+const STOP = new Set(['torneo', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'open', 'copa', 'i', 'ii', 'iii']);
+/** «OTÑ» para la miniatura sin portada. */
+const abbr = (name: string): string => {
+  const words = name.split(/\s+/).filter(Boolean);
+  const w = words.find((x) => !STOP.has(x.toLowerCase())) ?? words[0] ?? '?';
+  return w.slice(0, 3).toUpperCase();
+};
+
+type StatusFilter = 'all' | 'open' | 'live';
+type Digest = {
+  partner: string | null;
+  div: string;
+  line: string;
+  tone: 'accent' | 'warning' | 'muted';
+  badge: string | null;
+  today: boolean;
+};
+
+/** Miniatura cuadrada con la portada o las iniciales, y el estado encima. */
+const Thumb: React.FC<{
+  t: ExploreTournament;
+  live: boolean;
+  badge?: string | null;
+  s: Styles;
+  c: Palette;
+}> = ({ t, live, badge, s, c }) => (
+  <View style={s.thumb}>
+    {t.cover_url ? (
+      <Image source={{ uri: t.cover_url }} style={StyleSheet.absoluteFill} />
+    ) : (
+      <Text style={s.thumbText}>{abbr(t.name)}</Text>
+    )}
+    {live ? (
+      <View style={s.thumbLive}>
+        <LiveDot size={7} />
+      </View>
+    ) : null}
+    {badge ? (
+      <View style={[s.thumbBadge, { backgroundColor: c.warning }]}>
+        <Text style={s.thumbBadgeText}>{badge}</Text>
+      </View>
+    ) : null}
+  </View>
+);
+
+const Row: React.FC<{
   t: ExploreTournament;
   onPress: () => void;
-  styles: ReturnType<typeof makeStyles>;
+  s: Styles;
   c: Palette;
-}> = ({ t, onPress, styles, c }) => (
-  <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
-    {t.cover_url ? (
-      <Image source={{ uri: t.cover_url }} style={styles.cover} />
-    ) : (
-      <LinearGradient
-        colors={[c.accent15, c.bgCard]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.cover, styles.coverPlaceholder]}
-      >
-        <IconTrophy size={26} color={c.accent} />
-      </LinearGradient>
-    )}
-    <View style={styles.cardBody}>
+  digest?: Digest | null;
+}> = ({ t, onPress, s, c, digest }) => {
+  const bucket = tournamentBucket(t.status, t.starts_on);
+  const fee = t.entry_fee && t.entry_fee > 0 ? `${formatFee(t.entry_fee, t.fee_currency)}/pers.` : 'Gratis';
+  const inscritos = t.pair_based
+    ? `${t.players} ${t.players === 1 ? 'pareja inscrita' : 'parejas inscritas'}`
+    : `${t.players} ${t.players === 1 ? 'jugador inscrito' : 'jugadores inscritos'}`;
+  const meta = digest
+    ? [shortDate(t.starts_on), digest.div, digest.partner ? `con ${digest.partner}` : null]
+    : [t.club_name, t.location, shortDate(t.starts_on), t.status === 'open' ? fee : null];
+  const line = digest
+    ? digest.line
+    : bucket === 'live'
+      ? 'En juego'
+      : t.status === 'open'
+        ? inscritos
+        : bucket === 'finished'
+          ? t.status === 'canceled'
+            ? 'Cancelado'
+            : 'Terminado'
+          : 'Próximamente';
+  const tone = digest
+    ? digest.tone
+    : bucket === 'live' || t.status === 'open'
+      ? 'accent'
+      : 'muted';
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [s.row, pressed && { opacity: 0.85 }]}>
+      <Thumb t={t} live={bucket === 'live'} badge={digest?.badge} s={s} c={c} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.cardName} numberOfLines={1}>{t.name}</Text>
-        <Text style={styles.cardClub} numberOfLines={1}>{t.club_name}</Text>
-        <Text style={styles.cardMeta} numberOfLines={1}>
-          {[formatStartsOn(t.starts_on), t.location].filter(Boolean).join(' · ') || 'Fecha por confirmar'}
+        <Text style={s.rowName} numberOfLines={1}>
+          {t.name}
         </Text>
-        <View style={styles.chips}>
-          {(t.genders ?? []).map((g) => (
-            <View key={g} style={styles.chip}>
-              <Text style={styles.chipText}>{GENDER_LABEL[g] ?? g}</Text>
-            </View>
-          ))}
-          {(t.categories ?? []).slice(0, 3).map((cat) => (
-            <View key={cat} style={styles.chip}>
-              <Text style={styles.chipText}>{cat}</Text>
-            </View>
-          ))}
-        </View>
+        <Text style={s.rowMeta} numberOfLines={1}>
+          {meta.filter(Boolean).join(' · ') || 'Fecha por confirmar'}
+        </Text>
+        <Text
+          style={[
+            s.rowLine,
+            { color: tone === 'accent' ? c.accent : tone === 'warning' ? c.warning : c.textFaint },
+          ]}
+          numberOfLines={1}
+        >
+          {line}
+        </Text>
       </View>
-      <IconChevron size={16} color={c.textFaint} />
-    </View>
-    <View style={styles.cardFooter}>
-      <Text style={styles.statusText}>{tournamentStatusLabel(t.status, t.starts_on)}</Text>
-      <Text style={styles.playersText}>
-        {t.entry_fee ? `${formatFee(t.entry_fee, t.fee_currency)} · ` : ''}
-        {t.players} {t.pair_based ? (t.players === 1 ? 'pareja' : 'parejas') : t.players === 1 ? 'jugador' : 'jugadores'}
-      </Text>
-    </View>
-  </Pressable>
-);
+      <IconChevron size={15} color={c.textFaint} />
+    </Pressable>
+  );
+};
 
 export const ExploreTournamentsScreen = ({
   navigation,
@@ -108,19 +172,26 @@ export const ExploreTournamentsScreen = ({
   embedded?: boolean;
 }) => {
   const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
+  const s = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
+  const uid = useAuthStore((st) => st.user?.id ?? null);
+  const now = useNow(60_000);
 
   const [mode, setMode] = useState<'explore' | 'mine'>('explore');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<ExploreTournament[]>([]);
   const [mine, setMine] = useState<ExploreTournament[]>([]);
+  const [digests, setDigests] = useState<Record<string, Digest>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Sheet "Tengo un código de compañero".
-  const [partnerOpen, setPartnerOpen] = useState(false);
-  const [partnerCode, setPartnerCode] = useState('');
-  const [claiming, setClaiming] = useState(false);
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const [genders, setGenders] = useState<Set<string>>(new Set());
+  const [showFinished, setShowFinished] = useState(false);
+  // Hoja «Tengo un código» (vale el del torneo y el de tu pareja).
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeErr, setCodeErr] = useState<string | null>(null);
 
   const loadExplore = useCallback(async (q?: string) => {
     try {
@@ -133,147 +204,306 @@ export const ExploreTournamentsScreen = ({
     }
   }, []);
 
+  // Cada fila de «Mis torneos» dice lo tuyo. Sale de datos que ya hay
+  // (inscripción, horario, cuadro y estado de pago), torneo a torneo.
+  const loadDigests = useCallback(
+    async (list: ExploreTournament[]) => {
+      if (!uid || !list.length) return;
+      const out: Record<string, Digest> = {};
+      await Promise.all(
+        list.slice(0, 12).map(async (t) => {
+          try {
+            const [regs, matches, pays] = await Promise.all([
+              publicListRegistrations(t.id),
+              publicListMatches(t.id),
+              fetchMyRegPayments(t.id, uid),
+            ]);
+            const myRegs = regs.filter((r) => r.p1_user_id === uid || r.p2_user_id === uid);
+            const me = myRegs[0];
+            if (!me) return;
+            const ids = new Set(myRegs.map((r) => r.id));
+            const partnerFull = me.p1_user_id === uid ? me.p2_name : me.p1_name;
+            const partner = partnerFull ? partnerFull.split(/\s+/).slice(0, 2).join(' ') : null;
+            const div = divShort(me.gender, me.category);
+            const pending = Object.entries(pays).some(
+              ([id, p]) => ids.has(id) && p.status === 'pending_club',
+            );
+            const bucket = tournamentBucket(t.status, t.starts_on);
+            let next: TournamentMatch | undefined;
+            for (const m of matches) {
+              if (m.status === 'finished' || m.status === 'bye' || !m.scheduled_at) continue;
+              if (![m.home_reg, m.away_reg, m.home_reg2, m.away_reg2].some((x) => x && ids.has(x))) continue;
+              if (!next || m.scheduled_at < (next.scheduled_at ?? '')) next = m;
+            }
+            let line: string;
+            let tone: Digest['tone'] = 'muted';
+            if (bucket === 'finished') {
+              const sm = summarizeMyTournament(matches, ids);
+              line = sm
+                ? `${sm.reached} · ${sm.wins} ${sm.wins === 1 ? 'victoria' : 'victorias'}, ${sm.losses} ${sm.losses === 1 ? 'derrota' : 'derrotas'}`
+                : 'Terminado';
+            } else if (next?.scheduled_at) {
+              const cd = countdown(next.scheduled_at, Date.now());
+              line = [roundNameOf(next, matches), next.court, cd.text].filter(Boolean).join(' · ');
+              tone = 'accent';
+            } else if (pending) {
+              line = 'Pago pendiente en el club';
+              tone = 'warning';
+            } else {
+              line = matches.length ? 'Inscrito · tu horario aún no está' : 'Inscrito · el cuadro sale al cerrar la inscripción';
+            }
+            out[t.id] = {
+              partner,
+              div,
+              line,
+              tone,
+              badge: pending && bucket !== 'finished' ? 'PAGO' : null,
+              today:
+                bucket === 'live' ||
+                (!!next?.scheduled_at && localIso(new Date(next.scheduled_at)) === localIso(new Date())),
+            };
+          } catch {
+            /* la fila se queda con lo básico */
+          }
+        }),
+      );
+      setDigests(out);
+    },
+    [uid],
+  );
+
   const loadMine = useCallback(async () => {
     try {
-      setMine(await myTournaments());
+      const list = await myTournaments();
+      setMine(list);
+      loadDigests(list);
     } catch (e: any) {
       toast.error('No se pudieron cargar', e?.message ?? '');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
-
-  React.useEffect(() => {
-    loadExplore();
-  }, [loadExplore]);
+  }, [loadDigests]);
 
   // Búsqueda con debounce (solo en modo explorar).
-  React.useEffect(() => {
+  useEffect(() => {
     if (mode !== 'explore') return;
-    const id = setTimeout(() => loadExplore(search), 300);
+    const id = setTimeout(() => loadExplore(search), search ? 300 : 0);
     return () => clearTimeout(id);
   }, [search, mode, loadExplore]);
 
   const switchMode = (m: 'explore' | 'mine') => {
+    if (m === mode) return;
     setMode(m);
     setLoading(true);
-    if (m === 'mine') loadMine();
-    else loadExplore(search);
+    if (m === 'mine') {
+      if (!uid) setLoading(false);
+      else loadMine();
+    } else loadExplore(search);
   };
 
   const openTournament = (t: ExploreTournament) => {
     navigation.navigate('TournamentFollow', { tournamentId: t.id });
   };
 
-  const claimPartner = async () => {
-    const code = partnerCode.trim().toUpperCase();
-    if (code.length < 4) {
-      toast.error('Introduce el código de compañero');
+  const submitCode = async () => {
+    const v = code.trim().toUpperCase().replace(/\s/g, '');
+    if (v.length < 4) {
+      setCodeErr('Escribe el código que te han pasado.');
       return;
     }
-    setClaiming(true);
+    setCodeBusy(true);
+    setCodeErr(null);
     try {
-      const tournamentId = await claimPartnerByCode(code);
-      setPartnerOpen(false);
-      setPartnerCode('');
-      toast.success('¡Vinculado!', 'Ya puedes ver el torneo en Mis torneos.');
+      // 1) ¿Es el código de un torneo? → a apuntarse.
+      let found = null;
+      try {
+        found = await lookupTournament(v);
+      } catch {
+        found = null;
+      }
+      if (found) {
+        setCodeOpen(false);
+        setCode('');
+        navigation.navigate('TournamentSignup', { code: v });
+        return;
+      }
+      // 2) Si no, el de tu pareja → te une a su inscripción.
+      if (!uid) {
+        setCodeErr('No es el código de ningún torneo abierto. Si es el de tu pareja, inicia sesión y vuelve a meterlo.');
+        return;
+      }
+      const tournamentId = await claimPartnerByCode(v);
+      setCodeOpen(false);
+      setCode('');
+      toast.success('¡Vinculado!', 'Ya tienes el torneo en Mis torneos.');
       navigation.navigate('TournamentFollow', { tournamentId });
     } catch (e: any) {
-      toast.error('No se pudo vincular', e?.message ?? 'Revisa el código.');
+      setCodeErr(e?.message ? `No encontramos ese código: ${e.message}` : 'No encontramos ese código. Revísalo.');
     } finally {
-      setClaiming(false);
+      setCodeBusy(false);
     }
   };
 
-  // "Mis torneos" agrupados por estado.
+  // ── Explorar: filtros y grupos por estado ──
+  const filtered = items.filter((t) => {
+    const b = tournamentBucket(t.status, t.starts_on);
+    if (status === 'open' && t.status !== 'open') return false;
+    if (status === 'live' && b !== 'live') return false;
+    if (genders.size && !(t.genders ?? []).some((g) => genders.has(g))) return false;
+    return true;
+  });
+  const byDate = (a: ExploreTournament, b: ExploreTournament) =>
+    (a.starts_on ?? 'zz').localeCompare(b.starts_on ?? 'zz');
+  const live = filtered.filter((t) => tournamentBucket(t.status, t.starts_on) === 'live');
+  const open = filtered.filter((t) => t.status === 'open').sort(byDate);
+  const soon = filtered
+    .filter((t) => t.status !== 'open' && tournamentBucket(t.status, t.starts_on) === 'upcoming')
+    .sort(byDate);
+  const done = filtered
+    .filter((t) => tournamentBucket(t.status, t.starts_on) === 'finished')
+    .sort((a, b) => byDate(b, a));
+  const openCount = items.filter((t) => t.status === 'open').length;
+
+  // ── Mis torneos: hoy · próximos · jugados ──
   const mineSections = useMemo(() => {
-    const bucket = (t: ExploreTournament) => tournamentBucket(t.status, t.starts_on);
-    const live = mine.filter((t) => bucket(t) === 'live');
+    const todayL = mine.filter(
+      (t) => tournamentBucket(t.status, t.starts_on) !== 'finished' && digests[t.id]?.today,
+    );
     const upcoming = mine
-      .filter((t) => bucket(t) === 'upcoming')
-      .sort((a, b) => (a.starts_on ?? 'z').localeCompare(b.starts_on ?? 'z'));
-    const done = mine.filter((t) => bucket(t) === 'finished');
+      .filter((t) => tournamentBucket(t.status, t.starts_on) !== 'finished' && !digests[t.id]?.today)
+      .sort(byDate);
+    const played = mine
+      .filter((t) => tournamentBucket(t.status, t.starts_on) === 'finished')
+      .sort((a, b) => byDate(b, a));
+    const d = new Date(now);
     return [
-      { label: 'En juego', data: live },
+      { label: `Hoy · ${DOW[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`, data: todayL },
       { label: 'Próximos', data: upcoming },
-      { label: 'Jugados', data: done },
-    ].filter((s) => s.data.length);
-  }, [mine]);
+      { label: 'Jugados', data: played },
+    ].filter((x) => x.data.length);
+  }, [mine, digests, now]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const group = (label: string, data: ExploreTournament[], isLive?: boolean) =>
+    data.length ? (
+      <View key={label} style={{ marginTop: 18 }}>
+        <View style={s.groupHead}>
+          {isLive ? <LiveDot /> : null}
+          <Text style={s.groupLabel}>{label.toUpperCase()}</Text>
+          <Text style={s.groupCount}>{data.length}</Text>
+        </View>
+        <View style={s.groupCard}>
+          {data.map((t, i) => (
+            <View key={t.id} style={i > 0 ? s.rowBorder : null}>
+              <Row t={t} onPress={() => openTournament(t)} s={s} c={c} />
+            </View>
+          ))}
+        </View>
+      </View>
+    ) : null;
+
+  const chip = (label: string, on: boolean, onPress: () => void) => (
+    <Pressable key={label} onPress={onPress} style={[s.chip, on && s.chipOn]}>
+      <Text style={[s.chipText, on && s.chipTextOn]}>{label}</Text>
+    </Pressable>
+  );
+  const toggleGender = (g: string) =>
+    setGenders((prev) => {
+      const n = new Set(prev);
+      n.has(g) ? n.delete(g) : n.add(g);
+      return n;
+    });
 
   return (
-    <View style={styles.root}>
+    <View style={s.root}>
       {embedded ? (
-        <View style={{ height: 12 }} />
+        <View style={{ height: 10 }} />
       ) : (
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-        >
-          <IconBack size={20} color={c.text} />
-        </Pressable>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.eyebrow}>TORNEOS</Text>
-          <Text style={styles.title}>{mode === 'mine' ? 'Mis torneos' : 'Explorar'}</Text>
+        <View style={[s.header, { paddingTop: insets.top + 12 }]}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={10}
+            style={({ pressed }) => [s.backBtn, pressed && { opacity: 0.6 }]}
+          >
+            <IconBack size={20} color={c.text} />
+          </Pressable>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.eyebrow}>COMPETIR</Text>
+            <Text style={s.title}>Torneos</Text>
+          </View>
         </View>
-      </View>
       )}
 
-      {/* Toggle Explorar / Mis torneos */}
-      <View style={styles.modeTabs}>
-        {(['explore', 'mine'] as const).map((m) => {
-          const sel = mode === m;
-          return (
-            <Pressable
-              key={m}
-              onPress={() => switchMode(m)}
-              style={[styles.modeTab, sel && { backgroundColor: c.text }]}
-            >
-              <Text style={[styles.modeTabText, { color: sel ? c.background : c.textMuted }]}>
-                {m === 'explore' ? 'Explorar' : 'Mis torneos'}
-              </Text>
-            </Pressable>
-          );
-        })}
+      {/* Explorar / Mis torneos + un solo «Tengo un código». */}
+      <View style={s.topRow}>
+        <View style={s.modeTabs}>
+          {(['explore', 'mine'] as const).map((m) => {
+            const sel = mode === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => switchMode(m)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: sel }}
+                style={s.modeTab}
+              >
+                <Text style={[s.modeTabText, { color: sel ? c.text : c.textMuted, fontWeight: sel ? '800' : '600' }]}>
+                  {m === 'explore' ? 'Explorar' : 'Mis torneos'}
+                </Text>
+                <View style={[s.modeTabBar, sel && { backgroundColor: c.accent }]} />
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          onPress={() => {
+            setCodeErr(null);
+            setCodeOpen(true);
+          }}
+          style={({ pressed }) => [s.codeBtn, pressed && { opacity: 0.85 }]}
+        >
+          <IconTicket size={14} color={c.accent} />
+          <Text style={s.codeBtnText}>Tengo un código</Text>
+        </Pressable>
       </View>
 
-      <Pressable
-        onPress={() => setPartnerOpen(true)}
-        hitSlop={6}
-        style={({ pressed }) => [styles.partnerLink, pressed && { opacity: 0.7 }]}
-      >
-        <Text style={styles.partnerLinkText}>
-          ¿Te ha apuntado tu pareja? <Text style={{ color: c.accent, fontWeight: '800' }}>Tengo un código de compañero</Text>
-        </Text>
-      </Pressable>
-
       {mode === 'explore' ? (
-        <View style={styles.searchWrap}>
-          <View style={styles.searchBox}>
-            <IconSearch size={16} color={c.textFaint} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Busca por nombre, club o lugar"
-              placeholderTextColor={c.textFaint}
-              style={styles.searchInput}
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
+        <>
+          <View style={s.searchWrap}>
+            <View style={s.searchBox}>
+              <IconSearch size={16} color={c.textFaint} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Nombre, club o lugar"
+                placeholderTextColor={c.textFaint}
+                style={s.searchInput}
+                autoCapitalize="none"
+                returnKeyType="search"
+              />
+            </View>
           </View>
-          <Pressable
-            onPress={() => navigation.navigate('TournamentSignup')}
-            style={({ pressed }) => [styles.codeBtn, pressed && { opacity: 0.85 }]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.chips}
+            style={{ flexGrow: 0 }}
           >
-            <Text style={styles.codeBtnText}>Tengo código</Text>
-          </Pressable>
-        </View>
+            {chip('Todos', status === 'all' && genders.size === 0, () => {
+              setStatus('all');
+              setGenders(new Set());
+            })}
+            {chip('Abiertos', status === 'open', () => setStatus(status === 'open' ? 'all' : 'open'))}
+            {chip('En juego', status === 'live', () => setStatus(status === 'live' ? 'all' : 'live'))}
+            {chip('Masc.', genders.has('masculino'), () => toggleGender('masculino'))}
+            {chip('Fem.', genders.has('femenino'), () => toggleGender('femenino'))}
+            {chip('Mixto', genders.has('mixto'), () => toggleGender('mixto'))}
+          </ScrollView>
+        </>
       ) : null}
 
       {loading ? (
-        <View style={styles.center}>
+        <View style={s.center}>
           <ActivityIndicator color={c.accent} />
         </View>
       ) : (
@@ -281,93 +511,140 @@ export const ExploreTournamentsScreen = ({
           contentContainerStyle={{
             paddingHorizontal: 20,
             paddingBottom: insets.bottom + (embedded ? 64 + 12 + 32 : 24),
-            paddingTop: 4,
           }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                if (mode === 'mine') loadMine();
-                else loadExplore(search);
+                if (mode === 'mine') {
+                  if (uid) loadMine();
+                  else setRefreshing(false);
+                } else loadExplore(search);
               }}
               tintColor={c.accent}
             />
           }
         >
           {mode === 'explore' ? (
-            items.length === 0 ? (
-              <View style={styles.emptyBox}>
+            filtered.length === 0 ? (
+              <View style={s.emptyBox}>
                 <IconTrophy size={26} color={c.textFaint} />
-                <Text style={styles.emptyTitle}>No hay torneos abiertos</Text>
-                <Text style={styles.emptyText}>
-                  {search
-                    ? 'Prueba con otra búsqueda.'
-                    : 'Cuando un club abra inscripciones, aparecerá aquí. Si tienes un código, apúntate directamente.'}
+                <Text style={s.emptyTitle}>{search || status !== 'all' || genders.size ? 'Nada con este filtro' : 'Aún no hay torneos'}</Text>
+                <Text style={s.emptyText}>
+                  {search || status !== 'all' || genders.size
+                    ? 'Prueba con otra búsqueda o quita algún filtro.'
+                    : 'Cuando un club abra inscripciones, aparecerá aquí. Si te han pasado un código, úsalo arriba.'}
                 </Text>
               </View>
             ) : (
-              <View style={{ gap: 12 }}>
-                {items.map((t) => (
-                  <TournamentCard key={t.id} t={t} onPress={() => openTournament(t)} styles={styles} c={c} />
-                ))}
-              </View>
+              <>
+                {group('En juego ahora', live, true)}
+                {group('Inscripción abierta', open)}
+                {group('Próximamente', soon)}
+                {done.length ? (
+                  showFinished ? (
+                    group('Terminados', done)
+                  ) : (
+                    <Pressable
+                      onPress={() => setShowFinished(true)}
+                      style={({ pressed }) => [s.foldRow, pressed && { opacity: 0.8 }]}
+                    >
+                      <Text style={s.groupLabel}>TERMINADOS</Text>
+                      <Text style={s.foldLink}>Ver {done.length} ›</Text>
+                    </Pressable>
+                  )
+                ) : null}
+              </>
             )
-          ) : mineSections.length === 0 ? (
-            <View style={styles.emptyBox}>
+          ) : !uid ? (
+            <View style={s.emptyBox}>
               <IconTrophy size={26} color={c.textFaint} />
-              <Text style={styles.emptyTitle}>Aún no te has apuntado a ningún torneo</Text>
-              <Text style={styles.emptyText}>
-                Apúntate desde “Explorar” y aquí verás tus torneos en juego, próximos
-                y jugados.
+              <Text style={s.emptyTitle}>Entra para ver tus torneos</Text>
+              <Text style={s.emptyText}>
+                Aquí verás los torneos en los que juegas, con tu hora y tu pista.
               </Text>
+              <Pressable
+                onPress={() => (navigation as any).navigate('AuthFlow', { screen: 'Login' })}
+                style={({ pressed }) => [s.primaryBtn, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={s.primaryBtnText}>Iniciar sesión</Text>
+              </Pressable>
+            </View>
+          ) : mineSections.length === 0 ? (
+            <View style={s.emptyBox}>
+              <IconTrophy size={26} color={c.textFaint} />
+              <Text style={s.emptyTitle}>Aún no juegas ningún torneo</Text>
+              <Text style={s.emptyText}>
+                {openCount > 0
+                  ? `Hay ${openCount} con inscripción abierta. `
+                  : ''}
+                Si tu pareja ya te apuntó, mete su código y aparecerá aquí.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setStatus('open');
+                  switchMode('explore');
+                }}
+                style={({ pressed }) => [s.primaryBtn, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={s.primaryBtnText}>Ver torneos abiertos</Text>
+              </Pressable>
+              <Pressable onPress={() => setCodeOpen(true)} hitSlop={8}>
+                <Text style={s.foldLink}>Tengo un código</Text>
+              </Pressable>
             </View>
           ) : (
-            <View style={{ gap: 4 }}>
-              {mineSections.map((s) => (
-                <View key={s.label} style={{ marginTop: 8 }}>
-                  <Text style={styles.sectionLabel}>{s.label.toUpperCase()}</Text>
-                  <View style={{ gap: 12, marginTop: 8 }}>
-                    {s.data.map((t) => (
-                      <TournamentCard key={t.id} t={t} onPress={() => openTournament(t)} styles={styles} c={c} />
-                    ))}
-                  </View>
+            mineSections.map((sec) => (
+              <View key={sec.label} style={{ marginTop: 18 }}>
+                <View style={s.groupHead}>
+                  <Text style={s.groupLabel}>{sec.label.toUpperCase()}</Text>
                 </View>
-              ))}
-            </View>
+                <View style={s.groupCard}>
+                  {sec.data.map((t, i) => (
+                    <View key={t.id} style={i > 0 ? s.rowBorder : null}>
+                      <Row t={t} onPress={() => openTournament(t)} s={s} c={c} digest={digests[t.id] ?? null} />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))
           )}
         </ScrollView>
       )}
 
-      <BottomSheet open={partnerOpen} onClose={() => setPartnerOpen(false)}>
-        <Text style={styles.sheetEyebrow}>COMPAÑERO/A</Text>
-        <Text style={styles.sheetTitle}>Tengo un código</Text>
-        <Text style={styles.sheetText}>
-          Si tu pareja te ha apuntado a un torneo, introduce el código que te ha
-          pasado (o que te llegó por email) para vincular tu cuenta y ver el torneo.
-        </Text>
-        <View style={styles.sheetInput}>
+      <BottomSheet open={codeOpen} onClose={() => setCodeOpen(false)}>
+        <Text style={s.sheetEyebrow}>TENGO UN CÓDIGO</Text>
+        <Text style={s.sheetTitle}>Escribe el código que te han pasado</Text>
+        <View style={s.sheetInput}>
           <TextInput
-            value={partnerCode}
-            onChangeText={(v) => setPartnerCode(v.toUpperCase().replace(/\s/g, ''))}
-            placeholder="Ej. K7P2QX"
+            value={code}
+            onChangeText={(v) => {
+              setCode(v.toUpperCase().replace(/\s/g, ''));
+              setCodeErr(null);
+            }}
+            placeholder="K7P2QX"
             placeholderTextColor={c.textFaint}
-            style={styles.sheetInputField}
+            style={s.sheetInputField}
             autoCapitalize="characters"
-            maxLength={8}
+            autoCorrect={false}
+            maxLength={10}
+            onSubmitEditing={submitCode}
           />
         </View>
+        <Text style={s.sheetText}>
+          Vale el del torneo (te lleva a apuntarte) y el de tu pareja (te une a su
+          inscripción). No tienes que saber cuál es.
+        </Text>
+        {codeErr ? <Text style={s.sheetErr}>{codeErr}</Text> : null}
         <Pressable
-          onPress={claimPartner}
-          disabled={claiming}
-          style={({ pressed }) => [styles.sheetBtn, pressed && { opacity: 0.85 }]}
+          onPress={submitCode}
+          disabled={codeBusy}
+          style={({ pressed }) => [s.sheetBtn, pressed && { opacity: 0.85 }]}
         >
-          {claiming ? (
-            <ActivityIndicator color={c.textInverse} />
-          ) : (
-            <Text style={styles.sheetBtnText}>Vincular</Text>
-          )}
+          {codeBusy ? <ActivityIndicator color={c.textInverse} /> : <Text style={s.sheetBtnText}>Continuar</Text>}
         </Pressable>
       </BottomSheet>
     </View>
@@ -377,43 +654,7 @@ export const ExploreTournamentsScreen = ({
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
-    partnerLink: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 6 },
-    partnerLinkText: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
-    sheetEyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
-    sheetTitle: { color: c.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.4, marginTop: 2 },
-    sheetText: { color: c.textMuted, fontSize: 14, lineHeight: 20, marginTop: 8 },
-    sheetInput: {
-      marginTop: 16,
-      backgroundColor: c.bgRaised,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-    },
-    sheetInputField: {
-      color: c.text,
-      fontSize: 20,
-      fontWeight: '700',
-      fontFamily: Fonts.mono,
-      letterSpacing: 4,
-      paddingVertical: 14,
-      textAlign: 'center',
-    },
-    sheetBtn: {
-      marginTop: 14,
-      backgroundColor: c.accent,
-      borderRadius: 14,
-      paddingVertical: 15,
-      alignItems: 'center',
-    },
-    sheetBtnText: { color: c.textInverse, fontSize: 15.5, fontWeight: '800' },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 18,
-      paddingBottom: 12,
-    },
+    header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingBottom: 8 },
     backBtn: {
       width: 36,
       height: 36,
@@ -426,34 +667,37 @@ const makeStyles = (c: Palette) =>
     },
     eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
     title: { color: c.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.4, marginTop: 2 },
-    modeTabs: {
+    topRow: {
       flexDirection: 'row',
-      gap: 6,
-      marginHorizontal: 20,
-      marginBottom: 12,
-      padding: 4,
-      borderRadius: Radius.lg,
-      backgroundColor: c.bgCard,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-    },
-    modeTab: { flex: 1, height: 38, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-    modeTabText: { fontSize: 13, fontWeight: '700', letterSpacing: -0.2 },
-    sectionLabel: {
-      fontFamily: Fonts.mono,
-      fontSize: 11,
-      letterSpacing: 2,
-      color: c.textFaint,
-      fontWeight: '600',
-    },
-    searchWrap: {
-      flexDirection: 'row',
+      alignItems: 'center',
       gap: 10,
       paddingHorizontal: 20,
-      paddingBottom: 12,
+      marginBottom: 12,
     },
-    searchBox: {
+    modeTabs: {
       flex: 1,
+      flexDirection: 'row',
+      gap: 18,
+      borderBottomWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    modeTab: { paddingTop: 8, paddingBottom: 9 },
+    modeTabText: { fontSize: 14.5, letterSpacing: -0.2 },
+    modeTabBar: { position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, borderRadius: 1 },
+    codeBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    codeBtnText: { color: c.accent, fontSize: 12.5, fontWeight: '800' },
+    searchWrap: { paddingHorizontal: 20, paddingBottom: 10 },
+    searchBox: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
@@ -462,64 +706,123 @@ const makeStyles = (c: Palette) =>
       borderWidth: 1,
       borderColor: c.hairStrong,
       paddingHorizontal: 12,
-      height: 46,
+      height: 44,
     },
     searchInput: { flex: 1, color: c.text, fontSize: 14, fontWeight: '500', paddingVertical: 0 },
-    codeBtn: {
-      paddingHorizontal: 14,
-      height: 46,
-      borderRadius: Radius.md,
-      backgroundColor: c.accent10,
+    chips: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingBottom: 4 },
+    chip: {
+      paddingHorizontal: 12,
+      height: 32,
+      borderRadius: 999,
       borderWidth: 1,
-      borderColor: c.accent40,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    codeBtnText: { color: c.accent, fontSize: 13, fontWeight: '700' },
-    center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-    emptyBox: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, gap: 10 },
-    emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
-    emptyText: { color: c.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
-    card: {
+    chipOn: { backgroundColor: c.text, borderColor: c.text },
+    chipText: { color: c.textMuted, fontSize: 12.5, fontWeight: '700' },
+    chipTextOn: { color: c.background },
+    groupHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    groupLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 2,
+      color: c.textFaint,
+      fontWeight: '700',
+    },
+    groupCount: { fontFamily: Fonts.mono, fontSize: 11, color: c.textFaint, fontWeight: '700' },
+    groupCard: {
       backgroundColor: c.bgCard,
       borderRadius: Radius.lg,
       borderWidth: 1,
       borderColor: c.hairStrong,
       overflow: 'hidden',
     },
-    cover: { width: '100%', height: 130 },
-    coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-    cardBody: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 12,
-      paddingHorizontal: 14,
-      paddingTop: 12,
-    },
-    cardName: { color: c.text, fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
-    cardClub: { color: c.accent, fontSize: 13, fontWeight: '700', marginTop: 2 },
-    cardMeta: { color: c.textMuted, fontSize: 12, marginTop: 3 },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-    chip: {
-      paddingHorizontal: 9,
-      height: 24,
-      borderRadius: 7,
-      justifyContent: 'center',
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 11 },
+    rowBorder: { borderTopWidth: 1, borderColor: c.hair },
+    thumb: {
+      width: 48,
+      height: 48,
+      borderRadius: 11,
       backgroundColor: c.bgRaised,
       borderWidth: 1,
       borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
     },
-    chipText: { color: c.textMuted, fontSize: 11, fontWeight: '700' },
-    cardFooter: {
+    thumbText: { color: c.text, fontFamily: Fonts.mono, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+    thumbLive: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 13,
+      height: 13,
+      borderRadius: 7,
+      backgroundColor: c.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    thumbBadge: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingVertical: 1 },
+    thumbBadgeText: { color: '#1a1300', fontFamily: Fonts.mono, fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8 },
+    rowName: { color: c.text, fontSize: 15, fontWeight: '800', letterSpacing: -0.3 },
+    rowMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    rowLine: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+    foldRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      marginTop: 22,
+      paddingVertical: 12,
       paddingHorizontal: 14,
-      paddingVertical: 11,
-      marginTop: 10,
-      borderTopWidth: 1,
-      borderColor: c.hair,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
     },
-    statusText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-    playersText: { color: c.textFaint, fontSize: 12, fontWeight: '600' },
+    foldLink: { color: c.accent, fontSize: 13, fontWeight: '800' },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+    emptyBox: { alignItems: 'center', paddingTop: 48, paddingHorizontal: 18, gap: 10 },
+    emptyTitle: { color: c.text, fontSize: 16, fontWeight: '800', textAlign: 'center' },
+    emptyText: { color: c.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+    primaryBtn: {
+      marginTop: 6,
+      backgroundColor: c.accent,
+      borderRadius: 12,
+      paddingHorizontal: 20,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryBtnText: { color: c.textInverse, fontSize: 14, fontWeight: '800' },
+    sheetEyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
+    sheetTitle: { color: c.text, fontSize: 21, fontWeight: '800', letterSpacing: -0.4, marginTop: 4 },
+    sheetText: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 10 },
+    sheetErr: { color: c.error, fontSize: 13, lineHeight: 18, marginTop: 8, fontWeight: '600' },
+    sheetInput: {
+      marginTop: 16,
+      backgroundColor: c.bgRaised,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+    },
+    sheetInputField: {
+      color: c.text,
+      fontSize: 22,
+      fontWeight: '700',
+      fontFamily: Fonts.mono,
+      letterSpacing: 5,
+      paddingVertical: 14,
+      textAlign: 'center',
+    },
+    sheetBtn: {
+      marginTop: 14,
+      backgroundColor: c.accent,
+      borderRadius: 14,
+      paddingVertical: 15,
+      alignItems: 'center',
+    },
+    sheetBtnText: { color: c.textInverse, fontSize: 15.5, fontWeight: '800' },
   });
+type Styles = ReturnType<typeof makeStyles>;

@@ -7,164 +7,88 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeInDown,
-  FadeInUp,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import {
-  IconBack,
-  IconBolt,
-  IconAlert,
-  IconCheck,
-  IconPlus,
-  IconTrash,
-  BottomSheet,
-  Toggle,
-} from '@components/ui';
+import { IconBack, IconBolt, IconMenu, useCompactRail, useLayout } from '@components/ui';
 import * as MatchdaysApi from '@core/services/matchdays';
 import * as LineupsApi from '@core/services/lineups';
 import * as LineupVariantsApi from '@core/services/lineupVariants';
 import * as SeasonsApi from '@core/services/seasons';
+import * as AvailabilityApi from '@core/services/availability';
 import type { LineupVariant } from '@core/services/lineupVariants';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { getCourtsForCompetition, requiresStrengthOrder } from '@core/data/federations';
-import { useTeamStore, selectIsCaptain, type Player } from '@store/teamStore';
+import {
+  useTeamStore,
+  selectIsCaptain,
+  selectIsClubAdmin,
+  type Player,
+} from '@store/teamStore';
+import { useToastStore } from '@store/toastStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import {
   generateLineupOptions,
+  pairKey,
   type LineupOption,
   type PairStatsMap,
 } from '@core/utils/lineupGenerator';
 import { fetchPairStats } from '@core/services/pairStats';
 import { notifyPush } from '@core/push';
-import { shortName, initialsOf, photoOf } from '@core/utils/playerName';
+import { shortName } from '@core/utils/playerName';
+import { formatShortDay } from '@core/utils/format';
+
+import {
+  benchGroupOf,
+  buildEmptySlots,
+  calcValidation,
+  filledLen,
+  fmtPts,
+  ptsOfSlot,
+  sortByPoints,
+  type BenchGroup,
+  type Selection,
+  type SlotIdx,
+  type SlotState,
+} from '../components/lineup/lineupLogic';
+import { LineupCourt, CourtGap } from '../components/lineup/LineupCourt';
+import { LineupBench } from '../components/lineup/LineupBench';
+import { LineupBenchPanel } from '../components/lineup/LineupBenchPanel';
+import { CourtDropZone, LineupDragLayer } from '../components/lineup/LineupDrag';
+import {
+  GenerateSheet,
+  LineupMoreSheet,
+  PublishSheet,
+  type PublishRow,
+} from '../components/lineup/LineupSheets';
+import {
+  InfoBanner,
+  LineupStrip,
+  MyPairCard,
+  NoLineupYet,
+} from '../components/lineup/LineupReadView';
+import { notifySuccess, notifyWarning, tapLight } from '../components/match/haptics';
 
 import type { HomeStackScreenProps } from '@navigation/types';
 
-type SlotIdx = 0 | 1;
-
-interface SlotState {
-  court: number;
-  playerAId: string | null;
-  playerBId: string | null;
-}
-
-type Selection =
-  | { kind: 'slot'; court: number; slot: SlotIdx }
-  | { kind: 'bench'; id: string }
-  | null;
-
-type Validation =
-  | { state: 'ok' }
-  | { state: 'warn' }
-  | { state: 'err'; msg: string; diff: number }
-  | { state: 'empty' };
-
-const filledLen = (s: SlotState) =>
-  (s.playerAId ? 1 : 0) + (s.playerBId ? 1 : 0);
-
-const buildEmptySlots = (courts: number): SlotState[] =>
-  Array.from({ length: courts }).map((_, i) => ({
-    court: i + 1,
-    playerAId: null,
-    playerBId: null,
-  }));
-
-const ptsOfSlot = (s: SlotState, byId: Map<string, Player>) =>
-  (s.playerAId ? byId.get(s.playerAId)?.pts ?? 0 : 0) +
-  (s.playerBId ? byId.get(s.playerBId)?.pts ?? 0 : 0);
-
-const sortByPoints = (
-  input: SlotState[],
-  byId: Map<string, Player>,
-): SlotState[] => {
-  const normalized = input.map((p) => {
-    const a = p.playerAId ? byId.get(p.playerAId) : null;
-    const b = p.playerBId ? byId.get(p.playerBId) : null;
-    if (a && b) {
-      return a.pts >= b.pts
-        ? { playerAId: a.id, playerBId: b.id }
-        : { playerAId: b.id, playerBId: a.id };
-    }
-    if (a && !b) return { playerAId: a.id, playerBId: null };
-    if (!a && b) return { playerAId: b.id, playerBId: null };
-    return { playerAId: null, playerBId: null };
-  });
-
-  const indexed = normalized.map((n, i) => ({
-    ...n,
-    pts: ptsOfSlot({ court: i, ...n }, byId),
-    fill: (n.playerAId ? 1 : 0) + (n.playerBId ? 1 : 0),
-  }));
-
-  indexed.sort((a, b) => {
-    if (a.fill !== b.fill) return b.fill - a.fill;
-    return b.pts - a.pts;
-  });
-
-  return indexed.map((n, i) => ({
-    court: i + 1,
-    playerAId: n.playerAId,
-    playerBId: n.playerBId,
-  }));
-};
-
-const calcBalance = (
-  slots: SlotState[],
-  byId: Map<string, Player>,
-): number | null => {
-  const ptsArr = slots.map((s) => ptsOfSlot(s, byId));
-  const filled = ptsArr.filter((_, i) => filledLen(slots[i]) === 2);
-  if (filled.length < 2) return null;
-  let score = 0;
-  for (let i = 0; i < filled.length - 1; i++) {
-    const diff = filled[i] - filled[i + 1];
-    if (diff < 0) score += 0;
-    else if (diff === 0) score += 0.7;
-    else score += Math.min(1, diff / 50 + 0.6);
-  }
-  return Math.round((score / (filled.length - 1)) * 100);
-};
-
-const calcValidation = (
-  slots: SlotState[],
-  byId: Map<string, Player>,
-  mustOrder: boolean = true,
-): Validation[] => {
-  const ptsArr = slots.map((s) => ptsOfSlot(s, byId));
-  return ptsArr.map((v, i) => {
-    if (filledLen(slots[i]) !== 2) return { state: 'empty' };
-    if (i === 0) return { state: 'ok' };
-    if (v > ptsArr[i - 1]) {
-      // El orden estricto solo es error si la federación lo exige.
-      if (!mustOrder) return { state: 'ok' };
-      const diff = v - ptsArr[i - 1];
-      return {
-        state: 'err',
-        msg: `Pareja ${i + 1} más fuerte que la ${i}`,
-        diff,
-      };
-    }
-    if ((ptsArr[i - 1] - v) / Math.max(ptsArr[i - 1], 1) < 0.05) {
-      return { state: 'warn' };
-    }
-    return { state: 'ok' };
-  });
-};
-
+/**
+ * Alineación (rediseño bloque «Partido», 2026-10).
+ *
+ *  · Capitán: editor con una sola línea de estado («4/5 parejas · orden
+ *    correcto ✓»), «≥» entre pistas y el banquillo de la CONVOCATORIA de esta
+ *    jornada (Voy · Duda · Sin contestar; los «No» plegados). Publicar abre
+ *    una hoja con «Avisar al equipo».
+ *  · Jugador: lectura con «Tu pareja» arriba.
+ *  · Club: lectura con aviso de cómo editar.
+ *
+ * El motor no cambia: orden por puntos, variantes, realtime, gates premium
+ * (`lineup_edit` / `lineup_confirm`) y generador.
+ */
 export const LineupScreen = ({
   navigation,
   route,
@@ -174,12 +98,20 @@ export const LineupScreen = ({
   const insets = useSafeAreaInsets();
   const team = useTeamStore((s) => s.team);
   const players = useTeamStore((s) => s.players);
-  // Solo captain/club_admin pueden editar. El override de rol desde Profile
-  // (captain previsualizando como player) también desactiva la edición —
-  // RLS de Supabase de todas formas rechazaría a un player real, pero
-  // queremos defense in depth y no mostrarles botones que no funcionan.
+  const myPlayerId = useTeamStore((s) => s.myPlayerId);
+  // Solo el capitán edita. El club_admin ve todo pero no edita (modelo de
+  // roles 2026-05-16); el override de rol desde Perfil también cuenta.
   const isCaptain = useTeamStore(selectIsCaptain);
+  const isClub = useTeamStore(selectIsClubAdmin);
   const gate = usePremiumGate();
+  // Tablet: rail compacto (las pistas y el banquillo necesitan el ancho).
+  // Horizontal: banquillo en columna fija a la derecha. Vertical: anclado
+  // abajo en columnas por grupo. Móvil: la bandeja de siempre.
+  useCompactRail();
+  const { mode, isTablet } = useLayout();
+  const wide = mode === 'tabletLandscape';
+  // Acciones del store de toasts (estables; sin suscribirse a su estado).
+  const toast = useMemo(() => useToastStore.getState(), []);
   const matchdayId = route.params.matchdayId;
   const courts = getCourtsForCompetition(team?.federation, team?.league, team?.gender);
   const mustOrder = requiresStrengthOrder(team?.federation, team?.league, team?.gender);
@@ -196,43 +128,47 @@ export const LineupScreen = ({
   );
 
   const [matchday, setMatchday] = useState<MatchdaysApi.Matchday | null>(null);
-  // La season se carga junto al matchday para saber si está archivada y
-  // bloquear edición de alineación cuando lo está (los resultados siguen
-  // editables — eso vive en ResultsScreen).
+  // Season archivada → alineación en solo lectura (los resultados siguen
+  // editables en ResultsScreen).
   const [season, setSeason] = useState<SeasonsApi.Season | null>(null);
   const [variants, setVariants] = useState<LineupVariant[]>([]);
   const [currentVariantId, setCurrentVariantId] = useState<string | null>(null);
   const [variantBusy, setVariantBusy] = useState(false);
-  // ¿Se ha EDITADO la alineación en esta sesión? Solo avisamos a la plantilla
-  // (lineup_published) si hubo cambios reales o si cambió la variante oficial
-  // — así abrir y "Confirmar" sin tocar nada no genera un push repetido.
+  // ¿Se ha EDITADO la alineación en esta sesión? Decide el valor por defecto
+  // de «Avisar al equipo» (abrir y publicar sin tocar nada no avisa).
   const dirtyRef = useRef(false);
-  // Último estado PERSISTIDO por pista (`court -> "aId|bId"`), para escribir solo
-  // las pistas que cambian en cada edición (antes se reescribían las N).
+  // Último estado PERSISTIDO por pista (`court -> "aId|bId"`), para escribir
+  // solo las pistas que cambian en cada edición.
   const lastPersistedRef = useRef<Map<number, string>>(new Map());
-  const [slots, setSlots] = useState<SlotState[]>(() =>
-    buildEmptySlots(courts),
+  const [slots, setSlots] = useState<SlotState[]>(() => buildEmptySlots(courts));
+  // Nombres de la vista `lineup_pairs`: respaldo si la plantilla del store no
+  // tiene a alguien (jugador de otro equipo, ficha borrada…).
+  const [pairNames, setPairNames] = useState<Map<number, { a: string | null; b: string | null }>>(
+    new Map(),
   );
   const [sel, setSel] = useState<Selection>(null);
-  // Default del auto-orden depende de la federación/liga: ON si exige orden
-  // por fuerza (FEP standard), OFF si la liga deja libertad táctica al capi.
+  // Auto-orden: ON si la federación exige orden de fuerza. Vive en el menú ⋯.
   const [autoSort, setAutoSort] = useState(mustOrder);
-  const [pulseCourts, setPulseCourts] = useState<Set<number>>(new Set());
   const [swapAnimIds, setSwapAnimIds] = useState<Set<string>>(new Set());
-  const [autoDelta, setAutoDelta] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Química por historial (Fase 2). Best-effort: si falla, el generador
-  // sigue funcionando solo con posición + puntos.
-  const [pairStats, setPairStats] = useState<PairStatsMap | undefined>(
+  const [pairStats, setPairStats] = useState<PairStatsMap | undefined>(undefined);
+  // Convocatoria de la jornada. undefined = cargando · null = no se pudo leer.
+  const [avail, setAvail] = useState<AvailabilityApi.AvailabilityMap | null | undefined>(
     undefined,
   );
-  // Generador de parejas: panel de alternativas (preview sin confirmar).
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  // Único modificador global: emparejar respetando Drive+Revés.
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  // Hojas.
+  const [genOpen, setGenOpen] = useState(false);
   const [genUsePosition, setGenUsePosition] = useState(true);
+  const [includeMaybe, setIncludeMaybe] = useState(false);
+  const [genKey, setGenKey] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [publishDone, setPublishDone] = useState(false);
+  const [notify, setNotify] = useState(true);
 
-  // Carga inicial: matchday + variantes. La variante activa pasa a ser
-  // currentVariantId por defecto.
+  // ── Carga ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -247,7 +183,6 @@ export const LineupScreen = ({
         setVariants(vars);
         const initial = vars.find((v) => v.is_active) ?? vars[0] ?? null;
         setCurrentVariantId(initial?.id ?? null);
-        // Encadenamos el fetch de la season (depende de md.season_id).
         if (md?.season_id) {
           const s = await SeasonsApi.fetchSeasonById(md.season_id);
           if (!cancelled) setSeason(s);
@@ -263,7 +198,20 @@ export const LineupScreen = ({
     };
   }, [matchdayId]);
 
-  // Química por historial del equipo (para el generador). Best-effort.
+  const loadAvailability = useCallback(async () => {
+    try {
+      setAvail(await AvailabilityApi.fetchAvailability(matchdayId));
+    } catch (e) {
+      console.warn('Lineup availability fetch', e);
+      setAvail(null);
+    }
+  }, [matchdayId]);
+
+  useEffect(() => {
+    void loadAvailability();
+  }, [loadAvailability]);
+
+  // Química por historial del equipo (generador y «Tu pareja»). Best-effort.
   useEffect(() => {
     const teamId = team?.id;
     if (!teamId) return;
@@ -278,10 +226,37 @@ export const LineupScreen = ({
     };
   }, [team?.id]);
 
-  // Cargar lineup cada vez que cambia la variante seleccionada.
+  const applyLineupRows = useCallback(
+    (lineup: LineupsApi.LineupPair[]) => {
+      const arr: SlotState[] = Array.from({ length: courts }).map((_, i) => {
+        const found = lineup.find((p) => p.court_number === i + 1);
+        return {
+          court: i + 1,
+          playerAId: found?.player_a_id ?? null,
+          playerBId: found?.player_b_id ?? null,
+        };
+      });
+      setSlots(arr);
+      setPairNames(
+        new Map(
+          lineup
+            .filter((p) => p.court_number != null)
+            .map((p) => [
+              p.court_number as number,
+              { a: p.player_a_name ?? null, b: p.player_b_name ?? null },
+            ]),
+        ),
+      );
+      return arr;
+    },
+    [courts],
+  );
+
+  // Cargar la alineación cada vez que cambia la variante seleccionada.
   useEffect(() => {
     if (!currentVariantId) {
       setSlots(buildEmptySlots(courts));
+      setPairNames(new Map());
       return;
     }
     let cancelled = false;
@@ -289,17 +264,8 @@ export const LineupScreen = ({
       try {
         const lineup = await LineupsApi.fetchLineup(currentVariantId);
         if (cancelled) return;
-        const arr: SlotState[] = Array.from({ length: courts }).map((_, i) => {
-          const found = lineup.find((p) => p.court_number === i + 1);
-          return {
-            court: i + 1,
-            playerAId: found?.player_a_id ?? null,
-            playerBId: found?.player_b_id ?? null,
-          };
-        });
-        setSlots(arr);
-        // Sembramos el "último persistido" con el estado de BD → la primera
-        // edición ya solo escribe la pista que cambia.
+        const arr = applyLineupRows(lineup);
+        // Sembramos el «último persistido» con el estado de BD.
         lastPersistedRef.current = new Map(
           arr.map((s) => [s.court, `${s.playerAId ?? ''}|${s.playerBId ?? ''}`]),
         );
@@ -310,21 +276,15 @@ export const LineupScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [currentVariantId, courts]);
+  }, [currentVariantId, courts, applyLineupRows]);
 
   const closed = matchday?.status === 'finished';
-  // La season cerrada bloquea edición de alineación pero NO de resultados.
-  // El usuario quiere poder ponerse al día con actas pendientes después de
-  // cerrar (decisión de producto). Aquí solo nos afecta a la alineación.
   const seasonClosed = season ? !season.active : false;
-  // Read-only abarca: acta cerrada, season archivada o el user no es captain.
-  // A nivel funcional son indistinguibles para la UI (todo desactivado), pero
-  // el copy del hint difiere.
   const canEdit = !closed && !seasonClosed && isCaptain;
 
-  // ─── Variantes: handlers ─────────────────────────────────────
   const currentVariant = variants.find((v) => v.id === currentVariantId) ?? null;
-  const activeVariantId = variants.find((v) => v.is_active)?.id ?? null;
+  const activeVariant = variants.find((v) => v.is_active) ?? null;
+  const activeVariantId = activeVariant?.id ?? null;
 
   const reloadVariants = useCallback(async () => {
     const vars = await LineupVariantsApi.listVariants(matchdayId);
@@ -332,10 +292,8 @@ export const LineupScreen = ({
     return vars;
   }, [matchdayId]);
 
-  // Realtime: cuando llega un cambio externo sobre este matchday
-  // (otro device subiendo la alineación, cambiando variante activa,
-  // marcando un set o cerrando acta) refrescamos variantes + lineup
-  // de la variante visible + el propio matchday (para el status).
+  // Realtime: cambios de otro dispositivo (alineación, variante activa,
+  // sets, acta) → refrescamos variantes, la variante visible y el matchday.
   useMatchdayRealtime({
     matchdayId,
     onChange: async () => {
@@ -345,53 +303,39 @@ export const LineupScreen = ({
           MatchdaysApi.fetchMatchday(matchdayId),
         ]);
         setMatchday(md);
-        // Si el lineup no cambia de variante visible, repintamos la
-        // que estamos viendo. Si no había, caemos a la activa.
         const target =
-          currentVariantId ??
-          vars.find((v) => v.is_active)?.id ??
-          vars[0]?.id ??
-          null;
+          currentVariantId ?? vars.find((v) => v.is_active)?.id ?? vars[0]?.id ?? null;
         if (target) {
           const lineup = await LineupsApi.fetchLineup(target);
-          const arr: SlotState[] = Array.from({ length: courts }).map(
-            (_, i) => {
-              const found = lineup.find((p) => p.court_number === i + 1);
-              return {
-                court: i + 1,
-                playerAId: found?.player_a_id ?? null,
-                playerBId: found?.player_b_id ?? null,
-              };
-            },
-          );
-          setSlots(arr);
+          applyLineupRows(lineup);
         }
+        void loadAvailability();
       } catch (e) {
         console.warn('Lineup realtime refresh', e);
       }
     },
   });
 
+  // ── Variantes ───────────────────────────────────────────────────
+  const nextVariantLabel = useCallback(() => {
+    // Primer «Variante N» libre: el unique (matchday_id, label) no admite
+    // repetidos aunque se hayan borrado variantes intermedias.
+    const used = new Set<number>();
+    for (const v of variants) {
+      const m = v.label.match(/^Variante (\d+)$/);
+      if (m) used.add(parseInt(m[1], 10));
+    }
+    let n = 1;
+    while (used.has(n)) n += 1;
+    return `Variante ${n}`;
+  }, [variants]);
+
   const handleAddVariant = useCallback(async () => {
     if (variants.length >= 5 || variantBusy || !canEdit) return;
     setVariantBusy(true);
     try {
-      // Calculamos el primer "Variante N" libre. No basta con length+1 porque
-      // si los labels quedaron desfasados por un delete pre-renumerado podría
-      // colisionar con el unique (matchday_id, label).
-      const used = new Set<number>();
-      for (const v of variants) {
-        const m = v.label.match(/^Variante (\d+)$/);
-        if (m) used.add(parseInt(m[1], 10));
-      }
-      let nextNum = 1;
-      while (used.has(nextNum)) nextNum += 1;
-
-      // Variante nueva SIEMPRE vacía (empieza de cero), no clona la actual.
-      const created = await LineupVariantsApi.createVariant(
-        matchdayId,
-        `Variante ${nextNum}`,
-      );
+      // Variante nueva SIEMPRE vacía (empieza de cero).
+      const created = await LineupVariantsApi.createVariant(matchdayId, nextVariantLabel());
       const vars = await reloadVariants();
       setCurrentVariantId(created.id);
       if (!vars.find((v) => v.is_active)) {
@@ -402,7 +346,49 @@ export const LineupScreen = ({
     } finally {
       setVariantBusy(false);
     }
-  }, [variants, variantBusy, canEdit, matchdayId, reloadVariants]);
+  }, [variants, variantBusy, canEdit, matchdayId, reloadVariants, nextVariantLabel]);
+
+  const handleDuplicate = useCallback(async () => {
+    if (!currentVariant || variants.length >= 5 || variantBusy || !canEdit) return;
+    setMoreOpen(false);
+    setVariantBusy(true);
+    try {
+      const created = await LineupVariantsApi.createVariantWithClone(
+        matchdayId,
+        nextVariantLabel(),
+        currentVariant.id,
+      );
+      await reloadVariants();
+      setCurrentVariantId(created.id);
+      toast.success(`«${created.label}» creada`, `Copia de «${currentVariant.label}».`);
+    } catch (e: any) {
+      Alert.alert('No se pudo duplicar', e?.message ?? '');
+    } finally {
+      setVariantBusy(false);
+    }
+  }, [currentVariant, variants.length, variantBusy, canEdit, matchdayId, nextVariantLabel, reloadVariants, toast]);
+
+  const handleRename = useCallback(
+    async (label: string) => {
+      if (!currentVariant || variantBusy || !canEdit) return;
+      setVariantBusy(true);
+      try {
+        await LineupVariantsApi.updateVariantLabel(currentVariant.id, label);
+        await reloadVariants();
+        setMoreOpen(false);
+      } catch (e: any) {
+        Alert.alert(
+          'No se pudo renombrar',
+          /duplicate|unique/i.test(e?.message ?? '')
+            ? 'Ya hay otra variante con ese nombre.'
+            : e?.message ?? '',
+        );
+      } finally {
+        setVariantBusy(false);
+      }
+    },
+    [currentVariant, variantBusy, canEdit, reloadVariants],
+  );
 
   const handleSetActive = useCallback(
     async (variantId: string) => {
@@ -422,18 +408,15 @@ export const LineupScreen = ({
   );
 
   const handleDeleteVariant = useCallback(
-    async (variant: LineupVariant) => {
+    (variant: LineupVariant) => {
       if (variantBusy || !canEdit) return;
       if (variant.is_active) {
-        Alert.alert(
-          'No se puede eliminar',
-          'Marca otra variante como oficial antes de eliminar esta.',
-        );
+        Alert.alert('No se puede eliminar', 'Marca otra variante como oficial antes de eliminar esta.');
         return;
       }
       Alert.alert(
         'Eliminar variante',
-        `¿Eliminar "${variant.label}"? Se perderán las parejas asignadas a esta variante.`,
+        `¿Eliminar «${variant.label}»? Se perderán sus parejas.`,
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -447,9 +430,7 @@ export const LineupScreen = ({
                 await LineupVariantsApi.renumberDefaultVariants(matchdayId);
                 const vars = await reloadVariants();
                 if (currentVariantId === variant.id) {
-                  setCurrentVariantId(
-                    vars.find((v) => v.is_active)?.id ?? vars[0]?.id ?? null,
-                  );
+                  setCurrentVariantId(vars.find((v) => v.is_active)?.id ?? vars[0]?.id ?? null);
                 }
               } catch (e: any) {
                 Alert.alert('No se pudo eliminar', e?.message ?? '');
@@ -464,59 +445,20 @@ export const LineupScreen = ({
     [variantBusy, canEdit, currentVariantId, matchdayId, reloadVariants],
   );
 
-  const openVariantActions = useCallback(
-    (variant: LineupVariant) => {
-      if (!canEdit) return;
-      const isActive = variant.is_active;
-      Alert.alert(
-        variant.label,
-        isActive ? 'Esta es la variante oficial.' : undefined,
-        [
-          ...(isActive
-            ? []
-            : [
-                {
-                  text: '⭐  Marcar oficial',
-                  onPress: () => handleSetActive(variant.id),
-                },
-              ]),
-          ...(isActive
-            ? []
-            : [
-                {
-                  text: '🗑  Eliminar',
-                  style: 'destructive' as const,
-                  onPress: () => handleDeleteVariant(variant),
-                },
-              ]),
-          { text: 'Cancelar', style: 'cancel' },
-        ],
-      );
-    },
-    [canEdit, handleSetActive, handleDeleteVariant],
-  );
-
+  // ── Persistencia + gate premium (chokepoint de todas las ediciones) ──
   const persistAll = useCallback(
     async (next: SlotState[]) => {
       if (!currentVariantId) return;
-      dirtyRef.current = true; // hubo una edición real de la alineación
-      // Solo persistimos las pistas cuyo par cambió respecto a lo ya guardado.
+      dirtyRef.current = true;
       const keyOf = (sl: SlotState) => `${sl.playerAId ?? ''}|${sl.playerBId ?? ''}`;
       const changed = next.filter((sl) => lastPersistedRef.current.get(sl.court) !== keyOf(sl));
       if (changed.length === 0) return;
       try {
         await Promise.all(
           changed.map((sl) =>
-            LineupsApi.setLineupPair(
-              matchdayId,
-              currentVariantId,
-              sl.court,
-              sl.playerAId,
-              sl.playerBId,
-            ),
+            LineupsApi.setLineupPair(matchdayId, currentVariantId, sl.court, sl.playerAId, sl.playerBId),
           ),
         );
-        // Marcamos como persistidas solo tras el éxito (si falla, se reintenta).
         for (const sl of changed) lastPersistedRef.current.set(sl.court, keyOf(sl));
       } catch (e: any) {
         Alert.alert('No se pudo guardar', e?.message ?? '');
@@ -527,14 +469,9 @@ export const LineupScreen = ({
 
   const commit = useCallback(
     (next: SlotState[], opts?: { skipSort?: boolean }) => {
-      // El generador decide su propio orden de pistas (pirámide o invertido
-      // según el toggle), así que con skipSort respetamos ese orden tal cual.
-      const final =
-        autoSort && !opts?.skipSort ? sortByPoints(next, playerById) : next;
-      // Chokepoint de TODAS las ediciones de la alineación → pasa por el gate
-      // premium (reverse-trial): premium aplica al momento; sin sub, paywall y
-      // NO se toca el estado (sin optimismo huérfano). Cubre asignar, mover,
-      // quitar, generar y rellenar (todos llaman a commit).
+      // El generador decide su propio orden de pistas: con skipSort se respeta.
+      const final = autoSort && !opts?.skipSort ? sortByPoints(next, playerById) : next;
+      // Gate premium (reverse-trial): sin sub, paywall y NO se toca el estado.
       gate(() => {
         setSlots(final);
         void persistAll(final);
@@ -553,75 +490,63 @@ export const LineupScreen = ({
     return s;
   }, [slots]);
 
-  const benchPlayers = useMemo(
-    () =>
-      players
-        .filter((p) => p.available && p.active && !usedIds.has(p.id))
-        .sort((a, b) => b.pts - a.pts),
-    [players, usedIds],
+  // ── Convocatoria ────────────────────────────────────────────────
+  const availMap = avail === undefined ? null : avail;
+  // Nadie ha contestado (o no se pudo leer): el generador cae a la marca
+  // general `players.available` para no quedarse sin nadie.
+  const noReplies = !availMap || Object.keys(availMap).length === 0;
+  const groupOf = useCallback(
+    (p: Player): BenchGroup => benchGroupOf(p, avail === undefined ? null : avail),
+    [avail],
   );
 
-  const ptsArr = useMemo(
-    () => slots.map((s) => ptsOfSlot(s, playerById)),
-    [slots, playerById],
+  const benchGroups = useMemo(() => {
+    const g: Record<BenchGroup, Player[]> = { yes: [], maybe: [], pending: [], no: [] };
+    players
+      .filter((p) => p.active && !usedIds.has(p.id))
+      .sort((a, b) => b.pts - a.pts)
+      .forEach((p) => g[groupOf(p)].push(p));
+    return g;
+  }, [players, usedIds, groupOf]);
+
+  const counts = useMemo(() => {
+    const r = { yes: 0, maybe: 0, no: 0, pending: 0 };
+    players.filter((p) => p.active).forEach((p) => {
+      r[groupOf(p)] += 1;
+    });
+    return r;
+  }, [players, groupOf]);
+
+  /** Aviso antes de alinear a alguien que dijo «No puedo». */
+  const confirmNo = useCallback(
+    (playerId: string, proceed: () => void) => {
+      const p = playerById.get(playerId);
+      if (!p || groupOf(p) !== 'no' || noReplies) {
+        proceed();
+        return;
+      }
+      notifyWarning();
+      Alert.alert(
+        `${shortName(p)} dijo que no puede`,
+        'Respondió «No puedo» para esta jornada. ¿Lo alineas igualmente?',
+        [
+          { text: 'Cancelar', style: 'cancel', onPress: () => setSel(null) },
+          { text: 'Alinear', onPress: proceed },
+        ],
+      );
+    },
+    [playerById, groupOf, noReplies],
   );
 
-  const balance = useMemo(
-    () => calcBalance(slots, playerById),
-    [slots, playerById],
-  );
-
+  const ptsArr = useMemo(() => slots.map((s) => ptsOfSlot(s, playerById)), [slots, playerById]);
   const validation = useMemo(
     () => calcValidation(slots, playerById, mustOrder),
     [slots, playerById, mustOrder],
   );
-
   const filledCount = slots.filter((s) => filledLen(s) === 2).length;
   const allOk = validation.every((v) => v.state !== 'err');
-
-  const pulseCourt = useCallback((idx: number) => {
-    setPulseCourts((s) => new Set(s).add(idx));
-    setTimeout(() => {
-      setPulseCourts((s) => {
-        const n = new Set(s);
-        n.delete(idx);
-        return n;
-      });
-    }, 500);
-  }, []);
-
-  const pulseAll = useCallback(() => {
-    setPulseCourts(new Set(slots.map((_, i) => i)));
-    setTimeout(() => setPulseCourts(new Set()), 500);
-  }, [slots]);
-
-  const handleResetSlots = useCallback(() => {
-    if (!canEdit || !currentVariantId) return;
-    const isAlreadyEmpty = slots.every((s) => filledLen(s) === 0);
-    if (isAlreadyEmpty) return;
-    // Vaciar escribe directo (no pasa por commit) → gate premium aquí: sin sub
-    // muestra el paywall en vez de la confirmación de vaciado.
-    gate(() => {
-      Alert.alert(
-        'Vaciar alineación',
-        '¿Quitar todos los jugadores de la variante actual? Quedará en blanco para empezar de cero.',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Vaciar',
-            style: 'destructive',
-            onPress: () => {
-              const empty = buildEmptySlots(courts);
-              setSlots(empty);
-              void persistAll(empty);
-              pulseAll();
-              setSel(null);
-            },
-          },
-        ],
-      );
-    }, 'lineup_edit')();
-  }, [canEdit, currentVariantId, slots, courts, persistAll, pulseAll, gate]);
+  const teamPts = ptsArr.reduce((a, b) => a + b, 0);
+  const firstBreak = validation.findIndex((v) => v.state === 'err');
 
   const flashAvatar = useCallback((...ids: (string | null)[]) => {
     const valid = ids.filter((id): id is string => Boolean(id));
@@ -639,6 +564,31 @@ export const LineupScreen = ({
     }, 500);
   }, []);
 
+  /** Coloca a `benchId` en el hueco `slot` de la pista `idx` (el que hubiera
+   *  vuelve al banquillo). Lo usan el toque y el arrastre (tablet). */
+  const placeFromBench = (benchId: string, idx: number, slot: SlotIdx) => {
+    confirmNo(benchId, () => {
+      const next = slots.map((p) => ({ ...p }));
+      const target = next[idx];
+      const displaced = slot === 0 ? target.playerAId : target.playerBId;
+      if (slot === 0) target.playerAId = benchId;
+      else target.playerBId = benchId;
+      tapLight();
+      flashAvatar(displaced, benchId);
+      commit(next);
+      setSel(null);
+    });
+  };
+
+  /** Tablet: soltar un jugador del banquillo sobre una pista. */
+  const onBenchDrop = (benchId: string, court: number, slot: SlotIdx) => {
+    if (!canEdit) return;
+    const idx = slots.findIndex((s) => s.court === court);
+    if (idx === -1) return;
+    placeFromBench(benchId, idx, slot);
+  };
+
+  // ── Tocar y tocar ──────────────────────────────────────────────
   const onSlotTap = (court: number, slot: SlotIdx) => {
     if (!canEdit) return;
     const idx = slots.findIndex((s) => s.court === court);
@@ -646,7 +596,10 @@ export const LineupScreen = ({
     const here = slot === 0 ? slots[idx].playerAId : slots[idx].playerBId;
 
     if (!sel) {
-      if (here) setSel({ kind: 'slot', court, slot });
+      if (here) {
+        tapLight();
+        setSel({ kind: 'slot', court, slot });
+      }
       return;
     }
     if (sel.kind === 'slot' && sel.court === court && sel.slot === slot) {
@@ -654,64 +607,29 @@ export const LineupScreen = ({
       return;
     }
     if (sel.kind === 'bench') {
-      const next = slots.map((p) => ({ ...p }));
-      const target = next[idx];
-      const displaced = slot === 0 ? target.playerAId : target.playerBId;
-      if (slot === 0) target.playerAId = sel.id;
-      else target.playerBId = sel.id;
-      flashAvatar(displaced, sel.id);
-      commit(next);
-      pulseAll();
-      setSel(null);
+      placeFromBench(sel.id, idx, slot);
       return;
     }
     const fromIdx = slots.findIndex((s) => s.court === sel.court);
     if (fromIdx === -1) return;
     const next = slots.map((p) => ({ ...p }));
-    const aId =
-      sel.slot === 0 ? next[fromIdx].playerAId : next[fromIdx].playerBId;
+    const aId = sel.slot === 0 ? next[fromIdx].playerAId : next[fromIdx].playerBId;
     const bId = slot === 0 ? next[idx].playerAId : next[idx].playerBId;
     if (sel.slot === 0) next[fromIdx].playerAId = bId;
     else next[fromIdx].playerBId = bId;
     if (slot === 0) next[idx].playerAId = aId;
     else next[idx].playerBId = aId;
+    tapLight();
     if (aId && bId) flashAvatar(aId, bId);
+    else flashAvatar(aId);
     commit(next);
-    pulseAll();
-    setSel(null);
-  };
-
-  const onSlotEmpty = (court: number, slot: SlotIdx) => {
-    if (!canEdit || !sel) return;
-    const idx = slots.findIndex((s) => s.court === court);
-    if (idx === -1) return;
-    const next = slots.map((p) => ({ ...p }));
-    if (sel.kind === 'bench') {
-      if (slot === 0) next[idx].playerAId = sel.id;
-      else next[idx].playerBId = sel.id;
-      flashAvatar(sel.id);
-      commit(next);
-      pulseAll();
-      setSel(null);
-      return;
-    }
-    const fromIdx = slots.findIndex((s) => s.court === sel.court);
-    if (fromIdx === -1) return;
-    const moved =
-      sel.slot === 0 ? next[fromIdx].playerAId : next[fromIdx].playerBId;
-    if (slot === 0) next[idx].playerAId = moved;
-    else next[idx].playerBId = moved;
-    if (sel.slot === 0) next[fromIdx].playerAId = null;
-    else next[fromIdx].playerBId = null;
-    if (moved) flashAvatar(moved);
-    commit(next);
-    pulseAll();
     setSel(null);
   };
 
   const onBenchTap = (id: string) => {
     if (!canEdit) return;
     if (!sel) {
+      tapLight();
       setSel({ kind: 'bench', id });
       return;
     }
@@ -722,15 +640,17 @@ export const LineupScreen = ({
     if (sel.kind === 'slot') {
       const idx = slots.findIndex((s) => s.court === sel.court);
       if (idx === -1) return;
-      const next = slots.map((p) => ({ ...p }));
-      const out =
-        sel.slot === 0 ? next[idx].playerAId : next[idx].playerBId;
-      if (sel.slot === 0) next[idx].playerAId = id;
-      else next[idx].playerBId = id;
-      flashAvatar(out, id);
-      commit(next);
-      pulseAll();
-      setSel(null);
+      const slotSel = sel;
+      confirmNo(id, () => {
+        const next = slots.map((p) => ({ ...p }));
+        const out = slotSel.slot === 0 ? next[idx].playerAId : next[idx].playerBId;
+        if (slotSel.slot === 0) next[idx].playerAId = id;
+        else next[idx].playerBId = id;
+        tapLight();
+        flashAvatar(out, id);
+        commit(next);
+        setSel(null);
+      });
       return;
     }
     setSel({ kind: 'bench', id });
@@ -744,19 +664,27 @@ export const LineupScreen = ({
     if (slot === 0) next[idx].playerAId = null;
     else next[idx].playerBId = null;
     commit(next);
-    pulseCourt(idx);
     setSel(null);
   };
 
+  /** «Rellenar con los que van»: huecos vacíos con Voy (y si no hay nadie que
+   *  haya contestado, con la disponibilidad general), de más a menos puntos. */
   const fillEmpty = () => {
     if (!canEdit) return;
+    setMoreOpen(false);
     const next = slots.map((p) => ({ ...p }));
     const empties: { court: number; slot: SlotIdx }[] = [];
     next.forEach((p) => {
       if (!p.playerAId) empties.push({ court: p.court, slot: 0 });
       if (!p.playerBId) empties.push({ court: p.court, slot: 1 });
     });
-    const candidates = [...benchPlayers];
+    const candidates = noReplies
+      ? players.filter((p) => p.available && p.active && !usedIds.has(p.id)).sort((a, b) => b.pts - a.pts)
+      : benchGroups.yes;
+    if (candidates.length === 0) {
+      toast.info('No queda nadie que vaya', 'Los que dijeron Voy ya están en pista.');
+      return;
+    }
     empties.forEach((e, i) => {
       const cand = candidates[i];
       if (!cand) return;
@@ -766,31 +694,84 @@ export const LineupScreen = ({
       else next[idx].playerBId = cand.id;
     });
     commit(next);
-    pulseAll();
     setSel(null);
   };
 
-  // Alternativas de alineación para previsualizar (Pirámide / Sacrificio /
-  // Equilibrada / Química…). Se recalculan en vivo al abrir el panel o cambiar
-  // el toggle de posición. Consciente de la posición (Drive+Revés), a
-  // diferencia de `fillEmpty` que solo mira puntos.
+  const handleResetSlots = useCallback(() => {
+    if (!canEdit || !currentVariantId) return;
+    setMoreOpen(false);
+    if (slots.every((s) => filledLen(s) === 0)) return;
+    // Vaciar escribe directo (no pasa por commit) → gate premium aquí.
+    gate(() => {
+      Alert.alert(
+        'Vaciar alineación',
+        '¿Quitar todos los jugadores de esta variante? Quedará en blanco para empezar de cero.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Vaciar',
+            style: 'destructive',
+            onPress: () => {
+              const empty = buildEmptySlots(courts);
+              setSlots(empty);
+              void persistAll(empty);
+              setSel(null);
+            },
+          },
+        ],
+      );
+    }, 'lineup_edit')();
+  }, [canEdit, currentVariantId, slots, courts, persistAll, gate]);
+
+  const toggleAutoSort = (next: boolean) => {
+    setAutoSort(next);
+    // Al activar, reordenamos al instante para que se note.
+    if (next && canEdit) {
+      const sorted = sortByPoints(slots, playerById);
+      setSlots(sorted);
+      void persistAll(sorted);
+    }
+  };
+
+  // ── Generador: parte de los que dijeron Voy ─────────────────────
+  const genPlayers = useMemo(() => {
+    if (noReplies) return players;
+    return players.map((p) => {
+      const g = groupOf(p);
+      return { ...p, available: g === 'yes' || (includeMaybe && g === 'maybe') };
+    });
+  }, [players, noReplies, groupOf, includeMaybe]);
+
   const genOptions = useMemo<LineupOption[]>(
     () =>
-      filtersOpen
-        ? generateLineupOptions(players, courts, {
+      genOpen
+        ? generateLineupOptions(genPlayers, courts, {
             stats: pairStats,
             usePosition: genUsePosition,
             mustOrder,
           })
         : [],
-    [filtersOpen, players, courts, pairStats, genUsePosition, mustOrder],
+    [genOpen, genPlayers, courts, pairStats, genUsePosition, mustOrder],
   );
 
-  // Aplica la alternativa elegida. El generador ya fijó el orden de pistas, así
-  // que guardamos sin reordenar (skipSort) y sincronizamos el Auto-orden: si la
-  // estrategia mantiene la pirámide por puntos, lo dejamos ON; si el orden es
-  // intencional (sacrificio / equilibrada abajo), lo apagamos para que una
-  // edición manual posterior no vuelva a piramidar y lo deshaga.
+  const chemistryLine = useCallback(
+    (opt: LineupOption): string | null => {
+      if (opt.key !== 'quimica' || !pairStats) return null;
+      let best: { a: Player; b: Player; wins: number; played: number } | null = null;
+      for (const s of opt.result.slots) {
+        if (!s.playerAId || !s.playerBId) continue;
+        const st = pairStats.get(pairKey(s.playerAId, s.playerBId));
+        const a = playerById.get(s.playerAId);
+        const b = playerById.get(s.playerBId);
+        if (!st || !a || !b || st.played === 0) continue;
+        if (!best || st.wins > best.wins) best = { a, b, wins: st.wins, played: st.played };
+      }
+      if (!best) return null;
+      return `${shortName(best.a)} y ${shortName(best.b)}: ${best.wins} de ${best.played}`;
+    },
+    [pairStats, playerById],
+  );
+
   const applyOption = useCallback(
     (opt: LineupOption) => {
       const next: SlotState[] = opt.result.slots.map((g) => ({
@@ -798,94 +779,62 @@ export const LineupScreen = ({
         playerAId: g.playerAId,
         playerBId: g.playerBId,
       }));
-      setFiltersOpen(false);
+      setGenOpen(false);
+      // El generador fija el orden: Auto-orden ON si mantiene la pirámide.
       setAutoSort(opt.pyramidOrder);
       commit(next, { skipSort: true });
-      pulseAll();
+      setGenKey((k) => k + 1);
       setSel(null);
       if (opt.result.warnings.length > 0) {
-        Alert.alert(
-          'Alineación generada con avisos',
-          opt.result.warnings.join('\n'),
-        );
+        toast.warn('Alineación generada con avisos', opt.result.warnings.join('\n'));
       } else {
-        setAutoDelta('alineación generada');
-        setTimeout(() => setAutoDelta(null), 2400);
+        notifySuccess();
       }
     },
-    [commit, pulseAll],
+    [commit, toast],
   );
 
-  // El botón abre el panel de alternativas; el generado real se aplica desde ahí.
-  const handleGenerate = useCallback(() => {
-    if (!canEdit || !currentVariantId) return;
-    setFiltersOpen(true);
-  }, [canEdit, currentVariantId]);
-
-  const suggestion = useMemo(() => {
-    if (!allOk || filledCount < courts || benchPlayers.length === 0)
-      return null;
-    const currentBalance = balance ?? 0;
-    if (currentBalance >= 92) return null;
-    let best: {
-      gain: number;
-      out: Player;
-      in: Player;
-      court: number;
-      slot: SlotIdx;
-    } | null = null;
-    for (let c = 0; c < courts; c++) {
-      for (const s of [0, 1] as SlotIdx[]) {
-        const slotId = s === 0 ? slots[c].playerAId : slots[c].playerBId;
-        if (!slotId) continue;
-        const out = playerById.get(slotId);
-        if (!out) continue;
-        for (const bp of benchPlayers) {
-          const next = slots.map((p) => ({ ...p }));
-          if (s === 0) next[c].playerAId = bp.id;
-          else next[c].playerBId = bp.id;
-          const sorted = sortByPoints(next, playerById);
-          const newBal = calcBalance(sorted, playerById);
-          if (newBal != null && newBal > currentBalance + 4) {
-            const gain = newBal - currentBalance;
-            if (!best || gain > best.gain) {
-              best = {
-                gain,
-                out,
-                in: bp,
-                court: slots[c].court,
-                slot: s,
-              };
-            }
-          }
-        }
-      }
-    }
-    return best;
-  }, [
-    slots,
-    benchPlayers,
-    allOk,
-    filledCount,
-    balance,
-    courts,
-    playerById,
-  ]);
-
-  const applySuggestion = () => {
-    if (!suggestion || !canEdit) return;
-    const idx = slots.findIndex((s) => s.court === suggestion.court);
-    if (idx === -1) return;
-    const next = slots.map((p) => ({ ...p }));
-    if (suggestion.slot === 0) next[idx].playerAId = suggestion.in.id;
-    else next[idx].playerBId = suggestion.in.id;
-    flashAvatar(suggestion.out.id, suggestion.in.id);
-    commit(next);
-    pulseAll();
-    setAutoDelta(`+${suggestion.gain} equilibrio`);
-    setTimeout(() => setAutoDelta(null), 2400);
+  // ── Publicar ───────────────────────────────────────────────────
+  const openPublish = () => {
+    const changedActive = !!currentVariantId && currentVariantId !== activeVariantId;
+    setNotify(dirtyRef.current || changedActive || !activeVariantId);
+    setPublishDone(false);
+    setPublishOpen(true);
   };
 
+  const sortForPublish = () => {
+    const sorted = sortByPoints(slots, playerById);
+    commit(sorted, { skipSort: true });
+  };
+
+  const goBack = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('HomeRoot');
+  };
+
+  const doPublish = gate(() => {
+    void (async () => {
+      setPublishBusy(true);
+      // Publicar = la variante que el capitán ESTÁ viendo pasa a oficial.
+      const changedActive = !!currentVariantId && currentVariantId !== activeVariantId;
+      try {
+        if (changedActive) await LineupVariantsApi.setActiveVariant(currentVariantId!);
+      } catch {
+        // best-effort: la variante sigue guardada aunque falle el flag
+      }
+      if (notify && matchdayId) void notifyPush('lineup_published', matchdayId);
+      dirtyRef.current = false;
+      setPublishBusy(false);
+      setPublishDone(true);
+      notifySuccess();
+      setTimeout(() => {
+        setPublishOpen(false);
+        goBack();
+      }, 900);
+    })();
+  }, 'lineup_confirm');
+
+  // ── Render ─────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={[styles.root, styles.center]}>
@@ -894,227 +843,292 @@ export const LineupScreen = ({
     );
   }
 
+  const header = (right?: React.ReactNode) => (
+    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <Pressable
+        onPress={goBack}
+        accessibilityRole="button"
+        accessibilityLabel="Volver a la jornada"
+        style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+      >
+        <IconBack size={16} color={c.text} />
+        <Text style={styles.backLabel}>Jornada</Text>
+      </Pressable>
+      {right ?? null}
+    </View>
+  );
+
   if (!matchday) {
+    return <View style={styles.root}>{header()}</View>;
+  }
+
+  const dateLabel = matchday.match_date
+    ? formatShortDay(new Date(`${matchday.match_date}T12:00:00`))
+    : 'Fecha por confirmar';
+  const stripSub = [
+    dateLabel,
+    matchday.match_time ? matchday.match_time.slice(0, 5) : null,
+    matchday.is_home ? 'local' : 'visitante',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const stripTitle = `J${matchday.jornada_number} · vs ${matchday.opponent}`;
+  const goersPill = !noReplies && counts.yes > 0 ? `${counts.yes} van` : null;
+
+  const statusLine = (
+    <View style={styles.stat}>
+      <Text style={styles.statStrong}>
+        {filledCount}/{courts} parejas
+      </Text>
+      <Text style={styles.statSep}>·</Text>
+      {!mustOrder ? (
+        <Text style={styles.statMuted}>orden libre</Text>
+      ) : allOk ? (
+        <Text style={styles.statOk}>orden correcto ✓</Text>
+      ) : (
+        <Text style={styles.statWarn}>P{firstBreak + 1} rompe el orden</Text>
+      )}
+      {teamPts > 0 ? (
+        <>
+          <Text style={styles.statSep}>·</Text>
+          <Text style={styles.statMono}>{fmtPts(teamPts)} pts</Text>
+        </>
+      ) : null}
+    </View>
+  );
+
+  const courtList = (opts: { editable: boolean; highlightMe?: boolean }) => (
+    <View style={{ gap: 8 }}>
+      {slots.map((sl, ci) => {
+        const p1 = findPlayer(sl.playerAId);
+        const p2 = findPlayer(sl.playerBId);
+        const names = pairNames.get(sl.court) ?? null;
+        const filled = filledLen(sl) === 2;
+        const prevFilled = ci > 0 && filledLen(slots[ci - 1]) === 2;
+        const broken = ci > 0 && filled && prevFilled && ptsArr[ci] > ptsArr[ci - 1];
+        const isMine =
+          !!opts.highlightMe && !!myPlayerId && (sl.playerAId === myPlayerId || sl.playerBId === myPlayerId);
+        const benchName =
+          sel?.kind === 'bench' ? (findPlayer(sel.id) ? shortName(findPlayer(sel.id)!) : null) : null;
+        return (
+          <React.Fragment key={`${genKey}-${sl.court}`}>
+            {ci > 0 ? <CourtGap broken={broken} strict={mustOrder} /> : null}
+            <CourtDropZone court={sl.court}>
+            <Animated.View entering={genKey > 0 ? FadeInDown.delay(ci * 40).duration(220) : undefined}>
+              <LineupCourt
+                court={sl.court}
+                p1={p1}
+                p2={p2}
+                fallback={names && (!p1 || !p2) ? names : null}
+                total={ptsArr[ci]}
+                filled={filled}
+                validation={validation[ci]}
+                sel={opts.editable ? sel : null}
+                benchTarget={benchName}
+                disabled={!opts.editable}
+                highlight={isMine}
+                myPlayerId={opts.highlightMe ? myPlayerId : null}
+                onSlotTap={(slot) => onSlotTap(sl.court, slot)}
+                onRemove={(slot) => removeFromSlot(sl.court, slot)}
+                isAnimating={(id) => swapAnimIds.has(id)}
+              />
+            </Animated.View>
+            </CourtDropZone>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+
+  // ── Jugador: lectura con «Tu pareja» ─────────────────────────────
+  if (!isCaptain && !isClub) {
+    const published = !!activeVariantId && slots.some((s) => filledLen(s) > 0);
+    const mySlot = myPlayerId
+      ? slots.find((s) => s.playerAId === myPlayerId || s.playerBId === myPlayerId) ?? null
+      : null;
+    const me = findPlayer(myPlayerId);
+    const partnerId = mySlot ? (mySlot.playerAId === myPlayerId ? mySlot.playerBId : mySlot.playerAId) : null;
+    const partner = findPlayer(partnerId);
+    const partnerFallback = mySlot
+      ? (mySlot.playerAId === myPlayerId ? pairNames.get(mySlot.court)?.b : pairNames.get(mySlot.court)?.a) ?? 'tu pareja'
+      : 'tu pareja';
+    const stats = myPlayerId && partnerId && pairStats ? pairStats.get(pairKey(myPlayerId, partnerId)) ?? null : null;
+    const myStatus = myPlayerId && availMap ? availMap[myPlayerId]?.status ?? null : null;
+
+    const shareLineup = async () => {
+      const lines = slots.map((s) => {
+        const a = findPlayer(s.playerAId);
+        const b = findPlayer(s.playerBId);
+        const n = pairNames.get(s.court);
+        return `P${s.court} · ${a?.name ?? n?.a ?? '—'} / ${b?.name ?? n?.b ?? '—'}`;
+      });
+      try {
+        await Share.share({
+          message: [`🎾 ${team?.name ?? ''} · ${stripTitle}`, stripSub, '', ...lines].join('\n'),
+        });
+      } catch {
+        // cancelado
+      }
+    };
+
+    const respond = async (status: AvailabilityApi.AvailabilityStatus) => {
+      if (!myPlayerId) return;
+      setRsvpBusy(true);
+      try {
+        await AvailabilityApi.respondAvailability({ matchdayId, playerId: myPlayerId, status });
+        tapLight();
+        await loadAvailability();
+      } catch (e: any) {
+        toast.error('No se pudo guardar tu respuesta', e?.message ?? '');
+      } finally {
+        setRsvpBusy(false);
+      }
+    };
+
     return (
       <View style={styles.root}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <Pressable
-            onPress={() => {
-              if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate('HomeRoot');
-            }}
-            style={({ pressed }) => [
-              styles.backBtn,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <IconBack size={16} color={c.text} />
-            <Text style={styles.backLabel}>Atrás</Text>
-          </Pressable>
-        </View>
+        {header(
+          published ? (
+            <Pressable onPress={shareLineup} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.headerLink}>Compartir</Text>
+            </Pressable>
+          ) : null,
+        )}
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }, isTablet && styles.tabletColumn]}
+          showsVerticalScrollIndicator={false}
+        >
+          <LineupStrip teamName={team?.name ?? ''} title={stripTitle} sub={[stripSub, matchday.location].filter(Boolean).join(' · ')} pill={published ? null : goersPill} />
+          {!published ? (
+            <NoLineupYet
+              myStatus={myStatus}
+              canRespond={!!myPlayerId && !closed}
+              busy={rsvpBusy}
+              onRespond={respond}
+            />
+          ) : (
+            <>
+              {mySlot ? (
+                <MyPairCard
+                  court={mySlot.court}
+                  me={me}
+                  partner={partner}
+                  partnerName={partnerFallback}
+                  pairPts={filledLen(mySlot) === 2 ? ptsOfSlot(mySlot, playerById) || null : null}
+                  stats={stats}
+                />
+              ) : myPlayerId ? (
+                <InfoBanner>No juegas esta jornada. Si cambia algo, el capitán te avisará.</InfoBanner>
+              ) : null}
+              <Text style={styles.eyebrowFaint}>ALINEACIÓN OFICIAL</Text>
+              {courtList({ editable: false, highlightMe: true })}
+            </>
+          )}
+        </ScrollView>
       </View>
     );
   }
 
-  const teamPts = ptsArr.reduce((a, b) => a + b, 0);
-  const maxPts = Math.max(...ptsArr.filter((v) => v > 0), 1);
-
-  const hint = autoDelta
-    ? `⚡ ${autoDelta}`
-    : sel?.kind === 'slot'
-    ? 'Toca otro jugador para intercambiar · o el banquillo'
-    : sel?.kind === 'bench'
-    ? `Toca un slot para colocar a ${
-        findPlayer(sel.id)?.name.split(' ')[0] ?? '—'
-      }`
-    : closed
-    ? 'Acta cerrada · solo lectura.'
-    : seasonClosed
-    ? 'Temporada archivada · alineación en solo lectura.'
-    : !isCaptain
-    ? 'Solo el capitán puede editar la alineación.'
-    : autoSort
-    ? 'Las parejas se ordenan por puntos automáticamente'
-    : 'Toca un jugador para seleccionar';
-
-  return (
-    <Pressable
-      onPress={() => setSel(null)}
-      style={styles.root}
-      android_disableSound
-    >
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate('HomeRoot');
-          }}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+  // ── Club: lectura con aviso ──────────────────────────────────────
+  if (!isCaptain && isClub) {
+    const publishedAt = activeVariant?.updated_at
+      ? new Date(activeVariant.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+      : null;
+    return (
+      <View style={styles.root}>
+        {header()}
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }, isTablet && styles.tabletColumn]}
+          showsVerticalScrollIndicator={false}
         >
-          <IconBack size={16} color={c.text} />
-          <Text style={styles.backLabel}>Jornada</Text>
-        </Pressable>
-
-        <View style={styles.headerRight}>
-          {isCaptain ? (
-            <>
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleResetSlots();
-                }}
-                disabled={!canEdit || filledCount === 0}
-                hitSlop={6}
-                style={({ pressed }) => [
-                  styles.resetBtn,
-                  (!canEdit || filledCount === 0) && { opacity: 0.4 },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <IconTrash size={14} color={c.textMuted} />
-              </Pressable>
-
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  setAutoSort((prev) => {
-                    const next = !prev;
-                    // Al activar, reordenamos las parejas existentes al instante
-                    // para que el toggle se sienta inmediato y predecible.
-                    if (next) {
-                      const sorted = sortByPoints(slots, playerById);
-                      setSlots(sorted);
-                      void persistAll(sorted);
-                      pulseAll();
-                    }
-                    return next;
-                  });
-                }}
-                disabled={!canEdit}
-                style={({ pressed }) => [
-                  styles.autoSortBtn,
-                  autoSort && styles.autoSortBtnOn,
-                  pressed && { opacity: 0.85 },
-                  !canEdit && { opacity: 0.5 },
-                ]}
-              >
-            <IconBolt
-              size={12}
-              color={autoSort ? c.accent : c.textMuted}
-            />
-            <Text
-              style={[
-                styles.autoSortLabel,
-                { color: autoSort ? c.accent : c.textMuted },
-              ]}
-            >
-              Auto-orden {autoSort ? '· ON' : '· OFF'}
+          <LineupStrip
+            teamName={team?.name ?? ''}
+            title={stripTitle}
+            sub={
+              activeVariantId && slots.some((s) => filledLen(s) > 0)
+                ? `${team?.name ?? ''} · publicada${publishedAt ? ` el ${publishedAt}` : ''}`
+                : `${team?.name ?? ''} · sin publicar`
+            }
+          />
+          <InfoBanner>
+            Vista del club, solo lectura. Para editarla, pasa a modo capitán desde Perfil.
+          </InfoBanner>
+          {statusLine}
+          {courtList({ editable: false })}
+          {!noReplies ? (
+            <Text style={styles.footNote}>
+              Convocatoria: {counts.yes} van · {counts.maybe} con duda · {counts.no} no
+              {counts.pending > 0 ? ` · ${counts.pending} sin contestar` : ''}
             </Text>
-          </Pressable>
-            </>
           ) : null}
-        </View>
+        </ScrollView>
       </View>
+    );
+  }
 
-      <Pressable
-        onPress={(e) => e.stopPropagation()}
-        style={styles.titleSection}
-      >
-        <Text style={styles.eyebrow}>
-          JORNADA · J·{String(matchday.jornada_number).padStart(2, '0')} · ALINEACIÓN
-        </Text>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>
-            {filledCount}/{courts} parejas
-          </Text>
-          <View style={styles.dotsRow}>
-            {validation.map((v, i) => {
-              const color =
-                v.state === 'ok'
-                  ? c.accent
-                  : v.state === 'warn'
-                  ? c.warning
-                  : v.state === 'err'
-                  ? c.error
-                  : c.hairStrong;
-              return (
-                <View key={i} style={[styles.dot, { backgroundColor: color }]} />
-              );
-            })}
-          </View>
-        </View>
+  // ── Capitán: editor ─────────────────────────────────────────────
+  const breakInfo =
+    firstBreak > 0
+      ? {
+          upper: firstBreak,
+          lower: firstBreak + 1,
+          upperPts: ptsArr[firstBreak - 1],
+          lowerPts: ptsArr[firstBreak],
+        }
+      : null;
+  const publishRows: PublishRow[] = slots.map((s, i) => {
+    const a = findPlayer(s.playerAId);
+    const b = findPlayer(s.playerBId);
+    return {
+      court: s.court,
+      label: `${a ? shortName(a) : '—'} / ${b ? shortName(b) : '—'}`,
+      pts: ptsArr[i],
+      broken: validation[i].state === 'err' || (i + 1 < slots.length && validation[i + 1].state === 'err'),
+    };
+  });
+  const missing = courts - filledCount;
 
-        {balance != null ? (
-          <View style={styles.balanceRow}>
-            <View style={styles.balanceTrack}>
-              <BalanceFill
-                value={balance}
-                color={
-                  balance >= 80
-                    ? c.accent
-                    : balance >= 50
-                    ? c.warning
-                    : c.error
-                }
-              />
-            </View>
-            <Text
-              style={[
-                styles.balanceLabel,
-                {
-                  color: balance >= 80 ? c.accent : c.textMuted,
-                },
-              ]}
-            >
-              {balance}/100 EQUI.
-            </Text>
-          </View>
-        ) : null}
+  const moreButton = canEdit ? (
+    <Pressable
+      onPress={() => setMoreOpen(true)}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel="Más opciones de la alineación"
+      style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.7 }]}
+    >
+      <IconMenu size={16} color={c.text} />
+    </Pressable>
+  ) : null;
 
-        <Animated.Text
-          key={hint}
-          entering={FadeInUp.duration(200)}
-          style={[
-            styles.hintText,
-            autoDelta != null && { color: c.accent, fontWeight: '600' },
-          ]}
-        >
-          {hint}
-        </Animated.Text>
-      </Pressable>
-
-      <View style={styles.variantStripContainer}>
+  const variantTabs =
+    variants.length > 0 ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.variantStrip}
-        onTouchStart={(e) => e.stopPropagation()}
+        contentContainerStyle={styles.tabs}
+        style={[styles.tabsWrap, wide && { flexShrink: 1 }]}
       >
         {variants.map((v) => {
-          const isCurrent = v.id === currentVariantId;
-          const isActive = v.is_active;
+          const on = v.id === currentVariantId;
           return (
             <Pressable
               key={v.id}
-              onPress={() => setCurrentVariantId(v.id)}
-              onLongPress={() => openVariantActions(v)}
+              onPress={() => {
+                setSel(null);
+                setCurrentVariantId(v.id);
+              }}
+              onLongPress={() => {
+                if (!canEdit) return;
+                setCurrentVariantId(v.id);
+                setMoreOpen(true);
+              }}
               disabled={variantBusy}
-              style={[
-                styles.variantChip,
-                isCurrent && styles.variantChipCurrent,
-                isActive && styles.variantChipActive,
-              ]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              style={[styles.tab, on && styles.tabOn]}
             >
-              {isActive ? (
-                <Text style={styles.variantChipStar}>★</Text>
-              ) : null}
-              <Text
-                style={[
-                  styles.variantChipLabel,
-                  isCurrent && { color: c.accent },
-                ]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.tabText, on && { color: c.text }]} numberOfLines={1}>
+                {v.is_active ? <Text style={{ color: c.accent }}>★ </Text> : null}
                 {v.label}
               </Text>
             </Pressable>
@@ -1124,1526 +1138,365 @@ export const LineupScreen = ({
           <Pressable
             onPress={handleAddVariant}
             disabled={variantBusy}
-            style={[styles.variantChipAdd, variantBusy && { opacity: 0.4 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Nueva variante"
+            style={[styles.tab, variantBusy && { opacity: 0.4 }]}
           >
-            <Text style={styles.variantChipAddText}>+ NUEVA</Text>
+            <Text style={styles.tabText}>＋</Text>
           </Pressable>
         ) : null}
       </ScrollView>
-      </View>
+    ) : null;
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{ gap: 8 }}
-        >
-          {canEdit ? (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                handleGenerate();
-              }}
-              style={({ pressed }) => [
-                styles.generateBtn,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <IconBolt size={14} color={c.accent} />
-              <Text style={styles.generateLabel}>
-                Generar alineación
-              </Text>
-              <Text style={styles.generateHint}>Drive + Revés · por fuerza</Text>
-            </Pressable>
-          ) : null}
+  const editorScroll = (
+    <ScrollView
+      contentContainerStyle={styles.scrollEditor}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Pressable onPress={(e) => e.stopPropagation()} style={{ gap: 10 }}>
+        {!canEdit ? (
+          <InfoBanner>
+            {closed
+              ? 'Acta cerrada · la alineación es de solo lectura.'
+              : 'Temporada archivada · la alineación es de solo lectura.'}
+          </InfoBanner>
+        ) : null}
 
-          {slots.map((sl, ci) => {
-            const v = validation[ci];
-            const total = ptsArr[ci];
-            const filled = filledLen(sl) === 2;
-            const pulsing = pulseCourts.has(ci);
-            const top = ci === 0 && filled && v.state !== 'err';
-            return (
-              <CourtRow
-                key={sl.court}
-                court={sl.court}
-                p1={findPlayer(sl.playerAId)}
-                p2={findPlayer(sl.playerBId)}
-                total={total}
-                maxPts={maxPts}
-                filled={filled}
-                validation={v}
-                top={top}
-                pulsing={pulsing}
-                sel={sel}
-                disabled={!canEdit}
-                onSlotTap={(slot) => onSlotTap(sl.court, slot)}
-                onSlotEmpty={(slot) => onSlotEmpty(sl.court, slot)}
-                onRemove={(slot) => removeFromSlot(sl.court, slot)}
-                isAnimating={(id) => swapAnimIds.has(id)}
-              />
-            );
-          })}
-
-          {canEdit && filledCount < courts ? (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                fillEmpty();
-              }}
-              style={({ pressed }) => [
-                styles.fillEmptyBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <IconBolt size={12} color={c.accent} />
-              <Text style={styles.fillEmptyLabel}>
-                Completar con mejores del banquillo
-              </Text>
-            </Pressable>
-          ) : null}
-        </Pressable>
-      </ScrollView>
-
-      {suggestion && !sel && canEdit ? (
-        <Animated.View
-          entering={FadeInDown.duration(320)}
-          style={styles.suggestionWrap}
-        >
+        {canEdit ? (
           <Pressable
             onPress={(e) => {
               e.stopPropagation();
-              applySuggestion();
+              if (currentVariantId) setGenOpen(true);
             }}
-            style={({ pressed }) => [
-              styles.suggestionBtn,
-              pressed && { opacity: 0.85 },
-            ]}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
           >
-            <View style={styles.suggestionIcon}>
-              <IconBolt size={14} color={c.accent} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.suggestionEyebrow}>
-                Sugerencia · +{suggestion.gain} equilibrio
-              </Text>
-              <Text style={styles.suggestionText} numberOfLines={1}>
-                Cambia {suggestion.out.name.split(' ')[0]} ↔{' '}
-                {suggestion.in.name.split(' ')[0]}
-              </Text>
-            </View>
-            <View style={styles.suggestionApply}>
-              <Text style={styles.suggestionApplyText}>APLICAR</Text>
-            </View>
+            <IconBolt size={14} color={c.accent} />
+            <Text style={styles.generateLabel}>Generar con los que van</Text>
+            <Text style={styles.generateHint}>
+              {noReplies ? 'sin respuestas aún' : `${counts.yes} Voy · ${counts.maybe} Duda`}
+            </Text>
           </Pressable>
-        </Animated.View>
-      ) : null}
+        ) : null}
 
-      <BenchBar
-        players={benchPlayers}
-        sel={sel}
-        teamPts={teamPts}
-        onTap={onBenchTap}
-        isAnimating={(id) => swapAnimIds.has(id)}
-        disabled={!canEdit}
-      />
-
-      <View
-        style={[
-          styles.ctaWrap,
-          { paddingBottom: Math.max(insets.bottom, 18) },
-        ]}
-      >
-        <Pressable
-          disabled={canEdit && filledCount < courts}
-          // Read-only modes (acta cerrada O usuario no capitán): el botón
-          // actúa como "Volver" sin paywall ni save.
-          // Captain con acta abierta: gate envuelve la acción y dispara
-          // paywall si no es premium.
-          onPress={
-            !canEdit
-              ? () => {
-                  if (navigation.canGoBack()) navigation.goBack();
-                  else navigation.navigate('HomeRoot');
-                }
-              : gate(() => {
-                  const back = async () => {
-                    // "Confirmar" publica la variante que el capitán ESTÁ viendo:
-                    // si no era la activa, la marcamos oficial antes de avisar.
-                    // Si no, Results/Jornada leerían otra variante (o vacía) y el
-                    // aviso apuntaría a una alineación que nadie ve.
-                    const changedActive =
-                      !!currentVariantId && currentVariantId !== activeVariantId;
-                    try {
-                      if (changedActive) {
-                        await LineupVariantsApi.setActiveVariant(currentVariantId!);
-                      }
-                    } catch {
-                      // best-effort: la variante sigue guardada aunque falle el flag
-                    }
-                    // Avisar SOLO si hubo cambios reales o cambió la variante
-                    // oficial (evita spam al abrir y confirmar sin tocar nada).
-                    if (matchdayId && (dirtyRef.current || changedActive)) {
-                      void notifyPush('lineup_published', matchdayId);
-                    }
-                    dirtyRef.current = false;
-                    if (navigation.canGoBack()) navigation.goBack();
-                    else navigation.navigate('HomeRoot');
-                  };
-                  // Soft warning: si la federación exige orden y se incumple,
-                  // pedimos confirmación pero permitimos guardar.
-                  if (!allOk && mustOrder) {
-                    Alert.alert(
-                      'Orden de parejas',
-                      'Las parejas no van en orden de fuerza decreciente. La federación puede rechazar el acta. ¿Guardar igualmente?',
-                      [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Guardar igual', style: 'destructive', onPress: back },
-                      ],
-                    );
-                    return;
-                  }
-                  back();
-                }, 'lineup_confirm')
-          }
-          style={({ pressed }) => [
-            styles.cta,
-            canEdit && filledCount < courts && styles.ctaDisabled,
-            canEdit && !allOk && filledCount === courts && styles.ctaWarn,
-            pressed && (!canEdit || filledCount === courts) && { opacity: 0.85 },
-          ]}
-        >
-          {!canEdit ? (
-            // Read-only (acta cerrada o no capitán): el botón siempre vuelve.
-            <>
-              <IconCheck size={15} color="#000" />
-              <Text style={styles.ctaLabel}>Volver</Text>
-            </>
-          ) : filledCount < courts ? (
-            <Text style={styles.ctaLabelDisabled}>
-              Faltan {courts - filledCount}
-            </Text>
-          ) : !allOk ? (
-            <>
-              <IconAlert size={15} color="#1a0f00" />
-              <Text style={styles.ctaLabelWarn}>Guardar con aviso</Text>
-            </>
-          ) : (
-            <>
-              <IconCheck size={15} color="#000" />
-              <Text style={styles.ctaLabel}>Confirmar alineación</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
-
-      <BottomSheet open={filtersOpen} onClose={() => setFiltersOpen(false)}>
-        <Text style={styles.filterEyebrow}>GENERAR</Text>
-        <Text style={styles.filterTitle}>Elige una alineación</Text>
-        <Text style={styles.filterLede}>
-          Varias formas de armar las parejas. Mira cada una y toca la que
-          quieras — no se aplica hasta que la elijas.
-        </Text>
-
-        <FilterRow
-          label="Emparejar Drive + Revés"
-          hint="Si lo desactivas, empareja solo por nivel"
-          value={genUsePosition}
-          onChange={setGenUsePosition}
-        />
-
-        <View style={styles.optionList}>
-          {genOptions.map((opt) => (
-            <Pressable
-              key={opt.key}
-              onPress={() => applyOption(opt)}
-              style={({ pressed }) => [
-                styles.optionCard,
-                pressed && { opacity: 0.85, borderColor: c.accent50 },
-              ]}
-            >
-              <View style={styles.optionHead}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.optionLabel}>{opt.label}</Text>
-                  <Text style={styles.optionHint}>{opt.hint}</Text>
-                </View>
-                <View style={styles.optionUse}>
-                  <IconBolt size={12} color={c.accent} />
-                  <Text style={styles.optionUseText}>Usar</Text>
-                </View>
-              </View>
-
-              <View style={styles.optionPreview}>
-                {opt.result.slots.map((s) => {
-                  const a = s.playerAId ? playerById.get(s.playerAId) : null;
-                  const b = s.playerBId ? playerById.get(s.playerBId) : null;
-                  return (
-                    <View key={s.court} style={styles.optionRow}>
-                      <Text style={styles.optionCourt}>{s.court}</Text>
-                      <Text style={styles.optionPair} numberOfLines={1}>
-                        {a ? shortName(a) : '—'}
-                        <Text style={styles.optionPts}>
-                          {a ? ` ${a.pts}` : ''}
-                        </Text>
-                        {'  ·  '}
-                        {b ? shortName(b) : '—'}
-                        <Text style={styles.optionPts}>
-                          {b ? ` ${b.pts}` : ''}
-                        </Text>
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {opt.result.warnings.length > 0 ? (
-                <Text style={styles.optionWarn} numberOfLines={2}>
-                  {opt.result.warnings.join(' · ')}
-                </Text>
-              ) : null}
-            </Pressable>
-          ))}
-        </View>
-      </BottomSheet>
-    </Pressable>
-  );
-};
-
-const FilterRow: React.FC<{
-  label: string;
-  hint: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}> = ({ label, hint, value, onChange }) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-    <View style={styles.filterRow}>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.filterLabel}>{label}</Text>
-        <Text style={styles.filterHint}>{hint}</Text>
-      </View>
-      <Toggle value={value} onChange={onChange} />
-    </View>
-  );
-};
-
-// ============= BALANCE FILL =============
-
-const BalanceFill: React.FC<{ value: number; color: string }> = ({
-  value,
-  color,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const w = useSharedValue(0);
-  useEffect(() => {
-    w.value = withTiming(value, {
-      duration: 480,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [value, w]);
-  const aStyle = useAnimatedStyle(() => ({
-    width: `${w.value}%`,
-  }));
-  return (
-    <Animated.View
-      style={[styles.balanceFill, { backgroundColor: color }, aStyle]}
-    />
-  );
-};
-
-// ============= COURT BAR =============
-
-const CourtBarFill: React.FC<{ pct: number; color: string }> = ({
-  pct,
-  color,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const w = useSharedValue(0);
-  useEffect(() => {
-    w.value = withTiming(pct, {
-      duration: 380,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [pct, w]);
-  const aStyle = useAnimatedStyle(() => ({ width: `${w.value}%` }));
-  return (
-    <Animated.View
-      style={[styles.courtBarFill, { backgroundColor: color }, aStyle]}
-    />
-  );
-};
-
-// ============= AVATAR =============
-
-const Avatar: React.FC<{
-  initials: string;
-  selected: boolean;
-  animating: boolean;
-  size?: number;
-  fontSize?: number;
-  photoUrl?: string | null;
-}> = ({
-  initials,
-  selected,
-  animating,
-  size = 26,
-  fontSize = 10,
-  photoUrl,
-}) => {
-  const c = useColors();
-  const scale = useSharedValue(1);
-  const rotate = useSharedValue(0);
-
-  useEffect(() => {
-    if (animating) {
-      scale.value = withSequence(
-        withTiming(1.18, { duration: 200 }),
-        withTiming(1, { duration: 200 }),
-      );
-      rotate.value = withSequence(
-        withTiming(8, { duration: 200 }),
-        withTiming(0, { duration: 200 }),
-      );
-    }
-  }, [animating, scale, rotate]);
-
-  const aStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
-  }));
-
-  const bg = selected || animating ? c.accent : c.accent15;
-  const fg = selected || animating ? '#000' : c.accent;
-
-  return (
-    <Animated.View
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: bg,
-          overflow: 'hidden',
-        },
-        aStyle,
-      ]}
-    >
-      {photoUrl ? (
-        <Image
-          source={{ uri: photoUrl }}
-          style={{ width: size, height: size }}
-          resizeMode="cover"
-        />
-      ) : (
-        <Text
-          style={{
-            fontFamily: Fonts.mono,
-            fontSize,
-            fontWeight: '600',
-            color: fg,
-          }}
-        >
-          {initials}
-        </Text>
-      )}
-    </Animated.View>
-  );
-};
-
-// ============= COURT ROW =============
-
-interface CourtRowProps {
-  court: number;
-  p1: Player | null;
-  p2: Player | null;
-  total: number;
-  maxPts: number;
-  filled: boolean;
-  validation: Validation;
-  top: boolean;
-  pulsing: boolean;
-  sel: Selection;
-  disabled: boolean;
-  onSlotTap: (slot: SlotIdx) => void;
-  onSlotEmpty: (slot: SlotIdx) => void;
-  onRemove: (slot: SlotIdx) => void;
-  isAnimating: (id: string) => boolean;
-}
-
-const CourtRow: React.FC<CourtRowProps> = ({
-  court,
-  p1,
-  p2,
-  total,
-  maxPts,
-  filled,
-  validation,
-  top,
-  pulsing,
-  sel,
-  disabled,
-  onSlotTap,
-  onSlotEmpty,
-  onRemove,
-  isAnimating,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const pctOfMax = maxPts ? Math.min(100, (total / maxPts) * 100) : 0;
-  const tint =
-    validation.state === 'err'
-      ? c.error
-      : validation.state === 'warn'
-      ? c.warning
-      : top
-      ? c.accent
-      : c.text;
-
-  const errorMsg = validation.state === 'err' ? validation.msg : null;
-  const ghostHint = sel != null;
-
-  const borderColor =
-    validation.state === 'err'
-      ? 'rgba(255,107,107,0.6)'
-      : pulsing
-      ? c.accent
-      : top
-      ? c.accent40
-      : c.hair;
-
-  return (
-    <View style={[styles.courtRow, { borderColor }]}>
-      <View style={styles.courtHeader}>
-        <View
-          style={[
-            styles.courtBadge,
-            validation.state === 'err'
-              ? { backgroundColor: 'rgba(255,107,107,0.15)' }
-              : top
-              ? { backgroundColor: c.accent15 }
-              : null,
-          ]}
-        >
-          <Text
-            style={[
-              styles.courtBadgeText,
-              validation.state === 'err'
-                ? { color: c.error }
-                : top
-                ? { color: c.accent }
-                : null,
-            ]}
-          >
-            P{court}
-          </Text>
-        </View>
-
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={styles.courtBar}>
-            <CourtBarFill pct={pctOfMax} color={tint} />
-          </View>
-          {validation.state !== 'err' ? (
-            <Text
-              style={[styles.titularLabel, !top && styles.titularLabelMuted]}
-            >
-              PAREJA Nº{court}
-              {top ? ' · TITULAR' : ''}
-            </Text>
-          ) : null}
-          {errorMsg ? (
-            <Animated.Text
-              entering={FadeInUp.duration(200)}
-              style={styles.errorMsg}
-            >
-              {errorMsg}
-            </Animated.Text>
-          ) : null}
-        </View>
-
-        <Animated.View
-          key={`pts-${total}`}
-          entering={FadeInDown.duration(240)}
-          style={styles.totalWrap}
-        >
-          <Text style={[styles.totalValue, { color: tint }]}>
-            {filled ? total : '—'}
-          </Text>
-          <Text style={styles.totalLabel}>PTS</Text>
-        </Animated.View>
-      </View>
-
-      <View style={styles.slotsRow}>
-        <SlotTile
-          player={p1}
-          selected={
-            sel?.kind === 'slot' && sel.court === court && sel.slot === 0
-          }
-          error={validation.state === 'err'}
-          ghost={ghostHint && !p1}
-          disabled={disabled}
-          onTap={() => (p1 ? onSlotTap(0) : onSlotEmpty(0))}
-          onLongPress={p1 ? () => onRemove(0) : undefined}
-          animating={p1 ? isAnimating(p1.id) : false}
-        />
-        <SlotTile
-          player={p2}
-          selected={
-            sel?.kind === 'slot' && sel.court === court && sel.slot === 1
-          }
-          error={validation.state === 'err'}
-          ghost={ghostHint && !p2}
-          disabled={disabled}
-          onTap={() => (p2 ? onSlotTap(1) : onSlotEmpty(1))}
-          onLongPress={p2 ? () => onRemove(1) : undefined}
-          animating={p2 ? isAnimating(p2.id) : false}
-        />
-      </View>
-    </View>
-  );
-};
-
-// ============= SLOT TILE =============
-
-interface SlotTileProps {
-  player: Player | null;
-  selected: boolean;
-  error: boolean;
-  ghost: boolean;
-  disabled: boolean;
-  animating: boolean;
-  onTap: () => void;
-  onLongPress?: () => void;
-}
-
-const SlotTile: React.FC<SlotTileProps> = ({
-  player,
-  selected,
-  error,
-  ghost,
-  disabled,
-  animating,
-  onTap,
-  onLongPress,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  if (!player) {
-    return (
-      <Pressable
-        onPress={(e) => {
-          e.stopPropagation();
-          if (disabled) return;
-          onTap();
-        }}
-        disabled={disabled}
-        style={({ pressed }) => [
-          styles.slotEmpty,
-          ghost && styles.slotEmptyGhost,
-          pressed && { transform: [{ scale: 0.97 }] },
-          disabled && { opacity: 0.6 },
-        ]}
-      >
-        {ghost ? (
-          <Text style={styles.slotEmptyGhostText}>↓ Colocar aquí</Text>
-        ) : (
-          <>
-            <IconPlus size={12} color={c.textFaint} />
-            <Text style={styles.slotEmptyText}>Vacío</Text>
-          </>
-        )}
+        {courtList({ editable: canEdit })}
       </Pressable>
-    );
-  }
+    </ScrollView>
+  );
 
-  const initials = initialsOf(player);
-
-  return (
+  const publishButton = (
     <Pressable
-      onPress={(e) => {
-        e.stopPropagation();
-        if (disabled) return;
-        onTap();
-      }}
-      onLongPress={() => {
-        if (disabled || !onLongPress) return;
-        onLongPress();
-      }}
-      disabled={disabled}
+      disabled={missing > 0}
+      onPress={openPublish}
+      accessibilityRole="button"
       style={({ pressed }) => [
-        styles.slotTile,
-        selected && styles.slotTileSelected,
-        error && !selected && styles.slotTileError,
-        pressed && { transform: [{ scale: 0.97 }] },
-        disabled && { opacity: 0.7 },
+        styles.cta,
+        missing > 0 && styles.ctaDisabled,
+        missing === 0 && !allOk && styles.ctaWarn,
+        pressed && missing === 0 && { opacity: 0.85 },
       ]}
     >
-      <Avatar
-        initials={initials}
-        selected={selected}
-        animating={animating}
-        photoUrl={photoOf(player)}
-      />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.slotName} numberOfLines={1}>
-          {shortName(player)}
-        </Text>
-        <Text style={styles.slotMeta}>
-          {player.position} · <Text style={styles.slotPts}>{player.pts}</Text>
-        </Text>
-      </View>
-      {selected && onLongPress ? (
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            onLongPress();
-          }}
-          hitSlop={8}
-          style={styles.removeChip}
-        >
-          <IconTrash size={12} color={c.error} />
-        </Pressable>
-      ) : null}
+      <Text
+        style={[
+          styles.ctaLabel,
+          missing > 0 && { color: c.textFaint },
+          missing === 0 && !allOk && { color: c.warning },
+        ]}
+      >
+        {missing > 0
+          ? `Falta${missing > 1 ? 'n' : ''} ${missing} pareja${missing > 1 ? 's' : ''}`
+          : 'Publicar'}
+      </Text>
     </Pressable>
   );
-};
 
-// ============= BENCH BAR =============
+  const yesPlaced = players.filter(
+    (p) => p.active && usedIds.has(p.id) && groupOf(p) === 'yes',
+  ).length;
 
-interface BenchBarProps {
-  players: Player[];
-  sel: Selection;
-  teamPts: number;
-  onTap: (id: string) => void;
-  isAnimating: (id: string) => boolean;
-  disabled: boolean;
-}
+  const sheets = (
+    <>
+      <GenerateSheet
+        open={genOpen}
+        onClose={() => setGenOpen(false)}
+        options={genOptions}
+        playerById={playerById}
+        usePosition={genUsePosition}
+        onUsePosition={setGenUsePosition}
+        includeMaybe={includeMaybe}
+        onIncludeMaybe={setIncludeMaybe}
+        maybeCount={counts.maybe}
+        goersCount={counts.yes}
+        noReplies={noReplies}
+        chemistryLine={chemistryLine}
+        onUse={applyOption}
+      />
 
-const BenchBar: React.FC<BenchBarProps> = ({
-  players,
-  sel,
-  teamPts,
-  onTap,
-  isAnimating,
-  disabled,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const slotSelected = sel?.kind === 'slot';
-  return (
-    <Pressable
-      onPress={(e) => e.stopPropagation()}
-      style={[
-        styles.benchBar,
-        slotSelected && {
-          borderTopColor: 'rgba(0,223,130,0.4)',
-          backgroundColor: c.accent10,
-        },
-      ]}
-    >
-      <View style={styles.benchHeader}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text
-            style={[
-              styles.benchEyebrow,
-              slotSelected && { color: c.accent },
-            ]}
-          >
-            BANQUILLO · {players.length}
-          </Text>
-          {slotSelected ? (
-            <Animated.View
-              entering={FadeIn.duration(220)}
-              style={styles.benchHint}
-            >
-              <Text style={styles.benchHintText}>↓ TOCA UNO</Text>
-            </Animated.View>
+      <PublishSheet
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        jornada={matchday.jornada_number}
+        rows={publishRows}
+        mustOrder={mustOrder}
+        breakInfo={breakInfo}
+        onSort={sortForPublish}
+        notify={notify}
+        onNotify={setNotify}
+        convocados={filledCount * 2}
+        busy={publishBusy}
+        done={publishDone}
+        onPublish={doPublish}
+      />
+
+      <LineupMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        variant={currentVariant}
+        canAddVariant={variants.length < 5}
+        autoSort={autoSort}
+        onAutoSort={toggleAutoSort}
+        filledCount={filledCount}
+        onMarkOfficial={() => {
+          setMoreOpen(false);
+          if (currentVariant) void handleSetActive(currentVariant.id);
+        }}
+        onDuplicate={handleDuplicate}
+        onRename={handleRename}
+        onDelete={() => {
+          setMoreOpen(false);
+          if (currentVariant) handleDeleteVariant(currentVariant);
+        }}
+        onFill={fillEmpty}
+        onClear={handleResetSlots}
+      />
+    </>
+  );
+
+  // Móvil (y tablet sin sitio): la pantalla de siempre.
+  const phoneBody = (
+    <>
+      {header(moreButton)}
+
+      <View style={styles.top}>
+        <LineupStrip teamName={team?.name ?? ''} title={stripTitle} sub={stripSub} pill={goersPill} />
+        {variantTabs}
+        {statusLine}
+      </View>
+
+      {editorScroll}
+
+      {canEdit ? (
+        <>
+          {isTablet ? (
+            <LineupBenchPanel
+              layout="grid"
+              jornada={matchday.jornada_number}
+              groups={benchGroups}
+              yesPlaced={yesPlaced}
+              sel={sel}
+              disabled={!canEdit}
+              draggable
+              onTap={onBenchTap}
+              isAnimating={(id) => swapAnimIds.has(id)}
+            />
+          ) : (
+            <LineupBench
+              jornada={matchday.jornada_number}
+              groups={benchGroups}
+              sel={sel}
+              disabled={!canEdit}
+              bottomInset={0}
+              onTap={onBenchTap}
+              isAnimating={(id) => swapAnimIds.has(id)}
+            />
+          )}
+          <View style={[styles.ctaWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            {publishButton}
+          </View>
+        </>
+      ) : null}
+    </>
+  );
+
+  // Tablet horizontal: pistas en el centro y banquillo fijo a la derecha.
+  const wideBody = (
+    <>
+      {header(moreButton)}
+      <View style={styles.wideRow}>
+        <View style={styles.wideMain}>
+          <View style={styles.top}>
+            <LineupStrip teamName={team?.name ?? ''} title={stripTitle} sub={stripSub} pill={goersPill} />
+            <View style={styles.wideTabsRow}>
+              {variantTabs}
+              <View style={{ flexShrink: 0 }}>{statusLine}</View>
+            </View>
+          </View>
+          {editorScroll}
+          {canEdit ? (
+            <View style={[styles.wideFoot, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+              <Text style={styles.wideFootHint} numberOfLines={2}>
+                Cada cambio se guarda solo. Publicar avisa al equipo.
+              </Text>
+              <View style={styles.wideCta}>{publishButton}</View>
+            </View>
           ) : null}
         </View>
-        <Text style={styles.benchTeamPts}>
-          Σ EQUIPO <Text style={{ color: c.text }}>{teamPts}</Text>
-        </Text>
+        {canEdit ? (
+          <LineupBenchPanel
+            layout="column"
+            jornada={matchday.jornada_number}
+            groups={benchGroups}
+            yesPlaced={yesPlaced}
+            sel={sel}
+            disabled={!canEdit}
+            draggable
+            onTap={onBenchTap}
+            isAnimating={(id) => swapAnimIds.has(id)}
+          />
+        ) : null}
       </View>
-
-      {players.length === 0 ? (
-        <Text style={styles.benchEmpty}>
-          Todos los jugadores disponibles están alineados
-        </Text>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.benchScroll}
-        >
-          {players.map((p) => (
-            <BenchChip
-              key={p.id}
-              player={p}
-              selected={sel?.kind === 'bench' && sel.id === p.id}
-              dimmed={
-                sel != null && !(sel.kind === 'bench' && sel.id === p.id)
-              }
-              animating={isAnimating(p.id)}
-              disabled={disabled}
-              onTap={() => onTap(p.id)}
-            />
-          ))}
-        </ScrollView>
-      )}
-    </Pressable>
+    </>
   );
-};
 
-interface BenchChipProps {
-  player: Player;
-  selected: boolean;
-  dimmed: boolean;
-  animating: boolean;
-  disabled: boolean;
-  onTap: () => void;
-}
-
-const BenchChip: React.FC<BenchChipProps> = ({
-  player,
-  selected,
-  dimmed,
-  animating,
-  disabled,
-  onTap,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  const initials = initialsOf(player);
   return (
-    <Pressable
-      onPress={(e) => {
-        e.stopPropagation();
-        if (disabled) return;
-        onTap();
-      }}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.benchChip,
-        selected && styles.benchChipSelected,
-        dimmed && !selected && { opacity: 0.5 },
-        pressed && { transform: [{ scale: 0.96 }] },
-        disabled && { opacity: 0.6 },
-      ]}
-    >
-      <Avatar
-        initials={initials}
-        selected={selected}
-        animating={animating}
-        size={26}
-        fontSize={10}
-        photoUrl={photoOf(player)}
-      />
-      <View>
-        <Text style={styles.benchChipName} numberOfLines={1}>
-          {shortName(player)}
-        </Text>
-        <Text style={styles.benchChipMeta}>
-          {player.position} · {player.pts}
-        </Text>
-      </View>
+    <Pressable onPress={() => setSel(null)} style={styles.root} android_disableSound>
+      {isTablet ? (
+        <LineupDragLayer enabled={canEdit} onDrop={onBenchDrop}>
+          {wide ? wideBody : phoneBody}
+        </LineupDragLayer>
+      ) : (
+        phoneBody
+      )}
+
+      {sheets}
     </Pressable>
   );
 };
 
-// ============= STYLES =============
-
-const makeStyles = (c: Palette) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.background },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  backBtn: {
-    height: 36,
-    paddingHorizontal: 12,
-    borderRadius: Radius.md,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  resetBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    backgroundColor: c.bgCard,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  autoSortBtn: {
-    height: 32,
-    paddingHorizontal: 12,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    backgroundColor: c.bgCard,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  autoSortBtnOn: {
-    borderColor: c.accent50,
-    backgroundColor: c.accent10,
-  },
-  autoSortLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  titleSection: {
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    letterSpacing: 2.5,
-    color: c.accent,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  title: {
-    color: c.text,
-    fontSize: 22,
-    fontWeight: '600',
-    letterSpacing: -0.5,
-    lineHeight: 24,
-  },
-  dotsRow: { flexDirection: 'row', gap: 4 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-  balanceRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  balanceTrack: {
-    flex: 1,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: c.hair,
-    overflow: 'hidden',
-  },
-  balanceFill: { height: '100%' },
-  balanceLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    minWidth: 64,
-    textAlign: 'right',
-  },
-  hintText: {
-    marginTop: 6,
-    minHeight: 16,
-    fontSize: 11,
-    color: c.textMuted,
-  },
-  variantStripContainer: {
-    height: 52,
-    paddingVertical: 10,
-    justifyContent: 'center',
-  },
-  variantStrip: {
-    paddingHorizontal: 20,
-    gap: 6,
-    alignItems: 'center',
-  },
-  variantChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 14,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hair,
-  },
-  variantChipCurrent: {
-    borderColor: c.accent50,
-    backgroundColor: c.accent10,
-  },
-  variantChipActive: {
-    borderColor: c.accent,
-  },
-  variantChipStar: {
-    color: c.accent,
-    fontSize: 12,
-    lineHeight: 14,
-  },
-  variantChipLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
-    letterSpacing: 0.4,
-    color: c.textMuted,
-  },
-  variantChipAdd: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: c.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  variantChipAddText: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    color: c.textFaint,
-  },
-  ruleBanner: {
-    marginHorizontal: 20,
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-  },
-  ruleBannerStrict: {
-    backgroundColor: c.accent10,
-    borderColor: c.accent40,
-  },
-  ruleBannerLoose: {
-    backgroundColor: c.bgCard,
-    borderColor: c.hair,
-  },
-  ruleBannerText: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    letterSpacing: 0.6,
-    textAlign: 'center',
-  },
-  scroll: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  courtRow: {
-    backgroundColor: c.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  courtHeader: {
-    paddingHorizontal: 14,
-    paddingTop: 11,
-    paddingBottom: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  courtBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: c.bgRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  courtBadgeText: {
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    fontWeight: '600',
-    color: c.text,
-  },
-  courtBar: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: c.hair,
-    overflow: 'hidden',
-  },
-  courtBarFill: { height: '100%' },
-  titularLabel: {
-    fontSize: 9,
-    color: c.accent,
-    fontFamily: Fonts.mono,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-    marginTop: 4,
-  },
-  titularLabelMuted: {
-    color: c.textFaint,
-  },
-  errorMsg: {
-    fontSize: 10,
-    color: c.error,
-    fontFamily: Fonts.mono,
-    fontWeight: '500',
-    letterSpacing: 0.4,
-    marginTop: 4,
-  },
-  totalWrap: { minWidth: 50, alignItems: 'flex-end' },
-  totalValue: {
-    fontFamily: Fonts.mono,
-    fontSize: 22,
-    fontWeight: '500',
-    letterSpacing: -0.6,
-    lineHeight: 22,
-  },
-  totalLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 9,
-    color: c.textFaint,
-    letterSpacing: 1.2,
-    marginTop: 3,
-  },
-  slotsRow: {
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-    flexDirection: 'row',
-    gap: 6,
-  },
-  slotEmpty: {
-    flex: 1,
-    height: 52,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: c.hairStrong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  slotEmptyGhost: {
-    borderColor: 'rgba(0,223,130,0.6)',
-    backgroundColor: c.accent10,
-  },
-  slotEmptyText: { color: c.textFaint, fontSize: 12, fontWeight: '500' },
-  slotEmptyGhostText: { color: c.accent, fontSize: 12, fontWeight: '500' },
-  slotTile: {
-    flex: 1,
-    height: 52,
-    borderRadius: 11,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hair,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-  },
-  slotTileSelected: {
-    borderColor: c.accent,
-    backgroundColor: c.accent10,
-  },
-  slotTileError: {
-    borderColor: 'rgba(255,107,107,0.4)',
-    backgroundColor: 'rgba(255,107,107,0.08)',
-  },
-  slotName: {
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-    color: c.text,
-    lineHeight: 15,
-  },
-  slotMeta: {
-    fontSize: 10,
-    color: c.textFaint,
-    letterSpacing: 0.5,
-    marginTop: 2,
-    fontFamily: Fonts.mono,
-  },
-  slotPts: { color: c.textMuted },
-  removeChip: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(255,107,107,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fillEmptyBtn: {
-    marginTop: 4,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: c.accent50,
-    backgroundColor: c.accent10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  fillEmptyLabel: {
-    color: c.accent,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  generateBtn: {
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.accent50,
-    backgroundColor: c.accent15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  generateLabel: {
-    color: c.accent,
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  generateHint: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    opacity: 0.7,
-    fontSize: 10,
-    letterSpacing: 0.3,
-  },
-  filterEyebrow: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '500',
-  },
-  filterTitle: {
-    color: c.text,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    marginTop: 4,
-  },
-  filterLede: {
-    color: c.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderColor: c.hair,
-  },
-  filterLabel: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  filterHint: {
-    color: c.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  filterCta: {
-    height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: c.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-  },
-  filterCtaText: {
-    color: '#001810',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  // ── Alternativas del generador (tarjetas con preview) ──────────────
-  optionList: {
-    gap: 10,
-    marginTop: 4,
-  },
-  optionCard: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    backgroundColor: c.background,
-    padding: 14,
-    gap: 10,
-  },
-  optionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  optionLabel: {
-    color: c.text,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  optionHint: {
-    color: c.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  optionUse: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: c.accent15,
-    borderWidth: 1,
-    borderColor: c.accent40,
-  },
-  optionUseText: {
-    color: c.accent,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  optionPreview: {
-    gap: 4,
-    borderTopWidth: 1,
-    borderColor: c.hair,
-    paddingTop: 10,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  optionCourt: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 11,
-    fontWeight: '700',
-    width: 16,
-    textAlign: 'center',
-  },
-  optionPair: {
-    flex: 1,
-    color: c.text,
-    fontSize: 13,
-    letterSpacing: -0.1,
-  },
-  optionPts: {
-    fontFamily: Fonts.mono,
-    color: c.textMuted,
-    fontSize: 11,
-  },
-  optionWarn: {
-    color: c.warning,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  suggestionWrap: { paddingHorizontal: 16, paddingBottom: 8 },
-  suggestionBtn: {
-    width: '100%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: c.accent15,
-    borderWidth: 1,
-    borderColor: c.accent40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  suggestionIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: c.accent25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  suggestionEyebrow: {
-    fontSize: 11,
-    color: c.accent,
-    fontFamily: Fonts.mono,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-    marginBottom: 2,
-  },
-  suggestionText: {
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-    color: c.text,
-  },
-  suggestionApply: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: c.accent15,
-    borderRadius: 6,
-  },
-  suggestionApplyText: {
-    fontSize: 11,
-    color: c.accent,
-    fontFamily: Fonts.mono,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  benchBar: {
-    borderTopWidth: 1,
-    borderTopColor: c.hair,
-    backgroundColor: c.bgCard,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  benchHeader: {
-    paddingHorizontal: 18,
-    paddingBottom: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  benchEyebrow: {
-    fontSize: 10,
-    color: c.textFaint,
-    letterSpacing: 1.6,
-    fontFamily: Fonts.mono,
-    fontWeight: '500',
-  },
-  benchHint: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0,223,130,0.18)',
-  },
-  benchHintText: {
-    fontSize: 10,
-    color: c.accent,
-    fontFamily: Fonts.mono,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  benchTeamPts: {
-    fontSize: 10,
-    color: c.textFaint,
-    letterSpacing: 1.2,
-    fontFamily: Fonts.mono,
-    fontWeight: '500',
-  },
-  benchEmpty: {
-    paddingHorizontal: 18,
-    paddingTop: 4,
-    fontSize: 12,
-    color: c.textFaint,
-  },
-  benchScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  benchChip: {
-    height: 44,
-    paddingLeft: 6,
-    paddingRight: 10,
-    borderRadius: 12,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hair,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  benchChipSelected: {
-    borderColor: c.accent,
-    backgroundColor: c.accent10,
-  },
-  benchChipName: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-    color: c.text,
-    lineHeight: 14,
-  },
-  benchChipMeta: {
-    fontSize: 10,
-    color: c.textFaint,
-    fontFamily: Fonts.mono,
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  ctaWrap: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    backgroundColor: c.background,
-  },
-  cta: {
-    width: '100%',
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: c.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    shadowColor: c.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  ctaDisabled: {
-    backgroundColor: c.bgCard,
-    shadowOpacity: 0,
-  },
-  ctaWarn: {
-    backgroundColor: c.warning,
-    shadowColor: c.warning,
-  },
-  ctaLabel: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  ctaLabelWarn: {
-    color: '#1a0f00',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  ctaLabelDisabled: {
-    color: c.textFaint,
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: -0.2,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.background },
+    // Tablet · lectura (jugador y club): columna de 720 centrada.
+    tabletColumn: { width: '100%', maxWidth: 720, alignSelf: 'center' },
+    wideRow: { flex: 1, flexDirection: 'row' },
+    wideMain: { flex: 1, minWidth: 0 },
+    wideTabsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    wideFoot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.hairStrong,
+      backgroundColor: c.bgRaised,
+    },
+    wideFootHint: { flex: 1, color: c.textFaint, fontSize: 12 },
+    wideCta: { width: 280 },
+    center: { alignItems: 'center', justifyContent: 'center' },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    backBtn: {
+      height: 36,
+      paddingHorizontal: 12,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
+    headerLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
+    moreBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    top: { paddingHorizontal: 16, gap: 8, paddingBottom: 6 },
+    tabsWrap: { flexGrow: 0 },
+    tabs: {
+      gap: 4,
+      padding: 3,
+      borderRadius: 12,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hair,
+    },
+    tab: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 9,
+      minWidth: 44,
+      alignItems: 'center',
+    },
+    tabOn: { backgroundColor: c.bgCard2 },
+    tabText: { color: c.textMuted, fontSize: 12.5, fontWeight: '700' },
+    stat: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+    statStrong: { color: c.text, fontSize: 13, fontWeight: '700' },
+    statSep: { color: c.textFaint, fontSize: 13 },
+    statOk: { color: c.accent, fontSize: 13, fontWeight: '700' },
+    statWarn: { color: c.warning, fontSize: 13, fontWeight: '700' },
+    statMuted: { color: c.textMuted, fontSize: 13 },
+    statMono: { color: c.textMuted, fontSize: 12.5, fontFamily: Fonts.mono },
+    scroll: { paddingHorizontal: 16, gap: 12, paddingTop: 4 },
+    scrollEditor: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16 },
+    eyebrowFaint: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 2,
+      color: c.textFaint,
+      fontWeight: '500',
+      marginTop: 4,
+    },
+    footNote: { color: c.textFaint, fontSize: 12, textAlign: 'center', marginTop: 4 },
+    generateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      height: 42,
+      paddingHorizontal: 14,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    generateLabel: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
+    generateHint: {
+      marginLeft: 'auto',
+      color: c.textFaint,
+      fontSize: 11,
+      fontFamily: Fonts.mono,
+    },
+    ctaWrap: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      backgroundColor: c.bgRaised,
+    },
+    cta: {
+      height: 50,
+      borderRadius: Radius.md,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    ctaDisabled: { backgroundColor: c.bgCard2 },
+    ctaWarn: {
+      backgroundColor: 'rgba(242,201,76,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(242,201,76,0.45)',
+    },
+    ctaLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
+  });

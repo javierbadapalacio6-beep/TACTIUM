@@ -3,17 +3,34 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import {
   coverTeam,
-  deleteClub,
   fetchClub,
+  fetchClubHomeSchedule,
   fetchClubTeams,
+  fetchClubTournaments,
+  fetchSubscription,
+  fetchVenueHomeSchedule,
+  type DbClubHomeMatch,
   type DbClubTeam,
+  type DbClubTournament,
 } from "@/lib/queries";
+import {
+  fetchClubInscripciones,
+  fetchClubWeek,
+  fetchTournamentStats,
+  fetchUnconfirmedVenues,
+  tournamentPhase,
+  type FcpInscripcionesResumen,
+  type TeamWeek,
+} from "@/lib/club-ops";
+import { CLUB_PLANS } from "@/lib/plans";
+import { FCP_FEDERATION_CODE } from "@/lib/federations";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
+import { guardedWrite } from "@/lib/writes";
 import {
   Btn,
   BtnLink,
@@ -22,7 +39,6 @@ import {
   Chip,
   Field,
   IconTile,
-  Input,
   ListRow,
   Modal,
   Note,
@@ -34,15 +50,14 @@ import {
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import {
-  IconAlert,
   IconBuilding,
-  IconClock,
-  IconCreditCard,
+  IconCheckCircle,
   IconFlag,
   IconPlus,
   IconReceipt,
   IconSettings,
   IconShield,
+  IconTrophy,
   IconUserPlus,
 } from "@/components/Icon";
 import { InvitePanel } from "@/components/invite/InvitePanel";
@@ -61,59 +76,109 @@ interface ClubData {
   teams: DbClubTeam[];
 }
 
-const SHORTCUTS = [
-  {
-    href: "/club/horarios",
-    title: "Horarios de local",
-    body: "Día, hora y pista de los equipos que juegan en casa",
-    Icon: IconClock,
-  },
-  {
-    href: "/club/importar",
-    title: "Importar de la Federación",
-    body: "Trae equipos y plantillas desde la FCP",
-    Icon: IconFlag,
-  },
-  {
-    href: "/club/cobros",
-    title: "Cobrar inscripciones",
-    body: "Alta en Stripe para cobrar los torneos",
-    Icon: IconCreditCard,
-  },
-  {
-    href: "/club/facturacion",
-    title: "Facturación del club",
-    body: "Plan, equipos cubiertos y próxima renovación",
-    Icon: IconReceipt,
-  },
-];
+/** Lo que el panel necesita para «Por hacer», «Esta semana» y «Gestión». */
+interface OpsData {
+  home: (DbClubHomeMatch & { is_guest: boolean; unconfirmed: boolean })[];
+  tournaments: (DbClubTournament & { billing_status?: string | null })[];
+  unpaid: { count: number; id: string | null; name: string | null };
+  week: Record<string, TeamWeek>;
+  planName: string | null;
+  quota: number;
+  inscripciones: FcpInscripcionesResumen | null;
+}
+
+const WEEKDAY = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const localIso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dayLabel = (iso: string | null) => {
+  if (!iso) return "Sin fecha";
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : `${WEEKDAY[d.getDay()]} ${d.getDate()}`;
+};
+
+/** Ventana de la jornada en juego: 7 días desde el primer partido de hoy en adelante. */
+function currentRound<T extends { match_date: string | null }>(ms: T[]): T[] {
+  const dated = ms.filter((m) => m.match_date).sort((a, b) => a.match_date!.localeCompare(b.match_date!));
+  if (!dated.length) return ms;
+  const today = localIso(new Date());
+  const d0 = (dated.find((m) => m.match_date! >= today) ?? dated[dated.length - 1]).match_date!;
+  const end = new Date(`${d0}T00:00:00`);
+  end.setDate(end.getDate() + 6);
+  const e = localIso(end);
+  return ms.filter((m) => !m.match_date || (m.match_date >= d0 && m.match_date <= e));
+}
 
 export function ClubDashboard() {
   const { clubId } = useSession();
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const reduce = useReducedMotion();
   const [editOpen, setEditOpen] = useState(false);
-  const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  // Invitar a la plantilla de uno de los equipos del club.
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
+  const [roster, setRoster] = useState<number | null>(null);
 
   const { data, loading, error } = useAsync<ClubData>(
     async () => {
-      const [club, teams] = await Promise.all([
-        fetchClub(clubId!),
-        fetchClubTeams(clubId!),
-      ]);
+      const [club, teams] = await Promise.all([fetchClub(clubId!), fetchClubTeams(clubId!)]);
       return { club, teams };
     },
     [clubId, reloadKey],
-    !!clubId
+    !!clubId,
   );
 
-  // Espacio de organizador («solo torneos»): no hay panel de club, su casa
-  // es la pantalla de torneos, como en la app.
+  // Datos operativos, aparte: si una fuente falla, el panel se pinta igual.
+  const ops = useAsync<OpsData>(
+    async () => {
+      const teams = data?.teams ?? [];
+      const [own, guests, tours, sub, week, insc] = await Promise.all([
+        fetchClubHomeSchedule(clubId!).catch(() => [] as DbClubHomeMatch[]),
+        fetchVenueHomeSchedule(clubId!).catch(() => [] as DbClubHomeMatch[]),
+        fetchClubTournaments(clubId!).catch(() => [] as DbClubTournament[]),
+        fetchSubscription().catch(() => null),
+        fetchClubWeek(teams.map((t) => t.id)).catch(() => ({}) as Record<string, TeamWeek>),
+        data?.club?.federation === FCP_FEDERATION_CODE
+          ? fetchClubInscripciones(teams).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      const all = [
+        ...own.map((m) => ({ ...m, is_guest: false })),
+        ...guests.map((m) => ({ ...m, is_guest: true })),
+      ];
+      const pending = await fetchUnconfirmedVenues(all.map((m) => m.matchday_id)).catch(
+        () => new Set<string>(),
+      );
+      const open = tours.filter((t) => t.status === "open" || t.status === "draft");
+      const stats = await fetchTournamentStats(open);
+      let count = 0;
+      let top: DbClubTournament | null = null;
+      let topN = 0;
+      for (const t of open) {
+        const n = stats[t.id]?.pendingClub ?? 0;
+        count += n;
+        if (n > topN) {
+          topN = n;
+          top = t;
+        }
+      }
+      const plan =
+        sub?.subjectType === "club" ? (CLUB_PLANS.find((p) => p.tier === sub.planTier) ?? null) : null;
+      return {
+        home: all.map((m) => ({ ...m, unconfirmed: pending.has(m.matchday_id) })),
+        tournaments: tours,
+        unpaid: { count, id: top?.id ?? null, name: top?.name ?? null },
+        week,
+        planName: plan?.displayName ?? null,
+        quota: plan?.teamQuota ?? 0,
+        inscripciones: insc,
+      };
+    },
+    [clubId, data],
+    !!clubId && !!data,
+  );
+
+  // Espacio de organizador («solo torneos»): su casa es la pantalla de torneos.
   const router = useRouter();
   const tournamentsOnly = data?.club?.tournaments_only === true;
   useEffect(() => {
@@ -143,11 +208,7 @@ export function ClubDashboard() {
     return (
       <div className="tw-page">
         <Card>
-          <EmptyState
-            icon={<IconBuilding size={24} />}
-            title="No se pudo cargar el club"
-            body={error}
-          />
+          <EmptyState icon={<IconBuilding size={24} />} title="No se pudo cargar el club" body={error} />
         </Card>
       </div>
     );
@@ -157,21 +218,11 @@ export function ClubDashboard() {
   const teams = data?.teams ?? [];
   const covered = teams.filter((t) => t.covered).length;
   const unconfigured = teams.filter((t) => !t.category).length;
-  const nameOk = !!club && typed.trim() === club.name;
+  const o = ops.data;
+  const quota = o?.quota ?? 0;
+  const hasPlan = quota > 0;
   const pct = teams.length ? Math.round((covered / teams.length) * 100) : 0;
-
-  async function doDeleteClub() {
-    if (!club || busy || !nameOk) return;
-    setBusy(true);
-    const res = await guardedWrite("borrar el club", () => deleteClub(club.id));
-    setBusy(false);
-    if (!res.ok) {
-      setDeleteOpen(false);
-      setToast(res.reason);
-      return;
-    }
-    window.location.href = "/";
-  }
+  const isFcp = club?.federation === FCP_FEDERATION_CODE;
 
   async function doCoverTeam(teamId: string) {
     if (busy) return;
@@ -183,6 +234,112 @@ export function ClubDashboard() {
       setToast("Equipo cubierto con la suscripción del club");
     } else setToast(res.reason);
   }
+
+  // ── Por hacer ──────────────────────────────────────────────────────────
+  const todo: { key: string; count: number; title: string; sub: string; href: string }[] = [];
+  if (o) {
+    const round = currentRound(o.home);
+    const noTime = round.filter((m) => !m.match_time);
+    if (noTime.length) {
+      const j = noTime.find((m) => m.jornada_number)?.jornada_number;
+      todo.push({
+        key: "noTime",
+        count: noTime.length,
+        title: noTime.length === 1 ? "Partido de local sin hora" : "Partidos de local sin hora",
+        sub: [
+          j ? `J${j}` : null,
+          noTime
+            .slice(0, 3)
+            .map((m) => m.team_name + (m.is_guest ? " (invitado)" : ""))
+            .join(", "),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: "/club/horarios",
+      });
+    }
+    const venues = o.home.filter((m) => m.unconfirmed);
+    if (venues.length) {
+      todo.push({
+        key: "venues",
+        count: venues.length,
+        title: venues.length === 1 ? "Sede de playoff por confirmar" : "Sedes de playoff por confirmar",
+        sub: [venues[0].team_name, venues[0].match_date ? dayLabel(venues[0].match_date) : null]
+          .filter(Boolean)
+          .join(" · "),
+        href: "/club/horarios",
+      });
+    }
+    if (o.unpaid.count > 0) {
+      todo.push({
+        key: "unpaid",
+        count: o.unpaid.count,
+        title: o.unpaid.count === 1 ? "Pareja sin pagar en el club" : "Parejas sin pagar en el club",
+        sub: o.unpaid.name ?? "Tus torneos",
+        href: o.unpaid.id ? `/torneos/${o.unpaid.id}` : "/club/torneos",
+      });
+    }
+    const uncovered = hasPlan ? teams.filter((t) => !t.covered) : [];
+    if (uncovered.length) {
+      todo.push({
+        key: "cover",
+        count: uncovered.length,
+        title: uncovered.length === 1 ? "Equipo sin cubrir por el plan" : "Equipos sin cubrir por el plan",
+        sub: uncovered
+          .slice(0, 2)
+          .map((t) => [t.name, t.category].filter(Boolean).join(" · "))
+          .join(", "),
+        href: "/club/facturacion/cubrir",
+      });
+    }
+  }
+
+  // ── Esta semana ────────────────────────────────────────────────────────
+  const today = localIso(new Date());
+  const in7 = localIso(new Date(Date.now() + 6 * 86400000));
+  const nameOf = (id: string) => teams.find((t) => t.id === id)?.name ?? "";
+  const upcoming = Object.values(o?.week ?? {})
+    .map((w) => w.next)
+    .filter((n): n is NonNullable<typeof n> => !!n)
+    .sort((a, b) => (a.match_date ?? "z").localeCompare(b.match_date ?? "z"));
+  const thisWeek = upcoming.filter((m) => m.match_date && m.match_date >= today && m.match_date <= in7);
+  const weekList = thisWeek.length ? thisWeek : upcoming.slice(0, 4);
+  const results = Object.values(o?.week ?? {})
+    .map((w) => w.last)
+    .filter((n): n is NonNullable<typeof n> => !!n);
+  const tally = { v: 0, e: 0, d: 0 };
+  for (const r of results) {
+    if (r.outcome === "win") tally.v++;
+    else if (r.outcome === "loss") tally.d++;
+    else tally.e++;
+  }
+  const latest = results.slice().sort((a, b) => (b.match_date ?? "").localeCompare(a.match_date ?? ""))[0];
+
+  const tours = o?.tournaments ?? [];
+  const live = tours.filter((t) => tournamentPhase(t) === 3).length;
+  const openSignup = tours.filter((t) => tournamentPhase(t) === 0).length;
+  const toursSub =
+    tours.length === 0
+      ? "Crea el primero: gratis hasta 16 parejas"
+      : [live ? `${live} en juego` : null, openSignup ? `${openSignup} con inscripción abierta` : null]
+          .filter(Boolean)
+          .join(" · ") || `${tours.length} torneos`;
+
+  const shortcuts = [
+    { href: "/club/torneos", title: "Torneos", body: toursSub, Icon: IconTrophy },
+    {
+      href: "/club/facturacion",
+      title: "Cobros y facturación",
+      body: o?.planName ? `${o.planName} · cobro de inscripciones` : "Plan del club y cobro de inscripciones",
+      Icon: IconReceipt,
+    },
+    ...(isFcp
+      ? [{ href: "/club/importar", title: "Importar de la Federación", body: "Equipos, plantillas y puntos", Icon: IconFlag }]
+      : []),
+  ];
+
+  const insc = o?.inscripciones ?? null;
+  const rosterRow = roster != null && insc ? insc.rows[roster] : null;
 
   return (
     <div className="tw-page">
@@ -213,12 +370,54 @@ export function ClubDashboard() {
 
       <TrialCard subjectType="club" subjectId={clubId} />
 
+      {/* ── Por hacer: solo lo que pide una acción ─────────────────── */}
+      {teams.length > 0 && o && (
+        <AnimatePresence initial={false} mode="wait">
+          {todo.length > 0 ? (
+            <motion.div key="todo" exit={reduce ? undefined : { opacity: 0, height: 0 }}>
+              <Card flush style={{ marginBottom: 16, borderColor: "var(--warning)" }}>
+                <CardHead title="Por hacer" count={todo.reduce((n, t) => n + t.count, 0)} />
+                <AnimatePresence initial={false}>
+                  {todo.map((t) => (
+                    <motion.div
+                      key={t.key}
+                      layout={!reduce}
+                      exit={reduce ? undefined : { opacity: 0, height: 0, transition: { duration: 0.3 } }}
+                    >
+                      <ListRow
+                        href={t.href}
+                        icon={
+                          <span
+                            className="mono"
+                            style={{ minWidth: 28, textAlign: "center", fontSize: 20, fontWeight: 700, color: "var(--warning)" }}
+                          >
+                            {t.count}
+                          </span>
+                        }
+                        title={t.title}
+                        sub={t.sub}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </Card>
+            </motion.div>
+          ) : (
+            <motion.div key="ok" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}>
+              <Note tone="accent" icon={<IconCheckCircle size={15} />} style={{ marginBottom: 16 }}>
+                Todo al día: horarios puestos, equipos cubiertos y torneos sin pagos pendientes.
+              </Note>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
       <StatRow style={{ marginBottom: 16 }}>
         <Stat label="Equipos" value={teams.length} icon={<IconShield size={14} />} />
         <Stat
-          label="Cubiertos por el plan"
+          label={o?.planName ? `Cubiertos por ${o.planName}` : "Cubiertos por el plan"}
           value={covered}
-          unit={`/ ${teams.length}`}
+          unit={`/ ${hasPlan ? quota : teams.length}`}
           tone={teams.length > 0 && covered === teams.length ? "accent" : undefined}
           sub={
             teams.length === 0
@@ -228,7 +427,7 @@ export function ClubDashboard() {
                 : `${teams.length - covered} sin cubrir`
           }
         >
-          <Progress value={pct} style={{ marginTop: 10 }} />
+          <Progress value={hasPlan ? Math.round((covered / quota) * 100) : pct} style={{ marginTop: 10 }} />
         </Stat>
         <Stat
           label="Sin configurar"
@@ -238,10 +437,7 @@ export function ClubDashboard() {
         />
       </StatRow>
 
-      <div
-        className="tw-club-grid"
-        style={{ "--cols": "minmax(0, 1.6fr) minmax(0, 1fr)" } as CSSProperties}
-      >
+      <div className="tw-club-grid" style={{ "--cols": "minmax(0, 1.6fr) minmax(0, 1fr)" } as CSSProperties}>
         {/* ── Equipos ─────────────────────────────────────────────── */}
         <Card flush>
           <CardHead title="Equipos" count={teams.length}>
@@ -263,21 +459,8 @@ export function ClubDashboard() {
             </Link>
           </CardHead>
           {teams.length === 0 ? (
-            <EmptyState
-              compact
-              icon={<IconShield size={22} />}
-              title="Aún no hay equipos"
-              body="Da de alta el primero y asígnale un capitán."
-              action={
-                <BtnLink href="/club/equipos/nuevo" variant="accent" size="sm" icon={<IconPlus size={14} />}>
-                  Crear equipo
-                </BtnLink>
-              }
-            />
+            <SetupList isFcp={isFcp} clubName={club?.name ?? ""} />
           ) : (
-            /* Lista, no tabla: esta tarjeta vive en la columna estrecha del
-               panel y una tabla de cuatro columnas se corta. El detalle
-               tabular completo está en «Equipos». */
             teams.map((t) => (
               <ListRow
                 key={t.id}
@@ -289,20 +472,24 @@ export function ClubDashboard() {
                 }
                 title={t.name}
                 sub={
-                  [t.category, t.gender].filter(Boolean).join(" · ") ||
-                  "Sin categoría"
+                  hasPlan && !t.covered
+                    ? "Sin cubrir"
+                    : [t.category, t.gender].filter(Boolean).join(" · ") || "Sin categoría"
                 }
                 right={
                   t.covered ? (
                     <Chip>Cubierto</Chip>
+                  ) : covered >= quota && hasPlan ? (
+                    <Link href="/club/facturacion/cubrir" className="chip chip-warning" onClick={(e) => e.stopPropagation()}>
+                      Cubrir
+                    </Link>
                   ) : (
                     <button
                       type="button"
                       className="chip chip-warning"
                       disabled={busy}
                       onClick={(e) => {
-                        // La fila entera es un enlace: sin esto, cubrir al
-                        // equipo te sacaría de la pantalla.
+                        // La fila entera es un enlace: sin esto, cubrir te sacaría de la pantalla.
                         e.preventDefault();
                         e.stopPropagation();
                         void doCoverTeam(t.id);
@@ -318,26 +505,120 @@ export function ClubDashboard() {
           )}
         </Card>
 
-        {/* ── Gestión ─────────────────────────────────────────────── */}
-        <Card flush>
-          <CardHead title="Gestión del club" />
-          {SHORTCUTS.map((s) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          {/* ── Pretemporada / Esta semana ─────────────────────────── */}
+          {insc ? (
+            <Card flush>
+              <CardHead
+                title={`Inscripciones ${insc.temporada}`}
+                sub={`${insc.confirmados} de ${insc.total} equipos confirmados por la Federación`}
+              />
+              <div style={{ padding: "0 18px 8px" }}>
+                <Progress value={insc.total ? Math.round((insc.confirmados / insc.total) * 100) : 0} />
+              </div>
+              {insc.rows.map((r, i) => (
+                <ListRow
+                  key={`${r.equipo}-${r.genero}`}
+                  onClick={() => setRoster(i)}
+                  title={r.equipo}
+                  sub={[
+                    r.genero === "F" ? "Femenino" : "Masculino",
+                    r.categoriaActual && r.categoria && r.categoriaActual !== r.categoria
+                      ? `${r.categoriaActual} → ${r.categoria}`
+                      : r.categoria,
+                    r.enTactium ? null : "nuevo",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  right={r.confirmado ? <Chip>Confirmado</Chip> : <Chip tone="warning">Pendiente</Chip>}
+                />
+              ))}
+            </Card>
+          ) : (
+            teams.length > 0 && (
+              <Card flush>
+                <CardHead title={thisWeek.length ? "Esta semana" : "Próximas jornadas"}>
+                  <Link href="/temporadas" className="link-action">
+                    Ver liga
+                  </Link>
+                </CardHead>
+                {ops.loading ? (
+                  <div style={{ padding: 18, fontSize: 13, color: "var(--text-faint)" }}>Cargando…</div>
+                ) : weekList.length === 0 ? (
+                  <EmptyState compact title="Sin jornadas próximas" body="Cuando haya calendario, saldrán aquí." />
+                ) : (
+                  weekList.map((m) => {
+                    const time = m.match_time?.slice(0, 5);
+                    const noTime = m.is_home && !time;
+                    return (
+                      <ListRow
+                        key={m.id}
+                        href="/temporadas"
+                        icon={
+                          <span className="mono" style={{ minWidth: 44, fontSize: 12.5, color: "var(--text-muted)" }}>
+                            {dayLabel(m.match_date)}
+                          </span>
+                        }
+                        title={`${nameOf(m.team_id)} ${m.is_home ? "vs" : "@"} ${m.opponent ?? "—"}`}
+                        sub={[time ?? "Sin hora", m.location].filter(Boolean).join(" · ")}
+                        right={
+                          noTime ? (
+                            <Chip tone="warning">Sin hora</Chip>
+                          ) : m.is_home ? (
+                            <Chip>Casa</Chip>
+                          ) : (
+                            <Chip tone="mute">Fuera</Chip>
+                          )
+                        }
+                        chevron={false}
+                      />
+                    );
+                  })
+                )}
+                {latest && (
+                  <div className="card-foot" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                    Última jornada · <span className="mono">{tally.v}V · {tally.e}E · {tally.d}D</span> ·{" "}
+                    {nameOf(latest.team_id)}{" "}
+                    <span className="mono">
+                      {latest.score_for ?? "—"}-{latest.score_against ?? "—"}
+                    </span>{" "}
+                    {latest.opponent}
+                  </div>
+                )}
+              </Card>
+            )
+          )}
+
+          {/* ── Gestión ─────────────────────────────────────────────── */}
+          <Card flush>
+            <CardHead title="Gestión del club" />
+            {shortcuts.map((s) => (
+              <ListRow
+                key={s.href}
+                href={s.href}
+                icon={
+                  <IconTile>
+                    <s.Icon size={16} />
+                  </IconTile>
+                }
+                title={s.title}
+                sub={s.body}
+              />
+            ))}
             <ListRow
-              key={s.href}
-              href={s.href}
+              onClick={() => setEditOpen(true)}
               icon={
                 <IconTile>
-                  <s.Icon size={16} />
+                  <IconSettings size={16} />
                 </IconTile>
               }
-              title={s.title}
-              sub={s.body}
+              title="Ajustes del club"
+              sub="Nombre, escudo y borrar club"
             />
-          ))}
-        </Card>
+          </Card>
+        </div>
       </div>
 
-      {/* ── Invitar a la plantilla de un equipo ─────────────────── */}
       {inviteOpen && (
         <Modal
           open
@@ -350,11 +631,7 @@ export function ClubDashboard() {
         >
           {teams.length > 1 && (
             <Field label="Equipo" htmlFor="club-invitar-equipo" style={{ marginBottom: 16 }}>
-              <Select
-                id="club-invitar-equipo"
-                value={inviteTeamId ?? ""}
-                onChange={(e) => setInviteTeamId(e.target.value)}
-              >
+              <Select id="club-invitar-equipo" value={inviteTeamId ?? ""} onChange={(e) => setInviteTeamId(e.target.value)}>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -374,56 +651,37 @@ export function ClubDashboard() {
         </Modal>
       )}
 
-      {/* ── Zona de peligro ───────────────────────────────────────── */}
-      <Card danger style={{ marginTop: 24, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        <IconTile mute style={{ color: "var(--error)", background: "var(--error-soft)" }}>
-          <IconAlert size={16} />
-        </IconTile>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>Borrar club</div>
-          <div style={{ marginTop: 3, fontSize: 13, color: "var(--text-muted)" }}>
-            Se eliminan el club, sus equipos, sus jornadas y sus actas. No se puede deshacer.
-          </div>
-        </div>
-        <Btn variant="danger-ghost" onClick={() => setDeleteOpen(true)}>
-          Borrar club
-        </Btn>
-      </Card>
-
-      <Modal
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        labelledBy="borrar-club"
-        title={`¿Borrar ${club?.name}?`}
-        lede="Escribe el nombre del club para confirmar."
-        footer={
-          <>
-            <Btn onClick={() => setDeleteOpen(false)}>Cancelar</Btn>
-            <Btn
-              variant="danger"
-              disabled={!nameOk || !WRITES_ENABLED || busy}
-              onClick={() => void doDeleteClub()}
-            >
-              {busy ? "Borrando…" : "Borrar club"}
-            </Btn>
-          </>
-        }
-      >
-        <Input
-          type="text"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder={club?.name}
-          aria-label="Nombre del club"
-          large
-          style={{ borderColor: nameOk ? "var(--error)" : undefined }}
-        />
-        {!WRITES_ENABLED && (
-          <Note tone="warning" style={{ marginTop: 14 }}>
-            {READ_ONLY_MESSAGE}
-          </Note>
-        )}
-      </Modal>
+      {rosterRow && (
+        <Modal
+          open
+          onClose={() => setRoster(null)}
+          labelledBy="plantilla-inscrita"
+          width={460}
+          title={rosterRow.equipo}
+          lede={rosterRow.sede ? `Plantilla inscrita · juega en ${rosterRow.sede}` : "Plantilla inscrita"}
+          footer={<Btn onClick={() => setRoster(null)}>Cerrar</Btn>}
+        >
+          {rosterRow.jugadores.length === 0 ? (
+            <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
+              La Federación todavía no publica jugadores en este equipo.
+            </p>
+          ) : (
+            rosterRow.jugadores.map((j, i) => (
+              <div key={j.idJugador} style={{ display: "flex", gap: 10, padding: "6px 0", fontSize: 13.5 }}>
+                <span className="mono" style={{ width: 22, color: "var(--text-faint)" }}>
+                  {i + 1}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }} className="truncate">
+                  {j.nombre}
+                </span>
+                <span className="mono" style={{ color: "var(--text-muted)" }}>
+                  {j.puntos.toLocaleString("es-ES")}
+                </span>
+              </div>
+            ))
+          )}
+        </Modal>
+      )}
 
       {club && (
         <EditClubModal
@@ -437,6 +695,57 @@ export function ClubDashboard() {
       )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+/** Club sin equipos: lista de arranque en vez de «Aún no hay equipos». */
+function SetupList({ isFcp, clubName }: { isFcp: boolean; clubName: string }) {
+  const steps = [
+    { title: "Crear el club", sub: isFcp ? `${clubName} · Federación Cántabra` : clubName, done: true, href: undefined },
+    isFcp
+      ? { title: "Importar tus equipos de la Federación", sub: "Plantillas y puntos oficiales, en un paso", done: false, href: "/club/importar" }
+      : { title: "Crear el primer equipo", sub: "Nombre, categoría y género", done: false, href: "/club/equipos/nuevo" },
+    { title: "Invitar a los capitanes", sub: "Un código por equipo, por WhatsApp", done: false, href: "/club/equipos" },
+    { title: "Poner las franjas de tus pistas", sub: "Sábado 10:00 y 12:00, por ejemplo", done: false, href: "/club/horarios" },
+  ];
+  const next = steps.find((s) => !s.done);
+  return (
+    <div>
+      <div style={{ padding: "4px 18px 12px", fontSize: 13.5, color: "var(--text-muted)" }}>
+        Pon en marcha el club: 4 pasos, en cualquier orden.
+        <Progress value={25} style={{ marginTop: 10 }} />
+      </div>
+      {steps.map((s) => (
+        <ListRow
+          key={s.title}
+          href={s.href}
+          icon={
+            <IconTile small mute={!s.done}>
+              {s.done ? <IconCheckCircle size={14} /> : <span className="mono">·</span>}
+            </IconTile>
+          }
+          title={s.title}
+          sub={s.sub}
+        />
+      ))}
+      <ListRow
+        href="/club/torneos"
+        icon={
+          <IconTile small mute>
+            <IconTrophy size={14} />
+          </IconTile>
+        }
+        title="¿También organizas torneos?"
+        sub="Gratis hasta 16 parejas. Para cobrar la inscripción online, conecta Stripe."
+      />
+      {next?.href && (
+        <div className="card-foot">
+          <BtnLink href={next.href} variant="accent">
+            {next.title}
+          </BtnLink>
+        </div>
+      )}
     </div>
   );
 }

@@ -36,6 +36,9 @@ import {
   IconBall,
   IconTrophy,
 } from '@components/ui';
+import { useLayout, type LayoutMode } from '@components/ui/ResponsiveFrame';
+import { ContentColumn } from '@components/layout';
+import { fmtPts } from '@features/home/components/lineup/lineupLogic';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore } from '@store/teamStore';
@@ -258,6 +261,31 @@ export const HomeScreen = ({
     });
   }, 'calendar_scan');
 
+  // Tablet horizontal: dos columnas (la jornada a la izquierda; borrador de
+  // la alineación y «Tu gente» a la derecha). Vertical: columna de 720.
+  const { mode, isTablet } = useLayout();
+  const wide = mode === 'tabletLandscape';
+
+  const lineupCta =
+    nextMatchday && canEdit ? (
+      <Pressable
+        onPress={() =>
+          navigation.navigate('Lineup', { matchdayId: nextMatchday.id })
+        }
+        style={({ pressed }) => [
+          styles.primaryCta,
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <IconCourt size={20} color="#001810" />
+        <Text style={styles.primaryCtaLabel}>
+          {isTablet && lineupFilled > 0
+            ? `Seguir con la alineación · ${Math.min(lineupFilled, matchesPerRound)}/${matchesPerRound}`
+            : 'Crear alineación'}
+        </Text>
+      </Pressable>
+    ) : null;
+
   return (
     <View style={styles.root}>
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
@@ -290,9 +318,29 @@ export const HomeScreen = ({
           // Reserva el alto del tab bar flotante (~64) + offset (12) + colchón (32)
           // para que el último item no quede pegado al pill cristal.
           { paddingBottom: insets.bottom + 64 + 12 + 32 },
+          isTablet && { paddingBottom: insets.bottom + 40 },
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <HomeColumns
+          mode={mode}
+          aside={
+            wide ? (
+              <>
+                {canEdit && nextMatchday ? (
+                  <LineupDraftCard
+                    pairs={lineupPairs}
+                    courts={matchesPerRound}
+                    onOpen={() =>
+                      navigation.navigate('Lineup', { matchdayId: nextMatchday.id })
+                    }
+                  />
+                ) : null}
+                <FeedPreview />
+              </>
+            ) : null
+          }
+        >
         {/* Prueba gratis de 14 días (solo quien gestiona/paga). */}
         {canEdit ? <TrialHomeCard /> : null}
 
@@ -512,20 +560,7 @@ export const HomeScreen = ({
           </View>
         ) : null}
 
-        {nextMatchday && canEdit ? (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('Lineup', { matchdayId: nextMatchday.id })
-            }
-            style={({ pressed }) => [
-              styles.primaryCta,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <IconCourt size={20} color="#001810" />
-            <Text style={styles.primaryCtaLabel}>Crear alineación</Text>
-          </Pressable>
-        ) : null}
+        {!wide ? lineupCta : null}
 
         {/* Atajos: una fila de iconos (antes, 4-5 filas grandes). La
             disponibilidad ya no va aquí: la cubre la tarjeta de la jornada. */}
@@ -559,11 +594,82 @@ export const HomeScreen = ({
           ) : null}
         </View>
 
+        {wide ? lineupCta : null}
 
-        {/* TU GENTE: el feed de quien sigues, con kudos. */}
-        <FeedPreview />
+        {/* TU GENTE: el feed de quien sigues, con kudos. En tablet
+            horizontal va en la columna derecha. */}
+        {!wide ? <FeedPreview /> : null}
+        </HomeColumns>
       </ScrollView>
     </View>
+  );
+};
+
+/**
+ * Reparto del Inicio por modo. Móvil: tal cual (fragmento). Tablet
+ * vertical: columna centrada de 720. Tablet horizontal: la jornada a la
+ * izquierda y `aside` (borrador + «Tu gente») en una columna de 300.
+ */
+const HomeColumns: React.FC<{
+  mode: LayoutMode;
+  aside: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ mode, aside, children }) => {
+  if (mode === 'phone') return <>{children}</>;
+  if (mode === 'tabletPortrait') return <ContentColumn>{children}</ContentColumn>;
+  return (
+    <View style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-start' }}>
+      <View style={{ flex: 1, minWidth: 0 }}>{children}</View>
+      <View style={{ width: 300, gap: 14 }}>{aside}</View>
+    </View>
+  );
+};
+
+/** Tablet: resumen de la alineación (variante oficial) de la próxima jornada. */
+const LineupDraftCard: React.FC<{
+  pairs: LineupsApi.LineupPair[];
+  courts: number;
+  onOpen: () => void;
+}> = ({ pairs, courts, onOpen }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const short = (n: string | null) => {
+    if (!n) return null;
+    const parts = n.trim().split(/\s+/);
+    return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+  };
+  return (
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel="Abrir la alineación"
+      style={({ pressed }) => [styles.draftCard, pressed && { opacity: 0.9 }]}
+    >
+      <View style={styles.draftHead}>
+        <Text style={styles.draftEyebrow}>ALINEACIÓN</Text>
+        <Text style={styles.draftLink}>Editar ›</Text>
+      </View>
+      {Array.from({ length: courts }).map((_, i) => {
+        const pr = pairs.find((p) => p.court_number === i + 1);
+        const a = short(pr?.player_a_name ?? null);
+        const b = short(pr?.player_b_name ?? null);
+        const full = !!(a && b);
+        return (
+          <View key={i} style={styles.draftRow}>
+            <Text style={[styles.draftCourt, !full && { color: c.textFaint }]}>P{i + 1}</Text>
+            <Text
+              style={[styles.draftNames, !full && { color: c.textFaint }]}
+              numberOfLines={1}
+            >
+              {a || b ? `${a ?? 'falta uno'} / ${b ?? 'falta uno'}` : 'Sin colocar'}
+            </Text>
+            <Text style={styles.draftPts}>
+              {pr?.pair_points ? fmtPts(pr.pair_points) : '—'}
+            </Text>
+          </View>
+        );
+      })}
+    </Pressable>
   );
 };
 
@@ -590,6 +696,45 @@ const ShortcutTile: React.FC<{
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  draftCard: {
+    backgroundColor: c.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.hair,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 2,
+  },
+  draftHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  draftEyebrow: {
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    letterSpacing: 1.6,
+    color: c.textFaint,
+  },
+  draftLink: { color: c.accent, fontSize: 12, fontWeight: '700' },
+  draftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: c.hair,
+  },
+  draftCourt: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    color: c.accent,
+    width: 24,
+  },
+  draftNames: { flex: 1, minWidth: 0, color: c.text, fontSize: 13, fontWeight: '600' },
+  draftPts: { fontFamily: Fonts.mono, fontSize: 12, color: c.textMuted },
   shortcuts: {
     flexDirection: 'row',
     gap: 8,

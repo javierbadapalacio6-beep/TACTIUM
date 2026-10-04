@@ -166,6 +166,12 @@ const Segment: React.FC<
         return (
           <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
             <NoTeamState text="La liga es cosa de equipos: temporadas, jornadas y alineaciones. Únete al tuyo con la invitación de tu capitán o crea uno." />
+            {/* Mientras, la Federación (el suelto también la tiene). */}
+            <ManageTournamentsCard
+              title="Mientras, mira la Federación"
+              text="Clasificaciones, equipos y jugadores"
+              onPress={() => nav.navigate('Federacion')}
+            />
           </ScrollView>
         );
       }

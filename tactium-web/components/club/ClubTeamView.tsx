@@ -13,6 +13,7 @@ import {
   type DbSeason,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { useAsync } from "@/lib/use-async";
 import {
   Avatar,
@@ -38,6 +39,8 @@ function initialsOf(n: string) {
     .toUpperCase();
 }
 import { EmptyState, SkeletonPage } from "@/components/states";
+import { TeamMembersCard } from "@/components/club/TeamMembersCard";
+import { Crest } from "@/components/Crest";
 import {
   IconCalendar,
   IconChevronDown,
@@ -58,6 +61,7 @@ interface TeamData {
   matchdays: DbMatchday[];
   players: DbPlayer[];
   fcpGroup: { fed: string; idGrupo: string } | null;
+  logoUrl: string | null;
 }
 
 function formatDate(iso: string | null): string {
@@ -85,7 +89,13 @@ export function ClubTeamView({ id }: { id: string }) {
         fetchPlayers(id),
         fetchTeamFcpGroup(id).catch(() => null),
       ]);
-      return { team, season, matchdays, players, fcpGroup };
+      const { data: logoRow } = await supabaseBrowser()
+        .from("teams")
+        .select("logo_url")
+        .eq("id", id)
+        .maybeSingle();
+      const logoUrl = (logoRow as { logo_url: string | null } | null)?.logo_url ?? null;
+      return { team, season, matchdays, players, fcpGroup, logoUrl };
     },
     [id, clubId],
     !!clubId
@@ -119,6 +129,7 @@ export function ClubTeamView({ id }: { id: string }) {
   const season = data?.season ?? null;
   const players = data?.players ?? [];
   const fcpGroup = data?.fcpGroup ?? null;
+  const logoUrl = data?.logoUrl ?? null;
   const grupoHref = fcpGroup
     ? `/federacion/${fcpGroup.fed}/grupo/${encodeURIComponent(fcpGroup.idGrupo)}`
     : "/federacion";
@@ -133,14 +144,22 @@ export function ClubTeamView({ id }: { id: string }) {
     <div className="tw-page">
       <PageHeader
         back={{ href: "/club/equipos", label: "Equipos" }}
-        title={team?.name ?? "Equipo"}
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <Crest src={logoUrl} size={40} />
+            {team?.name ?? "Equipo"}
+            <Chip tone="mute" plain>
+              Solo lectura
+            </Chip>
+          </span>
+        }
         meta={[
           [team?.category, team?.gender].filter(Boolean).join(" · ") || "Sin categoría",
           season?.name ?? null,
         ]}
         actions={
           <BtnLink href={grupoHref} icon={<IconFlag size={15} />}>
-            {fcpGroup ? "Mi grupo" : "Federación"}
+            Federación
           </BtnLink>
         }
       />
@@ -209,6 +228,8 @@ export function ClubTeamView({ id }: { id: string }) {
           />
         )}
       </Card>
+
+      {team && <TeamMembersCard teamId={team.id} teamName={team.name} />}
 
       <Card flush>
         <CardHead title="Plantilla" count={players.length}>

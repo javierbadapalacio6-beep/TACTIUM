@@ -356,6 +356,10 @@ export const PublicHomeScreen = ({
                   key={`${f.kind}:${f.refId}`}
                   onPress={() => {
                     if (f.kind === 'federation') navigation.navigate('Federacion');
+                    else if (f.kind === 'tournament')
+                      (navigation as any).navigate('TournamentFollow', {
+                        tournamentId: f.refId,
+                      });
                     else if (f.kind === 'team')
                       navigation.navigate('FcpTeam', {
                         idEquipo: Number(f.refId),

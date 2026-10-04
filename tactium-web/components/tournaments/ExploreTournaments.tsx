@@ -1,283 +1,188 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { exploreTournaments, type DbTournament } from "@/lib/queries";
+import { exploreTournaments } from "@/lib/queries";
+import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import {
-  Btn,
-  Card,
-  CardHead,
-  Chip,
-  Field,
-  IconTile,
-  Input,
-  InputWrap,
-  ListRow,
-  PageHeader,
-  Segmented,
-} from "@/components/ui";
+import { Card, CardHead, IconTile, InputWrap, ListRow, PageHeader } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconSearch, IconTicket, IconTrophy } from "@/components/Icon";
+import { LiveDot } from "@/components/tournaments/SpectatorParts";
+import {
+  CodeBox,
+  TournamentRow,
+  groupTournaments,
+  bucketOf,
+  type RowTournament,
+} from "@/components/tournaments/TournamentRow";
 
 /**
- * Explorar torneos — datos REALES.
+ * Explorar torneos — datos REALES (RPC `explore_tournaments`, concedida a
+ * `anon`: funciona sin sesión, igual que en la app).
  *
- * Se leen con la RPC `explore_tournaments`, que es `SECURITY DEFINER` y está
- * concedida a `anon`: por eso esta pantalla funciona sin sesión, igual que en
- * la app. La tabla `tournaments` en sí no tiene política de SELECT, así que
- * leerla directamente no devolvería nada aunque hubiera sesión.
+ * Primero lo que está pasando: «En juego ahora» · «Inscripción abierta» ·
+ * «Próximamente» · «Terminados» (plegados), con la tarjeta compacta. Filtros
+ * por estado y género en chips, y un solo «Tengo un código».
  */
 
-type ChipTone = "accent" | "mute" | "warning" | "error" | "info" | "solid";
-
-/** Estados que guarda la base de datos, con su etiqueta y su tono. */
-const STATUS: Record<string, { label: string; tone: ChipTone }> = {
-  open: { label: "Inscripción abierta", tone: "accent" },
-  in_progress: { label: "En juego", tone: "warning" },
-  finished: { label: "Finalizado", tone: "mute" },
-  draft: { label: "Borrador", tone: "mute" },
-  cancelled: { label: "Cancelado", tone: "error" },
-};
-
-function statusOf(s: string): { label: string; tone: ChipTone } {
-  return STATUS[s] ?? { label: s, tone: "mute" };
-}
-
-const FORMAT_LABEL: Record<string, string> = {
-  americano: "Americano",
-  ko: "Cuadro",
-  groups_ko: "Grupos + Cuadro",
-  ko_consolation: "Cuadro con consolación",
-};
-
-function formatFee(t: DbTournament): string | null {
-  if (t.entry_fee == null) return null;
-  const n = Number(t.entry_fee);
-  if (!Number.isFinite(n) || n === 0) return null;
-  return `${n.toFixed(2).replace(".", ",")} €`;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "Fecha por confirmar";
-  const d = new Date(iso + "T00:00:00");
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("es-ES", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
+type StatusFilter = "all" | "open" | "live";
 
 export function ExploreTournaments() {
+  const { user } = useSession();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<string>("todos");
-  const [code, setCode] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [genders, setGenders] = useState<Set<string>>(new Set());
+  const [showDone, setShowDone] = useState(false);
 
-  const { data, loading, error } = useAsync(
-    () => exploreTournaments(),
-    [],
-    true
-  );
-  const all = data ?? [];
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query), 300);
+    return () => clearTimeout(id);
+  }, [query]);
 
-  const q = query.trim().toLowerCase();
+  const { data, loading, error } = useAsync(() => exploreTournaments(debounced), [debounced], true);
+  const all = (data ?? []) as unknown as RowTournament[];
+
   const rows = all.filter((t) => {
-    if (filter !== "todos" && t.status !== filter) return false;
-    if (!q) return true;
-    return `${t.name} ${t.club_name ?? ""} ${t.location ?? ""}`
-      .toLowerCase()
-      .includes(q);
+    if (status === "open" && t.status !== "open") return false;
+    if (status === "live" && bucketOf(t.status, t.starts_on) !== "live") return false;
+    if (genders.size && !(t.genders ?? []).some((g) => genders.has(g))) return false;
+    return true;
   });
+  const g = groupTournaments(rows);
+  const filtering = !!debounced.trim() || status !== "all" || genders.size > 0;
 
-  // Los filtros salen de lo que realmente hay, no de una lista fija.
-  const statuses = Array.from(new Set(all.map((t) => t.status)));
+  const toggleGender = (x: string) =>
+    setGenders((prev) => {
+      const n = new Set(prev);
+      if (n.has(x)) n.delete(x);
+      else n.add(x);
+      return n;
+    });
+
+  const group = (title: string, list: RowTournament[], live?: boolean) =>
+    list.length > 0 && (
+      <Card flush>
+        <CardHead
+          title={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              {live && <LiveDot />}
+              {title}
+            </span>
+          }
+          count={list.length}
+        />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))" }}>
+          {list.map((t) => (
+            <TournamentRow key={t.id} t={t} />
+          ))}
+        </div>
+      </Card>
+    );
 
   return (
     <div className="tw-page">
       <PageHeader
         title="Torneos"
-        lede="Busca por zona, club o fecha, o entra directo con el código que te ha pasado el club."
-        meta={[
-          loading
-            ? "Cargando…"
-            : `${all.length} ${all.length === 1 ? "torneo" : "torneos"}`,
-        ]}
+        lede="Busca por nombre, club o lugar, o entra directo con el código que te han pasado."
+        meta={[loading ? "Cargando…" : `${all.length} ${all.length === 1 ? "torneo" : "torneos"}`]}
       />
 
+      {/* Explorar / Mis torneos (antes nada llevaba a /torneos/mios). */}
+      <div className="tw-toolbar" role="tablist" aria-label="Torneos" style={{ marginBottom: 12 }}>
+        <span className="tw-fcp-chip is-on" role="tab" aria-selected="true" style={{ display: "inline-flex", alignItems: "center" }}>
+          Explorar
+        </span>
+        <Link href="/torneos/mios" className="tw-fcp-chip" role="tab" aria-selected="false" style={{ display: "inline-flex", alignItems: "center" }}>
+          Mis torneos
+        </Link>
+      </div>
+
       <div className="tw-tourney-grid">
-        <div>
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <div className="tw-toolbar">
             <InputWrap icon={<IconSearch size={15} />}>
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Busca por nombre, club o lugar"
+                placeholder="Nombre, club o lugar"
                 aria-label="Buscar torneo"
               />
             </InputWrap>
-            {statuses.length > 1 && (
-              <Segmented
-                label="Estado"
-                value={filter}
-                onChange={setFilter}
-                options={["todos", ...statuses].map((f) => ({
-                  value: f,
-                  label: f === "todos" ? "Todos" : statusOf(f).label,
-                }))}
-              />
-            )}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {(
+              [
+                ["Todos", status === "all" && genders.size === 0, () => { setStatus("all"); setGenders(new Set()); }],
+                ["Abiertos", status === "open", () => setStatus(status === "open" ? "all" : "open")],
+                ["En juego", status === "live", () => setStatus(status === "live" ? "all" : "live")],
+                ["Masc.", genders.has("masculino"), () => toggleGender("masculino")],
+                ["Fem.", genders.has("femenino"), () => toggleGender("femenino")],
+                ["Mixto", genders.has("mixto"), () => toggleGender("mixto")],
+              ] as [string, boolean, () => void][]
+            ).map(([label, on, fn]) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={on}
+                onClick={fn}
+                className={"tw-fcp-chip" + (on ? " is-on" : "")}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           {loading ? (
-            <div className="tw-tourney-cards">
+            <>
               <SkeletonCard />
               <SkeletonCard />
-            </div>
+            </>
           ) : error ? (
             <Card>
-              <EmptyState
-                icon={<IconTrophy size={22} />}
-                title="No se pudieron cargar los torneos"
-                body={error}
-              />
+              <EmptyState icon={<IconTrophy size={22} />} title="No se pudieron cargar los torneos" body={error} />
             </Card>
           ) : rows.length === 0 ? (
             <Card>
               <EmptyState
                 icon={<IconTrophy size={22} />}
-                title="No hay torneos que encajen"
-                body="Prueba con otra búsqueda o cambia el filtro."
+                title={filtering ? "Nada con este filtro" : "Aún no hay torneos"}
+                body={
+                  filtering
+                    ? "Prueba con otra búsqueda o quita algún filtro."
+                    : "Cuando un club abra inscripciones, aparecerá aquí."
+                }
               />
             </Card>
           ) : (
-            <div className="tw-tourney-cards">
-              {rows.map((t) => {
-                const st = statusOf(t.status);
-                const fee = formatFee(t);
-                const meta1 = [t.club_name ?? "Sin club", t.location]
-                  .filter(Boolean)
-                  .join(" · ");
-                const meta2 = [
-                  formatDate(t.starts_on),
-                  t.format ? FORMAT_LABEL[t.format] ?? t.format : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ");
-                return (
-                  <Link key={t.id} href={`/torneos/${t.id}`} style={{ color: "inherit" }}>
-                    <Card
-                      flush
-                      hover
-                      style={{ height: "100%", display: "flex", flexDirection: "column" }}
-                    >
-                      <div
-                        className={"tw-tourney-cover" + (t.cover_url ? "" : " is-empty")}
-                        style={
-                          t.cover_url
-                            ? {
-                                backgroundImage: `url(${t.cover_url})`,
-                                backgroundSize: "cover",
-                                backgroundPosition: "center",
-                              }
-                            : undefined
-                        }
-                      >
-                        {!t.cover_url && <IconTrophy size={22} />}
-                        <Chip
-                          tone={st.tone}
-                          style={{ position: "absolute", top: 12, right: 12 }}
-                        >
-                          {st.label}
-                        </Chip>
-                      </div>
-
-                      <div className="card-body" style={{ flex: 1 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>
-                          {t.name}
-                        </div>
-                        <div style={{ marginTop: 4, fontSize: 12.5, color: "var(--text-muted)" }}>
-                          {meta1}
-                        </div>
-                        <div style={{ marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
-                          {meta2}
-                        </div>
-
-                        {((t.categories ?? []).length > 0 || (t.genders ?? []).length > 0) && (
-                          <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {(t.categories ?? []).map((c) => (
-                              <Chip key={c} tone="mute" plain>
-                                {c}
-                              </Chip>
-                            ))}
-                            {(t.genders ?? []).map((g) => (
-                              <Chip key={g} tone="mute" plain>
-                                {g}
-                              </Chip>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="card-foot">
-                        {t.players != null && (
-                          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                            <span className="mono">{t.players}</span>{" "}
-                            {t.pair_based ? "jugadores" : "plazas"}
-                          </span>
-                        )}
-                        <span style={{ flex: 1 }} />
-                        {fee && (
-                          <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
-                            {fee}
-                          </span>
-                        )}
-                      </div>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
+            <>
+              {group("En juego ahora", g.live, true)}
+              {group("Inscripción abierta", g.open)}
+              {group("Próximamente", g.soon)}
+              {g.done.length > 0 &&
+                (showDone ? (
+                  group("Terminados", g.done)
+                ) : (
+                  <Card flush>
+                    <ListRow
+                      onClick={() => setShowDone(true)}
+                      title="Terminados"
+                      right={<span style={{ fontSize: 12.5, color: "var(--accent)", fontWeight: 600 }}>Ver {g.done.length}</span>}
+                    />
+                  </Card>
+                ))}
+            </>
           )}
         </div>
 
-        {/* ── Códigos ──────────────────────────────────────────────── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Card flush>
-            <CardHead
-              title="Tengo un código"
-              sub="Entra directo al torneo con el código que te ha pasado el club."
-            />
+            <CardHead title="Tengo un código" />
             <div className="card-body">
-              <Field label="Código del torneo" htmlFor="explore-code">
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Input
-                    id="explore-code"
-                    type="text"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    placeholder="Ej. K7P2QX"
-                    aria-label="Código del torneo"
-                    className="mono"
-                    style={{ letterSpacing: "0.12em" }}
-                  />
-                  <Btn
-                    variant="accent"
-                    disabled={code.trim().length < 4}
-                    onClick={() => {
-                      const hit = all.find(
-                        (t) => t.signup_code?.toUpperCase() === code.trim()
-                      );
-                      if (hit) window.location.href = `/torneos/${hit.id}`;
-                      else setQuery(code.trim());
-                    }}
-                  >
-                    Buscar
-                  </Btn>
-                </div>
-              </Field>
+              <CodeBox loggedIn={!!user} />
             </div>
           </Card>
 

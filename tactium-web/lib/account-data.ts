@@ -10,17 +10,28 @@
 // El icono se resuelve por nombre en `components/Icon.tsx` (`ICONS`), igual
 // que la navegación principal: este módulo no arrastra JSX.
 export const SETTINGS_SECTIONS = [
-  { slug: "apariencia", label: "Apariencia", icon: "sun" },
-  { slug: "notificaciones", label: "Notificaciones", icon: "bell" },
-  { slug: "jugador", label: "Mi jugador", icon: "user" },
-  { slug: "equipo", label: "Equipo actual", icon: "shield" },
-  { slug: "invitaciones", label: "Invitaciones", icon: "userPlus" },
-  { slug: "suscripcion", label: "Suscripción", icon: "creditCard" },
-  { slug: "torneos", label: "Torneos", icon: "trophy" },
-  { slug: "soporte", label: "Soporte", icon: "info" },
-  { slug: "datos", label: "Mis datos", icon: "file" },
-  { slug: "peligro", label: "Zona de peligro", icon: "alert" },
+  { slug: "perfil", label: "Perfil y plan", icon: "user" },
+  { slug: "equipo", label: "Tu equipo", icon: "shield" },
+  { slug: "preferencias", label: "Preferencias", icon: "sun" },
+  { slug: "cuenta", label: "Cuenta", icon: "file" },
+  { slug: "ayuda", label: "Ayuda", icon: "info" },
 ] as const;
+
+/**
+ * Las secciones de antes (10) se juntaron en 5. Cada URL antigua lleva a su
+ * sitio nuevo (con ancla cuando el bloque está dentro de una sección).
+ */
+export const LEGACY_SETTINGS_REDIRECTS: Record<string, string> = {
+  apariencia: "/ajustes/preferencias#apariencia",
+  notificaciones: "/ajustes/preferencias#avisos",
+  jugador: "/ajustes/equipo#mi-ficha",
+  invitaciones: "/ajustes/equipo#invitaciones",
+  suscripcion: "/ajustes/perfil#plan",
+  torneos: "/torneos",
+  soporte: "/ajustes/ayuda",
+  datos: "/ajustes/cuenta#mis-datos",
+  peligro: "/ajustes/cuenta#eliminar",
+};
 
 export type SettingsSlug = (typeof SETTINGS_SECTIONS)[number]["slug"];
 
@@ -29,34 +40,6 @@ export const SETTINGS_SLUGS = SETTINGS_SECTIONS.map((s) => s.slug);
 export function isSettingsSlug(v: string): v is SettingsSlug {
   return (SETTINGS_SLUGS as readonly string[]).includes(v);
 }
-
-// ── Notificaciones ─────────────────────────────────────────────────
-export interface NotifPref {
-  key: string;
-  label: string;
-  /** Valor inicial; el usuario lo cambia en la pantalla. */
-  on: boolean;
-}
-
-export const NOTIF_PREFS: NotifPref[] = [
-  { key: "jornada", label: "Jornada publicada", on: true },
-  { key: "alineacion", label: "Alineación publicada", on: true },
-  { key: "disponibilidad", label: "Recordatorio de disponibilidad", on: false },
-  { key: "crear", label: "Recordatorio de crear alineación", on: true },
-];
-
-// ── Mi jugador · plantilla sin dueño ───────────────────────────────
-export interface FreePlayer {
-  name: string;
-  meta: string;
-}
-
-export const FREE_PLAYERS: FreePlayer[] = [
-  { name: "Marco Bilbao", meta: "Revés · 4180 pts" },
-  { name: "Iván Sáez", meta: "Ambos · 3950 pts" },
-  { name: "Nacho Vega", meta: "Revés · 3480 pts" },
-  { name: "Hugo Palacio", meta: "Ambos · 2610 pts" },
-];
 
 /** Iniciales para el avatar de respaldo. */
 export function initials(name: string): string {

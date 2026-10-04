@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,27 +7,34 @@ import {
   ScrollView,
   Linking,
   Platform,
+  AppState,
+  ActivityIndicator,
 } from 'react-native';
+import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconArrowRight, IconAlert } from '@components/ui';
+import { IconBack, IconArrowRight } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
-import { requestConnectOnboarding } from '@core/services/connectOnboarding';
+import {
+  requestConnectOnboarding,
+  fetchConnectStatus,
+  type ConnectStatus,
+} from '@core/services/connectOnboarding';
 import {
   PLAN_BY_TIER,
-  CLUB_PLANS,
-  PREMIUM_STATUSES,
   formatEur,
-  recommendClubPlanForTeams,
   type SubscriptionStatus,
   isLiveSub,
 } from '@core/subscriptions/plans';
+import { TOURNAMENT_TIERS, TOURNAMENT_FREE_PAIRS } from '@core/entitlements/tournamentBilling';
+import { GATEWAY_FEE_LABEL } from '@features/club/clubOps';
 import type { Subscription } from '@core/entitlements/hasPremiumAccess';
 
 import type { RootStackScreenProps } from '@navigation/types';
@@ -47,6 +54,36 @@ const makeStatusTint = (c: Palette): Record<SubscriptionStatus, string> => ({
   expired: c.error,
 });
 
+const STORE_NAME = { ios: 'App Store', android: 'Google Play', web: 'tactium.io' } as const;
+
+// Estados de Stripe: los cuatro que ya devuelve /api/connect/status.
+const CONNECT: Record<ConnectStatus, { label: string; tone: 'ok' | 'warn' | 'mute'; body: string; cta: string | null }> = {
+  none: {
+    label: 'Sin conectar',
+    tone: 'mute',
+    body: 'Conecta Stripe y el dinero de las inscripciones va directo a la cuenta del club. También puedes cobrar en el club.',
+    cta: 'Conectar con Stripe',
+  },
+  onboarding: {
+    label: 'Alta pendiente',
+    tone: 'warn',
+    body: 'Empezaste el alta en Stripe y falta terminarla. Hasta entonces, las inscripciones con pago online no se pueden abrir.',
+    cta: 'Continuar alta',
+  },
+  restricted: {
+    label: 'Faltan datos',
+    tone: 'warn',
+    body: 'Stripe necesita algún dato más (por ejemplo, tu IBAN) para poder ingresarte lo cobrado. Hasta entonces, las inscripciones con pago online no se pueden abrir.',
+    cta: 'Completar en Stripe',
+  },
+  active: {
+    label: 'Listo para cobrar',
+    tone: 'ok',
+    body: '',
+    cta: null,
+  },
+};
+
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -54,6 +91,17 @@ function formatDate(iso: string | null): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+/** «25 € hasta 40, 67 € hasta 90» con los tramos reales. */
+const tiersLine = TOURNAMENT_TIERS.filter((t) => t.priceEur > 0)
+  .slice(0, 2)
+  .map((t) => `${formatEur(t.priceEur)} hasta ${t.pairs}`)
+  .join(', ');
+
+/**
+ * Cobros y facturación del club: el plan (con el importe que se FACTURA) y el
+ * cobro de inscripciones con el estado REAL de Stripe. Antes la fila de cobros
+ * decía siempre «Da de alta el club», aunque ya estuviera conectado.
+ */
 export const ClubBillingScreen = ({
   navigation,
 }: RootStackScreenProps<'ClubBilling'>) => {
@@ -61,6 +109,7 @@ export const ClubBillingScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const STATUS_TINT = useMemo(() => makeStatusTint(c), [c]);
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
   const club = useClubStore(selectActiveClub);
   const teams = useTeamStore((s) => s.teams);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
@@ -70,79 +119,86 @@ export const ClubBillingScreen = ({
     [teams, club],
   );
 
-  // Sub activa del club
   const clubSub = useMemo<Subscription | null>(() => {
     if (!club) return null;
     return (
       subscriptions
-        .filter(
-          (s) =>
-            s.subject_type === 'club' &&
-            s.subject_id === club.id &&
-            isLiveSub(s),
-        )
+        .filter((s) => s.subject_type === 'club' && s.subject_id === club.id && isLiveSub(s))
         .sort(
           (a, b) =>
-            new Date(b.current_period_end).getTime() -
-            new Date(a.current_period_end).getTime(),
+            new Date(b.current_period_end).getTime() - new Date(a.current_period_end).getTime(),
         )[0] ?? null
     );
   }, [subscriptions, club]);
 
-  const currentPlan = clubSub ? PLAN_BY_TIER[clubSub.plan_tier] : null;
+  const plan = clubSub ? PLAN_BY_TIER[clubSub.plan_tier] : null;
   const status = clubSub?.status ?? null;
-  const teamsCovered = currentPlan?.teamQuota ?? 0;
-  const teamCount = clubTeams.length;
-  const overQuota = currentPlan ? teamCount > currentPlan.teamQuota : false;
-  const recommended = recommendClubPlanForTeams(teamCount);
-
-  /** La sub del club se compró en la WEB: la tienda no puede reemplazarla y
-   *  comprar aquí serían dos cobros. Ver SubscriptionScreen. */
+  const covered = clubTeams.filter((t) => t.covered);
+  const uncovered = clubTeams.filter((t) => !t.covered);
+  const quota = plan?.teamQuota ?? 0;
+  const freeSlots = Math.max(0, quota - covered.length);
+  /** La sub del club se compró en la WEB: la tienda no puede reemplazarla. */
   const subWeb = clubSub?.platform === 'web';
+  const store = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
+
+  // ── Estado de Stripe ──────────────────────────────────────────────────────
+  const [connect, setConnect] = useState<ConnectStatus | null>(null);
+  const [connectLoaded, setConnectLoaded] = useState(false);
+  const refreshConnect = useCallback(async () => {
+    if (!club) return;
+    const s = await fetchConnectStatus(club.id);
+    setConnect(s);
+    setConnectLoaded(true);
+  }, [club]);
+  useFocusEffect(
+    useCallback(() => {
+      refreshConnect();
+    }, [refreshConnect]),
+  );
+  // Al volver de la página de Stripe (navegador), el estado se actualiza solo.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') refreshConnect();
+    });
+    return () => sub.remove();
+  }, [refreshConnect]);
 
   const openWebBilling = () => {
     Linking.openURL('https://tactium.io/suscripcion').catch(() =>
       toast.error('No se pudo abrir', 'Entra en tactium.io desde el navegador.'),
     );
   };
-
   const openStoreSubscriptions = () => {
     const url =
       Platform.OS === 'ios'
         ? 'https://apps.apple.com/account/subscriptions'
         : 'https://play.google.com/store/account/subscriptions';
-    Linking.openURL(url).catch(() =>
-      toast.error('No se pudo abrir', 'Abre Ajustes manualmente.'),
-    );
+    Linking.openURL(url).catch(() => toast.error('No se pudo abrir', 'Abre Ajustes manualmente.'));
   };
 
-  // Alta de cobros online (Stripe Connect) del club. Es onboarding de
-  // COMERCIANTE (recibir dinero), no una compra dentro de la app → fuera de IAP.
-  // La app ya tiene la sesión: pedimos el enlace de alta con el token y abrimos
-  // DIRECTAMENTE la página hospedada por Stripe (sin re-login ni buscar el botón
-  // en la web). Si falla, caemos a abrir la consola web del club.
+  // Alta de cobros online (Stripe Connect). Es onboarding de COMERCIANTE
+  // (recibir dinero), no una compra dentro de la app → fuera de IAP. Abrimos
+  // directamente la página hospedada por Stripe.
   const [payoutBusy, setPayoutBusy] = useState(false);
-  const openTournamentPayouts = async () => {
-    if (payoutBusy) return;
-    if (!club) {
-      toast.error('Sin club', 'Selecciona un club primero.');
-      return;
-    }
+  const openPayouts = async () => {
+    if (payoutBusy || !club) return;
     setPayoutBusy(true);
     try {
       const url = await requestConnectOnboarding(club.id);
       await Linking.openURL(url);
     } catch (e) {
-      // Fallback: la consola web del club (ahí también está el alta).
-      Linking.openURL('https://tactium.io/club/cobros').catch(() => {});
+      Linking.openURL('https://tactium.io/club/facturacion#cobros').catch(() => {});
       toast.error(
         'No se pudo abrir el alta',
-        e instanceof Error ? e.message : 'Inténtalo desde la web (Club → Cobros).',
+        e instanceof Error ? e.message : 'Inténtalo desde la web (Club → Cobros y facturación).',
       );
     } finally {
       setPayoutBusy(false);
     }
   };
+
+  const cs = connect ? CONNECT[connect] : null;
+  const toneColor = cs?.tone === 'ok' ? c.accent : cs?.tone === 'warn' ? c.warning : c.textMuted;
 
   return (
     <View style={styles.root}>
@@ -159,620 +215,323 @@ export const ClubBillingScreen = ({
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 28 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>
-          CLUB · {club?.name?.toUpperCase() ?? 'SIN CLUB'}
-        </Text>
-        <Text style={styles.title}>Facturación del club</Text>
-        <Text style={styles.lede}>
-          Gestiona el plan del club y los equipos que cubre. Los capitanes de
-          equipos cubiertos no necesitan suscripción individual.
-        </Text>
+        <Text style={styles.eyebrow}>{club?.name?.toUpperCase() ?? 'SIN CLUB'}</Text>
+        <Text style={styles.title}>{plan ? 'Facturación del club' : 'Cobros y facturación'}</Text>
 
-        {/* === STATUS CARD === */}
-        <View style={styles.statusCard}>
-          {clubSub && currentPlan && status ? (
+        {/* === TARJETA DEL PLAN === */}
+        <View style={styles.card}>
+          {clubSub && plan && status ? (
             <>
-              <View style={styles.statusHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.planName}>{currentPlan.displayName}</Text>
-                  <Text style={styles.planMeta}>
-                    {clubSub.billing_period === 'yearly' ? 'Anual' : 'Mensual'}
-                    {' · '}
+              <View style={styles.cardHead}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.cardTitle}>{plan.displayName}</Text>
+                  {/* Apple 3.1.2c: el importe FACTURADO es lo más visible. */}
+                  <Text style={styles.price}>
                     {clubSub.billing_period === 'yearly'
-                      ? formatEur(currentPlan.priceYearlyEur)
-                      : formatEur(currentPlan.priceMonthlyEur)}
+                      ? `${formatEur(plan.priceYearlyEur)} al año`
+                      : `${formatEur(plan.priceMonthlyEur)} al mes`}
+                  </Text>
+                  <Text style={styles.cardSub}>
+                    {clubSub.billing_period === 'yearly' ? 'Anual' : 'Mensual'} ·{' '}
+                    {STORE_NAME[clubSub.platform as keyof typeof STORE_NAME] ?? store}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.statusPill,
-                    { borderColor: STATUS_TINT[status] + '66' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusPillText,
-                      { color: STATUS_TINT[status] },
-                    ]}
-                  >
+                <View style={[styles.pill, { borderColor: STATUS_TINT[status] + '66' }]}>
+                  <Text style={[styles.pillText, { color: STATUS_TINT[status] }]}>
                     {STATUS_LABEL[status]}
                   </Text>
                 </View>
               </View>
-              <View style={styles.statusDivider} />
-              <View style={styles.statusRow}>
-                <Text style={styles.statusRowLabel}>
-                  {status === 'trialing'
+              <View style={styles.divider} />
+              <Row
+                label={
+                  status === 'trialing'
                     ? 'Prueba termina'
                     : clubSub.cancel_at_period_end
                       ? 'Termina'
-                      : 'Próxima renovación'}
-                </Text>
-                <Text style={styles.statusRowValue}>
-                  {formatDate(clubSub.current_period_end)}
-                </Text>
-              </View>
+                      : 'Próxima renovación'
+                }
+                value={formatDate(clubSub.current_period_end)}
+              />
+              <Row label="Equipos cubiertos" value={`${covered.length} de ${quota}`} />
+              <Row label="Torneos incluidos" value={`hasta ${plan.tournamentPairCap} parejas`} />
               {clubSub.cancel_at_period_end ? (
-                <View style={styles.scheduledNotice}>
-                  <Text style={styles.scheduledText}>
-                    No se renovará: tu acceso termina el{' '}
-                    {formatDate(clubSub.current_period_end)}.
-                  </Text>
-                </View>
+                <Text style={styles.notice}>
+                  No se renovará: tu acceso termina el {formatDate(clubSub.current_period_end)}.
+                </Text>
               ) : null}
               {clubSub.scheduled_plan_tier ? (
-                <View style={styles.scheduledNotice}>
-                  <Text style={styles.scheduledText}>
-                    Cambio programado: pasarás a{' '}
-                    {PLAN_BY_TIER[clubSub.scheduled_plan_tier].displayName} el{' '}
-                    {formatDate(clubSub.current_period_end)}.
+                <Text style={styles.notice}>
+                  Cambio programado: pasarás a {PLAN_BY_TIER[clubSub.scheduled_plan_tier].displayName}{' '}
+                  el {formatDate(clubSub.current_period_end)}.
+                </Text>
+              ) : null}
+              {uncovered.length > 0 ? (
+                <View style={styles.coverRow}>
+                  <Text style={styles.coverText}>
+                    {uncovered.length === 1
+                      ? `${uncovered[0].name} sin cubrir`
+                      : `${uncovered.length} equipos sin cubrir`}
+                    {freeSlots > 0 ? ': te queda sitio.' : ': el plan está lleno.'}
                   </Text>
+                  <Pressable
+                    onPress={() =>
+                      freeSlots > 0
+                        ? navigation.navigate('ClubCoverTeams')
+                        : navigation.navigate('Paywall', { intent: 'upgrade' })
+                    }
+                    hitSlop={6}
+                    style={({ pressed }) => [styles.smallBtn, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={styles.smallBtnText}>{freeSlots > 0 ? 'Cubrir' : 'Mejorar'}</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </>
           ) : (
             <>
-              <Text style={styles.planName}>Sin plan activo</Text>
-              <Text style={styles.planMeta}>
-                Suscribe el club para que tus capitanes accedan a las
-                funciones premium sin pagar individualmente.
+              <View style={styles.cardHead}>
+                <Text style={[styles.cardTitle, { flex: 1 }]}>Tu plan</Text>
+                <View style={[styles.pill, { borderColor: c.hairStrong }]}>
+                  <Text style={[styles.pillText, { color: c.textMuted }]}>Gratis</Text>
+                </View>
+              </View>
+              <Text style={styles.body}>
+                Torneos gratis hasta {TOURNAMENT_FREE_PAIRS} parejas. Por encima, pagas según las
+                parejas al cerrar la inscripción: {tiersLine}.
               </Text>
+              <Pressable
+                onPress={() => navigation.navigate('Paywall', { intent: 'club' })}
+                hitSlop={6}
+                style={{ marginTop: 12 }}
+              >
+                <Text style={styles.link}>Ver planes de club ›</Text>
+              </Pressable>
             </>
           )}
         </View>
 
-        {/* === USO DE EQUIPOS === */}
-        <View style={styles.usageBlock}>
-          <View style={styles.usageHeader}>
-            <Text style={styles.sectionLabel}>EQUIPOS</Text>
-            <Text style={styles.usageCount}>
-              {currentPlan
-                ? `${clubTeams.filter((t) => t.covered).length} de ${teamsCovered} cubiertos`
-                : `${teamCount} sin cubrir`}
-            </Text>
-          </View>
-
-          {overQuota && recommended && currentPlan ? (
-            <View style={styles.warningCard}>
-              <IconAlert size={14} color={c.warning} />
-              <Text style={styles.warningText}>
-                Tienes {teamCount} equipos pero tu plan {currentPlan.shortLabel}{' '}
-                solo cubre {teamsCovered}. Sube a{' '}
-                <Text style={{ fontWeight: '700' }}>
-                  {recommended.displayName}
-                </Text>{' '}
-                ({formatEur(recommended.priceMonthlyEur)}/mes) para cubrir
-                todos.
-              </Text>
+        {/* === TARJETA DE COBROS === */}
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.cardTitle}>Cobro de inscripciones</Text>
+              <Text style={styles.cardSub}>Stripe · cuenta del club</Text>
             </View>
-          ) : null}
-
-          {clubTeams.length === 0 ? (
-            <Text style={styles.emptyTeams}>
-              Tu club aún no tiene equipos creados.
-            </Text>
-          ) : (
-            <View style={styles.teamList}>
-              {clubTeams
-                .slice()
-                .sort(
-                  (a, b) =>
-                    new Date(a.created_at).getTime() -
-                    new Date(b.created_at).getTime(),
-                )
-                .map((t, i) => {
-                  // Cobertura REAL por equipo (flag `covered`, el que usa el
-                  // motor de entitlements), no por orden de creación.
-                  const covered = currentPlan ? !!t.covered : false;
-                  return (
-                    <View
-                      key={t.id}
-                      style={[
-                        styles.teamRow,
-                        i < clubTeams.length - 1 && styles.teamRowDivider,
-                      ]}
-                    >
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.teamName} numberOfLines={1}>
-                          {t.name}
-                        </Text>
-                        <Text style={styles.teamMeta} numberOfLines={1}>
-                          {[t.category, t.gender].filter(Boolean).join(' · ') ||
-                            'Sin configurar'}
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.teamBadge,
-                          covered ? styles.teamBadgeOk : styles.teamBadgeOff,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.teamBadgeText,
-                            {
-                              color: covered ? c.accent : c.warning,
-                            },
-                          ]}
-                        >
-                          {covered ? 'INCLUIDO' : 'NO CUBIERTO'}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-            </View>
-          )}
-        </View>
-
-        {/* === CTAS === */}
-        {!clubSub ? (
-          <Pressable
-            onPress={() => navigation.navigate('Paywall', { intent: 'club' })}
-            style={({ pressed }) => [
-              styles.ctaPrimary,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={styles.ctaPrimaryLabel}>
-              Suscribir club · Prueba 14 días
-            </Text>
-            <IconArrowRight size={16} color={c.textInverse} />
-          </Pressable>
-        ) : overQuota ? (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('Paywall', { intent: 'upgrade' })
-            }
-            style={({ pressed }) => [
-              styles.ctaPrimary,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={styles.ctaPrimaryLabel}>Mejorar plan</Text>
-            <IconArrowRight size={16} color={c.textInverse} />
-          </Pressable>
-        ) : subWeb ? (
-          <Pressable
-            onPress={openWebBilling}
-            style={({ pressed }) => [
-              styles.ctaSecondary,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={styles.ctaSecondaryLabel}>Cambiar plan en la web</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('Paywall', { intent: 'change' })
-            }
-            style={({ pressed }) => [
-              styles.ctaSecondary,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={styles.ctaSecondaryLabel}>Cambiar plan</Text>
-          </Pressable>
-        )}
-
-        {/* === COMPARATIVA DE PLANES === */}
-        <View style={styles.plansCompareBlock}>
-          <Text style={styles.sectionLabel}>PLANES DISPONIBLES</Text>
-          {CLUB_PLANS.map((p) => {
-            const isCurrent = currentPlan?.tier === p.tier;
-            return (
-              <View
-                key={p.tier}
-                style={[
-                  styles.compareRow,
-                  isCurrent && styles.compareRowCurrent,
-                ]}
+            {!connectLoaded ? (
+              <ActivityIndicator size="small" color={c.textFaint} />
+            ) : cs ? (
+              <Animated.View
+                key={connect}
+                entering={reduced ? undefined : FadeIn.duration(300)}
+                style={[styles.pill, { borderColor: toneColor + '66', backgroundColor: toneColor + '14' }]}
               >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.compareName}>
-                    {p.displayName}
-                    {isCurrent ? ' · ACTUAL' : ''}
-                  </Text>
-                  <Text style={styles.compareQuota}>
-                    Hasta {p.teamQuota} equipos
-                  </Text>
-                </View>
-                <Text style={styles.comparePrice}>
-                  {formatEur(p.priceMonthlyEur)}
-                  <Text style={styles.comparePriceSuffix}>/mes</Text>
-                </Text>
-              </View>
-            );
-          })}
+                <Text style={[styles.pillText, { color: toneColor }]}>{cs.label}</Text>
+              </Animated.View>
+            ) : null}
+          </View>
+          {connectLoaded && !cs ? (
+            <Text style={styles.body}>
+              No se pudo consultar el estado de Stripe ahora mismo. Vuelve a intentarlo en un rato.
+            </Text>
+          ) : null}
+          {cs && cs.body ? <Text style={styles.body}>{cs.body}</Text> : null}
+          <View style={styles.divider} />
+          <Row label="Comisión de TACTIUM" value="0 €" />
+          <Row label="Coste de la pasarela" value={GATEWAY_FEE_LABEL} />
+          <Text style={styles.fine}>Por cada inscripción cobrada online. Lo cobra Stripe, no TACTIUM.</Text>
+          {cs?.cta ? (
+            <>
+              <Pressable
+                onPress={openPayouts}
+                disabled={payoutBusy}
+                style={({ pressed }) => [styles.primary, (pressed || payoutBusy) && { opacity: 0.85 }]}
+              >
+                {payoutBusy ? (
+                  <ActivityIndicator color={c.textInverse} />
+                ) : (
+                  <Text style={styles.primaryText}>{cs.cta} ↗</Text>
+                )}
+              </Pressable>
+              <Text style={styles.fine}>
+                Se abre la página segura de Stripe. Al volver, el estado se actualiza solo.
+              </Text>
+            </>
+          ) : null}
         </View>
 
-        {/* === ACCIONES SECUNDARIAS === */}
-        <View style={styles.actionsBlock}>
-          {/* Cobros online de torneos (Stripe Connect). El alta la hospeda
-              Stripe en la web: abrimos el navegador. */}
-          <Pressable
-            onPress={openTournamentPayouts}
-            disabled={payoutBusy}
-            style={({ pressed }) => [
-              styles.actionRow,
-              styles.actionRowDivider,
-              (pressed || payoutBusy) && { opacity: 0.85 },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionLabel}>
-                {payoutBusy ? 'Abriendo el alta…' : 'Cobros online de torneos'}
-              </Text>
-              <Text style={styles.actionSub}>
-                Da de alta el club en Stripe para cobrar inscripciones online
-                (se abre en el navegador)
-              </Text>
-            </View>
-            <IconArrowRight size={14} color={c.textFaint} />
-          </Pressable>
-
-          <Pressable
-            onPress={subWeb ? openWebBilling : openStoreSubscriptions}
-            style={({ pressed }) => [
-              styles.actionRow,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionLabel}>
-                {subWeb ? 'Gestionar en la web' : 'Gestionar en Ajustes'}
-              </Text>
-              <Text style={styles.actionSub}>
-                {subWeb
-                  ? 'La contrataste en tactium.io'
-                  : `Cancelar o cambiar plan en ${Platform.OS === 'ios' ? 'App Store' : 'Google Play'}`}
-              </Text>
-            </View>
-            <IconArrowRight size={14} color={c.textFaint} />
-          </Pressable>
+        {/* === ACCIONES === */}
+        <View style={styles.actions}>
+          {plan ? (
+            <ActionRow
+              title="Cambiar de plan"
+              sub="Ver Starter, Pro y Elite"
+              onPress={() => (subWeb ? openWebBilling() : navigation.navigate('Paywall', { intent: 'change' }))}
+              divider
+            />
+          ) : (
+            <ActionRow
+              title="Suscribir el club"
+              sub="Prueba de 14 días"
+              onPress={() => navigation.navigate('Paywall', { intent: 'club' })}
+              divider
+            />
+          )}
+          {clubSub ? (
+            <ActionRow
+              title={subWeb ? 'Gestionar en la web' : 'Gestionar en Ajustes'}
+              sub={subWeb ? 'La contrataste en tactium.io' : `Cancelar en ${store}`}
+              onPress={subWeb ? openWebBilling : openStoreSubscriptions}
+            />
+          ) : (
+            <ActionRow
+              title="Equipos del club"
+              sub={`${clubTeams.length} ${clubTeams.length === 1 ? 'equipo' : 'equipos'} · cubre los que quieras con un plan`}
+              onPress={() => navigation.navigate('ClubCoverTeams')}
+            />
+          )}
         </View>
       </ScrollView>
     </View>
   );
 };
 
-const makeStyles = (c: Palette) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.background },
+const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={styles.row}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={styles.rowValue}>{value}</Text>
+    </View>
+  );
+};
 
-  header: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 36,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-  },
-  backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
+const ActionRow: React.FC<{ title: string; sub: string; onPress: () => void; divider?: boolean }> = ({
+  title,
+  sub,
+  onPress,
+  divider,
+}) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.actionRow, divider && styles.actionDivider, pressed && { opacity: 0.85 }]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={styles.actionLabel}>{title}</Text>
+        <Text style={styles.actionSub}>{sub}</Text>
+      </View>
+      <IconArrowRight size={14} color={c.textFaint} />
+    </Pressable>
+  );
+};
 
-  scroll: { paddingHorizontal: 22, paddingTop: 14 },
-
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '500',
-  },
-  title: {
-    color: c.text,
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    marginTop: 6,
-  },
-  lede: {
-    color: c.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 6,
-    marginBottom: 18,
-  },
-
-  // Status card
-  statusCard: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    padding: 16,
-    marginBottom: 14,
-  },
-  statusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  planName: {
-    color: c.text,
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  planMeta: {
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-    lineHeight: 17,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  statusPillText: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  statusDivider: { height: 1, backgroundColor: c.hair, marginVertical: 14 },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusRowLabel: { color: c.textMuted, fontSize: 13 },
-  statusRowValue: {
-    fontFamily: Fonts.mono,
-    color: c.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  scheduledNotice: {
-    marginTop: 12,
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: c.warning + '14',
-    borderWidth: 1,
-    borderColor: c.warning + '40',
-  },
-  scheduledText: {
-    color: c.warning,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-
-  // Usage block
-  usageBlock: { marginBottom: 14 },
-  usageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.text,
-    letterSpacing: 2,
-    fontWeight: '500',
-  },
-  usageCount: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: c.textFaint,
-    letterSpacing: 1,
-  },
-  warningCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(242,201,76,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(242,201,76,0.40)',
-    marginBottom: 10,
-  },
-  warningText: {
-    color: c.text,
-    fontSize: 12,
-    lineHeight: 17,
-    flex: 1,
-  },
-  emptyTeams: {
-    color: c.textFaint,
-    fontSize: 13,
-    textAlign: 'center',
-    paddingVertical: 22,
-  },
-
-  teamList: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    overflow: 'hidden',
-  },
-  teamRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  teamRowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: c.hair,
-  },
-  teamName: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  teamMeta: {
-    color: c.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  teamBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  teamBadgeOk: {
-    backgroundColor: c.accent10,
-    borderColor: c.accent40,
-  },
-  teamBadgeOff: {
-    backgroundColor: 'rgba(242,201,76,0.10)',
-    borderColor: 'rgba(242,201,76,0.40)',
-  },
-  teamBadgeText: {
-    fontFamily: Fonts.mono,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-
-  // CTAs
-  ctaPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: c.accent,
-    marginVertical: 14,
-    shadowColor: c.accent,
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  ctaPrimaryLabel: {
-    color: c.textInverse,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  ctaSecondary: {
-    height: 48,
-    borderRadius: Radius.md,
-    backgroundColor: c.bgRaised,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 14,
-  },
-  ctaSecondaryLabel: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Plans compare
-  plansCompareBlock: {
-    marginTop: 8,
-    marginBottom: 14,
-    gap: 8,
-  },
-  compareRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: Radius.md,
-    backgroundColor: c.bgCard,
-    borderWidth: 1,
-    borderColor: c.hair,
-  },
-  compareRowCurrent: {
-    backgroundColor: c.accent10,
-    borderColor: c.accent40,
-  },
-  compareName: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  compareQuota: {
-    color: c.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  comparePrice: {
-    fontFamily: Fonts.mono,
-    color: c.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  comparePriceSuffix: {
-    color: c.textMuted,
-    fontSize: 11,
-    fontWeight: '500',
-  },
-
-  // Actions
-  actionsBlock: {
-    backgroundColor: c.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: c.hairStrong,
-    overflow: 'hidden',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  actionRowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: c.hair,
-  },
-  actionLabel: {
-    color: c.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionSub: {
-    color: c.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.background },
+    header: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 4 },
+    backBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 36,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor: c.bgCard,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+    },
+    backLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
+    scroll: { paddingHorizontal: 22, paddingTop: 14 },
+    eyebrow: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 11,
+      letterSpacing: 2,
+      fontWeight: '500',
+    },
+    title: { color: c.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.6, marginTop: 6, marginBottom: 14 },
+    card: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      padding: 16,
+      marginBottom: 14,
+    },
+    cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    cardTitle: { color: c.text, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
+    cardSub: { color: c.textMuted, fontSize: 12.5, marginTop: 2 },
+    price: { fontFamily: Fonts.mono, color: c.text, fontSize: 22, fontWeight: '700', marginTop: 6 },
+    pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
+    pillText: { fontSize: 12, fontWeight: '700' },
+    divider: { height: 1, backgroundColor: c.hair, marginVertical: 12 },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 5,
+      gap: 12,
+    },
+    rowLabel: { color: c.textMuted, fontSize: 13.5 },
+    rowValue: { fontFamily: Fonts.mono, color: c.text, fontSize: 13.5, fontWeight: '600' },
+    notice: { color: c.warning, fontSize: 12.5, lineHeight: 18, marginTop: 8 },
+    coverRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 12,
+      padding: 10,
+      borderRadius: Radius.md,
+      backgroundColor: c.warning + '14',
+      borderWidth: 1,
+      borderColor: c.warning + '55',
+    },
+    coverText: { flex: 1, color: c.text, fontSize: 13, lineHeight: 18 },
+    smallBtn: {
+      paddingHorizontal: 12,
+      height: 32,
+      borderRadius: 9,
+      backgroundColor: c.warning,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    smallBtnText: { color: c.textInverse, fontSize: 12.5, fontWeight: '700' },
+    body: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 10 },
+    fine: { color: c.textFaint, fontSize: 11.5, lineHeight: 16, marginTop: 6 },
+    link: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
+    primary: {
+      marginTop: 14,
+      height: 50,
+      borderRadius: Radius.lg,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryText: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
+    actions: {
+      backgroundColor: c.bgCard,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      overflow: 'hidden',
+    },
+    actionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      minHeight: 60,
+    },
+    actionDivider: { borderBottomWidth: 1, borderBottomColor: c.hair },
+    actionLabel: { color: c.text, fontSize: 14.5, fontWeight: '600' },
+    actionSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+  });

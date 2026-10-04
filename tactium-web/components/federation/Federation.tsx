@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
+  fetchFcpActa,
   fetchFcpBracket,
   fetchFcpBracketTieActa,
   fetchFcpGroupActas,
@@ -37,8 +38,13 @@ import {
   type FcpTeamProfile,
 } from "@/lib/queries";
 import type { FcpGroupBundle } from "@/lib/seo/fcp";
+import type { FcpStanding } from "@/lib/fcp-public";
 import { FCP_ZONES_NOTE, legendFor, type FcpZone } from "@/lib/fcp-zones";
 import { useSession } from "@/lib/session";
+import { FCP_FEDERATION_CODE, FEDERATIONS as FED_LIST } from "@/lib/federations";
+import { fetchMyFederation, fetchPlayerHistMatches } from "./fed-data";
+import { motion, useReducedMotion } from "motion/react";
+import { FederationMine } from "./FederationMine";
 import { useAsync } from "@/lib/use-async";
 import { useDismiss } from "@/lib/use-dismiss";
 import {
@@ -93,9 +99,6 @@ const FEDERATIONS = [
     active: true,
     logo: "/federations/fcantp-mark.png",
   },
-  { slug: "asturiana", name: "Federación Asturiana de Pádel", short: "FAP", active: false },
-  { slug: "vasca", name: "Federación Vasca de Pádel", short: "FVP", active: false },
-  { slug: "madrilena", name: "Federación Madrileña de Pádel", short: "FMP", active: false },
 ];
 
 /**
@@ -131,70 +134,71 @@ function FedCrest({
   );
 }
 
+const FED_NAMES: Record<string, string> = Object.fromEntries(
+  FED_LIST.map((f) => [f.code, f.name]),
+);
+
 /* Estas pantallas ya NO piden sesión: las tablas `fcp_*` tienen lectura
    pública (migración 20260811c). Son datos que la federación publica en
    abierto, y además es lo que mejor posiciona en buscadores. */
 
 /* ═══ 01 · SELECTOR ═══════════════════════════════════════════════ */
-export function FederationPicker() {
+/**
+ * Selector honesto: solo la Cántabra tiene datos. Ya no se listan una a una
+ * las federaciones sin datos con «Próximamente». Si tu federación es otra, lo
+ * dice y lleva a la que sí está.
+ */
+export function FederationPicker({ mine }: { mine?: string | null } = {}) {
+  const f = FEDERATIONS[0];
   return (
     <div className="tw-page">
       <PageHeader
-        title="Elige federación"
-        lede="Clasificaciones, jornadas y jugadores federados."
+        title={mine ? "Tu federación aún no está" : "Federaciones"}
+        lede={
+          mine
+            ? `${mine}: de momento leemos los datos de la Cántabra. El resto de federaciones irán entrando.`
+            : "De momento leemos los datos de la Federación Cántabra. El resto de federaciones irán entrando."
+        }
       />
-
-      <div className="tw-club-teams">
-        {FEDERATIONS.map((f) => {
-          const inner = (
-            <Card
-              hover={f.active}
-              style={{
-                height: "100%",
-                opacity: f.active ? 1 : 0.6,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <FedCrest logo={f.logo} size={40} alt="" />
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>
-                  {f.name}
-                </span>
-                <span
-                  style={{
-                    display: "block",
-                    marginTop: 2,
-                    fontSize: 12.5,
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  {f.short}
-                </span>
-              </span>
-              {f.active ? (
-                <span className="list-row-chev">
-                  <IconChevronRight size={16} />
-                </span>
-              ) : (
-                <Chip tone="mute" plain>
-                  Próximamente
-                </Chip>
-              )}
-            </Card>
-          );
-          return f.active ? (
-            <Link key={f.slug} href={`/federacion/${f.slug}`} style={{ color: "inherit" }}>
-              {inner}
-            </Link>
-          ) : (
-            <div key={f.slug}>{inner}</div>
-          );
-        })}
-      </div>
+      <SectionHead title="Disponible" style={{ margin: "0 0 10px" }} />
+      <Link href={`/federacion/${f.slug}`} style={{ color: "inherit", display: "block", maxWidth: 520 }}>
+        <Card hover style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <FedCrest logo={f.logo} size={40} alt="" />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>{f.name}</span>
+            <span style={{ display: "block", marginTop: 2, fontSize: 12.5, color: "var(--text-muted)" }}>
+              Clasificaciones, equipos y jugadores
+            </span>
+          </span>
+          <span className="list-row-chev">
+            <IconChevronRight size={16} />
+          </span>
+        </Card>
+      </Link>
     </div>
   );
+}
+
+/**
+ * Competir › Federación: como en la app, va directa a la Cántabra; el
+ * selector solo sale si tu equipo (o tu club) es de otra federación.
+ */
+export function FederationForMe() {
+  const { role, activeTeam, clubId, ready } = useSession();
+  const fed = useAsync(
+    () =>
+      fetchMyFederation(
+        role === "club" ? { clubId } : { teamId: activeTeam?.id ?? null },
+      ),
+    [role, clubId, activeTeam?.id],
+    ready,
+  );
+  if (!ready || fed.loading) return <SkeletonPage />;
+  const code = fed.data ?? null;
+  if (code && code !== FCP_FEDERATION_CODE) {
+    return <FederationPicker mine={FED_NAMES[code] ?? "Tu federación"} />;
+  }
+  return <FederationExplore slug="cantabra" />;
 }
 
 type Tab = "todo" | "equipos" | "jugadores" | "rankings";
@@ -528,6 +532,9 @@ export function FederationExplore({ slug }: { slug: string }) {
           {countLabel}
         </span>
       </header>
+
+      {/* Primero lo tuyo (solo con sesión; sin ella la página queda igual). */}
+      <FederationMine slug={slug} onFindMe={() => setTab("jugadores")} />
 
       <div className="tw-fcp-bar">
         <div className="tw-fcp-bar-top">
@@ -1128,6 +1135,48 @@ export function FcpGroupView({
                 />
               </Card>
             ) : (
+              <FcpStandingsTable slug={slug} rows={rows} zones={zones} myFcpId={myFcpId} />
+            )}
+            {zones && rows.length > 0 && <ZoneLegend zones={zones} />}
+          </section>
+
+          <section style={{ minWidth: 0 }}>
+            <SectionHead title="Jornadas" style={{ margin: "0 0 10px" }} />
+            {matches.loading ? (
+              <SkeletonCard />
+            ) : mData.length === 0 ? (
+              <Card>
+                <EmptyState icon={<IconFlag size={22} />} title="Sin jornadas registradas" />
+              </Card>
+            ) : (
+              <FcpGroupSchedule idGrupo={id} matches={mData} />
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Tabla de clasificación de un grupo (zonas, tu fila en verde, racha). La usan
+ * el grupo federativo y la pestaña Clasificación de una temporada.
+ */
+export function FcpStandingsTable({
+  slug,
+  rows,
+  zones,
+  myFcpId,
+}: {
+  slug: string;
+  rows: FcpStanding[];
+  zones: FcpZone[] | null;
+  myFcpId: number | null;
+}) {
+  const isMine = (idEquipo: number) => myFcpId != null && Number(idEquipo) === myFcpId;
+  const zoneOf = (pos: number): FcpZone | null =>
+    zones?.find((zn) => pos >= zn.from && pos <= zn.to) ?? null;
+  return (
               <Card flush>
             <div className="tw-roster-scroll">
               <div
@@ -1202,25 +1251,6 @@ export function FcpGroupView({
               })}
                 </div>
               </Card>
-            )}
-            {zones && rows.length > 0 && <ZoneLegend zones={zones} />}
-          </section>
-
-          <section style={{ minWidth: 0 }}>
-            <SectionHead title="Jornadas" style={{ margin: "0 0 10px" }} />
-            {matches.loading ? (
-              <SkeletonCard />
-            ) : mData.length === 0 ? (
-              <Card>
-                <EmptyState icon={<IconFlag size={22} />} title="Sin jornadas registradas" />
-              </Card>
-            ) : (
-              <FcpGroupSchedule idGrupo={id} matches={mData} />
-            )}
-          </section>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -1640,7 +1670,7 @@ function FcpActaModal({
 }
 
 /* ── Cuadro de playoff (bracket): columnas por ronda + modal de acta ── */
-function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
+export function FcpBracketPanel({ idGrupo }: { idGrupo: string }) {
   const { user, activeTeam } = useSession();
   const bracket = useAsync(() => fetchFcpBracket(idGrupo), [idGrupo, user?.id]);
   const [selCuadro, setSelCuadro] = useState(0);
@@ -2094,11 +2124,19 @@ export function FcpTeamView({
   const { user } = useSession();
   const idEquipo = Number(id);
   const [sort, setSort] = useState<"puntos" | "nombre">("puntos");
+  // Resumen · Partidos · Plantilla (como la ficha de equipo de la app).
+  const [teamTab, setTeamTab] = useState<"resumen" | "partidos" | "plantilla">("resumen");
   const { data, loading, error } = useAsync(
     () => fetchFcpTeamProfile(idEquipo),
     [idEquipo, user?.id],
     Number.isFinite(idEquipo),
     initial
+  );
+  // Próximo y últimos: las jornadas del grupo filtradas por este equipo.
+  const groupMatches = useAsync(
+    () => fetchFcpMatches(data!.idGrupo!),
+    [data?.idGrupo],
+    !!data?.idGrupo && !data?.preseason
   );
 
   if (loading) return <SkeletonPage />;
@@ -2126,6 +2164,32 @@ export function FcpTeamView({
   const roster = [...data.roster].sort((a, b) =>
     sort === "nombre" ? a.name.localeCompare(b.name) : b.puntos - a.puntos
   );
+  const teamMatches = (groupMatches.data ?? [])
+    .filter((m) => fcpSameTeam(m.local, data.equipo) || fcpSameTeam(m.visitante, data.equipo))
+    .map((m) => {
+      const home = fcpSameTeam(m.local, data.equipo);
+      const sc = splitScore(m.resultado);
+      const l = sc ? Number(sc[0]) : null;
+      const v = sc ? Number(sc[1]) : null;
+      const played = l != null && v != null && Number.isFinite(l) && Number.isFinite(v);
+      return {
+        id: m.idPartido,
+        jornada: m.jornada,
+        fecha: m.fecha,
+        hora: m.hora,
+        rival: home ? m.visitante : m.local,
+        home,
+        us: played ? (home ? l : v) : null,
+        them: played ? (home ? v : l) : null,
+        played,
+      };
+    });
+  const playedTM = teamMatches
+    .filter((m) => m.played)
+    .sort((a, b) => (b.jornada ?? 0) - (a.jornada ?? 0));
+  const nextTM = teamMatches
+    .filter((m) => !m.played)
+    .sort((a, b) => (a.jornada ?? 999) - (b.jornada ?? 999))[0];
 
   return (
     <div className="tw-page">
@@ -2178,6 +2242,32 @@ export function FcpTeamView({
         </Card>
       ) : (
       <>
+      <div className="tw-toolbar">
+        <Segmented
+          label="Ficha del equipo"
+          value={teamTab}
+          onChange={setTeamTab}
+          options={[
+            { value: "resumen", label: "Resumen" },
+            { value: "partidos", label: "Partidos" },
+            { value: "plantilla", label: `Plantilla · ${data.roster.length}` },
+          ]}
+        />
+      </div>
+      {teamTab === "partidos" ? (
+        playedTM.length === 0 ? (
+          <Card>
+            <EmptyState icon={<IconFlag size={22} />} title="Aún no ha jugado ninguna jornada" />
+          </Card>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+            {playedTM.map((m, i) => (
+              <TeamActaCard key={m.id} m={m} initiallyOpen={i === 0} />
+            ))}
+          </div>
+        )
+      ) : teamTab === "resumen" ? (
+      <>
       {/* Cifras de la temporada */}
       <StatRow style={{ marginBottom: 16 }}>
         <Stat label="Puntos" value={data.puntos} tone="accent" />
@@ -2224,10 +2314,132 @@ export function FcpTeamView({
           </div>
         </Card>
       ) : null}
+
+      {nextTM ? (
+        <Card style={{ marginBottom: 16, borderColor: "var(--accent-40)" }}>
+          <CardHead title="Próximo" />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>
+              J{String(nextTM.jornada ?? 0).padStart(2, "0")}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="truncate" style={{ display: "block", fontSize: 14.5, fontWeight: 700 }}>
+                vs {nextTM.rival}
+              </span>
+              <span style={{ display: "block", fontSize: 12.5, color: "var(--text-muted)" }}>
+                {[
+                  nextTM.fecha
+                    ? new Date(nextTM.fecha + "T00:00:00").toLocaleDateString("es-ES", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })
+                    : null,
+                  nextTM.hora?.slice(0, 5),
+                  nextTM.home ? "En casa" : "Fuera",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </span>
+          </div>
+        </Card>
+      ) : null}
+
+      {playedTM.length > 0 ? (
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead title="Últimos">
+            <Btn size="sm" variant="quiet" onClick={() => setTeamTab("partidos")}>
+              Todos
+            </Btn>
+          </CardHead>
+          {playedTM.slice(0, 3).map((m) => (
+            <div key={m.id} className="list-row">
+              <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)", width: 30 }}>
+                J{String(m.jornada ?? 0).padStart(2, "0")}
+              </span>
+              <span className="list-row-main">
+                <span className="list-row-title truncate">{m.rival}</span>
+                <span className="list-row-sub">{m.home ? "Casa" : "Fuera"}</span>
+              </span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color:
+                    (m.us ?? 0) > (m.them ?? 0)
+                      ? "var(--accent)"
+                      : (m.us ?? 0) < (m.them ?? 0)
+                        ? "var(--error)"
+                        : "var(--text-muted)",
+                }}
+              >
+                {m.us}–{m.them}
+              </span>
+            </div>
+          ))}
+        </Card>
+      ) : null}
+      {data.roster.length > 0 ? (
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead title="Más puntos">
+            <Btn size="sm" variant="quiet" onClick={() => setTeamTab("plantilla")}>
+              Plantilla
+            </Btn>
+          </CardHead>
+          {/* Podio: los 3 con más puntos de la federación, 1º en acento. */}
+          {[...data.roster]
+            .sort((a, b) => b.puntos - a.puntos)
+            .slice(0, 3)
+            .map((p, i) => (
+              <ListRow
+                key={p.idJugador}
+                href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
+                icon={
+                  <>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: i === 0 ? "var(--accent)" : "var(--text-faint)",
+                        width: 24,
+                        textAlign: "center",
+                        flex: "none",
+                      }}
+                    >
+                      {i + 1}º
+                    </span>
+                    <Avatar initials={initials(p.name)} size={32} />
+                  </>
+                }
+                title={p.name}
+                sub={p.categoria ?? undefined}
+                right={
+                  <span
+                    className="mono"
+                    style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)", flex: "none" }}
+                  >
+                    {fmtInt(p.puntos)}
+                    <span
+                      style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginLeft: 4 }}
+                    >
+                      pts
+                    </span>
+                  </span>
+                }
+              />
+            ))}
+        </Card>
+      ) : null}
+      </>
+      ) : null}
       </>
       )}
 
       {/* Plantilla */}
+      {(data.preseason || teamTab === "plantilla") && (
       <Card flush>
         <CardHead title="Plantilla" count={data.roster.length}>
           <Btn
@@ -2292,7 +2504,129 @@ export function FcpTeamView({
           ))
         )}
       </Card>
+      )}
     </div>
+  );
+}
+
+/** Jornada de un equipo, desplegable con las 5 parejas del acta. */
+function TeamActaCard({
+  m,
+  initiallyOpen,
+}: {
+  m: {
+    id: string;
+    jornada: number | null;
+    fecha: string | null;
+    rival: string;
+    home: boolean;
+    us: number | null;
+    them: number | null;
+  };
+  initiallyOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(!!initiallyOpen);
+  const acta = useAsync(() => fetchFcpActa(m.id), [m.id], open);
+  const col =
+    (m.us ?? 0) > (m.them ?? 0)
+      ? "var(--accent)"
+      : (m.us ?? 0) < (m.them ?? 0)
+        ? "var(--error)"
+        : "var(--text-muted)";
+  const sur = (n: string | null) => (n ?? "").trim().split(/\s+/).slice(-1)[0] || "—";
+  return (
+    <Card flush>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="list-row"
+        style={{
+          width: "100%",
+          background: "none",
+          border: 0,
+          cursor: "pointer",
+          textAlign: "left",
+          color: "inherit",
+        }}
+      >
+        <span className="list-row-main">
+          <span className="list-row-sub">
+            Jornada {m.jornada ?? "—"}
+            {m.fecha
+              ? ` · ${new Date(m.fecha + "T00:00:00").toLocaleDateString("es-ES", {
+                  day: "numeric",
+                  month: "short",
+                })}`
+              : ""}
+          </span>
+          <span className="list-row-title truncate">
+            {m.home ? "vs" : "en"} {m.rival}
+          </span>
+        </span>
+        <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: col }}>
+          {m.us}–{m.them}
+        </span>
+        <IconChevronDown size={15} style={{ transform: open ? "rotate(180deg)" : "none" }} />
+      </button>
+      {open &&
+        (acta.loading ? (
+          <div style={{ padding: 16 }}>
+            <SkeletonCard />
+          </div>
+        ) : (acta.data ?? []).length === 0 ? (
+          <p style={{ margin: 0, padding: "0 18px 16px", fontSize: 13, color: "var(--text-muted)" }}>
+            Acta pendiente
+          </p>
+        ) : (
+          (acta.data ?? []).map((p) => {
+            const ours = m.home ? [p.localJ1, p.localJ2] : [p.visitJ1, p.visitJ2];
+            const theirs = m.home ? [p.visitJ1, p.visitJ2] : [p.localJ1, p.localJ2];
+            const su = (m.home ? p.setsLocal : p.setsVisit) ?? 0;
+            const sh = (m.home ? p.setsVisit : p.setsLocal) ?? 0;
+            const won = su > sh;
+            return (
+              <div key={p.partidoNum} className="list-row">
+                <span
+                  className="mono"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: "var(--r-sm)",
+                    flex: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: won ? "var(--accent-10)" : "var(--error-soft)",
+                    color: won ? "var(--accent)" : "var(--error)",
+                  }}
+                >
+                  {won ? "V" : "D"}
+                </span>
+                <span className="list-row-main">
+                  <span className="list-row-title truncate">{ours.map(sur).join(" / ")}</span>
+                  <span className="list-row-sub truncate">vs {theirs.map(sur).join(" / ")}</span>
+                </span>
+                <span style={{ textAlign: "right" }}>
+                  <span className="mono" style={{ display: "block", fontSize: 13, fontWeight: 700 }}>
+                    {su}-{sh}
+                  </span>
+                  {p.parciales ? (
+                    <span
+                      className="mono"
+                      style={{ display: "block", fontSize: 11.5, color: "var(--text-faint)" }}
+                    >
+                      {p.parciales}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            );
+          })
+        ))}
+    </Card>
   );
 }
 
@@ -2311,9 +2645,12 @@ export function FcpPlayerView({ id }: { id: string }) {
   const profile = useAsync(() => fetchFcpPlayerProfile(idJugador), [idJugador, user?.id]);
   const years = useAsync(() => fetchFcpPlayerYears(idJugador), [idJugador, user?.id]);
   const history = useAsync(() => fetchFcpPlayerHistory(idJugador), [idJugador, user?.id]);
+  // Histórico partido a partido (puntos que sumó o restó cada uno).
+  const histMatches = useAsync(() => fetchPlayerHistMatches(idJugador), [idJugador, user?.id]);
 
   const [selLiga, setSelLiga] = useState<number | null>(null);
   const [filter, setFilter] = useState<MatchFilter>("todos");
+  const [allPartners, setAllPartners] = useState(false);
 
   // Por defecto, la temporada más reciente.
   useEffect(() => {
@@ -2362,6 +2699,98 @@ export function FcpPlayerView({ id }: { id: string }) {
       ? history.data.find((h) => String(h.anio) === selYear.anio)?.variacion ?? null
       : null;
 
+  // Histórico de la temporada elegida (cronológico).
+  const yearHist = (histMatches.data ?? []).filter(
+    (h) => selYear != null && String(h.anio) === selYear.anio,
+  );
+  // Curva: puntos tras cada partido, reconstruidos hacia atrás desde los
+  // actuales. Con menos de 3 partidos no se dibuja.
+  const withVar = yearHist.filter((h) => h.puntosVar != null);
+  const curve = (() => {
+    if (withVar.length < 3) return null;
+    const vals: number[] = new Array(withVar.length);
+    let acc = rankingPts;
+    for (let i = withVar.length - 1; i >= 0; i--) {
+      vals[i] = acc;
+      acc -= withVar[i].puntosVar ?? 0;
+    }
+    // El histórico trae «17/01/2026 16:00»; algunas filas, ISO.
+    const toDate = (f: string | null) => {
+      if (!f) return null;
+      const dmy = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      const d = dmy
+        ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
+        : new Date(f.slice(0, 10) + "T00:00:00");
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const mon = (f: string | null) => toDate(f)?.toLocaleDateString("es-ES", { month: "short" }) ?? "";
+    const day = (f: string | null) =>
+      toDate(f)?.toLocaleDateString("es-ES", { day: "numeric", month: "short" }) ?? "";
+    const points: CurvePoint[] = withVar.map((h) => {
+      const head = h.esPlayoff ? "Playoff" : h.jornada ? `J${h.jornada}` : "Partido";
+      return {
+        delta: h.puntosVar ?? 0,
+        won: h.gana,
+        label: h.equipoRival ? `${head} · ${h.equipoRival}` : head,
+        date: day(h.fecha),
+      };
+    });
+    return {
+      values: [acc, ...vals],
+      points,
+      start: mon(withVar[0].fecha),
+      end: mon(withVar[withVar.length - 1].fecha),
+    };
+  })();
+  // Puntos y rival por jornada; si en una jornada hay más de un partido, no se pinta.
+  const histFor = (jornada: number | null, won?: boolean) => {
+    if (jornada == null) return null;
+    const arr = yearHist.filter((h) => h.jornada === jornada && !h.esPlayoff);
+    if (arr.length !== 1) return null;
+    if (won != null && arr[0].gana !== won) return null;
+    return arr[0];
+  };
+  // Parejas de la temporada: TODOS los compañeros, con partidos, balance,
+  // sets y los puntos de la federación que sumaron juntos (del histórico).
+  const partners = (() => {
+    const norm = (x: string) =>
+      x.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
+    const ptsBy = new Map<string, number>();
+    for (const h of yearHist) {
+      if (!h.pareja || h.puntosVar == null) continue;
+      const k = norm(h.pareja);
+      ptsBy.set(k, (ptsBy.get(k) ?? 0) + h.puntosVar);
+    }
+    const map = new Map<
+      string,
+      { name: string; n: number; w: number; sf: number; sa: number; pts: number | null }
+    >();
+    for (const m of yd?.matches ?? []) {
+      if (!m.partner) continue;
+      const e = map.get(m.partner) ?? { name: m.partner, n: 0, w: 0, sf: 0, sa: 0, pts: null };
+      e.n += 1;
+      if (m.won) e.w += 1;
+      const [a, b] = (m.sets ?? "").split("-").map((x) => Number(x));
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        e.sf += a;
+        e.sa += b;
+      }
+      map.set(m.partner, e);
+    }
+    // Las actas dan el nombre corto («ADRIAN RUIZ») y el histórico el completo
+    // («ADRIAN RUIZ CAÑARTE»): casan si uno empieza por el otro.
+    const same = (x: string, y: string) => x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `);
+    for (const e of map.values()) {
+      const k = norm(e.name);
+      let total: number | null = null;
+      for (const [hk, v] of ptsBy) if (same(hk, k)) total = (total ?? 0) + v;
+      e.pts = total;
+    }
+    return [...map.values()].sort((a, b) => b.n - a.n || b.w - a.w);
+  })();
+  const noActas = !!yd && yd.matches.length === 0 && !yd.hasData;
+  const prevYear = (years.data ?? []).find((y) => selLiga != null && y.idLiga < selLiga) ?? null;
+
   const equipoLabel = selYear?.equipo || p.equipo || "Sin equipo";
   const categoriaLabel = selYear?.categoria || p.categoria || null;
 
@@ -2377,7 +2806,9 @@ export function FcpPlayerView({ id }: { id: string }) {
       const key = isPlayoff ? "PLAYOFF" : `J${m.jornada}`;
       if (!map.has(key)) {
         map.set(key, {
-          label: isPlayoff ? "Playoff" : `Jornada ${m.jornada}`,
+          label: isPlayoff
+            ? "Playoff"
+            : `Jornada ${m.jornada}${histFor(m.jornada)?.equipoRival ? ` · vs ${histFor(m.jornada)!.equipoRival}` : ""}`,
           order: isPlayoff ? 9999 : m.jornada ?? 0,
           games: [],
         });
@@ -2403,7 +2834,7 @@ export function FcpPlayerView({ id }: { id: string }) {
       {/* Ranking FCP */}
       <StatRow style={{ marginBottom: 16 }}>
         <Stat
-          label="Ranking FCP"
+          label="Puntos de la federación"
           value={fmtInt(rankingPts)}
           unit="pts"
           tone="accent"
@@ -2421,6 +2852,12 @@ export function FcpPlayerView({ id }: { id: string }) {
         ) : null}
       </StatRow>
 
+      {curve && !noActas ? (
+        <Card style={{ marginBottom: 16 }}>
+          <PointsCurve values={curve.values} points={curve.points} start={curve.start} end={curve.end} />
+        </Card>
+      ) : null}
+
       {/* Selector de temporada */}
       {(years.data ?? []).length > 0 ? (
         <div style={{ marginBottom: 16, overflowX: "auto" }}>
@@ -2436,7 +2873,8 @@ export function FcpPlayerView({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {/* Stats del año */}
+      {/* Stats del año (sin actas no hay cifras a cero) */}
+      {noActas ? null : (
       <StatRow style={{ marginBottom: 16 }}>
         <Stat label="Jugados" value={yd?.pj ?? 0} />
         <Stat label="Ganados" value={yd?.pg ?? 0} tone="accent" />
@@ -2448,6 +2886,60 @@ export function FcpPlayerView({ id }: { id: string }) {
         />
         <Stat label="Sets" value={sd >= 0 ? `+${sd}` : String(sd)} />
       </StatRow>
+      )}
+
+      {partners.length > 0 ? (
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead title="Parejas" count={partners.length}>
+            {partners.length > 3 ? (
+              <Btn size="sm" variant="quiet" onClick={() => setAllPartners((v) => !v)}>
+                {allPartners ? "Menos" : "Todas"}
+              </Btn>
+            ) : null}
+          </CardHead>
+          {(allPartners ? partners : partners.slice(0, 3)).map((pp) => {
+            const pct = Math.round((pp.w / pp.n) * 100);
+            return (
+              <div key={pp.name} className="list-row">
+                <Avatar initials={initials(pp.name)} size={32} />
+                <span className="list-row-main" style={{ gap: 4 }}>
+                  <span className="list-row-title truncate">{pp.name}</span>
+                  <span className="list-row-sub">
+                    {pp.n} {pp.n === 1 ? "partido" : "partidos"} · sets {pp.sf}-{pp.sa}
+                    {pp.pts != null
+                      ? ` · ${pp.pts > 0 ? "+" : pp.pts < 0 ? "−" : ""}${fmtInt(Math.abs(pp.pts))} pts`
+                      : ""}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "block",
+                      height: 4,
+                      borderRadius: 2,
+                      background: "var(--line)",
+                      overflow: "hidden",
+                      maxWidth: 220,
+                    }}
+                  >
+                    <span style={{ display: "block", height: 4, width: `${pct}%`, background: "var(--accent)" }} />
+                  </span>
+                </span>
+                <span style={{ display: "grid", justifyItems: "end", gap: 2 }}>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
+                    {pp.w}-{pp.n - pp.w}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 11, color: pct >= 50 ? "var(--accent)" : "var(--text-faint)" }}
+                  >
+                    {pct}%
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </Card>
+      ) : null}
 
       {/* Partidos */}
       <SectionHead title="Partidos" count={yd?.matches.length ?? 0}>
@@ -2465,12 +2957,19 @@ export function FcpPlayerView({ id }: { id: string }) {
 
       {yearMatches.loading ? (
         <SkeletonCard />
-      ) : !yd || (yd.matches.length === 0 && !yd.hasData) ? (
+      ) : !yd || noActas ? (
         <Card>
           <EmptyState
             icon={<IconFlag size={22} />}
-            title="Actas en sincronización"
-            body={`Las actas de ${selYear?.anio ?? "esta temporada"} aún se están sincronizando con la Federación.`}
+            title={`Aún no hay actas de ${selYear?.anio ?? "esta temporada"}`}
+            body={`La federación las publica después de cada jornada.${prevYear ? " Mientras, mira la temporada pasada." : ""}`}
+            action={
+              prevYear ? (
+                <Btn size="sm" onClick={() => setSelLiga(prevYear.idLiga)}>
+                  Ver {prevYear.anio}
+                </Btn>
+              ) : undefined
+            }
           />
         </Card>
       ) : yd.matches.length === 0 ? (
@@ -2518,12 +3017,210 @@ export function FcpPlayerView({ id }: { id: string }) {
                   >
                     {m.parciales || m.sets}
                   </span>
+                  {(() => {
+                    const pv = d.games.length === 1 ? histFor(m.jornada, m.won)?.puntosVar : null;
+                    if (pv == null) return null;
+                    return (
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          minWidth: 40,
+                          textAlign: "right",
+                          color: pv >= 0 ? "var(--accent)" : "var(--error)",
+                        }}
+                      >
+                        {pv >= 0 ? "+" : "−"}
+                        {Math.abs(pv)}
+                      </span>
+                    );
+                  })()}
                 </div>
               ))}
             </Card>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+type CurvePoint = { delta: number; won: boolean; label: string; date: string };
+
+/** Curva de puntos de la federación. Cada partido es un punto (verde si ganó,
+ *  rojo si perdió); al pasar o tocar se ve ese partido. Debajo, inicio, máximo
+ *  y el mejor y el peor partido. Se dibuja en 1,1 s; con «reducir
+ *  movimiento», aparece sin más. */
+function PointsCurve({
+  values,
+  points,
+  start,
+  end,
+}: {
+  values: number[];
+  points: CurvePoint[];
+  start: string;
+  end: string;
+}) {
+  const reduce = useReducedMotion();
+  const [sel, setSel] = useState<number | null>(null);
+  const W = 600;
+  const H = 110;
+  const padX = 6;
+  const padY = 12;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => [
+    padX + (i / (values.length - 1)) * (W - padX * 2),
+    padY + (1 - (v - min) / span) * (H - padY * 2),
+  ]);
+  const d = pts.map((pt, i) => `${i === 0 ? "M" : "L"}${pt[0].toFixed(1)} ${pt[1].toFixed(1)}`).join(" ");
+  const area = `${d} L${pts[pts.length - 1][0].toFixed(1)} ${H} L${pts[0][0].toFixed(1)} ${H} Z`;
+  const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${fmtInt(Math.abs(n))}`;
+  const deltas = points.map((p) => p.delta);
+  const best = deltas.length ? Math.max(...deltas) : null;
+  const worst = deltas.length ? Math.min(...deltas) : null;
+  const selected = sel != null ? points[sel - 1] : null;
+  const pct = (x: number, total: number) => `${(x / total) * 100}%`;
+  const faint = { fontSize: 11, color: "var(--text-faint)" } as const;
+
+  const summary = [
+    { k: "Inicio", v: fmtInt(values[0]), color: "var(--text)" },
+    { k: "Máximo", v: fmtInt(max), color: "var(--text)" },
+    best != null
+      ? { k: "Mejor partido", v: signed(best), color: best >= 0 ? "var(--accent)" : "var(--error)" }
+      : null,
+    worst != null
+      ? { k: "Peor partido", v: signed(worst), color: worst < 0 ? "var(--error)" : "var(--text-muted)" }
+      : null,
+  ].filter((x): x is { k: string; v: string; color: string } => x != null);
+
+  return (
+    <div>
+      {/* Partido seleccionado */}
+      <div style={{ minHeight: 36, marginBottom: 6, display: "flex", alignItems: "center", gap: 10 }}>
+        {selected ? (
+          <>
+            <span
+              className="mono"
+              style={{ fontSize: 15, fontWeight: 800, color: selected.won ? "var(--accent)" : "var(--error)" }}
+            >
+              {signed(selected.delta)}
+            </span>
+            <span style={{ display: "grid", minWidth: 0 }}>
+              <span className="truncate" style={{ fontSize: 13.5, fontWeight: 600 }}>
+                {selected.won ? "Victoria" : "Derrota"} · {selected.label}
+              </span>
+              <span className="mono" style={faint}>
+                {selected.date} · quedó en {fmtInt(values[sel!])} pts
+              </span>
+            </span>
+          </>
+        ) : (
+          <span className="mono" style={faint}>
+            Pasa o toca un partido para ver el detalle
+          </span>
+        )}
+      </div>
+
+      <div style={{ position: "relative", height: H }} onMouseLeave={() => setSel(null)}>
+        {/* La línea se descubre de izquierda a derecha (con el trazo sin
+            escalar, pathLength no mide bien en un SVG estirado). */}
+        <motion.div
+          key={d}
+          initial={reduce ? false : { clipPath: "inset(0 100% 0 0)" }}
+          animate={{ clipPath: "inset(0 0% 0 0)" }}
+          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+        >
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          width="100%"
+          height={H}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          style={{ display: "block" }}
+        >
+          {/* Línea de referencia: los puntos con los que empezó */}
+          <line
+            x1={padX}
+            x2={W - padX}
+            y1={pts[0][1]}
+            y2={pts[0][1]}
+            stroke="var(--text-faint)"
+            strokeOpacity={0.4}
+            strokeDasharray="3 4"
+            vectorEffect="non-scaling-stroke"
+          />
+          <path d={area} fill="var(--accent)" fillOpacity={0.07} />
+          <path
+            d={d}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth={2.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        </motion.div>
+        {/* Un punto por partido, en HTML para que no se deforme con el ancho */}
+        {pts.slice(1).map(([x, y], i) => {
+          const p = points[i];
+          if (!p) return null;
+          const on = sel === i + 1;
+          return (
+            <button
+              key={i}
+              type="button"
+              onMouseEnter={() => setSel(i + 1)}
+              onFocus={() => setSel(i + 1)}
+              onClick={() => setSel((s) => (s === i + 1 ? null : i + 1))}
+              aria-label={`${p.won ? "Victoria" : "Derrota"} ${p.label}, ${signed(p.delta)} puntos`}
+              style={{
+                position: "absolute",
+                left: pct(x, W),
+                top: pct(y, H),
+                width: on ? 12 : 8,
+                height: on ? 12 : 8,
+                transform: "translate(-50%, -50%)",
+                borderRadius: "50%",
+                padding: 0,
+                cursor: "pointer",
+                background: p.won ? "var(--accent)" : "var(--error)",
+                border: on ? "2px solid var(--text)" : "none",
+              }}
+            />
+          );
+        })}
+        {max !== min ? (
+          <>
+            <span className="mono" style={{ ...faint, position: "absolute", right: 0, top: -4 }}>
+              {fmtInt(max)}
+            </span>
+            <span className="mono" style={{ ...faint, position: "absolute", right: 0, bottom: -4 }}>
+              {fmtInt(min)}
+            </span>
+          </>
+        ) : null}
+      </div>
+      <div className="mono" style={{ ...faint, display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+        <span>{start}</span>
+        <span>{end}</span>
+      </div>
+
+      {/* Resumen de la temporada */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 14 }}>
+        {summary.map((x) => (
+          <div key={x.k}>
+            <div className="mono" style={{ fontSize: 15, fontWeight: 800, color: x.color }}>
+              {x.v}
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{x.k}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

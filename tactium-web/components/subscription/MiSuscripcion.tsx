@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 import {
   isStoreManaged,
@@ -11,12 +11,29 @@ import {
   type SubscriptionSource,
 } from "@/lib/account-data";
 import { fetchSubscription, type DbSubscription } from "@/lib/queries";
-import { ALL_PLANS, formatEur } from "@/lib/plans";
+import {
+  fetchClubCoveredCount,
+  fetchClubSubscription,
+  fetchMyDbTrialEnd,
+  fetchTeamPro,
+} from "@/lib/account-queries";
+import { ALL_PLANS, TRIAL_DURATION_DAYS, formatEur } from "@/lib/plans";
+import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Btn, BtnLink, Card, Chip, Note, PageHeader } from "@/components/ui";
+import { Btn, BtnLink, Card, CardHead, Chip, Note, PageHeader, Progress } from "@/components/ui";
 import { SkeletonPage } from "@/components/states";
+import { CountUp, EASE } from "@/components/entry/motion-bits";
 import { RedeemCode } from "./RedeemCode";
-import { IconClock, IconLock } from "@/components/Icon";
+import { IconCheck, IconClock, IconLock } from "@/components/Icon";
+
+/** Ayuda oficial para gestionar una suscripción de tienda (antes el enlace
+ *  apuntaba a /ayuda/suscripcion-tienda, que no existe). */
+const STORE_HELP: Record<string, string> = {
+  app_store: "https://support.apple.com/es-es/118428",
+  play_store: "https://support.google.com/googleplay/answer/7018481?hl=es",
+};
+const DAY = 86400000;
+const shortDate = (d: Date) => d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 
 /**
  * Mi suscripción.
@@ -101,8 +118,22 @@ function toSubscription(row: DbSubscription | null): Subscription {
   };
 }
 
+/**
+ * Una «Mi suscripción» por rol (igual que la app): el jugador no compra nada,
+ * el club va a su facturación y el capitán ve su plan (con la prueba sin
+ * tarjeta, si la tiene, contada como en el paywall).
+ */
 export function MiSuscripcion() {
+  const { role, ready } = useSession();
+  if (!ready) return <SkeletonPage />;
+  if (role === "jugador") return <PlayerCoverage />;
+  if (role === "club") return <ClubSummary />;
+  return <CaptainSubscription />;
+}
+
+function CaptainSubscription() {
   const { data, loading, error } = useAsync(() => fetchSubscription(), []);
+  const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), []);
   const sub = toSubscription(data);
   const [portalBusy, setPortalBusy] = useState(false);
 
@@ -146,6 +177,8 @@ export function MiSuscripcion() {
           No se ha podido leer tu suscripción: {error}
         </Note>
       )}
+
+      {trialEnd && <DbTrialHero endIso={trialEnd} />}
 
       {/* Cambio de plan diferido: Apple/Google aplican los downgrades al
           final del ciclo, así que se anuncia de forma persistente. */}
@@ -231,7 +264,9 @@ export function MiSuscripcion() {
               <span style={{ display: "block", marginTop: 4 }}>
                 Aquí solo puedes consultarla · el cobro y la cancelación se gestionan en
                 la tienda.{" "}
-                <Link href="/ayuda/suscripcion-tienda">Cómo gestionarla</Link>
+                <a href={STORE_HELP[sub.source]} target="_blank" rel="noopener noreferrer">
+                  Cómo gestionarla
+                </a>
               </span>
             </Note>
 
@@ -260,7 +295,7 @@ export function MiSuscripcion() {
             <RedeemCode planHref="/pro" />
             <div style={{ flex: 1 }} />
             <Btn variant="danger-ghost" onClick={openPortal} disabled={portalBusy}>
-              {portalBusy ? "Abriendo…" : "Cancelar suscripción"}
+              {portalBusy ? "Abriendo…" : "Cancelar la renovación"}
             </Btn>
           </div>
         )}
@@ -277,12 +312,225 @@ export function MiSuscripcion() {
             }}
           >
             <BtnLink href="/pro" variant="accent">
-              Hazte Pro · Prueba 14 días
+              {trialEnd ? "Elegir el plan Capitán" : "Ver los planes"}
             </BtnLink>
             <RedeemCode planHref="/pro" />
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+/* ── Prueba sin tarjeta: días que quedan y línea de tiempo ─────────── */
+function DbTrialHero({ endIso }: { endIso: string }) {
+  const reduce = useReducedMotion();
+  const end = new Date(endIso);
+  const start = new Date(end.getTime() - TRIAL_DURATION_DAYS * DAY);
+  const notice = new Date(end.getTime() - 3 * DAY);
+  const today = new Date();
+  const daysLeft = Math.max(0, Math.ceil((end.getTime() - today.getTime()) / DAY));
+  const steps = [
+    { at: start, label: `Día 1 · ${shortDate(start)}`, text: "Empezaste tu prueba. Pro completo." },
+    { at: today, label: `Hoy · ${shortDate(today)}`, text: daysLeft === 1 ? "Te queda 1 día de Pro" : `Te quedan ${daysLeft} días de Pro`, now: true },
+    { at: notice, label: `Día ${TRIAL_DURATION_DAYS - 3} · ${shortDate(notice)}`, text: "Te avisamos con 3 días de margen" },
+    { at: end, label: `Día ${TRIAL_DURATION_DAYS} · ${shortDate(end)}`, text: "Pasas al plan gratis si no eliges" },
+  ].sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <CountUp
+          to={daysLeft}
+          className="mono"
+          style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, color: daysLeft <= 3 ? "var(--warning)" : "var(--accent)" }}
+        />
+        <span style={{ fontSize: 16, fontWeight: 700 }}>
+          {daysLeft === 1 ? "día de Pro gratis" : "días de Pro gratis"}
+        </span>
+      </div>
+      <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
+        Sin tarjeta. Cuando acabe no se cobra nada: eliges plan o sigues gratis.
+      </p>
+      <ol style={{ listStyle: "none", margin: "16px 0 0", padding: "0 0 0 24px", position: "relative" }}>
+        <motion.span
+          aria-hidden="true"
+          initial={reduce ? false : { scaleY: 0 }}
+          animate={{ scaleY: 1 }}
+          transition={{ duration: 0.9, ease: EASE, delay: 0.26 }}
+          style={{
+            position: "absolute",
+            left: 7,
+            top: 8,
+            bottom: 14,
+            width: 2,
+            borderRadius: 1,
+            transformOrigin: "top center",
+            background: "linear-gradient(var(--accent), var(--line-strong))",
+          }}
+        />
+        {steps.map((st) => {
+          const state = st.now ? "now" : st.at.getTime() <= today.getTime() ? "done" : "next";
+          return (
+            <li key={st.label} style={{ position: "relative", padding: "2px 0 12px" }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: -22,
+                  top: 6,
+                  width: 12,
+                  height: 12,
+                  borderRadius: 999,
+                  background: state === "now" ? "var(--accent)" : "var(--bg-card)",
+                  border: `2px solid ${state === "next" ? "var(--text-faint)" : "var(--accent)"}`,
+                }}
+              />
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 700 }}>{st.label}</span>
+              <span style={{ display: "block", fontSize: 12.5, color: "var(--text-muted)" }}>{st.text}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </Card>
+  );
+}
+
+/* ── Jugador: nada que comprar ─────────────────────────────────────── */
+const PLAYER_BENEFITS = [
+  "Convocatoria con Voy · Duda · No",
+  "Alineación y resultados de cada jornada",
+  "Tus números de liga y de amistosos",
+];
+
+function PlayerCoverage() {
+  const { activeTeam } = useSession();
+  const { data: pro, loading } = useAsync(
+    () => fetchTeamPro(activeTeam!.id),
+    [activeTeam?.id],
+    !!activeTeam,
+  );
+  if (loading) return <SkeletonPage />;
+  const name = activeTeam?.name ?? "Tu equipo";
+  const free = pro === false;
+  return (
+    <div className="tw-page-narrow">
+      <PageHeader
+        title={free ? "Tu equipo está en el plan gratis" : "Tu equipo te cubre"}
+        lede={
+          free
+            ? `${name} está en el plan gratis. Lo activa tu capitán. Tú no pagas nada.`
+            : `Eres jugador de ${name}. Tienes la app completa y no pagas nada.`
+        }
+      />
+      <Card flush>
+        <CardHead title={name} sub={free ? "Plan gratis · lo gestiona tu capitán" : "Tu equipo tiene Pro"}>
+          {pro && <Chip tone="accent">Pro</Chip>}
+        </CardHead>
+        {!free && (
+          <ul className="card-body" style={{ listStyle: "none", margin: 0, display: "grid", gap: 8 }}>
+            {PLAYER_BENEFITS.map((b) => (
+              <li key={b} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5 }}>
+                <span style={{ color: "var(--accent)", display: "flex" }}>
+                  <IconCheck size={15} />
+                </span>
+                {b}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>¿Vas a capitanear tu propio equipo?</div>
+        <p style={{ margin: "4px 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
+          Créalo y tendrás {TRIAL_DURATION_DAYS} días de prueba, sin tarjeta.
+        </p>
+        <BtnLink href="/empezar" size="sm">
+          Crear un equipo
+        </BtnLink>
+      </Card>
+    </div>
+  );
+}
+
+/* ── Club: un resumen y un camino ──────────────────────────────────── */
+function ClubSummary() {
+  const { clubId, clubs } = useSession();
+  const club = clubs.find((c) => c.id === clubId) ?? null;
+  const { data, loading } = useAsync(
+    async () => {
+      const [sub, used, personal] = await Promise.all([
+        fetchClubSubscription(clubId!),
+        fetchClubCoveredCount(clubId!),
+        fetchSubscription().catch(() => null),
+      ]);
+      return { sub, used, personal };
+    },
+    [clubId],
+    !!clubId,
+  );
+  if (loading) return <SkeletonPage />;
+  const sub = data?.sub ?? null;
+  const plan = sub ? ALL_PLANS.find((p) => p.tier === sub.planTier) ?? null : null;
+  const yearly = sub?.billingPeriod === "yearly";
+  const quota = plan?.teamQuota ?? 0;
+  const used = data?.used ?? 0;
+  const personalCaptain =
+    data?.personal?.subjectType === "user" && data.personal.planTier === "captain";
+
+  return (
+    <div className="tw-page-narrow">
+      <PageHeader
+        title={sub ? "La paga el club" : "Tu club está en el plan gratis"}
+        lede={
+          sub
+            ? "La suscripción del club cubre a sus equipos y a sus capitanes."
+            : "Con un plan de club cubres a todos tus equipos y capitanes."
+        }
+      />
+      {sub && plan && (
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                {plan.displayName} · {yearly ? "anual" : "mensual"}
+              </div>
+              {club && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>{club.name}</div>}
+            </div>
+            <span className="mono" style={{ fontSize: 22, fontWeight: 700 }}>
+              {formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)}
+              <span style={{ fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
+                {yearly ? " /año" : " /mes"}
+              </span>
+            </span>
+          </div>
+          <div className="divider" />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)", width: 70 }}>Equipos</span>
+            <div style={{ flex: 1 }}>
+              <Progress value={quota > 0 ? Math.min(100, (used / quota) * 100) : 0} />
+            </div>
+            <span className="mono" style={{ fontSize: 13 }}>
+              {used} de {quota}
+            </span>
+          </div>
+          <dl className="kv" style={{ marginTop: 14 }}>
+            <dt>{sub.status === "trialing" ? "Prueba termina" : sub.cancelAtPeriodEnd ? "Termina" : "Próximo cobro"}</dt>
+            <dd>{fmtDate(sub.currentPeriodEnd)}</dd>
+          </dl>
+        </Card>
+      )}
+      <div style={{ marginTop: 16 }}>
+        <BtnLink href="/club/facturacion" variant="accent">
+          {sub ? "Abrir la facturación del club" : "Ver los planes de club"}
+        </BtnLink>
+      </div>
+      {sub && personalCaptain && (
+        <Note tone="accent" icon={<IconCheck size={16} />} style={{ marginTop: 16 }}>
+          Tu club ya cubre tu plan. Puedes cancelar la suscripción individual de capitán para no
+          pagar dos veces.
+        </Note>
+      )}
     </div>
   );
 }

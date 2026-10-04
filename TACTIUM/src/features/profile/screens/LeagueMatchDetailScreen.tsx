@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -14,6 +15,7 @@ import {
   useRoute,
   type RouteProp,
 } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
@@ -22,42 +24,57 @@ import { IconBack } from '@components/ui';
 import { PhotoShareCard, shareCardImage } from '@components/share/PhotoShareCard';
 import { DOWNLOAD_URL } from '@core/config/referral';
 import { fetchPublicMatchday, type PublicMatchday } from '@core/services/social';
+import { useAuthStore } from '@store/authStore';
+import { useTeamStore } from '@store/teamStore';
 import type { RootStackParamList } from '@navigation/types';
 
+import { MatchRow, MatchScoreboard } from '@features/home/components/match/MatchScoreboard';
+import { KudosButton } from '@features/home/components/match/KudosButton';
+
 const MESES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+  'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
 ];
-const formatDate = (iso: string | null): string => {
+const shortDate = (iso: string | null): string => {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
-  return `${d} de ${MESES[m - 1]} de ${y}`;
+  return `${d} ${MESES[m - 1]} ${y}`;
 };
 
 const OUTCOME: Record<string, { label: string; won: boolean | null }> = {
-  win: { label: 'VICTORIA', won: true },
-  loss: { label: 'DERROTA', won: false },
-  draw: { label: 'EMPATE', won: null },
+  win: { label: 'Victoria', won: true },
+  loss: { label: 'Derrota', won: false },
+  draw: { label: 'Empate', won: null },
 };
 
-// Partido de liga (jornada) en SOLO LECTURA — al que llevan las fotos de
-// jornada del perfil. Sin acciones: es una vista pública.
+/** Campos que añade la migración 20261004_partido_kudos_detalle (sin aplicar). */
+type WithKudos = PublicMatchday & { kudos_count?: number | null; i_gave_kudos?: boolean | null };
+
+/**
+ * Detalle público de una jornada de liga (rediseño bloque «Partido»): la
+ * misma cabecera con marcador que la Jornada (con la foto de fondo si la
+ * hay), kudos y «pista a pista» con quién ganó cada una. Tu pista, primero.
+ */
 export const LeagueMatchDetailScreen = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'LeagueMatchDetail'>>();
   const { matchdayId } = route.params;
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const activeTeam = useTeamStore((s) => s.team);
+  const players = useTeamStore((s) => s.players);
+  const myPlayerId = useTeamStore((s) => s.myPlayerId);
 
   const [loading, setLoading] = useState(true);
-  const [md, setMd] = useState<PublicMatchday | null>(null);
+  const [md, setMd] = useState<WithKudos | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setMd(await fetchPublicMatchday(matchdayId));
+      setMd((await fetchPublicMatchday(matchdayId)) as WithKudos | null);
     } catch (e) {
       console.warn('LeagueMatchDetail load', e);
     } finally {
@@ -72,15 +89,27 @@ export const LeagueMatchDetailScreen = () => {
   );
 
   const oc = md?.outcome ? OUTCOME[md.outcome] ?? null : null;
-  const meta = md
-    ? [
-        md.category,
-        md.group_name ? `Grupo ${md.group_name}` : null,
-        formatDate(md.match_date),
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : '';
+  // ¿Es la jornada de MI equipo activo? Entonces «Abrir jornada» y «Tú».
+  const isMyTeam =
+    !!md && !!activeTeam && !!md.team_name && activeTeam.name.trim() === md.team_name.trim();
+  const myName = isMyTeam && myPlayerId ? players.find((p) => p.id === myPlayerId)?.name ?? null : null;
+
+  const courts = useMemo(() => {
+    if (!md) return [];
+    const rows = md.courts.map((ct) => {
+      let won: boolean | null = null;
+      if (ct.forfeit) won = !ct.forfeit_us;
+      else if (ct.sets.length > 0) {
+        const u = ct.sets.filter((s) => s.us > s.them).length;
+        const t = ct.sets.filter((s) => s.them > s.us).length;
+        won = u === t ? null : u > t;
+      }
+      const mine = !!myName && !!ct.pair && ct.pair.toLowerCase().includes(myName.toLowerCase());
+      return { ...ct, won, mine };
+    });
+    // Tu pista primero.
+    return [...rows.filter((r) => r.mine), ...rows.filter((r) => !r.mine)];
+  }, [md, myName]);
 
   const cardRef = useRef<View>(null);
   const shareText = useMemo(() => {
@@ -90,24 +119,54 @@ export const LeagueMatchDetailScreen = () => {
       (md.jornada_number != null ? ` · Jornada ${md.jornada_number}` : '');
     return [header, '', 'Sigue tus ligas con TACTIUM 🏆', DOWNLOAD_URL].join('\n');
   }, [md]);
-  const onShare = () => {
-    if (!md?.photo_url) return;
-    shareCardImage(cardRef, md.photo_url, shareText);
+  const onShare = async () => {
+    if (!md) return;
+    if (md.photo_url) {
+      shareCardImage(cardRef, md.photo_url, shareText);
+      return;
+    }
+    try {
+      await Share.share({ message: shareText });
+    } catch {
+      // cancelado
+    }
   };
+
+  const eyebrow = md
+    ? [
+        md.category,
+        md.group_name ? `Grupo ${md.group_name}` : null,
+        md.jornada_number != null ? `J${md.jornada_number}` : null,
+        shortDate(md.match_date),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .toUpperCase()
+    : '';
+  const tint = oc?.won === true ? c.accent : oc?.won === false ? c.error : oc ? c.warning : c.text;
 
   return (
     <View style={styles.root}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          style={styles.backBtn}
+        >
+          <IconBack size={18} color={c.text} />
+        </Pressable>
+        {md ? (
+          <Pressable onPress={onShare} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.headerLink}>Compartir</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32 },
-        ]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={styles.backBtn}>
-          <IconBack size={20} color={c.text} />
-        </Pressable>
-
         {loading ? (
           <View style={styles.loader}>
             <ActivityIndicator color={c.accent} />
@@ -118,112 +177,82 @@ export const LeagueMatchDetailScreen = () => {
           </View>
         ) : (
           <>
-            <Text style={styles.eyebrow}>
-              {md.jornada_number != null ? `JORNADA ${md.jornada_number}` : 'PARTIDO'}
-              {meta ? ` · ${meta}` : ''}
-            </Text>
+            <MatchScoreboard
+              eyebrow={eyebrow}
+              left={md.team_name ?? 'Nuestro equipo'}
+              right={md.opponent ?? 'Rival'}
+              us={md.score_for}
+              them={md.score_against}
+              status={oc ? `${oc.label}${md.is_home != null ? ` · ${md.is_home ? 'local' : 'visitante'}` : ''}` : 'Sin acta'}
+              tint={tint}
+              photoUrl={md.photo_url}
+            />
+
+            {oc && userId ? (
+              <KudosButton
+                kind="league"
+                targetId={md.id}
+                userId={userId}
+                initialCount={md.kudos_count ?? null}
+                initialGiven={md.i_gave_kudos ?? null}
+              />
+            ) : null}
+
+            {isMyTeam ? (
+              <Pressable
+                onPress={() =>
+                  navigation.navigate('MainTabs', {
+                    screen: 'Home',
+                    params: { screen: 'Jornada', params: { matchdayId: md.id } },
+                  })
+                }
+                style={({ pressed }) => [styles.openRow, pressed && { opacity: 0.8 }]}
+              >
+                <Text style={styles.openText}>Abrir jornada ›</Text>
+              </Pressable>
+            ) : null}
+
+            {courts.length > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>PISTA A PISTA</Text>
+                <View style={{ gap: 8 }}>
+                  {courts.map((ct) => (
+                    <MatchRow
+                      key={ct.court_number}
+                      badge={`P${ct.court_number}`}
+                      title={ct.mine && myName && ct.pair ? ct.pair.replace(myName, 'Tú') : ct.pair ?? `Pista ${ct.court_number}`}
+                      sub={
+                        ct.forfeit
+                          ? `W.O. ${ct.forfeit_us ? 'en contra' : 'a favor'}`
+                          : ct.sets.length
+                            ? ct.sets.map((s) => `${s.us}-${s.them}`).join(' ')
+                            : 'Sin resultado'
+                      }
+                      right={ct.won === true ? '✓' : ct.won === false ? '✕' : '—'}
+                      rightTone={ct.won === true ? 'win' : ct.won === false ? 'loss' : 'muted'}
+                      me={ct.mine}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
 
             {md.photo_url ? (
               <>
-                <View style={styles.cardWrap}>
+                <Text style={styles.sectionLabel}>TARJETA PARA COMPARTIR</Text>
+                <View style={{ alignItems: 'center' }}>
                   <PhotoShareCard
                     ref={cardRef}
                     photoUri={md.photo_url}
                     title={`${md.team_name ?? ''} ${md.score_for ?? 0} – ${md.score_against ?? 0} ${md.opponent ?? ''}`}
-                    subtitle={`${md.jornada_number != null ? `Jornada ${md.jornada_number}` : 'Partido'}${meta ? ` · ${meta}` : ''}`}
-                    detail={
-                      oc
-                        ? `${oc.label}${md.is_home != null ? ` · ${md.is_home ? 'Local' : 'Visitante'}` : ''}`
-                        : ''
-                    }
+                    subtitle={`${md.jornada_number != null ? `Jornada ${md.jornada_number}` : 'Partido'}${md.category ? ` · ${md.category}` : ''}`}
+                    detail={oc ? `${oc.label.toUpperCase()}${md.is_home != null ? ` · ${md.is_home ? 'Local' : 'Visitante'}` : ''}` : ''}
                     homeName={md.team_name ?? 'Nuestro equipo'}
                     homeScore={md.score_for ?? 0}
                     awayName={md.opponent ?? 'Rival'}
                     awayScore={md.score_against ?? 0}
                     highlight={oc?.won === true ? 'home' : oc?.won === false ? 'away' : 'home'}
                   />
-                </View>
-                <Pressable
-                  onPress={onShare}
-                  style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={styles.shareBtnLabel}>Compartir foto</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                {/* Sin foto: scoreboard clásico */}
-                <View style={styles.scoreCard}>
-                  <ScoreRow
-                    name={md.team_name ?? 'Nuestro equipo'}
-                    score={md.score_for}
-                    win={oc?.won === true}
-                  />
-                  <View style={styles.scoreDivider} />
-                  <ScoreRow
-                    name={md.opponent ?? 'Rival'}
-                    score={md.score_against}
-                    win={oc?.won === false}
-                  />
-                </View>
-                {oc ? (
-                  <View
-                    style={[
-                      styles.outcomePill,
-                      {
-                        borderColor:
-                          oc.won === true ? c.accent : oc.won === false ? c.error : c.warning,
-                        backgroundColor:
-                          (oc.won === true ? c.accent : oc.won === false ? c.error : c.warning) + '14',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.outcomeText,
-                        {
-                          color:
-                            oc.won === true ? c.accent : oc.won === false ? c.error : c.warning,
-                        },
-                      ]}
-                    >
-                      {oc.label}
-                      {md.is_home != null ? ` · ${md.is_home ? 'Local' : 'Visitante'}` : ''}
-                    </Text>
-                  </View>
-                ) : null}
-              </>
-            )}
-
-            {/* Resultados por pista */}
-            {md.courts.length > 0 ? (
-              <>
-                <Text style={styles.sectionLabel}>RESULTADOS POR PISTA</Text>
-                <View style={styles.courtsCard}>
-                  {md.courts.map((ct) => (
-                    <View key={ct.court_number} style={styles.courtRow}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.courtLabel}>PISTA {ct.court_number}</Text>
-                        {ct.pair ? (
-                          <Text style={styles.courtPair} numberOfLines={1}>
-                            {ct.pair}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <Text
-                        style={[
-                          styles.courtSets,
-                          ct.forfeit && { color: ct.forfeit_us ? c.error : c.accent },
-                        ]}
-                      >
-                        {ct.forfeit
-                          ? `W.O. ${ct.forfeit_us ? 'en contra' : 'a favor'}`
-                          : ct.sets.length
-                            ? ct.sets.map((s) => `${s.us}-${s.them}`).join('  ')
-                            : '—'}
-                      </Text>
-                    </View>
-                  ))}
                 </View>
               </>
             ) : null}
@@ -234,29 +263,18 @@ export const LeagueMatchDetailScreen = () => {
   );
 };
 
-const ScoreRow: React.FC<{ name: string; score: number | null; win: boolean }> = ({
-  name,
-  score,
-  win,
-}) => {
-  const c = useColors();
-  const styles = useMemo(() => makeStyles(c), [c]);
-  return (
-    <View style={styles.scoreRow}>
-      <Text style={[styles.scoreName, win && { color: c.text }]} numberOfLines={1}>
-        {name}
-      </Text>
-      <Text style={[styles.scoreValue, win && { color: c.accent }]}>
-        {score ?? '–'}
-      </Text>
-    </View>
-  );
-};
-
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.background },
-    content: { paddingHorizontal: 20 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    headerLink: { color: c.accent, fontSize: 14, fontWeight: '700' },
+    content: { paddingHorizontal: 16, gap: 10 },
     backBtn: {
       width: 38,
       height: 38,
@@ -266,7 +284,6 @@ const makeStyles = (c: Palette) =>
       borderColor: c.hairStrong,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 14,
     },
     loader: { paddingTop: 60, alignItems: 'center' },
     emptyBox: {
@@ -278,103 +295,17 @@ const makeStyles = (c: Palette) =>
       padding: 20,
     },
     emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
-    eyebrow: {
-      fontFamily: Fonts.mono,
-      fontSize: 11,
-      letterSpacing: 2,
-      color: c.accent,
-      fontWeight: '500',
-      marginBottom: 12,
-    },
-    cardWrap: { alignItems: 'center', marginBottom: 4 },
-    shareBtn: {
-      height: 50,
-      borderRadius: Radius.lg,
-      backgroundColor: c.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 14,
-    },
-    shareBtnLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
-    scoreCard: {
-      backgroundColor: c.bgCard,
-      borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: c.accent40,
-      padding: 18,
-      gap: 4,
-    },
-    scoreRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-    },
-    scoreName: {
-      flex: 1,
-      color: c.textMuted,
-      fontSize: 19,
-      fontWeight: '700',
-      letterSpacing: -0.3,
-    },
-    scoreValue: {
-      fontFamily: Fonts.mono,
-      color: c.textMuted,
-      fontSize: 26,
-      fontWeight: '800',
-      minWidth: 30,
-      textAlign: 'right',
-    },
-    scoreDivider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: c.hair,
-      marginVertical: 6,
-    },
-    outcomePill: {
+    openRow: {
       alignSelf: 'flex-start',
-      marginTop: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderRadius: 999,
-      borderWidth: 1,
+      paddingVertical: 4,
     },
-    outcomeText: {
-      fontFamily: Fonts.mono,
-      fontSize: 12,
-      letterSpacing: 1,
-      fontWeight: '800',
-    },
+    openText: { color: c.accent, fontSize: 14, fontWeight: '700' },
     sectionLabel: {
       fontFamily: Fonts.mono,
       color: c.textFaint,
-      fontSize: 11,
+      fontSize: 10.5,
       letterSpacing: 2,
       fontWeight: '500',
-      marginTop: 22,
-      marginBottom: 8,
+      marginTop: 8,
     },
-    courtsCard: {
-      backgroundColor: c.bgCard,
-      borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: c.hair,
-      paddingHorizontal: 16,
-    },
-    courtRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-      paddingVertical: 11,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: c.hair,
-    },
-    courtLabel: {
-      fontFamily: Fonts.mono,
-      color: c.textFaint,
-      fontSize: 10,
-      letterSpacing: 1,
-    },
-    courtPair: { color: c.text, fontSize: 14, fontWeight: '600', marginTop: 2 },
-    courtSets: { fontFamily: Fonts.mono, color: c.text, fontSize: 15, fontWeight: '700', textAlign: 'right' },
   });

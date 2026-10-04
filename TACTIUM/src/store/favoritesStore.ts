@@ -15,7 +15,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * haber empezado como invitado.
  */
 
-export type FavoriteKind = 'team' | 'player' | 'federation';
+// 'tournament' = seguir un torneo (campana de la ficha). En el servidor lo
+// admite la migración 20261004_favorites_kind_tournament; hasta que se aplique
+// vive solo en el dispositivo.
+export type FavoriteKind = 'team' | 'player' | 'federation' | 'tournament';
 
 export interface Favorite {
   kind: FavoriteKind;

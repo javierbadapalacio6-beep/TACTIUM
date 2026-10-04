@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
+import { MODAL_ORIENTATIONS } from '@components/ui/ResponsiveFrame';
 
 interface TrialTimelineProps {
   visible: boolean;
@@ -74,6 +75,7 @@ export const TrialTimeline = ({
 
   return (
     <Modal
+      supportedOrientations={MODAL_ORIENTATIONS}
       visible={visible}
       transparent
       animationType="slide"

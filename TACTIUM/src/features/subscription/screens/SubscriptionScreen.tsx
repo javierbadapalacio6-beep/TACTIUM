@@ -10,6 +10,8 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
@@ -17,19 +19,29 @@ import { Radius } from '@core/theme/spacing';
 import { IconBack, IconArrowRight, IconCheck } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
+import { useClubStore } from '@store/clubStore';
+import { useTeamPro } from '@features/settings/useTeamPro';
+import { clubCoverage } from '@core/entitlements/coverage';
+import {
+  DbTrialBlock,
+  BillingToggle,
+} from '@features/subscription/components/PaywallParts';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { toast } from '@store/toastStore';
 import {
   PLAN_BY_TIER,
+  CAPTAIN_PLAN,
+  TRIAL_DURATION_DAYS,
+  annualDiscountPercent,
   formatEur,
-  PREMIUM_STATUSES,
+  type BillingPeriod,
   type SubscriptionStatus,
   isLiveSub,
 } from '@core/subscriptions/plans';
 import type { Subscription } from '@core/entitlements/hasPremiumAccess';
 import { restorePurchases, presentCodeRedemption } from '@core/purchases';
 
-import type { RootStackScreenProps } from '@navigation/types';
+import type { RootStackParamList, RootStackScreenProps } from '@navigation/types';
 
 const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   trialing: 'En prueba',
@@ -57,9 +69,20 @@ function formatDate(iso: string | null): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+type SubscriptionScreenProps = Partial<RootStackScreenProps<'Subscription'>> & {
+  /**
+   * TABLET: pintada como DETALLE de Ajustes (lista + detalle, como los
+   * Ajustes del iPad). Sin cabecera «Volver» ni hueco de la barra de estado.
+   */
+  embedded?: boolean;
+};
+
 export const SubscriptionScreen = ({
-  navigation,
-}: RootStackScreenProps<'Subscription'>) => {
+  navigation: navProp,
+  embedded = false,
+}: SubscriptionScreenProps) => {
+  const fallbackNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = (navProp ?? fallbackNav) as NativeStackNavigationProp<RootStackParamList>;
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const STATUS_TINT = useMemo(() => makeStatusTint(c), [c]);
@@ -69,6 +92,37 @@ export const SubscriptionScreen = ({
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
   const refreshSubs = useSubscriptionStore((s) => s.refresh);
   const [restoring, setRestoring] = useState(false);
+  const team = useTeamStore((s) => s.team);
+  const teams = useTeamStore((s) => s.teams);
+  const setSoloUpgrade = useTeamStore((s) => s.setSoloUpgrade);
+  const setSoloMode = useTeamStore((s) => s.setSoloMode);
+  const clubs = useClubStore((s) => s.clubs);
+  const activeClubId = useClubStore((s) => s.activeClubId);
+  const [period, setPeriod] = useState<BillingPeriod>('yearly');
+
+  // Una «Mi suscripción» por rol: el jugador no compra nada, el club va a la
+  // facturación del club y el capitán (o quien no tiene rol de gestión) ve
+  // su plan propio.
+  const mode: 'player' | 'club' | 'captain' =
+    activeRole === 'player' ? 'player' : activeRole === 'club_admin' ? 'club' : 'captain';
+
+  // ¿El equipo del jugador tiene Pro? (sin decir quién paga)
+  const teamPro = useTeamPro(team, mode === 'player');
+
+  // Club activo y su suscripción.
+  const clubId = activeClubId ?? clubs[0]?.id ?? null;
+  const club = clubs.find((cl) => cl.id === clubId) ?? null;
+  const clubSub = useMemo<Subscription | null>(
+    () =>
+      subscriptions.find(
+        (s) => s.subject_type === 'club' && s.subject_id === clubId && isLiveSub(s),
+      ) ?? null,
+    [subscriptions, clubId],
+  );
+  const coverage = useMemo(
+    () => clubCoverage(clubId, teams, subscriptions),
+    [clubId, teams, subscriptions],
+  );
 
   // Sub del propio user (subject_type='user'). La activa más reciente.
   const mySub = useMemo<Subscription | null>(() => {
@@ -108,6 +162,16 @@ export const SubscriptionScreen = ({
 
   const plan = mySub ? PLAN_BY_TIER[mySub.plan_tier] : null;
   const status = mySub?.status ?? null;
+  // Prueba SIN tarjeta de la base (product_id `trial_*`): mismo bloque que el
+  // paywall (días que quedan y línea de tiempo).
+  const dbTrial =
+    !!mySub &&
+    status === 'trialing' &&
+    isLiveSub(mySub) &&
+    (mySub.product_id ?? '').startsWith('trial_');
+  const yearlyChip = annualDiscountPercent(CAPTAIN_PLAN) > 0;
+  const billed =
+    period === 'yearly' ? CAPTAIN_PLAN.priceYearlyEur : CAPTAIN_PLAN.priceMonthlyEur;
 
   /**
    * ¿La suscripción viva se compró en la WEB (Stripe) y no en la tienda?
@@ -180,7 +244,7 @@ export const SubscriptionScreen = ({
 
   const handleCancel = () => {
     Alert.alert(
-      'Cancelar suscripción',
+      'Cancelar la renovación',
       'La cancelación se gestiona desde Ajustes de tu cuenta de App Store / Google Play. Te abrimos esa pantalla ahora.',
       [
         { text: 'Volver', style: 'cancel' },
@@ -191,6 +255,7 @@ export const SubscriptionScreen = ({
 
   return (
     <View style={styles.root}>
+      {embedded ? null : (
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -203,15 +268,76 @@ export const SubscriptionScreen = ({
         </Pressable>
         <View style={{ flex: 1 }} />
       </View>
+      )}
 
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
+          embedded && { paddingTop: insets.top + 20 },
           { paddingBottom: insets.bottom + 28 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.eyebrow}>MI SUSCRIPCIÓN</Text>
+
+        {mode === 'player' ? (
+          <PlayerCoverage
+            teamName={team?.name ?? null}
+            teamPro={teamPro}
+            onCreateTeam={() => {
+              setSoloUpgrade(true);
+              setSoloMode(false);
+            }}
+            onRestore={handleRestore}
+            restoring={restoring}
+          />
+        ) : mode === 'club' ? (
+          <ClubSummary
+            clubName={club?.name ?? null}
+            sub={clubSub}
+            used={coverage.used}
+            quota={coverage.quota}
+            personalLive={!!mySub && isLiveSub(mySub) && mySub.plan_tier === 'captain'}
+            onOpenBilling={() => navigation.navigate('ClubBilling')}
+          />
+        ) : (
+        <>
+        {dbTrial && mySub ? (
+          <>
+            <DbTrialBlock
+              startIso={mySub.current_period_start ?? mySub.created_at ?? null}
+              endIso={mySub.trial_end ?? mySub.current_period_end}
+              trialDays={TRIAL_DURATION_DAYS}
+            />
+            <View style={{ marginTop: 14 }}>
+              <BillingToggle value={period} onChange={setPeriod} showYearlyChip={yearlyChip} />
+            </View>
+            {/* Apple 3.1.2c: el importe que se cobra es lo más grande. */}
+            <View style={styles.trialPlan}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.trialPlanName}>{CAPTAIN_PLAN.displayName}</Text>
+                <Text style={styles.planMeta}>
+                  {team?.name && !team.club_id ? `Cubre a ${team.name}` : '1 equipo'} · todo Pro
+                </Text>
+              </View>
+              <Text style={styles.trialPrice}>
+                {formatEur(billed)}
+                <Text style={styles.trialPriceUnit}>
+                  {period === 'yearly' ? '/año' : '/mes'}
+                </Text>
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => navigation.navigate('Paywall', { intent: 'upgrade' })}
+              style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.ctaPrimaryLabel}>Elegir el plan Capitán</Text>
+              <IconArrowRight size={16} color={c.textInverse} />
+            </Pressable>
+          </>
+        ) : (
+        <>
         <Text style={styles.title}>Plan y facturación</Text>
         <Text style={styles.lede}>
           Gestiona tu plan TACTIUM Pro y consulta el estado de tu suscripción.
@@ -231,6 +357,9 @@ export const SubscriptionScreen = ({
                       ? formatEur(plan.priceYearlyEur)
                       : formatEur(plan.priceMonthlyEur)}
                   </Text>
+                  {mySub.plan_tier === 'captain' && team && !team.club_id ? (
+                    <Text style={styles.planMeta}>Cubre a {team.name}</Text>
+                  ) : null}
                 </View>
                 <View
                   style={[
@@ -420,8 +549,12 @@ export const SubscriptionScreen = ({
           </View>
         ) : null}
 
+        </>
+        )}
+
         {/* === ACTIONS === */}
         <View style={styles.actionsBlock}>
+          {!dbTrial ? (
           <ActionRow
             label="Gestionar suscripción"
             sub={
@@ -433,6 +566,7 @@ export const SubscriptionScreen = ({
             }
             onPress={subWeb ? openWebBilling : openStoreSubscriptions}
           />
+          ) : null}
           <ActionRow
             label={restoring ? 'Restaurando…' : 'Restaurar compras'}
             sub="Recupera tu suscripción si cambiaste de dispositivo"
@@ -443,9 +577,9 @@ export const SubscriptionScreen = ({
             sub="Introduce un código promocional o de invitación"
             onPress={handleRedeemCode}
           />
-          {mySub && !mySub.cancel_at_period_end && status !== 'expired' ? (
+          {mySub && !dbTrial && !mySub.cancel_at_period_end && status !== 'expired' ? (
             <ActionRow
-              label="Cancelar suscripción"
+              label="Cancelar la renovación"
               sub="No se renovará al expirar"
               destructive
               onPress={handleCancel}
@@ -456,10 +590,12 @@ export const SubscriptionScreen = ({
         {/* === LEGAL === */}
         <View style={styles.legalBlock}>
           <Text style={styles.legalText}>
-            Términos de uso y Política de Privacidad disponibles en tu Perfil,
-            sección Soporte.
+            Términos de uso y Política de privacidad en Ajustes, «Ayuda y
+            contacto».
           </Text>
         </View>
+        </>
+        )}
       </ScrollView>
     </View>
   );
@@ -503,7 +639,211 @@ const ActionRow: React.FC<{
   );
 };
 
+// ─── Jugador: nada que comprar ─────────────────────────────────────────────
+const PLAYER_BENEFITS = [
+  'Convocatoria con Voy · Duda · No',
+  'Alineación y resultados de cada jornada',
+  'Tus números de liga y de amistosos',
+];
+
+const PlayerCoverage: React.FC<{
+  teamName: string | null;
+  teamPro: boolean | null;
+  onCreateTeam: () => void;
+  onRestore: () => void;
+  restoring: boolean;
+}> = ({ teamName, teamPro, onCreateTeam, onRestore, restoring }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const name = teamName ?? 'Tu equipo';
+  return (
+    <>
+      <Text style={styles.title}>
+        {teamPro === false ? 'Tu equipo está en el plan gratis' : 'Tu equipo te cubre'}
+      </Text>
+      <Text style={styles.lede}>
+        {teamPro === false
+          ? `${name} está en el plan gratis. Lo activa tu capitán. Tú no pagas nada.`
+          : `Eres jugador de ${name}. Tienes la app completa y no pagas nada.`}
+      </Text>
+
+      <View style={styles.statusCard}>
+        <View style={styles.statusHeader}>
+          <View style={styles.crest}>
+            <Text style={styles.crestText}>{name.slice(0, 3).toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.planName} numberOfLines={1}>
+              {name}
+            </Text>
+            <Text style={styles.planMeta}>
+              {teamPro === false ? 'Plan gratis · lo gestiona tu capitán' : 'Tu equipo tiene Pro'}
+            </Text>
+          </View>
+          {teamPro ? (
+            <View style={[styles.statusPill, { borderColor: c.accent40 }]}>
+              <Text style={[styles.statusPillText, { color: c.accent }]}>PRO</Text>
+            </View>
+          ) : null}
+        </View>
+        {teamPro !== false ? (
+          <View style={{ marginTop: 12, gap: 6 }}>
+            {PLAYER_BENEFITS.map((b) => (
+              <View key={b} style={styles.benefitRow}>
+                <IconCheck size={13} color={c.accent} />
+                <Text style={styles.benefitText}>{b}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.switchBlock}>
+        <Text style={styles.switchTitle}>¿Vas a capitanear tu propio equipo?</Text>
+        <Text style={styles.switchBody}>
+          Créalo y tendrás {TRIAL_DURATION_DAYS} días de prueba, sin tarjeta.
+        </Text>
+        <Pressable
+          onPress={onCreateTeam}
+          style={({ pressed }) => [styles.switchBtn, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+        >
+          <Text style={styles.switchBtnLabel}>Crear un equipo</Text>
+          <IconArrowRight size={14} color={c.accent} />
+        </Pressable>
+      </View>
+
+      <Pressable onPress={onRestore} disabled={restoring} hitSlop={8} style={styles.restoreLink}>
+        <Text style={styles.restoreLinkText}>
+          {restoring ? 'Restaurando…' : 'Restaurar compras'}
+        </Text>
+      </Pressable>
+    </>
+  );
+};
+
+// ─── Club: un resumen y un camino ──────────────────────────────────────────
+const ClubSummary: React.FC<{
+  clubName: string | null;
+  sub: Subscription | null;
+  used: number;
+  quota: number;
+  personalLive: boolean;
+  onOpenBilling: () => void;
+}> = ({ clubName, sub, used, quota, personalLive, onOpenBilling }) => {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const plan = sub ? PLAN_BY_TIER[sub.plan_tier] : null;
+  const yearly = sub?.billing_period === 'yearly';
+  const pct = quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : 0;
+  return (
+    <>
+      <Text style={styles.title}>{sub ? 'La paga el club' : 'Tu club está en el plan gratis'}</Text>
+      <Text style={styles.lede}>
+        {sub
+          ? 'La suscripción del club cubre a sus equipos y a sus capitanes.'
+          : 'Con un plan de club cubres a todos tus equipos y capitanes.'}
+      </Text>
+
+      {sub && plan ? (
+        <View style={[styles.statusCard, { borderColor: c.accent40 }]}>
+          <View style={styles.statusHeader}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.planName}>
+                {plan.displayName} · {yearly ? 'anual' : 'mensual'}
+              </Text>
+              {clubName ? <Text style={styles.planMeta}>{clubName}</Text> : null}
+            </View>
+            <Text style={styles.clubPrice}>
+              {formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)}
+              <Text style={styles.trialPriceUnit}>{yearly ? '/año' : '/mes'}</Text>
+            </Text>
+          </View>
+          <View style={styles.statusDivider} />
+          <View style={styles.quotaRow}>
+            <Text style={styles.statusRowLabel}>Equipos</Text>
+            <View style={styles.quotaTrack}>
+              <View style={[styles.quotaFill, { width: `${pct}%` }]} />
+            </View>
+            <Text style={styles.statusRowValue}>
+              {used} de {quota}
+            </Text>
+          </View>
+          <View style={[styles.statusRow, { marginTop: 10 }]}>
+            <Text style={styles.statusRowLabel}>
+              {sub.status === 'trialing'
+                ? 'Prueba termina'
+                : sub.cancel_at_period_end
+                  ? 'Termina'
+                  : 'Próximo cobro'}
+            </Text>
+            <Text style={styles.statusRowValue}>{formatDate(sub.current_period_end)}</Text>
+          </View>
+        </View>
+      ) : null}
+
+      <Pressable
+        onPress={onOpenBilling}
+        style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.85 }]}
+        accessibilityRole="button"
+      >
+        <Text style={styles.ctaPrimaryLabel}>
+          {sub ? 'Abrir la facturación del club' : 'Ver los planes de club'}
+        </Text>
+        <IconArrowRight size={16} color={c.textInverse} />
+      </Pressable>
+
+      {sub && personalLive ? (
+        <View style={styles.coverNotice}>
+          <View style={styles.coverDot}>
+            <IconCheck size={12} color={c.accent} />
+          </View>
+          <Text style={styles.coverText}>
+            Tu club ya cubre tu plan. Puedes cancelar la suscripción individual de
+            capitán para no pagar dos veces.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+};
+
 const makeStyles = (c: Palette) => StyleSheet.create({
+  crest: {
+    width: 40,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: c.accent15,
+    borderWidth: 1,
+    borderColor: c.accent40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crestText: { fontFamily: Fonts.mono, color: c.accent, fontSize: 11, fontWeight: '800' },
+  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  benefitText: { color: c.text, fontSize: 13, flex: 1 },
+  restoreLink: { alignItems: 'center', marginTop: 18 },
+  restoreLinkText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+  trialPlan: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
+  },
+  trialPlanName: { color: c.text, fontSize: 15, fontWeight: '700' },
+  trialPrice: { fontFamily: Fonts.mono, color: c.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  trialPriceUnit: { fontSize: 12, fontWeight: '600', color: c.textMuted },
+  clubPrice: { fontFamily: Fonts.mono, color: c.text, fontSize: 18, fontWeight: '800' },
+  quotaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  quotaTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: c.hairStrong, overflow: 'hidden' },
+  quotaFill: { height: '100%', borderRadius: 3, backgroundColor: c.accent },
+
   root: { flex: 1, backgroundColor: c.background },
 
   header: {

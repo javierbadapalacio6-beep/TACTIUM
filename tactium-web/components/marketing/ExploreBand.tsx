@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { BtnLink, Chip } from "@/components/ui";
+import { BtnLink } from "@/components/ui";
 import { EmptyState, Skeleton } from "@/components/states";
 import { IconFlag, IconSearch, IconTrophy } from "@/components/Icon";
 import {
@@ -17,6 +17,11 @@ import {
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import { Reveal } from "./Reveal";
+import {
+  TournamentRow,
+  groupTournaments,
+  type RowTournament,
+} from "@/components/tournaments/TournamentRow";
 
 /**
  * La parte que se puede usar SIN cuenta, con datos de verdad: los torneos que
@@ -28,24 +33,6 @@ import { Reveal } from "./Reveal";
 const PREVIEW = 4;
 const STANDINGS_ROWS = 5;
 const FED_SLUG = "cantabra";
-
-const STATUS_TONE: Record<string, "accent" | "warning" | "mute"> = {
-  open: "accent",
-  in_progress: "warning",
-  finished: "mute",
-};
-const STATUS_LABEL: Record<string, string> = {
-  open: "Inscripción abierta",
-  in_progress: "En juego",
-  finished: "Finalizado",
-};
-const FORMAT_LABEL: Record<string, string> = {
-  ko: "Eliminación directa",
-  ko_consolation: "Con consolación",
-  league: "Liga",
-  round_robin: "Liga",
-  groups_ko: "Grupos y eliminatorias",
-};
 
 /** Los clubes de demostración no salen en la portada. */
 const isDemo = (t: { club_name: string | null; name: string }) =>
@@ -106,7 +93,9 @@ export function ExploreBand() {
   const featured = useAsync(pickFeaturedGroup, []);
 
   const rows = (tournaments.data ?? []).filter((t) => !isDemo(t));
-  const shown = rows.slice(0, PREVIEW);
+  // Primero lo que está en juego, luego lo abierto (la misma tarjeta que /torneos).
+  const grouped = groupTournaments(rows as unknown as RowTournament[]);
+  const shown = [...grouped.live, ...grouped.open, ...grouped.soon, ...grouped.done].slice(0, PREVIEW);
   const searching = debounced.trim().length > 0;
 
   return (
@@ -170,28 +159,9 @@ export function ExploreBand() {
                 }
               />
             ) : (
-              <div className="mk-tourneys">
+              <div className="card card-flush" style={{ padding: 0 }}>
                 {shown.map((t) => (
-                  <Link key={t.id} href={`/torneos/${t.id}`} className="mk-tourney">
-                    <div>
-                      <Chip tone={STATUS_TONE[t.status] ?? "mute"}>
-                        {STATUS_LABEL[t.status] ?? t.status}
-                      </Chip>
-                    </div>
-                    <div className="mk-tourney-name">{t.name}</div>
-                    <div className="mk-tourney-meta">
-                      {t.club_name ?? "Sin club"}
-                      {t.location ? ` · ${t.location}` : ""}
-                    </div>
-                    <div className="mk-tourney-foot">
-                      <span>{FORMAT_LABEL[t.format] ?? t.format.replace(/_/g, " ")}</span>
-                      {t.players != null && (
-                        <span>
-                          <span className="mono">{t.players}</span> jugadores
-                        </span>
-                      )}
-                    </div>
-                  </Link>
+                  <TournamentRow key={t.id} t={t} />
                 ))}
               </div>
             )}

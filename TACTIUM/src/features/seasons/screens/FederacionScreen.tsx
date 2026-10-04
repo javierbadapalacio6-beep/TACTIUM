@@ -9,6 +9,7 @@ import { Radius } from '@core/theme/spacing';
 import { Input, IconBack, IconChevron, IconSearch, IconX, IconStar, IconStarFilled, IconCheck } from '@components/ui';
 import { BottomSheet } from '@components/ui';
 import { Segmented, Caret } from '../components/fcpUi';
+import { MyFederationBlock } from '../components/MyFederationBlock';
 import { federationLogo } from '@core/data/federationLogos';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { useFavoritesStore } from '@store/favoritesStore';
@@ -34,7 +35,19 @@ import {
   type FcpPlayerResult,
   type FcpRankingRow,
 } from '@core/services/fcpSearch';
-import type { CompetirStackScreenProps } from '@navigation/types';
+import type { CompetirStackParamList, CompetirStackScreenProps } from '@navigation/types';
+import { SplitView, useIsSplit } from '@components/layout';
+import { FcpGroupScreen } from './FcpGroupScreen';
+import { FcpTeamScreen } from './FcpTeamScreen';
+import { FcpPlayerScreen } from './FcpPlayerScreen';
+
+/** TABLET · lo abierto a la derecha (grupo, equipo o jugador), en pila. */
+type FcpEntry =
+  | { kind: 'FcpGroup'; params: CompetirStackParamList['FcpGroup'] }
+  | { kind: 'FcpTeam'; params: CompetirStackParamList['FcpTeam'] }
+  | { kind: 'FcpPlayer'; params: CompetirStackParamList['FcpPlayer'] };
+
+const FED_LIST_WIDTH = 380;
 
 type Tab = 'todo' | 'equipos' | 'jugadores' | 'rankings';
 const TABS: [Tab, string][] = [
@@ -266,12 +279,45 @@ export const FederacionScreen = ({
     return () => clearTimeout(timer);
   }, [tab, term, year, genderF, catF, selGrupo, grupoTeamIds, regularGroupIds]);
 
-  const openTeam = (t: FcpTeamResult) =>
-    navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo });
-  const openPlayer = (p: FcpPlayerResult) =>
-    navigation.navigate('FcpPlayer', { idJugador: p.idJugador, name: p.name });
-  const openGroup = (g: FcpGroupItem) =>
-    navigation.navigate('FcpGroup', { idGrupo: g.idGrupo, nombre: g.nombre });
+  // TABLET: lista + detalle. Tocar un grupo, equipo o jugador lo abre a la
+  // derecha (sin apilar pantallas); dentro del detalle se navega en su propia
+  // pila y «Atrás» vuelve al anterior. En móvil, se navega como siempre.
+  const split = useIsSplit(FED_LIST_WIDTH);
+  const [detail, setDetail] = useState<FcpEntry[]>([]);
+  const goTeam = (idEquipo: number, n?: string) =>
+    split
+      ? setDetail([{ kind: 'FcpTeam', params: { idEquipo, name: n } }])
+      : navigation.navigate('FcpTeam', { idEquipo, name: n });
+  const goPlayer = (idJugador: string, n?: string) =>
+    split
+      ? setDetail([{ kind: 'FcpPlayer', params: { idJugador, name: n } }])
+      : navigation.navigate('FcpPlayer', { idJugador, name: n });
+  const goGroup = (idGrupo: string, nombre?: string) =>
+    split
+      ? setDetail([{ kind: 'FcpGroup', params: { idGrupo, nombre } }])
+      : navigation.navigate('FcpGroup', { idGrupo, nombre });
+  const openTeam = (t: FcpTeamResult) => goTeam(t.idEquipo, t.equipo);
+  const openPlayer = (p: FcpPlayerResult) => goPlayer(p.idJugador, p.name);
+  const openGroup = (g: FcpGroupItem) => goGroup(g.idGrupo, g.nombre);
+
+  // Navegación «de mentira» para las fichas del detalle: las de Federación se
+  // apilan aquí; cualquier otra pantalla va a la navegación de verdad.
+  const detailNav = useMemo(() => {
+    const go = (name: string, params?: object) => {
+      if (name === 'FcpGroup' || name === 'FcpTeam' || name === 'FcpPlayer') {
+        setDetail((d) => [...d, { kind: name, params } as FcpEntry]);
+      } else {
+        (navigation.navigate as unknown as (n: string, p?: object) => void)(name, params);
+      }
+    };
+    return {
+      ...navigation,
+      navigate: go,
+      push: go,
+      goBack: () => setDetail((d) => d.slice(0, -1)),
+      canGoBack: () => true,
+    };
+  }, [navigation]);
 
   // Grupos que casan con los filtros (género/categoría).
   const browseGroups = useMemo(
@@ -348,8 +394,8 @@ export const FederacionScreen = ({
     setYear(defaultYear(years)?.idLiga ?? null);
   };
 
-  return (
-    <View style={styles.root}>
+  const listBody = (
+    <>
       {/* Nav: atrás + favorito */}
       <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
         {!embedded && navigation.canGoBack() ? (
@@ -443,7 +489,7 @@ export const FederacionScreen = ({
         {/* Acceso rápido al grupo seleccionado (card destacada) */}
         {selGrupoObj ? (
           <Pressable
-            onPress={() => navigation.navigate('FcpGroup', { idGrupo: selGrupoObj.idGrupo, nombre: selGrupoObj.nombre })}
+            onPress={() => goGroup(selGrupoObj.idGrupo, selGrupoObj.nombre)}
             style={({ pressed }) => [styles.grupoCard, pressed && { opacity: 0.9 }]}
           >
             <View style={styles.grupoCardTile}>
@@ -476,8 +522,16 @@ export const FederacionScreen = ({
         ) : tab === 'jugadores' ? (
           <ResultsPlayers styles={styles} c={c} players={players} onPress={openPlayer} emptyHint={playerHint(term, selGrupo)} />
         ) : term.length < 2 ? (
-          // Browse: grupos agrupados por categoría.
-          browseGroups.length > 0 ? (
+          // Browse: primero lo tuyo (tu equipo / los del club / búscate y lo
+          // que sigues) y debajo los grupos agrupados por categoría.
+          <>
+          <MyFederationBlock
+            onTeam={(idEquipo, n) => goTeam(idEquipo, n)}
+            onGroup={(idGrupo, nombre) => goGroup(idGrupo, nombre ?? undefined)}
+            onPlayer={(idJugador, n) => goPlayer(idJugador, n)}
+            onFindMe={() => setTab('jugadores')}
+          />
+          {browseGroups.length > 0 ? (
             <View style={{ marginTop: 6 }}>
               <View style={styles.listHead}>
                 <Text style={styles.listHeadTitle}>GRUPOS · {browseGroups.length}</Text>
@@ -508,7 +562,8 @@ export const FederacionScreen = ({
             </View>
           ) : (
             <Text style={styles.hint}>No hay grupos con esos filtros.</Text>
-          )
+          )}
+          </>
         ) : teams.length + players.length + todoGroups.length === 0 ? (
           <Text style={styles.hint}>Sin resultados para “{term}”.</Text>
         ) : (
@@ -535,6 +590,57 @@ export const FederacionScreen = ({
           </View>
         )}
       </ScrollView>
+    </>
+  );
+
+  const top = detail[detail.length - 1] ?? null;
+  const detailNode = !top ? null : (() => {
+    const key = `${detail.length}-${top.kind}`;
+    const nav = detailNav as unknown as CompetirStackScreenProps<'FcpGroup'>['navigation'];
+    if (top.kind === 'FcpGroup')
+      return (
+        <FcpGroupScreen
+          key={key}
+          navigation={nav}
+          route={{ key, name: 'FcpGroup', params: top.params }}
+        />
+      );
+    if (top.kind === 'FcpTeam')
+      return (
+        <FcpTeamScreen
+          key={key}
+          navigation={nav as unknown as CompetirStackScreenProps<'FcpTeam'>['navigation']}
+          route={{ key, name: 'FcpTeam', params: top.params }}
+        />
+      );
+    return (
+      <FcpPlayerScreen
+        key={key}
+        inSplit
+        navigation={nav as unknown as CompetirStackScreenProps<'FcpPlayer'>['navigation']}
+        route={{ key, name: 'FcpPlayer', params: top.params }}
+      />
+    );
+  })();
+
+  return (
+    <View style={styles.root}>
+      {split ? (
+        <SplitView
+          listWidth={FED_LIST_WIDTH}
+          list={<View style={{ flex: 1 }}>{listBody}</View>}
+          detail={detailNode}
+          emptyDetail={
+            <View style={styles.detailEmpty}>
+              <Text style={styles.hint}>
+                Elige un grupo, un equipo o un jugador y se abre aquí, sin perder la lista.
+              </Text>
+            </View>
+          }
+        />
+      ) : (
+        listBody
+      )}
 
       {/* Bottom sheets de filtro */}
       <BottomSheet open={sheet === 'temp'} onClose={() => setSheet(null)}>
@@ -785,6 +891,7 @@ const ResultsRanking: React.FC<{
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
+    detailEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 48 },
     root: { flex: 1, backgroundColor: c.background },
     nav: {
       flexDirection: 'row',
