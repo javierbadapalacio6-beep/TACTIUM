@@ -10,6 +10,7 @@ import {
   Platform,
   Linking,
   Share,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,7 +28,9 @@ import {
   checkCategoryEligibility,
   resolveCategoryThreshold,
   hourlyFranjas,
+  publicListRegistrations,
   type TournamentLookup,
+  type TournamentRegistration,
 } from '@core/services/tournaments';
 
 import type { RootStackScreenProps } from '@navigation/types';
@@ -74,7 +77,26 @@ const STEP_TITLE: Record<Step, string> = {
   3: 'Horario y pago',
 };
 
-type DoneItem = { cat: string | null; partner: string; code: string; emailedTo: string | null };
+type DoneItem = {
+  cat: string | null;
+  partner: string;
+  /** Null si la pareja ya tiene cuenta vinculada (o no se pudo leer). */
+  code: string | null;
+  emailedTo: string | null;
+  /** Pareja tal cual quedó inscrita (inscripción hecha en la web). */
+  pair?: string;
+  /** Estado del pago (inscripción hecha en la web). */
+  payment?: string | null;
+};
+
+/** Vuelta desde la web: fuera, comprobando o aún sin inscripción. */
+type WebPhase = null | 'away' | 'checking' | 'notYet';
+
+const PAYMENT_LABEL: Record<string, string> = {
+  paid: 'Pagado',
+  pending_club: 'Se paga en el club',
+  pending: 'Pago en proceso',
+};
 
 // MODO MAQUETA (solo desarrollo, EXPO_PUBLIC_AVAILABILITY_MOCK=1): enseña el
 // asistente también en torneos con cuota y NO envía la inscripción.
@@ -431,10 +453,63 @@ export const TournamentSignupScreen = ({
   // inscripción gratuita en estos torneos.
   const openWebSignup = () => {
     if (!found) return;
-    Linking.openURL(`https://tactium.io/torneos/${found.id}/inscripcion`).catch(() =>
-      toast.error('No se pudo abrir la ficha de pago'),
-    );
+    Linking.openURL(`https://tactium.io/torneos/${found.id}/inscripcion`)
+      .then(() => setWebPhase('away'))
+      .catch(() => toast.error('No se pudo abrir la ficha de pago'));
   };
+
+  // Vuelta de la web. Antes la pantalla se quedaba con el botón y el precio
+  // aunque ya estuvieras inscrito, y había que salir y volver a entrar para
+  // ver «Estás dentro». Ahora, al volver a la app, se busca tu inscripción
+  // unos segundos (el pago con tarjeta tarda un poco en confirmarse) y se
+  // enseña la entrada.
+  const [webPhase, setWebPhase] = useState<WebPhase>(null);
+  const checkingRef = useRef(false);
+  const checkWebSignup = async () => {
+    if (!found || !user?.id || checkingRef.current) return;
+    checkingRef.current = true;
+    setWebPhase('checking');
+    try {
+      let mine: TournamentRegistration[] = [];
+      for (let i = 0; i < 5 && mine.length === 0; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, 2000));
+        const regs = await publicListRegistrations(found.id).catch(() => []);
+        mine = regs.filter((r) => r.p1_user_id === user.id || r.p2_user_id === user.id);
+      }
+      if (mine.length === 0) {
+        setWebPhase('notYet');
+        return;
+      }
+      const items: DoneItem[] = [];
+      for (const r of mine) {
+        const partnerCode =
+          r.p1_user_id === user.id && !r.p2_user_id
+            ? await getRegistrationPartnerCode(r.id).catch(() => null)
+            : null;
+        items.push({
+          cat: r.category,
+          partner: (r.p1_user_id === user.id ? r.p2_name : r.p1_name) ?? '',
+          code: partnerCode,
+          emailedTo: null,
+          pair: [r.p1_name, r.p2_name].filter(Boolean).join(' / '),
+          payment: r.payment_status ?? null,
+        });
+      }
+      setWebPhase(null);
+      setDone(items);
+    } finally {
+      checkingRef.current = false;
+    }
+  };
+  const webPhaseRef = useRef(webPhase);
+  webPhaseRef.current = webPhase;
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active' && webPhaseRef.current === 'away') void checkWebSignup();
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found?.id, user?.id]);
 
   const save = async () => {
     if (!found) {
@@ -524,6 +599,7 @@ export const TournamentSignupScreen = ({
   const shareCode = async () => {
     if (!done || done.length === 0) return;
     const lines = done
+      .filter((d) => d.code)
       .map((d) => `${d.cat ? d.cat + ': ' : ''}${d.partner || 'tu pareja'} → código ${d.code}`)
       .join('\n');
     try {
@@ -550,7 +626,9 @@ export const TournamentSignupScreen = ({
         >
           <Text style={styles.successTitle}>Estáis dentro</Text>
           <Text style={styles.successText}>
-            {done.length > 1
+            {done.every((d) => !d.code)
+              ? 'Tu inscripción ya está en el torneo. El club os confirmará el cuadro y los horarios.'
+              : done.length > 1
               ? 'Te has apuntado a 2 categorías. Pásale a cada compañero/a su código para que vincule su cuenta y vea el torneo.'
               : 'El club os confirmará el cuadro. Pásale este código a tu pareja para que vincule su cuenta y vea el torneo en su app.'}
           </Text>
@@ -570,9 +648,15 @@ export const TournamentSignupScreen = ({
                   <View style={[styles.infoRow, !datesLabel && styles.infoRowLast]}>
                     <Text style={styles.infoLabel}>PAREJA</Text>
                     <Text style={styles.infoValue}>
-                      {me.name.trim()} / {d.partner || 'tu pareja'}
+                      {d.pair ?? `${me.name.trim()} / ${d.partner || 'tu pareja'}`}
                     </Text>
                   </View>
+                  {d.payment ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>PAGO</Text>
+                      <Text style={styles.infoValue}>{PAYMENT_LABEL[d.payment] ?? d.payment}</Text>
+                    </View>
+                  ) : null}
                   {datesLabel ? (
                     <View style={[styles.infoRow, styles.infoRowLast]}>
                       <Text style={styles.infoLabel}>FECHAS</Text>
@@ -581,30 +665,43 @@ export const TournamentSignupScreen = ({
                   ) : null}
                 </View>
               </View>
-              <View style={styles.ticketCut}>
-                <View style={[styles.ticketNotch, { marginLeft: -9 }]} />
-                <View style={styles.ticketDash} />
-                <View style={[styles.ticketNotch, { marginRight: -9 }]} />
-              </View>
-              <View style={styles.ticketBottom}>
-                <Text style={styles.codeBigLabel}>CÓDIGO DE COMPAÑERO</Text>
-                <Text style={styles.codeBig}>{d.code}</Text>
-                <Text style={styles.ticketNote}>
-                  {d.emailedTo
-                    ? `Enviado por email a ${d.emailedTo}`
-                    : `Pásaselo a ${d.partner || 'tu pareja'}`}
-                </Text>
-              </View>
+              {d.code ? (
+                <>
+                  <View style={styles.ticketCut}>
+                    <View style={[styles.ticketNotch, { marginLeft: -9 }]} />
+                    <View style={styles.ticketDash} />
+                    <View style={[styles.ticketNotch, { marginRight: -9 }]} />
+                  </View>
+                  <View style={styles.ticketBottom}>
+                    <Text style={styles.codeBigLabel}>CÓDIGO DE COMPAÑERO</Text>
+                    <Text style={styles.codeBig}>{d.code}</Text>
+                    <Text style={styles.ticketNote}>
+                      {d.emailedTo
+                        ? `Enviado por email a ${d.emailedTo}`
+                        : `Pásaselo a ${d.partner || 'tu pareja'}`}
+                    </Text>
+                  </View>
+                </>
+              ) : null}
             </View>
           ))}
 
-          <Pressable onPress={shareCode} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnText}>
-              Compartir {done.length > 1 ? 'códigos' : 'código'}
+          {done.some((d) => d.code) ? (
+            <Pressable onPress={shareCode} style={styles.primaryBtn}>
+              <Text style={styles.primaryBtnText}>
+                Compartir {done.filter((d) => d.code).length > 1 ? 'códigos' : 'código'}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={done.some((d) => d.code) ? styles.secondaryBtn : styles.primaryBtn}
+          >
+            <Text
+              style={done.some((d) => d.code) ? styles.secondaryBtnText : styles.primaryBtnText}
+            >
+              {done.some((d) => d.pair) ? 'Ver el torneo' : 'Hecho'}
             </Text>
-          </Pressable>
-          <Pressable onPress={() => navigation.goBack()} style={styles.secondaryBtn}>
-            <Text style={styles.secondaryBtnText}>Hecho</Text>
           </Pressable>
         </ScrollView>
       </View>
@@ -673,19 +770,46 @@ export const TournamentSignupScreen = ({
           showsVerticalScrollIndicator={false}
         >
           {infoCard}
-          <Text style={[styles.webNote, { marginTop: 14 }]}>
-            La inscripción y el pago de este torneo se hacen en la web. Al escribir tu nombre se
-            detectan tus puntos de la Federación automáticamente; ahí rellenáis la pareja y
-            pagáis.
-          </Text>
+          {webPhase === 'checking' ? (
+            <View style={[styles.emptyBox, { alignItems: 'center', gap: 10 }]}>
+              <ActivityIndicator color={c.accent} />
+              <Text style={styles.emptyTitle}>Comprobando tu inscripción…</Text>
+              <Text style={[styles.emptyText, { textAlign: 'center' }]}>
+                Si acabas de pagar, puede tardar unos segundos.
+              </Text>
+            </View>
+          ) : webPhase === 'notYet' ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>Aún no vemos tu inscripción</Text>
+              <Text style={styles.emptyText}>
+                Si no la terminaste, sigue en la web. Si ya la hiciste, compruébalo otra vez: el
+                pago a veces tarda un poco en confirmarse.
+              </Text>
+              <Pressable onPress={() => void checkWebSignup()} style={styles.ghostBtn}>
+                <Text style={styles.ghostBtnText}>Ya me he inscrito · comprobar</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={[styles.webNote, { marginTop: 14 }]}>
+              La inscripción y el pago de este torneo se hacen en la web. Al escribir tu nombre se
+              detectan tus puntos de la Federación automáticamente; ahí rellenáis la pareja y
+              pagáis. Al volver a la app verás aquí tu inscripción.
+            </Text>
+          )}
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
             onPress={openWebSignup}
-            style={({ pressed }) => [styles.saveBtn, { flex: 0 }, pressed && { opacity: 0.85 }]}
+            disabled={webPhase === 'checking'}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              { flex: 0 },
+              (pressed || webPhase === 'checking') && { opacity: 0.6 },
+            ]}
           >
             <Text style={styles.saveLabel}>
-              Ir a la inscripción · {found.entry_fee} {found.fee_currency ?? '€'}
+              {webPhase === 'notYet' ? 'Volver a la inscripción' : 'Ir a la inscripción'} ·{' '}
+              {found.entry_fee} {found.fee_currency ?? '€'}
             </Text>
           </Pressable>
         </View>
