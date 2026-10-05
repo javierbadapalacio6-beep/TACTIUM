@@ -282,7 +282,7 @@ export const FederationSheet: React.FC<{
           <View style={{ flex: 1 }}>
             <Text style={s.rowTitle}>Clasificación y jornadas</Text>
             <Text style={s.rowSub}>
-              {canManage ? 'Mira el grupo y vuelca el calendario' : 'Tu grupo en la Federación'}
+              Tu grupo en la Federación
             </Text>
           </View>
           <IconChevron size={14} color={c.textFaint} />

@@ -7,7 +7,7 @@
 import { supabase } from '@core/supabase/client';
 import * as SeasonsApi from './seasons';
 import * as MatchdaysApi from './matchdays';
-import { fetchCurrentLiga } from './fcpBrowse';
+import { fetchCurrentLiga, seasonLabel } from './fcpBrowse';
 
 type AnyFrom = (table: string) => any;
 const rawFrom = supabase.from.bind(supabase) as unknown as AnyFrom;
@@ -157,15 +157,49 @@ export async function resolveMainGroupOrPrevious(fcpIdEquipo: number): Promise<{
    *  pertenece la tabla, que NO es el del vínculo cuando hemos tirado de
    *  respaldo. Quien marca «este soy yo» tiene que comparar con este. */
   idEquipo: number;
+  /** true si la tabla es de la temporada ANTERIOR (el vínculo apunta a una
+   *  inscripción sin grupos todavía). Quien la enseñe tiene que decirlo. */
+  previous: boolean;
 } | null> {
   const propio = await resolveMainGroup(fcpIdEquipo);
-  if (propio) return { ...propio, idEquipo: fcpIdEquipo };
+  if (propio) return { ...propio, idEquipo: fcpIdEquipo, previous: false };
   const anterior = await idEquipoTemporadaAnterior(fcpIdEquipo);
   if (anterior == null) return null;
   // `anterior` sale de la clasificación, así que aquí ya no hay más respaldo
   // que buscar: o tiene grupo o no lo tiene.
   const previo = await resolveMainGroup(anterior);
-  return previo ? { ...previo, idEquipo: anterior } : null;
+  return previo ? { ...previo, idEquipo: anterior, previous: true } : null;
+}
+
+/** Temporada del grupo como la nombran los clubes («2025/2026»), o null. */
+async function temporadaDeGrupo(idGrupo: string): Promise<string | null> {
+  const { data: g } = await rawFrom('fcp_grupos')
+    .select('id_liga')
+    .eq('id_grupo', idGrupo)
+    .maybeSingle();
+  const idLiga = (g as { id_liga: number | null } | null)?.id_liga;
+  if (idLiga == null) return null;
+  const { data: l } = await rawFrom('fcp_ligas')
+    .select('temporada')
+    .eq('id_liga', idLiga)
+    .maybeSingle();
+  const t = seasonLabel((l as { temporada: string | null } | null)?.temporada);
+  return t || null;
+}
+
+/** Temporada de TACTIUM que ya salió de ese grupo federativo (activa o
+ *  cerrada en el histórico). Si existe, volcarla otra vez no aporta nada. */
+export async function seasonForFcpGroup(
+  teamId: string,
+  idGrupo: string,
+): Promise<{ id: string; name: string; active: boolean } | null> {
+  const { data } = await rawFrom('seasons')
+    .select('id, name, active')
+    .eq('team_id', teamId)
+    .eq('fcp_id_grupo', idGrupo)
+    .order('active', { ascending: false })
+    .limit(1);
+  return ((data ?? []) as { id: string; name: string; active: boolean }[])[0] ?? null;
 }
 
 export interface FcpStandingRow {
@@ -191,9 +225,24 @@ export async function fetchFcpGroupStandings(
   idGrupo: string | null;
   genero: string | null;
   rows: FcpStandingRow[];
+  /** La tabla es de la temporada anterior: la nueva aún no tiene grupos. */
+  previous: boolean;
+  /** «2025/2026» */
+  temporada: string | null;
+  /** Todos los partidos del grupo jugados: clasificación final. */
+  finished: boolean;
 }> {
   const main = await resolveMainGroupOrPrevious(fcpIdEquipo);
-  if (!main) return { grupo: null, idGrupo: null, genero: null, rows: [] };
+  if (!main)
+    return {
+      grupo: null,
+      idGrupo: null,
+      genero: null,
+      rows: [],
+      previous: false,
+      temporada: null,
+      finished: false,
+    };
   const grupo = main.id_grupo;
   const { data } = await rawFrom('fcp_clasificacion')
     .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
@@ -251,7 +300,16 @@ export async function fetchFcpGroupStandings(
     .eq('id_grupo', grupo)
     .maybeSingle();
   const gi = g as { nombre: string | null; genero: string | null } | null;
-  return { grupo: gi?.nombre ?? null, idGrupo: grupo, genero: gi?.genero ?? null, rows };
+  const lista = (partidos ?? []) as { estado: string | null }[];
+  return {
+    grupo: gi?.nombre ?? null,
+    idGrupo: grupo,
+    genero: gi?.genero ?? null,
+    rows,
+    previous: main.previous,
+    temporada: await temporadaDeGrupo(grupo).catch(() => null),
+    finished: lista.length > 0 && lista.every((p) => p.estado === 'jugado'),
+  };
 }
 
 export interface FcpScheduleRow {

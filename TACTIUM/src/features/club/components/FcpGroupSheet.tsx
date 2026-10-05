@@ -13,6 +13,7 @@ import {
   fetchFcpRivalRoster,
   fetchFcpActa,
   importFcpSeason,
+  seasonForFcpGroup,
   type FcpStandingRow,
   type FcpScheduleRow,
   type FcpRivalPlayer,
@@ -50,6 +51,12 @@ export const FcpGroupSheet: React.FC<{
   const [openActa, setOpenActa] = useState<string | null>(null);
   const [actas, setActas] = useState<Record<string, FcpActaPartido[]>>({});
   const [loadingActa, setLoadingActa] = useState<string | null>(null);
+  // De qué temporada es la tabla y si ya la tenemos volcada: con la liga
+  // nueva sin grupos se enseña la final de la pasada, y eso hay que decirlo.
+  const [previous, setPrevious] = useState(false);
+  const [temporada, setTemporada] = useState<string | null>(null);
+  const [finished, setFinished] = useState(false);
+  const [existing, setExisting] = useState<{ name: string; active: boolean } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -60,6 +67,10 @@ export const FcpGroupSheet: React.FC<{
         setRows([]);
         setSchedule([]);
         setGrupo(null);
+        setPrevious(false);
+        setTemporada(null);
+        setFinished(false);
+        setExisting(null);
         return;
       }
       const [stand, sched] = await Promise.all([
@@ -69,6 +80,12 @@ export const FcpGroupSheet: React.FC<{
       setGrupo(stand.grupo ?? sched.grupo);
       setRows(stand.rows);
       setSchedule(sched.rows);
+      setPrevious(stand.previous);
+      setTemporada(stand.temporada);
+      setFinished(stand.finished);
+      setExisting(
+        stand.idGrupo ? await seasonForFcpGroup(teamId, stand.idGrupo).catch(() => null) : null,
+      );
     } catch (e: any) {
       toast.error('No se pudo cargar el grupo', e?.message ?? '');
     } finally {
@@ -139,6 +156,7 @@ export const FcpGroupSheet: React.FC<{
           (res.new_season ? '. La anterior queda cerrada en el histórico.' : '.'),
       );
       onImported?.();
+      void load();
     } catch (e: any) {
       toast.error('No se pudo volcar la temporada', e?.message ?? '');
     } finally {
@@ -173,22 +191,59 @@ export const FcpGroupSheet: React.FC<{
         </Text>
       ) : (
         <>
-          <Pressable
-            onPress={doImport}
-            disabled={importing}
-            style={({ pressed }) => [styles.importBtn, pressed && { opacity: 0.9 }]}
-          >
-            {importing ? (
-              <ActivityIndicator size="small" color={c.textInverse} />
-            ) : (
-              <>
-                <Text style={styles.importBtnText}>Volcar temporada (calendario + resultados)</Text>
-                <Text style={styles.importBtnSub}>
-                  Crea las jornadas con su rival, local/visitante, marcador y fecha.
+          {previous ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>
+                Clasificación final{temporada ? ` de la ${temporada}` : ' de la temporada pasada'}
+              </Text>
+              <Text style={styles.noticeText}>
+                La Federación aún no ha publicado los grupos de la temporada nueva. Cuando lo
+                haga, aquí verás tu grupo nuevo y podrás volcar su calendario.
+              </Text>
+            </View>
+          ) : finished ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>
+                Temporada{temporada ? ` ${temporada}` : ''} terminada · clasificación final
+              </Text>
+              {existing ? (
+                <Text style={styles.noticeText}>
+                  Ya la tienes en Competir › Liga{existing.active ? '' : ', en el histórico'}.
                 </Text>
-              </>
-            )}
-          </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* Volcar solo cuando aporta: nunca la temporada pasada (la de la
+              inscripción no tiene grupo y la anterior ya está en el
+              histórico) ni una terminada que ya tenemos. */}
+          {!previous && !(finished && existing) ? (
+            <Pressable
+              onPress={doImport}
+              disabled={importing}
+              style={({ pressed }) => [styles.importBtn, pressed && { opacity: 0.9 }]}
+            >
+              {importing ? (
+                <ActivityIndicator size="small" color={c.textInverse} />
+              ) : existing ? (
+                <>
+                  <Text style={styles.importBtnText}>Actualizar resultados</Text>
+                  <Text style={styles.importBtnSub}>
+                    Trae los marcadores y horarios nuevos a tu temporada.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.importBtnText}>
+                    Volcar temporada{temporada ? ` ${temporada}` : ''}
+                  </Text>
+                  <Text style={styles.importBtnSub}>
+                    Crea las jornadas con su rival, local/visitante, marcador y fecha.
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          ) : null}
 
           {/* Pestañas */}
           <View style={styles.tabs}>
@@ -394,6 +449,18 @@ const makeStyles = (c: Palette) =>
     eyebrow: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 3, color: c.accent, fontWeight: '500' },
     title: { color: c.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4, marginTop: 2 },
     empty: { color: c.textMuted, fontSize: 13.5, lineHeight: 19, marginTop: 18 },
+    notice: {
+      marginTop: 14,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.bgCard,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 4,
+    },
+    noticeTitle: { color: c.text, fontSize: 14, fontWeight: '800' },
+    noticeText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
     importBtn: {
       marginTop: 14,
       backgroundColor: c.accent,
