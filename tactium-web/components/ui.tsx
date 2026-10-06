@@ -515,30 +515,77 @@ export function InputWrap({
   );
 }
 
-/** Control segmentado: una elección entre pocas. */
+/**
+ * Control segmentado: una elección entre pocas.
+ *
+ * Dos semánticas con el mismo aspecto:
+ * - `as="radio"` (por defecto): un FILTRO. `role="radiogroup"` + `radio`.
+ * - `as="tabs"`: cambia de VISTA. `role="tablist"` + `tab` con
+ *   `aria-selected`, foco itinerante (solo la pestaña activa entra en el
+ *   orden de Tab) y flechas ←/→, Inicio y Fin, que mueven el foco y
+ *   seleccionan a la vez (activación automática).
+ *   Con `idPrefix`, cada pestaña lleva `id="{idPrefix}-tab-{value}"` y
+ *   `aria-controls="{idPrefix}-panel-{value}"`; el panel se marca con
+ *   `<div {...tabPanelProps(idPrefix, value)}>`.
+ */
 export function Segmented<T extends string>({
   value,
   options,
   onChange,
   label,
   style,
+  as = "radio",
+  idPrefix,
 }: {
   value: T;
   options: { value: T; label: ReactNode }[];
   onChange: (v: T) => void;
   label: string;
   style?: CSSProperties;
+  as?: "radio" | "tabs";
+  /** Solo con `as="tabs"`: enlaza cada pestaña con su panel. */
+  idPrefix?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const tabs = as === "tabs";
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!tabs) return;
+    const i = options.findIndex((o) => o.value === value);
+    let next = -1;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % options.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+      next = (i - 1 + options.length) % options.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = options.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    onChange(options[next].value);
+    const btns = ref.current?.querySelectorAll<HTMLButtonElement>("[role=tab]");
+    btns?.[next]?.focus();
+  }
+
   return (
-    <div className="seg" role="radiogroup" aria-label={label} style={style}>
+    <div
+      ref={ref}
+      className="seg"
+      role={tabs ? "tablist" : "radiogroup"}
+      aria-label={label}
+      style={style}
+      onKeyDown={onKeyDown}
+    >
       {options.map((o) => {
         const on = o.value === value;
         return (
           <button
             key={o.value}
             type="button"
-            role="radio"
-            aria-checked={on}
+            role={tabs ? "tab" : "radio"}
+            aria-checked={tabs ? undefined : on}
+            aria-selected={tabs ? on : undefined}
+            tabIndex={tabs ? (on ? 0 : -1) : undefined}
+            id={tabs && idPrefix ? `${idPrefix}-tab-${o.value}` : undefined}
+            aria-controls={tabs && idPrefix ? `${idPrefix}-panel-${o.value}` : undefined}
             onClick={() => onChange(o.value)}
             className={"seg-item" + (on ? " is-on" : "")}
           >
@@ -548,6 +595,16 @@ export function Segmented<T extends string>({
       })}
     </div>
   );
+}
+
+/** Props del panel de una pestaña de `<Segmented as="tabs" idPrefix>`. */
+export function tabPanelProps(idPrefix: string, value: string) {
+  return {
+    role: "tabpanel" as const,
+    id: `${idPrefix}-panel-${value}`,
+    "aria-labelledby": `${idPrefix}-tab-${value}`,
+    tabIndex: 0,
+  };
 }
 
 /* ── Interruptor ───────────────────────────────────────────────────*/
@@ -656,19 +713,56 @@ export function Modal({
     if (!open) return;
     openerRef.current = document.activeElement as HTMLElement | null;
 
+    // Trampa de foco: Tab y Mayús+Tab dan la vuelta dentro del diálogo.
+    const FOCUSABLE =
+      'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
+      if (items.length === 0) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const inside = !!active && panel.contains(active);
+      if (e.shiftKey && (active === first || active === panel || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
 
     panelRef.current?.focus();
-    const prevOverflow = document.body.style.overflow;
+
+    // El scroll del panel vive en `.tw-main`, no en el body: hay que
+    // bloquear los dos (el body por las pantallas sin marco).
+    const main = document.querySelector<HTMLElement>(".tw-main");
+    const prevBody = document.body.style.overflow;
+    const prevMain = main?.style.overflowY ?? "";
     document.body.style.overflow = "hidden";
+    if (main) main.style.overflowY = "hidden";
 
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-      openerRef.current?.focus();
+      document.body.style.overflow = prevBody;
+      if (main) main.style.overflowY = prevMain;
+      // Devolver el foco a quien abrió, si sigue en la página.
+      const opener = openerRef.current;
+      if (opener && document.contains(opener)) opener.focus();
     };
   }, [open]);
 
