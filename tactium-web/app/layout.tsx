@@ -34,7 +34,9 @@ export const metadata: Metadata = {
     "federación cántabra pádel",
     "gestión club pádel",
   ],
-  alternates: { canonical: "/" },
+  // Sin canónica global: cada página declara la suya. Una canónica "/" en el
+  // layout la heredaban TODAS las URLs sin metadatos propios y le decía a
+  // Google que eran copias de la portada.
   openGraph: {
     type: "website",
     locale: "es_ES",

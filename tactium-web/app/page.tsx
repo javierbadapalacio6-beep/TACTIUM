@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
+
 import { serverUser } from "@/lib/supabase/server";
 import { HomeSwitch } from "@/components/home/HomeSwitch";
 import { MarketingHome } from "@/components/marketing/MarketingHome";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 /**
  * Inicio. Misma URL para todos a propósito — quien comparte tactium.io no

@@ -6,8 +6,8 @@ import { SITE_URL } from "@/lib/site";
 import { supabaseAnon } from "@/lib/supabase/anon";
 
 /**
- * Sitemap: las páginas fijas más TODAS las fichas federativas (grupos y
- * equipos). Sin ellas Google sólo conocía nueve URLs; con ellas conoce cada
+ * Sitemap: las páginas fijas, los torneos públicos y TODAS las fichas
+ * federativas (grupos y equipos). Sin ellas Google sólo conocía nueve URLs; con ellas conoce cada
  * clasificación y cada equipo de la Liga Cántabra desde 2021.
  *
  * Se regenera cada hora (ISR): la temporada en curso cambia cada jornada y
@@ -18,6 +18,7 @@ export const revalidate = 3600;
 const FIXED: MetadataRoute.Sitemap = [
   { url: `${SITE_URL}/`, changeFrequency: "weekly", priority: 1 },
   { url: `${SITE_URL}/torneos`, changeFrequency: "daily", priority: 0.9 },
+  { url: `${SITE_URL}/torneos/organizar`, changeFrequency: "monthly", priority: 0.8 },
   { url: `${SITE_URL}/federacion`, changeFrequency: "daily", priority: 0.9 },
   { url: `${SITE_URL}/federacion/${FCP_SLUG}`, changeFrequency: "daily", priority: 0.9 },
   { url: `${SITE_URL}/comunidad`, changeFrequency: "weekly", priority: 0.6 },
@@ -25,6 +26,8 @@ const FIXED: MetadataRoute.Sitemap = [
   { url: `${SITE_URL}/legal/privacidad`, changeFrequency: "yearly", priority: 0.2 },
   { url: `${SITE_URL}/legal/terminos`, changeFrequency: "yearly", priority: 0.2 },
   { url: `${SITE_URL}/legal/eliminar-cuenta`, changeFrequency: "yearly", priority: 0.2 },
+  { url: `${SITE_URL}/legal/aviso-legal`, changeFrequency: "yearly", priority: 0.2 },
+  { url: `${SITE_URL}/legal/cookies`, changeFrequency: "yearly", priority: 0.2 },
 ];
 
 /** PostgREST corta a 1000 filas por petición: se pagina hasta agotar. */
@@ -49,6 +52,20 @@ async function fetchAll<T>(
   return out;
 }
 
+type TorneoRow = { id: string; starts_on: string | null; status: string };
+
+/** Torneos públicos: los de `explore_tournaments` como anon (sin clubes demo
+ *  ni torneos caducados). Las fichas de demo siguen por enlace, no aquí. */
+async function publicTournaments(sb: SupabaseClient): Promise<MetadataRoute.Sitemap> {
+  const { data, error } = await sb.rpc("explore_tournaments", { p_search: null });
+  if (error) return [];
+  return ((data ?? []) as TorneoRow[]).map((t) => ({
+    url: `${SITE_URL}/torneos/${t.id}`,
+    changeFrequency: t.status === "in_progress" ? "hourly" : "daily",
+    priority: 0.7,
+  }));
+}
+
 type GrupoRow = { id_grupo: string; temporada: string | null; updated_at: string | null };
 type EquipoRow = { id_equipo: number; updated_at: string | null };
 
@@ -66,7 +83,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!sb) return fixed;
 
   try {
-    const [grupos, clasificacion, inscripciones] = await Promise.all([
+    const [torneos, grupos, clasificacion, inscripciones] = await Promise.all([
+      publicTournaments(sb).catch(() => [] as MetadataRoute.Sitemap),
       fetchAll<GrupoRow>(sb, "fcp_grupos", "id_grupo, temporada, updated_at"),
       fetchAll<EquipoRow>(sb, "fcp_clasificacion", "id_equipo, updated_at"),
       fetchAll<EquipoRow>(sb, "fcp_inscripciones", "id_equipo, updated_at"),
@@ -100,7 +118,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     }));
 
-    return [...fixed, ...groupEntries, ...teamEntries];
+    const torneoEntries = torneos.map((e) => ({ ...e, lastModified: now }));
+    return [...fixed, ...torneoEntries, ...groupEntries, ...teamEntries];
   } catch {
     // Sin base de datos el sitemap sigue saliendo, con lo fijo.
     return fixed;
