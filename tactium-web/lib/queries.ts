@@ -4,6 +4,8 @@ import { supabaseBrowser } from "./supabase/client";
 import { guardedWrite, type WriteResult } from "./writes";
 import type { Position } from "./team-data";
 import { FCP_FEDERATION_CODE } from "./federations";
+import { fetchClubInscripciones, fetchInscripcionGrupo } from "./club-ops";
+import type { FcpSeasonEstado } from "./fcp-season-diff";
 import {
   fcpDisplayName,
   fcpTeamKey,
@@ -19,12 +21,14 @@ import {
   type FcpRosterPlayer,
   type FcpStanding,
   type FcpTeamProfile,
+  type FcpRival,
 } from "./fcp-public";
 export type {
   FcpGroupHeader,
   FcpMatch,
   FcpMeeting,
   FcpPreseason,
+  FcpRival,
   FcpRosterPlayer,
   FcpStanding,
   FcpTeamProfile,
@@ -2274,8 +2278,17 @@ export async function fetchFeed(limit = 30): Promise<FeedRow[]> {
     p_limit: limit,
   });
   if (error) throw error;
+  // Un amistoso entre dos personas que sigues llega una vez por cada una: se
+  // enseña una sola tarjeta por partido, como en la app.
+  const seen = new Set<string>();
+  const rows = ((data ?? []) as Partial<FeedRow>[]).filter((r) => {
+    const k = `${r.kind}-${r.ref_id}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   // Un servidor sin la migración de kudos no trae las columnas: se rellenan.
-  return ((data ?? []) as Partial<FeedRow>[]).map((r) => ({
+  return rows.map((r) => ({
     ...(r as FeedRow),
     kudos_count: Number(r.kudos_count ?? 0),
     i_gave_kudos: !!r.i_gave_kudos,
@@ -2446,102 +2459,74 @@ export async function fetchFcpLeagues(): Promise<FcpLeague[]> {
 
 export interface FcpTeamInscripcion {
   temporada: string;
+  /** Nombre con el que lo inscribe la Federación (puede no ser el de TACTIUM). */
   equipo: string;
+  /** id federativo de la inscripción, para enlazar su ficha pública. */
+  idEquipo: number;
   categoria: string | null;
   /** Su categoría de ahora, para ver de un vistazo si sube o baja. */
   categoriaActual: string | null;
+  /** Grupo dentro de la categoría ('A' | 'B'…), null si aún no se conoce. */
+  subgrupo: string | null;
   confirmado: boolean;
   sede: string | null;
+  /** La sede en corto («SMASH»), como la escribe el PDF de la Federación. */
+  sedeCorta: string | null;
+  estado: FcpSeasonEstado;
+  /** «Sigue en 2ª», «4ª → 3ª», «Antes …», «Nuevo». */
+  estadoLabel: string;
+  /** Los demás equipos de su grupo (vacío sin subgrupo). */
+  rivales: FcpRival[];
   roster: FcpRosterPlayer[];
 }
-
-/** Quita patrocinador y letra de equipo para quedarse con el nombre del club.
- *  Mismo criterio que `clubOf` en la app. */
-function clubBase(equipo: string): string {
-  let s = equipo.trim().replace(/\s+/g, " ");
-  s = s.replace(/\s*[-–]\s*[^-–]+$/, "").trim() || s;
-  s = s.replace(/\s+(G[º°]\.?|GRUPO)\s+.+$/i, "").trim() || s;
-  s = s.replace(/[\s\-–]+$/, "").trim() || equipo.trim();
-  s = s
-    .replace(
-      /\s+(MASCULINO|FEMENINO)?\s*([A-ZÑ]|\d{1,2}|I{2,3}|IV|VI{0,3}|IX|XI{0,2})$/i,
-      ""
-    )
-    .trim();
-  return s || equipo.trim();
-}
-
-const normTeam = (s: string | null | undefined) =>
-  (s ?? "")
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
 
 /**
  * ¿Está MI equipo apuntado a la temporada que viene?
  *
  * El club tenía esto en su panel desde hace tiempo; un capitán independiente no
  * tenía dónde verlo, y es exactamente la misma pregunta: si está inscrito, si
- * se lo han confirmado, en qué categoría ha quedado y con qué plantilla.
+ * se lo han confirmado, en qué categoría y grupo ha quedado y con qué
+ * plantilla.
  *
- * El cruce va por NOMBRE + GÉNERO, no por id: el `id_equipo` de la Federación
- * cambia cada temporada, así que el vínculo guardado apunta a la liga en curso
- * y no sirve para encontrar al mismo equipo en la siguiente. El género hace
- * falta porque «MEDIO CUDEYO A» existe dos veces, una masculina y otra
- * femenina.
+ * Es el mismo cruce que el panel del club (`fetchClubInscripciones`): por
+ * jugadores en común y, si no, por nombre sin patrocinador. Antes iba por
+ * nombre exacto, y como la FCP reasigna letras entre temporadas, un equipo
+ * podía ver la inscripción de su hermano («RACKET SPORT B» de 1ª es el «A» que
+ * jugaba en 2ª). `hermanos` son los demás equipos del mismo club que ve el
+ * usuario: con ellos delante, el cruce no le adjudica a este equipo la fila de
+ * otro del club que comparta un par de jugadores. Como en la app.
  *
  * Devuelve null si no hay liga en inscripción o si ese equipo no aparece: así
  * la pantalla no pinta nada el resto del año.
  */
-export async function fetchTeamInscripcion(team: {
-  name: string;
-  gender: string | null;
-  category: string | null;
-}): Promise<FcpTeamInscripcion | null> {
-  const nombre = (team.name ?? "").trim();
-  if (nombre.length < 2) return null;
+export async function fetchTeamInscripcion(
+  team: { id: string; name: string; gender: string | null; category: string | null },
+  hermanos: { id: string; name: string; gender: string | null; category: string | null }[] = []
+): Promise<FcpTeamInscripcion | null> {
+  if ((team.name ?? "").trim().length < 2) return null;
+  const lista = [...hermanos.filter((t) => t.id !== team.id), team];
+  const r = await fetchClubInscripciones(lista);
+  const fila = r?.rows.find((x) => x.teamId === team.id);
+  if (!r || !fila) return null;
 
-  const ligas = await fetchFcpLeagues();
-  const proxima = ligas.find((l) => l.upcoming);
-  if (!proxima) return null;
-
-  // `%` y `,` rompen los filtros de PostgREST; el nombre de un club no los
-  // lleva, pero no cuesta nada no fiarse.
-  const base = clubBase(nombre).replace(/[%,()]/g, " ").trim();
-  if (base.length < 2) return null;
-
-  const { data } = await supabaseBrowser()
-    .from("fcp_inscripciones")
-    .select("id_equipo, equipo, genero, grupo_nombre, confirmado, sede")
-    .eq("id_liga", proxima.idLiga)
-    .ilike("equipo", `${base}%`)
-    .limit(200);
-
-  const esFemenino = team.gender === "femenino";
-  const fila = ((data ?? []) as {
-    id_equipo: number;
-    equipo: string | null;
-    genero: string | null;
-    grupo_nombre: string | null;
-    confirmado: boolean | null;
-    sede: string | null;
-  }[]).find(
-    (r) =>
-      normTeam(r.equipo) === normTeam(nombre) &&
-      (r.genero === "F" ? esFemenino : !esFemenino)
-  );
-  if (!fila) return null;
-
+  const [roster, rivales] = await Promise.all([
+    fetchFcpRoster(fila.idEquipo),
+    fetchInscripcionGrupo(fila).catch(() => [] as FcpRival[]),
+  ]);
   return {
-    temporada: proxima.temporada ?? String(proxima.idLiga),
-    equipo: (fila.equipo ?? nombre).trim(),
-    categoria: catShort(fila.grupo_nombre ?? ""),
-    categoriaActual: team.category,
-    confirmado: fila.confirmado === true,
+    temporada: r.temporada,
+    equipo: fila.equipo,
+    idEquipo: fila.idEquipo,
+    categoria: fila.categoria,
+    categoriaActual: fila.categoriaActual ?? team.category,
+    subgrupo: fila.subgrupo,
+    confirmado: fila.confirmado,
     sede: fila.sede,
-    roster: await fetchFcpRoster(fila.id_equipo),
+    sedeCorta: fila.sedeCorta,
+    estado: fila.estado,
+    estadoLabel: fila.estadoLabel,
+    rivales,
+    roster,
   };
 }
 
@@ -2610,6 +2595,17 @@ export interface FcpTeamResult {
   idEquipo: number;
   equipo: string;
   idGrupo: string;
+  /** Solo en una liga en inscripción (de `fcp_inscripciones`): con esto la
+   *  lista se agrupa por categoría y por el grupo que reparte la Federación. */
+  insc?: {
+    /** «2ª CATEGORIA MASCULINA». */
+    grupoNombre: string | null;
+    genero: "M" | "F" | null;
+    /** 'A' | 'B'…, null si la categoría aún no está repartida. */
+    subgrupo: string | null;
+    sedeCorta: string | null;
+    confirmado: boolean;
+  };
 }
 
 /**
@@ -2630,7 +2626,9 @@ export async function searchFcpTeams(opts: {
   let sel = idLigaSinGrupos
     ? supabaseBrowser()
         .from("fcp_inscripciones")
-        .select("id_equipo, equipo, id_grupo")
+        .select(
+          "id_equipo, equipo, id_grupo, grupo_nombre, genero, subgrupo, sede_corta, confirmado"
+        )
         .eq("id_liga", idLigaSinGrupos)
     : supabaseBrowser()
         .from("fcp_clasificacion")
@@ -2651,6 +2649,12 @@ export async function searchFcpTeams(opts: {
   const { data, error } = await sel.limit(idLigaSinGrupos ? limit : limit * 4);
   if (error) throw error;
 
+  if (idLigaSinGrupos) {
+    return (
+      await inscritosUnicos((data ?? []) as unknown as InscritoRow[])
+    ).slice(0, limit);
+  }
+
   // Un equipo aparece una vez por grupo: nos quedamos con una fila por equipo.
   const seen = new Map<number, FcpTeamResult>();
   for (const r of data ?? []) {
@@ -2664,6 +2668,64 @@ export async function searchFcpTeams(opts: {
   return [...seen.values()]
     .sort((a, b) => a.equipo.localeCompare(b.equipo, "es"))
     .slice(0, limit);
+}
+
+type InscritoRow = {
+  id_equipo: number | null;
+  equipo: string | null;
+  id_grupo: string;
+  grupo_nombre: string | null;
+  genero: string | null;
+  subgrupo: string | null;
+  sede_corta: string | null;
+  confirmado: boolean | null;
+};
+
+/**
+ * Una fila por equipo de una liga en inscripción.
+ *
+ * Al rellenar los grupos con el PDF de distribución de la Federación quedaron
+ * filas viejas sin `subgrupo` en categorías que sí lo tienen (un equipo que
+ * también sale bien colocado, o uno que la FCP ya no publica). Se descartan:
+ * si no, el equipo salía dos veces o en un «sin grupo» que no existe. Lo de
+ * «esa categoría tiene grupos» se pregunta a la tabla y no a lo que ha
+ * devuelto la búsqueda, que con un término es solo un trozo. Mismo criterio
+ * que `fetchGroupInscritos` en la app.
+ */
+async function inscritosUnicos(rows: InscritoRow[]): Promise<FcpTeamResult[]> {
+  const dudosas = [
+    ...new Set(rows.filter((r) => !r.subgrupo).map((r) => r.id_grupo)),
+  ];
+  const conSubgrupos = new Set<string>();
+  if (dudosas.length > 0) {
+    const { data } = await supabaseBrowser()
+      .from("fcp_inscripciones")
+      .select("id_grupo")
+      .in("id_grupo", dudosas)
+      .not("subgrupo", "is", null)
+      .limit(5000);
+    for (const g of (data ?? []) as { id_grupo: string }[]) conSubgrupos.add(g.id_grupo);
+  }
+  const seen = new Map<number, FcpTeamResult>();
+  for (const r of rows) {
+    if (r.id_equipo == null) continue;
+    if (!r.subgrupo && conSubgrupos.has(r.id_grupo)) continue;
+    const prev = seen.get(r.id_equipo);
+    if (prev && (prev.insc?.subgrupo || !r.subgrupo)) continue;
+    seen.set(r.id_equipo, {
+      idEquipo: r.id_equipo,
+      equipo: (r.equipo ?? "").trim() || "—",
+      idGrupo: r.id_grupo,
+      insc: {
+        grupoNombre: r.grupo_nombre,
+        genero: r.genero === "F" ? "F" : r.genero === "M" ? "M" : null,
+        subgrupo: r.subgrupo ?? null,
+        sedeCorta: r.sede_corta ?? null,
+        confirmado: r.confirmado === true,
+      },
+    });
+  }
+  return [...seen.values()].sort((a, b) => a.equipo.localeCompare(b.equipo, "es"));
 }
 
 export interface FcpRankingRow {

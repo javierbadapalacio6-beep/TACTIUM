@@ -184,7 +184,16 @@ export async function listFollowing(userId: string): Promise<FollowingRow[]> {
 }
 
 export async function fetchFeed(limit = 30): Promise<FeedItem[]> {
-  return (await callRpc<FeedItem[]>('social_feed', { p_limit: limit })) ?? [];
+  const rows = (await callRpc<FeedItem[]>('social_feed', { p_limit: limit })) ?? [];
+  // Un amistoso entre dos personas que sigues llega una vez por cada una: se
+  // enseña una sola tarjeta por partido (la primera, que es la más reciente).
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const k = `${r.kind}-${r.ref_id}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 /**

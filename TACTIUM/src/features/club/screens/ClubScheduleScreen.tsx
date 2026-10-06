@@ -306,6 +306,13 @@ export const ClubScheduleScreen = ({
   const roundMatches = useMemo(() => currentRoundMatches(matches), [matches]);
   const hasMore = matches.length > roundMatches.length;
   const visible = showAll ? matches : roundMatches;
+  // Al cambiar entre «jornada actual» y «todas», el día marcado en la tira se
+  // suelta: si no, la lista seguía filtrada por ese día y el botón parecía no
+  // hacer nada.
+  const toggleShowAll = () => {
+    setShowAll((v) => !v);
+    if (!gridMode) setDayFilter(null);
+  };
 
   // Tira de la semana: 7 días desde el lunes de la semana de la jornada en
   // juego. Punto verde si todo tiene hora; ámbar si falta algo.
@@ -555,11 +562,15 @@ export const ClubScheduleScreen = ({
                 ponerles día y hora.
               </Text>
             ) : (
-              <Text style={styles.emptyText}>Todos los partidos de local tienen hora.</Text>
+              <Text style={styles.emptyText}>
+                {showAll
+                  ? `Todas las jornadas tienen hora · ${matches.length} partidos de local.`
+                  : 'Todos los partidos de local de esta jornada tienen hora.'}
+              </Text>
             )}
             {hasMore ? (
               <Pressable
-                onPress={() => setShowAll((v) => !v)}
+                onPress={toggleShowAll}
                 hitSlop={8}
                 style={{ alignSelf: 'flex-start', marginTop: 18 }}
               >
@@ -590,7 +601,8 @@ export const ClubScheduleScreen = ({
         >
           {tab === 'partidos' ? (
             <>
-              {weekStrip}
+              {/* La tira es de la semana en juego: con todas las jornadas no aplica. */}
+              {showAll ? null : weekStrip}
 
               {matches.length === 0 ? (
                 <Text style={styles.emptyText}>
@@ -623,7 +635,7 @@ export const ClubScheduleScreen = ({
 
               {hasMore ? (
                 <Pressable
-                  onPress={() => setShowAll((v) => !v)}
+                  onPress={toggleShowAll}
                   hitSlop={8}
                   style={{ alignSelf: 'center', marginTop: 18 }}
                 >
