@@ -44,6 +44,7 @@ import {
   type PairStatsMap,
 } from "@/lib/lineup-generator";
 import { useSession } from "@/lib/session";
+import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import {
@@ -439,8 +440,12 @@ function ReadSlot({ p, name, me }: { p: DbPlayer | null; name: string | null; me
 }
 
 export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
-  const { activeTeam, role, user } = useSession();
-  const teamId = activeTeam?.id ?? null;
+  const { role, user } = useSession();
+  // El equipo (y la capitanía) es el de la jornada, no el activo: el club abre
+  // la de cualquiera de sus equipos desde su panel.
+  const owner = useMatchdayTeam(id);
+  const teamId = owner.teamId;
+  const isCaptain = role === "capitan" && owner.isTeamCaptain;
   const reduce = useReducedMotion();
 
   const [reloadKey, setReloadKey] = useState(0);
@@ -633,7 +638,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   // Solo el capitán edita. El club ve la de cualquiera de sus equipos en
   // lectura (como en la app: el club_admin no edita).
   const derivedLock: Lock =
-    lock ?? (role !== "capitan" ? "notCaptain" : data?.matchday.status === "finished" ? "closed" : "none");
+    lock ?? (!isCaptain ? "notCaptain" : data?.matchday.status === "finished" ? "closed" : "none");
   const readOnly = derivedLock !== "none";
 
   const placed = useMemo(() => new Set(courts.flat().filter(Boolean) as string[]), [courts]);
@@ -864,6 +869,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     else say(res.reason, "warning");
   }
 
+  if (owner.loading) return <SkeletonPage />;
   if (!teamId) {
     return (
       <div className="tw-page">
@@ -926,7 +932,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
 
   const strip = (pill?: string | null) => (
     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-      <Avatar initials={initials(activeTeam?.name ?? "")} size={36} />
+      <Avatar initials={initials(owner.teamName ?? "")} size={36} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <h1 className="tw-page-title truncate" style={{ margin: 0 }}>
           J{m.round} · vs {m.opponent}
@@ -939,7 +945,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const goersPill = !noReplies && counts.yes > 0 ? `${counts.yes} van` : null;
 
   /* ── Vista de lectura (jugador y club) ─────────────────────────── */
-  if (role !== "capitan") {
+  if (!isCaptain) {
     const isClub = role === "club";
     const active = variants.find((v) => v.isActive) ?? null;
     const published = !!active && courts.some((p) => p[0] || p[1]);
@@ -1504,8 +1510,8 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
           Volver a la jornada
         </BtnLink>
         <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
-          {activeTeam?.name}
-          {activeTeam?.category ? ` · ${activeTeam.category}` : ""}
+          {owner.teamName}
+          {owner.teamCategory ? ` · ${owner.teamCategory}` : ""}
         </span>
       </div>
     </div>

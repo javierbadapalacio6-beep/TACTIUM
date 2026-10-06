@@ -10,6 +10,7 @@ import {
   type MatchdayBundle,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
 import { Btn, BtnLink, Card, Modal, Note } from "@/components/ui";
@@ -67,8 +68,11 @@ function formatDate(iso: string | null): string {
 }
 
 export function ResultsView({ id }: { id: string }) {
-  const { activeTeam, user, role } = useSession();
-  const teamId = activeTeam?.id ?? null;
+  const { user, role } = useSession();
+  // El equipo (y la capitanía) es el de la jornada, no el activo: el club abre
+  // la de cualquiera de sus equipos desde su panel.
+  const owner = useMatchdayTeam(id);
+  const teamId = owner.teamId;
   const [reloadKey, setReloadKey] = useState(0);
 
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
@@ -137,7 +141,7 @@ export function ResultsView({ id }: { id: string }) {
     return !Number.isNaN(t.getTime()) && Date.now() >= t.getTime();
   }, [m]);
   const myPlayer = data && user ? data.players.find((p) => p.userId === user.id) ?? null : null;
-  const isCaptain = role === "capitan";
+  const isCaptain = role === "capitan" && owner.isTeamCaptain;
   const playerNoFicha = role === "jugador" && !myPlayer;
   const canEdit = !!m && started && !closed && (isCaptain || (role === "jugador" && !!myPlayer));
 
@@ -152,6 +156,7 @@ export function ResultsView({ id }: { id: string }) {
     return { us, them, played: us + them };
   }, [courts]);
 
+  if (owner.loading) return <SkeletonPage />;
   if (!teamId) {
     return (
       <div className="tw-page">
@@ -181,7 +186,7 @@ export function ResultsView({ id }: { id: string }) {
     );
   }
 
-  const ourName = activeTeam?.name ?? "Nosotros";
+  const ourName = owner.teamName ?? "Nosotros";
   const labelOf = (c: Court) => {
     const [a, b] = c.pair;
     const nm = (p: DbPlayer | null) => (p ? (myPlayer && p.id === myPlayer.id ? "Tú" : p.name.split(" ")[0]) : "—");

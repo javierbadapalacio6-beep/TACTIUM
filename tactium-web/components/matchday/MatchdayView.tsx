@@ -19,7 +19,7 @@ import {
 } from "@/lib/queries";
 import { removeMatchPhoto, updateMatchdaySchedule, uploadMatchPhoto } from "@/lib/matchday-ops";
 import { useSession } from "@/lib/session";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
@@ -376,25 +376,14 @@ function ShareResultCard({
 }
 
 export function MatchdayView({ id }: { id: string }) {
-  const { activeTeam, role, user } = useSession();
+  const { role } = useSession();
   // El equipo es el de la jornada, no el activo: el club entra desde su
   // panel en jornadas de cualquiera de sus equipos. Si no se puede leer, el
-  // activo, como antes.
-  const owner = useAsync(
-    async () => {
-      const { data: row } = await supabaseBrowser()
-        .from("matchdays")
-        .select("seasons(team_id)")
-        .eq("id", id)
-        .maybeSingle();
-      const s = (row as { seasons?: { team_id?: string } | { team_id?: string }[] } | null)?.seasons;
-      return (Array.isArray(s) ? s[0]?.team_id : s?.team_id) ?? null;
-    },
-    [id, user?.id],
-    !!user,
-  );
-  const teamId = owner.loading ? null : (owner.data ?? activeTeam?.id ?? null);
-  const isCaptain = role === "capitan" || role === "club";
+  // activo, como antes. La capitanía también es la de ESE equipo.
+  const owner = useMatchdayTeam(id);
+  const teamId = owner.teamId;
+  const teamCaptain = role === "capitan" && owner.isTeamCaptain;
+  const isCaptain = teamCaptain || role === "club";
   const router = useRouter();
   const pathname = usePathname();
 
@@ -609,7 +598,7 @@ export function MatchdayView({ id }: { id: string }) {
         : { chip: "warning" as const, stat: "warning" as const, l: "Empate" };
 
   const ctx = fcp.data ?? null;
-  const ourName = activeTeam?.name ?? "Mi equipo";
+  const ourName = owner.teamName ?? "Mi equipo";
 
   // Convocatoria sobre la plantilla activa.
   const activeIds = data.players.filter((p) => p.active !== false).map((p) => p.id);
@@ -1177,7 +1166,7 @@ export function MatchdayView({ id }: { id: string }) {
               · capitán con la jornada en juego → resultados y acta;
               · jugador con la jornada en juego → su resultado;
               · el resto (jugador antes, club, acta cerrada) → ver la alineación. */}
-          {role === "capitan" && !closed && started ? (
+          {teamCaptain && !closed && started ? (
             <>
               <Btn
                 variant="accent"
@@ -1193,11 +1182,11 @@ export function MatchdayView({ id }: { id: string }) {
                 Alineación
               </BtnLink>
             </>
-          ) : role === "capitan" && !closed ? (
+          ) : teamCaptain && !closed ? (
             <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent" icon={<IconUsers size={15} />}>
               Editar alineación
             </BtnLink>
-          ) : role !== "capitan" && role !== "club" && !closed && started ? (
+          ) : !teamCaptain && role !== "club" && !closed && started ? (
             <>
               <BtnLink href={`/jornada/${m.id}/resultados`} variant="accent" icon={<IconFlag size={15} />}>
                 Meter mi resultado

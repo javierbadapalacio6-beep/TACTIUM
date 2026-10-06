@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { useSession } from "@/lib/session";
+import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { useAsync } from "@/lib/use-async";
 import {
   countAvail,
@@ -65,9 +66,13 @@ function initials(n: string) {
  * por cualquiera. Todas las escrituras pasan por `guardedWrite`.
  */
 export function AvailabilityView({ id }: { id: string }) {
-  const { activeTeam, role, user } = useSession();
-  const teamId = activeTeam?.id ?? null;
-  const isCaptain = role === "capitan" || role === "club";
+  const { role, user } = useSession();
+  // El equipo (y la capitanía) es el de la jornada, no el activo: el club abre
+  // la de cualquiera de sus equipos desde su panel. El club gestiona la
+  // convocatoria como el capitán.
+  const owner = useMatchdayTeam(id);
+  const teamId = owner.teamId;
+  const isCaptain = (role === "capitan" && owner.isTeamCaptain) || role === "club";
 
   const { data, loading, error } = useAsync(
     () =>
@@ -103,6 +108,7 @@ export function AvailabilityView({ id }: { id: string }) {
     }
   }, [data, isCaptain]);
 
+  if (owner.loading) return <SkeletonPage />;
   if (!teamId) {
     return (
       <div className="tw-page">
