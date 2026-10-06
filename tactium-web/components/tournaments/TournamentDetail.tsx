@@ -34,6 +34,8 @@ import {
   type ResultMatch,
 } from "@/lib/tournament-engine";
 import { formatFee } from "@/lib/tournament-signup-pricing";
+import { addTournamentRegistration } from "@/lib/tournament-admin";
+import { canonicalOrigin } from "@/lib/site";
 import { guardedWrite } from "@/lib/writes";
 import {
   Btn,
@@ -58,8 +60,10 @@ import {
   IconClock,
   IconCopy,
   IconInfo,
+  IconShare,
   IconTicket,
   IconTrophy,
+  IconUserPlus,
   IconUsers,
 } from "@/components/Icon";
 import { PayTournamentButton } from "@/components/tournaments/PayTournamentButton";
@@ -1544,6 +1548,148 @@ function MatchRows({
 }
 
 /* ── Pantalla ──────────────────────────────────────────────────── */
+/* ── Alta manual de una pareja (organizador) ──────────────────────
+   Espejo de `AddPairSheet` de la app (TournamentDetailScreen): jugador 1,
+   jugador 2 opcional y puntos para la siembra. Si el torneo tiene varias
+   divisiones (género × categoría), se elige en cuál entra. */
+function AddPairModal({
+  tournamentId,
+  divisions,
+  social,
+  onClose,
+  onDone,
+}: {
+  tournamentId: string;
+  divisions: [string | null, string | null][];
+  social: boolean;
+  onClose: () => void;
+  onDone: (msg: string, ok: boolean) => void;
+}) {
+  const [div, setDiv] = useState<string>(divisions.length === 1 ? "0" : "");
+  const [p1, setP1] = useState("");
+  const [p2, setP2] = useState("");
+  const [email, setEmail] = useState("");
+  const [pts, setPts] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [tried, setTried] = useState(false);
+
+  const divLabel = (g: string | null, c: string | null) =>
+    [c, g ? (GENDER_LABEL[g] ?? g) : null].filter(Boolean).join(" · ") || "General";
+  const needDiv = divisions.length > 1 && div === "";
+
+  async function save() {
+    setTried(true);
+    if (!p1.trim() || needDiv || saving) return;
+    const [g, c] = divisions[Number(div || 0)] ?? [null, null];
+    setSaving(true);
+    const res = await guardedWrite(social ? "añadir el jugador" : "añadir la pareja", () =>
+      addTournamentRegistration({
+        tournamentId,
+        gender: g,
+        category: c,
+        p1Name: p1,
+        p2Name: social ? "" : p2,
+        p1Email: email,
+        seedPoints: pts ? parseInt(pts, 10) : null,
+      }),
+    );
+    setSaving(false);
+    if (res.ok) onDone(social ? "Jugador añadido" : "Pareja añadida", true);
+    else onDone(res.reason, false);
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy="alta-manual"
+      title="Alta manual"
+      lede={
+        social
+          ? "Apunta a alguien que se ha inscrito fuera de TACTIUM."
+          : "Apunta a una pareja que se ha inscrito fuera de TACTIUM: en el club, por teléfono o por WhatsApp."
+      }
+      footer={
+        <>
+          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn variant="accent" disabled={saving} onClick={() => void save()}>
+            {saving ? "Añadiendo…" : social ? "Añadir jugador" : "Añadir pareja"}
+          </Btn>
+        </>
+      }
+    >
+      {divisions.length > 1 && (
+        <Field
+          label="Categoría"
+          error={tried && needDiv ? "Elige en qué categoría juegan." : undefined}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {divisions.map(([g, c], i) => {
+              const on = div === String(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setDiv(String(i))}
+                  className={"tw-fcp-chip" + (on ? " is-on" : "")}
+                >
+                  {divLabel(g, c)}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+      )}
+      <Field
+        label={social ? "Jugador" : "Jugador 1"}
+        htmlFor="alta-p1"
+        error={tried && !p1.trim() ? "Falta el nombre." : undefined}
+      >
+        <Input
+          id="alta-p1"
+          value={p1}
+          onChange={(e) => setP1(e.target.value)}
+          placeholder="Nombre y apellidos"
+          maxLength={40}
+          autoFocus
+        />
+      </Field>
+      {!social && (
+        <Field label="Jugador 2" htmlFor="alta-p2" hint="Opcional: puedes completarlo después.">
+          <Input
+            id="alta-p2"
+            value={p2}
+            onChange={(e) => setP2(e.target.value)}
+            placeholder="Nombre y apellidos"
+            maxLength={40}
+          />
+        </Field>
+      )}
+      <div className="tw-form-grid">
+        <Field label="Email de contacto" htmlFor="alta-email" hint="Opcional">
+          <Input
+            id="alta-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="nombre@correo.com"
+          />
+        </Field>
+        <Field label="Puntos para la siembra" htmlFor="alta-pts" hint="Opcional">
+          <Input
+            id="alta-pts"
+            inputMode="numeric"
+            value={pts}
+            onChange={(e) => setPts(e.target.value.replace(/[^0-9]/g, "").slice(0, 5))}
+            placeholder="p. ej. 1500"
+          />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 export function TournamentDetail({
   id,
   spectator,
@@ -1564,6 +1710,8 @@ export function TournamentDetail({
     !!uid,
   );
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -2243,7 +2391,13 @@ export function TournamentDetail({
             <PayTournamentButton tournamentId={t.id} />
           ) : (
             <>
-              <Btn variant="quiet">Alta manual</Btn>
+              <Btn
+                variant="quiet"
+                icon={<IconUserPlus size={15} />}
+                onClick={() => setAddOpen(true)}
+              >
+                Alta manual
+              </Btn>
               <BtnLink href={`/torneos/${t.id}/inscripcion`} icon={<IconTicket size={15} />}>
                 Ficha de inscripción
               </BtnLink>
@@ -2312,8 +2466,24 @@ export function TournamentDetail({
           >
             {copied ? "Copiado" : "Copiar"}
           </Btn>
+          <Btn
+            variant="quiet"
+            size="sm"
+            icon={linkCopied ? <IconCheck size={14} /> : <IconShare size={14} />}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`${canonicalOrigin()}/torneos/${t.id}`);
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 1800);
+              } catch {
+                /* se puede copiar a mano */
+              }
+            }}
+          >
+            {linkCopied ? "Enlace copiado" : "Copiar enlace"}
+          </Btn>
           <span style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
-            Compártelo para que se apunten desde la app.
+            Comparte el enlace o el código para que se apunten.
           </span>
         </Card>
       )}
@@ -2918,6 +3088,22 @@ export function TournamentDetail({
             </div>
           </Card>
         </div>
+      )}
+
+      {addOpen && (
+        <AddPairModal
+          tournamentId={t.id}
+          divisions={genDivs}
+          social={social}
+          onClose={() => setAddOpen(false)}
+          onDone={(msg, ok) => {
+            setToast(msg);
+            if (ok) {
+              setAddOpen(false);
+              setReloadKey((k) => k + 1);
+            }
+          }}
+        />
       )}
 
       {entry && (
