@@ -42,6 +42,7 @@ import {
   IconCamera,
   IconChevronRight,
   IconFlag,
+  IconInfo,
   IconPlus,
 } from "@/components/Icon";
 import { fetchTeamStanding, shortGroupName } from "@/components/federation/fed-data";
@@ -105,7 +106,12 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
     !!teamId,
   );
   const SEASONS = data?.seasons ?? [];
-  const standing = useAsync(() => fetchTeamStanding(teamId!), [teamId], !!teamId);
+  // Con la temporada anterior si la nueva aún no tiene grupos (como la app).
+  const standing = useAsync(
+    () => fetchTeamStanding(teamId!, { withPrevious: true }),
+    [teamId],
+    !!teamId,
+  );
 
   const [open, setOpen] = useState(false);
   // «Escanear el calendario» sin temporada: primero se crea la temporada y,
@@ -542,6 +548,17 @@ function Scoreboard({
         <Stat label="Jornadas" value={`${played}/${total || "—"}`} />
         <Stat label="Balance" value={`${wins}-${draws}-${losses}`} sub="Ganadas · empatadas · perdidas" />
       </StatRow>
+
+      {standing?.previous && me && (
+        <Note icon={<IconInfo size={15} />} style={{ marginTop: 12 }}>
+              <b>
+                Clasificación final
+                {standing.temporada ? ` de la ${standing.temporada}` : " de la temporada pasada"}
+              </b>
+              . La Federación aún no ha publicado los grupos de la temporada nueva. Cuando lo
+              haga, aquí verás tu grupo nuevo.
+            </Note>
+      )}
 
       {next ? (
         <div

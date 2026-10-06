@@ -35,7 +35,7 @@ import { EmptyState, SkeletonCard, SkeletonPage, Toast } from "@/components/stat
 import { EASE } from "@/components/entry/motion-bits";
 import { ScanModal } from "@/components/team/ScanModal";
 import type { ScannedMatchday } from "@/lib/parse-image";
-import { IconCalendar, IconChevronRight, IconLock, IconPlus } from "@/components/Icon";
+import { IconCalendar, IconChevronRight, IconInfo, IconLock, IconPlus } from "@/components/Icon";
 import { FcpBracketPanel, FcpStandingsTable } from "@/components/federation/Federation";
 import {
   fetchTeamPlayoffGroup,
@@ -122,7 +122,12 @@ export function SeasonDetail({ id }: { id: string }) {
     [id, teamId, user?.id, reloadKey],
     !!user,
   );
-  const standing = useAsync(() => fetchTeamStanding(teamId!), [teamId], !!teamId);
+  // Con la temporada anterior si la nueva aún no tiene grupos (como la app).
+  const standing = useAsync(
+    () => fetchTeamStanding(teamId!, { withPrevious: true }),
+    [teamId],
+    !!teamId,
+  );
   const playoff = useAsync(
     () => fetchTeamPlayoffGroup(standing.data!),
     [standing.data?.idGrupo, standing.data?.me?.equipo],
@@ -447,6 +452,16 @@ export function SeasonDetail({ id }: { id: string }) {
               {shortGroupName(standing.data.grupo)}
             </span>
           </div>
+          {standing.data.previous && (
+            <Note icon={<IconInfo size={15} />} style={{ marginBottom: 12 }}>
+              <b>
+                Clasificación final
+                {standing.data.temporada ? ` de la ${standing.data.temporada}` : " de la temporada pasada"}
+              </b>
+              . La Federación aún no ha publicado los grupos de la temporada nueva. Cuando lo
+              haga, aquí verás tu grupo nuevo.
+            </Note>
+          )}
           {matchdays.length === 0 ? (
             <Card>
               <EmptyState
