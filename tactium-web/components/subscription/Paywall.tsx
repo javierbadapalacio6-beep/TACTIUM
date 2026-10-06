@@ -204,15 +204,15 @@ export function Paywall({
   } else if (trial) {
     ctaLabel = `Seguir con Pro · ${formatEur(billed)}/${per}`;
     ctaNote = "Se cobra al confirmar. Si prefieres, te avisamos el día 11 y decides entonces.";
-  } else if (hadTrial) {
+  } else {
+    // La única prueba es la nuestra sin tarjeta, al crear el equipo o el club.
+    // Suscribirse cobra desde el primer día, igual que en las tiendas.
     ctaLabel = `Suscribirme · ${formatEur(billed)}/${per}`;
     ctaNote = `Se cobra al confirmar. Renovación automática ${yearly ? "anual" : "mensual"}; cancela cuando quieras.`;
-  } else {
-    ctaLabel = `Suscribirme · ${formatEur(billed)}/${per}`;
-    ctaNote = `Incluye ${TRIAL_DURATION_DAYS} días de prueba: el primer cobro llega el día ${TRIAL_DURATION_DAYS} y puedes cancelar antes.`;
   }
-  // El «14 días gratis» solo a quien no ha gastado la prueba.
-  const showTrialPromo = !trial && !hadTrial;
+  // «Cómo va la prueba» solo a quien aún puede empezarla: sin cuenta, o sin el
+  // club al que irá el plan.
+  const showTrialPromo = !trial && !hadTrial && (!user || (isClub && !clubId));
 
   return (
     <div className="tw-page-narrow">

@@ -7,13 +7,12 @@ import { webAppOrigin } from "@/lib/connect";
 import {
   planForTier,
   subscriptionLineItem,
-  TRIAL_DAYS,
   type BillingCycle,
 } from "@/lib/subscription-billing";
 
 // POST /api/subscription/checkout
-// Crea la sesión de Stripe Checkout de una SUSCRIPCIÓN (reverse-trial de 14
-// días). El importe se calcula SIEMPRE en el servidor desde `plans.ts`, nunca se
+// Crea la sesión de Stripe Checkout de una SUSCRIPCIÓN (cobra desde el día 1:
+// la prueba es la nuestra sin tarjeta). El importe se calcula SIEMPRE en el servidor desde `plans.ts`, nunca se
 // confía en el cliente. El sujeto es el club (planes de club) o el propio
 // usuario (plan capitán), y se AUTORIZA aquí igual que el cobro por torneo.
 //
@@ -135,26 +134,14 @@ export async function POST(req: Request) {
     product_id: `tactium_${tier}_${cycle}`,
   };
 
-  // Quien ya disfrutó nuestra prueba sin tarjeta (al crear su equipo o club)
-  // no recibe OTRA de Stripe: paga desde el primer día. Igual que en la app,
-  // donde la oferta de prueba de la tienda se retira con el build de oct. 2026.
-  const { count: hadOwnTrial } = await admin
-    .from("subscriptions")
-    .select("id", { count: "exact", head: true })
-    .eq("subject_type", subjectType)
-    .eq("subject_id", subjectId)
-    .like("product_id", "trial_%");
-  const stripeTrialDays = (hadOwnTrial ?? 0) > 0 ? undefined : TRIAL_DAYS;
-
+  // Sin prueba de Stripe: la única prueba es la nuestra sin tarjeta, que
+  // empieza al crear el equipo o el club. Suscribirse cobra desde el primer
+  // día, igual que en App Store y Google Play desde la 1.5.0 (oct. 2026).
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [subscriptionLineItem(plan, cycle)],
-    // Prueba de Stripe solo si el sujeto no tuvo ya la nuestra sin tarjeta.
-    subscription_data: {
-      ...(stripeTrialDays ? { trial_period_days: stripeTrialDays } : {}),
-      metadata,
-    },
+    subscription_data: { metadata },
     ...(user?.email ? { customer_email: user.email } : {}),
     // Metadata también en la sesión para el evento checkout.session.completed.
     metadata,
