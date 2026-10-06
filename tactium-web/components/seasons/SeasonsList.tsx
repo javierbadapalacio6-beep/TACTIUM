@@ -45,7 +45,12 @@ import {
   IconInfo,
   IconPlus,
 } from "@/components/Icon";
-import { fetchTeamStanding, shortGroupName } from "@/components/federation/fed-data";
+import {
+  fetchTeamStanding,
+  isAlreadyInHistoryError,
+  previousSeasonImportNotice,
+  shortGroupName,
+} from "@/components/federation/fed-data";
 import {
   PHASE_EYEBROW,
   fetchSeasonsBalance,
@@ -122,6 +127,8 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
   const [matchdaysStr, setMatchdaysStr] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Aviso informativo (no error): p. ej. «aún no hay temporada nueva».
+  const [notice, setNotice] = useState<{ title: string; body: string } | null>(null);
 
   const active = data?.active ?? null;
   const past = SEASONS.filter((s) => !s.active);
@@ -176,6 +183,14 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
       return;
     }
     setBusy(true);
+    // Entre temporadas lo único publicado es la ANTERIOR: volcarla duplicaría
+    // la del histórico. Se avisa y no se llama al RPC (como la app).
+    if (standing.data?.previous) {
+      const n = await previousSeasonImportNotice(teamId, standing.data);
+      setBusy(false);
+      setNotice(n);
+      return;
+    }
     const res = await guardedWrite("traer la temporada de la Federación", () =>
       importFcpSeason(teamId, fcpId),
     );
@@ -185,6 +200,8 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
       setToast(
         `${res.data.newSeason ? "Temporada nueva creada" : "Temporada volcada"} · ${res.data.created} jornadas`,
       );
+    } else if (isAlreadyInHistoryError(res.reason)) {
+      setNotice({ title: "Aún no hay temporada nueva", body: res.reason });
     } else setToast(res.reason);
   }
 
@@ -460,6 +477,9 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
       </Modal>
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+      {notice && (
+        <Toast tone="info" title={notice.title} body={notice.body} onClose={() => setNotice(null)} />
+      )}
     </div>
   );
 }

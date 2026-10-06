@@ -26,7 +26,11 @@ import {
 import * as SeasonsApi from '@core/services/seasons';
 import * as MatchdaysApi from '@core/services/matchdays';
 import type * as TeamsApi from '@core/services/teams';
-import { importFcpSeason } from '@core/services/fcpSeason';
+import {
+  importFcpSeason,
+  isAlreadyInHistoryError,
+  previousSeasonImportNotice,
+} from '@core/services/fcpSeason';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import {
   fetchLeagueStatsBundle,
@@ -36,7 +40,7 @@ import {
 import { matchdayState } from '@core/utils/matchday';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
-import { toast } from '@store/toastStore';
+import { toast, useToastStore } from '@store/toastStore';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { zoneColor } from '@core/data/fcpZones';
 import {
@@ -168,6 +172,13 @@ export const SeasonsScreen = ({
         toast.error('Tu equipo no está vinculado', 'Vincúlalo a la Federación desde Equipo.');
         return;
       }
+      // Entre temporadas lo único publicado es la ANTERIOR: volcarla duplicaría
+      // la del histórico. Se avisa y no se llama al RPC.
+      if (st.previous) {
+        const n = await previousSeasonImportNotice(team.id, st);
+        useToastStore.getState().show('info', n.title, n.body, 8000);
+        return;
+      }
       const res = await importFcpSeason(team.id, st.idEquipo, 'Liga Cántabra');
       toast.success(
         res.new_season ? 'Temporada nueva creada' : 'Temporada volcada',
@@ -176,6 +187,10 @@ export const SeasonsScreen = ({
       await reload();
       if (res.season_id) navigation.navigate('SeasonDetail', { id: res.season_id });
     } catch (e: any) {
+      if (isAlreadyInHistoryError(e?.message)) {
+        useToastStore.getState().show('info', 'Aún no hay temporada nueva', e.message, 8000);
+        return;
+      }
       toast.error('No se pudo traer la temporada', e?.message ?? '');
     } finally {
       setImporting(false);

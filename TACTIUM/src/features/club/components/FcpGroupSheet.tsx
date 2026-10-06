@@ -5,7 +5,7 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet, IconChevron } from '@components/ui';
-import { toast } from '@store/toastStore';
+import { toast, useToastStore } from '@store/toastStore';
 import {
   getFcpIdEquipo,
   fetchFcpGroupStandings,
@@ -13,6 +13,7 @@ import {
   fetchFcpRivalRoster,
   fetchFcpActa,
   importFcpSeason,
+  isAlreadyInHistoryError,
   seasonForFcpGroup,
   type FcpStandingRow,
   type FcpScheduleRow,
@@ -158,6 +159,11 @@ export const FcpGroupSheet: React.FC<{
       onImported?.();
       void load();
     } catch (e: any) {
+      // No duplica la del histórico: es un aviso, no un fallo.
+      if (isAlreadyInHistoryError(e?.message)) {
+        useToastStore.getState().show('info', 'Aún no hay temporada nueva', e.message, 8000);
+        return;
+      }
       toast.error('No se pudo volcar la temporada', e?.message ?? '');
     } finally {
       setImporting(false);

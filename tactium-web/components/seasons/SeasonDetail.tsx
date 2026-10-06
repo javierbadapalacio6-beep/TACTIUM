@@ -40,6 +40,8 @@ import { FcpBracketPanel, FcpStandingsTable } from "@/components/federation/Fede
 import {
   fetchTeamPlayoffGroup,
   fetchTeamStanding,
+  isAlreadyInHistoryError,
+  previousSeasonImportNotice,
   shortGroupName,
 } from "@/components/federation/fed-data";
 import {
@@ -86,6 +88,8 @@ export function SeasonDetail({ id }: { id: string }) {
   const [jorHome, setJorHome] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Aviso informativo (no error): p. ej. «aún no hay temporada nueva».
+  const [notice, setNotice] = useState<{ title: string; body: string } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
   // Escanear el calendario es premium, como en la app (`calendar_scan`).
@@ -211,6 +215,13 @@ export function SeasonDetail({ id }: { id: string }) {
     const fcpId = standing.data?.fcpId ?? null;
     if (busy || !teamId || fcpId == null) return;
     setBusy(true);
+    // Lo único publicado es la temporada ANTERIOR: no se vuelca, se avisa.
+    if (standing.data?.previous) {
+      const n = await previousSeasonImportNotice(teamId, standing.data);
+      setBusy(false);
+      setNotice(n);
+      return;
+    }
     const res = await guardedWrite("traer el calendario de la Federación", () =>
       importFcpSeason(teamId, fcpId),
     );
@@ -218,6 +229,8 @@ export function SeasonDetail({ id }: { id: string }) {
     if (res.ok) {
       setReloadKey((k) => k + 1);
       setToast(`${res.data.created} jornadas creadas · ${res.data.updated} actualizadas`);
+    } else if (isAlreadyInHistoryError(res.reason)) {
+      setNotice({ title: "Aún no hay temporada nueva", body: res.reason });
     } else setToast(res.reason);
   }
 
@@ -590,6 +603,9 @@ export function SeasonDetail({ id }: { id: string }) {
       )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
+      {notice && (
+        <Toast tone="info" title={notice.title} body={notice.body} onClose={() => setNotice(null)} />
+      )}
     </div>
   );
 }

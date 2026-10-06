@@ -419,6 +419,10 @@ export async function importFcpTeams(
     }
     // Vuelca también la temporada (calendario + resultados). No bloquea el
     // onboarding si falla; siempre se puede rehacer desde "🏆 Mi grupo".
+    // Si el id es una inscripción sin grupos, el RPC puede caer a la temporada
+    // anterior: en un equipo nuevo la crea (tiene sentido enseñar algo); en uno
+    // que ya la tiene en el histórico responde «ya está en tu histórico» y no
+    // duplica. Ese error también se ignora aquí a propósito.
     try {
       await importFcpSeason(teamId, t.id_equipo, FCP_LEAGUE);
     } catch {

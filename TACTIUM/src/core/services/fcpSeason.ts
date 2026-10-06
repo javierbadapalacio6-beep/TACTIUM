@@ -558,6 +558,68 @@ export async function importFcpSeason(
 }
 
 /**
+ * El RPC ya no duplica una temporada del histórico: lanza «Esa temporada ya
+ * está en tu histórico (…)». No es un fallo, es que aún no hay nada nuevo que
+ * volcar; quien lo reciba lo enseña como aviso informativo, no como error.
+ * Ver la migración `20261006b_import_fcp_season_no_duplica_historico`.
+ */
+export function isAlreadyInHistoryError(message: string | null | undefined): boolean {
+  return (message ?? '').includes('ya está en tu histórico');
+}
+
+/** Temporada («2026/2027») de la INSCRIPCIÓN a la que apunta un id, o null. */
+export async function temporadaDeInscripcion(fcpIdEquipo: number): Promise<string | null> {
+  const { data: ins } = await rawFrom('fcp_inscripciones')
+    .select('id_liga')
+    .eq('id_equipo', fcpIdEquipo)
+    .limit(1);
+  const idLiga = ((ins ?? []) as { id_liga: number | null }[])[0]?.id_liga ?? null;
+  if (idLiga == null) return null;
+  const { data: l } = await rawFrom('fcp_ligas')
+    .select('temporada')
+    .eq('id_liga', idLiga)
+    .maybeSingle();
+  const t = seasonLabel((l as { temporada: string | null } | null)?.temporada);
+  return t || null;
+}
+
+/**
+ * Aviso para «Traer de la Federación» cuando lo único publicado es la
+ * temporada ANTERIOR (el vínculo apunta a la inscripción de la que viene, que
+ * aún no tiene grupos). Volcarla no aporta nada: o ya está en el histórico o
+ * es una temporada terminada. Se explica en vez de llamar al RPC.
+ */
+export async function previousSeasonImportNotice(
+  teamId: string,
+  st: {
+    idEquipo: number | null;
+    idGrupo: string | null;
+    temporada: string | null;
+    finished: boolean;
+  },
+): Promise<{ title: string; body: string }> {
+  const [nueva, enHistorico] = await Promise.all([
+    st.idEquipo != null ? temporadaDeInscripcion(st.idEquipo).catch(() => null) : null,
+    st.idGrupo
+      ? seasonForFcpGroup(teamId, st.idGrupo)
+          .then((s) => !!s && !s.active)
+          .catch(() => false)
+      : false,
+  ]);
+  const nuevaTxt = nueva ? `temporada ${nueva}` : 'temporada nueva';
+  const anteriorTxt = st.temporada ? `temporada ${st.temporada}` : 'temporada anterior';
+  const cola = [st.finished ? 'que ya terminó' : null, enHistorico ? 'ya la tienes en el histórico' : null]
+    .filter(Boolean)
+    .join(' y ');
+  return {
+    title: 'Aún no hay temporada nueva',
+    body:
+      `La Federación aún no ha publicado el calendario de la ${nuevaTxt}. ` +
+      `Lo que hay es la ${anteriorTxt}${cola ? `, ${cola}` : ''}.`,
+  };
+}
+
+/**
  * ¿Es momento de "Preparar nueva temporada"? Para no tener el botón siempre.
  * Sí cuando: no hay temporada activa (entre temporadas), la activa está vacía
  * (recién creada, aún sin jornadas) o ya terminó (todas las jornadas jugadas o

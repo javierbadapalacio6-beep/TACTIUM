@@ -134,7 +134,7 @@ export function SkeletonPage() {
 
 /* ── Toast ─────────────────────────────────────────────────────────
    Abajo a la derecha en escritorio, arriba en móvil. */
-export type ToastTone = "success" | "warning" | "error";
+export type ToastTone = "success" | "warning" | "error" | "info";
 
 export function Toast({
   tone = "success",
@@ -152,14 +152,18 @@ export function Toast({
       ? "var(--accent)"
       : tone === "warning"
         ? "var(--warning)"
-        : "var(--error)";
+        : tone === "info"
+          ? "var(--info)"
+          : "var(--error)";
   const bg =
     tone === "success"
       ? "var(--accent-10)"
       : tone === "warning"
         ? "var(--warning-soft)"
-        : "var(--error-soft)";
-  const Icon = tone === "success" ? IconCheck : IconAlert;
+        : tone === "info"
+          ? "var(--info-soft)"
+          : "var(--error-soft)";
+  const Icon = tone === "success" ? IconCheck : tone === "info" ? IconInfo : IconAlert;
 
   return (
     <div role="status" aria-live="polite" className="tw-toast">

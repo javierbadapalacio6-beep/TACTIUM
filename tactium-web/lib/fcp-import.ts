@@ -177,6 +177,9 @@ export async function importFcpTeams(
     // Reimportar no duplica: si ya es mío, se reutiliza.
     const yaEsMio = await findMyLinkedTeam(t.id_equipo, clubId, guest);
     if (yaEsMio) {
+      // Si lo que hay es la temporada anterior y ya está en su histórico, el
+      // RPC responde «ya está en tu histórico» y no duplica: se ignora a
+      // propósito (es un alta de equipos, no hay temporada nueva que volcar).
       try {
         await sb.rpc("import_fcp_season", {
           p_team_id: yaEsMio,

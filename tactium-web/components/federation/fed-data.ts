@@ -217,6 +217,74 @@ export async function fetchTeamStanding(
   return v;
 }
 
+/* ── Volcar la temporada anterior: aviso, no volcado ──────────────────
+   Copia de `isAlreadyInHistoryError` / `previousSeasonImportNotice` de la
+   app (`src/core/services/fcpSeason.ts`). */
+
+/** El RPC `import_fcp_season` ya no duplica una temporada del histórico:
+ *  lanza «Esa temporada ya está en tu histórico (…)». Es un aviso, no un
+ *  fallo. Ver la migración `20261006b_import_fcp_season_no_duplica_historico`. */
+export function isAlreadyInHistoryError(message: string | null | undefined): boolean {
+  return (message ?? "").includes("ya está en tu histórico");
+}
+
+/** Temporada («2026/2027») de la INSCRIPCIÓN a la que apunta un id, o null. */
+async function temporadaDeInscripcion(fcpIdEquipo: number): Promise<string | null> {
+  const sb = supabaseBrowser();
+  const { data: ins } = await sb
+    .from("fcp_inscripciones")
+    .select("id_liga")
+    .eq("id_equipo", fcpIdEquipo)
+    .limit(1);
+  const idLiga = ((ins ?? []) as { id_liga: number | null }[])[0]?.id_liga ?? null;
+  if (idLiga == null) return null;
+  const { data: l } = await sb
+    .from("fcp_ligas")
+    .select("temporada")
+    .eq("id_liga", idLiga)
+    .maybeSingle();
+  return seasonLabel((l as { temporada: string | null } | null)?.temporada);
+}
+
+/**
+ * Aviso para «Traer de la Federación» cuando lo único publicado es la
+ * temporada ANTERIOR (`previous`): el vínculo apunta a la inscripción de la
+ * que viene, que aún no tiene grupos. Volcarla duplicaría la del histórico.
+ */
+export async function previousSeasonImportNotice(
+  teamId: string,
+  st: Pick<TeamStanding, "fcpId" | "idGrupo" | "temporada" | "finished">,
+): Promise<{ title: string; body: string }> {
+  const sb = supabaseBrowser();
+  const [nueva, enHistorico] = await Promise.all([
+    st.fcpId != null ? temporadaDeInscripcion(st.fcpId).catch(() => null) : null,
+    st.idGrupo
+      ? Promise.resolve(
+          sb
+            .from("seasons")
+            .select("id")
+            .eq("team_id", teamId)
+            .eq("fcp_id_grupo", st.idGrupo)
+            .eq("active", false)
+            .limit(1),
+        )
+          .then(({ data }) => ((data ?? []) as unknown[]).length > 0)
+          .catch(() => false)
+      : false,
+  ]);
+  const nuevaTxt = nueva ? `temporada ${nueva}` : "temporada nueva";
+  const anteriorTxt = st.temporada ? `temporada ${st.temporada}` : "temporada anterior";
+  const cola = [st.finished ? "que ya terminó" : null, enHistorico ? "ya la tienes en el histórico" : null]
+    .filter(Boolean)
+    .join(" y ");
+  return {
+    title: "Aún no hay temporada nueva",
+    body:
+      `La Federación aún no ha publicado el calendario de la ${nuevaTxt}. ` +
+      `Lo que hay es la ${anteriorTxt}${cola ? `, ${cola}` : ""}.`,
+  };
+}
+
 /**
  * Fecha de la Federación en formato humano: «2026-05-23» → «sáb 23 may».
  * Con otro año que el actual, lo añade («sáb 23 may 2025»). Lo que no sea
