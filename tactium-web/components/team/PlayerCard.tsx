@@ -247,7 +247,9 @@ export function PlayerCard({
         </>
       )}
 
-      {canManage && (
+      {/* El capitán, en la de cualquiera; el jugador (o el capitán en modo
+          jugador), en la suya: si no, abría su ficha y no podía darse de baja. */}
+      {(canManage || myPlayerId === player.id) && (
         <div
           style={{
             marginTop: 16,

@@ -213,7 +213,9 @@ export const PlayerCardSheet: React.FC<{
         </>
       ) : null}
 
-      {canManage ? (
+      {/* El capitán, en la de cualquiera; el jugador (o el capitán en modo
+          jugador), en la suya: si no, abría su ficha y no podía darse de baja. */}
+      {canManage || (myPlayerId != null && p.id === myPlayerId) ? (
         <View style={[s.list, { marginTop: 16 }]}>
           <View style={s.line}>
             <Text style={s.lineValue}>

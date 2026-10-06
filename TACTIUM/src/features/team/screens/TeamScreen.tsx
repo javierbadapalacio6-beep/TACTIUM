@@ -1273,6 +1273,9 @@ export const TeamScreen = () => {
           onEdit={() => cardPlayer && setEditing(cardPlayer)}
           onToggleAvailable={(v) => {
             if (!cardPlayer) return;
+            // Sin gestión solo se ve el interruptor de la propia ficha, y va
+            // por la RPC del jugador (la RLS no le deja tocar `players`).
+            if (!canManage) return void toggleMe(v);
             lightTap();
             updatePlayer(cardPlayer.id, { available: v }).catch((e: any) =>
               toast.error('No se pudo guardar', e?.message ?? ''),
@@ -1302,6 +1305,7 @@ export const TeamScreen = () => {
         }}
         onToggleAvailable={(v) => {
           if (!cardPlayer) return;
+          if (!canManage) return void toggleMe(v);
           lightTap();
           updatePlayer(cardPlayer.id, { available: v }).catch((e: any) =>
             toast.error('No se pudo guardar', e?.message ?? ''),

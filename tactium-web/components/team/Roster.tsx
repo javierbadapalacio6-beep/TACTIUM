@@ -1082,7 +1082,9 @@ export function Roster() {
             setCardId(null);
             setEditing(card);
           }}
-          onToggleAvailable={(v) => void setAvailable(card, v, false)}
+          // Sin gestión solo sale el interruptor de la propia ficha: va por
+          // la RPC del jugador.
+          onToggleAvailable={(v) => void setAvailable(card, v, !canManage)}
           onRemove={() => void removePlayer(card)}
           profileHref={card.userId ? `/u/${card.userId}` : null}
         />
