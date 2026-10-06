@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSession } from "@/lib/session";
 import { CaptainHome } from "@/components/home/CaptainHome";
 import { SoloHome } from "@/components/home/SoloHome";
@@ -43,7 +44,10 @@ export function HomeSwitch() {
       <SoloHome />
     ) : role === "club" ? (
       tournamentsOnly ? (
-        <CreateTournament />
+        // Lee `?nuevo=1` con useSearchParams: su propio Suspense.
+        <Suspense>
+          <CreateTournament />
+        </Suspense>
       ) : (
         <ClubDashboard />
       )

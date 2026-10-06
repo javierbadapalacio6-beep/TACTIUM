@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
@@ -323,6 +324,22 @@ export function CreateTournament() {
     }
   }
   const [err, setErr] = useState<string | null>(null);
+
+  // El «＋» del menú llega con `?nuevo=1`: abre el asistente y limpia el
+  // parámetro (también si ya estabas en esta página).
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("nuevo") !== "1") return;
+    setCreated(false);
+    setStep(1);
+    setCreating(true);
+    const q = new URLSearchParams(searchParams.toString());
+    q.delete("nuevo");
+    const rest = q.toString();
+    router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false });
+  }, [searchParams, pathname, router]);
 
   // Torneos reales del club con su recuento (parejas, sin pagar, partidos).
   const { data: clubData, loading: loadingTournaments } = useAsync(
