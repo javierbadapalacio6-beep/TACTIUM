@@ -39,7 +39,10 @@
 
   --text: #e8f5ef;
   --text-muted: rgba(232, 245, 239, 0.68);
-  --text-faint: rgba(232, 245, 239, 0.46);
+  /* 0.52 y no 0.46: con 0.46 se quedaba en 4,24:1 sobre la tarjeta. Ahora
+     5,19:1 sobre --bg (#030f0f), 5,06:1 sobre --bg-card (#0a1c1b) y
+     4,86:1 sobre --surface / --bg-card-2: AA (≥4,5:1) en todas. */
+  --text-faint: rgba(232, 245, 239, 0.52);
   --text-inverse: #001810;
 
   --hair: rgba(232, 245, 239, 0.07);
@@ -173,7 +176,9 @@
 
   --lt-text: #0e1a14;
   --lt-text-muted: rgba(14, 26, 20, 0.66);
-  --lt-text-faint: rgba(14, 26, 20, 0.46);
+  /* 0.62 y no 0.46 (que daba 2,97:1). Ahora 4,86:1 sobre --bg (#f3f6f4),
+     5,01:1 sobre --bg-card (#fff) y 4,81:1 sobre --bg-card-2: AA. */
+  --lt-text-faint: rgba(14, 26, 20, 0.62);
   --lt-text-inverse: #ffffff;
 
   --lt-hair: rgba(14, 26, 20, 0.08);
@@ -2350,29 +2355,6 @@ button.list-row:hover,
   display: none;
 }
 
-/* Botón de inicio: el único destino que está siempre a mano. */
-.tw-homebtn {
-  width: 38px;
-  height: 38px;
-  border-radius: 999px;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  background: var(--glass-chip);
-  border: 1px solid transparent;
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-}
-.tw-homebtn:hover {
-  color: var(--text);
-  background: var(--bg-card-3);
-}
-.tw-homebtn.is-active {
-  background: var(--accent);
-  color: var(--text-inverse);
-}
-
 /* Píldoras de sección. Scroll horizontal cuando no caben, sin barra. */
 .tw-pills {
   display: none;
@@ -2478,6 +2460,55 @@ button.list-row:hover,
 .tw-ctx-name {
   min-width: 0;
   max-width: 130px;
+}
+/* Por debajo de escritorio la píldora se queda en el escudo: sin ella, quien
+   lleva dos clubes o varios equipos no tenía cómo cambiar en móvil. */
+@media (max-width: 1023px) {
+  .tw-ctx {
+    display: inline-flex;
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+  }
+  .tw-ctx-name,
+  .tw-ctx-chev {
+    display: none;
+  }
+  .tw-ctx-icon {
+    width: 26px;
+    height: 26px;
+  }
+}
+/* El menú del contexto: en móvil, a lo ancho de la barra, como la campana. */
+@media (max-width: 560px) {
+  .tw-ctx-pop {
+    position: fixed !important;
+    top: 66px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+  }
+}
+
+/* «Saltar al contenido»: invisible hasta que recibe el foco del teclado. */
+.tw-skip {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.tw-skip:focus-visible,
+.tw-skip:focus {
+  transform: none;
 }
 
 .tw-avatarbtn {
@@ -2695,6 +2726,21 @@ button.list-row:hover,
   background: var(--error-soft);
   color: var(--error);
 }
+/* Pie de la campana: «Ver todos» lleva a /avisos. */
+.tw-bell-foot {
+  flex: none;
+  display: block;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.tw-bell-foot:hover {
+  background: var(--bg-card-2);
+}
 .tw-bell-clear.is-danger:hover {
   color: var(--error);
   border-color: color-mix(in srgb, var(--error) 45%, transparent);
@@ -2776,9 +2822,6 @@ button.list-row:hover,
 @media (min-width: 768px) {
   .tw-createbtn {
     display: inline-flex;
-  }
-  .tw-homebtn {
-    display: none;
   }
 }
 

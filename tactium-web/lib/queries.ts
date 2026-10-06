@@ -1548,12 +1548,17 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
   }
 }
 
-export async function fetchNotifications(): Promise<DbNotification[]> {
+/** Avisos más recientes primero. `offset`/`limit` para paginar `/avisos`. */
+export async function fetchNotifications(
+  opts: { offset?: number; limit?: number } = {},
+): Promise<DbNotification[]> {
+  const offset = opts.offset ?? 0;
+  const limit = opts.limit ?? 30;
   const { data, error } = await supabaseBrowser()
     .from("notifications")
     .select("id, type, title, body, data, read_at, created_at")
     .order("created_at", { ascending: false })
-    .limit(30);
+    .range(offset, offset + limit - 1);
   if (error) throw error;
   const rows = (data ?? []) as (Omit<DbNotification, "href"> & {
     data: Record<string, unknown> | null;
@@ -1721,6 +1726,16 @@ export async function markNotificationsRead(): Promise<void> {
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
     .eq("user_id", user.id)
+    .is("read_at", null);
+  if (error) throw error;
+}
+
+/** Marca UN aviso como leído (al tocarlo). Igual que `markOneRead` de la app. */
+export async function markNotificationRead(id: string): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("id", id)
     .is("read_at", null);
   if (error) throw error;
 }

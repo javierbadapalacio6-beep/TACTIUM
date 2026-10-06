@@ -139,12 +139,15 @@ export function NoticeList({
   notices,
   onNavigate,
   onDelete,
+  onRead,
 }: {
   notices: Notice[];
   /** Al seguir un enlace (cierra la campana). */
   onNavigate: () => void;
   /** Borra uno o varios avisos (una fila agrupada son varios). */
   onDelete: (ids: string[]) => void;
+  /** Al tocar un aviso no leído: lo marca como leído (baja el contador). */
+  onRead?: (ids: string[]) => void;
 }) {
   if (notices.length === 0) {
     return (
@@ -186,6 +189,7 @@ export function NoticeList({
                 last={last}
                 onNavigate={onNavigate}
                 onDelete={() => onDelete([it.n.id])}
+                onRead={it.n.unread && onRead ? () => onRead([it.n.id]) : undefined}
               />
             ) : (
               <FollowersRow
@@ -194,6 +198,11 @@ export function NoticeList({
                 last={last}
                 onNavigate={onNavigate}
                 onDelete={() => onDelete(it.items.map((n) => n.id))}
+                onRead={
+                  onRead && it.items.some((n) => n.unread)
+                    ? () => onRead(it.items.filter((n) => n.unread).map((n) => n.id))
+                    : undefined
+                }
               />
             );
           })}
@@ -217,6 +226,7 @@ function RowShell({
   actions,
   onNavigate,
   onDelete,
+  onRead,
   emoji,
 }: {
   href: string | null;
@@ -232,6 +242,7 @@ function RowShell({
   actions?: ReactNode;
   onNavigate: () => void;
   onDelete: () => void;
+  onRead?: () => void;
 }) {
   const Icon = ICONS[icon];
   const color =
@@ -320,15 +331,27 @@ function RowShell({
     >
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {href ? (
-          <Link href={href} className="tw-bell-body" onClick={onNavigate}>
+          <Link
+            href={href}
+            className="tw-bell-body"
+            onClick={() => {
+              onRead?.();
+              onNavigate();
+            }}
+          >
             {contenido}
           </Link>
         ) : (
-          <span className="tw-bell-body">{contenido}</span>
+          <span className="tw-bell-body" onClick={onRead}>
+            {contenido}
+          </span>
         )}
         {actions ? (
-          // Alineado con el texto: 30 del icono + 12 de hueco.
-          <div style={{ margin: "-4px 0 12px 42px" }}>{actions}</div>
+          // Alineado con el texto: 30 del icono + 12 de hueco. Usar un
+          // botón del aviso también cuenta como leerlo.
+          <div style={{ margin: "-4px 0 12px 42px" }} onClickCapture={onRead}>
+            {actions}
+          </div>
         ) : null}
       </div>
       <button
@@ -352,11 +375,13 @@ function NoticeRow({
   last,
   onNavigate,
   onDelete,
+  onRead,
 }: {
   n: Notice;
   last: boolean;
   onNavigate: () => void;
   onDelete: () => void;
+  onRead?: () => void;
 }) {
   return (
     <RowShell
@@ -371,6 +396,7 @@ function NoticeRow({
       actions={<NoticeActions n={n} onNavigate={onNavigate} />}
       onNavigate={onNavigate}
       onDelete={onDelete}
+      onRead={onRead}
     />
   );
 }
@@ -380,11 +406,13 @@ function FollowersRow({
   last,
   onNavigate,
   onDelete,
+  onRead,
 }: {
   items: Notice[];
   last: boolean;
   onNavigate: () => void;
   onDelete: () => void;
+  onRead?: () => void;
 }) {
   const unread = items.some((n) => n.unread);
   return (
@@ -399,6 +427,7 @@ function FollowersRow({
       last={last}
       onNavigate={onNavigate}
       onDelete={onDelete}
+      onRead={onRead}
     />
   );
 }

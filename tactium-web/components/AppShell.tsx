@@ -10,7 +10,6 @@ import {
   IconBuilding,
   IconCheck,
   IconChevronDown,
-  IconHome,
   IconMoon,
   IconPlus,
   IconSearch,
@@ -24,6 +23,7 @@ import { PublicShell } from "./PublicShell";
 import { Wordmark } from "./Wordmark";
 import { Avatar } from "./ui";
 import { NoticeList, type Notice } from "./notifications/NoticeList";
+import { NOTICES_CHANGED, asRead, toNotice } from "./notifications/notices";
 import { CreateMenu } from "./nav/CreateMenu";
 import {
   hasTeamSwitcher,
@@ -41,6 +41,7 @@ import {
   deleteAllNotifications,
   deleteNotification,
   fetchNotifications,
+  markNotificationRead,
   markNotificationsRead,
 } from "@/lib/queries";
 import { WRITES_ENABLED } from "@/lib/writes";
@@ -132,34 +133,8 @@ function SignedOut() {
 
 /* ── Avisos (campanita) ── datos reales de la tabla `notifications` ────
    La lista (agrupada por día, con botones en línea) vive en
-   `components/notifications/NoticeList.tsx`. */
-function iconForNotif(type: string): keyof typeof ICONS {
-  if (["member_joined", "joined_team", "player_claimed"].includes(type))
-    return "userPlus";
-  if (["matchday_created", "lineup_published"].includes(type)) return "calendar";
-  if (type.includes("reminder")) return "clock";
-  if (type.includes("follow") || type === "kudos") return "users";
-  if (type === "tournament_payment_due") return "creditCard";
-  if (type.startsWith("tournament")) return "trophy";
-  return "calendar";
-}
-
-function timeAgo(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const s = Math.max(0, (Date.now() - then) / 1000);
-  if (s < 60) return "ahora";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `hace ${m} min`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `hace ${d} d`;
-  const w = Math.floor(d / 7);
-  if (w < 5) return `hace ${w} sem`;
-  const mo = Math.floor(d / 30);
-  return `hace ${mo} ${mo === 1 ? "mes" : "meses"}`;
-}
+   `components/notifications/NoticeList.tsx`; el paso de fila a aviso, en
+   `components/notifications/notices.ts`. */
 
 function matchesHref(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -301,42 +276,38 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [user]);
 
   const [notices, setNotices] = useState<Notice[]>([]);
+  // Se recarga al entrar, al volver a la pestaña (`visibilitychange`), cada
+  // dos minutos mientras se ve, y cuando `/avisos` cambia algo. La web no
+  // usa Realtime en ningún otro sitio: no se abre un canal solo para esto.
   useEffect(() => {
     if (!user) {
       setNotices([]);
       return;
     }
     let alive = true;
-    fetchNotifications()
-      .then((rows) => {
-        if (!alive) return;
-        setNotices(
-          rows.map((n) => ({
-            id: n.id,
-            type: n.type,
-            href: n.href,
-            icon: iconForNotif(n.type),
-            text: n.title,
-            time: timeAgo(n.created_at),
-            createdAt: n.created_at,
-            unread: n.read_at == null,
-            matchdayId: n.matchdayId,
-            tournamentId: n.tournamentId,
-            actor: n.actor,
-            clubId: n.clubId,
-            tone: n.type.includes("reminder")
-              ? "warning"
-              : n.read_at == null
-                ? "accent"
-                : "muted",
-          })),
-        );
-      })
-      .catch(() => {
-        if (alive) setNotices([]);
-      });
+    const load = () => {
+      fetchNotifications()
+        .then((rows) => {
+          if (alive) setNotices(rows.map(toNotice));
+        })
+        .catch(() => {
+          /* se queda lo que hubiera */
+        });
+    };
+    load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener(NOTICES_CHANGED, load);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 120_000);
     return () => {
       alive = false;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(NOTICES_CHANGED, load);
+      window.clearInterval(timer);
     };
   }, [user]);
 
@@ -379,7 +350,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const section = sectionOf(pathname, user.username);
   const unread = notices.filter((n) => n.unread).length;
   const activeClub = clubs.find((c) => c.id === clubId) ?? null;
-  const atHome = section === "inicio";
 
   // Qué contexto se enseña en la píldora: el club manda cuando se usa como
   // club; si no, el equipo, que es sobre lo que actúan las pantallas.
@@ -395,8 +365,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   function marcarTodasLeidas() {
-    setNotices((ns) => ns.map((n) => ({ ...n, unread: false })));
+    setNotices((ns) => ns.map(asRead));
     if (WRITES_ENABLED) markNotificationsRead().catch(() => {});
+  }
+
+  // Al tocar un aviso se da por leído (como `markOneRead` en la app): el
+  // contador baja en el acto aunque el servidor tarde.
+  function marcarLeidos(ids: string[]) {
+    setNotices((ns) => ns.map((n) => (ids.includes(n.id) ? asRead(n) : n)));
+    if (WRITES_ENABLED) for (const id of ids) markNotificationRead(id).catch(() => {});
   }
 
   // Se quita de la lista antes de que conteste el servidor: si fallara, el
@@ -417,6 +394,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     // El panel no llega al borde: `tw-shell` es el lienzo de fuera y
     // `tw-frame` el marco redondeado que lo contiene todo.
     <div className="tw-shell">
+      <a href="#contenido" className="tw-skip">
+        Saltar al contenido
+      </a>
       <div className="tw-frame">
         {/* ══ Navegación superior ═══════════════════════════════════ */}
         <header className="tw-topnav">
@@ -427,17 +407,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="tw-brand-mini">
               <LogoMark size={20} color="var(--accent)" />
             </span>
-          </Link>
-
-          {/* Botón de inicio: siempre a la vista, vuelve a la portada del rol. */}
-          <Link
-            href={home.href}
-            className={"tw-homebtn" + (atHome ? " is-active" : "")}
-            aria-label={`Ir a ${home.label}`}
-            aria-current={atHome ? "page" : undefined}
-            title={home.label}
-          >
-            <IconHome size={17} />
           </Link>
 
           <nav className="tw-pills" aria-label="Navegación principal">
@@ -468,6 +437,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   aria-expanded={ctxOpen}
                   className="tw-ctx"
                   title="Club y equipo activos"
+                  aria-label={`Cambiar de club o equipo. Ahora: ${ctxLabel}`}
                 >
                   <span className={"tw-ctx-icon" + (ctxLogo ? " has-img" : "")}>
                     {ctxLogo ? (
@@ -480,12 +450,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                     )}
                   </span>
                   <span className="tw-ctx-name truncate">{ctxLabel}</span>
-                  <IconChevronDown size={14} style={{ flex: "none", opacity: 0.7 }} />
+                  <IconChevronDown
+                    size={14}
+                    className="tw-ctx-chev"
+                    style={{ flex: "none", opacity: 0.7 }}
+                  />
                 </button>
 
                 {ctxOpen && (
                   <div
-                    className="tw-popover"
+                    className="tw-popover tw-ctx-pop"
                     style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 250, padding: 6 }}
                   >
                     {clubs.length > 0 && (
@@ -570,7 +544,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
 
-            <Link href="/comunidad" className="tw-iconbtn" aria-label="Buscar">
+            <Link
+              href="/comunidad"
+              className="tw-iconbtn"
+              aria-label="Buscar jugadores"
+              title="Buscar jugadores"
+            >
               <IconSearch size={17} />
             </Link>
 
@@ -625,8 +604,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                       notices={notices}
                       onNavigate={() => setBellOpen(false)}
                       onDelete={borrarAvisos}
+                      onRead={marcarLeidos}
                     />
                   </div>
+                  <Link href="/avisos" className="tw-bell-foot">
+                    Ver todos
+                  </Link>
                 </div>
               )}
             </div>
@@ -697,10 +680,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                     </>
                   )}
                   <div className="tw-pop-sep" />
-                  <Link href="/ajustes/apariencia" className="tw-popitem">
+                  <Link href="/perfil" className="tw-popitem">
+                    <span style={{ flex: 1, textAlign: "left" }}>Mi perfil</span>
+                  </Link>
+                  <Link href="/ajustes/preferencias" className="tw-popitem">
                     <span style={{ flex: 1, textAlign: "left" }}>Ajustes</span>
                   </Link>
-                  <Link href="/ajustes/datos" className="tw-popitem">
+                  <Link href="/ajustes/cuenta#mis-datos" className="tw-popitem">
                     <span style={{ flex: 1, textAlign: "left" }}>Mis datos</span>
                   </Link>
                   <Link href="/suscripcion" className="tw-popitem">
@@ -722,7 +708,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {/* ══ Contenido ═════════════════════════════════════════════ */}
-        <main className="tw-main">
+        <main className="tw-main" id="contenido" tabIndex={-1}>
           <div className="tw-content">{children}</div>
         </main>
       </div>
@@ -740,7 +726,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={"tw-tab" + (active ? " is-active" : "")}
             >
               <Icon size={19} />
-              <span style={{ fontSize: 10.5, fontWeight: active ? 700 : 500 }}>
+              <span style={{ fontSize: 11, fontWeight: active ? 700 : 500 }}>
                 {t.label}
               </span>
             </Link>

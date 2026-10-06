@@ -59,7 +59,9 @@ export function mainNav(role: Role, opts?: { tournamentsOnly?: boolean }): MainN
     { key: "inicio", href: "/", label: "Inicio", icon: "home" },
     { key: "competir", href: "/competir", label: "Competir", icon: "trophy" },
     { key: "equipo", href: equipoHref, label: "Equipo", icon: "users" },
-    { key: "perfil", href: "/ajustes", label: "Perfil", icon: "user" },
+    // El perfil SOCIAL (récord, fotos, seguidores), como en la app. Los
+    // ajustes cuelgan de él (engranaje) y del menú del avatar.
+    { key: "perfil", href: "/perfil", label: "Perfil", icon: "user" },
   ];
 }
 
@@ -81,6 +83,7 @@ const SECTION_PREFIXES: { prefix: string; key: MainSection; exact?: boolean }[] 
   { prefix: "/equipo", key: "equipo" },
   { prefix: "/club/equipos", key: "equipo" },
   { prefix: "/club/importar", key: "equipo" },
+  { prefix: "/perfil", key: "perfil" },
   { prefix: "/ajustes", key: "perfil" },
   { prefix: "/stats", key: "perfil" },
   { prefix: "/suscripcion", key: "perfil" },
@@ -187,6 +190,8 @@ const KNOWN_ROUTE_PREFIXES = [
   "/empezar",
   "/auth",
   "/ajustes",
+  "/avisos",
+  "/perfil",
   "/amistosos",
   "/club",
   "/competir",
@@ -208,44 +213,6 @@ export function isKnownRoute(pathname: string): boolean {
 /** El jugador suelto no pertenece a ninguna plantilla: sin selector. */
 export function hasTeamSwitcher(role: Role): boolean {
   return role !== "suelto";
-}
-
-/**
- * Eyebrow + título de la barra superior por ruta. Se resuelve por el prefijo
- * más largo que case, así `/torneos/abc` hereda el de `/torneos`.
- */
-const ROUTE_META: { prefix: string; eyebrow: string; title: string }[] = [
-  { prefix: "/ajustes", eyebrow: "CUENTA · AJUSTES", title: "Ajustes" },
-  { prefix: "/suscripcion", eyebrow: "CUENTA · SUSCRIPCIÓN", title: "Mi suscripción" },
-  { prefix: "/pro", eyebrow: "TACTIUM PRO", title: "Planes" },
-  { prefix: "/club/facturacion", eyebrow: "CLUB · FACTURACIÓN", title: "Facturación" },
-  { prefix: "/club/horarios", eyebrow: "CLUB · HORARIOS", title: "Horarios de local" },
-  { prefix: "/club/equipos", eyebrow: "CLUB · EQUIPOS", title: "Equipos" },
-  { prefix: "/club/torneos", eyebrow: "CLUB · TORNEOS", title: "Torneos" },
-  { prefix: "/club", eyebrow: "CLUB · ADMIN", title: "Club" },
-  { prefix: "/competir", eyebrow: "COMPETIR", title: "Competir" },
-  { prefix: "/temporadas", eyebrow: "TEMPORADA", title: "Temporadas" },
-  { prefix: "/jornada", eyebrow: "JORNADA", title: "Jornada" },
-  { prefix: "/equipo", eyebrow: "EQUIPO", title: "Plantilla" },
-  { prefix: "/torneos/mios", eyebrow: "TORNEOS", title: "Mis torneos" },
-  { prefix: "/torneos", eyebrow: "TORNEOS", title: "Torneos" },
-  { prefix: "/federacion", eyebrow: "FEDERACIÓN", title: "Federación" },
-  { prefix: "/stats", eyebrow: "MIS ESTADÍSTICAS", title: "Stats" },
-  { prefix: "/comunidad", eyebrow: "COMUNIDAD", title: "Comunidad" },
-  { prefix: "/novedades", eyebrow: "COMUNIDAD · NOVEDADES", title: "Novedades" },
-  { prefix: "/amistosos", eyebrow: "AMISTOSOS", title: "Amistosos" },
-  { prefix: "/u", eyebrow: "PERFIL", title: "Perfil" },
-];
-
-export function routeMeta(pathname: string, role: Role) {
-  const match = ROUTE_META.filter((m) => pathname.startsWith(m.prefix)).sort(
-    (a, b) => b.prefix.length - a.prefix.length
-  )[0];
-  if (match) return match;
-  return {
-    eyebrow: role === "suelto" ? "TU PÁDEL" : "INICIO",
-    title: role === "suelto" ? "Mi pádel" : "Inicio",
-  };
 }
 
 /** Un destino del nav superior. Con `items`, es un desplegable. */
