@@ -33,12 +33,15 @@ export function Hero() {
               Explorar sin cuenta
             </BtnLink>
           </div>
-          <p className="mk-fine">
-            14 días gratis · sin tarjeta para empezar · los jugadores no pagan
-          </p>
+          {/* Las tiendas justo debajo de los botones, no al final: en un
+              portátil con zoom quedaban por debajo del pliegue y no se veía
+              dónde descargar la app. */}
           <div className="mk-hero-stores">
             <StoreBadges />
           </div>
+          <p className="mk-fine">
+            14 días gratis · sin tarjeta para empezar · los jugadores no pagan
+          </p>
         </div>
 
         {/* Captura con 5 parejas (Liga Cántabra): la de alineación enseña 3 y
