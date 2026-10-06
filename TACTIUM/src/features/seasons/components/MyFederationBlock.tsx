@@ -16,6 +16,7 @@ import { useNavRole } from '@navigation/navRole';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { zoneColor } from '@core/data/fcpZones';
 import { fetchFcpGroupSchedule, type FcpScheduleRow } from '@core/services/fcpSeason';
+import { usePremiumGate, useIsPremium } from '@core/hooks/usePremiumGate';
 import {
   useFcpStanding,
   loadFcpStanding,
@@ -116,6 +117,10 @@ const MyTeamCard: React.FC<{
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
   const { loading, data } = useFcpStanding(teamId);
+  // Mismo gate que el resto de funciones Pro: decide por equipo y rol (al
+  // jugador no lo bloquea nunca, ver `hasPremiumAccess`).
+  const gate = usePremiumGate();
+  const isPremium = useIsPremium();
   // Próxima jornada: el primer partido tuyo del grupo sin jugar (como la web).
   // Solo con la tabla de la temporada en juego: en la anterior no hay próxima.
   const [next, setNext] = useState<FcpScheduleRow | null>(null);
@@ -214,12 +219,27 @@ const MyTeamCard: React.FC<{
       ) : null}
       <View style={s.mineBtns}>
         {data.idGrupo ? (
+          // «Tu grupo» es Pro (el explorador público de abajo, no). Sin Pro el
+          // botón se ve, con el distintivo, y abre el paywall.
           <Pressable
-            onPress={() => onGroup(data.idGrupo!, data.grupo)}
-            style={({ pressed }) => [s.mineBtn, s.mineBtnOn, pressed && { opacity: 0.85 }]}
+            onPress={gate(() => onGroup(data.idGrupo!, data.grupo), 'fcp_group')}
+            style={({ pressed }) => [
+              s.mineBtn,
+              isPremium && s.mineBtnOn,
+              !isPremium && s.mineBtnRow,
+              pressed && { opacity: 0.85 },
+            ]}
             accessibilityRole="button"
+            accessibilityLabel={isPremium ? 'Ver clasificación' : 'Ver clasificación (Pro)'}
           >
-            <Text style={[s.mineBtnText, { color: c.textInverse }]}>Ver clasificación</Text>
+            <Text style={[s.mineBtnText, isPremium && { color: c.textInverse }]}>
+              Ver clasificación
+            </Text>
+            {!isPremium ? (
+              <View style={s.pro}>
+                <Text style={s.proText}>PRO</Text>
+              </View>
+            ) : null}
           </Pressable>
         ) : null}
         <Pressable
@@ -420,6 +440,20 @@ const makeStyles = (c: Palette) =>
       borderColor: c.hairStrong,
     },
     mineBtnOn: { backgroundColor: c.accent, borderColor: c.accent },
+    mineBtnRow: { flexDirection: 'row', gap: 8 },
+    pro: {
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 6,
+      backgroundColor: c.accent15,
+    },
+    proText: {
+      fontFamily: Fonts.mono,
+      color: c.accent,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
     mineBtnText: { color: c.text, fontSize: 13.5, fontWeight: '700' },
     findCard: {
       flexDirection: 'row',

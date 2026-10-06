@@ -54,6 +54,10 @@ const MOTIVOS: Record<string, { title: string; sub: string }> = {
     title: "Importar los equipos del club es Pro",
     sub: "Todos tus equipos de la federación, con su plantilla y sus puntos",
   },
+  fcp_group: {
+    title: "Tu grupo de la Federación es Pro",
+    sub: "Clasificación, jornadas y actas de tu grupo, al día",
+  },
 };
 
 const BENEFITS: Record<Family, string[]> = {

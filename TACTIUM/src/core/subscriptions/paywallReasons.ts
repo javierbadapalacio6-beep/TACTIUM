@@ -26,6 +26,7 @@ export type PaywallReason =
   | 'matchday_edit'
   | 'season_create'
   | 'club_manage_team'
+  | 'fcp_group'
   | 'trial_expiring';
 
 export type PaywallIntent =
@@ -113,6 +114,11 @@ const REASONS: Record<Exclude<PaywallReason, 'trial_expiring'>, PaywallReasonCop
     title: 'Gestionar los equipos del club es Pro',
     subtitle: 'Plantillas, capitanes y jornadas de todos, desde un panel',
     family: 'club',
+  },
+  fcp_group: {
+    icon: 'trophy',
+    title: 'Tu grupo de la Federación es Pro',
+    subtitle: 'Clasificación, jornadas y actas de tu grupo, al día',
   },
 };
 

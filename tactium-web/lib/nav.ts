@@ -138,8 +138,8 @@ export const SIGNUP_HREF = signupHref();
 /**
  * Enlace al paywall con el motivo (el gate que lo abre) y la familia de
  * planes. Los motivos son los de la app: `matchday_close`, `lineup_edit`,
- * `calendar_scan`, `availability_remind`, `roster_import`, `trial_expiring`
- * y, solo web de momento, `club_import`.
+ * `calendar_scan`, `availability_remind`, `roster_import`, `fcp_group`,
+ * `trial_expiring` y, solo web de momento, `club_import`.
  */
 export function proHref(motivo?: string, para?: "club" | "capitan"): string {
   const q = new URLSearchParams();

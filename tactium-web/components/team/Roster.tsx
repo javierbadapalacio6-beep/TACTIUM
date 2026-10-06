@@ -19,6 +19,7 @@ import {
 } from "@/lib/queries";
 import { fetchLeagueStatsBundle, type LeagueStatsBundle } from "@/lib/player-stats";
 import { FcpGroupRivals } from "@/components/federation/FcpGroupRivals";
+import { fetchFcpGroupUnlocked } from "@/components/federation/fed-data";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -270,9 +271,19 @@ export function Roster() {
     [teamId],
     !!teamId
   );
-  const grupoHref = fcpGroup.data
+  const grupoHrefRaw = fcpGroup.data
     ? `/federacion/${fcpGroup.data.fed}/grupo/${encodeURIComponent(fcpGroup.data.idGrupo)}`
     : null;
+  // «Tu grupo de la Federación» es Pro (como en la app): mismo gate por
+  // equipo; al jugador no se le bloquea. Sin Pro la fila se ve con el
+  // distintivo y lleva al paywall.
+  const groupAccess = useAsync(
+    () => fetchFcpGroupUnlocked(teamId!, canManage),
+    [teamId, canManage],
+    !!teamId && !!grupoHrefRaw,
+  );
+  const groupLocked = !!grupoHrefRaw && groupAccess.data === false;
+  const grupoHref = groupLocked ? proHref("fcp_group") : grupoHrefRaw;
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync(
@@ -609,6 +620,7 @@ export function Roster() {
                     icon={<IconCalendar size={14} />}
                     title="Mi grupo en la Federación"
                     sub="Jornadas y clasificación"
+                    pro={groupLocked}
                     href={grupoHref ?? "/federacion"}
                   />
                 </Dropdown>
@@ -668,9 +680,15 @@ export function Roster() {
                   <span className="list-row-title">Clasificación y jornadas</span>
                   <span className="list-row-sub">Tu grupo en la Federación</span>
                 </span>
-                <span className="list-row-chev">
-                  <IconChevronRight size={16} />
-                </span>
+                {groupLocked ? (
+                  <Chip tone="accent" plain>
+                    Pro
+                  </Chip>
+                ) : (
+                  <span className="list-row-chev">
+                    <IconChevronRight size={16} />
+                  </span>
+                )}
               </a>
             )}
             {insc && (

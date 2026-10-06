@@ -222,6 +222,9 @@ export const FederationSheet: React.FC<{
   signing: boolean;
   resyncing: boolean;
   refreshing: boolean;
+  /** «Clasificación y jornadas» es Pro: sin Pro se ve con el distintivo y
+   *  `onOpenGroup` (ya pasado por el gate) abre el paywall. */
+  groupPro?: boolean;
   onOpenGroup: () => void;
   onPrepareSeason: () => void;
   onResync: () => void;
@@ -236,6 +239,7 @@ export const FederationSheet: React.FC<{
   signing,
   resyncing,
   refreshing,
+  groupPro = false,
   onOpenGroup,
   onPrepareSeason,
   onResync,
@@ -310,7 +314,13 @@ export const FederationSheet: React.FC<{
               Tu grupo en la Federación
             </Text>
           </View>
-          <IconChevron size={14} color={c.textFaint} />
+          {groupPro ? (
+            <View style={s.pro}>
+              <Text style={s.proText}>PRO</Text>
+            </View>
+          ) : (
+            <IconChevron size={14} color={c.textFaint} />
+          )}
         </Pressable>
         {canManage && newSeason ? (
           <Pressable
