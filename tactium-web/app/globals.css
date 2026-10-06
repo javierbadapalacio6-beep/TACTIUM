@@ -5234,3 +5234,149 @@ select.tw-cell-input {
 .acta-pair.is-won .acta-faces .avatar {
   box-shadow: 0 0 0 2px var(--accent-40);
 }
+
+/* ── Marcador en vivo (directo) ───────────────────────────────────────
+   Filas por pista al estilo de las listas en directo de Sofascore: estado a
+   la izquierda, nosotros/rival en dos líneas y juegos por set a la derecha,
+   con el set en curso resaltado. Lo usan la jornada del equipo
+   (LiveScoreboard) y la página pública /directo/[token]. */
+.tw-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--error);
+  box-shadow: 0 0 0 0 var(--error-soft);
+  animation: tw-live-pulse 1.6s ease-out infinite;
+  flex: none;
+}
+@keyframes tw-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.45); }
+  70% { box-shadow: 0 0 0 8px rgba(255, 107, 107, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-live-dot { animation: none; }
+}
+.tw-live-total {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 16px 16px 12px;
+}
+.tw-live-total-num {
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+.tw-live-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  min-height: 64px;
+}
+a.tw-live-row:hover {
+  background: var(--bg-card-2);
+}
+.tw-live-court {
+  font-size: 15px;
+  font-weight: 700;
+}
+.tw-live-status {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.tw-live-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tw-live-name.is-rival {
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 3px;
+}
+.tw-live-action {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 5px;
+}
+.tw-live-sets {
+  display: flex;
+  gap: 4px;
+}
+.tw-live-set {
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 6px;
+  padding: 2px 0;
+  font-size: 15px;
+  line-height: 21px;
+  color: var(--text-muted);
+}
+.tw-live-set .is-win {
+  color: var(--text);
+  font-weight: 700;
+}
+.tw-live-set.is-current {
+  background: var(--error-soft);
+  color: var(--error);
+  font-weight: 700;
+}
+/* Marcador de una pista (marcar): números enormes y botones al pulgar. */
+.tw-live-big {
+  font-size: clamp(64px, 18vw, 104px);
+  font-weight: 700;
+  line-height: 1;
+}
+.tw-live-pad {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.tw-live-pad button {
+  height: 148px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-card-2);
+  color: var(--text);
+  transition: transform 0.08s ease;
+  touch-action: manipulation;
+}
+.tw-live-pad button.is-us {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+.tw-live-pad button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.tw-live-pad button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.tw-live-pad .plus {
+  font-size: 44px;
+  font-weight: 300;
+  line-height: 1;
+}

@@ -62,6 +62,10 @@ const MOTIVOS: Record<string, { title: string; sub: string }> = {
     title: "Tu grupo de la Federación es Pro",
     sub: "Clasificación, jornadas y actas de tu grupo, al día",
   },
+  results_edit: {
+    title: "Apuntar resultados es Pro",
+    sub: "Juego a juego en directo, y quedan en el acta para todo el equipo",
+  },
 };
 
 const BENEFITS: Record<Family, string[]> = {

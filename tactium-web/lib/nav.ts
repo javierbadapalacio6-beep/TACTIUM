@@ -162,6 +162,8 @@ export const PUBLIC_ROUTES = [
   "/i/",
   // Detalle público de una jornada de liga (RPC public_get_matchday, anon).
   "/partido/",
+  // Directo público de una jornada (tactium.io/directo/TOKEN, RPC anon).
+  "/directo/",
 ];
 
 /**
@@ -187,6 +189,7 @@ const KNOWN_ROUTE_PREFIXES = [
   "/legal",
   "/i/",
   "/partido/",
+  "/directo/",
   "/entrar",
   "/empezar",
   "/auth",

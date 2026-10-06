@@ -46,6 +46,7 @@ import {
 } from "@/components/ui";
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
 import { TimePollPanel } from "@/components/matchday/TimePollPanel";
+import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
 import {
   IconAlert,
   IconCalendar,
@@ -1363,6 +1364,18 @@ export function MatchdayView({ id }: { id: string }) {
 
       {curTab === "resultado" && (
         <>
+          {/* En directo: marcador juego a juego por pista (Realtime). */}
+          <LiveScoreboard
+            matchdayId={m.id}
+            teamId={teamId}
+            courts={Math.max(rows.length, 1)}
+            teamName={ourName}
+            opponent={m.opponent}
+            jornada={m.round}
+            started={started}
+            closed={closed}
+            onToast={setToast}
+          />
           <StatRow compact style={{ marginBottom: 16 }}>
             <Stat
               label="Pistas"

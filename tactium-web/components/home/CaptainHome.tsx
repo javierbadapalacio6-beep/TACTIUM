@@ -38,6 +38,7 @@ import { SeasonCalendar } from "@/components/home/SeasonCalendar";
 import { OtherTeamsStrip } from "@/components/home/OtherTeamsStrip";
 import { Crest } from "@/components/Crest";
 import { TrialCard } from "@/components/subscription/TrialCard";
+import { LiveHomeCard } from "@/components/matchday/LiveHomeCard";
 import {
   IconCalendar,
   IconCheck,
@@ -404,6 +405,10 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
       {greeting}
       <OtherTeamsStrip />
       {trial}
+      {/* Jornada en juego: marcador global en directo (solo si hay). */}
+      {m ? (
+        <LiveHomeCard matchdayId={m.id} teamName={activeTeam?.name ?? "Nosotros"} opponent={m.opponent} jornada={m.round} />
+      ) : null}
 
       <div className="bento">
         {/* ══ La tarjeta que manda: la próxima jornada ══════════════ */}
