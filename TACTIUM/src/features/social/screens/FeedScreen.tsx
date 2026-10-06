@@ -33,7 +33,9 @@ export const FeedScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { items, loading, refreshing, load, onKudos } = useFeed(40);
+  // De 20 en 20 con «Ver más», como /novedades en la web.
+  const { items, loading, refreshing, load, onKudos, photos, hasMore, loadMore, loadingMore } =
+    useFeed(20, 20);
 
   return (
     <View style={styles.root}>
@@ -92,9 +94,29 @@ export const FeedScreen = () => {
               </Pressable>
             </View>
           ) : (
-            items.map((it) => (
-              <FeedItemCard key={feedItemKey(it)} it={it} onKudos={onKudos} />
-            ))
+            <>
+              {items.map((it) => (
+                <FeedItemCard
+                  key={feedItemKey(it)}
+                  it={it}
+                  onKudos={onKudos}
+                  photo={photos[feedItemKey(it)] ?? null}
+                />
+              ))}
+              {hasMore ? (
+                <Pressable
+                  onPress={loadMore}
+                  disabled={loadingMore}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.moreBtn,
+                    (pressed || loadingMore) && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.moreBtnText}>{loadingMore ? 'Cargando…' : 'Ver más'}</Text>
+                </Pressable>
+              ) : null}
+            </>
           )}
         </ScrollView>
       )}
@@ -131,6 +153,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8 },
+  moreBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+    backgroundColor: c.bgCard,
+    marginTop: 4,
+  },
+  moreBtnText: { color: c.text, fontSize: 13, fontWeight: '600' },
   emptyTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
   emptyLink: { color: c.accent, fontSize: 13, fontWeight: '700', marginTop: 4 },
   emptyHint: {

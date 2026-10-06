@@ -187,6 +187,41 @@ export async function fetchFeed(limit = 30): Promise<FeedItem[]> {
   return (await callRpc<FeedItem[]>('social_feed', { p_limit: limit })) ?? [];
 }
 
+/**
+ * Fotos de los resultados del feed, por `${kind}-${ref_id}`. Los amistosos se
+ * leen directo (`casual_matches` tiene lectura pública); las jornadas, por la
+ * RPC `public_get_matchday` (la del detalle). Igual que `fetchFeedPhotos` de
+ * la web. Lo que falle se queda sin foto.
+ */
+export async function fetchFeedPhotos(
+  items: Pick<FeedItem, 'kind' | 'ref_id'>[],
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const casualIds = [...new Set(items.filter((r) => r.kind === 'casual').map((r) => r.ref_id))];
+  const leagueIds = [...new Set(items.filter((r) => r.kind === 'league').map((r) => r.ref_id))];
+  await Promise.all([
+    casualIds.length
+      ? Promise.resolve(
+          (supabase.from('casual_matches' as never) as any)
+            .select('id, photo_url')
+            .in('id', casualIds) as PromiseLike<{ data: unknown }>,
+        ).then(({ data }) => {
+          for (const r of (data ?? []) as { id: string; photo_url: string | null }[]) {
+            if (r.photo_url) out[`casual-${r.id}`] = r.photo_url;
+          }
+        })
+      : null,
+    ...leagueIds.map((id) =>
+      fetchPublicMatchday(id)
+        .then((m) => {
+          if (m?.photo_url) out[`league-${id}`] = m.photo_url;
+        })
+        .catch(() => {}),
+    ),
+  ]).catch(() => {});
+  return out;
+}
+
 /** Da o quita kudos a un amistoso ('casual', `targetId` = id del partido) o a
  *  una jornada ('league', `targetId` = id de la jornada). En amistosos se pasa
  *  `targetUserId` (el actor del ítem del feed, a quien se avisa); en liga, null.

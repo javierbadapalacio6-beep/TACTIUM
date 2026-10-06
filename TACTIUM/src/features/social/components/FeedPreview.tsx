@@ -29,7 +29,7 @@ export const FeedPreview: React.FC<{ style?: object }> = ({ style }) => {
   const styles = useMemo(() => makeStyles(c), [c]);
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { items, loading, onKudos } = useFeed(PREVIEW_COUNT);
+  const { items, loading, onKudos, photos } = useFeed(PREVIEW_COUNT);
 
   return (
     <View style={[styles.wrap, style]}>
@@ -66,7 +66,12 @@ export const FeedPreview: React.FC<{ style?: object }> = ({ style }) => {
       ) : (
         <View style={{ gap: 10 }}>
           {items.slice(0, PREVIEW_COUNT).map((it) => (
-            <FeedItemCard key={feedItemKey(it)} it={it} onKudos={onKudos} />
+            <FeedItemCard
+              key={feedItemKey(it)}
+              it={it}
+              onKudos={onKudos}
+              photo={photos[feedItemKey(it)] ?? null}
+            />
           ))}
         </View>
       )}

@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -8,6 +8,7 @@ import { Fonts } from '@core/theme/fonts';
 import { IconChevron } from '@components/ui';
 import {
   fetchFeed,
+  fetchFeedPhotos,
   toggleActivityKudos,
   type FeedItem,
 } from '@core/services/social';
@@ -36,11 +37,18 @@ const fmtDate = (iso: string | null): string => {
   }
 };
 
-/** Carga el feed en cada focus y expone el kudos optimista. */
-export function useFeed(limit: number) {
+/**
+ * Carga el feed en cada focus y expone el kudos optimista. Con `step`, «Ver
+ * más» sube el tope de `step` en `step` (la RPC `social_feed` solo acepta un
+ * tope, como en la web). También trae la foto de cada resultado, si la hay.
+ */
+export function useFeed(initialLimit: number, step = 0) {
+  const [limit, setLimit] = useState(initialLimit);
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [photos, setPhotos] = useState<Record<string, string>>({});
   // Ítems con un kudos en vuelo: evita dobles toques mientras responde el RPC.
   const pending = useRef(new Set<string>());
 
@@ -53,6 +61,7 @@ export function useFeed(limit: number) {
         console.warn('feed load', e);
       } finally {
         setLoading(false);
+        setLoadingMore(false);
         setRefreshing(false);
       }
     },
@@ -64,6 +73,26 @@ export function useFeed(limit: number) {
       load();
     }, [load]),
   );
+
+  // Fotos: solo de los resultados que aún no se han mirado.
+  const asked = useRef(new Set<string>());
+  const photoKey = items.map(feedItemKey).join(',');
+  useEffect(() => {
+    const fresh = items.filter((it) => !asked.current.has(feedItemKey(it)));
+    if (fresh.length === 0) return;
+    for (const it of fresh) asked.current.add(feedItemKey(it));
+    fetchFeedPhotos(fresh)
+      .then((p) => setPhotos((prev) => ({ ...prev, ...p })))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoKey]);
+
+  const hasMore = step > 0 && items.length >= limit;
+  const loadMore = () => {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    setLimit((l) => l + step);
+  };
 
   const patchItem = (key: string, patch: Partial<FeedItem>) =>
     setItems((prev) =>
@@ -97,14 +126,19 @@ export function useFeed(limit: number) {
     }
   };
 
-  return { items, loading, refreshing, load, onKudos };
+  return { items, loading, refreshing, load, onKudos, photos, hasMore, loadMore, loadingMore };
 }
 
-/** Tarjeta de una actividad del feed (abre el perfil del autor). */
+/**
+ * Tarjeta de una actividad del feed. El avatar y el nombre llevan al perfil
+ * de quien jugó; el resto de la tarjeta, al detalle del partido (amistoso o
+ * jornada de liga), como en la web. Con foto, miniatura a la derecha.
+ */
 export const FeedItemCard: React.FC<{
   it: FeedItem;
   onKudos: (it: FeedItem) => void;
-}> = ({ it, onKudos }) => {
+  photo?: string | null;
+}> = ({ it, onKudos, photo }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const navigation =
@@ -119,27 +153,50 @@ export const FeedItemCard: React.FC<{
     });
   };
 
+  const openDetail = () => {
+    if (it.kind === 'casual') navigation.navigate('CasualMatchDetail', { matchId: it.ref_id });
+    else navigation.navigate('LeagueMatchDetail', { matchdayId: it.ref_id });
+  };
+
   const count = it.kudos_count ?? 0;
   // Tu propio amistoso: no puedes aplaudirte; solo el contador (si hay).
   const own = it.kind === 'casual' && !!myId && it.actor_id === myId;
   const given = !!it.i_gave_kudos;
+  const name = it.actor_name ?? '';
+  // «Ana ganó…»: el nombre lleva al perfil y el resto, al partido.
+  const rest =
+    name && it.actor_id && it.title.startsWith(name) ? it.title.slice(name.length) : null;
 
   return (
     <Pressable
-      onPress={openActor}
+      onPress={openDetail}
+      accessibilityHint="Abre el partido"
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
     >
-      <CommunityAvatar
-        name={it.actor_name ?? '—'}
-        avatarUrl={it.avatar_url}
-        size={44}
-      />
+      <Pressable
+        onPress={openActor}
+        disabled={!it.actor_id}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={name ? `Perfil de ${name}` : 'Perfil'}
+      >
+        <CommunityAvatar name={name || '—'} avatarUrl={it.avatar_url} size={44} />
+      </Pressable>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text
           style={[styles.title, it.positive === true && { color: c.accent }]}
           numberOfLines={2}
         >
-          {it.title}
+          {rest !== null ? (
+            <>
+              <Text style={styles.actor} onPress={openActor}>
+                {name}
+              </Text>
+              {rest}
+            </>
+          ) : (
+            it.title
+          )}
         </Text>
         {it.subtitle ? (
           <Text style={styles.subtitle} numberOfLines={2}>
@@ -183,7 +240,11 @@ export const FeedItemCard: React.FC<{
           </View>
         )}
       </View>
-      <IconChevron size={14} color={c.textFaint} />
+      {photo ? (
+        <Image source={{ uri: photo }} style={styles.thumb} accessibilityLabel="Foto del partido" />
+      ) : (
+        <IconChevron size={14} color={c.textFaint} />
+      )}
     </Pressable>
   );
 };
@@ -205,6 +266,15 @@ const makeStyles = (c: Palette) =>
       fontSize: 14.5,
       fontWeight: '600',
       letterSpacing: -0.1,
+    },
+    actor: { fontWeight: '800' },
+    thumb: {
+      width: 56,
+      height: 56,
+      borderRadius: 10,
+      backgroundColor: c.bgCard2,
+      borderWidth: 1,
+      borderColor: c.hair,
     },
     subtitle: {
       fontFamily: Fonts.mono,
