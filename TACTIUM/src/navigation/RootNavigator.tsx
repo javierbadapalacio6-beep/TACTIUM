@@ -15,6 +15,7 @@ import { PushPromptScreen } from '@features/onboarding/screens/OnboardingNotific
 import { PaywallScreen } from '@features/subscription/screens/PaywallScreen';
 import { SubscriptionScreen } from '@features/subscription/screens/SubscriptionScreen';
 import { ClubBillingScreen } from '@features/subscription/screens/ClubBillingScreen';
+import { NotificationsScreen } from '@features/notifications/screens/NotificationsScreen';
 import { ClubSettingsScreen } from '@features/club/screens/ClubSettingsScreen';
 import { ClubCoverTeamsScreen } from '@features/club/screens/ClubCoverTeamsScreen';
 import { ActivateTeamManagementScreen } from '@features/club/screens/ActivateTeamManagementScreen';
@@ -155,6 +156,11 @@ export const RootNavigator = () => {
                 presentation: 'card',
                 animation: 'slide_from_right',
               }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ presentation: 'card', animation: 'slide_from_right' }}
             />
             <Stack.Screen
               name="ClubSettings"

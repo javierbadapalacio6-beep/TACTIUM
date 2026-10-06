@@ -45,6 +45,10 @@ type NotifTable = {
       limit: (
         n: number,
       ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+      range: (
+        from: number,
+        to: number,
+      ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
     };
   };
   update: (values: Record<string, unknown>) => {
@@ -65,11 +69,10 @@ type NotifTable = {
 const table = (): NotifTable =>
   supabase.from('notifications' as never) as unknown as NotifTable;
 
-export async function fetchNotifications(limit = 50): Promise<AppNotification[]> {
-  const { data, error } = await table()
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+export async function fetchNotifications(limit = 50, offset = 0): Promise<AppNotification[]> {
+  const q = table().select('*').order('created_at', { ascending: false });
+  // Con `offset`, una página concreta (pantalla «Todos los avisos»).
+  const { data, error } = await (offset > 0 ? q.range(offset, offset + limit - 1) : q.limit(limit));
   if (error) throw new Error(error.message);
   return (data as AppNotification[]) ?? [];
 }

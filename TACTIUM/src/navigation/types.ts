@@ -150,6 +150,8 @@ export type RootStackParamList = {
   Paywall: { intent?: string } | undefined;
   Subscription: undefined;
   ClubBilling: undefined;
+  // Todos los avisos, paginados (desde «Ver todos» en la hoja de la campana).
+  Notifications: undefined;
   // Ajustes del club (nombre, federación y borrar club) y elegir qué equipos
   // cubre el plan cuando hay más equipos que plazas.
   ClubSettings: undefined;
