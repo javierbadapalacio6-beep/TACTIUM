@@ -1,0 +1,52 @@
+{
+  "id": "G1",
+  "titulo": "Ya están los grupos 2026/27",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/tablon-club.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "titulo": "Ya están *los grupos.*",
+      "bandera": "cantabria"
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "equipos inscritos",
+      "valor": "323",
+      "sub": "12 categorías y 41 grupos. El calendario, todavía sin salir."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "Lo de siempre",
+      "titulo": "Un PDF de 15 páginas para encontrar tu equipo.",
+      "sub": "Y otro rato para saber contra quién juegas y **en qué pista.**"
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "Tu grupo",
+      "titulo": "Buscas tu equipo y ves su grupo, sus rivales y dónde juega cada uno.",
+      "src": "web/g1-grupos.png",
+      "alto": 900
+    },
+    {
+      "tipo": "pantalla",
+      "eyebrow": "Tus rivales",
+      "titulo": "Y la plantilla inscrita de cada rival, con sus puntos.",
+      "src": "web/g1-ficha.png",
+      "alto": 900
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "Si llevas un club",
+      "titulo": "Te decimos qué equipo es cuál este año.",
+      "sub": "Si la Federación te cambia la letra, lo reconocemos por los **jugadores**. Y te avisamos de los que no aparecen inscritos."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "Busca tu equipo en *tactium.io*",
+      "cta": "Federación · Liga Cántabra 2026/27",
+      "bandera": "cantabria"
+    }
+  ]
+}

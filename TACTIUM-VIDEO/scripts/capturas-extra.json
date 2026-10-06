@@ -1,9 +1,101 @@
 [
-  { "name": "torneo-horario-lista", "url": "/torneos/dd508541-9587-49e5-a09b-e2aa4efe632a", "acts": [{ "click": "Horario" }, { "scrollPx": 640 }] },
-  { "name": "torneo-cuadro-final", "url": "/torneos/dd508541-9587-49e5-a09b-e2aa4efe632a", "acts": [{ "click": "Cuadro" }, { "scrollPx": 900 }] },
-  { "name": "fed-grupo-clasificacion", "url": "/federacion/cantabra/grupo/31249", "acts": [{ "scrollPx": 300 }] },
-  { "name": "fed-grupo-jornadas", "url": "/federacion/cantabra/grupo/31249", "acts": [{ "scrollPx": 900 }] },
-  { "name": "fed-playoff", "url": "/federacion/cantabra/grupo/fase2_31306", "acts": [{ "scrollPx": 420 }] },
-  { "name": "fed-rankings", "url": "/federacion/cantabra", "acts": [{ "click": "Rankings" }, { "scrollPx": 760 }] },
-  { "name": "fed-jugador-busqueda", "url": "/federacion/cantabra", "acts": [{ "click": "Jugadores" }, { "type": "Busca un jugador", "text": "gar" }, { "scrollPx": 300 }] }
+  {
+    "name": "torneo-horario-lista",
+    "url": "/torneos/dd508541-9587-49e5-a09b-e2aa4efe632a",
+    "acts": [
+      {
+        "click": "Horario"
+      },
+      {
+        "scrollPx": 640
+      }
+    ]
+  },
+  {
+    "name": "torneo-cuadro-final",
+    "url": "/torneos/dd508541-9587-49e5-a09b-e2aa4efe632a",
+    "acts": [
+      {
+        "click": "Cuadro"
+      },
+      {
+        "scrollPx": 900
+      }
+    ]
+  },
+  {
+    "name": "fed-grupo-clasificacion",
+    "url": "/federacion/cantabra/grupo/31249",
+    "acts": [
+      {
+        "scrollPx": 300
+      }
+    ]
+  },
+  {
+    "name": "fed-grupo-jornadas",
+    "url": "/federacion/cantabra/grupo/31249",
+    "acts": [
+      {
+        "scrollPx": 900
+      }
+    ]
+  },
+  {
+    "name": "fed-playoff",
+    "url": "/federacion/cantabra/grupo/fase2_31306",
+    "acts": [
+      {
+        "scrollPx": 420
+      }
+    ]
+  },
+  {
+    "name": "fed-rankings",
+    "url": "/federacion/cantabra",
+    "acts": [
+      {
+        "click": "Rankings"
+      },
+      {
+        "scrollPx": 760
+      }
+    ]
+  },
+  {
+    "name": "fed-jugador-busqueda",
+    "url": "/federacion/cantabra",
+    "acts": [
+      {
+        "click": "Jugadores"
+      },
+      {
+        "type": "Busca un jugador",
+        "text": "gar"
+      },
+      {
+        "scrollPx": 300
+      }
+    ]
+  },
+  {
+    "name": "g1-grupos",
+    "url": "/federacion/cantabra/equipo/162832",
+    "acts": [
+      {
+        "scrollTo": "Su grupo",
+        "offset": -60
+      }
+    ]
+  },
+  {
+    "name": "g1-ficha",
+    "url": "/federacion/cantabra/equipo/162743",
+    "acts": [
+      {
+        "scrollTo": "Por puntos",
+        "offset": 6
+      }
+    ]
+  }
 ]

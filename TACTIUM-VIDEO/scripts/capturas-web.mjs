@@ -7,7 +7,8 @@ import os from "node:os";
 
 const EXE = path.join(os.homedir(), "AppData/Local/ms-playwright/chromium-1243/chrome-win64/chrome.exe");
 const OUT = "public/web";
-const BASE = "https://tactium.io";
+// BASE=http://localhost:3000 para capturar algo que aún no está publicado.
+const BASE = process.env.BASE ?? "https://tactium.io";
 const TORNEO = "/torneos/dd508541-9587-49e5-a09b-e2aa4efe632a";
 
 /** Cada captura: url + acciones (click por texto, scroll hasta texto, scroll px) */
@@ -41,6 +42,8 @@ for (const s of [...SHOTS, ...extra]) {
   if (only.length && !only.includes(s.name)) continue;
   try {
     await page.goto(BASE + s.url, { waitUntil: "networkidle", timeout: 45000 });
+    // En local, Next pinta su botón de desarrollo («N») encima de la página.
+    if (BASE.includes("localhost")) await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
     await page.waitForTimeout(800);
     for (const a of s.acts ?? []) {
       if (a.click) {

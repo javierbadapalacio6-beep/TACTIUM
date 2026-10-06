@@ -80,6 +80,9 @@ p.lead b{color:${C.fg.primary};font-weight:700}
 .wa .row .m{font-size:34px;color:#8696a0;max-width:700px;line-height:1.3}
 .wa .row .b{min-width:90px;height:64px;border-radius:32px;background:#00a884;color:#0b141a;font-weight:900;font-size:34px;display:flex;align-items:center;justify-content:center;padding:0 22px}
 .wa .row .h{font-size:26px;color:#00a884;font-weight:700}
+.bandera{display:inline-flex;flex-direction:column;width:var(--bw,60px);aspect-ratio:3/2;border-radius:6px;overflow:hidden;box-shadow:0 0 0 2px rgba(255,255,255,.18);flex:none}
+.bandera i{flex:1;display:block}
+.eyebrow.conbandera{display:flex;align-items:center;gap:22px}
 .codigo{font-family:JBMono,monospace;font-weight:500;font-size:200px;letter-spacing:.12em;color:${C.accent.base};text-align:center;line-height:1}
 .ticks{display:flex;flex-direction:column;gap:26px}
 .ticks div{display:flex;align-items:center;gap:22px;font-size:46px;font-weight:700;letter-spacing:-.02em}
@@ -89,6 +92,13 @@ p.lead b{color:${C.fg.primary};font-weight:700}
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 /** *texto* → acento verde; **texto** → blanco fuerte */
 const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*(.+?)\*/g, '<span class="acc">$1</span>');
+
+/** Banderas de federación (versión civil, sin escudo). `bandera: "cantabria"` en la slide. */
+const BANDERAS = { cantabria: ["#ffffff", "#d52b1e"] };
+const bandera = (id, w) => {
+  const franjas = BANDERAS[id];
+  return franjas ? `<span class="bandera" style="--bw:${w}px">${franjas.map((c) => `<i style="background:${c}"></i>`).join("")}</span>` : "";
+};
 
 const pad2 = (v) => String(v).padStart(2, "0");
 const foot = (i, n) => `
@@ -101,7 +111,7 @@ function slideHtml(s, i, n) {
   switch (s.tipo) {
     case "portada":
       cuerpo = `<div class="pad" style="bottom:${s.sticker ? 640 : (H > 1400 ? 360 : 190)}px">
-        ${s.eyebrow ? `<div class="eyebrow" style="margin-bottom:34px">${esc(s.eyebrow)}</div>` : ""}
+        ${s.eyebrow ? `<div class="eyebrow ${s.bandera ? "conbandera" : ""}" style="margin-bottom:34px">${bandera(s.bandera, 66)}${esc(s.eyebrow)}</div>` : ""}
         <h1 class="${s.tam ?? ""}">${rich(s.titulo)}</h1>
         ${s.sub ? `<p class="lead" style="margin-top:36px">${rich(s.sub)}</p>` : ""}
       </div>`;
@@ -160,7 +170,7 @@ function slideHtml(s, i, n) {
       cuerpo = `<div class="pad" style="top:50%;transform:translateY(-50%)">
         <h1 class="${s.tam ?? "md"}">${rich(s.titulo)}</h1>
         ${s.sub ? `<p class="lead" style="margin-top:40px">${rich(s.sub)}</p>` : ""}
-        ${s.cta ? `<div class="chip" style="margin-top:56px">${esc(s.cta)}</div>` : ""}
+        ${s.cta ? `<div class="chip" style="margin-top:56px">${bandera(s.bandera, 42)}${esc(s.cta)}</div>` : ""}
       </div>`;
       break;
   }
