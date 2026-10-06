@@ -4980,6 +4980,10 @@ select.tw-cell-input {
   .tw-fcp-stand .tw-st-x {
     display: none;
   }
+  /* Racha: en móvil, los tres últimos (el nombre necesita el sitio). */
+  .tw-fcp-stand .tw-pips > :nth-last-child(n + 4) {
+    display: none !important; /* cada pastilla lleva su display en línea */
+  }
   .tw-st-sub {
     display: block;
     margin-top: 2px;

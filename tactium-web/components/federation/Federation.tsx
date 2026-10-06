@@ -1092,7 +1092,7 @@ function initials(name: string): string {
 function FormPips({ form, box = 18 }: { form: ("V" | "D")[]; box?: number }) {
   if (form.length === 0) return null;
   return (
-    <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+    <span className="tw-pips" style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
       {form.map((r, i) => (
         <span
           key={i}
