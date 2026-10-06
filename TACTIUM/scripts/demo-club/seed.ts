@@ -427,6 +427,7 @@ async function seedSeasons() {
     log(`  ✓ ${s.team.name}: ${s.cal.length} jornadas · ${s.finishedUntil} jugadas (${w}V ${d}E ${l}D)`);
   }
   await seedConvocatoria();
+  await seedLive();
 }
 
 /** Próxima jornada del A (sábado): convocatoria Voy/Duda/No + borrador con 2 variantes. */
@@ -515,6 +516,93 @@ async function seedTimePoll(
   ];
   await must(db('matchday_time_poll_votes').insert(votes), 'time poll votes');
   log(`  ✓ encuesta de hora abierta en J${NEXT_J}: 3 opciones · 7 votos · Iván sin votar`);
+}
+
+// ─── DIRECTO (marcador en vivo) ──────────────────────────────────────────────
+/** Token fijo y legible del directo demo: tactium.io/directo/demo-directo */
+const LIVE_TOKEN = 'demo-directo';
+
+/**
+ * Un directo a medias en la J8 del A (marcador en vivo, migración
+ * 20261006c_live_scoring): P1 terminada 6-4 6-3 (ya volcada al acta), P2 en el
+ * tercer set, P3 y P4 en el segundo; P5 sin empezar. Se escribe directo en las
+ * tablas (las RPC necesitan auth.uid y aquí vamos con service role), con el
+ * mismo log de juegos que dejarían las RPC, así «Deshacer» funciona.
+ */
+async function seedLive() {
+  const next = MD[TEAM.a].find((m) => m.jornada_number === NEXT_J)!;
+  const plan: Record<number, [number, number][]> = {
+    1: [[6, 4], [6, 3]],
+    2: [[6, 4], [3, 6], [2, 1]],
+    3: [[7, 6], [2, 3]],
+    4: [[3, 6], [1, 2]],
+  };
+  const started = new Date(Date.now() - 75 * 60e3);
+  for (const [k, sets] of Object.entries(plan)) {
+    const court = Number(k);
+    // Orden de juegos: alternos hasta el mínimo y el resto para quien gana el set.
+    const sides: { side: 'us' | 'them'; set: number }[] = [];
+    sets.forEach(([a, b], i) => {
+      for (let g = 0; g < Math.min(a, b); g++) sides.push({ side: 'us', set: i + 1 }, { side: 'them', set: i + 1 });
+      for (let g = 0; g < a - Math.min(a, b); g++) sides.push({ side: 'us', set: i + 1 });
+      for (let g = 0; g < b - Math.min(a, b); g++) sides.push({ side: 'them', set: i + 1 });
+    });
+    const usSets = sets.filter(([a, b]) => a > b && Math.max(a, b) >= 6).length;
+    const themSets = sets.filter(([a, b]) => b > a && Math.max(a, b) >= 6).length;
+    const winner = usSets === 2 ? 'us' : themSets === 2 ? 'them' : null;
+    const updated = new Date(started.getTime() + sides.length * 3.5 * 60e3);
+    const row = (await must(
+      db('live_matches')
+        .insert({
+          kind: 'league',
+          matchday_id: next.id,
+          court_number: court,
+          format: 'normal',
+          status: winner ? 'finished' : 'live',
+          sets: sets.map(([us, them]) => ({ us, them })),
+          winner,
+          games_count: sides.length,
+          started_at: started.toISOString(),
+          finished_at: winner ? updated.toISOString() : null,
+          updated_at: updated.toISOString(),
+          updated_by: U.capitan,
+          scorer_id: null,
+          scorer_seen_at: null,
+        })
+        .select('id')
+        .single(),
+      `live P${court}`,
+    )) as { id: string };
+    await must(
+      db('live_match_events').insert(
+        sides.map((s, i) => ({
+          live_match_id: row.id,
+          seq: i + 1,
+          side: s.side,
+          set_number: s.set,
+          created_by: U.capitan,
+          created_at: new Date(started.getTime() + (i + 1) * 3.5 * 60e3).toISOString(),
+        })),
+      ),
+      `live events P${court}`,
+    );
+    // Pista terminada: sus sets ya están en el acta (lo que haría el volcado).
+    if (winner) {
+      await must(
+        db('match_results').insert(
+          sets.map(([us, them], i) => ({
+            matchday_id: next.id, court_number: court, set_number: i + 1, us, them, forfeit: false, forfeit_us: false,
+          })),
+        ),
+        `live acta P${court}`,
+      );
+    }
+  }
+  await must(
+    db('live_shares').insert({ token: LIVE_TOKEN, kind: 'league', matchday_id: next.id, created_by: U.capitan }),
+    'live share',
+  );
+  log(`  ✓ Directo J${NEXT_J}: P1 6-4 6-3 · P2/P3/P4 en juego · tactium.io/directo/${LIVE_TOKEN}`);
 }
 
 // ─── SOCIAL ──────────────────────────────────────────────────────────────────
