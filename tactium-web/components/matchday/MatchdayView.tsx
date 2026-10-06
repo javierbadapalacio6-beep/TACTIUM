@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import {
@@ -80,6 +81,14 @@ interface CourtRow {
 }
 
 type Tab = "previa" | "alineacion" | "resultado" | "fotos";
+const TABS: Tab[] = ["previa", "alineacion", "resultado", "fotos"];
+
+/** Pestaña de la URL (`?tab=`), o null si no hay o no vale. */
+function tabFromUrl(): Tab | null {
+  if (typeof window === "undefined") return null;
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return t && (TABS as string[]).includes(t) ? (t as Tab) : null;
+}
 
 const EMPTY_SETS: [number, number][] = [
   [0, 0],
@@ -368,6 +377,8 @@ export function MatchdayView({ id }: { id: string }) {
   const { activeTeam, role } = useSession();
   const teamId = activeTeam?.id ?? null;
   const isCaptain = role === "capitan" || role === "club";
+  const router = useRouter();
+  const pathname = usePathname();
 
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
     () => fetchMatchdayBundle(id, teamId!),
@@ -419,11 +430,18 @@ export function MatchdayView({ id }: { id: string }) {
   const [schedTime, setSchedTime] = useState("");
   const [schedSaving, setSchedSaving] = useState(false);
 
-  // La pestaña elegida a mano se mantiene hasta cambiar de jornada.
+  // La pestaña va en la URL (`?tab=`): se puede enlazar, recargar y volver
+  // atrás sin perderla. Sin parámetro, la que toque según el momento.
   useEffect(() => {
-    setTab(null);
+    setTab(tabFromUrl());
     setPatch({});
   }, [id]);
+  function selectTab(t: Tab) {
+    setTab(t);
+    const q = new URLSearchParams(window.location.search);
+    q.set("tab", t);
+    router.replace(`${pathname}?${q.toString()}`, { scroll: false });
+  }
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60_000);
@@ -1134,14 +1152,46 @@ export function MatchdayView({ id }: { id: string }) {
           <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
           Temporada
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <BtnLink
-            href={`/jornada/${m.id}/alineacion`}
-            variant={closed ? "ghost" : "accent"}
-            icon={<IconUsers size={15} />}
-          >
-            {closed ? "Ver alineación" : "Editar alineación"}
-          </BtnLink>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {/* La acción principal depende del rol y del momento:
+              · capitán antes de empezar → editar la alineación;
+              · capitán con la jornada en juego → resultados y acta;
+              · jugador con la jornada en juego → su resultado;
+              · el resto (jugador antes, club, acta cerrada) → ver la alineación. */}
+          {role === "capitan" && !closed && started ? (
+            <>
+              <Btn
+                variant="accent"
+                icon={<IconFlag size={15} />}
+                onClick={() => selectTab("resultado")}
+              >
+                Meter resultados
+              </Btn>
+              <Btn icon={<IconCheck size={15} />} onClick={() => setConfirmClose(true)}>
+                Cerrar acta
+              </Btn>
+              <BtnLink href={`/jornada/${m.id}/alineacion`} variant="quiet" icon={<IconUsers size={15} />}>
+                Alineación
+              </BtnLink>
+            </>
+          ) : role === "capitan" && !closed ? (
+            <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent" icon={<IconUsers size={15} />}>
+              Editar alineación
+            </BtnLink>
+          ) : role !== "capitan" && role !== "club" && !closed && started ? (
+            <>
+              <BtnLink href={`/jornada/${m.id}/resultados`} variant="accent" icon={<IconFlag size={15} />}>
+                Meter mi resultado
+              </BtnLink>
+              <BtnLink href={`/jornada/${m.id}/alineacion`} variant="ghost" icon={<IconUsers size={15} />}>
+                Ver alineación
+              </BtnLink>
+            </>
+          ) : (
+            <BtnLink href={`/jornada/${m.id}/alineacion`} variant="ghost" icon={<IconUsers size={15} />}>
+              Ver alineación
+            </BtnLink>
+          )}
           {canDelete && (
             <div ref={menuRef} style={{ position: "relative" }}>
               <Btn
@@ -1271,7 +1321,7 @@ export function MatchdayView({ id }: { id: string }) {
         <Segmented<Tab>
           label="Fase de la jornada"
           value={curTab}
-          onChange={setTab}
+          onChange={selectTab}
           options={[
             { value: "previa", label: "Previa" },
             { value: "alineacion", label: "Alineación" },
