@@ -117,6 +117,7 @@ export function sectionOf(pathname: string, username?: string | null): MainSecti
  */
 export const PUBLIC_NAV: NavEntry[] = [
   { href: "/torneos", label: "Torneos", icon: "trophy" },
+  { href: "/torneos/organizar", label: "Organizar torneo", icon: "plus" },
   { href: "/federacion", label: "Federación", icon: "flag" },
   { href: "/comunidad", label: "Comunidad", icon: "globe" },
   { href: "/pro", label: "Planes", icon: "receipt" },

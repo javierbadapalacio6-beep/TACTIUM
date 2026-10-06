@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 
 import { exploreTournaments } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { TOURNAMENT_FREE_PAIRS } from "@/lib/tournament-billing";
 import { useAsync } from "@/lib/use-async";
-import { Card, CardHead, IconTile, InputWrap, ListRow, PageHeader } from "@/components/ui";
+import { BtnLink, Card, CardHead, IconTile, InputWrap, ListRow, PageHeader } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconSearch, IconTicket, IconTrophy } from "@/components/Icon";
 import { LiveDot } from "@/components/tournaments/SpectatorParts";
@@ -47,7 +48,7 @@ export function ExploreTournaments() {
 
   const rows = all.filter((t) => {
     if (status === "open" && t.status !== "open") return false;
-    if (status === "live" && bucketOf(t.status, t.starts_on) !== "live") return false;
+    if (status === "live" && bucketOf(t.status, t.starts_on, t.ends_on) !== "live") return false;
     if (genders.size && !(t.genders ?? []).some((g) => genders.has(g))) return false;
     return true;
   });
@@ -147,15 +148,25 @@ export function ExploreTournaments() {
             </Card>
           ) : rows.length === 0 ? (
             <Card>
-              <EmptyState
-                icon={<IconTrophy size={22} />}
-                title={filtering ? "Nada con este filtro" : "Aún no hay torneos"}
-                body={
-                  filtering
-                    ? "Prueba con otra búsqueda o quita algún filtro."
-                    : "Cuando un club abra inscripciones, aparecerá aquí."
-                }
-              />
+              {filtering ? (
+                <EmptyState
+                  icon={<IconTrophy size={22} />}
+                  title="Nada con este filtro"
+                  body="Prueba con otra búsqueda o quita algún filtro."
+                />
+              ) : (
+                // Sin torneos vivos: la página se dirige a quien organiza.
+                <EmptyState
+                  icon={<IconTrophy size={22} />}
+                  title="Ahora mismo no hay torneos abiertos"
+                  body={`Si organizas uno, móntalo aquí: inscripción por categorías, cuadros, horario por pistas y resultados en directo. Hasta ${TOURNAMENT_FREE_PAIRS} parejas es gratis.`}
+                  action={
+                    <BtnLink href="/torneos/organizar" variant="accent">
+                      Organizar un torneo
+                    </BtnLink>
+                  }
+                />
+              )}
             </Card>
           ) : (
             <>

@@ -23,6 +23,8 @@ export interface RowTournament {
   club_name: string | null;
   location: string | null;
   starts_on: string | null;
+  /** Última fecha del torneo. Si ya pasó, cuenta como terminado. */
+  ends_on?: string | null;
   status: string;
   cover_url: string | null;
   genders: string[] | null;
@@ -37,9 +39,18 @@ const localToday = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-/** Igual que `tournamentBucket` de la app: con cuadro pero fecha futura = próximo. */
-export function bucketOf(status: string, startsOn: string | null): "live" | "upcoming" | "finished" {
+/**
+ * Igual que `tournamentBucket` de la app: con cuadro pero fecha futura =
+ * próximo. Si se pasa `endsOn` y ya quedó atrás, es terminado aunque nadie lo
+ * haya cerrado: un torneo de hace un mes no puede salir «En juego».
+ */
+export function bucketOf(
+  status: string,
+  startsOn: string | null,
+  endsOn?: string | null,
+): "live" | "upcoming" | "finished" {
   if (status === "finished" || status === "canceled" || status === "cancelled") return "finished";
+  if (endsOn && endsOn < localToday()) return "finished";
   if (status === "in_progress" && (!startsOn || startsOn <= localToday())) return "live";
   return "upcoming";
 }
@@ -58,17 +69,37 @@ const abbr = (name: string) => {
   return (w.find((x) => !STOP.has(x.toLowerCase())) ?? w[0] ?? "?").slice(0, 3).toUpperCase();
 };
 
+/**
+ * Lugar sin repetir el club: «Arena Pádel Santander · C/ Castilla 42» con club
+ * «Arena Pádel Santander» se queda en «C/ Castilla 42», y si son iguales, nada.
+ */
+export function placeWithoutClub(location: string | null, club: string | null): string | null {
+  const loc = location?.trim();
+  if (!loc) return null;
+  const c = club?.trim();
+  if (!c) return loc;
+  const norm = (x: string) => x.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (norm(loc) === norm(c)) return null;
+  if (norm(loc).startsWith(norm(c)) && loc.length >= c.length) {
+    const rest = loc.slice(c.length).replace(/^\s*[·,\-–—]\s*/, "").trim();
+    return rest || null;
+  }
+  return loc;
+}
+
 /** Agrupa por estado: lo que está pasando primero. */
 export function groupTournaments<T extends RowTournament>(list: T[]) {
   const byDate = (a: T, b: T) => (a.starts_on ?? "zz").localeCompare(b.starts_on ?? "zz");
   return {
-    live: list.filter((t) => bucketOf(t.status, t.starts_on) === "live"),
-    open: list.filter((t) => t.status === "open").sort(byDate),
+    live: list.filter((t) => bucketOf(t.status, t.starts_on, t.ends_on) === "live"),
+    open: list
+      .filter((t) => t.status === "open" && bucketOf(t.status, t.starts_on, t.ends_on) !== "finished")
+      .sort(byDate),
     soon: list
-      .filter((t) => t.status !== "open" && bucketOf(t.status, t.starts_on) === "upcoming")
+      .filter((t) => t.status !== "open" && bucketOf(t.status, t.starts_on, t.ends_on) === "upcoming")
       .sort(byDate),
     done: list
-      .filter((t) => bucketOf(t.status, t.starts_on) === "finished")
+      .filter((t) => bucketOf(t.status, t.starts_on, t.ends_on) === "finished")
       .sort((a, b) => byDate(b, a)),
   };
 }
@@ -89,7 +120,7 @@ export function TournamentRow({
   tone?: "accent" | "warning" | "muted";
   badge?: string | null;
 }) {
-  const bucket = bucketOf(t.status, t.starts_on);
+  const bucket = bucketOf(t.status, t.starts_on, t.ends_on);
   const fee =
     t.entry_fee && Number(t.entry_fee) > 0
       ? `${formatFee(Number(t.entry_fee), t.fee_currency)}/pers.`
@@ -102,7 +133,12 @@ export function TournamentRow({
       : `${n} ${n === 1 ? "pareja inscrita" : "parejas inscritas"}`;
   const metaText =
     meta ??
-    ([t.club_name, t.location, shortDate(t.starts_on), t.status === "open" ? fee : null]
+    ([
+      t.club_name,
+      placeWithoutClub(t.location, t.club_name),
+      shortDate(t.starts_on),
+      t.status === "open" && bucket !== "finished" ? fee : null,
+    ]
       .filter(Boolean)
       .join(" · ") ||
       "Fecha por confirmar");
@@ -110,14 +146,15 @@ export function TournamentRow({
     line ??
     (bucket === "live"
       ? "En juego"
-      : t.status === "open"
+      : t.status === "open" && bucket !== "finished"
         ? inscritos
         : bucket === "finished"
           ? t.status === "canceled" || t.status === "cancelled"
             ? "Cancelado"
             : "Terminado"
           : "Próximamente");
-  const lineTone = tone ?? (bucket === "live" || t.status === "open" ? "accent" : "muted");
+  const lineTone =
+    tone ?? (bucket === "live" || (t.status === "open" && bucket !== "finished") ? "accent" : "muted");
   return (
     <Link href={`/torneos/${t.id}`} className="list-row" style={{ gap: 12 }}>
       <span
