@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EntryFrame, Field, Input } from "./EntryFrame";
-import { Btn, Eyebrow, Modal, Note } from "@/components/ui";
+import { Btn, Modal, Note } from "@/components/ui";
 import { canonicalOrigin } from "@/lib/site";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { WRITES_ENABLED } from "@/lib/writes";
@@ -168,9 +168,10 @@ export function Auth({ initialMode = "login" }: { initialMode?: Mode }) {
   return (
     <EntryFrame>
       {/* La frase de producto, la misma que en la bienvenida de la app. */}
-      <Eyebrow tone="accent" style={{ marginBottom: 10 }}>
+      {/* Frase normal, no antetítulo en mayúsculas (regla 6 de la guía). */}
+      <p style={{ margin: "0 0 8px", fontSize: 13.5, fontWeight: 600, color: "var(--accent)" }}>
         Convoca, alinea y cierra la jornada.
-      </Eyebrow>
+      </p>
       <h1>{signup ? "Crear cuenta" : "Iniciar sesión"}</h1>
       <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
         {signup

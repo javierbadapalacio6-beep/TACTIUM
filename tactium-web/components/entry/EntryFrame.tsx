@@ -81,16 +81,6 @@ export function EntryFrame({
         </div>
       </main>
 
-      <footer
-        style={{
-          textAlign: "center",
-          padding: "0 24px 28px",
-          fontSize: 12,
-          color: "var(--text-faint)",
-        }}
-      >
-        Pádel primero, deporte siempre
-      </footer>
     </div>
   );
 }
