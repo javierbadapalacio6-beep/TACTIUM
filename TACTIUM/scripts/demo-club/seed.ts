@@ -231,7 +231,7 @@ async function seedAccounts() {
 // ─── CLUB + SUSCRIPCIÓN ──────────────────────────────────────────────────────
 async function seedClub() {
   log('— club');
-  await must(db('clubs').insert({ id: CLUB_ID, owner_id: U.club, name: CLUB_NAME, federation: 'FCantP' }), 'club');
+  await must(db('clubs').insert({ id: CLUB_ID, owner_id: U.club, name: CLUB_NAME, federation: 'FCantP', is_demo: true }), 'club');
   const cm = (await must(db('club_members').select('id').eq('club_id', CLUB_ID).eq('user_id', U.club), 'cm')) as unknown[];
   if (cm.length === 0) await must(db('club_members').insert({ club_id: CLUB_ID, user_id: U.club, role: 'admin' }), 'club_members');
   await must(
@@ -690,7 +690,7 @@ async function seedTournaments() {
 // ─── ORGANIZADOR «SOLO TORNEOS» ──────────────────────────────────────────────
 async function seedOrganizer() {
   log('— organizador (solo torneos)');
-  await must(db('clubs').insert({ id: ORG_CLUB_ID, owner_id: U.organizador, name: ORG_CLUB_NAME, federation: 'FCantP', tournaments_only: true }), 'org club');
+  await must(db('clubs').insert({ id: ORG_CLUB_ID, owner_id: U.organizador, name: ORG_CLUB_NAME, federation: 'FCantP', tournaments_only: true, is_demo: true }), 'org club');
   const cm = (await must(db('club_members').select('id').eq('club_id', ORG_CLUB_ID).eq('user_id', U.organizador), 'cm')) as unknown[];
   if (cm.length === 0) await must(db('club_members').insert({ club_id: ORG_CLUB_ID, user_id: U.organizador, role: 'admin' }), 'org cm');
   const base = { ...baseTour(), club_id: ORG_CLUB_ID, created_by: U.organizador, location: 'Pádel Costa Norte · Noja', format: 'ko', match_format: 'bo3_stb', phase_formats: { main: 'bo3_stb' }, courts: 3, slot_minutes: 90, rest_minutes: 0, start_time: '17:00', end_time: '22:00', payment_deadline_days: 3 };
