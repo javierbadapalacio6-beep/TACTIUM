@@ -99,7 +99,7 @@ export function Compete() {
         ) : vista === "liga" ? (
           <Liga role={role} tournamentsOnly={tournamentsOnly} />
         ) : vista === "federacion" ? (
-          <FederationForMe />
+          <FederationForMe embedded />
         ) : (
           <Torneos isClub={role === "club"} tournamentsOnly={tournamentsOnly} />
         )}
@@ -110,7 +110,7 @@ export function Compete() {
 
 function Liga({ role, tournamentsOnly }: { role: string; tournamentsOnly: boolean }) {
   if (role === "capitan" || role === "jugador") return <SeasonsList embedded />;
-  if (role === "club" && !tournamentsOnly) return <ClubSchedule />;
+  if (role === "club" && !tournamentsOnly) return <ClubSchedule embedded />;
 
   // Suelto u organizador: no hay liga que enseñar todavía.
   return (
@@ -174,7 +174,7 @@ function Torneos({ isClub, tournamentsOnly }: { isClub: boolean; tournamentsOnly
           </BtnLink>
         )}
       </div>
-      <ExploreTournaments />
+      <ExploreTournaments embedded />
     </>
   );
 }

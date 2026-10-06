@@ -7,7 +7,7 @@ import { exploreTournaments } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { TOURNAMENT_FREE_PAIRS } from "@/lib/tournament-billing";
 import { useAsync } from "@/lib/use-async";
-import { BtnLink, Card, CardHead, IconTile, InputWrap, ListRow, PageHeader } from "@/components/ui";
+import { BtnLink, Card, CardHead, IconTile, InputWrap, ListRow, PageHeader, SectionHead } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { IconSearch, IconTicket, IconTrophy } from "@/components/Icon";
 import { LiveDot } from "@/components/tournaments/SpectatorParts";
@@ -30,7 +30,7 @@ import {
 
 type StatusFilter = "all" | "open" | "live";
 
-export function ExploreTournaments() {
+export function ExploreTournaments({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useSession();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -85,21 +85,35 @@ export function ExploreTournaments() {
 
   return (
     <div className="tw-page">
-      <PageHeader
-        title="Torneos"
-        lede="Busca por nombre, club o lugar, o entra directo con el código que te han pasado."
-        meta={[loading ? "Cargando…" : `${all.length} ${all.length === 1 ? "torneo" : "torneos"}`]}
-      />
+      {/* Dentro de Competir el título es «Competir», la pestaña ya dice
+          «Torneos» y encima va «Mis torneos»: aquí, un título de bloque y sin
+          las pestañas Explorar / Mis torneos. */}
+      {embedded ? (
+        <SectionHead
+          title="Explorar torneos"
+          count={loading ? undefined : all.length}
+          sub="Busca por nombre, club o lugar, o entra directo con el código que te han pasado."
+          style={{ marginTop: 0 }}
+        />
+      ) : (
+        <>
+          <PageHeader
+            title="Torneos"
+            lede="Busca por nombre, club o lugar, o entra directo con el código que te han pasado."
+            meta={[loading ? "Cargando…" : `${all.length} ${all.length === 1 ? "torneo" : "torneos"}`]}
+          />
 
-      {/* Explorar / Mis torneos (antes nada llevaba a /torneos/mios). */}
-      <div className="tw-toolbar" role="tablist" aria-label="Torneos" style={{ marginBottom: 12 }}>
-        <span className="tw-fcp-chip is-on" role="tab" aria-selected="true" style={{ display: "inline-flex", alignItems: "center" }}>
-          Explorar
-        </span>
-        <Link href="/torneos/mios" className="tw-fcp-chip" role="tab" aria-selected="false" style={{ display: "inline-flex", alignItems: "center" }}>
-          Mis torneos
-        </Link>
-      </div>
+          {/* Explorar / Mis torneos (antes nada llevaba a /torneos/mios). */}
+          <div className="tw-toolbar" role="tablist" aria-label="Torneos" style={{ marginBottom: 12 }}>
+            <span className="tw-fcp-chip is-on" role="tab" aria-selected="true" style={{ display: "inline-flex", alignItems: "center" }}>
+              Explorar
+            </span>
+            <Link href="/torneos/mios" className="tw-fcp-chip" role="tab" aria-selected="false" style={{ display: "inline-flex", alignItems: "center" }}>
+              Mis torneos
+            </Link>
+          </div>
+        </>
+      )}
 
       <div className="tw-tourney-grid">
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>

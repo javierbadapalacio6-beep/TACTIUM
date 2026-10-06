@@ -156,18 +156,24 @@ const FED_NAMES: Record<string, string> = Object.fromEntries(
  * las federaciones sin datos con «Próximamente». Si tu federación es otra, lo
  * dice y lleva a la que sí está.
  */
-export function FederationPicker({ mine }: { mine?: string | null } = {}) {
+export function FederationPicker({
+  mine,
+  embedded = false,
+}: { mine?: string | null; embedded?: boolean } = {}) {
   const f = FEDERATIONS[0];
+  const title = mine ? "Tu federación aún no está" : "Federaciones";
+  const lede = mine
+    ? `${mine}: de momento leemos los datos de la Cántabra. El resto de federaciones irán entrando.`
+    : "De momento leemos los datos de la Federación Cántabra. El resto de federaciones irán entrando.";
   return (
     <div className="tw-page">
-      <PageHeader
-        title={mine ? "Tu federación aún no está" : "Federaciones"}
-        lede={
-          mine
-            ? `${mine}: de momento leemos los datos de la Cántabra. El resto de federaciones irán entrando.`
-            : "De momento leemos los datos de la Federación Cántabra. El resto de federaciones irán entrando."
-        }
-      />
+      {/* Dentro de Competir el título de página es «Competir»: aquí, un
+          título de bloque. */}
+      {embedded ? (
+        <SectionHead title={title} sub={lede} style={{ marginTop: 0 }} />
+      ) : (
+        <PageHeader title={title} lede={lede} />
+      )}
       <SectionHead title="Disponible" style={{ margin: "0 0 10px" }} />
       <Link href={`/federacion/${f.slug}`} style={{ color: "inherit", display: "block", maxWidth: 520 }}>
         <Card hover style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -191,7 +197,7 @@ export function FederationPicker({ mine }: { mine?: string | null } = {}) {
  * Competir › Federación: como en la app, va directa a la Cántabra; el
  * selector solo sale si tu equipo (o tu club) es de otra federación.
  */
-export function FederationForMe() {
+export function FederationForMe({ embedded = false }: { embedded?: boolean } = {}) {
   const { role, activeTeam, clubId, ready } = useSession();
   const fed = useAsync(
     () =>
@@ -204,9 +210,9 @@ export function FederationForMe() {
   if (!ready || fed.loading) return <SkeletonPage />;
   const code = fed.data ?? null;
   if (code && code !== FCP_FEDERATION_CODE) {
-    return <FederationPicker mine={FED_NAMES[code] ?? "Tu federación"} />;
+    return <FederationPicker mine={FED_NAMES[code] ?? "Tu federación"} embedded={embedded} />;
   }
-  return <FederationExplore slug="cantabra" />;
+  return <FederationExplore slug="cantabra" embedded={embedded} />;
 }
 
 /* ── Vista partida (≥1100 px): lista a la izquierda, detalle a la derecha ──
@@ -347,7 +353,14 @@ function FilterField({
   );
 }
 
-export function FederationExplore({ slug }: { slug: string }) {
+export function FederationExplore({
+  slug,
+  embedded = false,
+}: {
+  slug: string;
+  /** Dentro de Competir: sin «‹ Federaciones» y el nombre como h2 (el h1 es «Competir»). */
+  embedded?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("todo");
   const wide = useMinWidth(1100);
   const [sel, setSel] = useState<PaneSel | null>(null);
@@ -577,14 +590,20 @@ export function FederationExplore({ slug }: { slug: string }) {
           Sobre una pista de noche dibujada con gradientes: la
           federación es la cara pública de la aplicación. */}
       <header className="tw-fcp-hero">
-        <Link href="/federacion" className="tw-back" style={{ marginBottom: 12 }}>
-          <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
-          Federaciones
-        </Link>
+        {!embedded && (
+          <Link href="/federacion" className="tw-back" style={{ marginBottom: 12 }}>
+            <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
+            Federaciones
+          </Link>
+        )}
         <div className="tw-fcp-hero-top">
           <FedCrest logo="/federations/fcantp-mark.png" alt="" />
           <div className="tw-fcp-hero-txt">
-            <h1 className="tw-fcp-hero-title">Federación Cántabra de Pádel</h1>
+            {embedded ? (
+              <h2 className="tw-fcp-hero-title">Federación Cántabra de Pádel</h2>
+            ) : (
+              <h1 className="tw-fcp-hero-title">Federación Cántabra de Pádel</h1>
+            )}
             <p className="tw-fcp-hero-sub">
               Clasificaciones, jornadas y jugadores federados.
             </p>

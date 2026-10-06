@@ -27,6 +27,7 @@ import {
   Modal,
   Note,
   PageHeader,
+  SectionHead,
   Segmented,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
@@ -139,7 +140,7 @@ type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean };
 const sameCourt = (a: string, b: string) =>
   !!a.trim() && !!b.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
 
-export function ClubSchedule() {
+export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) {
   const { clubId } = useSession();
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -385,16 +386,20 @@ export function ClubSchedule() {
     : null;
   const favKeys = new Set(favSlots.map((s) => slotKey(s.day, s.hour)));
 
-  const header = (
-    <PageHeader
-      title="Horarios de local"
-      lede="Asigna día, hora y pista a los equipos que juegan en casa, sean tuyos o invitados."
-      actions={
-        <Btn onClick={() => setAddOpen(true)} icon={<IconPlus size={15} />}>
-          Añadir equipo invitado
-        </Btn>
-      }
-    />
+  const addGuest = (
+    <Btn onClick={() => setAddOpen(true)} icon={<IconPlus size={15} />}>
+      Añadir equipo invitado
+    </Btn>
+  );
+  const lede = "Asigna día, hora y pista a los equipos que juegan en casa, sean tuyos o invitados.";
+  // Dentro de Competir el título de página es «Competir»: aquí, un título de
+  // bloque con la misma acción.
+  const header = embedded ? (
+    <SectionHead title="Horarios de local" sub={lede} style={{ marginTop: 0 }}>
+      {addGuest}
+    </SectionHead>
+  ) : (
+    <PageHeader title="Horarios de local" lede={lede} actions={addGuest} />
   );
 
   if (loading) return <SkeletonPage />;
