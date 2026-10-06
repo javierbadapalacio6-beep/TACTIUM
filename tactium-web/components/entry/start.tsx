@@ -39,6 +39,7 @@ import {
   createTeam,
   fetchClub,
   fetchClubTeams,
+  fetchSubscription,
   startSubscriptionTrial,
 } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
@@ -61,6 +62,9 @@ import {
 import { useSession } from "@/lib/session";
 import { InlineInvitePreview } from "@/components/invite/InviteJoin";
 import { InvitePanel } from "@/components/invite/InvitePanel";
+import { ScanModal } from "@/components/team/ScanModal";
+import { FcpRosterModal } from "@/components/team/FcpRosterModal";
+import { normalizeName, type ScannedPlayer } from "@/lib/parse-image";
 import { guardedWrite } from "@/lib/writes";
 import { TOURNAMENT_FREE_PAIRS } from "@/lib/tournament-billing";
 import { EASE, Stagger, StaggerItem, StepProgress } from "./motion-bits";
@@ -1499,6 +1503,36 @@ export function AddPlayers() {
   const [nextId, setNextId] = useState(2);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [fcpOpen, setFcpOpen] = useState(false);
+  // Jugadores que ya entraron por la Federación (van directos a la plantilla).
+  const [imported, setImported] = useState<number | null>(null);
+  // El escaneo es premium, como en la app; normalmente pasa porque la prueba
+  // sin tarjeta arranca al crear el equipo en el paso anterior.
+  const sub = useAsync(() => fetchSubscription(), [scanOpen], scanOpen);
+
+  /** Lo escaneado entra en la lista de abajo; se guarda con el botón final. */
+  function addScanned(items: ScannedPlayer[]) {
+    const filled = players.filter((p) => p.name.trim().length > 0).map((p) => ({ ...p }));
+    const byName = new Map(filled.map((p) => [normalizeName(p.name), p]));
+    let id = nextId;
+    for (const s of items) {
+      const hit = byName.get(normalizeName(s.name));
+      const pts = s.pts != null ? String(s.pts) : "";
+      const pos = (s.position ?? "Ambos") as DraftPlayer["pos"];
+      if (hit) {
+        // Repetir el escaneo actualiza los puntos, no duplica.
+        hit.pts = pts || hit.pts;
+        hit.pos = pos;
+      } else {
+        const row: DraftPlayer = { id: id++, name: s.name, pts, pos };
+        filled.push(row);
+        byName.set(normalizeName(s.name), row);
+      }
+    }
+    setNextId(id);
+    setPlayers(filled);
+  }
 
   const patch = (id: number, p: Partial<DraftPlayer>) =>
     setPlayers((ps) => ps.map((x) => (x.id === id ? { ...x, ...p } : x)));
@@ -1627,35 +1661,55 @@ export function AddPlayers() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Card flush>
-            <CardHead title="Escanear ranking" />
+            <CardHead title="Traer la plantilla" />
             <div className="card-body">
-              <label
+              <button
+                type="button"
+                onClick={() => setScanOpen(true)}
                 style={{
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
                   gap: 12,
+                  width: "100%",
                   padding: "24px 18px",
                   borderRadius: "var(--r-md)",
                   border: "1px dashed var(--line-strong)",
+                  background: "transparent",
+                  color: "var(--text)",
                   cursor: "pointer",
                   textAlign: "center",
+                  fontFamily: "var(--font-ui)",
                 }}
               >
                 <span style={{ color: "var(--accent)" }}>
                   <IconUpload size={22} />
                 </span>
-                <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                  Arrastra una imagen o un PDF del ranking de la federación, o pega desde el
-                  portapapeles
+                <span style={{ fontSize: 13.5, fontWeight: 600 }}>Escanear el ranking</span>
+                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                  Una foto o el PDF de la lista de puntos. Revisas los jugadores antes de añadirlos.
                 </span>
-                <input type="file" accept="image/*,.pdf" hidden />
-              </label>
-              <Btn block style={{ marginTop: 12 }}>
-                Importar desde la Federación Cántabra
-              </Btn>
+              </button>
+              {activeTeam && (
+                <Btn
+                  block
+                  icon={<IconFlag size={15} />}
+                  style={{ marginTop: 12 }}
+                  onClick={() => setFcpOpen(true)}
+                >
+                  Importar desde la Federación Cántabra
+                </Btn>
+              )}
             </div>
           </Card>
+
+          {imported != null && (
+            <Note tone="accent" icon={<IconFlag size={16} />}>
+              {imported > 0
+                ? `${imported} ${imported === 1 ? "jugador importado" : "jugadores importados"} de la Federación, ya en tu plantilla.`
+                : "Ya tenías a toda la plantilla de la Federación."}
+            </Note>
+          )}
 
           <Note icon={<IconCheck size={16} />}>
             <span className="mono">{validPlayers.length}</span>{" "}
@@ -1683,8 +1737,35 @@ export function AddPlayers() {
           ? "Guardando…"
           : validPlayers.length > 0
             ? `Añadir ${validPlayers.length} y continuar`
-            : "Continuar sin jugadores"}
+            : imported
+              ? "Continuar"
+              : "Continuar sin jugadores"}
       </Btn>
+
+      <ScanModal
+        mode="ranking"
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        checking={sub.loading && !sub.data}
+        locked={!sub.data}
+        lockedIntent="roster_import"
+        lockedText="Escanear el ranking y volcar la plantilla con sus puntos es una función premium. Empieza la prueba gratis para usarlo o añade los jugadores a mano; podrás volcarla después."
+        onConfirm={async (items) => {
+          addScanned(items);
+          return null;
+        }}
+      />
+      {activeTeam && (
+        <FcpRosterModal
+          open={fcpOpen}
+          teamId={activeTeam.id}
+          onClose={() => setFcpOpen(false)}
+          onImported={(n) => {
+            setFcpOpen(false);
+            setImported((prev) => (prev ?? 0) + n);
+          }}
+        />
+      )}
     </EntryFrame>
   );
 }

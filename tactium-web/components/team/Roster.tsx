@@ -67,6 +67,8 @@ import {
   IconX,
 } from "@/components/Icon";
 import { EditTeamModal } from "@/components/team/EditTeamModal";
+import { ScanModal } from "@/components/team/ScanModal";
+import { bulkUpsertPlayers } from "@/lib/parse-image";
 import { PairStats } from "@/components/team/PairStats";
 import { ACCOUNT_DOT, PlayerCard } from "@/components/team/PlayerCard";
 import { Crest } from "@/components/Crest";
@@ -356,7 +358,11 @@ export function Roster() {
   const [fcpErr, setFcpErr] = useState<string | null>(null);
 
   // El volcado masivo es premium en las cinco superficies.
-  const sub = useAsync(() => fetchSubscription(), [fcpOpen, menuOpen], fcpOpen || menuOpen);
+  const sub = useAsync(
+    () => fetchSubscription(),
+    [fcpOpen, menuOpen, scanOpen],
+    fcpOpen || menuOpen || scanOpen,
+  );
 
   useEffect(() => {
     if (!fcpOpen || fcpQuery.trim().length < 2) {
@@ -1415,44 +1421,32 @@ export function Roster() {
         </Modal>
       )}
 
-      {/* ── Escanear ranking ─────────────────────────────────────── */}
-      <Modal
+      {/* Escanear ranking (parse-image, como la app) */}
+      <ScanModal
+        mode="ranking"
         open={scanOpen}
         onClose={() => setScanOpen(false)}
-        labelledBy="escanear"
-        width={520}
-        title="Escanear ranking"
-        lede="En el móvil esto se hace con la cámara. Aquí, arrastrando el archivo."
-        footer={
-          <>
-            <Btn onClick={() => setScanOpen(false)}>Cancelar</Btn>
-            <Btn variant="accent" disabled>
-              Importar jugadores
-            </Btn>
-          </>
-        }
-      >
-        <label
-          className="card card-quiet"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 12,
-            padding: "32px 20px",
-            cursor: "pointer",
-            textAlign: "center",
-          }}
-        >
-          <IconTile>
-            <IconUpload size={16} />
-          </IconTile>
-          <span style={{ fontSize: 13, color: "var(--text-muted)", textWrap: "pretty" }}>
-            Arrastra una imagen o un PDF, o pega desde el portapapeles
-          </span>
-          <input type="file" accept="image/*,.pdf" hidden />
-        </label>
-      </Modal>
+        checking={sub.loading && !sub.data}
+        locked={!sub.data}
+        lockedIntent="roster_import"
+        onConfirm={async (items) => {
+          if (!teamId) return "No hay equipo activo.";
+          const res = await guardedWrite("importar los jugadores escaneados", () =>
+            bulkUpsertPlayers(teamId, items, PLAYERS),
+          );
+          if (!res.ok) return res.reason;
+          setReloadKey((k) => k + 1);
+          const { added, updated } = res.data;
+          setToast(
+            added && updated
+              ? `Plantilla actualizada: ${added} ${added === 1 ? "nuevo" : "nuevos"} y ${updated} con los puntos al día`
+              : updated
+                ? `Puntos actualizados de ${updated} ${updated === 1 ? "jugador" : "jugadores"}`
+                : `${added} ${added === 1 ? "jugador añadido" : "jugadores añadidos"}`,
+          );
+          return null;
+        }}
+      />
 
       {teamId && (
         <EditTeamModal
