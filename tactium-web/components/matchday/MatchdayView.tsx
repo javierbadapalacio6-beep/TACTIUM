@@ -45,6 +45,7 @@ import {
   StatRow,
 } from "@/components/ui";
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
+import { TimePollPanel } from "@/components/matchday/TimePollPanel";
 import {
   IconAlert,
   IconCalendar,
@@ -1342,6 +1343,9 @@ export function MatchdayView({ id }: { id: string }) {
       </div>
 
       <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
+      {/* Encuesta de hora (lógica en TimePollPanel). */}
+      {curTab === "previa" && !closed && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+
       {curTab === "previa" && (
         <div style={twoCols}>
           {lastMeetingCard}

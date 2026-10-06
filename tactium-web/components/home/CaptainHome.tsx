@@ -29,6 +29,7 @@ import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import { ConvoBar, RsvpButtons, formatDeadline, timeLeft } from "@/components/team/AvailabilityControls";
+import { TimePollPanel } from "@/components/matchday/TimePollPanel";
 import { getCourtsForCompetition, type TeamGender } from "@/lib/courts";
 import { proHref } from "@/lib/nav";
 import { Avatar, Btn, BtnLink, Card, Chip } from "@/components/ui";
@@ -542,6 +543,12 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                   <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--error)" }}>{availError}</div>
                 )}
               </div>
+            )}
+
+            {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
+                el recuento (TimePollPanel). */}
+            {!started && m.status === "upcoming" && (
+              <TimePollPanel variant="home" matchdayId={m.id} canManage={isCaptain} />
             )}
 
             {isCaptain && (

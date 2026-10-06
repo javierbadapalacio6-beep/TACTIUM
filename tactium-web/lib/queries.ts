@@ -1539,6 +1539,14 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
       return "/equipo";
     case "schedule_set":
       return "/club/horarios";
+    // Encuesta de hora: el bloque vive en la jornada. Al gestor del club que
+    // no es del equipo se le avisa de la hora fijada → Horarios.
+    case "time_poll_open":
+    case "time_poll_reminder":
+      return jornada ? `/jornada/${jornada}` : null;
+    case "time_poll_fixed":
+      if (data?.for_club) return "/club/horarios";
+      return jornada ? `/jornada/${jornada}` : null;
     case "kudos": {
       // data = {type, actor_id, target_kind: 'casual'|'league', target_id}
       const target = g("target_id", "targetId");

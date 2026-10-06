@@ -486,6 +486,11 @@ function linkAction(n: Notice): [string, string] | null {
       return ["Ver plantilla", "/equipo"];
     case "schedule_set":
       return ["Ver horario", "/club/horarios"];
+    case "time_poll_open":
+    case "time_poll_reminder":
+      return n.href ? ["Votar", n.href] : null;
+    case "time_poll_fixed":
+      return n.href ? [n.href === "/club/horarios" ? "Ver horario" : "Ver jornada", n.href] : null;
     case "tournament_bracket":
       return t ? ["Ver cuadro", `/torneos/${t}`] : null;
     case "tournament_schedule":

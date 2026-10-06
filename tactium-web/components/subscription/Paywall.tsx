@@ -46,6 +46,10 @@ const MOTIVOS: Record<string, { title: string; sub: string }> = {
     title: "Recordar a los pendientes es Pro",
     sub: "Un toque y les llega el aviso, sin perseguir a nadie",
   },
+  time_poll: {
+    title: "La encuesta de hora es Pro",
+    sub: "Propón horas, el equipo vota y la fijas con un toque",
+  },
   roster_import: {
     title: "Importar la plantilla es Pro",
     sub: "Todos los jugadores con sus puntos oficiales",
