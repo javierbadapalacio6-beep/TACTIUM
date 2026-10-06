@@ -5,6 +5,7 @@ import {
   IconShield,
   IconUsers,
 } from "@/components/Icon";
+import { INSCRIPTION_MONEY_TEXT } from "@/lib/public-copy";
 import { Reveal } from "./Reveal";
 
 /** Formatos de torneo. Los usa también la página de venta de /torneos/organizar. */
@@ -19,7 +20,7 @@ const BULLETS = [
   { icon: IconUsers, text: "Inscripción desde la web o la app, por categorías y con reglas de nivel y puntos" },
   { icon: IconCalendar, text: "Horario automático por pistas, y una rejilla para moverlo a mano" },
   { icon: IconShield, text: "Grupos, cuadros y consolación que se generan solos" },
-  { icon: IconReceipt, text: "El dinero de las inscripciones llega a la cuenta del club" },
+  { icon: IconReceipt, text: "Inscripciones cobradas online o en mano, como prefiera el organizador" },
 ];
 
 export function Tournaments() {
@@ -32,9 +33,10 @@ export function Tournaments() {
             Torneos completos, del cartel a la final
           </h2>
           <p className="mk-lede">
-            Eliges el formato, los jugadores se apuntan, los cuadros se generan
-            solos y el horario se reparte por pistas. Todo el mundo sigue los
-            resultados en directo, sin hojas de cálculo.
+            Quien organiza el torneo lo monta con TACTIUM: elige el formato, los
+            jugadores se apuntan, los cuadros se generan solos y el horario se
+            reparte por pistas. Todo el mundo sigue los resultados en directo,
+            sin hojas de cálculo.
           </p>
         </Reveal>
 
@@ -59,7 +61,14 @@ export function Tournaments() {
           ))}
         </ul>
 
+        <Reveal as="div" className="mk-fine" style={{ maxWidth: "62ch" }}>
+          {INSCRIPTION_MONEY_TEXT}
+        </Reveal>
+
         <Reveal className="mk-actions">
+          <BtnLink href="/torneos/organizar" variant="accent">
+            Organizar un torneo
+          </BtnLink>
           <BtnLink href="/torneos" variant="ghost">
             Ver torneos en marcha
           </BtnLink>

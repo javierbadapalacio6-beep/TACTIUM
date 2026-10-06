@@ -4,13 +4,13 @@ import { useState } from "react";
 
 import { BtnLink, Chip } from "@/components/ui";
 import { IconCheck } from "@/components/Icon";
+import { ALL_PLANS, TRIAL_DURATION_DAYS, formatEur, type Plan } from "@/lib/plans";
 import {
-  ALL_PLANS,
-  TRIAL_DURATION_DAYS,
-  annualDiscountPercent,
-  formatEur,
-  type Plan,
-} from "@/lib/plans";
+  ANNUAL_SAVING_TEXT,
+  FREE_AFTER_TRIAL,
+  INSCRIPTION_MONEY_TEXT,
+  priceTaxNote,
+} from "@/lib/public-copy";
 import {
   TOURNAMENT_FREE_PAIRS,
   TOURNAMENT_TIERS,
@@ -25,9 +25,8 @@ type Billing = "monthly" | "yearly";
  * el paywall de `/pro`— para que la portada nunca diga un precio distinto al
  * que se cobra.
  */
-export function PricingTeaser() {
+export function PricingTeaser({ onProPage = false }: { onProPage?: boolean } = {}) {
   const [billing, setBilling] = useState<Billing>("yearly");
-  const discount = annualDiscountPercent(ALL_PLANS[1]);
 
   return (
     <section id="precios" className="mk-sec" aria-labelledby="mk-price-title">
@@ -39,7 +38,8 @@ export function PricingTeaser() {
           </h2>
           <p className="mk-lede">
             Sin permanencia. Cambia o cancela cuando quieras desde tu cuenta.
-            Los jugadores no pagan nunca.
+            Los jugadores no pagan nunca. Si al acabar la prueba no eliges plan,
+            no se cobra nada y sigues en el plan gratis.
           </p>
           <div className="mk-billing" role="group" aria-label="Periodo de facturación">
             <button
@@ -54,7 +54,7 @@ export function PricingTeaser() {
               className={billing === "yearly" ? "is-on" : ""}
               onClick={() => setBilling("yearly")}
             >
-              Anual <Chip tone="accent">−{discount}%</Chip>
+              Anual <Chip tone="accent">{ANNUAL_SAVING_TEXT}</Chip>
             </button>
           </div>
         </Reveal>
@@ -73,6 +73,9 @@ export function PricingTeaser() {
               las parejas inscritas. Hasta {TOURNAMENT_FREE_PAIRS} parejas no
               cuesta nada.
             </p>
+            <p className="mk-fine" style={{ marginTop: 8 }}>
+              {INSCRIPTION_MONEY_TEXT}
+            </p>
           </div>
           <div className="mk-tiers">
             {TOURNAMENT_TIERS.map((t) => (
@@ -84,11 +87,25 @@ export function PricingTeaser() {
           </div>
         </Reveal>
 
-        <Reveal className="mk-actions" style={{ justifyContent: "center" }}>
-          <BtnLink href="/pro" variant="ghost">
-            Ver todos los detalles de los planes
-          </BtnLink>
+        <Reveal className="mk-free-after" delay={0.1}>
+          <h3>Qué sigue gratis después del día {TRIAL_DURATION_DAYS}</h3>
+          <ul>
+            {FREE_AFTER_TRIAL.map((f) => (
+              <li key={f}>
+                <IconCheck size={14} />
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
         </Reveal>
+
+        {!onProPage && (
+          <Reveal className="mk-actions" style={{ justifyContent: "center" }}>
+            <BtnLink href="/pro" variant="ghost">
+              Comparar los planes
+            </BtnLink>
+          </Reveal>
+        )}
       </div>
     </section>
   );
@@ -120,6 +137,8 @@ function PlanCard({ plan, billing, delay }: { plan: Plan; billing: Billing; dela
         {yearly
           ? `equivale a ${formatEur(perMonth)} al mes`
           : `o ${formatEur(plan.priceYearlyEur)} al año`}
+        <br />
+        {priceTaxNote(plan.tier)}
       </p>
       <ul>
         {plan.features.slice(0, 4).map((f) => (

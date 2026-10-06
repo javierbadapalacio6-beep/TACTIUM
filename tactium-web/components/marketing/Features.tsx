@@ -58,6 +58,8 @@ export function Features() {
                 <span><i>P1</i> Marcos · Álvaro <b>1.840</b></span>
                 <span><i>P2</i> Jorge · Nacho <b>1.615</b></span>
                 <span><i>P3</i> Dani · Rubén <b>1.390</b></span>
+                <span><i>P4</i> Iván · Hugo <b>1.205</b></span>
+                <span><i>P5</i> Pablo · Sergio <b>1.060</b></span>
               </div>
             }
           />

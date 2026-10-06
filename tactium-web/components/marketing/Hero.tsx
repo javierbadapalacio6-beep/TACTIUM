@@ -1,6 +1,8 @@
 import { BtnLink } from "@/components/ui";
 import { IconChevronDown } from "@/components/Icon";
 import { HeroBackdrop } from "./HeroBackdrop";
+import { PhoneFrame } from "./PhoneFrame";
+import { StoreBadges } from "./StoreBadges";
 import { SIGNUP_HREF } from "@/lib/nav";
 
 export function Hero() {
@@ -34,8 +36,25 @@ export function Hero() {
           <p className="mk-fine">
             14 días gratis · sin tarjeta para empezar · los jugadores no pagan
           </p>
+          <div className="mk-hero-stores">
+            <StoreBadges />
+          </div>
         </div>
-        <div className="mk-hero-stage" aria-hidden="true" />
+
+        {/* Captura con 5 parejas (Liga Cántabra): la de alineación enseña 3 y
+            hay que repetirla antes de usarla aquí. */}
+        {/* El producto de verdad, delante de la pista 3D. En móvil va DEBAJO
+            del texto (rejilla de una columna), nunca encima. */}
+        <div className="mk-hero-stage">
+          <div className="mk-hero-phone">
+            <PhoneFrame
+              src="/screens/jornada-pendiente.jpg"
+              alt="Pantalla de una jornada en TACTIUM: rival, sede, hora y las cinco parejas por alinear"
+              size="hero"
+              priority
+            />
+          </div>
+        </div>
       </div>
 
       <a href="#flujo" className="mk-hero-scroll">

@@ -1,6 +1,6 @@
 import { INSCRIPTION_FEE_BPS, INSCRIPTION_FEE_FIXED_CENTS } from "@/lib/connect";
 import { ALL_PLANS, annualDiscountPercent } from "@/lib/plans";
-import { vatNote } from "@/lib/tax";
+import { TAX_ENABLED, vatNote } from "@/lib/tax";
 
 /**
  * Frases de negocio que se repiten en varias páginas públicas. Viven aquí para
@@ -29,6 +29,11 @@ export const ANNUAL_SAVING_TEXT = `hasta −${MAX_ANNUAL_DISCOUNT} %`;
 export function priceTaxNote(tier: string): string {
   return vatNote(tier) || "Precio final, sin impuestos añadidos";
 }
+
+/** Resumen de impuestos para el pie de una tabla de precios. */
+export const PRICES_TAX_SUMMARY = TAX_ENABLED
+  ? "El plan Capitán lleva el IVA incluido; los planes de club se facturan + IVA."
+  : "Los precios son finales: no se añade ningún impuesto al pagar.";
 
 /**
  * Lo que sigue gratis cuando acaba la prueba sin suscribirse. Mismo criterio

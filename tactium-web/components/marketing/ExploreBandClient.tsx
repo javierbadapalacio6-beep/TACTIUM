@@ -6,15 +6,7 @@ import { useEffect, useState } from "react";
 import { BtnLink } from "@/components/ui";
 import { EmptyState, Skeleton } from "@/components/states";
 import { IconFlag, IconSearch, IconTrophy } from "@/components/Icon";
-import {
-  exploreTournaments,
-  fetchFcpGroupMetas,
-  fetchFcpGroups,
-  fetchFcpLeagues,
-  fetchFcpStandings,
-  type FcpGroup,
-  type FcpStanding,
-} from "@/lib/queries";
+import { exploreTournaments } from "@/lib/queries";
 import { useAsync } from "@/lib/use-async";
 import { Reveal } from "./Reveal";
 import {
@@ -22,21 +14,16 @@ import {
   groupTournaments,
   type RowTournament,
 } from "@/components/tournaments/TournamentRow";
+import type { FeaturedGroup } from "./explore-data";
 
 /**
- * La parte que se puede usar SIN cuenta, con datos de verdad: los torneos que
- * los clubes tienen en marcha y una clasificación real de la Federación
- * Cántabra. Todo sale de fuentes ya públicas (`explore_tournaments` y las
- * tablas `fcp_*` de lectura abierta).
+ * La parte que se puede usar SIN cuenta, con datos de verdad. Los datos de
+ * partida llegan ya del servidor (cacheados, ver `explore-data.ts`); el
+ * navegador solo consulta cuando el visitante busca.
  */
 
 const PREVIEW = 4;
-const STANDINGS_ROWS = 5;
 const FED_SLUG = "cantabra";
-
-/** Los clubes de demostración no salen en la portada. */
-const isDemo = (t: { club_name: string | null; name: string }) =>
-  /\bdemo\b|\btest\b/i.test(`${t.club_name ?? ""} ${t.name}`);
 
 /** "5ª CATEGORIA MASCULINA - GRUPO A" → "5ª categoría masculina · Grupo A". */
 function prettyGroup(nombre: string): string {
@@ -48,39 +35,13 @@ function prettyGroup(nombre: string): string {
     .replace(/grupo (\w+)/gi, (_, g: string) => `Grupo ${g.toUpperCase()}`);
 }
 
-interface FeaturedGroup {
-  group: FcpGroup;
-  rows: FcpStanding[];
-  live: boolean;
-}
-
-/** Un grupo de liga regular de la temporada en curso, a poder ser en juego. */
-async function pickFeaturedGroup(): Promise<FeaturedGroup | null> {
-  const leagues = await fetchFcpLeagues();
-  const league = leagues.find((l) => !l.upcoming);
-  if (!league) return null;
-  const groups = (await fetchFcpGroups(league.idLiga)).filter((g) => !g.esPlayoff);
-  if (groups.length === 0) return null;
-  const metas = await fetchFcpGroupMetas(groups.slice(0, 60).map((g) => g.idGrupo));
-  const scored = groups
-    .map((g) => ({ g, m: metas[g.idGrupo] }))
-    .filter((x) => x.m && x.m.equiposCount >= 4)
-    .sort((a, b) => {
-      const la = a.m.live ? 1 : 0;
-      const lb = b.m.live ? 1 : 0;
-      if (la !== lb) return lb - la;
-      const ea = a.m.estado === "en_curso" ? 1 : 0;
-      const eb = b.m.estado === "en_curso" ? 1 : 0;
-      if (ea !== eb) return eb - ea;
-      return b.m.equiposCount - a.m.equiposCount;
-    });
-  const best = scored[0] ?? { g: groups[0], m: undefined };
-  const rows = await fetchFcpStandings(best.g.idGrupo);
-  if (rows.length === 0) return null;
-  return { group: best.g, rows: rows.slice(0, STANDINGS_ROWS), live: Boolean(best.m?.live) };
-}
-
-export function ExploreBand() {
+export function ExploreBandClient({
+  initialTournaments,
+  featured,
+}: {
+  initialTournaments: RowTournament[];
+  featured: FeaturedGroup | null;
+}) {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
 
@@ -89,14 +50,16 @@ export function ExploreBand() {
     return () => clearTimeout(id);
   }, [query]);
 
-  const tournaments = useAsync(() => exploreTournaments(debounced), [debounced]);
-  const featured = useAsync(pickFeaturedGroup, []);
-
-  const rows = (tournaments.data ?? []).filter((t) => !isDemo(t));
-  // Primero lo que está en juego, luego lo abierto (la misma tarjeta que /torneos).
-  const grouped = groupTournaments(rows as unknown as RowTournament[]);
-  const shown = [...grouped.live, ...grouped.open, ...grouped.soon, ...grouped.done].slice(0, PREVIEW);
   const searching = debounced.trim().length > 0;
+  const search = useAsync(() => exploreTournaments(debounced), [debounced], searching);
+
+  const rows = searching
+    ? ((search.data ?? []) as unknown as RowTournament[])
+    : initialTournaments;
+  // Primero lo que está en juego, luego lo abierto (la misma tarjeta que /torneos).
+  const grouped = groupTournaments(rows);
+  const shown = [...grouped.live, ...grouped.open, ...grouped.soon].slice(0, PREVIEW);
+  const loading = searching && search.loading;
 
   return (
     <section id="explorar" className="mk-sec mk-explore" aria-labelledby="mk-explore-title">
@@ -107,9 +70,9 @@ export function ExploreBand() {
             Torneos y federación, sin cuenta
           </h2>
           <p className="mk-lede">
-            Cuadros, horarios y resultados de los torneos que organizan los
-            clubes, y la competición federada al completo. Entra solo cuando
-            quieras inscribirte o llevar tu equipo.
+            Cuadros, horarios y resultados de los torneos que montan clubes y
+            organizadores, y la competición federada al completo. Entra solo
+            cuando quieras inscribirte o llevar tu equipo.
           </p>
         </Reveal>
 
@@ -134,30 +97,41 @@ export function ExploreBand() {
               />
             </label>
 
-            {tournaments.loading ? (
+            {loading ? (
               <div className="mk-tourneys">
                 {Array.from({ length: PREVIEW }).map((_, i) => (
                   <Skeleton key={i} h={118} r={14} />
                 ))}
               </div>
-            ) : tournaments.error ? (
+            ) : searching && search.error ? (
               <EmptyState
                 compact
                 icon={<IconTrophy size={22} />}
                 title="No se han podido cargar los torneos"
-                body={tournaments.error}
+                body={search.error}
               />
             ) : shown.length === 0 ? (
-              <EmptyState
-                compact
-                icon={<IconTrophy size={22} />}
-                title={searching ? "Ningún torneo con esa búsqueda" : "Todavía no hay torneos"}
-                body={
-                  searching
-                    ? "Prueba con el nombre del club o de la localidad."
-                    : "En cuanto un club publique el suyo, aparecerá aquí."
-                }
-              />
+              searching ? (
+                <EmptyState
+                  compact
+                  icon={<IconTrophy size={22} />}
+                  title="Ningún torneo con esa búsqueda"
+                  body="Prueba con el nombre del club o de la localidad."
+                />
+              ) : (
+                // Sin torneos vivos, el hueco se dirige a quien organiza.
+                <EmptyState
+                  compact
+                  icon={<IconTrophy size={22} />}
+                  title="¿Organizas un torneo?"
+                  body="Ahora mismo no hay torneos abiertos. Monta el tuyo: inscripción online, cuadros y horario por pistas, y aparecerá aquí."
+                  action={
+                    <BtnLink href="/torneos/organizar" variant="ghost">
+                      Organizar un torneo
+                    </BtnLink>
+                  }
+                />
+              )
             ) : (
               <div className="card card-flush" style={{ padding: 0 }}>
                 {shown.map((t) => (
@@ -174,10 +148,8 @@ export function ExploreBand() {
                 Toda la federación
               </Link>
             </h3>
-            {featured.loading ? (
-              <Skeleton h={320} r={20} />
-            ) : featured.data ? (
-              <FeaturedStandings data={featured.data} />
+            {featured ? (
+              <FeaturedStandings data={featured} />
             ) : (
               <EmptyState
                 compact
