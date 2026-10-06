@@ -82,7 +82,7 @@ const PHASE_LABEL: Record<DbSeason["phase"], string> = {
  * racha con resultado). Sin temporada, el capitán tiene los tres caminos; el
  * jugador, el aviso y el salto a Federación.
  */
-export function SeasonsList() {
+export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
   const { activeTeam, role, user } = useSession();
   const teamId = activeTeam?.id ?? null;
   // Solo capitán/club crean temporadas; el jugador las consulta (Competir › Liga).
@@ -186,17 +186,33 @@ export function SeasonsList() {
 
   return (
     <div className="tw-page">
-      <PageHeader
-        title="Liga"
-        meta={[activeTeam?.name ?? null, activeTeam?.category ?? null]}
-        actions={
-          canManage && active ? (
+      {/* Dentro de Competir el título es «Competir» y la pestaña ya dice
+          «Liga»: aquí basta con el equipo y la acción. */}
+      {embedded ? (
+        <SectionHead
+          title={activeTeam?.name ?? "Liga"}
+          sub={activeTeam?.category ?? undefined}
+          style={{ marginTop: 0 }}
+        >
+          {canManage && active ? (
             <Btn variant="ghost" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
               Nueva temporada
             </Btn>
-          ) : undefined
-        }
-      />
+          ) : null}
+        </SectionHead>
+      ) : (
+        <PageHeader
+          title="Liga"
+          meta={[activeTeam?.name ?? null, activeTeam?.category ?? null]}
+          actions={
+            canManage && active ? (
+              <Btn variant="ghost" onClick={() => setOpen(true)} icon={<IconPlus size={15} />}>
+                Nueva temporada
+              </Btn>
+            ) : undefined
+          }
+        />
+      )}
 
       {!teamId ? (
         <Card>

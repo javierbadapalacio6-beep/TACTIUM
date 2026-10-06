@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useSession } from "@/lib/session";
-import { BtnLink, Card, Segmented } from "@/components/ui";
+import { BtnLink, Card, PageHeader } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { SeasonsList } from "@/components/seasons/SeasonsList";
 import { ClubSchedule } from "@/components/club/ClubSchedule";
@@ -12,12 +13,15 @@ import { ExploreTournaments } from "@/components/tournaments/ExploreTournaments"
 import { IconCalendar, IconCreditCard, IconPlus, IconTrophy, IconUsers } from "@/components/Icon";
 
 /**
- * «Competir»: liga, federación y torneos bajo un mismo apartado, con el
- * selector arriba (como en la app). Cada vista es la pantalla de siempre,
- * embebida tal cual; las rutas antiguas (`/temporadas`, `/federacion`,
- * `/torneos`…) siguen funcionando y encienden también «Competir» en el menú.
+ * «Competir»: liga, federación y torneos bajo un mismo apartado. Título
+ * «Competir» y, debajo, las pestañas (como en la app). Cada vista es la
+ * pantalla de siempre, embebida; las rutas antiguas (`/temporadas`,
+ * `/federacion`, `/torneos`…) siguen funcionando y encienden también
+ * «Competir» en el menú.
  *
- * La vista elegida se recuerda en este navegador.
+ * La vista va en la URL (`/competir?vista=liga|federacion|torneos`) para
+ * poder enlazarla y volver atrás; sin parámetro, la última elegida en este
+ * navegador o la que toque por rol.
  */
 type Vista = "liga" | "federacion" | "torneos";
 
@@ -34,61 +38,115 @@ function isVista(v: unknown): v is Vista {
 
 export function Compete() {
   const { role, clubs, clubId, ready } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
   const tournamentsOnly =
     role === "club" && (clubs.find((c) => c.id === clubId)?.tournamentsOnly ?? false);
   // Sin liga propia (suelto, organizador), lo natural es empezar por torneos.
   const fallback: Vista = role === "suelto" || tournamentsOnly ? "torneos" : "liga";
 
-  const [vista, setVista] = useState<Vista | null>(null);
+  const fromUrl = params.get("vista");
+  const [saved, setSaved] = useState<Vista | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
-    let saved: unknown = null;
     try {
-      saved = localStorage.getItem(STORAGE_KEY);
+      const s = localStorage.getItem(STORAGE_KEY);
+      if (isVista(s)) setSaved(s);
     } catch {
       /* sin storage: vista por defecto */
     }
-    setVista(isVista(saved) ? saved : fallback);
-  }, [ready, fallback]);
+    setLoaded(true);
+  }, [ready]);
+
+  const vista: Vista | null = isVista(fromUrl) ? fromUrl : loaded ? (saved ?? fallback) : null;
 
   function choose(v: Vista) {
-    setVista(v);
+    setSaved(v);
     try {
       localStorage.setItem(STORAGE_KEY, v);
     } catch {
       /* sin storage: no se recuerda, sin más */
     }
+    const q = new URLSearchParams(params.toString());
+    q.set("vista", v);
+    router.replace(`${pathname}?${q.toString()}`, { scroll: false });
   }
 
   return (
     <>
-      <div className="tw-page" style={{ marginBottom: 20 }}>
-        <Segmented<Vista>
-          label="Competir"
-          value={vista ?? fallback}
-          options={VISTAS}
-          onChange={choose}
-        />
+      <div className="tw-page">
+        <PageHeader title="Competir" />
+        <VistaTabs value={vista ?? fallback} onChange={choose} />
       </div>
 
-      {vista === null ? (
-        <div className="tw-page">
-          <SkeletonCard />
-        </div>
-      ) : vista === "liga" ? (
-        <Liga role={role} tournamentsOnly={tournamentsOnly} />
-      ) : vista === "federacion" ? (
-        <FederationForMe />
-      ) : (
-        <Torneos isClub={role === "club"} tournamentsOnly={tournamentsOnly} />
-      )}
+      <div id={`competir-${vista ?? fallback}`} role="tabpanel" aria-labelledby={`competir-tab-${vista ?? fallback}`}>
+        {vista === null ? (
+          <div className="tw-page">
+            <SkeletonCard />
+          </div>
+        ) : vista === "liga" ? (
+          <Liga role={role} tournamentsOnly={tournamentsOnly} />
+        ) : vista === "federacion" ? (
+          <FederationForMe />
+        ) : (
+          <Torneos isClub={role === "club"} tournamentsOnly={tournamentsOnly} />
+        )}
+      </div>
     </>
   );
 }
 
+/**
+ * Pestañas de navegación (no un control de formulario): `role="tablist"`,
+ * flechas, Inicio y Fin. Usa las clases del `Segmented` de `ui.tsx`, que
+ * es un `radiogroup` y no sirve aquí.
+ */
+function VistaTabs({ value, onChange }: { value: Vista; onChange: (v: Vista) => void }) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  function onKey(e: KeyboardEvent<HTMLDivElement>) {
+    const i = VISTAS.findIndex((v) => v.value === value);
+    let j = i;
+    if (e.key === "ArrowRight") j = (i + 1) % VISTAS.length;
+    else if (e.key === "ArrowLeft") j = (i - 1 + VISTAS.length) % VISTAS.length;
+    else if (e.key === "Home") j = 0;
+    else if (e.key === "End") j = VISTAS.length - 1;
+    else return;
+    e.preventDefault();
+    onChange(VISTAS[j].value);
+    refs.current[j]?.focus();
+  }
+  return (
+    <div className="seg" role="tablist" aria-label="Competir" onKeyDown={onKey} style={{ marginBottom: 20 }}>
+      {VISTAS.map((v, i) => {
+        const on = v.value === value;
+        return (
+          <button
+            key={v.value}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            id={`competir-tab-${v.value}`}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            aria-controls={`competir-${v.value}`}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(v.value)}
+            className={"seg-item" + (on ? " is-on" : "")}
+          >
+            {v.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function Liga({ role, tournamentsOnly }: { role: string; tournamentsOnly: boolean }) {
-  if (role === "capitan" || role === "jugador") return <SeasonsList />;
+  if (role === "capitan" || role === "jugador") return <SeasonsList embedded />;
   if (role === "club" && !tournamentsOnly) return <ClubSchedule />;
 
   // Suelto u organizador: no hay liga que enseñar todavía.
