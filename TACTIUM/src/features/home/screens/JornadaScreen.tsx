@@ -67,6 +67,7 @@ import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
+import { LiveScoreboard } from '../components/live/LiveScoreboard';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { useTeamStore, selectIsCaptain, selectIsPlayer } from '@store/teamStore';
 import {
@@ -1079,6 +1080,23 @@ const JornadaDetail = ({
         {/* === RESULTADO === */}
         {tab === 'resultado' ? (
           <>
+            {/* === EN DIRECTO (marcador en vivo, juego a juego) === */}
+            <LiveScoreboard
+              matchdayId={matchday.id}
+              courts={courts}
+              teamName={teamName}
+              opponent={matchday.opponent}
+              jornadaNumber={matchday.jornada_number}
+              matchStarted={matchStarted}
+              closed={closed}
+              onScoreCourt={(court) =>
+                gate(
+                  () => navigation.navigate('LiveScore', { matchdayId: matchday.id, court }),
+                  'results_edit',
+                )()
+              }
+            />
+
             {/* === RESULT CARD === */}
             <ResultCard
               status={status}

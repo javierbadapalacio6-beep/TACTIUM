@@ -58,6 +58,7 @@ import {
   OtherTeamsMatchdays,
   formatMatchDate,
 } from '@features/home/components/OtherTeamsMatchdays';
+import { LiveHomeCard } from '@features/home/components/live/LiveHomeCard';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
@@ -348,6 +349,17 @@ export const HomeScreen = ({
         {/* Varios equipos: la próxima jornada de los demás, para saltar a
             ellos de un toque. Con un solo equipo no pinta nada. */}
         <OtherTeamsMatchdays bleed={22} />
+
+        {/* Jornada en juego: marcador global en directo (solo si hay). */}
+        {nextMatchday ? (
+          <LiveHomeCard
+            matchdayId={nextMatchday.id}
+            teamName={team?.name ?? 'Nosotros'}
+            opponent={nextMatchday.opponent}
+            jornadaNumber={nextMatchday.jornada_number}
+            onOpen={() => navigation.navigate('Jornada', { matchdayId: nextMatchday.id })}
+          />
+        ) : null}
 
         <Text style={styles.eyebrow}>
           {nextMatchday && matchdayState(nextMatchday) === 'pending-acta'

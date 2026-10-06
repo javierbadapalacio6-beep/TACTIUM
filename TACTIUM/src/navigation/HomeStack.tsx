@@ -8,6 +8,7 @@ import { JornadaScreen } from '@features/home/screens/JornadaScreen';
 import { LineupScreen } from '@features/home/screens/LineupScreen';
 import { ResultsScreen } from '@features/home/screens/ResultsScreen';
 import { AvailabilityScreen } from '@features/home/screens/AvailabilityScreen';
+import { LiveScoreScreen } from '@features/home/screens/LiveScoreScreen';
 import { AmistosoScreen } from '@features/home/screens/AmistosoScreen';
 import { FederacionScreen } from '@features/seasons/screens/FederacionScreen';
 import { FcpTeamScreen } from '@features/seasons/screens/FcpTeamScreen';
@@ -59,6 +60,7 @@ export const HomeStack = () => {
       <Stack.Screen name="Lineup" component={LineupScreen} />
       <Stack.Screen name="Results" component={ResultsScreen} />
       <Stack.Screen name="Availability" component={AvailabilityScreen} />
+      <Stack.Screen name="LiveScore" component={LiveScoreScreen} />
       <Stack.Screen name="Amistoso" component={AmistosoScreen} />
       {/* Explorar Federación desde el atajo de Home → "atrás" vuelve a Inicio. */}
       <Stack.Screen name="Federacion" component={FederacionScreen} />

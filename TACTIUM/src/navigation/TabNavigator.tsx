@@ -205,6 +205,7 @@ const HIDE_TAB_BAR_ON: ReadonlySet<string> = new Set([
   'Lineup',
   'Results',
   'Availability',
+  'LiveScore',
   'SeasonDetail',
   'FcpTeam',
   'FcpPlayer',

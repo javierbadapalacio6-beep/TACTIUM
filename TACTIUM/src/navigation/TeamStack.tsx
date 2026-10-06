@@ -11,6 +11,7 @@ import { JornadaScreen } from '@features/home/screens/JornadaScreen';
 import { LineupScreen } from '@features/home/screens/LineupScreen';
 import { ResultsScreen } from '@features/home/screens/ResultsScreen';
 import { AvailabilityScreen } from '@features/home/screens/AvailabilityScreen';
+import { LiveScoreScreen } from '@features/home/screens/LiveScoreScreen';
 
 import { useNavRole } from './navRole';
 import type { TeamStackParamList } from './types';
@@ -63,6 +64,7 @@ export const TeamStack = () => {
       <Stack.Screen name="Lineup" component={LineupScreen} />
       <Stack.Screen name="Results" component={ResultsScreen} />
       <Stack.Screen name="Availability" component={AvailabilityScreen} />
+      <Stack.Screen name="LiveScore" component={LiveScoreScreen} />
     </Stack.Navigator>
   );
 };

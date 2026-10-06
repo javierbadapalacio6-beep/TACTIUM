@@ -63,6 +63,8 @@ type MatchdayRoutes = {
   Lineup: { matchdayId: string };
   Results: { matchdayId: string; focus?: number };
   Availability: { matchdayId?: string };
+  // Marcador en vivo de una pista (juego a juego).
+  LiveScore: { matchdayId: string; court: number };
 };
 
 // Explorador de la Federación (Cántabra): años → grupos → clasificación.
