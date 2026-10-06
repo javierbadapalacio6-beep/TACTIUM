@@ -19,6 +19,7 @@ import {
 } from "@/lib/queries";
 import { removeMatchPhoto, updateMatchdaySchedule, uploadMatchPhoto } from "@/lib/matchday-ops";
 import { useSession } from "@/lib/session";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
@@ -374,8 +375,24 @@ function ShareResultCard({
 }
 
 export function MatchdayView({ id }: { id: string }) {
-  const { activeTeam, role } = useSession();
-  const teamId = activeTeam?.id ?? null;
+  const { activeTeam, role, user } = useSession();
+  // El equipo es el de la jornada, no el activo: el club entra desde su
+  // panel en jornadas de cualquiera de sus equipos. Si no se puede leer, el
+  // activo, como antes.
+  const owner = useAsync(
+    async () => {
+      const { data: row } = await supabaseBrowser()
+        .from("matchdays")
+        .select("seasons(team_id)")
+        .eq("id", id)
+        .maybeSingle();
+      const s = (row as { seasons?: { team_id?: string } | { team_id?: string }[] } | null)?.seasons;
+      return (Array.isArray(s) ? s[0]?.team_id : s?.team_id) ?? null;
+    },
+    [id, user?.id],
+    !!user,
+  );
+  const teamId = owner.loading ? null : (owner.data ?? activeTeam?.id ?? null);
   const isCaptain = role === "capitan" || role === "club";
   const router = useRouter();
   const pathname = usePathname();
@@ -513,6 +530,7 @@ export function MatchdayView({ id }: { id: string }) {
     return { us, them, gf, ga };
   }, [rows]);
 
+  if (owner.loading) return <SkeletonPage />;
   if (!teamId) {
     return (
       <div className="tw-page">

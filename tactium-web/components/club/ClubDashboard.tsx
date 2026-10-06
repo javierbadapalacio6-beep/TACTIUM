@@ -109,7 +109,7 @@ function currentRound<T extends { match_date: string | null }>(ms: T[]): T[] {
 }
 
 export function ClubDashboard() {
-  const { clubId } = useSession();
+  const { clubId, teams: myTeams, setActiveTeam } = useSession();
   const reduce = useReducedMotion();
   const [editOpen, setEditOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -553,7 +553,13 @@ export function ClubDashboard() {
                     return (
                       <ListRow
                         key={m.id}
-                        href="/temporadas"
+                        // A la jornada concreta. Si el admin también está en
+                        // ese equipo, se activa: las pantallas de alineación y
+                        // resultados trabajan con el equipo activo.
+                        onClick={() => {
+                          if (myTeams.some((t) => t.id === m.team_id)) setActiveTeam(m.team_id);
+                          router.push(`/jornada/${m.id}`);
+                        }}
                         icon={
                           <span className="mono" style={{ minWidth: 44, fontSize: 12.5, color: "var(--text-muted)" }}>
                             {dayLabel(m.match_date)}
@@ -570,7 +576,6 @@ export function ClubDashboard() {
                             <Chip tone="mute">Fuera</Chip>
                           )
                         }
-                        chevron={false}
                       />
                     );
                   })
