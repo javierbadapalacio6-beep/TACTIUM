@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useSession } from "@/lib/session";
-import { BtnLink, Card, PageHeader, Segmented } from "@/components/ui";
+import { BtnLink, Card, PageHeader, Segmented, tabPanelProps } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { SeasonsList } from "@/components/seasons/SeasonsList";
 import { ClubSchedule } from "@/components/club/ClubSchedule";
@@ -91,11 +91,7 @@ export function Compete() {
         />
       </div>
 
-      <div
-        id={`competir-panel-${vista ?? fallback}`}
-        role="tabpanel"
-        aria-labelledby={`competir-tab-${vista ?? fallback}`}
-      >
+      <div {...tabPanelProps("competir", vista ?? fallback)} style={{ outline: "none" }}>
         {vista === null ? (
           <div className="tw-page">
             <SkeletonCard />

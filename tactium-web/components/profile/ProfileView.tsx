@@ -32,6 +32,7 @@ import {
 } from "@/lib/player-stats";
 import { fetchCasualMatches, fetchPublicProfile, type DbCasual } from "@/lib/queries";
 import { ROLE_LABELS, useSession } from "@/lib/session";
+import { casualRecordGames } from "@/components/social/social";
 import { useAsync } from "@/lib/use-async";
 
 /**
@@ -52,27 +53,6 @@ interface ProfilePhoto {
   positive?: boolean | null;
 }
 
-/** Amistosos decididos en los que juega `uid` (copia de la regla de
- *  `components/social/social.tsx`, que no la exporta). */
-function casualGames(matches: DbCasual[], uid: string): RecordGame[] {
-  const out: RecordGame[] = [];
-  for (const m of matches) {
-    const side = m.userIdsA.includes(uid) ? 0 : m.userIdsB.includes(uid) ? 1 : null;
-    if (side === null || m.winnerSide === null) continue;
-    const names = side === 0 ? m.sideA : m.sideB;
-    const ids = side === 0 ? m.userIdsA : m.userIdsB;
-    const i = ids.findIndex((id, idx) => id !== uid && !!names[idx]);
-    const partnerName = i >= 0 ? names[i] : null;
-    out.push({
-      sortKey: `${m.playedOn ?? "9999"}·c`,
-      won: m.winnerSide === side,
-      partnerKey: partnerName ? `n:${partnerName.trim().toLowerCase()}` : null,
-      partnerName,
-    });
-  }
-  return out;
-}
-
 export function ProfileView() {
   const { user, role, clubs, clubId } = useSession();
   const [toast, setToast] = useState<string | null>(null);
@@ -89,7 +69,7 @@ export function ProfileView() {
         fetchCasualMatches(100).catch(() => [] as DbCasual[]),
         fetchMyLeagueStats(user!.id).catch(() => null),
       ]);
-      return combineRecord(league?.games ?? [], casualGames(matches, user!.id));
+      return combineRecord(league?.games ?? [], casualRecordGames(matches, user!.id));
     },
     [user?.id],
     !!user,

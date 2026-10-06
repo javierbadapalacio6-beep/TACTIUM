@@ -40,6 +40,7 @@ import {
   Modal,
   Note,
   Segmented,
+  tabPanelProps,
   Stat,
   StatRow,
 } from "@/components/ui";
@@ -1337,6 +1338,8 @@ export function MatchdayView({ id }: { id: string }) {
       {/* ── Pestañas por fase ─────────────────────────────────────── */}
       <div style={{ marginBottom: 16, overflowX: "auto" }}>
         <Segmented<Tab>
+          as="tabs"
+          idPrefix="jornada"
           label="Fase de la jornada"
           value={curTab}
           onChange={selectTab}
@@ -1349,6 +1352,7 @@ export function MatchdayView({ id }: { id: string }) {
         />
       </div>
 
+      <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
       {curTab === "previa" && (
         <div style={twoCols}>
           {lastMeetingCard}
@@ -1407,6 +1411,7 @@ export function MatchdayView({ id }: { id: string }) {
             La foto del partido se ve aquí cuando el acta está cerrada.
           </Note>
         ))}
+      </div>
 
       {/* ── Eliminar jornada ─────────────────────────────────────── */}
       <Modal

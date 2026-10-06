@@ -908,7 +908,7 @@ function PublicProfileBody({ data: p }: { data: Record<string, unknown> }) {
 
 /* ═══ RÉCORD (perfil y /stats) ════════════════════════════════════ */
 /** Victorias · Derrotas · % ganados, racha con los últimos 5 y mejor pareja. */
-function RecordBlock({
+export function RecordBlock({
   record,
   sub,
   title,
@@ -1010,7 +1010,7 @@ function sideOf(m: DbCasual, uid: string | undefined): 0 | 1 | null {
 }
 
 /** Amistosos decididos en los que juega `uid`, como partidos del récord. */
-function casualRecordGames(matches: DbCasual[], uid: string | undefined): RecordGame[] {
+export function casualRecordGames(matches: DbCasual[], uid: string | undefined): RecordGame[] {
   const out: RecordGame[] = [];
   for (const m of matches) {
     const side = sideOf(m, uid);
