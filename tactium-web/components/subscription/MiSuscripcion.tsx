@@ -74,6 +74,25 @@ const fmtDate = (iso: string | null) =>
       })
     : "—";
 
+/**
+ * «Próximo cobro: 1 de octubre de 2026 · 47,99 €», con lo que ya hay en la
+ * fila (fin del periodo y precio del plan en `plans.ts`). Null si no va a
+ * haber cobro: sin plan, sin fecha o con la baja ya pedida.
+ */
+function nextChargeLine(row: DbSubscription | null): string | null {
+  if (!row || row.cancelAtPeriodEnd || !row.currentPeriodEnd) return null;
+  // La prueba sin tarjeta (fila `trial_*`, sin pasarela) no cobra nada al
+  // acabar: solo hay cobro si la compra es de la web o de una tienda.
+  if (sourceOf(row.platform) === "none") return null;
+  const plan = ALL_PLANS.find((p) => p.tier === row.planTier);
+  if (!plan) return null;
+  const amount = formatEur(
+    row.billingPeriod === "yearly" ? plan.priceYearlyEur : plan.priceMonthlyEur,
+  );
+  const label = row.status === "trialing" ? "Primer cobro" : "Próximo cobro";
+  return `${label}: ${fmtDate(row.currentPeriodEnd)} · ${amount}`;
+}
+
 /** Traduce la fila de la base de datos a lo que pinta la pantalla. */
 function toSubscription(row: DbSubscription | null): Subscription {
   if (!row) {
@@ -135,6 +154,7 @@ function CaptainSubscription() {
   const { data, loading, error } = useAsync(() => fetchSubscription(), []);
   const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), []);
   const sub = toSubscription(data);
+  const nextCharge = nextChargeLine(data);
   const [portalBusy, setPortalBusy] = useState(false);
 
   // Abre el portal de facturación de Stripe (cancelar, método de pago, facturas).
@@ -230,6 +250,11 @@ function CaptainSubscription() {
                 {sub.period}
               </span>
             </div>
+            {nextCharge && (
+              <div style={{ marginTop: 8, fontSize: 13.5, color: "var(--text-muted)" }}>
+                {nextCharge}
+              </div>
+            )}
           </div>
 
           <Chip tone="mute" plain style={{ flex: "none" }}>
@@ -292,11 +317,35 @@ function CaptainSubscription() {
             <BtnLink href="/pro" variant="accent">
               Cambiar plan
             </BtnLink>
-            <RedeemCode planHref="/pro" />
-            <div style={{ flex: 1 }} />
-            <Btn variant="danger-ghost" onClick={openPortal} disabled={portalBusy}>
-              {portalBusy ? "Abriendo…" : "Cancelar la renovación"}
+            {/* El portal de Stripe: facturas, tarjeta y baja. */}
+            <Btn onClick={openPortal} disabled={portalBusy}>
+              {portalBusy ? "Abriendo…" : "Facturas y método de pago"}
             </Btn>
+            <RedeemCode planHref="/pro" />
+          </div>
+        )}
+        {/* La baja, discreta: es la misma pasarela, no un botón rojo al lado
+            de «Cambiar plan». */}
+        {webManaged && !data?.cancelAtPeriodEnd && (
+          <div style={{ marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={openPortal}
+              disabled={portalBusy}
+              style={{
+                padding: 0,
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                color: "var(--text-muted)",
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              Cancelar la renovación
+            </button>
           </div>
         )}
 
@@ -516,7 +565,19 @@ function ClubSummary() {
           </div>
           <dl className="kv" style={{ marginTop: 14 }}>
             <dt>{sub.status === "trialing" ? "Prueba termina" : sub.cancelAtPeriodEnd ? "Termina" : "Próximo cobro"}</dt>
-            <dd>{fmtDate(sub.currentPeriodEnd)}</dd>
+            <dd>
+              {fmtDate(sub.currentPeriodEnd)}
+              {/* Importe solo con el plan activo: una prueba de club puede ser
+                  sin tarjeta y no cobrar nada al terminar. */}
+              {sub.status === "active" && !sub.cancelAtPeriodEnd && (
+                <>
+                  {" · "}
+                  <span className="mono">
+                    {formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)}
+                  </span>
+                </>
+              )}
+            </dd>
           </dl>
         </Card>
       )}
