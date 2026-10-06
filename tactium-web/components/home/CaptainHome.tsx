@@ -1,17 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
   countAvail,
   fetchActiveSeason,
   fetchAvailabilityDetail,
+  fetchLastReminder,
+  fetchLineup,
   fetchMatchdays,
   fetchMaybeDeadline,
   fetchPlayers,
+  fetchTeam,
+  fetchVariants,
+  remindPendingAvailability,
   respondAvailability,
   type AvailRow,
+  type DbLineupRow,
   type AvailStatus,
   type MaybeReason,
   type DbMatchday,
@@ -21,9 +28,11 @@ import {
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
-import { RsvpButtons, STATUS_COLOR, formatDeadline, timeLeft } from "@/components/team/AvailabilityControls";
-import { Avatar, BtnLink, Card, Chip } from "@/components/ui";
-import { EmptyState, SkeletonPage } from "@/components/states";
+import { ConvoBar, RsvpButtons, formatDeadline, timeLeft } from "@/components/team/AvailabilityControls";
+import { getCourtsForCompetition, type TeamGender } from "@/lib/courts";
+import { proHref } from "@/lib/nav";
+import { Avatar, Btn, BtnLink, Card, Chip } from "@/components/ui";
+import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { SeasonCalendar } from "@/components/home/SeasonCalendar";
 import { OtherTeamsStrip } from "@/components/home/OtherTeamsStrip";
 import { Crest } from "@/components/Crest";
@@ -49,28 +58,27 @@ import {
  * próxima jornada) y el resto en silencio alrededor.
  */
 
-const SHORTCUTS = [
-  {
-    href: "/equipo",
-    title: "Escanear calendario",
-    Icon: IconUpload,
-  },
-  {
-    href: "/torneos",
-    title: "Explorar torneos",
-    Icon: IconSearch,
-  },
-  {
-    href: "/federacion",
-    title: "Ver la Federación",
-    Icon: IconFlag,
-  },
-  {
-    href: "/ajustes/invitaciones",
-    title: "Invitar a un capitán",
-    Icon: IconUserPlus,
-  },
-];
+type Shortcut = { href: string; title: string; Icon: typeof IconSearch };
+
+/**
+ * Atajos de Inicio. «Escanear calendario» abre el escáner de la temporada
+ * activa (`?escanear=1`), como en la app; sin temporada no se ofrece: lo
+ * primero es crearla. Solo el capitán escanea e invita a otros capitanes.
+ */
+function shortcuts(isCaptain: boolean, seasonId: string | null): Shortcut[] {
+  return [
+    ...(isCaptain && seasonId
+      ? [{ href: `/temporadas/${seasonId}?escanear=1`, title: "Escanear calendario", Icon: IconUpload }]
+      : []),
+    { href: "/competir?vista=torneos", title: "Explorar torneos", Icon: IconSearch },
+    { href: "/competir?vista=federacion", title: "Ver la Federación", Icon: IconFlag },
+    ...(isCaptain
+      ? [{ href: "/ajustes/invitaciones", title: "Invitar a un capitán", Icon: IconUserPlus }]
+      : []),
+  ];
+}
+
+const REMIND_COOLDOWN_MS = 12 * 3_600_000;
 
 /** dd mmm en español a partir de la fecha ISO de la base. */
 function formatDate(iso: string | null): string {
@@ -114,12 +122,21 @@ interface HomeData {
   players: DbPlayer[];
   availability: Record<string, AvailRow>;
   deadline: Date | null;
+  /** Pistas por jornada de la liga del equipo (copia de la app). */
+  courts: number;
+  /** Alineación oficial (variante activa) de la próxima jornada. */
+  lineup: DbLineupRow[];
+  lastReminder: Date | null;
 }
 
 /** Panel del capitán / jugador de equipo, con datos reales del equipo activo. */
 export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const { activeTeam, user } = useSession();
+  const router = useRouter();
   const teamId = activeTeam?.id ?? null;
+  const [lastReminder, setLastReminder] = useState<Date | null>(null);
+  const [sending, setSending] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   // Respuestas de la próxima jornada (editable en local, optimista).
   const [answers, setAnswers] = useState<Record<string, AvailRow>>({});
   const [availError, setAvailError] = useState<string | null>(null);
@@ -132,17 +149,38 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         fetchPlayers(teamId!),
       ]);
       const next = matchdays.find((m) => m.status !== "finished");
-      const [availability, deadline] = next
-        ? await Promise.all([fetchAvailabilityDetail(next.id), fetchMaybeDeadline(next.id)])
-        : [{}, null];
-      return { season, matchdays, players, availability, deadline };
+      const team = await fetchTeam(teamId!).catch(() => null);
+      const courts = getCourtsForCompetition(
+        team?.federation,
+        team?.league,
+        (team?.gender as TeamGender | null | undefined) ?? null,
+      );
+      if (!next) {
+        return { season, matchdays, players, availability: {}, deadline: null, courts, lineup: [], lastReminder: null };
+      }
+      const [availability, deadline, lineup, lastReminder] = await Promise.all([
+        fetchAvailabilityDetail(next.id),
+        fetchMaybeDeadline(next.id),
+        // La alineación «publicada» es la variante activa, igual que en la app.
+        fetchVariants(next.id)
+          .then((vs) => {
+            const active = vs.find((v) => v.isActive);
+            return active ? fetchLineup(next.id, active.id) : [];
+          })
+          .catch(() => [] as DbLineupRow[]),
+        isCaptain ? fetchLastReminder(next.id) : Promise.resolve(null),
+      ]);
+      return { season, matchdays, players, availability, deadline, courts, lineup, lastReminder };
     },
-    [teamId],
+    [teamId, isCaptain],
     !!teamId
   );
 
   useEffect(() => {
-    if (data) setAnswers(data.availability);
+    if (data) {
+      setAnswers(data.availability);
+      setLastReminder(data.lastReminder);
+    }
   }, [data]);
 
   if (!teamId) {
@@ -202,6 +240,59 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const losses = played.filter((m) => m.outcome === "loss").length;
   const m = upcoming[0] ?? null;
   const dUntil = m ? daysUntil(m.date) : null;
+  const started = !!m && (m.status === "in_progress" || (dUntil !== null && dUntil < 0));
+
+  // Alineación oficial de la próxima jornada (como el hero de la app).
+  const courts = data?.courts ?? 3;
+  const lineup = data?.lineup ?? [];
+  const lineupFilled = lineup.filter((r) => r.playerA && r.playerB).length;
+  const lineupLabel = !m
+    ? null
+    : m.status === "in_progress"
+      ? "En juego"
+      : lineupFilled === 0
+        ? "Sin alineación"
+        : lineupFilled >= courts
+          ? "Alineación lista"
+          : `Alineación ${lineupFilled}/${courts}`;
+  const nameOf = (id: string | null) => {
+    const p = id ? players.find((x) => x.id === id) : null;
+    return p ? p.alias?.trim() || p.name : null;
+  };
+  const myPair = me ? lineup.find((r) => r.playerA === me.id || r.playerB === me.id) ?? null : null;
+  const myPartner = myPair ? nameOf(myPair.playerA === me!.id ? myPair.playerB : myPair.playerA) : null;
+
+  // Convocatoria del capitán: «te faltan N» y «Recordar ahora».
+  const needed = courts * 2;
+  const missing = Math.max(0, needed - availableCount);
+  const toRemind = availCounts.pending + availCounts.maybe;
+  const cooldownUntil =
+    lastReminder && Date.now() - lastReminder.getTime() < REMIND_COOLDOWN_MS
+      ? new Date(lastReminder.getTime() + REMIND_COOLDOWN_MS)
+      : null;
+
+  async function remind() {
+    if (!m || sending) return;
+    setSending(true);
+    const res = await guardedWrite("recordar a los pendientes", () => remindPendingAvailability(m.id));
+    setSending(false);
+    if (!res.ok) return setToast(res.reason);
+    const out = res.data;
+    if (out.ok) {
+      setLastReminder(new Date());
+      setToast(
+        (out.reminded === 0
+          ? "Nadie con la app tenía la respuesta pendiente"
+          : `Recordatorio enviado a ${out.reminded}`) +
+          (out.withoutApp.length ? `. Sin la app: ${out.withoutApp.join(", ")} (escríbeles por WhatsApp)` : ""),
+      );
+    } else if (out.kind === "premium") {
+      router.push(proHref("availability_remind"));
+    } else if (out.kind === "cooldown") {
+      setLastReminder(new Date());
+      setToast("Ya recordaste hace menos de 12 horas.");
+    } else setToast(out.message);
+  }
 
   // Racha: las últimas jornadas jugadas, de la más antigua a la más reciente.
   const form = played.slice(-8);
@@ -288,12 +379,18 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         <Card>
           <EmptyState
             icon={<IconCalendar size={24} />}
-            title="Aún no hay jornadas"
-            body="Crea una temporada activa para empezar a planificar."
+            title="Aún no hay temporada"
+            body={
+              isCaptain
+                ? "Crea la temporada y carga el calendario: de la Federación, escaneado o a mano."
+                : "Tu capitán todavía no ha creado la temporada. Cuando lo haga, aquí verás la próxima jornada."
+            }
             action={
-              <BtnLink href="/temporadas" variant="accent">
-                Crear temporada
-              </BtnLink>
+              isCaptain ? (
+                <BtnLink href="/competir?vista=liga" variant="accent">
+                  Crear temporada
+                </BtnLink>
+              ) : undefined
             }
           />
         </Card>
@@ -357,11 +454,101 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               </div>
             </div>
 
+            {lineupLabel && (
+              <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <span className="delta">{lineupLabel}</span>
+              </div>
+            )}
+
+            {/* El jugador ve su pista en cuanto hay alineación oficial. */}
+            {!isCaptain && me && lineupFilled > 0 && (
+              <Link
+                href={`/jornada/${m.id}`}
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  background: "var(--feature-soft)",
+                  color: "var(--text)",
+                  fontSize: 13.5,
+                }}
+              >
+                {myPair ? (
+                  <>
+                    <span className="mono" style={{ fontWeight: 700, color: "var(--accent)" }}>
+                      P{myPair.court}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      Juegas con <b>{myPartner ?? "pareja por confirmar"}</b> en la pista {myPair.court}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ flex: 1, minWidth: 0, color: "var(--text-muted)" }}>
+                    Esta jornada no estás en la alineación.
+                  </span>
+                )}
+                <IconChevronRight size={15} style={{ color: "var(--text-faint)", flex: "none" }} />
+              </Link>
+            )}
+
+            {/* Voy · Duda · No puedo, dentro de la tarjeta (RsvpCard embedded
+                de la app). Una vez empezada la jornada ya no se contesta. */}
+            {me && !started && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  {myAnswer?.status === "maybe"
+                    ? "Estás en duda"
+                    : myAnswer?.status === "yes"
+                      ? "Vas a esta jornada"
+                      : myAnswer?.status === "no"
+                        ? "No puedes esta jornada"
+                        : "¿Puedes jugar?"}
+                  {myAnswer?.status === "maybe" && deadline && (
+                    <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>
+                      {" "}
+                      · <span className="mono" style={{ color: "var(--warning)" }}>{timeLeft(deadline)}</span> para
+                      decidir; después del {formatDeadline(deadline)} contarás como «No puedo».
+                    </span>
+                  )}
+                </div>
+                <RsvpButtons
+                  value={myAnswer}
+                  maybeClosed={maybeClosed}
+                  deadline={deadline}
+                  onAnswer={async (status: AvailStatus, reason?: MaybeReason | null, note?: string | null) => {
+                    const prev = answers[me.id];
+                    setAnswers((a) => ({
+                      ...a,
+                      [me.id]: { status, reason: status === "maybe" ? reason ?? null : null, note: note ?? null, autoResolved: false },
+                    }));
+                    const res = await guardedWrite("guardar tu disponibilidad", () =>
+                      respondAvailability(m.id, me.id, status, reason, note),
+                    );
+                    if (!res.ok) {
+                      setAnswers((a) => {
+                        const next = { ...a };
+                        if (prev) next[me.id] = prev;
+                        else delete next[me.id];
+                        return next;
+                      });
+                      setAvailError(res.reason);
+                    } else setAvailError(null);
+                  }}
+                />
+                {availError && (
+                  <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--error)" }}>{availError}</div>
+                )}
+              </div>
+            )}
+
             {isCaptain && (
               <div className="bcard-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {/* Si ya se jugó, lo que toca es meter el resultado, no
                     preparar la alineación. */}
-                {dUntil !== null && dUntil < 0 ? (
+                {started ? (
                   <Link href={`/jornada/${m.id}`} className="btn btn-accent">
                     <IconCheck size={15} />
                     Meter el resultado
@@ -377,6 +564,41 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 </Link>
               </div>
             )}
+            {!isCaptain && (
+              <div className="bcard-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Link href={`/jornada/${m.id}`} className="btn btn-ghost">
+                  Abrir jornada
+                </Link>
+                <Link href={`/jornada/${m.id}/disponibilidad`} className="btn btn-ghost">
+                  Ver convocatoria
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : matchdays.length === 0 ? (
+          /* Temporada creada pero sin calendario: no es lo mismo que haberlo
+             jugado todo. */
+          <div className="bcard col-7">
+            <EmptyState
+              compact
+              icon={<IconCalendar size={22} />}
+              title="Aún no hay jornadas"
+              body={
+                isCaptain
+                  ? "Escanea el calendario de tu liga o añade las jornadas a mano."
+                  : "Tu capitán todavía no ha cargado el calendario."
+              }
+              action={
+                isCaptain ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    <BtnLink href={`/temporadas/${season.id}?escanear=1`} variant="accent" icon={<IconUpload size={15} />}>
+                      Escanear calendario
+                    </BtnLink>
+                    <BtnLink href={`/temporadas/${season.id}?nueva=1`}>Añadir a mano</BtnLink>
+                  </div>
+                ) : undefined
+              }
+            />
           </div>
         ) : (
           <div className="bcard col-7">
@@ -384,7 +606,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               compact
               icon={<IconTrophy size={22} />}
               title="No quedan jornadas"
-              body="Has disputado todas las del calendario."
+              body="Habéis disputado todas las del calendario."
               action={<BtnLink href={`/temporadas/${season.id}`}>Ver temporada</BtnLink>}
             />
           </div>
@@ -579,7 +801,63 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           )}
         </div>
 
+        {/* ══ Convocatoria (capitán) ═══════════════════════════════
+            Como ConvocatoriaCard de la app: los cuatro estados, lo que
+            falta para completar las pistas y «Recordar ahora». */}
+        {isCaptain && m && !started && players.length > 0 && (
+          <div className="bcard col-4">
+            <div className="bcard-head">
+              <span className="tile-round tile-round-accent">
+                <IconUsers size={17} />
+              </span>
+              <span className="bcard-title">Convocatoria</span>
+              <span className="delta delta-flat">
+                {availableCount}/{active.length} van
+              </span>
+            </div>
+            <ConvoBar counts={availCounts} />
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                fontWeight: 600,
+                color: missing === 0 ? "var(--accent)" : "var(--text)",
+              }}
+            >
+              {missing === 0
+                ? `Tienes ${availableCount} para ${courts} ${courts === 1 ? "pista" : "pistas"}: equipo completo`
+                : `Necesitas ${needed} para ${courts} ${courts === 1 ? "pista" : "pistas"}: te ${missing === 1 ? "falta 1" : `faltan ${missing}`}`}
+            </div>
+            <div className="bcard-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {toRemind > 0 && (
+                <Btn
+                  size="sm"
+                  variant={cooldownUntil ? "ghost" : "accent"}
+                  onClick={() => void remind()}
+                  disabled={sending || !!cooldownUntil}
+                >
+                  {sending ? "Enviando…" : cooldownUntil ? "Recordado" : `Recordar a los ${toRemind} pendientes`}
+                </Btn>
+              )}
+              <Link href={`/jornada/${m.id}/disponibilidad`} className="link-action">
+                Ver convocatoria <IconChevronRight size={13} />
+              </Link>
+            </div>
+            {cooldownUntil && toRemind > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
+                Podrás volver a recordar a las{" "}
+                <span className="mono">
+                  {String(cooldownUntil.getHours()).padStart(2, "0")}:
+                  {String(cooldownUntil.getMinutes()).padStart(2, "0")}
+                </span>
+                .
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ══ Disponibilidad del equipo ════════════════════════════ */}
+        {!(isCaptain && m && !started && players.length > 0) && (
         <div className="bcard col-4">
           <div className="bcard-head">
             <span className="tile-round tile-round-accent">
@@ -633,6 +911,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
             </Link>
           </div>
         </div>
+        )}
 
         {/* ══ Calendario ═══════════════════════════════════════════
             En rejilla de mes: se ve de un vistazo cuándo toca, contra quién
@@ -693,122 +972,43 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           )}
         </div>
 
-        {/* ══ Mi disponibilidad ════════════════════════════════════
-            Mismo modelo que la app: Voy · Duda · No puedo, por jornada. */}
-        <div className="bcard col-5">
-          <div className="bcard-head">
-            <span
-              className="bcard-title"
-              style={myAnswer ? { color: STATUS_COLOR[myAnswer.status].c } : undefined}
-            >
-              {myAnswer?.status === "maybe"
-                ? "Estás en duda"
-                : myAnswer?.status === "yes"
-                  ? "Vas a la próxima jornada"
-                  : myAnswer?.status === "no"
-                    ? "No puedes la próxima jornada"
-                    : "¿Puedes jugar la próxima jornada?"}
-            </span>
-          </div>
-          {m && me ? (
-            <>
-              {myAnswer?.status === "maybe" && deadline && (
-                <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10 }}>
-                  <b className="mono" style={{ fontSize: 20, color: "var(--warning)" }}>{timeLeft(deadline)}</b>{" "}
-                  para decidir · después del {formatDeadline(deadline)} contarás como «No puedo».
-                </div>
-              )}
-              <RsvpButtons
-                value={myAnswer}
-                maybeClosed={maybeClosed}
-                deadline={deadline}
-                onAnswer={async (status: AvailStatus, reason?: MaybeReason | null, note?: string | null) => {
-                  const prev = answers[me.id];
-                  setAnswers((a) => ({
-                    ...a,
-                    [me.id]: { status, reason: status === "maybe" ? reason ?? null : null, note: note ?? null, autoResolved: false },
-                  }));
-                  const res = await guardedWrite("guardar tu disponibilidad", () =>
-                    respondAvailability(m.id, me.id, status, reason, note),
-                  );
-                  if (!res.ok) {
-                    setAnswers((a) => {
-                      const next = { ...a };
-                      if (prev) next[me.id] = prev;
-                      else delete next[me.id];
-                      return next;
-                    });
-                    setAvailError(res.reason);
-                  } else setAvailError(null);
-                }}
-              />
-            </>
-          ) : (
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-              {m ? "Tu cuenta no está vinculada a la plantilla." : "No hay jornada próxima."}
-            </span>
-          )}
-          <div className="bcard-foot">
-            <span style={{ fontSize: 12, color: availError ? "var(--error)" : "var(--text-faint)" }}>
-              {availError ??
-                (myAnswer
-                  ? "Tu capitán ya lo sabe."
-                  : "Tu capitán lo verá al momento.")}
-            </span>
-            {m && (
-              <Link href={`/jornada/${m.id}/disponibilidad`} className="link-action">
-                Ver convocatoria <IconChevronRight size={14} />
-              </Link>
-            )}
-          </div>
-        </div>
-
         {/* ══ Atajos ═══════════════════════════════════════════════
-            Ocupa las 7 columnas que deja la disponibilidad: si fuera de 12
-            la fila anterior se quedaba medio vacía. */}
-        <div className="bcard col-7">
+            A lo ancho: con la disponibilidad dentro de la tarjeta de la
+            jornada ya no hay tarjeta suelta con la que compartir fila. Cada
+            atajo es un bloque con fondo, no una tarjeta dentro de otra. */}
+        <div className="bcard col-12">
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+              gap: 8,
             }}
           >
-            {SHORTCUTS.map((s) => (
+            {shortcuts(isCaptain, season.id).map((s) => (
               <Link
                 key={s.href}
                 href={s.href}
-                className="bcard bcard-hover"
                 style={{
-                  flexDirection: "row",
+                  display: "flex",
                   alignItems: "center",
-                  padding: "12px 14px",
-                  borderRadius: 16,
-                  background: "var(--bg-card-2)",
-                  boxShadow: "none",
                   gap: 11,
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  background: "var(--bg-card-2)",
+                  color: "var(--text)",
                 }}
               >
                 <span className="tile-round" style={{ width: 32, height: 32 }}>
                   <s.Icon size={15} />
                 </span>
-                <span
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {s.title}
-                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600 }}>{s.title}</span>
                 <IconChevronRight size={15} style={{ color: "var(--text-faint)", flex: "none" }} />
               </Link>
             ))}
           </div>
         </div>
       </div>
+      {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
