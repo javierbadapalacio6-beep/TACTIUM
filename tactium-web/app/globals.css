@@ -1131,7 +1131,7 @@ a.bcard:hover,
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   opacity: 0.85;
 }
@@ -1190,11 +1190,11 @@ a.bcard:hover,
   .cal-ev-top {
     flex-direction: column;
     gap: 2px;
-    font-size: 9.5px;
+    font-size: 11px;
     opacity: 1;
   }
   .cal-ev-score {
-    font-size: 9.5px;
+    font-size: 11px;
     margin-left: 0 !important;
   }
 }
