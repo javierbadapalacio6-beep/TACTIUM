@@ -58,8 +58,12 @@ import {
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { listTournaments, type Tournament } from '@core/services/tournaments';
-import { fetchClubInscripciones, refreshInscripcionRoster } from '@core/services/fcpInscripciones';
-import type { FcpInscripcionesResumen } from '@core/services/fcpInscripciones';
+import {
+  fetchClubInscripciones,
+  fetchInscripcionGrupo,
+  refreshInscripcionRoster,
+} from '@core/services/fcpInscripciones';
+import type { FcpInscripcionesResumen, FcpRivalGrupo } from '@core/services/fcpInscripciones';
 import { fetchTournamentStats, tournamentPhase } from '../clubOps';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
@@ -140,6 +144,25 @@ export const ClubDashboardScreen = ({
   // Plantilla abierta en la hoja (índice de fila).
   const [abierta, setAbierta] = useState<number | null>(null);
   const [refrescando, setRefrescando] = useState(false);
+  // Rivales del grupo del equipo abierto. Se piden al abrir la hoja, no con
+  // la tarjeta: son una consulta por equipo y casi nadie abre todos.
+  const [rivales, setRivales] = useState<{ key: string; rows: FcpRivalGrupo[] } | null>(null);
+  const filaAbierta = abierta != null ? inscripciones?.rows[abierta] ?? null : null;
+  const rivalesKey = filaAbierta?.subgrupo
+    ? `${filaAbierta.idLiga}|${filaAbierta.idGrupo}|${filaAbierta.subgrupo}|${filaAbierta.idEquipo}`
+    : null;
+  useEffect(() => {
+    if (!filaAbierta || !rivalesKey) return;
+    let alive = true;
+    fetchInscripcionGrupo(filaAbierta)
+      .then((rows) => alive && setRivales({ key: rivalesKey, rows }))
+      .catch(() => alive && setRivales({ key: rivalesKey, rows: [] }));
+    return () => {
+      alive = false;
+    };
+    // Basta la clave: identifica el grupo y el equipo sin depender del objeto
+    // de la fila, que se recrea cada vez que se refresca la tarjeta.
+  }, [rivalesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Relee la plantilla de ese equipo en la Federación, ahora. Para cuando el
   // club acaba de dar a alguien de alta y no quiere esperar al volcado
@@ -156,7 +179,7 @@ export const ClubDashboardScreen = ({
     }
     setRefrescando(true);
     try {
-      const r = await refreshInscripcionRoster(fila.teamId);
+      const r = await refreshInscripcionRoster(fila.teamId, fila.idEquipo);
       if (!r.found) {
         toast.error(
           'No aparece inscrito',
@@ -663,10 +686,12 @@ export const ClubDashboardScreen = ({
                 <Text style={styles.inscripMeta} numberOfLines={1}>
                   {[
                     r.genero === 'F' ? 'Femenino' : 'Masculino',
-                    r.categoriaActual && r.categoria && r.categoriaActual !== r.categoria
-                      ? `${r.categoriaActual} → ${r.categoria}`
-                      : r.categoria,
-                    r.enTactium ? null : 'nuevo',
+                    r.categoria
+                      ? `${r.categoria}${r.subgrupo ? ` · Grupo ${r.subgrupo}` : ''}`
+                      : r.subgrupo
+                        ? `Grupo ${r.subgrupo}`
+                        : null,
+                    r.estadoLabel,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -679,6 +704,24 @@ export const ClubDashboardScreen = ({
               </View>
             </Pressable>
           ))}
+          {/* Equipos importados de la Federación que no salen en la lista de
+              la temporada nueva. Discreto: puede ser una baja buscada, pero si
+              no lo es, el club tiene que enterarse antes de que cierre el plazo. */}
+          {inscripciones.desaparecen.length > 0 ? (
+            <View style={styles.gone}>
+              <Text style={styles.goneHead}>NO APARECEN INSCRITOS</Text>
+              {inscripciones.desaparecen.map((t) => (
+                <Text key={t.teamId} style={styles.goneRow} numberOfLines={1}>
+                  {t.name}
+                  {t.categoria ? <Text style={styles.goneCat}> · {t.categoria}</Text> : null}
+                </Text>
+              ))}
+              <Text style={styles.goneFoot}>
+                No salen en la lista de la Federación para la temporada nueva. Si
+                deberían jugar, revisa su inscripción con la Federación.
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.cardFoot}>
             Toca un equipo para ver la plantilla inscrita y actualizarla desde la
             Federación. Cuando salga el calendario, te avisaremos para volcar la
@@ -973,22 +1016,40 @@ export const ClubDashboardScreen = ({
 
       {/* Plantilla inscrita de un equipo (pretemporada), en hoja. */}
       <BottomSheet open={abierta != null} onClose={() => setAbierta(null)}>
-        {abierta != null && inscripciones?.rows[abierta] ? (
+        {abierta != null && filaAbierta ? (
           <View>
             <Text style={styles.cardEyebrow}>PLANTILLA INSCRITA</Text>
             <Text style={styles.sheetTitle} numberOfLines={1}>
-              {inscripciones.rows[abierta].equipo}
+              {filaAbierta.equipo}
             </Text>
-            {inscripciones.rows[abierta].sede ? (
-              <Text style={styles.sheetSub}>Juega en {inscripciones.rows[abierta].sede}</Text>
+            {filaAbierta.subgrupo || filaAbierta.sedeCorta || filaAbierta.sede ? (
+              <Text style={styles.sheetSub}>
+                {[
+                  filaAbierta.subgrupo ? `Grupo ${filaAbierta.subgrupo}` : null,
+                  filaAbierta.sedeCorta || filaAbierta.sede
+                    ? `${filaAbierta.subgrupo ? 'juega' : 'Juega'} en ${filaAbierta.sedeCorta || filaAbierta.sede}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            ) : null}
+            {/* La Federación lo ha inscrito con otro nombre (otra letra, otro
+                patrocinador) pero son los mismos jugadores: se dice, para que
+                nadie lo tome por un equipo nuevo y cree otro. */}
+            {filaAbierta.estado === 'renombrado' && filaAbierta.antes ? (
+              <Text style={styles.sheetNote}>
+                En TACTIUM se llama{' '}
+                {clubTeams.find((t) => t.id === filaAbierta.teamId)?.name ?? filaAbierta.antes}
+              </Text>
             ) : null}
             <View style={{ marginTop: 12 }}>
-              {inscripciones.rows[abierta].jugadores.length === 0 ? (
+              {filaAbierta.jugadores.length === 0 ? (
                 <Text style={styles.cardFoot}>
                   La Federación todavía no publica jugadores en este equipo.
                 </Text>
               ) : (
-                inscripciones.rows[abierta].jugadores.map((j, i) => (
+                filaAbierta.jugadores.map((j, i) => (
                   <View key={j.idJugador} style={styles.rosterRow}>
                     <Text style={styles.rosterNum}>{i + 1}</Text>
                     <Text style={styles.rosterName} numberOfLines={1}>
@@ -999,6 +1060,37 @@ export const ClubDashboardScreen = ({
                 ))
               )}
             </View>
+            {/* Los rivales de la temporada que viene: lo segundo que pregunta
+                un capitán al ver la inscripción. Sin grupo asignado no se
+                pinta: la categoría entera no es «tu grupo». */}
+            {filaAbierta.subgrupo ? (
+              <View style={{ marginTop: 18 }}>
+                <Text style={styles.cardEyebrow}>TU GRUPO · GRUPO {filaAbierta.subgrupo}</Text>
+                <View style={{ marginTop: 8 }}>
+                  {!rivales || rivales.key !== rivalesKey ? (
+                    <ActivityIndicator color={c.accent} style={{ marginVertical: 10 }} />
+                  ) : rivales.rows.length === 0 ? (
+                    <Text style={styles.cardFoot}>
+                      La Federación todavía no publica más equipos en este grupo.
+                    </Text>
+                  ) : (
+                    rivales.rows.map((r, i) => (
+                      <View key={r.idEquipo} style={styles.rosterRow}>
+                        <Text style={styles.rosterNum}>{i + 1}</Text>
+                        <Text style={styles.rosterName} numberOfLines={1}>
+                          {r.equipo}
+                        </Text>
+                        {r.sedeCorta ? (
+                          <Text style={styles.rosterPts} numberOfLines={1}>
+                            {r.sedeCorta}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))
+                  )}
+                </View>
+              </View>
+            ) : null}
             <Pressable
               onPress={() => refrescarPlantilla(abierta)}
               disabled={refrescando}
@@ -1527,6 +1619,26 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   sheetTitle: { color: c.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.4, marginTop: 4 },
   sheetSub: { color: c.textMuted, fontSize: 13, marginTop: 2 },
+  sheetNote: { color: c.accent, fontSize: 12.5, fontWeight: '600', marginTop: 6 },
+  // «No aparecen inscritos»: en tinta apagada, debajo de la lista. Es un aviso,
+  // no una alarma; la baja puede ser buscada.
+  gone: {
+    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: c.hair,
+  },
+  goneHead: {
+    fontFamily: Fonts.mono,
+    color: c.textFaint,
+    fontSize: 10.5,
+    letterSpacing: 1.4,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  goneRow: { color: c.textMuted, fontSize: 13, paddingVertical: 2 },
+  goneCat: { color: c.textFaint },
+  goneFoot: { color: c.textFaint, fontSize: 12, lineHeight: 17, marginTop: 6 },
   rosterRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   rosterNum: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 11, width: 20 },
   rosterName: { flex: 1, minWidth: 0, color: c.text, fontSize: 14 },

@@ -5,6 +5,15 @@
  */
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { INSCRIPTION_FEE_BPS, INSCRIPTION_FEE_FIXED_CENTS } from "@/lib/connect";
+import { fetchFcpGroupRivals, type FcpRival } from "@/lib/fcp-public";
+import {
+  diffClubSeason,
+  fcpEstadoLabel,
+  fcpPlayerKey,
+  type FcpDiffActual,
+  type FcpDiffSiguiente,
+  type FcpSeasonEstado,
+} from "@/lib/fcp-season-diff";
 
 export interface TournamentStats {
   /** Inscripciones activas (sin retiradas). Una pareja en 2 categorías cuenta 2. */
@@ -187,17 +196,41 @@ export async function fetchClubWeek(teamIds: string[]): Promise<Record<string, T
 }
 
 /* ── Inscripciones de la temporada que viene (FCP) ────────────────────
- * Puerto de `fetchClubInscripciones` de la app (core/services/fcpInscripciones):
- * se cruza por NOMBRE + género porque el id_equipo de la Federación cambia cada
- * temporada. Devuelve null si no hay liga en inscripción para este club. */
+ * Puerto de `fetchClubInscripciones` de la app (core/services/fcpInscripciones).
+ * Las filas se buscan por el nombre del club (prefijo) y cada una se casa con
+ * su equipo de TACTIUM con `diffClubSeason` (lib/fcp-season-diff): primero por
+ * jugadores en común y después por nombre sin patrocinador. No sirve el id —el
+ * `id_equipo` de la Federación cambia cada temporada— ni basta el nombre
+ * exacto: la FCP reasigna letras («ZINK PADEL F» pasa a «ZINK PADEL E») y el
+ * equipo de siempre salía como nuevo. Devuelve null si no hay liga en
+ * inscripción para este club. */
 export interface FcpInscripcion {
+  /** Liga, categoría y equipo en la Federación: hacen falta para pedir los
+   *  rivales del grupo (`fetchInscripcionGrupo`) y para enlazar su ficha. */
+  idLiga: number;
+  idGrupo: string;
+  idEquipo: number;
   equipo: string;
   genero: "M" | "F" | null;
   categoria: string | null;
+  /** Grupo dentro de la categoría ('A' | 'B'…), del PDF de distribución de la
+   *  Federación. Null mientras no se conozca. */
+  subgrupo: string | null;
   confirmado: boolean;
   enTactium: boolean;
+  /** Equipo de TACTIUM con el que se ha casado (por jugadores o por nombre). */
+  teamId: string | null;
   categoriaActual: string | null;
+  /** Qué le pasa respecto a la temporada en curso. */
+  estado: FcpSeasonEstado;
+  /** Nombre que tiene en TACTIUM cuando la Federación lo inscribe con otro. */
+  antes: string | null;
+  /** «Sigue en 2ª», «4ª → 3ª», «Antes ZINK PADEL F», «Nuevo». */
+  estadoLabel: string;
+  /** Sede de local, nombre largo. */
   sede: string | null;
+  /** La misma sede en corto («SMASH», «GO FIT»). */
+  sedeCorta: string | null;
   jugadores: { idJugador: string; nombre: string; puntos: number }[];
 }
 export interface FcpInscripcionesResumen {
@@ -205,13 +238,16 @@ export interface FcpInscripcionesResumen {
   total: number;
   confirmados: number;
   rows: FcpInscripcion[];
+  /** Equipos del club en TACTIUM, importados de la Federación, que no salen
+   *  en la lista de inscritos de la temporada nueva. */
+  desaparecen: { teamId: string; name: string; categoria: string | null }[];
 }
 
 const normName = (s: string | null | undefined) =>
   (s ?? "")
     .toUpperCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -236,8 +272,107 @@ const seasonLabel = (temporada: string | null | undefined): string => {
   return t;
 };
 
+type ClubTeamLite = { id: string; name: string; gender: string | null; category: string | null };
+
+type FcpJugadorClave = {
+  nombre: string | null;
+  nombre_pila: string | null;
+  apellido1: string | null;
+  apellido2: string | null;
+};
+
+/**
+ * Plantilla de la temporada EN CURSO de cada equipo del club, como claves de
+ * jugador (`fcpPlayerKey`), para cruzarla con la de la temporada que viene.
+ *
+ * Primero la de la Federación, por el vínculo `fcp_team_links`: es la lista
+ * oficial y trae nombre y apellidos por separado. Si el equipo no está
+ * vinculado (o la FCP no publica jugadores en él), la de TACTIUM: los
+ * jugadores importados se guardan como «Nombre Apellido1 Apellido2», que
+ * normalizado da la misma clave.
+ *
+ * Devuelve también qué equipos están vinculados: solo esos pueden
+ * «desaparecer» de la Federación. Un equipo creado a mano nunca estuvo allí.
+ * Copia de `plantillasActuales` de la app.
+ */
+async function plantillasActuales(
+  teams: ClubTeamLite[],
+): Promise<{ porEquipo: Map<string, Set<string>>; vinculados: Set<string> }> {
+  const porEquipo = new Map<string, Set<string>>();
+  const vinculados = new Set<string>();
+  const ids = teams.map((t) => t.id);
+  if (ids.length === 0) return { porEquipo, vinculados };
+  const sb = supabaseBrowser();
+
+  const { data: links } = await sb
+    .from("fcp_team_links")
+    .select("team_id, fcp_id_equipo")
+    .in("team_id", ids);
+  const linkRows = ((links ?? []) as { team_id: string; fcp_id_equipo: number | null }[]).filter(
+    (l) => l.fcp_id_equipo != null,
+  );
+  for (const l of linkRows) vinculados.add(l.team_id);
+
+  if (linkRows.length > 0) {
+    const { data: jug } = await sb
+      .from("fcp_jugadores")
+      .select("id_equipo, nombre, nombre_pila, apellido1, apellido2")
+      .in("id_equipo", [...new Set(linkRows.map((l) => l.fcp_id_equipo as number))])
+      .limit(5000);
+    const clavesPorFcp = new Map<number, Set<string>>();
+    for (const j of (jug ?? []) as (FcpJugadorClave & { id_equipo: number })[]) {
+      const k = fcpPlayerKey(j);
+      if (!k) continue;
+      const set = clavesPorFcp.get(j.id_equipo) ?? new Set<string>();
+      set.add(k);
+      clavesPorFcp.set(j.id_equipo, set);
+    }
+    // Un equipo acumula un vínculo por temporada: se juntan, porque cualquiera
+    // de esos jugadores sirve para reconocerlo.
+    for (const l of linkRows) {
+      const claves = clavesPorFcp.get(l.fcp_id_equipo as number);
+      if (!claves || claves.size === 0) continue;
+      const set = porEquipo.get(l.team_id) ?? new Set<string>();
+      claves.forEach((k) => set.add(k));
+      porEquipo.set(l.team_id, set);
+    }
+  }
+
+  const sinPlantilla = ids.filter((id) => !porEquipo.get(id)?.size);
+  if (sinPlantilla.length > 0) {
+    const { data: pl } = await sb
+      .from("players")
+      .select("team_id, name")
+      .in("team_id", sinPlantilla)
+      .eq("active", true)
+      .limit(5000);
+    for (const p of (pl ?? []) as { team_id: string; name: string | null }[]) {
+      const k = fcpPlayerKey({ nombre: p.name });
+      if (!k) continue;
+      const set = porEquipo.get(p.team_id) ?? new Set<string>();
+      set.add(k);
+      porEquipo.set(p.team_id, set);
+    }
+  }
+
+  return { porEquipo, vinculados };
+}
+
+type FilaInscripcionRaw = {
+  id_liga: number;
+  id_grupo: string;
+  id_equipo: number;
+  equipo: string | null;
+  genero: string | null;
+  grupo_nombre: string | null;
+  subgrupo: string | null;
+  confirmado: boolean | null;
+  sede: string | null;
+  sede_corta: string | null;
+};
+
 export async function fetchClubInscripciones(
-  teams: { id: string; name: string; gender: string | null; category: string | null }[],
+  teams: ClubTeamLite[],
 ): Promise<FcpInscripcionesResumen | null> {
   const conNombre = teams.filter((t) => (t.name ?? "").trim());
   if (conNombre.length === 0) return null;
@@ -251,99 +386,159 @@ export async function fetchClubInscripciones(
   const currentLiga = (cur as { id_liga: number } | null)?.id_liga ?? null;
 
   const bases = [...new Set(conNombre.map((t) => clubOfTeam(t.name)).filter(Boolean))];
-  const vistos = new Set<string>();
-  const idEquipoPorFila = new Map<number, number>();
-  const rows: FcpInscripcion[] = [];
-  let idLiga: number | null = null;
+  const candidatas: FilaInscripcionRaw[] = [];
   for (const base of bases) {
     const safe = base.replace(/[%,()]/g, " ").trim();
     if (safe.length < 2) continue;
     const { data } = await sb
       .from("fcp_inscripciones")
-      .select("id_liga, id_equipo, equipo, genero, grupo_nombre, confirmado, sede")
+      .select(
+        "id_liga, id_grupo, id_equipo, equipo, genero, grupo_nombre, subgrupo, confirmado, sede, sede_corta",
+      )
       .ilike("equipo", `${safe}%`)
       .limit(200);
-    for (const r of (data ?? []) as {
-      id_liga: number;
-      id_equipo: number;
-      equipo: string | null;
-      genero: string | null;
-      grupo_nombre: string | null;
-      confirmado: boolean | null;
-      sede: string | null;
-    }[]) {
+    for (const r of (data ?? []) as FilaInscripcionRaw[]) {
       if (currentLiga != null && r.id_liga <= currentLiga) continue;
-      const equipo = (r.equipo ?? "").trim();
-      if (!equipo) continue;
-      const clave = `${normName(equipo)}|${r.genero ?? ""}`;
-      if (vistos.has(clave)) continue;
-      vistos.add(clave);
-      idLiga = idLiga ?? r.id_liga;
-      const mio = conNombre.find(
-        (t) =>
-          normName(t.name) === normName(equipo) &&
-          (r.genero === "F" ? t.gender === "femenino" : t.gender !== "femenino"),
-      );
-      rows.push({
-        equipo,
-        genero: r.genero === "F" ? "F" : r.genero === "M" ? "M" : null,
-        categoria: catShortLocal(r.grupo_nombre),
-        confirmado: !!r.confirmado,
-        enTactium: !!mio,
-        categoriaActual: mio?.category ?? null,
-        sede: r.sede ?? null,
-        jugadores: [],
-      });
-      idEquipoPorFila.set(rows.length - 1, r.id_equipo);
+      if (!(r.equipo ?? "").trim()) continue;
+      candidatas.push(r);
     }
   }
-  if (rows.length === 0) return null;
+  if (candidatas.length === 0) return null;
 
-  const idsEquipo = [...new Set([...idEquipoPorFila.values()])];
-  if (idsEquipo.length) {
-    const { data: jug } = await sb
+  // Filas viejas. Al rellenar los grupos con el PDF de distribución quedaron
+  // filas sin `subgrupo` en categorías que sí lo tienen: son inscripciones que
+  // la Federación ya no publica, y contarlas pondría un equipo de más en la
+  // lista del club. Se mira la categoría entera, una consulta para todas.
+  const dudosas = [...new Set(candidatas.filter((r) => !r.subgrupo).map((r) => r.id_grupo))];
+  const conSubgrupos = new Set<string>();
+  if (dudosas.length > 0) {
+    const { data: sg } = await sb
+      .from("fcp_inscripciones")
+      .select("id_grupo")
+      .in("id_grupo", dudosas)
+      .not("subgrupo", "is", null)
+      .limit(5000);
+    for (const g of (sg ?? []) as { id_grupo: string }[]) conSubgrupos.add(g.id_grupo);
+  }
+
+  // Una fila por equipo y género. Si aun así se repite, gana la que trae grupo.
+  const porClave = new Map<string, FilaInscripcionRaw>();
+  for (const r of candidatas) {
+    if (!r.subgrupo && conSubgrupos.has(r.id_grupo)) continue;
+    const clave = `${normName(r.equipo)}|${r.genero ?? ""}`;
+    const previa = porClave.get(clave);
+    if (!previa || (!previa.subgrupo && r.subgrupo)) porClave.set(clave, r);
+  }
+  const raws = [...porClave.values()];
+  if (raws.length === 0) return null;
+  const idLiga = raws[0].id_liga;
+
+  // Plantillas de la temporada nueva y de la que se juega, a la vez. Todo en
+  // bloque, no una consulta por equipo.
+  const idsEquipo = [...new Set(raws.map((r) => r.id_equipo))];
+  const [{ data: jug }, actualesInfo] = await Promise.all([
+    sb
       .from("fcp_jugadores")
       .select("id_jugador, nombre, nombre_pila, apellido1, apellido2, puntos, id_equipo")
       .in("id_equipo", idsEquipo)
       .order("puntos", { ascending: false, nullsFirst: false })
-      .limit(2000);
-    const porEquipo = new Map<number, FcpInscripcion["jugadores"]>();
-    for (const j of (jug ?? []) as {
-      id_jugador: string;
-      nombre: string | null;
-      nombre_pila: string | null;
-      apellido1: string | null;
-      apellido2: string | null;
-      puntos: number | null;
-      id_equipo: number;
-    }[]) {
-      const lista = porEquipo.get(j.id_equipo) ?? [];
-      lista.push({
-        idJugador: j.id_jugador,
-        nombre:
-          [j.nombre_pila, j.apellido1, j.apellido2].filter(Boolean).join(" ").trim() ||
-          (j.nombre ?? "—"),
-        puntos: j.puntos ?? 0,
-      });
-      porEquipo.set(j.id_equipo, lista);
+      .limit(3000),
+    plantillasActuales(conNombre),
+  ]);
+  const porEquipo = new Map<number, FcpInscripcion["jugadores"]>();
+  const clavesPorEquipo = new Map<number, Set<string>>();
+  for (const j of (jug ?? []) as (FcpJugadorClave & {
+    id_jugador: string;
+    puntos: number | null;
+    id_equipo: number;
+  })[]) {
+    const lista = porEquipo.get(j.id_equipo) ?? [];
+    lista.push({
+      idJugador: j.id_jugador,
+      nombre:
+        [j.nombre_pila, j.apellido1, j.apellido2].filter(Boolean).join(" ").trim() ||
+        (j.nombre ?? "—"),
+      puntos: j.puntos ?? 0,
+    });
+    porEquipo.set(j.id_equipo, lista);
+    const k = fcpPlayerKey(j);
+    if (k) {
+      const set = clavesPorEquipo.get(j.id_equipo) ?? new Set<string>();
+      set.add(k);
+      clavesPorEquipo.set(j.id_equipo, set);
     }
-    for (const [i, idEq] of idEquipoPorFila) rows[i].jugadores = porEquipo.get(idEq) ?? [];
   }
 
-  let temporada = "";
-  if (idLiga != null) {
-    const { data: liga } = await sb
-      .from("fcp_ligas")
-      .select("temporada")
-      .eq("id_liga", idLiga)
-      .maybeSingle();
-    temporada = seasonLabel((liga as { temporada: string | null } | null)?.temporada);
-  }
+  // El cruce de temporada: qué fila es qué equipo del club.
+  const actuales: FcpDiffActual[] = conNombre.map((t) => ({
+    teamId: t.id,
+    name: t.name,
+    genero: t.gender === "femenino" ? "F" : "M",
+    categoria: t.category,
+    jugadores: actualesInfo.porEquipo.get(t.id) ?? new Set<string>(),
+  }));
+  const generoDe = (g: string | null): "M" | "F" | null => (g === "F" ? "F" : g === "M" ? "M" : null);
+  const siguientes: FcpDiffSiguiente[] = raws.map((r) => ({
+    equipo: (r.equipo ?? "").trim(),
+    genero: generoDe(r.genero),
+    categoria: catShortLocal(r.grupo_nombre),
+    jugadores: clavesPorEquipo.get(r.id_equipo) ?? new Set<string>(),
+  }));
+  const diff = diffClubSeason(actuales, siguientes);
+
+  const rows: FcpInscripcion[] = raws.map((r, i) => {
+    const d = diff.filas[i];
+    const categoria = siguientes[i].categoria;
+    return {
+      idLiga: r.id_liga,
+      idGrupo: r.id_grupo,
+      idEquipo: r.id_equipo,
+      equipo: siguientes[i].equipo,
+      genero: siguientes[i].genero,
+      categoria,
+      subgrupo: r.subgrupo ?? null,
+      confirmado: !!r.confirmado,
+      enTactium: !!d.teamId,
+      teamId: d.teamId,
+      categoriaActual: d.categoriaAntes,
+      estado: d.estado,
+      antes: d.antes,
+      estadoLabel: fcpEstadoLabel(d, categoria),
+      sede: r.sede ?? null,
+      sedeCorta: r.sede_corta ?? null,
+      jugadores: porEquipo.get(r.id_equipo) ?? [],
+    };
+  });
+
+  const { data: liga } = await sb
+    .from("fcp_ligas")
+    .select("temporada")
+    .eq("id_liga", idLiga)
+    .maybeSingle();
+  const temporada = seasonLabel((liga as { temporada: string | null } | null)?.temporada);
+
   rows.sort((a, b) => a.equipo.localeCompare(b.equipo) || (a.genero ?? "").localeCompare(b.genero ?? ""));
   return {
     temporada,
     total: rows.length,
     confirmados: rows.filter((r) => r.confirmado).length,
     rows,
+    // Solo los importados de la Federación: un equipo hecho a mano (amateur,
+    // de pachanga) no tiene por qué estar inscrito y avisar de él sería ruido.
+    desaparecen: diff.desaparecen
+      .filter((t) => actualesInfo.vinculados.has(t.teamId))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+/** Rivales del grupo de una fila de inscripción (vacío sin subgrupo). Es
+ *  `fetchFcpGroupRivals` con el cliente del navegador; se pide al abrir la
+ *  plantilla, no para todas las filas del panel a la vez. */
+export function fetchInscripcionGrupo(fila: {
+  idLiga: number;
+  idGrupo: string;
+  subgrupo: string | null;
+  idEquipo?: number | null;
+}): Promise<FcpRival[]> {
+  return fetchFcpGroupRivals(supabaseBrowser(), fila);
 }

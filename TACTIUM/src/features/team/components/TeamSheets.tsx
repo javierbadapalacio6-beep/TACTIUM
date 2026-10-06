@@ -7,7 +7,8 @@ import { Radius } from '@core/theme/spacing';
 import { BottomSheet, IconCheck, IconChevron } from '@components/ui';
 import { useTeamStore, type Team } from '@store/teamStore';
 import { toast } from '@store/toastStore';
-import type { FcpInscripcion } from '@core/services/fcpInscripciones';
+import { fetchInscripcionGrupo } from '@core/services/fcpInscripciones';
+import type { FcpInscripcion, FcpRivalGrupo } from '@core/services/fcpInscripciones';
 import { fetchNextMatchdays, shortDate, teamLogoOf } from '@features/team/teamData';
 import { TeamCrest } from './TeamCrest';
 
@@ -243,7 +244,24 @@ export const FederationSheet: React.FC<{
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [grupoOpen, setGrupoOpen] = useState(false);
   const f = inscripcion?.fila;
+  // Rivales del grupo de la temporada que viene. Se piden al abrir la hoja
+  // (no con la pantalla): casi nadie la abre y es una consulta más. La clave
+  // evita repetirla cada vez que la fila se recrea al refrescar.
+  const grupoKey = f?.subgrupo ? `${f.idLiga}|${f.idGrupo}|${f.subgrupo}|${f.idEquipo}` : null;
+  const [rivales, setRivales] = useState<{ key: string; rows: FcpRivalGrupo[] } | null>(null);
+  useEffect(() => {
+    if (!open || !f || !grupoKey || rivales?.key === grupoKey) return;
+    let alive = true;
+    fetchInscripcionGrupo(f)
+      .then((rows) => alive && setRivales({ key: grupoKey, rows }))
+      .catch(() => alive && setRivales({ key: grupoKey, rows: [] }));
+    return () => {
+      alive = false;
+    };
+  }, [open, grupoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rivalesListos = rivales && rivales.key === grupoKey ? rivales.rows : null;
   const after = (fn: () => void) => () => {
     onClose();
     setTimeout(fn, 320);
@@ -261,12 +279,19 @@ export const FederationSheet: React.FC<{
           </Text>
           <Text style={s.inscripText}>
             {f.categoriaActual && f.categoria && f.categoriaActual !== f.categoria
-              ? `Cambias de ${f.categoriaActual} a ${f.categoria}.`
+              ? `Cambias de ${f.categoriaActual} a ${f.categoria}`
               : f.categoria
-                ? `Jugarás en ${f.categoria}.`
-                : 'La Federación aún no publica la categoría.'}
-            {f.sede ? ` Sede: ${f.sede}.` : ''}
+                ? `Jugarás en ${f.categoria}`
+                : 'La Federación aún no publica la categoría'}
+            {f.subgrupo ? `, grupo ${f.subgrupo}.` : '.'}
+            {f.sedeCorta || f.sede ? ` Sede: ${f.sedeCorta || f.sede}.` : ''}
           </Text>
+          {/* Otra letra u otro patrocinador, mismos jugadores: se dice con
+              el nombre de la Federación, que es el que saldrá en el
+              calendario y en las actas. */}
+          {f.estado === 'renombrado' ? (
+            <Text style={s.inscripText}>La Federación lo inscribe como {f.equipo}.</Text>
+          ) : null}
         </View>
       ) : null}
 
@@ -360,6 +385,58 @@ export const FederationSheet: React.FC<{
             )}
           </View>
         ) : null}
+        {/* Tu grupo de la temporada que viene. Solo con grupo asignado: la
+            categoría entera (hasta 32 equipos) no son tus rivales. */}
+        {f?.subgrupo ? (
+          <Pressable
+            onPress={() => setGrupoOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: grupoOpen }}
+            style={({ pressed }) => [s.row, s.rowTopDivider, pressed && { opacity: 0.8 }]}
+          >
+            <View style={s.glyph}>
+              <Text style={s.glyphText}>{f.subgrupo}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.rowTitle}>Tu grupo · Grupo {f.subgrupo}</Text>
+              <Text style={s.rowSub}>
+                {rivalesListos == null
+                  ? 'Cargando rivales…'
+                  : rivalesListos.length === 1
+                    ? '1 rival'
+                    : `${rivalesListos.length} rivales`}
+              </Text>
+            </View>
+            <View style={{ transform: [{ rotate: grupoOpen ? '90deg' : '0deg' }] }}>
+              <IconChevron size={14} color={c.textFaint} />
+            </View>
+          </Pressable>
+        ) : null}
+        {f?.subgrupo && grupoOpen ? (
+          <View style={s.roster}>
+            {rivalesListos == null ? (
+              <ActivityIndicator color={c.accent} style={{ marginVertical: 10 }} />
+            ) : rivalesListos.length === 0 ? (
+              <Text style={[s.rowSub, { marginTop: 8 }]}>
+                La Federación todavía no publica más equipos en tu grupo.
+              </Text>
+            ) : (
+              rivalesListos.map((r, i) => (
+                <View key={r.idEquipo} style={s.rosterRow}>
+                  <Text style={s.rosterNum}>{i + 1}</Text>
+                  <Text style={s.rosterName} numberOfLines={1}>
+                    {r.equipo}
+                  </Text>
+                  {r.sedeCorta ? (
+                    <Text style={s.rivalSede} numberOfLines={1}>
+                      {r.sedeCorta}
+                    </Text>
+                  ) : null}
+                </View>
+              ))
+            )}
+          </View>
+        ) : null}
       </View>
 
       {canManage && f ? (
@@ -425,6 +502,9 @@ const makeStyles = (c: Palette) =>
       paddingVertical: 12,
     },
     rowDivider: { borderBottomWidth: 1, borderColor: c.hair },
+    // Para la fila que va DESPUÉS de una que puede desplegarse: el borde va
+    // arriba, así separa igual con la lista abierta que cerrada.
+    rowTopDivider: { borderTopWidth: 1, borderColor: c.hair },
     glyph: {
       width: 34,
       height: 34,
@@ -467,6 +547,7 @@ const makeStyles = (c: Palette) =>
     rosterNum: { color: c.textFaint, fontSize: 11, width: 18, textAlign: 'center' },
     rosterName: { flex: 1, minWidth: 0, color: c.text, fontSize: 13.5 },
     rosterPts: { fontFamily: Fonts.mono, color: c.accent, fontSize: 13, fontWeight: '700' },
+    rivalSede: { fontFamily: Fonts.mono, color: c.textMuted, fontSize: 11.5, maxWidth: 120 },
     hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
     refresh: {
       marginTop: 12,

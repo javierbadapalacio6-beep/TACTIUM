@@ -375,6 +375,11 @@ export interface FcpInscritoEnGrupo {
   equipo: string;
   confirmado: boolean;
   sede: string | null;
+  /** Sede en corto («SMASH», «GO FIT»), como la escribe el PDF de la FCP. */
+  sedeCorta: string | null;
+  /** Grupo dentro de la categoría ('A' | 'B' | …). Null hasta que la
+   *  Federación publica la distribución. */
+  subgrupo: string | null;
   /** Jugadores ya dados de alta. Muchos equipos se apuntan antes de tener
    *  plantilla, así que el cero es información, no un fallo. */
   jugadores: number;
@@ -383,21 +388,27 @@ export interface FcpInscritoEnGrupo {
 /**
  * Equipos apuntados a una categoría de la liga que aún no ha empezado.
  *
- * Esa liga no tiene clasificación ni calendario —el sorteo no está hecho—, así
- * que la pantalla de grupo no tenía nada que enseñar y salían dos pestañas
- * vacías. Esto es lo que sí existe.
+ * Esa liga no tiene clasificación ni calendario —no hay partidos—, así que la
+ * pantalla de grupo no tenía nada que enseñar y salían dos pestañas vacías.
+ * Esto es lo que sí existe. Cuando la Federación reparte la categoría en
+ * grupos (`subgrupo`), las filas que se quedaron sin él son inscripciones
+ * viejas que ya no publica y se descartan.
  */
 export async function fetchGroupInscritos(idGrupo: string): Promise<FcpInscritoEnGrupo[]> {
   const { data } = await rawFrom('fcp_inscripciones')
-    .select('id_equipo, equipo, confirmado, sede, num')
+    .select('id_equipo, equipo, confirmado, sede, sede_corta, subgrupo, num')
     .eq('id_grupo', idGrupo)
     .order('num', { ascending: true });
-  const rows = (data ?? []) as {
+  const todas = (data ?? []) as {
     id_equipo: number;
     equipo: string | null;
     confirmado: boolean | null;
     sede: string | null;
+    sede_corta: string | null;
+    subgrupo: string | null;
   }[];
+  const conSubgrupos = todas.some((r) => !!r.subgrupo);
+  const rows = conSubgrupos ? todas.filter((r) => !!r.subgrupo) : todas;
   if (rows.length === 0) return [];
 
   // Cuántos jugadores tiene ya cada uno. Una sola consulta para toda la lista.
@@ -415,6 +426,8 @@ export async function fetchGroupInscritos(idGrupo: string): Promise<FcpInscritoE
     equipo: r.equipo ?? '—',
     confirmado: !!r.confirmado,
     sede: r.sede,
+    sedeCorta: r.sede_corta ?? null,
+    subgrupo: r.subgrupo ?? null,
     jugadores: cuenta.get(r.id_equipo) ?? 0,
   }));
 }

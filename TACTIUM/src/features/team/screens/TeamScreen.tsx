@@ -169,13 +169,38 @@ export const TeamScreen = () => {
     };
   }, [team?.id, isFcpTeam]);
 
-  // Inscripción del equipo a la temporada que VIENE (cruza por nombre +
-  // género; la fila mía es la que el servicio ha casado con este equipo).
+  // Inscripción del equipo a la temporada que VIENE. El servicio casa cada
+  // fila de la Federación con un equipo de TACTIUM por jugadores en común (y
+  // si no, por nombre), así que la fila mía es la que trae este `teamId`
+  // aunque la FCP le haya cambiado la letra.
+  //
+  // Se le pasan los equipos del club que este usuario ve, no solo el activo:
+  // con los hermanos delante, el cruce no le adjudica a este equipo la fila
+  // de otro del mismo club que comparta un par de jugadores. Un jugador suelto
+  // solo ve su equipo, y entonces va solo; el cruce por plantilla basta.
   const [inscripcion, setInscripcion] = useState<{
     temporada: string;
     fila: FcpInscripcion;
   } | null>(null);
   const [refrescando, setRefrescando] = useState(false);
+  const inscripcionTeams = useMemo(() => {
+    if (!team) return [];
+    const hermanos = team.club_id ? teams.filter((t) => t.club_id === team.club_id) : [];
+    const lista = hermanos.some((t) => t.id === team.id) ? hermanos : [...hermanos, team];
+    return lista.map((t) => ({ id: t.id, name: t.name, gender: t.gender, category: t.category }));
+  }, [team, teams]);
+  // Clave estable para el efecto: el array se recrea con cada cambio del store.
+  const inscripcionTeamsKey = inscripcionTeams
+    .map((t) => `${t.id}|${t.name}|${t.gender}|${t.category}`)
+    .join(',');
+
+  const cargarInscripcion = useCallback(async () => {
+    if (!team?.id) return null;
+    const r = await fetchClubInscripciones(inscripcionTeams);
+    const fila = r?.rows.find((x) => x.teamId === team.id);
+    return fila && r ? { temporada: r.temporada, fila } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team?.id, inscripcionTeamsKey]);
 
   useEffect(() => {
     if (!team?.id || !isFcpTeam) {
@@ -183,19 +208,13 @@ export const TeamScreen = () => {
       return;
     }
     let alive = true;
-    fetchClubInscripciones([
-      { id: team.id, name: team.name, gender: team.gender, category: team.category },
-    ])
-      .then((r) => {
-        if (!alive) return;
-        const fila = r?.rows.find((x) => x.teamId === team.id);
-        setInscripcion(fila ? { temporada: r!.temporada, fila } : null);
-      })
+    cargarInscripcion()
+      .then((v) => alive && setInscripcion(v))
       .catch(() => alive && setInscripcion(null));
     return () => {
       alive = false;
     };
-  }, [team?.id, team?.name, team?.gender, team?.category, isFcpTeam]);
+  }, [team?.id, isFcpTeam, cargarInscripcion]);
 
   /** Relee la plantilla en la web de la Federación, sin esperar al volcado
    *  automático (martes y viernes). */
@@ -203,12 +222,8 @@ export const TeamScreen = () => {
     if (!team?.id || refrescando) return;
     setRefrescando(true);
     try {
-      await refreshInscripcionRoster(team.id);
-      const r = await fetchClubInscripciones([
-        { id: team.id, name: team.name, gender: team.gender, category: team.category },
-      ]);
-      const fila = r?.rows.find((x) => x.teamId === team.id);
-      setInscripcion(fila ? { temporada: r!.temporada, fila } : null);
+      await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
+      setInscripcion(await cargarInscripcion());
     } catch {
       /* el texto ya dice de cuándo es la foto */
     } finally {
@@ -968,10 +983,13 @@ export const TeamScreen = () => {
                   : inscripcion.fila.categoria
                     ? `Jugáis en ${inscripcion.fila.categoria}`
                     : 'Categoría aún sin publicar'}
+                {inscripcion.fila.subgrupo ? `, grupo ${inscripcion.fila.subgrupo}` : ''}
               </Text>
               <Text style={styles.inscSub} numberOfLines={1}>
                 {[
-                  inscripcion.fila.sede ? `Sede: ${inscripcion.fila.sede}` : 'Sede sin asignar',
+                  inscripcion.fila.sedeCorta || inscripcion.fila.sede
+                    ? `Sede: ${inscripcion.fila.sedeCorta || inscripcion.fila.sede}`
+                    : 'Sede sin asignar',
                   `${inscripcion.fila.jugadores.length} inscritos`,
                 ].join(' · ')}
               </Text>

@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !anonKey || !serviceKey) return json({ error: 'misconfigured' }, 500);
 
-  let body: { team_id?: string };
+  let body: { team_id?: string; fcp_id_equipo?: number };
   try { body = await req.json(); } catch { return json({ error: 'invalid_json' }, 400); }
   if (!body.team_id) return json({ error: 'team_id_required' }, 400);
 
@@ -102,17 +102,30 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  // 2) El equipo en la liga que viene. Se busca por NOMBRE y género: el
-  //    id_equipo de la Federación cambia cada temporada, así que el vínculo
-  //    guardado apunta a la liga en curso y aquí no sirve.
-  const { data: insc } = await admin
-    .from('fcp_inscripciones')
-    .select('id_liga, id_grupo, id_equipo, equipo, genero, plantilla_updated_at')
-    .ilike('equipo', team.name)
-    .eq('genero', team.gender === 'femenino' ? 'F' : 'M')
-    .order('id_liga', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // 2) El equipo en la liga que viene. El id_equipo de la Federación cambia
+  //    cada temporada, así que el vínculo guardado apunta a la liga en curso y
+  //    aquí no sirve. Si el cliente ya sabe cuál es (lo saca del cruce por
+  //    jugadores, `diffClubSeason`), manda `fcp_id_equipo`: es lo único que
+  //    funciona cuando la FCP le ha cambiado la letra («ZINK PADEL F» → «E»).
+  //    Si no, se busca por NOMBRE y género, como antes. Refrescar la plantilla
+  //    de otro equipo no expone nada: es la ficha pública de la Federación.
+  const sel = 'id_liga, id_grupo, id_equipo, equipo, genero, plantilla_updated_at';
+  const { data: insc } = body.fcp_id_equipo
+    ? await admin
+        .from('fcp_inscripciones')
+        .select(sel)
+        .eq('id_equipo', body.fcp_id_equipo)
+        .order('id_liga', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : await admin
+        .from('fcp_inscripciones')
+        .select(sel)
+        .ilike('equipo', team.name)
+        .eq('genero', team.gender === 'femenino' ? 'F' : 'M')
+        .order('id_liga', { ascending: false })
+        .limit(1)
+        .maybeSingle();
   if (!insc) return json({ ok: true, found: false, reason: 'no_inscrito' });
 
   if (insc.plantilla_updated_at &&

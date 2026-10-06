@@ -278,6 +278,20 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
 
   const eyebrow = (grupo ?? 'Grupo').toUpperCase();
   const soloInscripcion = !loading && rows.length === 0 && schedule.length === 0 && inscritos.length > 0;
+  // La categoría entera son hasta 32 equipos, pero cada uno solo juega contra
+  // los de su grupo: se enseñan por grupos, como los reparte la Federación.
+  // Mientras no haya reparto, un único bloque sin cabecera (como antes).
+  const inscritosPorGrupo = useMemo(() => {
+    const porGrupo = new Map<string | null, FcpInscritoEnGrupo[]>();
+    for (const t of inscritos) {
+      const lista = porGrupo.get(t.subgrupo) ?? [];
+      lista.push(t);
+      porGrupo.set(t.subgrupo, lista);
+    }
+    return [...porGrupo.entries()]
+      .map(([subgrupo, equipos]) => ({ subgrupo, equipos }))
+      .sort((a, b) => (a.subgrupo ?? '~').localeCompare(b.subgrupo ?? '~'));
+  }, [inscritos]);
   const h1 = soloInscripcion
     ? 'Equipos inscritos'
     : tab === 'clasif'
@@ -356,33 +370,43 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
         ) : soloInscripcion ? (
           <View style={{ marginTop: 20, gap: 6 }}>
             <Text style={styles.empty}>
-              El sorteo no está hecho: todavía no hay grupos ni calendario. Estos son
-              los equipos apuntados a la categoría.
+              {inscritosPorGrupo.length > 1 || inscritosPorGrupo[0]?.subgrupo
+                ? 'Todavía no hay calendario. Estos son los equipos apuntados, en el grupo que les ha asignado la Federación.'
+                : 'El sorteo no está hecho: todavía no hay grupos ni calendario. Estos son los equipos apuntados a la categoría.'}
             </Text>
-            {inscritos.map((t, i) => (
-              <Pressable
-                key={t.idEquipo}
-                onPress={() =>
-                  navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
-                }
-                style={({ pressed }) => [styles.inscRow, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.inscNum}>{i + 1}</Text>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.inscName} numberOfLines={1}>{t.equipo}</Text>
-                  <Text style={styles.inscMeta} numberOfLines={1}>
-                    {[
-                      t.jugadores > 0 ? `${t.jugadores} jugadores` : 'sin plantilla aún',
-                      t.sede,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+            {inscritosPorGrupo.map((g) => (
+              <React.Fragment key={g.subgrupo ?? '-'}>
+                {g.subgrupo ? (
+                  <Text style={styles.inscGroupHead}>
+                    GRUPO {g.subgrupo} · {g.equipos.length} EQUIPOS
                   </Text>
-                </View>
-                <Text style={[styles.inscState, !t.confirmado && styles.inscPending]}>
-                  {t.confirmado ? 'OK' : 'PEND.'}
-                </Text>
-              </Pressable>
+                ) : null}
+                {g.equipos.map((t, i) => (
+                  <Pressable
+                    key={t.idEquipo}
+                    onPress={() =>
+                      navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
+                    }
+                    style={({ pressed }) => [styles.inscRow, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.inscNum}>{i + 1}</Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.inscName} numberOfLines={1}>{t.equipo}</Text>
+                      <Text style={styles.inscMeta} numberOfLines={1}>
+                        {[
+                          t.jugadores > 0 ? `${t.jugadores} jugadores` : 'sin plantilla aún',
+                          t.sedeCorta ?? t.sede,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    </View>
+                    <Text style={[styles.inscState, !t.confirmado && styles.inscPending]}>
+                      {t.confirmado ? 'OK' : 'PEND.'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </React.Fragment>
             ))}
           </View>
         ) : tab === 'cuadro' ? (
@@ -737,6 +761,15 @@ const makeStyles = (c: Palette) =>
   inscMeta: { fontFamily: Fonts.mono, color: c.textFaint, fontSize: 10.5, marginTop: 2, textTransform: 'uppercase' },
   inscState: { fontFamily: Fonts.mono, color: c.accent, fontSize: 10 },
   inscPending: { color: c.warning },
+  inscGroupHead: {
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    letterSpacing: 1.6,
+    color: c.accent,
+    fontWeight: '600',
+    marginTop: 14,
+    marginBottom: 2,
+  },
   empty: { color: c.textMuted, fontSize: 13.5, marginTop: 30, textAlign: 'center' },
 
     // Tabla clasificación

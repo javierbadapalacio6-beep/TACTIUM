@@ -18,6 +18,7 @@ import {
   type DbPlayer,
 } from "@/lib/queries";
 import { fetchLeagueStatsBundle, type LeagueStatsBundle } from "@/lib/player-stats";
+import { FcpGroupRivals } from "@/components/federation/FcpGroupRivals";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -228,7 +229,7 @@ function MenuItem({
  *  · La inscripción pasa a la sección «Federación».
  */
 export function Roster() {
-  const { activeTeam, role, user } = useSession();
+  const { activeTeam, role, user, teams: myTeams } = useSession();
   const reduce = useReducedMotion();
   const teamId = activeTeam?.id ?? null;
   // El jugador (o el capitán que entra en modo jugador) no gestiona. Decisión
@@ -237,15 +238,31 @@ export function Roster() {
   const canManage =
     (activeTeam?.role === "captain" || activeTeam?.role === "admin") && role !== "jugador";
 
-  // Inscripción a la temporada que viene (null fuera del periodo).
+  // Inscripción a la temporada que viene (null fuera del periodo). Con los
+  // demás equipos del mismo club que ve el usuario: el cruce por jugadores
+  // necesita a los hermanos delante para no quedarse con la fila de otro.
+  const hermanos = useMemo(
+    () =>
+      activeTeam?.clubId
+        ? myTeams
+            .filter((t) => t.clubId === activeTeam.clubId)
+            .map((t) => ({ id: t.id, name: t.name, gender: t.gender, category: t.category }))
+        : [],
+    [myTeams, activeTeam?.clubId]
+  );
+  const hermanosKey = hermanos.map((t) => `${t.id}|${t.name}|${t.gender}|${t.category}`).join(",");
   const inscripcion = useAsync(
     () =>
-      fetchTeamInscripcion({
-        name: activeTeam!.name,
-        gender: activeTeam!.gender,
-        category: activeTeam!.category,
-      }),
-    [activeTeam?.id, activeTeam?.name, activeTeam?.gender, activeTeam?.category],
+      fetchTeamInscripcion(
+        {
+          id: activeTeam!.id,
+          name: activeTeam!.name,
+          gender: activeTeam!.gender,
+          category: activeTeam!.category,
+        },
+        hermanos
+      ),
+    [activeTeam?.id, activeTeam?.name, activeTeam?.gender, activeTeam?.category, hermanosKey],
     !!activeTeam?.name
   );
   const fcpGroup = useAsync(
@@ -658,6 +675,17 @@ export function Roster() {
             )}
             {insc && (
               <div style={{ padding: "12px 16px 14px" }}>
+                {/* Lo que de verdad quiere saber el equipo, en una frase:
+                    dónde juega y contra quién. El grupo y la sede corta salen
+                    del PDF de distribución de la Federación. */}
+                {insc.categoria && (
+                  <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700 }}>
+                    Jugarás en {insc.categoria}
+                    {insc.subgrupo ? `, grupo ${insc.subgrupo}` : ""}.
+                    {(insc.sedeCorta || insc.sede) &&
+                      ` Sede: ${insc.sedeCorta ?? niceName(insc.sede!)}.`}
+                  </p>
+                )}
                 <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
                   Inscripción {insc.temporada}.{" "}
                   {insc.confirmado
@@ -665,21 +693,28 @@ export function Roster() {
                     : "Estás apuntado, pero la Federación todavía no lo ha confirmado."}{" "}
                   Cuando publique el calendario podrás volcar la temporada con sus jornadas.
                 </p>
+                {/* La FCP reasigna letras entre temporadas: si te inscribe con
+                    otro nombre, que no parezca que esto es de otro equipo. */}
+                {insc.estado === "renombrado" && (
+                  <Note style={{ marginBottom: 12 }}>
+                    En la Federación se llama <strong>{insc.equipo}</strong>.
+                  </Note>
+                )}
                 <dl className="tw-insc-facts">
                   <div className="tw-insc-fact">
                     <dt>Categoría</dt>
                     <dd>
                       {insc.categoria ?? "—"}
-                      <small>
-                        {insc.categoriaActual && insc.categoria && insc.categoriaActual !== insc.categoria
-                          ? `Ahora en ${insc.categoriaActual}`
-                          : "Sin cambio"}
-                      </small>
+                      {insc.subgrupo ? ` · Grupo ${insc.subgrupo}` : ""}
+                      <small>{insc.estadoLabel}</small>
                     </dd>
                   </div>
                   <div className="tw-insc-fact">
                     <dt>Sede de local</dt>
-                    <dd>{insc.sede ? niceName(insc.sede) : "Sin asignar"}</dd>
+                    <dd>
+                      {insc.sedeCorta ?? (insc.sede ? niceName(insc.sede) : "Sin asignar")}
+                      {insc.sedeCorta && insc.sede && <small>{niceName(insc.sede)}</small>}
+                    </dd>
                   </div>
                   <div className="tw-insc-fact">
                     <dt>Plantilla inscrita</dt>
@@ -711,6 +746,17 @@ export function Roster() {
                   <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--text-faint)" }}>
                     La Federación todavía no publica jugadores en tu equipo.
                   </p>
+                )}
+                {insc.rivales.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                      Tu grupo
+                      <span style={{ marginLeft: 6, fontWeight: 500, color: "var(--text-muted)" }}>
+                        Grupo {insc.subgrupo} · {insc.rivales.length} rivales
+                      </span>
+                    </div>
+                    <FcpGroupRivals rivales={insc.rivales} />
+                  </div>
                 )}
               </div>
             )}

@@ -20,14 +20,17 @@ import {
 import {
   fetchClubInscripciones,
   fetchClubWeek,
+  fetchInscripcionGrupo,
   fetchTournamentStats,
   fetchUnconfirmedVenues,
   tournamentPhase,
+  type FcpInscripcion,
   type FcpInscripcionesResumen,
   type TeamWeek,
 } from "@/lib/club-ops";
 import { CLUB_PLANS } from "@/lib/plans";
 import { FCP_FEDERATION_CODE } from "@/lib/federations";
+import { FcpGroupRivals } from "@/components/federation/FcpGroupRivals";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
@@ -521,18 +524,40 @@ export function ClubDashboard() {
                   key={`${r.equipo}-${r.genero}`}
                   onClick={() => setRoster(i)}
                   title={r.equipo}
+                  // El estado sale del cruce por jugadores (`diffClubSeason`),
+                  // no del nombre exacto: dice si sigue, sube, baja, si la FCP
+                  // le ha cambiado el nombre o si es nuevo.
                   sub={[
                     r.genero === "F" ? "Femenino" : "Masculino",
-                    r.categoriaActual && r.categoria && r.categoriaActual !== r.categoria
-                      ? `${r.categoriaActual} → ${r.categoria}`
-                      : r.categoria,
-                    r.enTactium ? null : "nuevo",
+                    r.categoria,
+                    r.subgrupo ? `Grupo ${r.subgrupo}` : null,
+                    r.estadoLabel,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
                   right={r.confirmado ? <Chip>Confirmado</Chip> : <Chip tone="warning">Pendiente</Chip>}
                 />
               ))}
+              {/* Equipos importados de la Federación que no salen en la lista
+                  nueva: o no se han apuntado o se han ido a otro club. Es lo
+                  que el gestor tiene que perseguir antes del cierre. */}
+              {insc.desaparecen.length > 0 && (
+                <div style={{ borderTop: "1px solid var(--line)" }}>
+                  <CardHead
+                    title="No aparecen inscritos"
+                    count={insc.desaparecen.length}
+                    sub="Equipos del club que la Federación no lista esta temporada"
+                  />
+                  {insc.desaparecen.map((t) => (
+                    <ListRow
+                      key={t.teamId}
+                      title={t.name}
+                      sub={t.categoria ? `Ahora en ${t.categoria}` : undefined}
+                      right={<Chip tone="mute">Sin inscribir</Chip>}
+                    />
+                  ))}
+                </div>
+              )}
             </Card>
           ) : (
             teams.length > 0 && (
@@ -657,35 +682,17 @@ export function ClubDashboard() {
       )}
 
       {rosterRow && (
-        <Modal
-          open
+        <InscripcionModal
+          row={rosterRow}
+          // El nombre de verdad del equipo en TACTIUM, no `antes` (que va en
+          // mayúsculas y sin patrocinador): es el que el gestor reconoce.
+          nombreTactium={
+            rosterRow.estado === "renombrado" && rosterRow.teamId
+              ? (teams.find((t) => t.id === rosterRow.teamId)?.name ?? rosterRow.antes)
+              : null
+          }
           onClose={() => setRoster(null)}
-          labelledBy="plantilla-inscrita"
-          width={460}
-          title={rosterRow.equipo}
-          lede={rosterRow.sede ? `Plantilla inscrita · juega en ${rosterRow.sede}` : "Plantilla inscrita"}
-          footer={<Btn onClick={() => setRoster(null)}>Cerrar</Btn>}
-        >
-          {rosterRow.jugadores.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
-              La Federación todavía no publica jugadores en este equipo.
-            </p>
-          ) : (
-            rosterRow.jugadores.map((j, i) => (
-              <div key={j.idJugador} style={{ display: "flex", gap: 10, padding: "6px 0", fontSize: 13.5 }}>
-                <span className="mono" style={{ width: 22, color: "var(--text-faint)" }}>
-                  {i + 1}
-                </span>
-                <span style={{ flex: 1, minWidth: 0 }} className="truncate">
-                  {j.nombre}
-                </span>
-                <span className="mono" style={{ color: "var(--text-muted)" }}>
-                  {j.puntos.toLocaleString("es-ES")}
-                </span>
-              </div>
-            ))
-          )}
-        </Modal>
+        />
       )}
 
       {club && (
@@ -701,6 +708,87 @@ export function ClubDashboard() {
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>
+  );
+}
+
+/**
+ * Detalle de un equipo inscrito: dónde juega, contra quién y con qué
+ * plantilla. Va en componente aparte porque pide los rivales al abrirse (una
+ * consulta por equipo mirado, no una por fila del panel) y un hook no puede
+ * vivir detrás de los `return` tempranos del panel.
+ */
+function InscripcionModal({
+  row,
+  nombreTactium,
+  onClose,
+}: {
+  row: FcpInscripcion;
+  nombreTactium: string | null;
+  onClose: () => void;
+}) {
+  const rivales = useAsync(
+    () => fetchInscripcionGrupo(row).catch(() => []),
+    [row.idLiga, row.idGrupo, row.subgrupo, row.idEquipo],
+    !!row.subgrupo,
+  );
+  const sede = row.sedeCorta ?? row.sede;
+  const lede = [row.subgrupo ? `Grupo ${row.subgrupo}` : null, sede ? `juega en ${sede}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  const fila: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "22px minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 10,
+    padding: "6px 0",
+    fontSize: 13.5,
+  };
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy="plantilla-inscrita"
+      width={460}
+      title={row.equipo}
+      lede={lede ? lede.charAt(0).toUpperCase() + lede.slice(1) : "Plantilla inscrita"}
+      footer={<Btn onClick={onClose}>Cerrar</Btn>}
+    >
+      {nombreTactium && (
+        <Note style={{ marginBottom: 14 }}>
+          En TACTIUM se llama <strong>{nombreTactium}</strong>. La Federación lo ha inscrito con
+          otro nombre, pero son los mismos jugadores.
+        </Note>
+      )}
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Plantilla inscrita</div>
+      {row.jugadores.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
+          La Federación todavía no publica jugadores en este equipo.
+        </p>
+      ) : (
+        row.jugadores.map((j, i) => (
+          <div key={j.idJugador} style={fila}>
+            <span className="mono" style={{ color: "var(--text-faint)" }}>
+              {i + 1}
+            </span>
+            <span className="truncate">{j.nombre}</span>
+            <span className="mono" style={{ color: "var(--text-muted)" }}>
+              {j.puntos.toLocaleString("es-ES")}
+            </span>
+          </div>
+        ))
+      )}
+      {(rivales.data?.length ?? 0) > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+            Tu grupo
+            <span style={{ marginLeft: 6, fontWeight: 500, color: "var(--text-muted)" }}>
+              Grupo {row.subgrupo} · {rivales.data!.length} rivales
+            </span>
+          </div>
+          <FcpGroupRivals rivales={rivales.data!} />
+        </div>
+      )}
+    </Modal>
   );
 }
 

@@ -44,9 +44,10 @@ import {
   type FcpPlayerMatch,
   type FcpPlayerYearTeam,
   type FcpTeamProfile,
+  type FcpTeamResult,
 } from "@/lib/queries";
 import type { FcpGroupBundle } from "@/lib/seo/fcp";
-import type { FcpStanding } from "@/lib/fcp-public";
+import { fcpCategoriaCorta, type FcpStanding } from "@/lib/fcp-public";
 import { FCP_ZONES_NOTE, legendFor, type FcpZone } from "@/lib/fcp-zones";
 import { useSession } from "@/lib/session";
 import { FCP_FEDERATION_CODE, FEDERATIONS as FED_LIST } from "@/lib/federations";
@@ -484,10 +485,13 @@ export function FederationExplore({
   }, [groups.loading, groups.data, grupoOptions, grupo]);
 
   // Igual con una categoría recordada que no existe en esta temporada.
+  // (En una liga en inscripción las categorías salen de los inscritos: se
+  // decide más abajo, con ellos ya cargados.)
   useEffect(() => {
+    if (upcomingLiga != null) return;
     if (groups.loading || !groups.data) return;
     if (cat !== "all" && !catOptions.some((c) => c.value === cat)) setCat("all");
-  }, [groups.loading, groups.data, catOptions, cat]);
+  }, [groups.loading, groups.data, catOptions, cat, upcomingLiga]);
 
   // ── Grupos que se listan ────────────────────────────────────────────────
   const shownGroups = useMemo(() => {
@@ -538,6 +542,81 @@ export function FederationExplore({
       (term.length >= 2 || scopedGroupIds.length > 0 || upcomingLiga != null)
   );
 
+  // Liga en inscripción: los equipos por categoría y, dentro, por el grupo que
+  // reparte la Federación (`subgrupo`). Aquí no hay `fcp_grupos` que filtrar,
+  // así que género y categoría se aplican sobre la propia lista.
+  const inscritosPorCategoria = useMemo(() => {
+    if (!upcomingLiga) return [];
+    const porCat = new Map<
+      string,
+      {
+        idGrupo: string;
+        titulo: string;
+        genero: string;
+        num: number;
+        total: number;
+        grupos: Map<string | null, FcpTeamResult[]>;
+      }
+    >();
+    for (const t of teams.data ?? []) {
+      const i = t.insc;
+      if (!i) continue;
+      if (gender !== "all" && i.genero !== gender) continue;
+      if (cat !== "all" && catShort(i.grupoNombre) !== cat) continue;
+      let sec = porCat.get(t.idGrupo);
+      if (!sec) {
+        sec = {
+          idGrupo: t.idGrupo,
+          titulo: fcpCategoriaCorta(i.grupoNombre, i.genero) ?? i.grupoNombre ?? "Categoría",
+          genero: i.genero ?? "M",
+          num: parseInt(catShort(i.grupoNombre) ?? "99", 10),
+          total: 0,
+          grupos: new Map(),
+        };
+        porCat.set(t.idGrupo, sec);
+      }
+      sec.total += 1;
+      const lista = sec.grupos.get(i.subgrupo) ?? [];
+      lista.push(t);
+      sec.grupos.set(i.subgrupo, lista);
+    }
+    return [...porCat.values()]
+      .sort((a, b) => a.genero.localeCompare(b.genero) || a.num - b.num)
+      .map((s) => ({
+        ...s,
+        // Sin grupo al final: solo puede darse en una categoría sin reparto.
+        grupos: [...s.grupos.entries()]
+          .sort(([a], [b]) => (a ?? "~").localeCompare(b ?? "~"))
+          .map(([subgrupo, equipos]) => ({ subgrupo, equipos })),
+      }));
+  }, [upcomingLiga, teams.data, gender, cat]);
+
+  // Categorías del filtro en una liga en inscripción: salen de los inscritos,
+  // porque no hay grupos de los que sacarlas.
+  const upcomingCatOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of teams.data ?? []) {
+      if (!t.insc) continue;
+      if (gender !== "all" && t.insc.genero !== gender) continue;
+      const c = catShort(t.insc.grupoNombre);
+      if (c) set.add(c);
+    }
+    return [
+      { value: "all", label: "Todas" },
+      ...[...set]
+        .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
+        .map((c) => ({ value: c, label: c })),
+    ];
+  }, [teams.data, gender]);
+
+  // La categoría recordada que no existe en la liga en inscripción se suelta,
+  // pero solo con la lista entera delante: con un término de búsqueda la
+  // lista es un trozo y faltarían categorías que sí existen.
+  useEffect(() => {
+    if (upcomingLiga == null || !teams.data || term.length >= 2) return;
+    if (cat !== "all" && !upcomingCatOptions.some((c) => c.value === cat)) setCat("all");
+  }, [upcomingLiga, teams.data, term, upcomingCatOptions, cat]);
+
   const players = useAsync(
     () => searchFcpPlayers(term, 40),
     [term],
@@ -572,7 +651,7 @@ export function FederationExplore({
       : tab === "jugadores"
         ? `${(players.data ?? []).length} jugadores`
         : tab === "equipos"
-          ? `${(teams.data ?? []).length} equipos`
+          ? `${upcomingLiga ? inscritosPorCategoria.reduce((n, s) => n + s.total, 0) : (teams.data ?? []).length} equipos`
           : groups.loading
             ? "Cargando…"
             : `${shownGroups.length} de ${allGroups.length} grupos`;
@@ -685,7 +764,7 @@ export function FederationExplore({
             label="Categoría"
             icon={<IconTrophy size={15} />}
             value={cat}
-            options={catOptions}
+            options={upcomingLiga ? upcomingCatOptions : catOptions}
             onChange={setCat}
           />
           {tab !== "rankings" && (
@@ -828,7 +907,7 @@ export function FederationExplore({
               body={teams.error}
             />
           </Card>
-        ) : (teams.data ?? []).length === 0 ? (
+        ) : (upcomingLiga ? inscritosPorCategoria.length : (teams.data ?? []).length) === 0 ? (
           <Card>
             <EmptyState
               icon={<IconSearch size={22} />}
@@ -836,6 +915,68 @@ export function FederationExplore({
               body="Escribe un nombre o acota por categoría y grupo."
             />
           </Card>
+        ) : upcomingLiga ? (
+          // Liga en inscripción: una tarjeta por categoría y, dentro, los
+          // grupos tal y como los reparte la Federación. Cada equipo solo
+          // juega contra los de su grupo, así que una lista plana de 323
+          // nombres no contestaba a nada. Sin reparto, la categoría va de
+          // corrido, como antes.
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {inscritosPorCategoria.map((sec) => (
+              <Card flush key={sec.idGrupo}>
+                <CardHead title={sec.titulo} count={sec.total} />
+                {sec.grupos.map((g) => (
+                  <div key={g.subgrupo ?? "-"}>
+                    {g.subgrupo && (
+                      <div
+                        className="grid-head"
+                        style={{
+                          padding: "8px 18px",
+                          background: "var(--bg-card-2)",
+                          borderBottom: "1px solid var(--line)",
+                        }}
+                      >
+                        Grupo {g.subgrupo} · {g.equipos.length} {g.equipos.length === 1 ? "equipo" : "equipos"}
+                      </div>
+                    )}
+                    {g.equipos.map((t, i) => (
+                      <Link
+                        key={t.idEquipo}
+                        href={`/federacion/${slug}/equipo/${t.idEquipo}`}
+                        onClick={pane("equipo", t.idEquipo)}
+                        aria-current={isSel("equipo", t.idEquipo)}
+                        className="tw-fcp-row"
+                        style={{
+                          color: "inherit",
+                          gridTemplateColumns: "24px minmax(0, 1fr) auto auto 16px",
+                        }}
+                      >
+                        <span className="mono" style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                          {i + 1}
+                        </span>
+                        <span className="truncate" style={{ fontSize: 14, fontWeight: 700 }}>
+                          {t.equipo}
+                        </span>
+                        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                          {t.insc?.sedeCorta ?? ""}
+                        </span>
+                        <span>
+                          {t.insc && !t.insc.confirmado && (
+                            <Chip tone="warning" plain>
+                              Pendiente
+                            </Chip>
+                          )}
+                        </span>
+                        <span className="list-row-chev">
+                          <IconChevronRight size={16} />
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ))}
+              </Card>
+            ))}
+          </div>
         ) : (
           <div className="tw-club-teams">
             {(teams.data ?? []).map((t) => (
@@ -2384,7 +2525,19 @@ export function FcpTeamView({
             {data.equipo}
           </span>
         }
-        meta={[data.grupo ?? null]}
+        meta={[
+          // En inscripción, «2ª Masculina · Grupo B» en vez del «2ª CATEGORIA
+          // MASCULINA» de la FCP: el grupo es lo que más importa y no cabía.
+          data.preseason
+            ? [
+                fcpCategoriaCorta(data.preseason.categoria, data.preseason.genero) ??
+                  data.grupo,
+                data.preseason.subgrupo ? `Grupo ${data.preseason.subgrupo}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || null
+            : (data.grupo ?? null),
+        ]}
         actions={
           data.preseason ? (
             <Chip tone={data.preseason.confirmado ? "accent" : "warning"}>
@@ -2409,17 +2562,22 @@ export function FcpTeamView({
             </span>
           </div>
           <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
-            La Federación todavía no ha hecho el sorteo, así que este equipo aún
-            no tiene grupo, calendario ni clasificación. Lo que sí hay es dónde
-            le han encuadrado y su plantilla: ahí es donde se ven los fichajes.
+            {data.preseason.subgrupo
+              ? "La Federación ya ha repartido la categoría en grupos, pero todavía no hay calendario ni clasificación. Lo que sí hay es contra quién jugará, dónde y con qué plantilla."
+              : "La Federación todavía no ha hecho el sorteo, así que este equipo aún no tiene grupo, calendario ni clasificación. Lo que sí hay es dónde le han encuadrado y su plantilla: ahí es donde se ven los fichajes."}
           </p>
           {/* Ni categoría ni género: los dos van ya en la cabecera, y el
               nombre de la categoría («5ª CATEGORIA MASCULINA») lleva el género
               dentro. Repetirlos aquí solo hacía la fila más alta. Sin `unit`
               en la plantilla: su margen de 2px es para «%» y con una palabra
-              entera el número queda pegado. */}
+              entera el número queda pegado. La sede, en corto («SMASH») si la
+              Federación la da así: el nombre largo no cabe en una cifra. */}
           <StatRow>
-            <Stat label="Sede de local" value={data.preseason.sede ?? "Sin asignar"} />
+            <Stat
+              label="Sede de local"
+              value={data.preseason.sedeCorta ?? data.preseason.sede ?? "Sin asignar"}
+              sub={data.preseason.sedeCorta ? (data.preseason.sede ?? undefined) : undefined}
+            />
             <Stat label="Plantilla" value={data.roster.length} />
           </StatRow>
         </Card>
@@ -2620,6 +2778,29 @@ export function FcpTeamView({
       </>
       ) : null}
       </>
+      )}
+
+      {/* Su grupo en la liga que viene: contra quién juega y dónde. Sale del
+          PDF de distribución de la FCP; sin él no hay nada que enseñar (la
+          categoría entera no es «su grupo»). */}
+      {data.preseason && data.preseason.rivales.length > 0 && (
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead
+            title="Su grupo"
+            count={data.preseason.rivales.length}
+            sub={`Grupo ${data.preseason.subgrupo} · rivales de la temporada ${data.preseason.temporada ?? "siguiente"}`}
+          />
+          {data.preseason.rivales.map((r) => (
+            <ListRow
+              key={r.idEquipo}
+              href={`/federacion/${slug}/equipo/${r.idEquipo}`}
+              onClick={pane("equipo", r.idEquipo)}
+              title={r.equipo}
+              sub={r.sedeCorta ? `Juega en ${r.sedeCorta}` : "Sede sin asignar"}
+              right={r.confirmado ? undefined : <Chip tone="warning">Sin confirmar</Chip>}
+            />
+          ))}
+        </Card>
       )}
 
       {/* Plantilla */}

@@ -66,7 +66,23 @@ export interface FcpPreseason {
   genero: string | null;
   confirmado: boolean;
   sede: string | null;
+  /** La sede en corto («SMASH», «GO FIT»), como la escribe el PDF de
+   *  distribución de la Federación. */
+  sedeCorta: string | null;
+  /** Grupo dentro de la categoría ('A' | 'B'…). Null mientras la FCP no
+   *  publique la distribución. */
+  subgrupo: string | null;
+  /** Los demás equipos de su grupo. Vacío sin `subgrupo`. */
+  rivales: FcpRival[];
   temporada: string | null;
+}
+
+/** Un equipo del mismo grupo en una liga en inscripción. */
+export interface FcpRival {
+  idEquipo: number;
+  equipo: string;
+  sedeCorta: string | null;
+  confirmado: boolean;
 }
 
 export interface FcpTeamProfile {
@@ -111,6 +127,19 @@ export function fcpDisplayName(r: {
     .join(" ")
     .trim();
   return n || (r.nombre ?? "Jugador");
+}
+
+/** «2ª CATEGORIA MASCULINA» → «2ª Masculina». El nombre que publica la FCP
+ *  va en mayúsculas y repite «categoría»; en una línea de meta sobra todo
+ *  menos el número y el género. Null si no trae número. */
+export function fcpCategoriaCorta(
+  grupoNombre: string | null | undefined,
+  genero?: string | null
+): string | null {
+  const m = (grupoNombre ?? "").match(/(\d+)\s*ª/);
+  if (!m) return null;
+  const fem = /FEMEN/i.test(grupoNombre ?? "") || (genero ?? "").toUpperCase().startsWith("F");
+  return `${m[1]}ª ${fem ? "Femenina" : "Masculina"}`;
 }
 
 /** PJ/PG/racha por equipo, derivados del calendario (fcp_partidos). */
@@ -362,30 +391,45 @@ async function fetchFcpPreseasonTeam(
   sb: SupabaseClient,
   idEquipo: number
 ): Promise<FcpTeamProfile | null> {
+  // Varias filas y no `maybeSingle`: al rellenar los grupos con el PDF de
+  // distribución quedaron un par de filas viejas sin `subgrupo` para equipos
+  // que también tienen la buena. De la liga más nueva, gana la que trae grupo.
   const { data } = await sb
     .from("fcp_inscripciones")
-    .select("id_liga, equipo, genero, grupo_nombre, confirmado, sede")
+    .select(
+      "id_liga, id_grupo, equipo, genero, grupo_nombre, confirmado, sede, subgrupo, sede_corta"
+    )
     .eq("id_equipo", idEquipo)
     .order("id_liga", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const r = data as {
+    .limit(5);
+  const filas = (data ?? []) as {
     id_liga: number;
+    id_grupo: string;
     equipo: string | null;
     genero: string | null;
     grupo_nombre: string | null;
     confirmado: boolean | null;
     sede: string | null;
-  } | null;
-  if (!r) return null;
+    subgrupo: string | null;
+    sede_corta: string | null;
+  }[];
+  if (filas.length === 0) return null;
+  const deLaUltima = filas.filter((f) => f.id_liga === filas[0].id_liga);
+  const r = deLaUltima.find((f) => f.subgrupo) ?? deLaUltima[0];
 
-  const [{ data: liga }, roster] = await Promise.all([
+  const [{ data: liga }, roster, rivales] = await Promise.all([
     sb
       .from("fcp_ligas")
       .select("temporada, nombre")
       .eq("id_liga", r.id_liga)
       .maybeSingle(),
     fetchFcpRoster(sb, idEquipo),
+    fetchFcpGroupRivals(sb, {
+      idLiga: r.id_liga,
+      idGrupo: r.id_grupo,
+      subgrupo: r.subgrupo,
+      idEquipo,
+    }).catch(() => [] as FcpRival[]),
   ]);
 
   return {
@@ -407,10 +451,58 @@ async function fetchFcpPreseasonTeam(
       genero: r.genero,
       confirmado: r.confirmado === true,
       sede: r.sede,
+      sedeCorta: r.sede_corta ?? null,
+      subgrupo: r.subgrupo ?? null,
+      rivales,
       temporada:
         (liga as { temporada: string | null } | null)?.temporada ?? null,
     },
   };
+}
+
+/**
+ * Rivales de un equipo en la liga que viene: misma liga, misma categoría
+ * (`id_grupo`) y mismo grupo dentro de ella (`subgrupo`), sin el propio
+ * equipo, por nombre.
+ *
+ * Sin subgrupo devuelve []: la categoría entera son hasta 32 equipos y casi
+ * ninguno será rival, así que enseñarla como «su grupo» sería falso. Filtrar
+ * por subgrupo deja fuera, de paso, las filas viejas que se quedaron sin él.
+ * Mismo criterio que `fetchInscripcionGrupo` en la app.
+ */
+export async function fetchFcpGroupRivals(
+  sb: SupabaseClient,
+  f: { idLiga: number; idGrupo: string; subgrupo: string | null; idEquipo?: number | null }
+): Promise<FcpRival[]> {
+  if (!f.subgrupo) return [];
+  const { data, error } = await sb
+    .from("fcp_inscripciones")
+    .select("id_equipo, equipo, sede_corta, confirmado")
+    .eq("id_liga", f.idLiga)
+    .eq("id_grupo", f.idGrupo)
+    .eq("subgrupo", f.subgrupo)
+    .limit(100);
+  if (error) throw error;
+  const vistos = new Set<number>();
+  return ((data ?? []) as {
+    id_equipo: number;
+    equipo: string | null;
+    sede_corta: string | null;
+    confirmado: boolean | null;
+  }[])
+    .filter((r) => {
+      if (r.id_equipo === f.idEquipo || !(r.equipo ?? "").trim()) return false;
+      if (vistos.has(r.id_equipo)) return false;
+      vistos.add(r.id_equipo);
+      return true;
+    })
+    .map((r) => ({
+      idEquipo: r.id_equipo,
+      equipo: (r.equipo ?? "").trim(),
+      sedeCorta: r.sede_corta ?? null,
+      confirmado: !!r.confirmado,
+    }))
+    .sort((a, b) => a.equipo.localeCompare(b.equipo, "es"));
 }
 
 /** Grupo principal (liga regular) de un id_equipo federativo: el que tiene más
