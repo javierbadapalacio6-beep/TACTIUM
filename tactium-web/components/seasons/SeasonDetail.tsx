@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import {
   createMatchday,
   fetchMatchdays,
+  fetchSubscription,
   renumberSeasonMatchdays,
   fetchSeasons,
   type DbMatchday,
@@ -32,6 +33,8 @@ import {
 } from "@/components/ui";
 import { EmptyState, SkeletonCard, SkeletonPage, Toast } from "@/components/states";
 import { EASE } from "@/components/entry/motion-bits";
+import { ScanModal } from "@/components/team/ScanModal";
+import type { ScannedMatchday } from "@/lib/parse-image";
 import { IconCalendar, IconChevronRight, IconLock, IconPlus } from "@/components/Icon";
 import { FcpBracketPanel, FcpStandingsTable } from "@/components/federation/Federation";
 import {
@@ -84,15 +87,23 @@ export function SeasonDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [scanOpen, setScanOpen] = useState(false);
+  // Escanear el calendario es premium, como en la app (`calendar_scan`).
+  const sub = useAsync(() => fetchSubscription(), [scanOpen], scanOpen);
 
-  // «＋ Crear → Nueva jornada» llega con `?nueva=1`: el formulario se abre
-  // solo y el parámetro se limpia para que recargar no lo vuelva a abrir.
+  // «＋ Crear → Nueva jornada» llega con `?nueva=1` y el atajo «Escanear
+  // calendario» con `?escanear=1`: el modal se abre solo y el parámetro se
+  // limpia para que recargar no lo vuelva a abrir.
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
-      if (url.searchParams.get("nueva") !== "1") return;
-      setNewOpen(true);
+      const nueva = url.searchParams.get("nueva") === "1";
+      const escanear = url.searchParams.get("escanear") === "1";
+      if (!nueva && !escanear) return;
+      if (nueva) setNewOpen(true);
+      if (escanear) setScanOpen(true);
       url.searchParams.delete("nueva");
+      url.searchParams.delete("escanear");
       window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
     } catch {
       /* sin URL: se abre a mano */
@@ -159,6 +170,36 @@ export function SeasonDetail({ id }: { id: string }) {
       setReloadKey((k) => k + 1);
       setToast("Temporada cerrada");
     } else setToast(res.reason);
+  }
+
+  /**
+   * Vuelca las jornadas escaneadas. Igual que `handleBulkMatchdays` de la
+   * app: numera a partir de la última y, salvo en ligas de la Federación
+   * (donde manda el número oficial), renumera por fecha al terminar.
+   */
+  async function saveScanned(items: ScannedMatchday[], fcp: boolean): Promise<string | null> {
+    const base = matchdays.reduce((m, j) => Math.max(m, j.round), 0) + 1;
+    const res = await guardedWrite("crear las jornadas escaneadas", async () => {
+      try {
+        for (let i = 0; i < items.length; i++) {
+          const m = items[i];
+          await createMatchday(id, {
+            jornada_number: base + i,
+            opponent: m.opponent,
+            match_date: m.match_date ?? null,
+            match_time: m.match_time ?? null,
+            is_home: m.is_home,
+          });
+        }
+        if (!fcp) await renumberSeasonMatchdays(id);
+      } finally {
+        // Siempre: si un insert falla a medias, que se vea lo que sí entró.
+        setReloadKey((k) => k + 1);
+      }
+    });
+    if (!res.ok) return res.reason;
+    setToast(`${items.length} ${items.length === 1 ? "jornada creada" : "jornadas creadas"}`);
+    return null;
   }
 
   async function importFromFederation() {
@@ -275,6 +316,11 @@ export function SeasonDetail({ id }: { id: string }) {
                 accent
                 items={[
                   { label: "Nueva jornada", sub: "Rival, casa o fuera, fecha y hora", onClick: () => setNewOpen(true) },
+                  {
+                    label: "Escanear el calendario",
+                    sub: "Foto o PDF del calendario del grupo",
+                    onClick: () => setScanOpen(true),
+                  },
                   ...(isFcp
                     ? [
                         {
@@ -339,12 +385,19 @@ export function SeasonDetail({ id }: { id: string }) {
             <EmptyState
               icon={<IconCalendar size={24} />}
               title="Aún no hay jornadas"
-              body={canEdit ? "Añádelas a mano o tráelas de la Federación." : "El capitán aún no ha añadido jornadas."}
+              body={
+                canEdit
+                  ? "Añádelas a mano, escanea el calendario o tráelas de la Federación."
+                  : "El capitán aún no ha añadido jornadas."
+              }
               action={
                 canEdit ? (
-                  <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={14} />}>
-                    Añadir jornada
-                  </Btn>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={14} />}>
+                      Añadir jornada
+                    </Btn>
+                    <Btn onClick={() => setScanOpen(true)}>Escanear el calendario</Btn>
+                  </div>
                 ) : undefined
               }
             />
@@ -506,6 +559,20 @@ export function SeasonDetail({ id }: { id: string }) {
           <Note>Todas las jornadas están disputadas.</Note>
         )}
       </Modal>
+
+      {canEdit && (
+        <ScanModal
+          mode="calendar"
+          open={scanOpen}
+          onClose={() => setScanOpen(false)}
+          teamName={activeTeam?.name}
+          checking={sub.loading && !sub.data}
+          locked={!sub.data}
+          lockedIntent="calendar_scan"
+          lockedText="Escanear el calendario y crear todas las jornadas de golpe es una función premium. Sin plan puedes añadirlas a mano."
+          onConfirm={(items) => saveScanned(items, isFcp)}
+        />
+      )}
 
       {toast && <Toast title={toast} onClose={() => setToast(null)} />}
     </div>

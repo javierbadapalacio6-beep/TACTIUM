@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { type SeasonFormat } from "@/lib/team-data";
 import {
   createSeason,
+  fetchActiveSeason,
   fetchAvailabilityDetail,
   fetchMatchdays,
   fetchPlayers,
@@ -107,6 +108,9 @@ export function SeasonsList() {
   const standing = useAsync(() => fetchTeamStanding(teamId!), [teamId], !!teamId);
 
   const [open, setOpen] = useState(false);
+  // «Escanear el calendario» sin temporada: primero se crea la temporada y,
+  // al crearla, se salta a ella con el escáner abierto.
+  const [scanAfter, setScanAfter] = useState(false);
   const [format, setFormat] = useState<SeasonFormat>("Liga + Playoff");
   const [name, setName] = useState("");
   const [matchdaysStr, setMatchdaysStr] = useState("");
@@ -138,9 +142,17 @@ export function SeasonsList() {
         totalMatchdays: n,
       }),
     );
+    if (res.ok && scanAfter) {
+      const created = await fetchActiveSeason(teamId).catch(() => null);
+      if (created) {
+        window.location.href = `/temporadas/${created.id}?escanear=1`;
+        return;
+      }
+    }
     setBusy(false);
     if (res.ok) {
       setOpen(false);
+      setScanAfter(false);
       setName("");
       setMatchdaysStr("");
       setReloadKey((k) => k + 1);
@@ -241,17 +253,23 @@ export function SeasonsList() {
                   />
                 ) : null}
                 <ListRow
-                  href="/equipo"
+                  onClick={() => {
+                    setScanAfter(true);
+                    setOpen(true);
+                  }}
                   icon={
                     <IconTile mute>
                       <IconCamera size={16} />
                     </IconTile>
                   }
                   title="Escanear el calendario"
-                  sub="Desde la app: foto del PDF o de la tabla"
+                  sub="Creas la temporada y subes la foto o el PDF"
                 />
                 <ListRow
-                  onClick={() => setOpen(true)}
+                  onClick={() => {
+                    setScanAfter(false);
+                    setOpen(true);
+                  }}
                   icon={
                     <IconTile mute>
                       <IconPlus size={16} />
@@ -311,10 +329,14 @@ export function SeasonsList() {
       {/* ── Crear temporada ──────────────────────────────────────── */}
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          setScanAfter(false);
+        }}
         labelledBy="nueva-temp"
         width={520}
         title="Crear temporada"
+        lede={scanAfter ? "Primero la temporada; después subes el calendario y creamos las jornadas." : undefined}
         footer={
           <>
             <Btn onClick={() => setOpen(false)}>Cancelar</Btn>
@@ -323,7 +345,9 @@ export function SeasonsList() {
                 ? "Creando…"
                 : active
                   ? "Cerrar y crear nueva"
-                  : "Crear temporada"}
+                  : scanAfter
+                    ? "Crear y escanear"
+                    : "Crear temporada"}
             </Btn>
           </>
         }
