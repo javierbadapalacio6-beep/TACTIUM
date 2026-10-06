@@ -67,7 +67,7 @@ import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
-import { useTeamStore, selectIsCaptain } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain, selectIsPlayer } from '@store/teamStore';
 import {
   formatLongDay,
   formatShortDay,
@@ -257,6 +257,7 @@ const JornadaDetail = ({
   // Solo captain/club_admin pueden editar/cerrar/eliminar la jornada.
   // Players ven la pantalla en read-only.
   const isCaptain = useTeamStore(selectIsCaptain);
+  const isPlayer = useTeamStore(selectIsPlayer);
   const gate = usePremiumGate();
 
   const [matchday, setMatchday] = useState<MatchdaysApi.Matchday | null>(null);
@@ -438,17 +439,14 @@ const JornadaDetail = ({
     [matchday],
   );
 
-  // Eje rol × estado para el CTA inferior. canEditLineup gobierna si el
-  // tap navega a Lineup en modo editable; navigateToLineup decide si tiene
-  // sentido siquiera abrir la pantalla (player con alineación ya creada
-  // entra en read-only; player sin alineación, no — el botón cambia a
-  // "Volver" para no enviarle a una pantalla vacía sin opción de actuar).
+  // Eje rol × estado para el CTA inferior (ver el bloque CTA). canEditLineup
+  // gobierna si el capitán entra a Lineup en modo editable; sin alineación,
+  // el resto ve «Volver» en vez de una pantalla read-only vacía.
   // La season cerrada bloquea edición de alineación pero NO de resultados:
   // un capitán con temporada archivada puede ver la alineación (read-only)
   // pero no editarla; los resultados siguen accesibles por otra vía.
   const seasonClosed = season ? !season.active : false;
   const canEditLineup = !closed && !seasonClosed && isCaptain;
-  const navigateToLineup = !closed && (canEditLineup || lineupReady);
 
   // Pistas que ya tienen resultado set a set. `score` no sirve para esto:
   // cuando la jornada trae marcador agregado (las federadas lo traen) devuelve
@@ -664,6 +662,19 @@ const JornadaDetail = ({
   // Si faltan resultados pero el partido ya empezó, se cierra manualmente
   // con un sheet que pide el marcador final.
   const canClose = isCaptain && !closed && matchStarted;
+  const goLineup = () => navigation.navigate('Lineup', { matchdayId: matchday.id });
+  // Con alineación, directo a meter los resultados; sin ella, a la pestaña
+  // Resultado, que explica qué falta (y deja cerrar el acta a mano).
+  const openResults = () => {
+    if (!lineupReady) {
+      setTabPicked('resultado');
+      return;
+    }
+    gate(
+      () => navigation.navigate('Results', { matchdayId: matchday.id, focus: 0 }),
+      'results_edit',
+    )();
+  };
   const closeIsManual =
     !closed && (!lineupReady || score.played < courts);
   const dateObj = isoDateToDate(matchday.match_date);
@@ -1260,50 +1271,91 @@ const JornadaDetail = ({
       </ScrollView>
 
       {/* === CTA ===
-          Depende de DOS ejes: estado de la jornada (cerrada vs abierta) y
-          rol del usuario (capitán vs resto). Combinaciones:
-           · Cerrada                  → "Volver" (el resultado ya se ve arriba).
-           · Abierta · capitán        → "Editar/Crear alineación" (puede editar).
-           · Abierta · player/admin   → "Ver alineación" si existe, "Volver"
-             si no — entrar a una pantalla read-only vacía no aporta nada y
-             confunde (el bug que motivó este cambio: un player veía "Crear
-             alineación" y entraba a una pantalla que internamente bloqueaba
-             edición). */}
+          La acción principal depende del rol y del momento (igual que la
+          web, MatchdayView):
+           · capitán antes de empezar      → «Editar / Crear alineación»;
+           · capitán con la jornada en juego → «Meter resultados» y «Cerrar acta»;
+           · jugador con la jornada en juego → «Meter mi resultado»;
+           · el resto (jugador antes, club, acta cerrada) → «Ver alineación»
+             si existe; si no, «Volver» (una pantalla read-only vacía no
+             aporta nada). */}
       <View
         style={[
           styles.ctaWrap,
+          styles.ctaRow,
           { paddingBottom: Math.max(insets.bottom, 18) },
         ]}
       >
-        <Pressable
-          onPress={
-            navigateToLineup
-              ? () =>
-                  navigation.navigate('Lineup', { matchdayId: matchday.id })
-              : () => {
-                  if (navigation.canGoBack()) navigation.goBack();
-                  else navigation.navigate('HomeRoot');
-                }
-          }
-          style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
-        >
-          {navigateToLineup ? (
+        {isCaptain && !closed && matchStarted ? (
+          <>
+            <Pressable
+              onPress={openResults}
+              style={({ pressed }) => [styles.cta, styles.ctaFlex, pressed && { opacity: 0.85 }]}
+            >
+              <IconCheck size={18} color="#000" />
+              <Text style={styles.ctaLabel}>Meter resultados</Text>
+            </Pressable>
+            <Pressable
+              onPress={gate(closeMatch, 'matchday_close')}
+              disabled={closing}
+              style={({ pressed }) => [
+                styles.ctaSecondary,
+                (pressed || closing) && { opacity: 0.7 },
+              ]}
+            >
+              {closing ? (
+                <ActivityIndicator color={c.text} />
+              ) : (
+                <Text style={styles.ctaSecondaryLabel}>Cerrar acta</Text>
+              )}
+            </Pressable>
+          </>
+        ) : canEditLineup && !matchStarted ? (
+          <Pressable
+            onPress={goLineup}
+            style={({ pressed }) => [styles.cta, styles.ctaFlex, pressed && { opacity: 0.85 }]}
+          >
             <IconCourt size={20} color="#000" />
-          ) : (
-            <IconCheck size={18} color="#000" />
-          )}
-          <Text style={styles.ctaLabel}>
-            {closed
-              ? 'Volver'
-              : canEditLineup
-              ? lineupReady
-                ? 'Editar alineación'
-                : 'Crear alineación'
-              : lineupReady
-              ? 'Ver alineación'
-              : 'Volver'}
-          </Text>
-        </Pressable>
+            <Text style={styles.ctaLabel}>
+              {lineupReady ? 'Editar alineación' : 'Crear alineación'}
+            </Text>
+          </Pressable>
+        ) : isPlayer && !closed && matchStarted && lineupReady ? (
+          <>
+            <Pressable
+              onPress={openResults}
+              style={({ pressed }) => [styles.cta, styles.ctaFlex, pressed && { opacity: 0.85 }]}
+            >
+              <IconCheck size={18} color="#000" />
+              <Text style={styles.ctaLabel}>Meter mi resultado</Text>
+            </Pressable>
+            <Pressable
+              onPress={goLineup}
+              style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.ctaSecondaryLabel}>Ver alineación</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable
+            onPress={
+              lineupReady
+                ? goLineup
+                : () => {
+                    if (navigation.canGoBack()) navigation.goBack();
+                    else navigation.navigate('HomeRoot');
+                  }
+            }
+            style={({ pressed }) => [styles.cta, styles.ctaFlex, pressed && { opacity: 0.85 }]}
+          >
+            {lineupReady ? (
+              <IconCourt size={20} color="#000" />
+            ) : (
+              <IconCheck size={18} color="#000" />
+            )}
+            <Text style={styles.ctaLabel}>{lineupReady ? 'Ver alineación' : 'Volver'}</Text>
+          </Pressable>
+        )}
       </View>
 
       <EditMatchdaySheet
@@ -2456,6 +2508,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingTop: 12,
     backgroundColor: c.background,
   },
+  ctaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ctaFlex: { flex: 1, width: undefined },
+  ctaSecondary: {
+    height: 56,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.bgCard,
+    borderWidth: 1,
+    borderColor: c.hairStrong,
+  },
+  ctaSecondaryLabel: { color: c.text, fontSize: 15, fontWeight: '600' },
   cta: {
     width: '100%',
     height: 56,
