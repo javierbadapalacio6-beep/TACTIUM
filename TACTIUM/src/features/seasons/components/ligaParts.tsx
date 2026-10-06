@@ -38,6 +38,12 @@ export interface FcpStanding {
   rows: FcpStandingRow[];
   me: FcpStandingRow | null;
   zone: Zone | null;
+  /** La tabla es de la temporada ANTERIOR (la nueva aún sin grupos). */
+  previous: boolean;
+  /** «2025/2026» */
+  temporada: string | null;
+  /** Todos los partidos del grupo jugados: clasificación final. */
+  finished: boolean;
 }
 
 const EMPTY: FcpStanding = {
@@ -48,6 +54,9 @@ const EMPTY: FcpStanding = {
   rows: [],
   me: null,
   zone: null,
+  previous: false,
+  temporada: null,
+  finished: false,
 };
 
 // Caché en memoria: Liga, Federación y el detalle piden lo mismo al cambiar de
@@ -63,7 +72,8 @@ export async function loadFcpStanding(teamId: string): Promise<FcpStanding> {
     standingCache.set(teamId, { at: Date.now(), v: EMPTY });
     return EMPTY;
   }
-  const { grupo, idGrupo, genero, rows } = await fetchFcpGroupStandings(idEquipo);
+  const { grupo, idGrupo, genero, rows, previous, temporada, finished } =
+    await fetchFcpGroupStandings(idEquipo);
   const zones = groupZones({ fed: FCP_FEDERATION_CODE, idGrupo, nombre: grupo, genero });
   const me = rows.find((r) => r.isMe) ?? null;
   const v: FcpStanding = {
@@ -74,6 +84,9 @@ export async function loadFcpStanding(teamId: string): Promise<FcpStanding> {
     rows,
     me,
     zone: zoneIn(zones, me?.posicion),
+    previous,
+    temporada,
+    finished,
   };
   standingCache.set(teamId, { at: Date.now(), v });
   return v;

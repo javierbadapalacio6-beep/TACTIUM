@@ -8,17 +8,19 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconChevron, IconSearch } from '@components/ui';
+import { IconCalendar, IconChevron, IconSearch } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { useFavoritesStore, type Favorite } from '@store/favoritesStore';
 import { useNavRole } from '@navigation/navRole';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { zoneColor } from '@core/data/fcpZones';
+import { fetchFcpGroupSchedule, type FcpScheduleRow } from '@core/services/fcpSeason';
 import {
   useFcpStanding,
   loadFcpStanding,
   shortGroupName,
+  fmtDay,
   type FcpStanding,
 } from './ligaParts';
 
@@ -114,10 +116,46 @@ const MyTeamCard: React.FC<{
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
   const { loading, data } = useFcpStanding(teamId);
+  // Próxima jornada: el primer partido tuyo del grupo sin jugar (como la web).
+  // Solo con la tabla de la temporada en juego: en la anterior no hay próxima.
+  const [next, setNext] = useState<FcpScheduleRow | null>(null);
+  const wantNext = data.idEquipo != null && !!data.me && !data.previous && !data.finished;
+  useEffect(() => {
+    if (!wantNext || data.idEquipo == null) {
+      setNext(null);
+      return;
+    }
+    let alive = true;
+    fetchFcpGroupSchedule(data.idEquipo)
+      .then(({ rows }) => {
+        if (!alive) return;
+        const mine = rows
+          .filter(
+            (r) => (r.isMeLocal || r.isMeVisit) && r.estado !== 'jugado' && !r.resultado,
+          )
+          .sort((a, b) => (a.jornada ?? 999) - (b.jornada ?? 999));
+        setNext(mine[0] ?? null);
+      })
+      .catch(() => alive && setNext(null));
+    return () => {
+      alive = false;
+    };
+  }, [wantNext, data.idEquipo]);
+
   if (loading || data.idEquipo == null) return null;
   const pos = data.me?.posicion ?? null;
   const name = data.me?.equipo ?? teamName;
   const group = shortGroupName(data.grupo);
+  const nextMeta = next
+    ? [
+        'Próxima',
+        next.jornada != null ? `jornada ${next.jornada}` : null,
+        next.fecha ? fmtDay(next.fecha) : null,
+        next.hora ? next.hora.slice(0, 5) : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
   return (
     <View style={s.mineCard}>
       <View style={s.mineTop}>
@@ -129,17 +167,51 @@ const MyTeamCard: React.FC<{
             {name}
           </Text>
           <Text style={s.mineMeta} numberOfLines={1}>
-            {['TU EQUIPO', group?.toUpperCase()].filter(Boolean).join(' · ')}
+            {['TU EQUIPO', group?.toUpperCase(), data.previous ? data.temporada : null]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
         </View>
         {pos != null ? (
-          <Text style={[s.minePos, data.zone ? { color: zoneColor(data.zone.key, c) } : null]}>
-            {pos}º
-          </Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[s.minePos, data.zone ? { color: zoneColor(data.zone.key, c) } : null]}>
+              {pos}º
+            </Text>
+            {data.me?.puntos != null ? (
+              <Text style={s.minePts}>{data.me.puntos} PTS</Text>
+            ) : null}
+          </View>
         ) : (
           <Text style={s.noDraw}>SIN SORTEO</Text>
         )}
       </View>
+      {data.previous ? (
+        // Mismo aviso que FcpGroupSheet: la tabla es de la temporada pasada.
+        <Text style={s.mineNote}>
+          <Text style={{ fontWeight: '700', color: c.text }}>
+            Clasificación final
+            {data.temporada ? ` de la ${data.temporada}` : ' de la temporada pasada'}
+          </Text>
+          . La Federación aún no ha publicado los grupos de la temporada nueva. Cuando lo haga,
+          aquí verás tu grupo nuevo.
+        </Text>
+      ) : data.finished ? (
+        <Text style={s.mineNote}>
+          Temporada{data.temporada ? ` ${data.temporada}` : ''} terminada · clasificación final
+        </Text>
+      ) : next ? (
+        <View style={s.nextBox}>
+          <IconCalendar size={15} color={c.textMuted} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nextMeta} numberOfLines={1}>
+              {nextMeta}
+            </Text>
+            <Text style={s.nextTeams} numberOfLines={1}>
+              {next.equipo_local} – {next.equipo_visit}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       <View style={s.mineBtns}>
         {data.idGrupo ? (
           <Pressable
@@ -147,7 +219,7 @@ const MyTeamCard: React.FC<{
             style={({ pressed }) => [s.mineBtn, s.mineBtnOn, pressed && { opacity: 0.85 }]}
             accessibilityRole="button"
           >
-            <Text style={[s.mineBtnText, { color: c.textInverse }]}>Tu grupo</Text>
+            <Text style={[s.mineBtnText, { color: c.textInverse }]}>Ver clasificación</Text>
           </Pressable>
         ) : null}
         <Pressable
@@ -309,6 +381,26 @@ const makeStyles = (c: Palette) =>
       marginTop: 3,
     },
     minePos: { fontFamily: Fonts.mono, color: c.accent, fontSize: 26, fontWeight: '800' },
+    minePts: {
+      fontFamily: Fonts.mono,
+      color: c.textMuted,
+      fontSize: 10,
+      letterSpacing: 1,
+      marginTop: 1,
+    },
+    mineNote: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 12 },
+    nextBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: Radius.md,
+      backgroundColor: c.bgCard2,
+    },
+    nextMeta: { color: c.textMuted, fontSize: 12.5 },
+    nextTeams: { color: c.text, fontSize: 13.5, fontWeight: '700', marginTop: 2 },
     noDraw: {
       fontFamily: Fonts.mono,
       color: c.textFaint,
