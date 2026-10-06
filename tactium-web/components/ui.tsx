@@ -11,6 +11,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 import { IconChevronRight } from "./Icon";
 
@@ -768,7 +769,12 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  // Al `body`, con un portal: dentro de una tarjeta de cristal (las que llevan
+  // `backdrop-filter`) un `position: fixed` deja de ser relativo a la ventana
+  // y pasa a serlo a la tarjeta, así que el diálogo salía encajado en ella,
+  // pegado arriba y cortado, en vez de centrado en la pantalla.
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       role="presentation"
       onClick={(e) => {
@@ -812,7 +818,8 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
