@@ -16,8 +16,6 @@ import Animated, {
 import Svg, { Defs, RadialGradient, Stop, Circle, Path, Line } from 'react-native-svg';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Haptics from 'expo-haptics';
-import Constants from 'expo-constants';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Colors } from '@core/theme/colors';
 import { Fonts } from '@core/theme/fonts';
@@ -41,7 +39,6 @@ const AnimatedLine = Animated.createAnimatedComponent(Line);
 const LOGO = 150;
 const GLOW = 320;
 const BALL = 12;
-const VERSION_KEY = 'splash:fullVersion';
 
 // Momentos clave (ms). La versión entera dura ≈2,5 s; la corta, ≈0,9 s.
 const FULL = { impact: 1020, word: 1400, tag: 1700, exit: 2150 };
@@ -60,11 +57,6 @@ const FROM: [number, number][] = [
   [0.8, 0],
   [0, -0.6],
 ];
-
-/** Versión de la app: la animación entera sale una vez por versión. */
-function appVersion(): string {
-  return Constants.expoConfig?.version ?? 'dev';
-}
 
 /** Vibración ligera; si el módulo nativo no está (dev client viejo), nada. */
 function tap(style: Haptics.ImpactFeedbackStyle) {
@@ -195,8 +187,8 @@ function useScramble(target: string, start: number | null, duration: number) {
  * la T crece hasta atravesar la pantalla, descubriendo la app que ya está
  * montada debajo.
  *
- * - Entera (≈2,5 s) en el primer arranque de cada versión; corta (≈0,9 s)
- *   el resto de veces. Un toque la salta.
+ * - Entera (≈2,5 s) en cada arranque en frío. Un toque la salta. La corta
+ *   (≈0,9 s) sigue disponible como modo, pero ya no se usa.
  * - Con «Reducir movimiento», solo un fundido.
  * - JS puro (Reanimated + SVG): se puede iterar por OTA.
  */
@@ -211,23 +203,8 @@ export function AnimatedSplash({ onFinish, ready = true }: Props) {
       setMode('reduced');
       return;
     }
-    // En desarrollo, siempre entera: así se ve en cada recarga.
-    if (__DEV__) {
-      setMode('full');
-      return;
-    }
-    let done = false;
-    const v = appVersion();
-    AsyncStorage.getItem(VERSION_KEY)
-      .then((seen) => {
-        if (done) return;
-        setMode(seen === v ? 'short' : 'full');
-        if (seen !== v) AsyncStorage.setItem(VERSION_KEY, v).catch(() => {});
-      })
-      .catch(() => !done && setMode('short'));
-    return () => {
-      done = true;
-    };
+    // Siempre entera (decisión del usuario, 06-10-2026). Un toque la salta.
+    setMode('full');
   }, [reduced]);
 
   if (!mode) return <View style={[StyleSheet.absoluteFill, styles.root]} />;
