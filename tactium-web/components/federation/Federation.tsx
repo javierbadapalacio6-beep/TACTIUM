@@ -388,7 +388,10 @@ export function FederationExplore({
   // navegador. Se leen tras montar —no en el `useState`— para no romper la
   // hidratación del HTML de servidor; y no se guarda nada hasta haber leído,
   // o lo primero que se escribiría serían los valores por defecto.
-  const filtersKey = `tw_fcp_explore_filters:${slug}`;
+  // «v2»: hasta octubre de 2026 la temporada por defecto era la que se juega y
+  // quedó guardada en cada navegador; con la clave nueva todos aterrizan en la
+  // de inscripción una vez, y a partir de ahí manda lo que elijan.
+  const filtersKey = `tw_fcp_explore_filters:v2:${slug}`;
   const [filtersRestored, setFiltersRestored] = useState(false);
   useEffect(() => {
     try {
@@ -427,15 +430,17 @@ export function FederationExplore({
 
   const leagues = useAsync(() => fetchFcpLeagues(), []);
 
-  // Por defecto, la temporada que SE JUEGA, no la más reciente: la que está en
-  // inscripción ordena por delante ("2026/2027" > "2026") y aterrizar ahí sería
-  // aterrizar en una temporada sin clasificación ni resultados.
+  // Por defecto, la temporada en INSCRIPCIÓN si la hay: entre que la FCP
+  // reparte los grupos y publica el calendario es lo que busca todo el mundo
+  // (contra quién juego, dónde). La que se jugó ya está cerrada. Sin liga en
+  // inscripción, la que se juega.
   // Una temporada recordada que ya no existe también cae en la de por defecto.
   useEffect(() => {
     if (!filtersRestored || !leagues.data?.length) return;
     if (year != null && leagues.data.some((l) => l.idLiga === year)) return;
+    const enInscripcion = leagues.data.find((l) => l.upcoming);
     const jugando = leagues.data.find((l) => !l.upcoming);
-    setYear((jugando ?? leagues.data[0]).idLiga);
+    setYear((enInscripcion ?? jugando ?? leagues.data[0]).idLiga);
   }, [leagues.data, year, filtersRestored]);
 
   const selectedLeague = useMemo(
@@ -444,6 +449,10 @@ export function FederationExplore({
   );
   /** Liga en inscripción: los equipos salen de las inscripciones. */
   const upcomingLiga = selectedLeague?.upcoming ? selectedLeague.idLiga : null;
+  // Una liga en inscripción no tiene `fcp_grupos` (no hay calendario), así que
+  // «Todo» saldría vacío: ahí «todo» son los inscritos por categoría y grupo,
+  // lo mismo que enseña Equipos.
+  const vista: Tab = upcomingLiga != null && tab === "todo" ? "equipos" : tab;
 
   const groups = useAsync(() => fetchFcpGroups(year), [year], year != null);
   const allGroups = useMemo(() => groups.data ?? [], [groups.data]);
@@ -513,7 +522,7 @@ export function FederationExplore({
   const groupMetas = useAsync(
     () => fetchFcpGroupMetas(metaIds),
     [metaIds.join(",")],
-    tab === "todo" && metaIds.length > 0
+    vista === "todo" && metaIds.length > 0
   );
 
   const scopedGroupIds = useMemo(
@@ -538,7 +547,7 @@ export function FederationExplore({
     [term, scopedGroupIds.join(","), upcomingLiga],
     // Sin sorteo no hay grupos que acotar, así que la condición de "hay algo
     // que enseñar" no puede depender de ellos: si no, la pestaña sale vacía.
-    tab === "equipos" &&
+    vista === "equipos" &&
       (term.length >= 2 || scopedGroupIds.length > 0 || upcomingLiga != null)
   );
 
@@ -650,7 +659,7 @@ export function FederationExplore({
       ? `${(ranking.data ?? []).length} jugadores en el ranking`
       : tab === "jugadores"
         ? `${(players.data ?? []).length} jugadores`
-        : tab === "equipos"
+        : vista === "equipos"
           ? `${upcomingLiga ? inscritosPorCategoria.reduce((n, s) => n + s.total, 0) : (teams.data ?? []).length} equipos`
           : groups.loading
             ? "Cargando…"
@@ -713,7 +722,7 @@ export function FederationExplore({
               placeholder={
                 tab === "jugadores"
                   ? "Busca un jugador (3 letras)…"
-                  : tab === "equipos"
+                  : vista === "equipos"
                     ? "Busca un equipo…"
                     : tab === "rankings"
                       ? "Busca en el ranking…"
@@ -797,8 +806,10 @@ export function FederationExplore({
       </div>
 
       {/* ── TODO · grupos ─────────────────────────────────────────── */}
-      {tab === "todo" &&
-        (groups.loading ? (
+      {vista === "todo" &&
+        // Sin temporada todavía (las ligas aún cargando) no hay nada que decir:
+        // «no hay grupos» sería mentira durante medio segundo.
+        (groups.loading || year == null ? (
           <SkeletonCard />
         ) : groups.error ? (
           <Card>
@@ -896,7 +907,7 @@ export function FederationExplore({
         ))}
 
       {/* ── EQUIPOS ───────────────────────────────────────────────── */}
-      {tab === "equipos" &&
+      {vista === "equipos" &&
         (teams.loading ? (
           <SkeletonCard />
         ) : teams.error ? (

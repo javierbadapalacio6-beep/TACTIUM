@@ -78,9 +78,11 @@ export async function fetchFcpYears(): Promise<FcpYear[]> {
     .sort((a, b) => b.temporada.localeCompare(a.temporada));
 }
 
-/** La que debe salir elegida de entrada: la que se juega, no la más nueva. */
+/** La que debe salir elegida de entrada: la que está en INSCRIPCIÓN si la hay
+ *  (entre el reparto de grupos y el calendario es lo que todo el mundo busca:
+ *  contra quién juega y dónde) y, si no, la que se juega. Igual que la web. */
 export const defaultYear = (years: FcpYear[]): FcpYear | null =>
-  years.find((y) => y.conCalendario) ?? years[0] ?? null;
+  years.find((y) => !y.conCalendario) ?? years.find((y) => y.conCalendario) ?? years[0] ?? null;
 
 export interface FcpGroupItem {
   idGrupo: string;

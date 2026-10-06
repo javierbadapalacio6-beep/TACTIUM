@@ -62,7 +62,9 @@ const MEDAL: Record<number, string> = { 1: '#E7B93E', 2: '#AEB7C2', 3: '#CD7F45'
 const fmtN = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
 // Filtros recordados entre visitas (temporada, género, categoría, grupo).
-const FILTERS_KEY = 'tactium.federacion.filtros.v1';
+// «v2» (oct-2026): con la v1 quedó guardada la temporada que se jugaba; la
+// clave nueva hace que todos entren una vez en la de inscripción.
+const FILTERS_KEY = 'tactium.federacion.filtros.v2';
 type SavedFilters = {
   year?: number | null;
   genderF?: 'all' | 'M' | 'F';
