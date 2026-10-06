@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useSession } from "@/lib/session";
-import { BtnLink, Card, PageHeader } from "@/components/ui";
+import { BtnLink, Card, PageHeader, Segmented } from "@/components/ui";
 import { EmptyState, SkeletonCard } from "@/components/states";
 import { SeasonsList } from "@/components/seasons/SeasonsList";
 import { ClubSchedule } from "@/components/club/ClubSchedule";
@@ -79,10 +79,23 @@ export function Compete() {
     <>
       <div className="tw-page">
         <PageHeader title="Competir" />
-        <VistaTabs value={vista ?? fallback} onChange={choose} />
+        {/* Es navegación, no un campo: pestañas (tablist con flechas). */}
+        <Segmented<Vista>
+          as="tabs"
+          idPrefix="competir"
+          label="Competir"
+          value={vista ?? fallback}
+          options={VISTAS}
+          onChange={choose}
+          style={{ marginBottom: 20 }}
+        />
       </div>
 
-      <div id={`competir-${vista ?? fallback}`} role="tabpanel" aria-labelledby={`competir-tab-${vista ?? fallback}`}>
+      <div
+        id={`competir-panel-${vista ?? fallback}`}
+        role="tabpanel"
+        aria-labelledby={`competir-tab-${vista ?? fallback}`}
+      >
         {vista === null ? (
           <div className="tw-page">
             <SkeletonCard />
@@ -96,52 +109,6 @@ export function Compete() {
         )}
       </div>
     </>
-  );
-}
-
-/**
- * Pestañas de navegación (no un control de formulario): `role="tablist"`,
- * flechas, Inicio y Fin. Usa las clases del `Segmented` de `ui.tsx`, que
- * es un `radiogroup` y no sirve aquí.
- */
-function VistaTabs({ value, onChange }: { value: Vista; onChange: (v: Vista) => void }) {
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  function onKey(e: KeyboardEvent<HTMLDivElement>) {
-    const i = VISTAS.findIndex((v) => v.value === value);
-    let j = i;
-    if (e.key === "ArrowRight") j = (i + 1) % VISTAS.length;
-    else if (e.key === "ArrowLeft") j = (i - 1 + VISTAS.length) % VISTAS.length;
-    else if (e.key === "Home") j = 0;
-    else if (e.key === "End") j = VISTAS.length - 1;
-    else return;
-    e.preventDefault();
-    onChange(VISTAS[j].value);
-    refs.current[j]?.focus();
-  }
-  return (
-    <div className="seg" role="tablist" aria-label="Competir" onKeyDown={onKey} style={{ marginBottom: 20 }}>
-      {VISTAS.map((v, i) => {
-        const on = v.value === value;
-        return (
-          <button
-            key={v.value}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            id={`competir-tab-${v.value}`}
-            type="button"
-            role="tab"
-            aria-selected={on}
-            aria-controls={`competir-${v.value}`}
-            tabIndex={on ? 0 : -1}
-            onClick={() => onChange(v.value)}
-            className={"seg-item" + (on ? " is-on" : "")}
-          >
-            {v.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
