@@ -1,5 +1,6 @@
 "use client";
 
+import { ANNUAL_SAVING_TEXT, INSCRIPTION_MONEY_TEXT } from "@/lib/public-copy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -267,7 +268,7 @@ export function Paywall({
         <StaggerItem>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <CycleToggle value={cycle} onChange={setCycle} />
-            <Chip tone="accent">2 meses gratis</Chip>
+            <Chip tone="accent">Anual {ANNUAL_SAVING_TEXT}</Chip>
           </div>
         </StaggerItem>
 
@@ -360,9 +361,9 @@ export function Paywall({
               textWrap: "pretty",
             }}
           >
-            No hace falta suscripción. Pagas una vez, por el tamaño del torneo, y las
-            inscripciones las cobras tú con tu pasarela: TACTIUM no se queda comisión. Si
-            ya tienes plan de club, tus torneos van incluidos hasta el tope de tu plan.
+            No hace falta suscripción: pagas una vez, por el tamaño del torneo.{" "}
+            {INSCRIPTION_MONEY_TEXT} Si ya tienes plan de club, tus torneos van incluidos
+            hasta el tope de tu plan.
           </p>
           <div
             style={{
