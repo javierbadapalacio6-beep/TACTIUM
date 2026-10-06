@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Share,
+  Platform,
   Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +20,16 @@ import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import * as ImagePicker from 'expo-image-picker';
-import { IconBack, IconShare, IconTrophy, IconTrash, IconPencil, IconCamera, BottomSheet } from '@components/ui';
+import {
+  IconBack,
+  IconShare,
+  IconTrophy,
+  IconTrash,
+  IconPencil,
+  IconCamera,
+  IconLink,
+  BottomSheet,
+} from '@components/ui';
 import {
   TimeField,
   DateField,
@@ -756,6 +766,25 @@ export const PlayersView: React.FC<{
 };
 
 // Pestaña INFO: datos del torneo (formato, categorías, plazas, código…).
+/** Ficha pública del torneo en la web (como el «Copiar enlace» de la web). */
+const tournamentPublicUrl = (id: string) => `https://tactium.io/torneos/${id}`;
+
+const CopyLinkBtn: React.FC<{ onPress: () => void; styles: Styles; c: Palette }> = ({
+  onPress,
+  styles,
+  c,
+}) => (
+  <Pressable
+    onPress={onPress}
+    hitSlop={6}
+    accessibilityRole="button"
+    style={({ pressed }) => [styles.copyLinkBtn, pressed && { opacity: 0.7 }]}
+  >
+    <IconLink size={13} color={c.accent} />
+    <Text style={styles.copyLinkText}>Copiar enlace</Text>
+  </Pressable>
+);
+
 export const InfoView: React.FC<{
   t: Tournament | null;
   onShareCode: () => void;
@@ -767,7 +796,9 @@ export const InfoView: React.FC<{
   /** Cómo se cobra la cuota («se paga al apuntarte» / «se paga en el club»).
    *  Sin dato no se afirma nada: antes decía siempre «en el club». */
   feeNote?: string | null;
-}> = ({ t, onShareCode, styles, c, audience = 'organizer', feeNote }) => {
+  /** Organizador: «Copiar enlace» a la ficha pública del torneo. */
+  onCopyLink?: () => void;
+}> = ({ t, onShareCode, styles, c, audience = 'organizer', feeNote, onCopyLink }) => {
   if (!t) return null;
   // Valor de "Partidos": si el club fijó formato por cuadro y difieren, se
   // listan (Principal / Consolación / Grupos); si no, un único formato.
@@ -911,12 +942,17 @@ export const InfoView: React.FC<{
             <Text style={styles.codeHint}>
               {audience === 'player'
                 ? 'Pásales el código del torneo para que se apunten.'
-                : 'Compártelo para que se apunten desde la app.'}
+                : 'Comparte el enlace o el código para que se apunten.'}
             </Text>
+            {audience === 'organizer' && onCopyLink ? (
+              <CopyLinkBtn onPress={onCopyLink} styles={styles} c={c} />
+            ) : null}
           </View>
           <Pressable
             onPress={onShareCode}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Compartir el código"
             style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.7 }]}
           >
             <IconShare size={16} color={c.accent} />
@@ -3241,6 +3277,21 @@ export const TournamentDetailScreen = ({
     }
   };
 
+  // «Copiar enlace»: la ficha pública del torneo en la web, donde también
+  // se apuntan. Sin expo-clipboard en el proyecto (pide build nativo), va por
+  // la hoja de compartir del sistema, que trae «Copiar».
+  const copyLink = async () => {
+    if (!t) return;
+    const url = tournamentPublicUrl(t.id);
+    try {
+      await Share.share(
+        Platform.OS === 'ios' ? { url, message: url } : { message: url },
+      );
+    } catch {
+      /* cancelado */
+    }
+  };
+
   const removeReg = (r: TournamentRegistration) => {
     Alert.alert('Quitar pareja', `¿Quitar a ${r.p1_name}${r.p2_name ? ' / ' + r.p2_name : ''}?`, [
       { text: 'Cancelar', style: 'cancel' },
@@ -3429,7 +3480,13 @@ export const TournamentDetailScreen = ({
               c={c}
             />
           ) : tab === 'info' ? (
-            <InfoView t={t} onShareCode={shareCode} styles={styles} c={c} />
+            <InfoView
+              t={t}
+              onShareCode={shareCode}
+              onCopyLink={copyLink}
+              styles={styles}
+              c={c}
+            />
           ) : !hasBracket ? (
             <View style={{ paddingHorizontal: 22 }}>
               {t?.signup_code ? (
@@ -3438,8 +3495,9 @@ export const TournamentDetailScreen = ({
                     <Text style={styles.codeLabel}>CÓDIGO DE INSCRIPCIÓN</Text>
                     <Text style={styles.code}>{t.signup_code}</Text>
                     <Text style={styles.codeHint}>
-                      Compártelo para que se apunten desde la app.
+                      Comparte el enlace o el código para que se apunten.
                     </Text>
+                    <CopyLinkBtn onPress={copyLink} styles={styles} c={c} />
                   </View>
                   <Pressable
                     onPress={shareCode}
@@ -5183,6 +5241,20 @@ export const makeStyles = (c: Palette) =>
     codeLabel: { fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2, color: c.textFaint, fontWeight: '500' },
     code: { fontFamily: Fonts.mono, fontSize: 28, fontWeight: '800', color: c.accent, letterSpacing: 4, marginTop: 4 },
     codeHint: { color: c.textMuted, fontSize: 12, marginTop: 4 },
+    copyLinkBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      marginTop: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    copyLinkText: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
     shareBtn: {
       width: 44,
       height: 44,
