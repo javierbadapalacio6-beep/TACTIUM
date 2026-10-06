@@ -781,7 +781,7 @@ const CopyLinkBtn: React.FC<{ onPress: () => void; styles: Styles; c: Palette }>
     style={({ pressed }) => [styles.copyLinkBtn, pressed && { opacity: 0.7 }]}
   >
     <IconLink size={13} color={c.accent} />
-    <Text style={styles.copyLinkText}>Copiar enlace</Text>
+    <Text style={styles.copyLinkText}>Compartir enlace</Text>
   </Pressable>
 );
 
