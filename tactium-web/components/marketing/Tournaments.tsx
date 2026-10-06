@@ -7,9 +7,10 @@ import {
 } from "@/components/Icon";
 import { Reveal } from "./Reveal";
 
-const FORMATS = [
+/** Formatos de torneo. Los usa también la página de venta de /torneos/organizar. */
+export const TOURNAMENT_FORMATS = [
   { tag: "KO", name: "Eliminación directa", desc: "Un cuadro. Pierdes y fuera." },
-  { tag: "KO+", name: "Con consolación", desc: "Quien cae en primera ronda sigue jugando." },
+  { tag: "KO+", name: "Con consolación", desc: "Opcional: quien cae en primera ronda sigue jugando." },
   { tag: "Liga", name: "Todos contra todos", desc: "Gana quien más suma. Sin cuadro." },
   { tag: "G+KO", name: "Grupos y eliminatorias", desc: "Liguilla y luego cuadro. El de club." },
 ];
@@ -38,7 +39,7 @@ export function Tournaments() {
         </Reveal>
 
         <div className="mk-formats">
-          {FORMATS.map((f, i) => (
+          {TOURNAMENT_FORMATS.map((f, i) => (
             <Reveal as="div" key={f.tag} className="mk-format" delay={0.05 * i}>
               <span className="tag">{f.tag}</span>
               <h3>{f.name}</h3>
