@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import {
   fetchCasualMatches,
@@ -24,6 +24,7 @@ import {
   type RecordSummary,
 } from "@/lib/player-stats";
 import { fetchTeamRanking } from "@/lib/account-queries";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { CodeRedeem } from "@/components/settings/CodeRedeem";
 import { PairStats } from "@/components/team/PairStats";
 import { fetchPeopleYouKnow, profileHref, type PersonSuggestion } from "@/lib/people";
@@ -85,11 +86,57 @@ const TYPE_LABEL: Record<string, string> = {
  * Inicio: sin cabecera de pantalla, las últimas `limit` y «Ver todo» a
  * `/novedades`. Kudos y estados vacíos son los mismos.
  */
+const FEED_PAGE = 20;
+
+/**
+ * Fotos de los resultados del feed. Los amistosos públicos se leen directo
+ * (`casual_matches` tiene lectura pública); las jornadas, por la RPC
+ * `public_get_matchday`, que es la que sirve el detalle `/partido/[id]`.
+ */
+async function fetchFeedPhotos(rows: FeedRow[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const sb = supabaseBrowser();
+  const casualIds = [...new Set(rows.filter((r) => r.kind === "casual").map((r) => r.ref_id))];
+  const leagueIds = [...new Set(rows.filter((r) => r.kind === "league").map((r) => r.ref_id))];
+  await Promise.all([
+    casualIds.length
+      ? sb
+          .from("casual_matches")
+          .select("id, photo_url")
+          .in("id", casualIds)
+          .then(({ data }) => {
+            for (const r of (data ?? []) as { id: string; photo_url: string | null }[]) {
+              if (r.photo_url) out[`casual-${r.id}`] = r.photo_url;
+            }
+          })
+      : null,
+    ...leagueIds.map((id) =>
+      sb.rpc("public_get_matchday", { p_id: id }).then(({ data }) => {
+        const url = ((data ?? []) as { photo_url: string | null }[])[0]?.photo_url;
+        if (url) out[`league-${id}`] = url;
+      }),
+    ),
+  ]);
+  return out;
+}
+
+/** Dónde se ve el resultado entero. */
+const feedHref = (n: FeedRow) => (n.kind === "casual" ? `/amistosos/${n.ref_id}` : `/partido/${n.ref_id}`);
+
 export function Feed({ embedded = false, limit = 5 }: { embedded?: boolean; limit?: number } = {}) {
   const { user } = useSession();
-  const { data, loading, error } = useAsync(() => fetchFeed(30), [user?.id], !!user);
+  // La RPC `social_feed` solo acepta un tope: «Ver más» lo sube de 20 en 20.
+  const [pageLimit, setPageLimit] = useState(embedded ? Math.max(limit, 10) : FEED_PAGE);
+  const { data, loading, error } = useAsync(() => fetchFeed(pageLimit), [user?.id, pageLimit], !!user);
   const all = data ?? [];
   const rows = embedded ? all.slice(0, limit) : all;
+  const hasMore = !embedded && all.length >= pageLimit;
+  const photoKey = rows.map((r) => `${r.kind}-${r.ref_id}`).join(",");
+  const photos = useAsync<Record<string, string>>(
+    () => fetchFeedPhotos(rows).catch(() => ({})),
+    [photoKey],
+    rows.length > 0,
+  );
 
   // Kudos por resultado (clave kind·ref: un amistoso con dos jugadores a los
   // que sigues sale dos veces y comparte recuento). Optimista con rollback.
@@ -119,7 +166,8 @@ export function Feed({ embedded = false, limit = 5 }: { embedded?: boolean; limi
     }
   }
 
-  if (loading) return embedded ? <SkeletonCard /> : <SkeletonPage />;
+  // «Ver más» recarga con más filas: se mantiene lo que ya se ve.
+  if (loading && !data) return embedded ? <SkeletonCard /> : <SkeletonPage />;
 
   // Con el feed vacío o casi (menos de 3 entradas), «Gente que conoces»: a
   // quién seguir para que el feed se llene. Igual que en la app.
@@ -160,57 +208,32 @@ export function Feed({ embedded = false, limit = 5 }: { embedded?: boolean; limi
             <CardHead title="Actividad reciente" count={rows.length} />
           )}
           {rows.map((n) => (
-            <ListRow
+            <FeedItem
               key={`${n.kind}-${n.ref_id}-${n.actor_id ?? ""}`}
-              icon={
-                <Avatar
-                  initials={initialsOf(n.actor_name ?? "?")}
-                  src={n.avatar_url}
-                  size={36}
+              n={n}
+              photo={photos.data?.[`${n.kind}-${n.ref_id}`] ?? null}
+              kudos={
+                <KudosButton
+                  state={kudosOf(n)}
+                  // Sin kudos a uno mismo: en tu propio amistoso solo se ve el recuento.
+                  own={n.kind === "casual" && !!user && n.actor_id === user.id}
+                  busy={kudosBusy === kudosKey(n)}
+                  onToggle={() => void toggleKudos(n)}
                 />
               }
-              title={n.title}
-              sub={
-                <>
-                  <span>
-                    {n.kind === "casual" ? "Amistoso" : "Jornada"}
-                    {n.occurred_on ? ` · ${formatDate(n.occurred_on)}` : ""}
-                  </span>
-                  {n.subtitle && (
-                    <span
-                      style={{
-                        display: "block",
-                        marginTop: 6,
-                        padding: "10px 12px",
-                        borderRadius: "var(--r-sm)",
-                        background: "var(--bg-card-2)",
-                        color: "var(--text-muted)",
-                        fontSize: 12.5,
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {n.subtitle}
-                    </span>
-                  )}
-                  <KudosButton
-                    state={kudosOf(n)}
-                    // Sin kudos a uno mismo: en tu propio amistoso solo se ve el recuento.
-                    own={n.kind === "casual" && !!user && n.actor_id === user.id}
-                    busy={kudosBusy === kudosKey(n)}
-                    onToggle={() => void toggleKudos(n)}
-                  />
-                </>
-              }
-              right={
-                n.positive !== null ? (
-                  <Chip tone={n.positive ? "accent" : "mute"}>
-                    {n.positive ? "Victoria" : "Jugado"}
-                  </Chip>
-                ) : undefined
-              }
-              style={{ alignItems: "flex-start", paddingTop: 14, paddingBottom: 14 }}
             />
           ))}
+          {hasMore && (
+            <div className="card-foot" style={{ justifyContent: "center" }}>
+              <Btn
+                size="sm"
+                disabled={loading}
+                onClick={() => setPageLimit((l) => l + FEED_PAGE)}
+              >
+                {loading ? "Cargando…" : "Ver más"}
+              </Btn>
+            </div>
+          )}
         </Card>
       )}
 
@@ -370,6 +393,103 @@ export function PeopleYouKnow({ showSearch = false }: { showSearch?: boolean }) 
 }
 
 /** «👏 Kudos · N» (ya diste el tuyo) / «👏 Dar kudos · N». */
+/**
+ * Una entrada del feed. El avatar y el nombre llevan al perfil de quien
+ * jugó; el resultado, al detalle del partido. No es un enlace entero porque
+ * dentro hay otros controles (kudos).
+ */
+function FeedItem({
+  n,
+  photo,
+  kudos,
+}: {
+  n: FeedRow;
+  photo: string | null;
+  kudos: ReactNode;
+}) {
+  // En amistosos el actor es un usuario con perfil público; en jornadas es
+  // el club, que no tiene ficha propia en la web.
+  const profile = n.kind === "casual" && n.actor_id ? profileHref(n.actor_id) : null;
+  const name = n.actor_name ?? "";
+  const rest = name && n.title.startsWith(name) ? n.title.slice(name.length) : null;
+  const avatar = <Avatar initials={initialsOf(name || "?")} src={n.avatar_url} size={36} />;
+
+  return (
+    <div className="list-row" style={{ alignItems: "flex-start", paddingTop: 14, paddingBottom: 14 }}>
+      {profile ? (
+        <Link href={profile} aria-label={`Perfil de ${name}`} style={{ flex: "none" }}>
+          {avatar}
+        </Link>
+      ) : (
+        avatar
+      )}
+      <span className="list-row-main">
+        <span className="list-row-title" style={{ fontWeight: 600 }}>
+          {profile && rest !== null ? (
+            <>
+              <Link href={profile} style={{ color: "inherit", fontWeight: 700 }}>
+                {name}
+              </Link>
+              <Link href={feedHref(n)} style={{ color: "inherit" }}>
+                {rest}
+              </Link>
+            </>
+          ) : (
+            <Link href={feedHref(n)} style={{ color: "inherit", fontWeight: 700 }}>
+              {n.title}
+            </Link>
+          )}
+        </span>
+        <span className="list-row-sub">
+          {n.kind === "casual" ? "Amistoso" : "Jornada"}
+          {n.occurred_on ? ` · ${formatDate(n.occurred_on)}` : ""}
+        </span>
+        {n.subtitle && (
+          <Link
+            href={feedHref(n)}
+            style={{
+              display: "block",
+              marginTop: 6,
+              padding: "10px 12px",
+              borderRadius: "var(--r-sm)",
+              background: "var(--bg-card-2)",
+              color: "var(--text-muted)",
+              fontSize: 12.5,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {n.subtitle}
+          </Link>
+        )}
+        {kudos}
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flex: "none" }}>
+        {n.positive !== null && (
+          <Chip tone={n.positive ? "accent" : "mute"}>{n.positive ? "Victoria" : "Jugado"}</Chip>
+        )}
+        {photo && (
+          <Link href={feedHref(n)} aria-label="Ver la foto del partido">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo}
+              alt=""
+              loading="lazy"
+              style={{
+                display: "block",
+                width: 64,
+                height: 64,
+                objectFit: "cover",
+                borderRadius: "var(--r-sm)",
+                border: "1px solid var(--line)",
+              }}
+            />
+          </Link>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function KudosButton({
   state,
   own,
