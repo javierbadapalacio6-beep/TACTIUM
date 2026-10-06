@@ -69,6 +69,30 @@ function formatDate(iso: string | null): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+/**
+ * «Próximo cobro: 01/10/2026 · 47,99 €» (o «Primer cobro» en una prueba de
+ * pago), con lo que ya hay en la fila: fin del periodo y precio del plan en
+ * `plans.ts`. Null si no va a haber cobro: la prueba sin tarjeta (`trial_*`,
+ * sin pasarela) no cobra nada al acabar, y con la baja pedida tampoco.
+ * Mismo criterio que `nextChargeLine` de la web (MiSuscripcion.tsx).
+ */
+function nextCharge(sub: Subscription | null): { label: string; value: string } | null {
+  if (!sub || sub.cancel_at_period_end || !sub.current_period_end) return null;
+  if ((sub.product_id ?? '').startsWith('trial_')) return null;
+  if (sub.status !== 'trialing' && sub.status !== 'active' && sub.status !== 'grace_period') {
+    return null;
+  }
+  const plan = PLAN_BY_TIER[sub.plan_tier];
+  if (!plan) return null;
+  const amount = formatEur(
+    sub.billing_period === 'yearly' ? plan.priceYearlyEur : plan.priceMonthlyEur,
+  );
+  return {
+    label: sub.status === 'trialing' ? 'Primer cobro' : 'Próximo cobro',
+    value: `${formatDate(sub.current_period_end)} · ${amount}`,
+  };
+}
+
 type SubscriptionScreenProps = Partial<RootStackScreenProps<'Subscription'>> & {
   /**
    * TABLET: pintada como DETALLE de Ajustes (lista + detalle, como los
@@ -169,6 +193,7 @@ export const SubscriptionScreen = ({
     status === 'trialing' &&
     isLiveSub(mySub) &&
     (mySub.product_id ?? '').startsWith('trial_');
+  const charge = useMemo(() => nextCharge(mySub), [mySub]);
   const yearlyChip = annualDiscountPercent(CAPTAIN_PLAN) > 0;
   const billed =
     period === 'yearly' ? CAPTAIN_PLAN.priceYearlyEur : CAPTAIN_PLAN.priceMonthlyEur;
@@ -378,18 +403,31 @@ export const SubscriptionScreen = ({
                 </View>
               </View>
               <View style={styles.statusDivider} />
-              <View style={styles.statusRow}>
-                <Text style={styles.statusRowLabel}>
-                  {status === 'trialing'
-                    ? 'Prueba termina'
-                    : mySub.cancel_at_period_end
-                      ? 'Termina'
-                      : 'Próxima renovación'}
-                </Text>
-                <Text style={styles.statusRowValue}>
-                  {formatDate(mySub.current_period_end)}
-                </Text>
-              </View>
+              {/* En activa, «Próximo cobro: fecha · importe» sustituye a la
+                  fecha de renovación; en prueba de pago va debajo como
+                  «Primer cobro». */}
+              {charge && status !== 'trialing' ? null : (
+                <View style={styles.statusRow}>
+                  <Text style={styles.statusRowLabel}>
+                    {status === 'trialing'
+                      ? 'Prueba termina'
+                      : mySub.cancel_at_period_end
+                        ? 'Termina'
+                        : 'Próxima renovación'}
+                  </Text>
+                  <Text style={styles.statusRowValue}>
+                    {formatDate(mySub.current_period_end)}
+                  </Text>
+                </View>
+              )}
+              {charge ? (
+                <View
+                  style={[styles.statusRow, status === 'trialing' && { marginTop: 8 }]}
+                >
+                  <Text style={styles.statusRowLabel}>{charge.label}</Text>
+                  <Text style={styles.statusRowValue}>{charge.value}</Text>
+                </View>
+              ) : null}
               {mySub.cancel_at_period_end ? (
                 <View style={styles.scheduledNotice}>
                   <Text style={styles.scheduledText}>
@@ -777,7 +815,14 @@ const ClubSummary: React.FC<{
                   ? 'Termina'
                   : 'Próximo cobro'}
             </Text>
-            <Text style={styles.statusRowValue}>{formatDate(sub.current_period_end)}</Text>
+            <Text style={styles.statusRowValue}>
+              {formatDate(sub.current_period_end)}
+              {/* Importe solo con el plan activo: una prueba de club puede ser
+                  sin tarjeta y no cobrar nada al terminar. */}
+              {sub.status === 'active' && !sub.cancel_at_period_end
+                ? ` · ${formatEur(yearly ? plan.priceYearlyEur : plan.priceMonthlyEur)}`
+                : ''}
+            </Text>
           </View>
         </View>
       ) : null}

@@ -252,9 +252,21 @@ export const ClubBillingScreen = ({
                     ? 'Prueba termina'
                     : clubSub.cancel_at_period_end
                       ? 'Termina'
-                      : 'Próxima renovación'
+                      : status === 'active'
+                        ? 'Próximo cobro'
+                        : 'Próxima renovación'
                 }
-                value={formatDate(clubSub.current_period_end)}
+                value={
+                  // Importe solo con el plan activo (como la web): una prueba
+                  // de club puede ser sin tarjeta y no cobrar nada.
+                  status === 'active' && !clubSub.cancel_at_period_end
+                    ? `${formatDate(clubSub.current_period_end)} · ${formatEur(
+                        clubSub.billing_period === 'yearly'
+                          ? plan.priceYearlyEur
+                          : plan.priceMonthlyEur,
+                      )}`
+                    : formatDate(clubSub.current_period_end)
+                }
               />
               <Row label="Equipos cubiertos" value={`${covered.length} de ${quota}`} />
               <Row label="Torneos incluidos" value={`hasta ${plan.tournamentPairCap} parejas`} />
