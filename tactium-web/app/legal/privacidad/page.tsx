@@ -1,200 +1,206 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { LegalPage } from "@/components/legal/LegalPage";
+import { LEGAL_ENTITY, LEGAL_UPDATED } from "@/lib/legal";
+import { GATEWAY_FEE_TEXT } from "@/lib/public-copy";
 
 export const metadata: Metadata = {
   title: "Política de privacidad",
   description:
-    "Cómo TACTIUM trata los datos personales de capitanes, jugadores y clubs.",
+    "Qué datos trata TACTIUM, para qué, con qué proveedores (incluido Stripe para los cobros en la web) y cómo ejercer tus derechos.",
   alternates: { canonical: "/legal/privacidad" },
 };
 
 export default function PrivacidadPage() {
+  const mail = <a href={`mailto:${LEGAL_ENTITY.email}`}>{LEGAL_ENTITY.email}</a>;
   return (
-    <LegalPage title="Política de privacidad" updated="4 de junio de 2026">
+    <LegalPage title="Política de privacidad" updated={LEGAL_UPDATED}>
       <section>
         <p>
-          Esta política explica qué datos personales trata TACTIUM (la «app» y
-          el sitio web <strong>tactium.io</strong>), con qué finalidad y qué
-          derechos tienes sobre ellos. TACTIUM es una herramienta para
-          gestionar equipos de pádel federado: convocar jugadores, montar
-          alineaciones y llevar el seguimiento de la temporada.
+          Esta política explica qué datos personales trata TACTIUM (la app para
+          iOS y Android y la web <strong>{LEGAL_ENTITY.site}</strong>), con qué
+          finalidad y qué derechos tienes sobre ellos. TACTIUM es una
+          herramienta para gestionar equipos de pádel federado, clubes y
+          torneos.
         </p>
       </section>
 
       <section>
         <h2>1. Responsable del tratamiento</h2>
         <p>
-          El responsable es TACTIUM. Para cualquier cuestión sobre tus datos o
-          esta política puedes escribirnos a{" "}
-          <a href="mailto:hola@tactium.io">hola@tactium.io</a>.
+          {LEGAL_ENTITY.name}, con NIF {LEGAL_ENTITY.nif} y domicilio en{" "}
+          {LEGAL_ENTITY.address}. Para cualquier cuestión sobre tus datos
+          escríbenos a {mail}.
         </p>
       </section>
 
       <section>
         <h2>2. Datos que tratamos</h2>
-        <p>Según cómo uses TACTIUM, tratamos los siguientes datos:</p>
         <ul>
           <li>
-            <strong>Datos de cuenta.</strong> Tu dirección de correo
-            electrónico y tu nombre, necesarios para crear y mantener tu cuenta
-            e iniciar sesión.
+            <strong>Datos de cuenta.</strong> Correo electrónico, nombre y, si
+            lo eliges, un nombre de usuario público. Si entras con Google o
+            Apple, recibimos el correo y el nombre que ese proveedor nos da.
           </li>
           <li>
-            <strong>Foto de perfil (opcional).</strong> Si subes un avatar, la
-            imagen se almacena para mostrarla a ti y a tus compañeros de
-            equipo. Puedes quitarla en cualquier momento desde la app.
+            <strong>Foto de perfil (opcional).</strong> Se guarda para
+            mostrarla a ti y a tus compañeros. Puedes quitarla cuando quieras.
           </li>
           <li>
-            <strong>Identificadores.</strong> Un identificador interno de
-            usuario y el identificador que nos asigna nuestro proveedor de
-            suscripciones (RevenueCat), para vincular tu cuenta con tu plan.
+            <strong>Contenido que creas.</strong> Equipos, jugadores (nombre y
+            puntos), clubes, jornadas, alineaciones, resultados, torneos,
+            inscripciones, amistosos, publicaciones e invitaciones.
           </li>
           <li>
-            <strong>Datos de suscripción y compras.</strong> El plan que
-            contratas, su estado (prueba, activa, cancelada), las fechas y los
-            identificadores de transacción de la tienda.{" "}
-            <strong>
-              No tratamos ni almacenamos los datos de tu tarjeta o método de
-              pago
-            </strong>
-            : el cobro lo gestionan íntegramente App Store (Apple) o Google
-            Play.
+            <strong>Datos de suscripción y de pago.</strong> El plan, su estado
+            (prueba, activa, cancelada), fechas e identificadores de la
+            transacción. <strong>No vemos ni guardamos los datos de tu
+            tarjeta</strong>: el cobro lo hacen Apple, Google o Stripe, según
+            dónde pagues.
           </li>
           <li>
-            <strong>Contenido que creas.</strong> Los equipos, jugadores
-            (nombre y puntos), clubs, jornadas, alineaciones, resultados e
-            invitaciones que registras para gestionar tu equipo.
+            <strong>Datos de cobro de los clubes.</strong> Si un club activa el
+            cobro de inscripciones, Stripe le pide los datos que exige la ley
+            para abrir una cuenta de pagos (titular, IBAN, identificación). Esos
+            datos los recoge y guarda Stripe en su formulario; TACTIUM solo
+            guarda el identificador de la cuenta conectada y su estado.
           </li>
           <li>
-            <strong>Metadatos técnicos del waitlist.</strong> Cuando te apuntas
-            a la lista de espera en la web, guardamos datos técnicos no
-            identificativos (idioma, navegador, referrer) para entender por qué
-            canal nos descubres.
+            <strong>Datos técnicos.</strong> Los imprescindibles para que la
+            sesión funcione (ver la <Link href="/legal/cookies">política de
+            cookies</Link>) y, en la app, el token de notificaciones si las
+            activas.
           </li>
         </ul>
         <p>
-          <strong>No</strong> recopilamos tu ubicación, datos de salud,
-          contactos, ni datos publicitarios, y <strong>no</strong> usamos
-          herramientas de analítica de terceros dentro de la app.
+          <strong>No</strong> recogemos tu ubicación, datos de salud ni
+          contactos, y <strong>no</strong> usamos analítica ni publicidad de
+          terceros, ni en la app ni en la web.
         </p>
       </section>
 
       <section>
-        <h2>3. Para qué usamos tus datos</h2>
-        <p>
-          Tratamos tus datos exclusivamente para que la app funcione:
-          autenticarte, gestionar tu equipo, club, jornadas y alineaciones,
-          administrar tu suscripción y, si te apuntaste al waitlist, avisarte
-          del lanzamiento.{" "}
-          <strong>
-            No usamos tus datos con fines publicitarios, no elaboramos perfiles
-            comerciales y no los vendemos a nadie.
-          </strong>{" "}
-          La base legal es la ejecución del contrato (los términos de uso) y,
-          para los avisos del waitlist, tu consentimiento.
-        </p>
-      </section>
-
-      <section>
-        <h2>4. No te rastreamos</h2>
-        <p>
-          TACTIUM no rastrea tu actividad a través de apps o sitios web de
-          otras empresas. No utilizamos el identificador de publicidad (IDFA),
-          ni redes publicitarias, ni mostramos anuncios.
-        </p>
-      </section>
-
-      <section>
-        <h2>5. Proveedores que nos ayudan</h2>
-        <p>
-          Compartimos datos únicamente con los proveedores estrictamente
-          necesarios para prestar el servicio, que actúan como encargados del
-          tratamiento bajo nuestras instrucciones:
-        </p>
+        <h2>3. Para qué los usamos y con qué base</h2>
         <ul>
           <li>
-            <strong>Supabase</strong> — base de datos, autenticación y
-            almacenamiento (incluida la foto de avatar).
+            Prestar el servicio: tu cuenta, tu equipo o club, jornadas,
+            alineaciones, torneos e inscripciones. Base: la ejecución del
+            contrato (los <Link href="/legal/terminos">términos de uso</Link>).
           </li>
           <li>
-            <strong>RevenueCat</strong> — gestión técnica de las suscripciones
-            in-app.
+            Cobrar suscripciones e inscripciones y cumplir las obligaciones
+            fiscales y contables. Base: contrato y obligación legal.
           </li>
           <li>
-            <strong>Apple App Store</strong> y <strong>Google Play</strong> —
-            procesamiento de los pagos de las suscripciones.
-          </li>
-          <li>
-            <strong>Resend</strong> — envío de los correos del waitlist.
-          </li>
-          <li>
-            <strong>Expo (EAS)</strong> — distribución de la app y de sus
-            actualizaciones.
+            Enviarte los correos del servicio (confirmaciones, avisos de pago,
+            recuperación de contraseña) y, si las activas, notificaciones.
+            Base: contrato.
           </li>
         </ul>
         <p>
-          Algunos de estos proveedores están ubicados fuera del Espacio
-          Económico Europeo. En esos casos, las transferencias se amparan en
-          las garantías adecuadas previstas por el RGPD (como las cláusulas
-          contractuales tipo de la Comisión Europea).
+          <strong>No vendemos tus datos, no hacemos perfiles comerciales y no
+          los usamos para publicidad.</strong>
         </p>
       </section>
 
       <section>
-        <h2>6. Cuánto tiempo conservamos tus datos</h2>
+        <h2>4. Qué es público</h2>
         <p>
-          Conservamos tus datos mientras tu cuenta esté activa. Si eliminas tu
-          cuenta desde la app, borramos tu perfil y el contenido asociado
-          (equipos, jugadores, jornadas, alineaciones, resultados e
-          invitaciones). Podemos conservar durante el plazo legal mínimo los
-          registros de facturación exigidos por la normativa fiscal.
+          Algunas cosas se ven sin cuenta porque esa es su función: los
+          torneos que un club publica (con los nombres de las parejas inscritas
+          y sus resultados), los datos de la competición federada que publica
+          la propia federación y tu perfil si eliges un nombre de usuario. Lo
+          demás (plantillas, alineaciones, jornadas de tu equipo, fotos que
+          subes) solo lo ve tu equipo o tu club.
+        </p>
+      </section>
+
+      <section>
+        <h2>5. Proveedores (encargados del tratamiento)</h2>
+        <p>
+          Solo compartimos datos con los proveedores necesarios para prestar el
+          servicio, que los tratan siguiendo nuestras instrucciones:
+        </p>
+        <ul>
+          <li>
+            <strong>Supabase</strong>: base de datos, autenticación y
+            almacenamiento de archivos.
+          </li>
+          <li>
+            <strong>Stripe</strong>: cobro de las suscripciones contratadas en
+            la web, de las cuotas de organización de torneos y de las
+            inscripciones online. Para las inscripciones usamos Stripe Connect:
+            el dinero va a la cuenta del club, que es quien vende la
+            inscripción, y TACTIUM retiene solo el coste de la pasarela (
+            {GATEWAY_FEE_TEXT}). Stripe trata además algunos datos como
+            responsable propio para prevenir el fraude y cumplir la normativa
+            de pagos.
+          </li>
+          <li>
+            <strong>Apple App Store y Google Play</strong>: cobro de las
+            suscripciones contratadas dentro de la app.
+          </li>
+          <li>
+            <strong>RevenueCat</strong>: gestión técnica de las suscripciones de
+            la app.
+          </li>
+          <li>
+            <strong>Resend</strong>: envío de los correos del servicio.
+          </li>
+          <li>
+            <strong>Vercel</strong>: alojamiento de la web.
+          </li>
+          <li>
+            <strong>Expo (EAS)</strong>: distribución de la app, sus
+            actualizaciones y las notificaciones.
+          </li>
+        </ul>
+        <p>
+          Algunos están fuera del Espacio Económico Europeo. En esos casos la
+          transferencia se ampara en las garantías del RGPD (cláusulas
+          contractuales tipo de la Comisión Europea o marco de privacidad
+          UE-EE. UU.).
+        </p>
+      </section>
+
+      <section>
+        <h2>6. Cuánto tiempo los conservamos</h2>
+        <p>
+          Mientras tu cuenta esté activa. Si la eliminas, borramos tu perfil y
+          el contenido asociado. Los registros de facturación y de pagos se
+          conservan el plazo que exige la normativa fiscal y mercantil.
         </p>
       </section>
 
       <section>
         <h2>7. Tus derechos</h2>
         <p>
-          Puedes ejercer en cualquier momento tus derechos de acceso,
-          rectificación, supresión, portabilidad, limitación y oposición. Desde
-          la propia app tienes dos atajos directos:
-        </p>
-        <ul>
-          <li>
-            <strong>Perfil → Mis datos</strong>: exporta en un archivo todos
-            los datos personales que guardamos sobre ti (derecho de
-            portabilidad).
-          </li>
-          <li>
-            <strong>Perfil → Eliminar cuenta</strong>: borra tu cuenta y tus
-            datos (derecho de supresión).
-          </li>
-        </ul>
-        <p>
-          También puedes ejercerlos escribiéndonos a{" "}
-          <a href="mailto:hola@tactium.io">hola@tactium.io</a>. Si consideras
-          que no hemos atendido tu solicitud correctamente, tienes derecho a
-          reclamar ante la Agencia Española de Protección de Datos (aepd.es).
+          Puedes pedir acceso, rectificación, supresión, portabilidad,
+          limitación y oposición. En la app tienes dos atajos: <strong>Perfil →
+          Mis datos</strong> (exporta tus datos) y <strong>Perfil → Eliminar
+          cuenta</strong>; en la web, <Link href="/legal/eliminar-cuenta">cómo
+          eliminar tu cuenta</Link>. También puedes escribirnos a {mail}. Si
+          crees que no hemos atendido bien tu solicitud, puedes reclamar ante
+          la Agencia Española de Protección de Datos (aepd.es).
         </p>
       </section>
 
       <section>
         <h2>8. Datos de terceros y menores</h2>
         <p>
-          Para usar TACTIUM debes ser mayor de 14 años. Cuando un capitán o un
-          club da de alta a sus jugadores (nombre y puntos), lo hace bajo su
-          responsabilidad y debe contar con la base legítima para ello; si
-          alguno de esos jugadores es menor de edad, corresponde al club
-          recabar el consentimiento necesario de sus tutores.
+          Para usar TACTIUM hay que tener al menos 14 años. Cuando un capitán o
+          un club da de alta a sus jugadores, lo hace bajo su responsabilidad y
+          con base legítima para ello; si alguno es menor, corresponde al club
+          recabar el consentimiento de sus tutores.
         </p>
       </section>
 
       <section>
-        <h2>9. Cambios en esta política</h2>
+        <h2>9. Cambios</h2>
         <p>
-          Podemos actualizar esta política para reflejar cambios en el servicio
-          o en la normativa. Publicaremos siempre la versión vigente en esta
-          página, con su fecha de última actualización.
+          Publicaremos siempre aquí la versión vigente, con su fecha. Si el
+          cambio es importante, te avisaremos por correo o en la app.
         </p>
       </section>
     </LegalPage>

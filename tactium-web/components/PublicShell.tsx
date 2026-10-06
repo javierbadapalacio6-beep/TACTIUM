@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { ICONS } from "./Icon";
-import { ThemeToggle } from "./ThemeToggle";
+import { ICONS, IconMoon, IconSun } from "./Icon";
 import { Wordmark } from "./Wordmark";
 import { BtnLink } from "./ui";
 import { PUBLIC_NAV, SIGNUP_HREF } from "@/lib/nav";
+import { useTheme } from "@/lib/theme";
 import { APP_STORE_URL, CONTACT_EMAIL, PLAY_STORE_URL } from "@/lib/site";
 
 /**
@@ -40,8 +40,13 @@ export function PublicShell({
   // Al entrar se vuelve a donde estabas, nunca al inicio.
   const next = encodeURIComponent(pathname || "/");
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
+  // Gana el destino más concreto: en /torneos/organizar se marca «Organizar
+  // torneo», no también «Torneos».
+  const matches = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const activeHref = PUBLIC_NAV.map((i) => i.href)
+    .filter(matches)
+    .sort((a, b) => b.length - a.length)[0];
+  const isActive = (href: string) => href === activeHref;
 
   const navLinks = PUBLIC_NAV.map((item) => {
     const active = isActive(item.href);
@@ -61,6 +66,9 @@ export function PublicShell({
 
   return (
     <div className={"tw-pub-shell" + (dark ? " mk-dark" : "")}>
+    <a href="#contenido" className="tw-skip">
+      Saltar al contenido
+    </a>
     <div className="tw-pub">
       <header className="tw-pub-bar">
         <Link href="/" className="tw-pub-brand" aria-label="TACTIUM · Inicio">
@@ -73,7 +81,7 @@ export function PublicShell({
         </nav>
 
         <div className="tw-pub-actions">
-          {!dark && <ThemeToggle />}
+          {!dark && <PublicThemeToggle />}
           <Link
             href={`/entrar?next=${next}`}
             className="tw-pub-ghost tw-pub-deskonly"
@@ -118,7 +126,9 @@ export function PublicShell({
       </header>
 
       <div className="tw-pub-scroll">
-      <main className="tw-pub-content">{children}</main>
+      <main id="contenido" tabIndex={-1} className="tw-pub-content">
+        {children}
+      </main>
 
       <footer className="tw-pub-foot tw-pub-foot--big">
         <div className="mk-foot-brand">
@@ -145,6 +155,7 @@ export function PublicShell({
           <h4>Explorar</h4>
           <nav aria-label="Explorar">
             <Link href="/torneos">Torneos</Link>
+            <Link href="/torneos/organizar">Organizar un torneo</Link>
             <Link href="/federacion">Federación</Link>
             <Link href="/comunidad">Comunidad</Link>
           </nav>
@@ -160,8 +171,10 @@ export function PublicShell({
         <div className="mk-foot-col">
           <h4>Legal y contacto</h4>
           <nav aria-label="Legal y contacto">
+            <Link href="/legal/aviso-legal">Aviso legal</Link>
             <Link href="/legal/privacidad">Privacidad</Link>
             <Link href="/legal/terminos">Términos</Link>
+            <Link href="/legal/cookies">Cookies</Link>
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
           </nav>
         </div>
@@ -172,5 +185,30 @@ export function PublicShell({
       </div>
     </div>
     </div>
+  );
+}
+
+/**
+ * Botón de tema del marco público. Dice la ACCIÓN («Cambiar a oscuro»), no el
+ * estado: quien llega sin cuenta lee «Modo claro» como una etiqueta, no como
+ * un botón.
+ */
+function PublicThemeToggle() {
+  const { resolved, toggle, ready } = useTheme();
+  const toDark = resolved !== "dark";
+  const label = ready ? (toDark ? "Cambiar a oscuro" : "Cambiar a claro") : "Cambiar tema";
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="btn btn-ghost btn-sm"
+      aria-label={label}
+      suppressHydrationWarning
+    >
+      {toDark ? <IconMoon size={14} /> : <IconSun size={14} />}
+      <span className="tw-pub-deskonly" suppressHydrationWarning>
+        {label}
+      </span>
+    </button>
   );
 }
