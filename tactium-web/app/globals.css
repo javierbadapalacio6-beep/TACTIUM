@@ -4961,6 +4961,117 @@ select.tw-cell-input {
   }
 }
 
+/* Tabla de clasificación de un grupo (Pos · Equipo · PJ · PG · Dif ·
+   Sets + · Sets − · Pts · Racha). En móvil se queda en Pos · Equipo · Pts ·
+   Racha y el resto baja a una segunda línea bajo el nombre (`.tw-st-sub`). */
+.tw-fcp-stand {
+  grid-template-columns: 38px minmax(150px, 1.7fr) 34px 34px 46px 46px 46px 52px minmax(104px, auto);
+  min-width: 700px;
+}
+.tw-st-sub {
+  display: none;
+}
+@media (max-width: 640px) {
+  .tw-fcp-stand {
+    grid-template-columns: 26px minmax(0, 1fr) 40px auto;
+    min-width: 0;
+    padding: 9px 12px;
+  }
+  .tw-fcp-stand .tw-st-x {
+    display: none;
+  }
+  .tw-st-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* ── Federación · vista partida (≥1100 px) ─────────────────────────
+   Lista a la izquierda (380) y detalle del grupo, equipo o jugador a la
+   derecha, como el `SplitView` de la app en tablet. El detalle se queda
+   fijo mientras se desplaza la lista (el scroll vive en `.tw-main`). */
+.tw-fcp-master {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.tw-fcp-master-list {
+  min-width: 0;
+}
+.tw-fcp-pane {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 20px;
+}
+.tw-fcp-pane-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tw-fcp-pane-body {
+  min-width: 0;
+}
+/* Dentro del panel no hay sitio para dos columnas ni para la rejilla. */
+.tw-fcp-pane .tw-fcp-split {
+  grid-template-columns: minmax(0, 1fr);
+}
+.tw-fcp-master .tw-fcp-groups,
+.tw-fcp-master .tw-club-teams {
+  grid-template-columns: minmax(0, 1fr);
+}
+.tw-fcp-master .tw-fcp-fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.tw-fcp-group[aria-current="true"],
+.tw-fcp-pick[aria-current="true"] .card,
+.tw-fcp-row[aria-current="true"] {
+  border-color: var(--accent-40);
+  background: var(--accent-10);
+}
+
+/* El selector de secciones (Todo · Equipos · Jugadores · Rankings): en
+   móvil y en la columna de la vista partida, las cuatro a lo ancho y sin
+   icono, en vez de deslizarse y esconder «Rankings». */
+@media (max-width: 560px) {
+  .tw-fcp-bar .seg {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 100%;
+    overflow: visible;
+  }
+  .tw-fcp-bar .seg-item {
+    justify-content: center;
+    padding: 0 4px;
+  }
+  .tw-fcp-bar .seg-item svg {
+    display: none;
+  }
+}
+.tw-fcp-master .tw-fcp-bar .seg {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  flex: 1 1 100%;
+  overflow: visible;
+}
+.tw-fcp-master .tw-fcp-bar .seg-item {
+  justify-content: center;
+  padding: 0 4px;
+}
+.tw-fcp-master .tw-fcp-bar .seg-item svg {
+  display: none;
+}
+
 /* ══ Acta de un partido ════════════════════════════════════════════
    Cinco puntos, dos parejas cada uno, con la cara y los puntos de cada
    jugador. Es la pantalla donde la liga deja de ser una tabla y pasa a

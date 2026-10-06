@@ -8,13 +8,15 @@
 import { supabaseBrowser } from "@/lib/supabase/client";
 import {
   catShort,
+  fcpSameTeam,
   fetchFcpGroupHeader,
+  fetchFcpMatches,
   fetchFcpStandings,
   fetchTeamFcpGroup,
   fetchTeamFcpId,
 } from "@/lib/queries";
 import { legendFor, type FcpZone } from "@/lib/fcp-zones";
-import type { FcpStanding } from "@/lib/fcp-public";
+import type { FcpMatch, FcpStanding } from "@/lib/fcp-public";
 
 /* ── Puesto de un equipo TACTIUM en la Federación ─────────────────── */
 
@@ -27,6 +29,17 @@ export interface TeamStanding {
   me: FcpStanding | null;
   zone: FcpZone | null;
   zones: FcpZone[] | null;
+  /** La tabla es la de la temporada ANTERIOR: el vínculo apunta a una
+   *  inscripción y la nueva aún no tiene grupos. Quien la enseñe tiene que
+   *  decirlo (solo con `withPrevious`). */
+  previous: boolean;
+  /** «2025/2026», o null. */
+  temporada: string | null;
+  /** Próximo partido de tu equipo en el grupo (solo con `withPrevious` y
+   *  si la tabla es de la temporada en juego). */
+  nextMatch: FcpMatch | null;
+  /** Todos los partidos del grupo jugados: clasificación final. */
+  finished: boolean;
 }
 
 const EMPTY: TeamStanding = {
@@ -37,28 +50,152 @@ const EMPTY: TeamStanding = {
   me: null,
   zone: null,
   zones: null,
+  previous: false,
+  temporada: null,
+  nextMatch: null,
+  finished: false,
 };
 
 const cache = new Map<string, { at: number; v: TeamStanding }>();
 const TTL = 5 * 60_000;
 
-export async function fetchTeamStanding(teamId: string): Promise<TeamStanding> {
-  const hit = cache.get(teamId);
+/** «2025-26» / «2026» → «2025/2026». Copia de `seasonLabel` de la app
+ *  (`TACTIUM/src/core/services/fcpBrowse.ts`). */
+function seasonLabel(temporada: string | null | undefined): string | null {
+  const t = (temporada ?? "").trim();
+  if (!t) return null;
+  const rango = t.match(/^(\d{4})\s*[/-]\s*(\d{2,4})$/);
+  if (rango) return `${rango[1]}/${rango[2].length === 2 ? `20${rango[2]}` : rango[2]}`;
+  const anio = t.match(/^(\d{4})$/);
+  if (anio) return `${Number(anio[1]) - 1}/${anio[1]}`;
+  return t;
+}
+
+const norm = (s: string | null | undefined) =>
+  (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * El mismo equipo en la última temporada que SÍ tiene clasificación, cuando
+ * el vínculo apunta a una INSCRIPCIÓN (la liga que viene trae equipos meses
+ * antes que grupos). Cruce por NOMBRE + GÉNERO: el `id_equipo` cambia cada
+ * temporada. Copia de `idEquipoTemporadaAnterior` de la app
+ * (`TACTIUM/src/core/services/fcpSeason.ts`).
+ */
+async function idEquipoTemporadaAnterior(
+  fcpIdEquipo: number,
+): Promise<{ idEquipo: number; idGrupo: string } | null> {
+  const sb = supabaseBrowser();
+  const { data: ins } = await sb
+    .from("fcp_inscripciones")
+    .select("equipo, genero")
+    .eq("id_equipo", fcpIdEquipo)
+    .limit(1);
+  const insc = ((ins ?? []) as { equipo: string | null; genero: string | null }[])[0];
+  const nombre = (insc?.equipo ?? "").trim();
+  if (!nombre) return null;
+  const esFem = (insc?.genero ?? "").toUpperCase().startsWith("F");
+
+  const { data: cl } = await sb
+    .from("fcp_clasificacion")
+    .select("id_equipo, equipo, id_grupo")
+    .ilike("equipo", nombre)
+    .limit(500);
+  const rows = ((cl ?? []) as {
+    id_equipo: number | null;
+    equipo: string | null;
+    id_grupo: string | null;
+  }[]).filter(
+    (r) =>
+      r.id_equipo != null &&
+      r.id_grupo &&
+      !/^fase/i.test(r.id_grupo) &&
+      norm(r.equipo) === norm(nombre),
+  );
+  if (rows.length === 0) return null;
+
+  const { data: gr } = await sb
+    .from("fcp_grupos")
+    .select("id_grupo, id_liga, genero")
+    .in("id_grupo", [...new Set(rows.map((r) => r.id_grupo as string))]);
+  const gById = new Map(
+    ((gr ?? []) as { id_grupo: string; id_liga: number | null; genero: string | null }[]).map(
+      (g) => [g.id_grupo, g],
+    ),
+  );
+  let best: { idEquipo: number; idGrupo: string; liga: number } | null = null;
+  for (const r of rows) {
+    const g = gById.get(r.id_grupo as string);
+    if (!g || g.id_liga == null) continue;
+    // El género separa homónimos: «MEDIO CUDEYO A» existe en las dos.
+    if ((g.genero ?? "").toUpperCase().startsWith("F") !== esFem) continue;
+    if (!best || g.id_liga > best.liga) {
+      best = { idEquipo: r.id_equipo as number, idGrupo: r.id_grupo as string, liga: g.id_liga };
+    }
+  }
+  return best ? { idEquipo: best.idEquipo, idGrupo: best.idGrupo } : null;
+}
+
+/**
+ * Puesto de un equipo TACTIUM en su grupo federativo.
+ *
+ * Con `withPrevious` se comporta como `resolveMainGroupOrPrevious` +
+ * `fetchFcpGroupStandings` de la app: si el vínculo apunta a una
+ * inscripción sin grupos, cae a la clasificación de la temporada anterior
+ * (`previous: true`), y trae también el próximo partido. Sin la opción, el
+ * comportamiento de siempre (lo usan Competir y la temporada).
+ */
+export async function fetchTeamStanding(
+  teamId: string,
+  opts: { withPrevious?: boolean } = {},
+): Promise<TeamStanding> {
+  const key = `${teamId}:${opts.withPrevious ? "p" : ""}`;
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL) return hit.v;
   const fcpId = await fetchTeamFcpId(teamId);
   if (fcpId == null) return EMPTY;
-  const g = await fetchTeamFcpGroup(teamId);
+  let g = await fetchTeamFcpGroup(teamId);
+  // Con quién se compara «tu fila»: el id de la temporada de la tabla, que
+  // NO es el del vínculo cuando se tira de la anterior.
+  let myId = fcpId;
+  let previous = false;
+  if (!g && opts.withPrevious) {
+    const prev = await idEquipoTemporadaAnterior(fcpId).catch(() => null);
+    if (prev) {
+      g = { fed: "FCantP", idGrupo: prev.idGrupo };
+      myId = prev.idEquipo;
+      previous = true;
+    }
+  }
   if (!g) {
     // Vinculado pero sin grupo: temporada en inscripción (sin sorteo).
     const v = { ...EMPTY, fcpId };
-    cache.set(teamId, { at: Date.now(), v });
+    cache.set(key, { at: Date.now(), v });
     return v;
   }
-  const [rows, header] = await Promise.all([
+  const [rows, header, matches] = await Promise.all([
     fetchFcpStandings(g.idGrupo),
     fetchFcpGroupHeader(g.idGrupo).catch(() => null),
+    opts.withPrevious ? fetchFcpMatches(g.idGrupo).catch(() => [] as FcpMatch[]) : Promise.resolve(null),
   ]);
-  const me = rows.find((r) => Number(r.idEquipo) === fcpId) ?? null;
+  const me = rows.find((r) => Number(r.idEquipo) === myId) ?? null;
+  const finished =
+    !!matches && matches.length > 0 && matches.every((m) => m.estado === "jugado");
+  const nextMatch =
+    matches && me && !previous
+      ? (matches
+          .filter(
+            (m) =>
+              m.estado !== "jugado" &&
+              !m.resultado &&
+              (fcpSameTeam(m.local, me.equipo) || fcpSameTeam(m.visitante, me.equipo)),
+          )
+          .sort((a, b) => (a.jornada ?? 999) - (b.jornada ?? 999))[0] ?? null)
+      : null;
   const zones = /^fase/i.test(g.idGrupo) || /ORO|PLATA|PLAY\s*OFF/i.test(header?.nombre ?? "")
     ? null
     : legendFor("FCantP", header?.genero ?? null, catShort(header?.nombre ?? ""));
@@ -71,9 +208,36 @@ export async function fetchTeamStanding(teamId: string): Promise<TeamStanding> {
     me,
     zone,
     zones,
+    previous,
+    temporada: seasonLabel(header?.temporada),
+    nextMatch,
+    finished,
   };
-  cache.set(teamId, { at: Date.now(), v });
+  cache.set(key, { at: Date.now(), v });
   return v;
+}
+
+/**
+ * Fecha de la Federación en formato humano: «2026-05-23» → «sáb 23 may».
+ * Con otro año que el actual, lo añade («sáb 23 may 2025»). Lo que no sea
+ * una fecha ISO se devuelve tal cual.
+ */
+export function fmtFcpDate(v: string | null | undefined): string {
+  if (!v) return "";
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return v;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(d.getTime())) return v;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d
+    .toLocaleDateString("es-ES", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      ...(sameYear ? {} : { year: "numeric" }),
+    })
+    .replace(/\./g, "")
+    .replace(/,/g, "");
 }
 
 /** «2ª Categoría Masculina - Grupo B» → «2ª Masc · Grupo B». */

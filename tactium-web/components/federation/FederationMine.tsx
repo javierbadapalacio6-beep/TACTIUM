@@ -4,12 +4,14 @@ import Link from "next/link";
 
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
-import { Avatar, Btn, BtnLink, Card, Chip, ListRow, SectionHead } from "@/components/ui";
-import { IconSearch } from "@/components/Icon";
+import { Avatar, Btn, BtnLink, Card, Chip, ListRow, Note, SectionHead } from "@/components/ui";
+import { IconCalendar, IconInfo, IconSearch } from "@/components/Icon";
+
 import {
   fetchClubTeamsLite,
   fetchMyFollows,
   fetchTeamStanding,
+  fmtFcpDate,
   shortGroupName,
   type TeamStanding,
 } from "./fed-data";
@@ -22,15 +24,33 @@ function initials(name: string): string {
 }
 
 /**
- * Federación · «primero lo tuyo» (solo con sesión). Tu equipo y tu grupo
- * (capitán y jugador), los equipos del club (club), o la invitación a
- * buscarse (suelto). Debajo, lo que sigues con la ☆ de la app.
+ * Federación · «primero lo tuyo» (solo con sesión). Arriba del explorador,
+ * fija, la tarjeta «Tu grupo» (capitán y jugador): puesto, puntos, próxima
+ * jornada y enlace a la clasificación. Si el vínculo apunta a una
+ * inscripción sin grupos, enseña la final de la temporada anterior con el
+ * mismo aviso que la app (`FcpGroupSheet`). Para el club, sus equipos; para
+ * el suelto, la invitación a buscarse. Debajo, lo que sigues con la ☆.
+ *
+ * `onOpenGroup`: con la vista partida (≥1100 px) el grupo se abre a la
+ * derecha en vez de navegar.
  */
-export function FederationMine({ slug, onFindMe }: { slug: string; onFindMe: () => void }) {
+export function FederationMine({
+  slug,
+  onFindMe,
+  onOpenGroup,
+}: {
+  slug: string;
+  onFindMe: () => void;
+  onOpenGroup?: (idGrupo: string) => void;
+}) {
   const { user, role, activeTeam, clubId } = useSession();
   const teamId = activeTeam?.id ?? null;
   const isTeam = role === "capitan" || role === "jugador";
-  const mine = useAsync(() => fetchTeamStanding(teamId!), [teamId], !!user && isTeam && !!teamId);
+  const mine = useAsync(
+    () => fetchTeamStanding(teamId!, { withPrevious: true }),
+    [teamId],
+    !!user && isTeam && !!teamId,
+  );
   const club = useAsync(
     async () => {
       const teams = await fetchClubTeamsLite(clubId!);
@@ -52,33 +72,97 @@ export function FederationMine({ slug, onFindMe }: { slug: string; onFindMe: () 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
       {isTeam && st && st.fcpId != null ? (
-        <Card style={{ borderColor: "var(--accent-40)" }}>
+        <Card style={{ borderColor: "var(--accent-40)" }} aria-label="Tu grupo">
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <Avatar initials={initials(st.me?.equipo ?? activeTeam?.name ?? "?")} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Tu grupo</div>
               <div style={{ fontSize: 15, fontWeight: 700 }} className="truncate">
                 {st.me?.equipo ?? activeTeam?.name}
               </div>
               <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                {["Tu equipo", shortGroupName(st.grupo)].filter(Boolean).join(" · ")}
+                {[shortGroupName(st.grupo), st.previous ? st.temporada : null]
+                  .filter(Boolean)
+                  .join(" · ") || "En inscripción"}
               </div>
             </div>
             {st.me ? (
-              <span
-                className="mono"
-                style={{ fontSize: 24, fontWeight: 700, color: st.zone?.color ?? "var(--accent)" }}
-                title={st.zone?.label}
-              >
-                {st.me.posicion}º
+              <span style={{ textAlign: "right" }}>
+                <span
+                  className="mono"
+                  style={{
+                    display: "block",
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: st.zone?.color ?? "var(--accent)",
+                  }}
+                  title={st.zone?.label}
+                >
+                  {st.me.posicion}º
+                </span>
+                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                  <span className="mono">{st.me.puntos}</span> pts
+                </span>
               </span>
             ) : (
               <Chip tone="mute">Sin sorteo</Chip>
             )}
           </div>
+
+          {st.previous ? (
+            <Note icon={<IconInfo size={15} />} style={{ marginTop: 12 }}>
+              <b>
+                Clasificación final
+                {st.temporada ? ` de la ${st.temporada}` : " de la temporada pasada"}
+              </b>
+              . La Federación aún no ha publicado los grupos de la temporada nueva. Cuando lo
+              haga, aquí verás tu grupo nuevo.
+            </Note>
+          ) : st.finished ? (
+            <Note icon={<IconInfo size={15} />} style={{ marginTop: 12 }}>
+              Temporada{st.temporada ? ` ${st.temporada}` : ""} terminada · clasificación final
+            </Note>
+          ) : st.nextMatch ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: "var(--r-md)",
+                background: "var(--bg-card-2)",
+                fontSize: 13.5,
+              }}
+            >
+              <IconCalendar size={15} style={{ flex: "none", color: "var(--text-muted)" }} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ color: "var(--text-muted)" }}>
+                  Próxima
+                  {st.nextMatch.jornada != null ? ` · jornada ${st.nextMatch.jornada}` : ""}
+                  {st.nextMatch.fecha ? ` · ${fmtFcpDate(st.nextMatch.fecha)}` : ""}
+                  {st.nextMatch.hora ? ` · ${st.nextMatch.hora.slice(0, 5)}` : ""}
+                </span>
+                <span className="truncate" style={{ display: "block", fontWeight: 600 }}>
+                  {st.nextMatch.local} – {st.nextMatch.visitante}
+                </span>
+              </span>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             {st.idGrupo ? (
-              <BtnLink href={`${base}/grupo/${encodeURIComponent(st.idGrupo)}`} size="sm" variant="accent">
-                Tu grupo
+              <BtnLink
+                href={`${base}/grupo/${encodeURIComponent(st.idGrupo)}`}
+                size="sm"
+                variant="accent"
+                onClick={(e) => {
+                  if (!onOpenGroup || e.metaKey || e.ctrlKey || e.shiftKey) return;
+                  e.preventDefault();
+                  onOpenGroup(st.idGrupo!);
+                }}
+              >
+                Ver clasificación
               </BtnLink>
             ) : null}
             <BtnLink href={`${base}/equipo/${st.me?.idEquipo ?? st.fcpId}`} size="sm">

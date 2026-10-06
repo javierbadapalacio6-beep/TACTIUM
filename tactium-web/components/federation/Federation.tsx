@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 
 import {
   fetchFcpActa,
@@ -42,7 +50,7 @@ import type { FcpStanding } from "@/lib/fcp-public";
 import { FCP_ZONES_NOTE, legendFor, type FcpZone } from "@/lib/fcp-zones";
 import { useSession } from "@/lib/session";
 import { FCP_FEDERATION_CODE, FEDERATIONS as FED_LIST } from "@/lib/federations";
-import { fetchMyFederation, fetchPlayerHistMatches } from "./fed-data";
+import { fetchMyFederation, fetchPlayerHistMatches, fmtFcpDate } from "./fed-data";
 import { motion, useReducedMotion } from "motion/react";
 import { FederationMine } from "./FederationMine";
 import { useAsync } from "@/lib/use-async";
@@ -201,6 +209,40 @@ export function FederationForMe() {
   return <FederationExplore slug="cantabra" />;
 }
 
+/* ── Vista partida (≥1100 px): lista a la izquierda, detalle a la derecha ──
+   Como `SplitView` de la app en tablet. Los enlaces a grupo, equipo y
+   jugador, dentro del explorador o del propio detalle, abren el detalle en
+   el panel en vez de navegar; con Ctrl/Cmd/Mayús (o en móvil) navegan como
+   siempre, y la URL de cada ficha sigue existiendo. */
+type PaneKind = "grupo" | "equipo" | "jugador";
+type PaneSel = { kind: PaneKind; id: string };
+const FcpPaneCtx = createContext<((sel: PaneSel) => void) | null>(null);
+
+/** `onClick` para un enlace de la federación: abre en el panel si lo hay. */
+function useFcpPane() {
+  const open = useContext(FcpPaneCtx);
+  return (kind: PaneKind, id: string | number) =>
+    open
+      ? (e: ReactMouseEvent) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          open({ kind, id: String(id) });
+        }
+      : undefined;
+}
+
+function useMinWidth(px: number): boolean {
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${px}px)`);
+    const on = () => setOk(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [px]);
+  return ok;
+}
+
 type Tab = "todo" | "equipos" | "jugadores" | "rankings";
 const TABS: [Tab, string, (p: { size?: number }) => React.ReactElement][] = [
   ["todo", "Todo", IconSliders],
@@ -307,6 +349,20 @@ function FilterField({
 
 export function FederationExplore({ slug }: { slug: string }) {
   const [tab, setTab] = useState<Tab>("todo");
+  const wide = useMinWidth(1100);
+  const [sel, setSel] = useState<PaneSel | null>(null);
+  // Este componente PONE el contexto, así que no lo puede leer: el
+  // `onClick` se construye con su propio estado.
+  const pane = (kind: PaneKind, id: string | number) =>
+    wide
+      ? (e: ReactMouseEvent) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          setSel({ kind, id: String(id) });
+        }
+      : undefined;
+  const isSel = (kind: PaneKind, id: string | number) =>
+    wide && sel?.kind === kind && sel.id === String(id) ? "true" : undefined;
   const [query, setQuery] = useState("");
   const [term, setTerm] = useState("");
   const [year, setYear] = useState<number | null>(null);
@@ -509,6 +565,13 @@ export function FederationExplore({ slug }: { slug: string }) {
             : `${shownGroups.length} de ${allGroups.length} grupos`;
 
   return (
+    <FcpPaneCtx.Provider value={wide ? setSel : null}>
+    <ExploreBody
+      wide={wide}
+      sel={sel}
+      onClose={() => setSel(null)}
+      slug={slug}
+    >
     <div className="tw-page">
       {/* ══ Cabecera ══════════════════════════════════════════════
           Sobre una pista de noche dibujada con gradientes: la
@@ -534,8 +597,14 @@ export function FederationExplore({ slug }: { slug: string }) {
       </header>
 
       {/* Primero lo tuyo (solo con sesión; sin ella la página queda igual). */}
-      <FederationMine slug={slug} onFindMe={() => setTab("jugadores")} />
+      <FederationMine
+        slug={slug}
+        onFindMe={() => setTab("jugadores")}
+        onOpenGroup={wide ? (idGrupo) => setSel({ kind: "grupo", id: idGrupo }) : undefined}
+      />
 
+      <div className={wide ? "tw-fcp-master" : undefined}>
+      <div className="tw-fcp-master-list">
       <div className="tw-fcp-bar">
         <div className="tw-fcp-bar-top">
           <InputWrap icon={<IconSearch size={15} />}>
@@ -556,6 +625,7 @@ export function FederationExplore({ slug }: { slug: string }) {
             />
           </InputWrap>
           <Segmented
+            as="tabs"
             label="Sección"
             value={tab}
             onChange={setTab}
@@ -676,7 +746,9 @@ export function FederationExplore({ slug }: { slug: string }) {
                 <Link
                   key={g.idGrupo}
                   href={`/federacion/${slug}/grupo/${encodeURIComponent(g.idGrupo)}`}
+                  onClick={pane("grupo", g.idGrupo)}
                   className="tw-fcp-group"
+                  aria-current={isSel("grupo", g.idGrupo)}
                 >
                   <span className="tw-fcp-group-top">
                     <span className="tw-fcp-field-tile" aria-hidden="true">
@@ -751,6 +823,9 @@ export function FederationExplore({ slug }: { slug: string }) {
               <Link
                 key={t.idEquipo}
                 href={`/federacion/${slug}/equipo/${t.idEquipo}`}
+                onClick={pane("equipo", t.idEquipo)}
+                aria-current={isSel("equipo", t.idEquipo)}
+                className="tw-fcp-pick"
                 style={{ color: "inherit" }}
               >
                 <Card
@@ -802,6 +877,8 @@ export function FederationExplore({ slug }: { slug: string }) {
               <Link
                 key={p.idJugador}
                 href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
+                onClick={pane("jugador", p.idJugador)}
+                aria-current={isSel("jugador", p.idJugador)}
                 className="tw-fcp-row"
                 style={{ color: "inherit" }}
               >
@@ -916,6 +993,7 @@ export function FederationExplore({ slug }: { slug: string }) {
                 <Link
                   key={`${r.posicion}-${r.name}`}
                   href={`/federacion/${slug}/jugador/${encodeURIComponent(r.idJugador)}`}
+                  onClick={pane("jugador", r.idJugador)}
                   className="tw-fcp-rank-row is-link"
                 >
                   {cuerpo}
@@ -928,8 +1006,74 @@ export function FederationExplore({ slug }: { slug: string }) {
             })}
           </Card>
         ))}
+      </div>
+      {wide && (
+        <aside className="tw-fcp-pane" aria-label="Detalle">
+          {sel ? (
+            <>
+              <div className="tw-fcp-pane-bar">
+                <Link
+                  href={
+                    `/federacion/${slug}/${sel.kind}/` +
+                    (sel.kind === "equipo" ? sel.id : encodeURIComponent(sel.id))
+                  }
+                  className="tw-fcp-reset"
+                >
+                  Abrir en su página
+                </Link>
+                <button type="button" className="tw-fcp-reset" onClick={() => setSel(null)}>
+                  Cerrar
+                </button>
+              </div>
+              {sel.kind === "grupo" ? (
+                <FcpGroupView key={sel.id} slug={slug} id={sel.id} embedded />
+              ) : sel.kind === "equipo" ? (
+                <FcpTeamView key={sel.id} slug={slug} id={sel.id} embedded />
+              ) : (
+                <FcpPlayerView key={sel.id} id={sel.id} embedded />
+              )}
+            </>
+          ) : (
+            <Card>
+              <EmptyState
+                icon={<IconFlag size={22} />}
+                title="Elige un grupo, un equipo o un jugador"
+                body="Su clasificación, sus partidos o su ficha se abren aquí, sin perder la lista."
+              />
+            </Card>
+          )}
+        </aside>
+      )}
+      </div>
     </div>
+    </ExploreBody>
+    </FcpPaneCtx.Provider>
   );
+}
+
+/** Envoltorio del explorador: hoy solo pasa los hijos (el panel va dentro
+ *  de `.tw-fcp-master`); queda como punto único para el atajo de Escape. */
+function ExploreBody({
+  wide,
+  sel,
+  onClose,
+  children,
+}: {
+  wide: boolean;
+  sel: PaneSel | null;
+  onClose: () => void;
+  slug: string;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!wide || !sel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector(".tw-scrim")) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [wide, sel, onClose]);
+  return <>{children}</>;
 }
 
 /* ═══ Primitivas compartidas ══════════════════════════════════════ */
@@ -975,9 +1119,9 @@ function FormPips({ form, box = 18 }: { form: ("V" | "D")[]; box?: number }) {
 
 /* ═══ 03 · GRUPO ══════════════════════════════════════════════════ */
 
-// Columnas de la tabla de clasificación (comparte plantilla cabecera + filas).
-const STAND_COLS =
-  "38px minmax(150px, 1.7fr) 34px 34px 46px 46px 46px 52px minmax(104px, auto)";
+// Columnas de la tabla de clasificación: en `.tw-fcp-stand` (globals.css).
+// En móvil quedan Pos · Equipo · Pts · Racha, y PJ, PG, Dif y sets bajan a
+// una segunda línea bajo el nombre: así Pts no se pierde por la derecha.
 
 /* Clasificación y jornadas ya no son dos pestañas: se miran a la vez, que
    es como se mira una liga —«voy tercero, ¿contra quién juego?»—. En un
@@ -989,11 +1133,14 @@ export function FcpGroupView({
   slug,
   id,
   initial,
+  embedded,
 }: {
   slug: string;
   id: string;
   /** Datos ya cargados en servidor (SEO): la vista arranca pintada. */
   initial?: FcpGroupBundle;
+  /** Dentro del panel de detalle del explorador: sin «volver» ni márgenes de página. */
+  embedded?: boolean;
 }) {
   const { user, activeTeam } = useSession();
   const esPlayoff = /^fase/i.test(decodeURIComponent(id));
@@ -1057,12 +1204,14 @@ export function FcpGroupView({
   ].filter(Boolean);
 
   return (
-    <div className="tw-page">
+    <div className={embedded ? "tw-fcp-pane-body" : "tw-page"}>
       <header className="tw-fcp-hero">
-        <Link href={`/federacion/${slug}`} className="tw-back" style={{ marginBottom: 12 }}>
-          <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
-          Federación
-        </Link>
+        {!embedded && (
+          <Link href={`/federacion/${slug}`} className="tw-back" style={{ marginBottom: 12 }}>
+            <IconChevronRight size={13} style={{ transform: "rotate(180deg)" }} />
+            Federación
+          </Link>
+        )}
         <div className="tw-fcp-hero-top">
           <FedCrest logo="/federations/fcantp-mark.png" alt="" />
           <div className="tw-fcp-hero-txt">
@@ -1173,19 +1322,19 @@ export function FcpStandingsTable({
   zones: FcpZone[] | null;
   myFcpId: number | null;
 }) {
+  const pane = useFcpPane();
   const isMine = (idEquipo: number) => myFcpId != null && Number(idEquipo) === myFcpId;
   const zoneOf = (pos: number): FcpZone | null =>
     zones?.find((zn) => pos >= zn.from && pos <= zn.to) ?? null;
   return (
               <Card flush>
             <div className="tw-roster-scroll">
-              <div
-                className="tw-fcp-head"
-                style={{ gridTemplateColumns: STAND_COLS, minWidth: 700 }}
-              >
+              <div className="tw-fcp-head tw-fcp-stand">
                 {["Pos", "Equipo", "PJ", "PG", "Dif", "Sets +", "Sets −", "Pts", "Racha"].map(
-                  (h) => (
-                    <span key={h}>{h}</span>
+                  (h, i) => (
+                    <span key={h} className={i >= 2 && i <= 6 ? "tw-st-x" : undefined}>
+                      {h}
+                    </span>
                   )
                 )}
               </div>
@@ -1201,11 +1350,10 @@ export function FcpStandingsTable({
                   <Link
                     key={t.idEquipo}
                     href={`/federacion/${slug}/equipo/${t.idEquipo}`}
-                    className="tw-fcp-table-row"
+                    onClick={pane("equipo", t.idEquipo)}
+                    className="tw-fcp-table-row tw-fcp-stand"
                     style={{
                       color: "inherit",
-                      gridTemplateColumns: STAND_COLS,
-                      minWidth: 700,
                       background: mine ? "var(--accent-10)" : undefined,
                       // Franja de la zona a la izquierda.
                       boxShadow: zone ? `inset 3px 0 0 ${zone.color}` : undefined,
@@ -1216,24 +1364,34 @@ export function FcpStandingsTable({
                     <span className="mono" style={{ color: "var(--text-muted)" }}>
                       {t.posicion}
                     </span>
-                    <span
-                      className="truncate"
-                      style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <span className="truncate">{t.equipo}</span>
-                      {mine ? (
-                        <Chip plain style={{ flex: "none" }}>
-                          Tu equipo
-                        </Chip>
-                      ) : null}
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        className="truncate"
+                        style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}
+                      >
+                        <span className="truncate">{t.equipo}</span>
+                        {mine ? (
+                          <Chip plain style={{ flex: "none" }}>
+                            Tu equipo
+                          </Chip>
+                        ) : null}
+                      </span>
+                      <span className="tw-st-sub">
+                        PJ <span className="mono">{t.pj}</span> · PG{" "}
+                        <span className="mono">{t.pg}</span> · Dif{" "}
+                        <span className="mono">{dif >= 0 ? `+${dif}` : dif}</span> · Sets{" "}
+                        <span className="mono">
+                          {t.setsFavor}-{t.setsContra}
+                        </span>
+                      </span>
                     </span>
-                    <span className="mono">{t.pj}</span>
-                    <span className="mono">{t.pg}</span>
-                    <span className="mono" style={{ color: "var(--text-muted)" }}>
+                    <span className="mono tw-st-x">{t.pj}</span>
+                    <span className="mono tw-st-x">{t.pg}</span>
+                    <span className="mono tw-st-x" style={{ color: "var(--text-muted)" }}>
                       {dif >= 0 ? `+${dif}` : dif}
                     </span>
-                    <span className="mono">{t.setsFavor}</span>
-                    <span className="mono">{t.setsContra}</span>
+                    <span className="mono tw-st-x">{t.setsFavor}</span>
+                    <span className="mono tw-st-x">{t.setsContra}</span>
                     <span className="mono" style={{ fontWeight: 700, color: "var(--accent)" }}>
                       {t.puntos}
                     </span>
@@ -1378,7 +1536,7 @@ function FcpGroupSchedule({
   }
 
   const g = groups[cur];
-  const date = g.items.find((m) => m.fecha)?.fecha ?? null;
+  const date = fmtFcpDate(g.items.find((m) => m.fecha)?.fecha ?? null) || null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2115,13 +2273,19 @@ export function FcpTeamView({
   slug,
   id,
   initial,
+  embedded,
 }: {
   slug: string;
   id: string;
   /** Perfil ya cargado en servidor (SEO): la vista arranca pintada. */
   initial?: FcpTeamProfile | null;
+  /** Dentro del panel de detalle del explorador: sin «volver» ni márgenes de página. */
+  embedded?: boolean;
 }) {
   const { user } = useSession();
+  const pane = useFcpPane();
+  const root = embedded ? "tw-fcp-pane-body" : "tw-page";
+  const back = embedded ? undefined : { href: `/federacion/${slug}`, label: "Federación" };
   const idEquipo = Number(id);
   const [sort, setSort] = useState<"puntos" | "nombre">("puntos");
   // Resumen · Partidos · Plantilla (como la ficha de equipo de la app).
@@ -2143,9 +2307,9 @@ export function FcpTeamView({
 
   if (error || !data) {
     return (
-      <div className="tw-page">
+      <div className={root}>
         <PageHeader
-          back={{ href: `/federacion/${slug}`, label: "Federación" }}
+          back={back}
           title={`Equipo ${id}`}
         />
         <Card>
@@ -2192,9 +2356,9 @@ export function FcpTeamView({
     .sort((a, b) => (a.jornada ?? 999) - (b.jornada ?? 999))[0];
 
   return (
-    <div className="tw-page">
+    <div className={root}>
       <PageHeader
-        back={{ href: `/federacion/${slug}`, label: "Federación" }}
+        back={back}
         title={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
             <Avatar initials={initials(data.equipo)} size={40} />
@@ -2396,6 +2560,7 @@ export function FcpTeamView({
               <ListRow
                 key={p.idJugador}
                 href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
+                onClick={pane("jugador", p.idJugador)}
                 icon={
                   <>
                     <span
@@ -2463,6 +2628,7 @@ export function FcpTeamView({
             <ListRow
               key={p.idJugador}
               href={`/federacion/${slug}/jugador/${encodeURIComponent(p.idJugador)}`}
+              onClick={pane("jugador", p.idJugador)}
               icon={
                 <>
                   <span
@@ -2638,8 +2804,10 @@ const MATCH_FILTER_LABEL: Record<MatchFilter, string> = {
   derrotas: "Derrotas",
 };
 
-export function FcpPlayerView({ id }: { id: string }) {
+export function FcpPlayerView({ id, embedded }: { id: string; embedded?: boolean }) {
   const { user } = useSession();
+  const root = embedded ? "tw-fcp-pane-body" : "tw-page";
+  const back = embedded ? undefined : { href: "/federacion", label: "Federación" };
   const idJugador = decodeURIComponent(id);
 
   const profile = useAsync(() => fetchFcpPlayerProfile(idJugador), [idJugador, user?.id]);
@@ -2676,8 +2844,8 @@ export function FcpPlayerView({ id }: { id: string }) {
   const p = profile.data;
   if (profile.error || !p) {
     return (
-      <div className="tw-page">
-        <PageHeader back={{ href: "/federacion", label: "Federación" }} title="Jugador" />
+      <div className={root}>
+        <PageHeader back={back} title="Jugador" />
         <Card>
           <EmptyState
             icon={<IconUser size={22} />}
@@ -2819,9 +2987,9 @@ export function FcpPlayerView({ id }: { id: string }) {
   })();
 
   return (
-    <div className="tw-page">
+    <div className={root}>
       <PageHeader
-        back={{ href: "/federacion", label: "Federación" }}
+        back={back}
         title={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
             <Avatar initials={initials(p.name)} src={p.avatarUrl} size={40} />

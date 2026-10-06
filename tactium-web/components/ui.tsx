@@ -858,7 +858,9 @@ export function ListRow({
   title: ReactNode;
   sub?: ReactNode;
   right?: ReactNode;
-  onClick?: () => void;
+  /** Sin `href`, la fila es un botón. Con `href`, se llama antes de navegar
+   *  (puede hacer `preventDefault`, p. ej. para abrir en un panel). */
+  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
   chevron?: boolean;
   style?: CSSProperties;
 }) {
@@ -879,7 +881,7 @@ export function ListRow({
   );
   if (href) {
     return (
-      <Link href={href} className="list-row" style={style}>
+      <Link href={href} className="list-row" style={style} onClick={onClick}>
         {inner}
       </Link>
     );
