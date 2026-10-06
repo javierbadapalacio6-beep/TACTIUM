@@ -723,7 +723,7 @@ export function CreateTournament() {
               {done ? (
                 <IconCheck size={13} />
               ) : (
-                <span className="mono" style={{ fontSize: 11.5 }}>
+                <span className="mono" style={{ fontSize: 12 }}>
                   {s.n}
                 </span>
               )}

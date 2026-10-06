@@ -2782,7 +2782,7 @@ function TeamActaCard({
                   {p.parciales ? (
                     <span
                       className="mono"
-                      style={{ display: "block", fontSize: 11.5, color: "var(--text-faint)" }}
+                      style={{ display: "block", fontSize: 12, color: "var(--text-faint)" }}
                     >
                       {p.parciales}
                     </span>
@@ -3098,7 +3098,7 @@ export function FcpPlayerView({ id, embedded }: { id: string; embedded?: boolean
                   </span>
                   <span
                     className="mono"
-                    style={{ fontSize: 11, color: pct >= 50 ? "var(--accent)" : "var(--text-faint)" }}
+                    style={{ fontSize: 12, color: pct >= 50 ? "var(--accent)" : "var(--text-faint)" }}
                   >
                     {pct}%
                   </span>
@@ -3252,7 +3252,7 @@ function PointsCurve({
   const worst = deltas.length ? Math.min(...deltas) : null;
   const selected = sel != null ? points[sel - 1] : null;
   const pct = (x: number, total: number) => `${(x / total) * 100}%`;
-  const faint = { fontSize: 11, color: "var(--text-faint)" } as const;
+  const faint = { fontSize: 12, color: "var(--text-faint)" } as const;
 
   const summary = [
     { k: "Inicio", v: fmtInt(values[0]), color: "var(--text)" },
@@ -3385,7 +3385,7 @@ function PointsCurve({
             <div className="mono" style={{ fontSize: 15, fontWeight: 800, color: x.color }}>
               {x.v}
             </div>
-            <div style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{x.k}</div>
+            <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{x.k}</div>
           </div>
         ))}
       </div>

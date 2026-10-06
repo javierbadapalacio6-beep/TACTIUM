@@ -726,7 +726,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={"tw-tab" + (active ? " is-active" : "")}
             >
               <Icon size={19} />
-              <span style={{ fontSize: 11, fontWeight: active ? 700 : 500 }}>
+              <span style={{ fontSize: 12, fontWeight: active ? 700 : 500 }}>
                 {t.label}
               </span>
             </Link>
