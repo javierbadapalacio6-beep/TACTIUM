@@ -36,7 +36,8 @@ export type NavTarget =
   | { kind: 'clubDetail'; tournamentId: string }
   | { kind: 'casualMatch'; matchId: string }
   | { kind: 'leagueMatch'; matchdayId: string }
-  | { kind: 'web'; url: string };
+  | { kind: 'web'; url: string }
+  | { kind: 'clubSchedule' };
 
 export function targetOf(n: AppNotification): NavTarget | null {
   const md = matchdayOf(n);
@@ -49,6 +50,14 @@ export function targetOf(n: AppNotification): NavTarget | null {
     case 'lineup_published':
     case 'matchday_created':
     case 'schedule_set':
+      return md ? { kind: 'home', screen: 'Jornada', matchdayId: md } : null;
+    // Encuesta de hora: el bloque vive en la jornada (Previa). Al gestor del
+    // club que no es del equipo se le avisa de la hora fijada → Horarios.
+    case 'time_poll_open':
+    case 'time_poll_reminder':
+      return md ? { kind: 'home', screen: 'Jornada', matchdayId: md } : null;
+    case 'time_poll_fixed':
+      if (n.data?.for_club) return { kind: 'clubSchedule' };
       return md ? { kind: 'home', screen: 'Jornada', matchdayId: md } : null;
     case 'joined_team':
       return { kind: 'team', fallbackHome: true };
@@ -145,6 +154,9 @@ export function goToTarget(t: NavTarget): void {
         navAny('TournamentFollow', { tournamentId: t.tournamentId, initialTab: 'players' });
         return;
       }
+      case 'clubSchedule':
+        goTab('Home', 'ClubSchedule');
+        return;
       case 'casualMatch':
         navAny('CasualMatchDetail', { matchId: t.matchId });
         return;
@@ -174,6 +186,11 @@ export function ctaLabel(type: string): string | null {
       return 'Ver plantilla';
     case 'schedule_set':
       return 'Ver horario';
+    case 'time_poll_open':
+    case 'time_poll_reminder':
+      return 'Votar';
+    case 'time_poll_fixed':
+      return 'Ver jornada';
     case 'tournament_bracket':
       return 'Ver cuadro';
     case 'tournament_schedule':

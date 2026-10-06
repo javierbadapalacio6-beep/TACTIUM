@@ -51,6 +51,7 @@ import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
 import { matchdayState } from '@core/utils/matchday';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import { RsvpCard } from '@features/availability/components/RsvpCard';
+import { TimePollCard } from '@features/timePoll/components/TimePollCard';
 import { ConvocatoriaCard } from '@features/availability/components/ConvocatoriaCard';
 import { useRemindPending } from '@features/availability/hooks/useRemindPending';
 import {
@@ -436,6 +437,17 @@ export const HomeScreen = ({
                 deadline={availability.deadline}
                 maybeClosed={availability.maybeClosed}
                 onRespond={(status, extra) => availability.respond(myPlayerId, status, extra)}
+              />
+            ) : null}
+
+            {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
+                el recuento (features/timePoll). */}
+            {nextMatchday.status === 'upcoming' ? (
+              <TimePollCard
+                variant="home"
+                palette={darkColors}
+                matchdayId={nextMatchday.id}
+                canManage={canEdit}
               />
             ) : null}
           </Pressable>

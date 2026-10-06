@@ -19,6 +19,7 @@ export type PaywallReason =
   | 'lineup_confirm'
   | 'calendar_scan'
   | 'availability_remind'
+  | 'time_poll'
   | 'roster_import'
   | 'club_roster_import'
   | 'results_edit'
@@ -77,6 +78,11 @@ const REASONS: Record<Exclude<PaywallReason, 'trial_expiring'>, PaywallReasonCop
     icon: 'bell',
     title: 'Recordar a los pendientes es Pro',
     subtitle: 'Un toque y les llega el aviso, sin perseguir a nadie',
+  },
+  time_poll: {
+    icon: 'clock',
+    title: 'La encuesta de hora es Pro',
+    subtitle: 'Propón horas, el equipo vota y la fijas con un toque',
   },
   roster_import: {
     icon: 'file',

@@ -15,6 +15,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Botones Voy / Duda / No puedo de las notificaciones de disponibilidad.
 registerAvailabilityCategories();
+// Botón «Votar» de los avisos de la encuesta de hora.
+registerTimePollCategories();
 
 import { RootNavigator } from './src/navigation';
 import { linking } from './src/navigation/linking';
@@ -33,6 +35,10 @@ import {
   AvailabilityPushResponder,
   registerAvailabilityCategories,
 } from './src/core/push/availabilityActions';
+import {
+  TimePollPushResponder,
+  registerTimePollCategories,
+} from './src/core/push/timePollActions';
 import { navigationRef } from './src/navigation/navigationRef';
 import {
   ToastHost,
@@ -262,6 +268,7 @@ export default function App() {
                 crear primer club/team). */}
             <TrialStartedModal />
             <AvailabilityPushResponder />
+            <TimePollPushResponder />
           </ResponsiveFrame>
         </NavigationContainer>
       </SafeAreaProvider>

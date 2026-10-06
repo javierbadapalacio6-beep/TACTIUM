@@ -15,6 +15,11 @@ export type NotificationType =
   | 'availability_reminder'
   | 'lineup_reminder'
   | 'schedule_set'
+  // Encuesta de hora de la jornada. data: {type, matchdayId, pollId} (+
+  // for_club/club_id/team_id en el aviso al gestor del club).
+  | 'time_poll_open'
+  | 'time_poll_reminder'
+  | 'time_poll_fixed'
   | 'new_follower'
   | 'tournament_bracket'
   | 'tournament_schedule'

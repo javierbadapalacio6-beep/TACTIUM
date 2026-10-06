@@ -65,6 +65,7 @@ import {
 import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
+import { TimePollCard } from '@features/timePoll/components/TimePollCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
 import { useTeamStore, selectIsCaptain, selectIsPlayer } from '@store/teamStore';
@@ -1035,6 +1036,11 @@ const JornadaDetail = ({
           onChange={setTabPicked}
           hidden={split ? ['alineacion'] : undefined}
         />
+
+        {/* === ENCUESTA DE HORA === (lógica en features/timePoll) */}
+        {tab === 'previa' && !closed ? (
+          <TimePollCard matchdayId={matchday.id} canManage={isCaptain} onChanged={load} />
+        ) : null}
 
         {/* === PREVIA === */}
         {tab === 'previa' ? (
