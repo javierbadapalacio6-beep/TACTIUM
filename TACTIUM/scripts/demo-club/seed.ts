@@ -460,6 +460,61 @@ async function seedConvocatoria() {
   const alt = [pool[0], pool[2], pool[1], pool[3], pool[4], pool[6], pool[5], pool[7]];
   await must(db('lineups').insert(pairsOf(v2.id, alt)), 'lineups v2');
   log(`  ✓ J${NEXT_J} (${next.match_date}) vs ${next.opponent}: 7 Voy · 2 Duda · 1 No · 3 sin contestar · borrador 4/5 con 2 variantes`);
+  await seedTimePoll(next, roster, ivan.id, ruben.id);
+}
+
+/**
+ * Encuesta de hora abierta en la próxima jornada del A. Es de fuera y el
+ * rival aún no ha dicho la hora: la jornada queda SIN hora (un equipo de club
+ * solo puede abrir encuesta en una jornada sin hora). Votan el capitán y
+ * unos cuantos; Iván (demo.jugador) queda sin votar para probar el voto.
+ * Se borra sola con el reset (ON DELETE CASCADE desde matchdays).
+ */
+async function seedTimePoll(
+  next: { id: string; match_date: string },
+  roster: { id: string; user_id: string | null }[],
+  ivanId: string,
+  rubenId: string,
+) {
+  await must(db('matchdays').update({ match_time: null }).eq('id', next.id), 'md sin hora');
+  const sunday = addDays(next.match_date, 1);
+  // Cierra el viernes a las 21:00; si el seed corre más tarde, sin límite.
+  const dl = new Date(`${addDays(next.match_date, -1)}T21:00:00+02:00`);
+  const poll = (await must(
+    db('matchday_time_polls')
+      .insert({
+        matchday_id: next.id, team_id: TEAM.a, created_by: U.capitan,
+        message: 'El rival nos deja elegir. ¿Cuál os va mejor?',
+        deadline: dl.getTime() > Date.now() + 3600e3 ? dl.toISOString() : null,
+        created_at: hoursAgo(20),
+      })
+      .select('id')
+      .single(),
+    'time poll',
+  )) as { id: string };
+  const opts = (await must(
+    db('matchday_time_poll_options')
+      .insert([
+        { poll_id: poll.id, match_date: next.match_date, match_time: '10:00:00', position: 0 },
+        { poll_id: poll.id, match_date: next.match_date, match_time: '17:30:00', position: 1 },
+        { poll_id: poll.id, match_date: sunday, match_time: '11:00:00', position: 2 },
+      ])
+      .select('id, position'),
+    'time poll options',
+  )) as { id: string; position: number }[];
+  const o = opts.sort((a, b) => a.position - b.position).map((x) => x.id);
+  const voters = roster.filter((p) => p.id !== ivanId && p.id !== rubenId).slice(0, 6);
+  const votes = [
+    { poll_id: poll.id, player_id: rubenId, user_id: U.capitan, option_ids: [o[0], o[2]], updated_at: hoursAgo(20) },
+    { poll_id: poll.id, player_id: voters[0].id, option_ids: [o[0]], updated_at: hoursAgo(18) },
+    { poll_id: poll.id, player_id: voters[1].id, option_ids: [o[0], o[1]], updated_at: hoursAgo(16) },
+    { poll_id: poll.id, player_id: voters[2].id, option_ids: [o[2]], updated_at: hoursAgo(12) },
+    { poll_id: poll.id, player_id: voters[3].id, option_ids: [o[0], o[2]], updated_at: hoursAgo(8) },
+    { poll_id: poll.id, player_id: voters[4].id, option_ids: [], updated_at: hoursAgo(5) },
+    { poll_id: poll.id, player_id: voters[5].id, option_ids: [o[1], o[2]], updated_at: hoursAgo(3) },
+  ];
+  await must(db('matchday_time_poll_votes').insert(votes), 'time poll votes');
+  log(`  ✓ encuesta de hora abierta en J${NEXT_J}: 3 opciones · 7 votos · Iván sin votar`);
 }
 
 // ─── SOCIAL ──────────────────────────────────────────────────────────────────
