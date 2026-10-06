@@ -942,14 +942,79 @@ export function SignupForm({ id }: { id: string }) {
   const termsText = terms ?? defaultTerms;
   const nextArrow = <IconChevronRight size={15} />;
 
+  // Resumen fijo a la derecha (≥1000 px): torneo, categorías, importe por
+  // persona y total. En móvil no se pinta: el paso 3 ya lleva el desglose.
+  const chosenCats = [hasCats ? category : "Categoría única", category2].filter(
+    (c): c is string => !!c,
+  );
+  const summary = (
+    <aside className="tw-signup-summary" aria-label="Resumen de la inscripción">
+      <Card flush>
+        <CardHead title="Resumen" />
+        <div className="card-body">
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+            {[t.dates, t.club ?? t.place].filter(Boolean).join(" · ")}
+          </div>
+          <div className="divider" style={{ margin: "12px 0" }} />
+          <dl className="kv" style={{ gridTemplateColumns: "auto minmax(0, 1fr)" }}>
+            {gender && (
+              <>
+                <dt>Cuadro</dt>
+                <dd style={{ textAlign: "right" }}>{gender}</dd>
+              </>
+            )}
+            <dt>{chosenCats.length > 1 ? "Categorías" : "Categoría"}</dt>
+            <dd style={{ textAlign: "right" }}>
+              {chosenCats.length > 0 ? chosenCats.join(" y ") : "Por elegir"}
+            </dd>
+            {feePer > 0 && (
+              <>
+                <dt>Por persona</dt>
+                <dd className="mono" style={{ textAlign: "right" }}>
+                  {formatFee(feePer, feeCur)}
+                  {entryFee2 && category2 ? ` · ${formatFee(entryFee2, feeCur)} con 2` : ""}
+                </dd>
+              </>
+            )}
+          </dl>
+          {feePer > 0 ? (
+            <>
+              <div className="divider" style={{ margin: "12px 0" }} />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 13.5, color: "var(--text-muted)" }}>
+                  Total
+                  {pricing.persons.length > 0 ? ` · ${pricing.persons.length} jugadores` : ""}
+                </span>
+                <span className="mono" style={{ fontSize: 18, fontWeight: 700 }}>
+                  {formatFee(feeTotal, feeCur)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p style={{ margin: "12px 0 0", fontSize: 13.5, color: "var(--text-muted)" }}>
+              Inscripción gratuita.
+            </p>
+          )}
+        </div>
+      </Card>
+    </aside>
+  );
+
   return (
-    <div className="tw-page-narrow">
+    <div className="tw-page-narrow tw-signup-page">
       <StepBar step={step} />
-      <PageHeader
-        eyebrow={`Paso ${step} de 3 · ${t.name}`}
-        title={STEP_TITLES[step]}
-        lede={stepLede}
-      />
+      <PageHeader title={STEP_TITLES[step]} lede={stepLede} meta={[t.name]} />
+
+      <div className="tw-signup-grid">
+      <div style={{ minWidth: 0 }}>
 
       {payCancelled && (
         <Note tone="warning" icon={<IconAlert size={15} />} style={{ marginBottom: 16 }}>
@@ -1407,6 +1472,9 @@ export function SignupForm({ id }: { id: string }) {
           </div>
         </>
       )}
+      </div>
+      {summary}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
 
 import {
@@ -54,6 +55,7 @@ import { ActivateTeamsCard } from "@/components/club/ActivateTeamsCard";
 import {
   IconAlert,
   IconCheck,
+  IconChevronDown,
   IconCopy,
   IconInfo,
   IconPlus,
@@ -153,6 +155,125 @@ function ChipPicker({
         );
       })}
     </div>
+  );
+}
+
+/** Estado del torneo en frase normal, para la columna «Estado». */
+function statusChip(status: string): { label: string; tone: "accent" | "mute" | "warning" | "error" | "info" } {
+  switch (status) {
+    case "draft":
+      return { label: "Borrador", tone: "mute" };
+    case "open":
+      return { label: "Inscripción abierta", tone: "accent" };
+    case "closed":
+      return { label: "Inscripción cerrada", tone: "info" };
+    case "in_progress":
+      return { label: "En juego", tone: "accent" };
+    case "finished":
+      return { label: "Terminado", tone: "mute" };
+    case "canceled":
+      return { label: "Cancelado", tone: "error" };
+    default:
+      return { label: status, tone: "mute" };
+  }
+}
+
+/**
+ * Menú por fila de la tabla de torneos: lo que no es la acción de la fase.
+ * Va en un portal con posición fija: dentro de la tabla (que desliza en
+ * horizontal y por tanto recorta) un desplegable absoluto se cortaba en las
+ * últimas filas. Se cierra al pulsar fuera, con Escape o al desplazarse.
+ */
+function TournamentRowMenu({
+  id,
+  onShare,
+}: {
+  id: string;
+  onShare: () => void;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLSpanElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setPos(null);
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || btnRef.current?.contains(t)) return;
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  function toggle() {
+    if (open) return setPos(null);
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const W = 210;
+    setPos({
+      top: Math.min(r.bottom + 6, window.innerHeight - 190),
+      left: Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8)),
+    });
+  }
+
+  return (
+    <span ref={btnRef} style={{ display: "inline-flex" }}>
+      <Btn
+        size="sm"
+        variant="quiet"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Más acciones"
+        onClick={toggle}
+      >
+        <IconChevronDown size={15} />
+      </Btn>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            className="tw-popover"
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: 210, padding: 6, zIndex: 80 }}
+          >
+            <Link role="menuitem" href={`/torneos/${id}`} className="tw-popitem">
+              Abrir el torneo
+            </Link>
+            <Link role="menuitem" href={`/torneos/${id}/inscripcion`} className="tw-popitem">
+              Ver la inscripción
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              className="tw-popitem"
+              onClick={() => {
+                onShare();
+                setPos(null);
+              }}
+            >
+              Copiar el enlace
+            </button>
+            <Link role="menuitem" href="/club/cobros" className="tw-popitem">
+              Cobros
+            </Link>
+          </div>,
+          document.body,
+        )}
+    </span>
   );
 }
 
@@ -379,8 +500,10 @@ export function CreateTournament() {
     );
   }
 
+  // La lista va a ancho completo (es una tabla de gestión); el asistente de
+  // creación, en columna estrecha, que es un formulario.
   return (
-    <div className="tw-page-narrow">
+    <div className={creating ? "tw-page-narrow" : "tw-page"}>
       <PageHeader
         title="Torneos del club"
         lede="Cada torneo dice en qué fase está y qué toca hacer ahora."
@@ -457,12 +580,13 @@ export function CreateTournament() {
                 {active.length === 0 ? (
                   <EmptyState compact icon={<IconTrophy size={22} />} title="Ningún torneo en marcha" />
                 ) : (
-                  <Table>
+                  <Table minWidth={820}>
                     <thead>
                       <tr>
                         <th>Torneo</th>
+                        <th>Estado</th>
                         <th className="num">Parejas</th>
-                        <th className="num">Sin pagar</th>
+                        <th className="num">Cobradas</th>
                         <th>Fase</th>
                         <th />
                       </tr>
@@ -490,12 +614,22 @@ export function CreateTournament() {
                                 </span>
                               </Link>
                             </td>
+                            <td>
+                              <Chip tone={statusChip(t.status).tone} plain>
+                                {statusChip(t.status).label}
+                              </Chip>
+                            </td>
                             <td className="num mono">
                               {st?.pairs ?? 0}
                               {t.max_pairs ? ` / ${t.max_pairs}` : ""}
                             </td>
-                            <td className="num mono" style={{ color: st?.pendingClub ? "var(--warning)" : undefined }}>
-                              {st?.pendingClub ?? 0}
+                            <td className="num">
+                              <span className="mono">{st?.paidOnline ?? 0}</span>
+                              {st?.pendingClub ? (
+                                <span className="cell-sub" style={{ color: "var(--warning)" }}>
+                                  {st.pendingClub} en el club
+                                </span>
+                              ) : null}
                             </td>
                             <td>
                               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -527,6 +661,10 @@ export function CreateTournament() {
                                     {PHASE_ACTION[ph]}
                                   </BtnLink>
                                 )}
+                                <TournamentRowMenu
+                                  id={t.id}
+                                  onShare={() => void share(t.id, t.signup_code)}
+                                />
                               </div>
                             </td>
                           </tr>

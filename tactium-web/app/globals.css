@@ -5072,6 +5072,30 @@ select.tw-cell-input {
   display: none;
 }
 
+/* ── Inscripción a un torneo: dos columnas desde 1000 px ──────────
+   El asistente a la izquierda y un resumen fijo a la derecha (torneo,
+   categorías, importe por persona y total). En móvil, una columna y sin
+   resumen: el paso 3 ya lleva el desglose. */
+.tw-signup-summary {
+  display: none;
+}
+@media (min-width: 1000px) {
+  .tw-page-narrow.tw-signup-page {
+    max-width: 1120px;
+  }
+  .tw-signup-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    align-items: start;
+  }
+  .tw-signup-summary {
+    display: block;
+    position: sticky;
+    top: 0;
+  }
+}
+
 /* ══ Acta de un partido ════════════════════════════════════════════
    Cinco puntos, dos parejas cada uno, con la cara y los puntos de cada
    jugador. Es la pantalla donde la liga deja de ser una tabla y pasa a
