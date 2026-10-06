@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  ActivityIndicator,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
@@ -129,6 +137,10 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
+  // Móvil: PJ, PG y DIF en columna dejaban el nombre en pocas letras. Como la
+  // web: arriba Pos · Equipo · Racha (3 últimas) · Pts; debajo, el resto.
+  const { width } = useWindowDimensions();
+  const narrow = width < 600;
   const { idGrupo, nombre } = route.params;
   const esPlayoff = /^fase/i.test(idGrupo);
 
@@ -407,14 +419,23 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
               ) : null}
 
               {/* Cabecera de tabla */}
-              <View style={styles.thead}>
-                <Text style={[styles.th, { width: 22 }]}>#</Text>
-                <Text style={[styles.th, { flex: 1 }]}>EQUIPO</Text>
-                <Text style={[styles.th, styles.thNum, { width: 26 }]}>PJ</Text>
-                <Text style={[styles.th, styles.thNum, { width: 26 }]}>PG</Text>
-                <Text style={[styles.th, { width: 40, textAlign: 'right' }]}>DIF</Text>
-                <Text style={[styles.th, { width: 34, textAlign: 'right', color: c.textMuted }]}>PTS</Text>
-              </View>
+              {narrow ? (
+                <View style={styles.thead}>
+                  <Text style={[styles.th, { width: 22 }]}>#</Text>
+                  <Text style={[styles.th, { flex: 1 }]}>EQUIPO</Text>
+                  <Text style={[styles.th, { textAlign: 'right' }]}>RACHA</Text>
+                  <Text style={[styles.th, { width: 34, textAlign: 'right', color: c.textMuted }]}>PTS</Text>
+                </View>
+              ) : (
+                <View style={styles.thead}>
+                  <Text style={[styles.th, { width: 22 }]}>#</Text>
+                  <Text style={[styles.th, { flex: 1 }]}>EQUIPO</Text>
+                  <Text style={[styles.th, styles.thNum, { width: 26 }]}>PJ</Text>
+                  <Text style={[styles.th, styles.thNum, { width: 26 }]}>PG</Text>
+                  <Text style={[styles.th, { width: 40, textAlign: 'right' }]}>DIF</Text>
+                  <Text style={[styles.th, { width: 34, textAlign: 'right', color: c.textMuted }]}>PTS</Text>
+                </View>
+              )}
 
               <View style={{ gap: 6, marginTop: 10 }}>
                 {rows.map((t, i) => {
@@ -442,6 +463,26 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                       {zone ? (
                         <View style={[styles.zoneBar, { backgroundColor: zoneColor(zone.key, c) }]} />
                       ) : null}
+                      {narrow ? (
+                        <>
+                          <View style={styles.stTop}>
+                            <Text style={[styles.stPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
+                            <Text
+                              style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]}
+                              numberOfLines={1}
+                            >
+                              {t.equipo}
+                            </Text>
+                            {t.form.length > 0 ? <FormChips form={t.form.slice(-3)} /> : null}
+                            <Text style={[styles.stPts, { width: 34 }]}>{t.puntos ?? 0}</Text>
+                          </View>
+                          <Text style={styles.stSub} numberOfLines={1}>
+                            {t.pj} PJ · {t.pg} PG · DIF {dif >= 0 ? `+${dif}` : dif} · SETS{' '}
+                            {t.setsFavor ?? 0}/{t.setsContra ?? 0}
+                          </Text>
+                        </>
+                      ) : (
+                      <>
                       <View style={styles.stTop}>
                         <Text style={[styles.stPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
                         <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={1}>{t.equipo}</Text>
@@ -462,6 +503,8 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                           </Text>
                         </View>
                       ) : null}
+                      </>
+                      )}
                     </Pressable>
                     </React.Fragment>
                   );
@@ -761,6 +804,13 @@ const makeStyles = (c: Palette) =>
     stPts: { fontFamily: Fonts.mono, fontSize: 17, fontWeight: '800', color: c.text, textAlign: 'right' },
     stFormRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 32 },
     stFormLabel: { fontFamily: Fonts.mono, fontSize: 9.5, letterSpacing: 1.2, color: c.textFaint, marginRight: 2 },
+    stSub: {
+      fontFamily: Fonts.mono,
+      fontSize: 10.5,
+      letterSpacing: 0.4,
+      color: c.textFaint,
+      paddingLeft: 32,
+    },
     stSets: { fontFamily: Fonts.mono, fontSize: 9.5, letterSpacing: 0.6, color: c.textFaint },
 
     // Tira de jornadas
