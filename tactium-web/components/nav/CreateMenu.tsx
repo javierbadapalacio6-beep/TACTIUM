@@ -79,7 +79,9 @@ const A: Record<ActionKey, Action> = {
     title: "Crear torneo",
     sub: "Inscripción online, cuadro y horarios",
     icon: <IconTrophy size={16} />,
-    href: "/club/torneos",
+    // `?nuevo=1`: la pantalla de torneos del club abre directamente el
+    // formulario de creación en vez de la lista.
+    href: "/club/torneos?nuevo=1",
   },
   nuevoEquipo: {
     key: "nuevoEquipo",
