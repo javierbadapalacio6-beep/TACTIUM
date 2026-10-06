@@ -7,6 +7,7 @@ import { SITE_URL } from "@/lib/site";
 const PRIVATE = [
   "/api/",
   "/auth/",
+  "/avisos",
   "/ajustes",
   "/amistosos",
   "/club",
@@ -17,6 +18,7 @@ const PRIVATE = [
   "/equipo",
   "/jornada",
   "/novedades",
+  "/perfil",
   "/stats",
   "/suscripcion",
   "/temporadas",
