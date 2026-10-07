@@ -727,7 +727,7 @@ const PlanCard: React.FC<{
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
-  // Plan Capitán compartido: me cubre el plan de otra capitana del equipo.
+  // Plan Capitán compartido: me cubre el plan de otro capitán del equipo.
   const activeTeam = useTeamStore((s) => s.team);
   const mateCover = useSubscriptionStore((s) => {
     if (activeRole !== 'captain' || !activeTeam || activeTeam.club_id) return null;
@@ -805,7 +805,7 @@ const PlanCard: React.FC<{
     : isClubAdmin
       ? 'Cubre a todos los capitanes del club'
       : mateCover
-        ? `Te cubre el plan de ${mateCover.payer_name?.split(/\s+/)[0] ?? 'otra capitana'}`
+        ? `Te cubre el plan de ${mateCover.payer_name?.split(/\s+/)[0] ?? 'otro capitán'}`
         : '14 días de prueba, sin compromiso';
 
   return (
