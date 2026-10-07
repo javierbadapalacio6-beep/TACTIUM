@@ -80,12 +80,14 @@ export const JoinTeamPreview: React.FC<{
   const refreshMyPlayer = useTeamStore((s) => s.refreshMyPlayer);
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
   const loadClubs = useClubStore((s) => s.loadForUser);
+  const myPlayerTeamIds = useTeamStore((s) => s.myPlayerTeamIds);
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [preview, setPreview] = useState<InvitationsApi.InvitationPreview | null>(null);
   const [pick, setPick] = useState<PickValue>(null);
   const [joining, setJoining] = useState(false);
+  const [claiming, setClaiming] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,6 +130,46 @@ export const JoinTeamPreview: React.FC<{
   }, [valid, freeSlots, user, pick]);
 
   const alreadyMember = !!valid && teams.some((t) => t.id === valid.team.id);
+  // Ya es del equipo (p. ej. capitán) pero sin ficha de jugador vinculada: con
+  // un código de jugador puede vincularla aquí (y así tener «Ver como»).
+  const canClaimHere =
+    alreadyMember &&
+    isAuthenticated &&
+    valid?.role === 'player' &&
+    !myPlayerTeamIds.includes(valid.team.id);
+
+  const handleClaimOnly = async () => {
+    if (!valid || claiming || !pick || pick === 'none') return;
+    const teamId = valid.team.id;
+    setClaiming(true);
+    try {
+      await PlayersApi.claimPlayer(pick);
+    } catch (e: any) {
+      setClaiming(false);
+      const msg = String(e?.message ?? '');
+      toast.error(
+        'No se pudo vincular',
+        e?.code === '23505'
+          ? 'Esa ficha ya la tiene otra persona o ya tienes otra vinculada en este equipo.'
+          : msg || 'Inténtalo de nuevo.',
+      );
+      return;
+    }
+    // La ficha cuenta para «Ver como» (roles disponibles) sin recargar todo.
+    useTeamStore.setState((st) => ({
+      myPlayerTeamIds: st.myPlayerTeamIds.includes(teamId)
+        ? st.myPlayerTeamIds
+        : [...st.myPlayerTeamIds, teamId],
+    }));
+    await refreshMyPlayer().catch(() => {});
+    setClaiming(false);
+    const name = freeSlots.find((r) => r.id === pick)?.name;
+    toast.success(
+      'Ficha vinculada',
+      name ? `Ya eres ${name} en ${valid.team.name}.` : `Ya tienes tu ficha en ${valid.team.name}.`,
+    );
+    onGoToTeam?.(teamId);
+  };
 
   const handleJoin = async () => {
     if (!valid || joining) return;
@@ -170,8 +212,8 @@ export const JoinTeamPreview: React.FC<{
         await setActiveTeam(teamId).catch(() => {});
       }
       await refreshMyPlayer().catch(() => {});
-      // Si entra como capitana en un equipo ya cubierto por el plan de otra
-      // capitana, que no vea ningún paywall desde el primer momento.
+      // Si entra como capitán en un equipo ya cubierto por el plan de otro
+      // capitán, que no vea ningún paywall desde el primer momento.
       await useSubscriptionStore.getState().refreshTeamCoverage(teamId);
     } catch (e) {
       console.warn('JoinTeamPreview: recarga tras unirse', e);
@@ -277,7 +319,64 @@ export const JoinTeamPreview: React.FC<{
         </View>
       </View>
 
-      {alreadyMember ? (
+      {canClaimHere ? (
+        <>
+          <View style={styles.memberNote}>
+            <IconCheck size={14} color={c.accent} />
+            <Text style={styles.memberNoteText}>
+              Ya estás en este equipo, pero sin ficha de jugador
+            </Text>
+          </View>
+          {freeSlots.length > 0 ? (
+            <>
+              <Text style={styles.groupLabel}>¿QUIÉN ERES DE LA PLANTILLA?</Text>
+              <View style={styles.list}>
+                {freeSlots.map((r, i) => (
+                  <RadioRow
+                    key={r.id}
+                    label={r.name}
+                    meta={[r.position, r.pts != null ? `${r.pts} pts` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    selected={pick === r.id}
+                    onPress={() => setPick(r.id)}
+                    divider={i > 0}
+                    styles={styles}
+                  />
+                ))}
+              </View>
+              <Pressable
+                onPress={handleClaimOnly}
+                disabled={claiming || !pick || pick === 'none'}
+                style={({ pressed }) => [
+                  styles.cta,
+                  (claiming || !pick || pick === 'none') && { opacity: 0.5 },
+                  pressed && !claiming && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+              >
+                {claiming ? (
+                  <ActivityIndicator color={c.textInverse} />
+                ) : (
+                  <Text style={styles.ctaLabel}>Vincular mi ficha</Text>
+                )}
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.hint}>
+              No quedan fichas libres. Añádete a la plantilla desde Equipo.
+            </Text>
+          )}
+          <Pressable
+            onPress={() => onGoToTeam?.(t.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={{ marginTop: 14, alignSelf: 'center' }}
+          >
+            <Text style={[styles.memberNoteText, { color: c.accent }]}>Ir a mi equipo</Text>
+          </Pressable>
+        </>
+      ) : alreadyMember ? (
         <>
           <View style={styles.memberNote}>
             <IconCheck size={14} color={c.accent} />
