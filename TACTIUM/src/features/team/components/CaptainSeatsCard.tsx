@@ -29,12 +29,12 @@ import { toast } from '@store/toastStore';
 import type { RootStackParamList } from '@navigation/types';
 
 /**
- * Bloque «Capitanas · 2 de 3» de la pestaña Equipo (equipos independientes).
+ * Bloque «Capitanes · 2 de 3» de la pestaña Equipo (equipos independientes).
  *
- * El plan Capitán cubre a TODAS las capitanas del equipo, hasta 3. Aquí se ve
- * quién paga y hasta cuándo, las plazas libres («Añadir capitana» comparte un
- * código de capitán de un solo uso) y se puede quitar a una capitana (pasa a
- * jugadora): solo el dueño del equipo o quien paga el plan.
+ * El plan Capitán cubre a TODOS los capitanes del equipo, hasta 3 (un plan, un solo equipo). Aquí se ve
+ * quién paga y hasta cuándo, las plazas libres («Añadir capitán» comparte un
+ * código de capitán de un solo uso) y se puede quitar a un capitán (pasa a
+ * jugador): solo el dueño del equipo o quien paga el plan.
  *
  * Patrones (Mobbin): plazas libres como huecos con «+» — Tolan «Family · 5
  * seats left»; filas con rol bajo el nombre — Instacart «Your family»; estado
@@ -50,7 +50,7 @@ export interface CaptainSeatsTeam {
 
 export const CaptainSeatsCard: React.FC<{
   team: CaptainSeatsTeam;
-  /** Tras quitar a una capitana (para refrescar marcas de la plantilla). */
+  /** Tras quitar a un capitán (para refrescar marcas de la plantilla). */
   onChanged?: () => void;
 }> = ({ team, onChanged }) => {
   const c = useColors();
@@ -94,10 +94,10 @@ export const CaptainSeatsCard: React.FC<{
   };
 
   const askRemove = (cap: TeamCaptain) => {
-    const name = cap.name ?? 'esta capitana';
+    const name = cap.name ?? 'este capitán';
     Alert.alert(
-      `¿Quitar a ${name} como capitana?`,
-      'Pasa a jugadora: sigue en el equipo, pero ya no gestiona jornadas ni alineaciones. Su plaza queda libre.',
+      `¿Quitar a ${name} como capitán?`,
+      'Pasa a jugador: sigue en el equipo, pero ya no gestiona jornadas ni alineaciones. Su plaza queda libre.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -109,7 +109,7 @@ export const CaptainSeatsCard: React.FC<{
               await demoteTeamCaptain(team.id, cap.user_id);
               await refreshTeamCoverage(team.id);
               onChanged?.();
-              toast.success(`${name} ya es jugadora`, 'Su plaza de capitana queda libre.');
+              toast.success(`${name} ya es jugador`, 'Su plaza de capitán queda libre.');
             } catch (e: any) {
               toast.error('No se pudo quitar', e?.message ?? 'Inténtalo de nuevo.');
             } finally {
@@ -122,16 +122,16 @@ export const CaptainSeatsCard: React.FC<{
   };
 
   const metaOf = (cap: TeamCaptain): string => {
-    if (cap.is_payer) return until ? `Cubre a todas hasta ${until}` : 'Cubre a todas';
+    if (cap.is_payer) return until ? `Cubre a todos hasta ${until}` : 'Cubre a todos';
     if (cap.is_owner) return 'Dueño del equipo';
-    return covered ? 'Capitana · con Pro' : 'Capitana';
+    return covered ? 'Capitán · con Pro' : 'Capitán';
   };
 
   return (
     <View style={styles.card}>
       <View style={styles.head}>
         <Text style={styles.eyebrow}>
-          CAPITANAS · {count} DE {CAPTAIN_SEATS}
+          CAPITANES · {count} DE {CAPTAIN_SEATS}
         </Text>
         {covered ? <Text style={styles.chip}>PRO</Text> : null}
       </View>
@@ -173,7 +173,7 @@ export const CaptainSeatsCard: React.FC<{
                   onPress={() => askRemove(cap)}
                   hitSlop={8}
                   accessibilityRole="button"
-                  accessibilityLabel={`Quitar a ${cap.name ?? 'esta capitana'} como capitana`}
+                  accessibilityLabel={`Quitar a ${cap.name ?? 'este capitán'} como capitán`}
                   style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.7 }]}
                 >
                   <Text style={styles.removeText}>Quitar</Text>
@@ -190,7 +190,7 @@ export const CaptainSeatsCard: React.FC<{
           onPress={addCaptain}
           disabled={sharing}
           accessibilityRole="button"
-          accessibilityLabel="Añadir capitana"
+          accessibilityLabel="Añadir capitán"
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}
         >
           <View style={styles.slot}>
@@ -201,7 +201,7 @@ export const CaptainSeatsCard: React.FC<{
             )}
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.slotTitle}>Añadir capitana</Text>
+            <Text style={styles.slotTitle}>Añadir capitán</Text>
             <Text style={styles.meta} numberOfLines={1}>
               {covered ? 'Entra con Pro, sin pagar nada' : 'Código de un solo uso · 7 días'}
             </Text>
@@ -222,7 +222,7 @@ export const CaptainSeatsCard: React.FC<{
           style={({ pressed }) => [styles.upsell, pressed && { opacity: 0.85 }]}
         >
           <Text style={styles.upsellText}>
-            Con el plan Capitán, las {CAPTAIN_SEATS} capitanas tienen todas las funciones.
+            Con el plan Capitán, los {CAPTAIN_SEATS} capitanes tienen todas las funciones.
           </Text>
           <Text style={styles.upsellLink}>Ver el plan ›</Text>
         </Pressable>

@@ -40,7 +40,7 @@ interface State {
   realtimeChannel: RealtimeChannel | null;
   // «El plan Capitán cubre al equipo»: cobertura por equipo independiente
   // (RPC `team_captain_coverage`), indexada por team_id. Incluye la lista de
-  // capitanas para el bloque «Capitanas · 2 de 3».
+  // capitanes para el bloque «Capitanes · 2 de 3».
   teamCoverage: Record<string, TeamCaptainCoverage>;
 
   // Mutaciones

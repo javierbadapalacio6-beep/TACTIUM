@@ -1,10 +1,12 @@
 import { supabase } from '@core/supabase/client';
 
 /**
- * «El plan Capitán cubre al equipo»: hasta 3 capitanas por equipo
- * independiente comparten el Pro de una sola suscripción.
+ * «El plan Capitán cubre al equipo»: hasta 3 capitanes por equipo
+ * independiente comparten el Pro de una sola suscripción. Un plan cubre UN
+ * solo equipo: el de quien paga o, si no es dueño de ninguno, aquel en el que
+ * es capitán desde hace más tiempo.
  *
- * La sub de otra capitana no se puede leer (RLS), así que todo sale de la RPC
+ * La sub de otro capitán no se puede leer (RLS), así que todo sale de la RPC
  * `team_captain_coverage` (SECURITY DEFINER). Ver la migración
  * `20261007b_captain_plan_covers_team.sql`.
  */
@@ -12,7 +14,7 @@ import { supabase } from '@core/supabase/client';
 export const CAPTAIN_SEATS = 3;
 
 export const CAPTAIN_LIMIT_MESSAGE =
-  'Este equipo ya tiene 3 capitanas: el máximo con el plan. Quita a una para añadir otra.';
+  'Este equipo ya tiene 3 capitanes: el máximo con el plan. Quita a uno para añadir otro.';
 
 export interface TeamCaptain {
   user_id: string;
@@ -60,7 +62,7 @@ export async function fetchTeamCaptainCoverage(
   }));
 }
 
-/** Pasa a una capitana a jugadora. Solo el dueño o quien paga el plan. */
+/** Pasa a un capitán a jugador. Solo el dueño o quien paga el plan. */
 export async function demoteTeamCaptain(teamId: string, userId: string): Promise<void> {
   const { error } = await rpc()('demote_team_captain', {
     p_team_id: teamId,

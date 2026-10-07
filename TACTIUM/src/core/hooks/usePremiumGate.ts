@@ -100,7 +100,7 @@ function useGateRunner() {
         return;
       }
 
-      // Equipo independiente: puede que otra capitana del equipo haya
+      // Equipo independiente: puede que otro capitán del equipo haya
       // empezado el plan después de la última carga (la cobertura por equipo
       // no llega por realtime). Se pregunta una vez más antes del paywall.
       if (team && !team.club_id && role === 'captain') {

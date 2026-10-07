@@ -128,10 +128,15 @@ export const SubscriptionScreen = ({
   const clubs = useClubStore((s) => s.clubs);
   const activeClubId = useClubStore((s) => s.activeClubId);
   const [period, setPeriod] = useState<BillingPeriod>('yearly');
-  // «El plan Capitán cubre al equipo» (hasta 3 capitanas): cobertura del
-  // equipo activo, si es independiente.
+  // «El plan Capitán cubre al equipo» (hasta 3 capitanes): cobertura del
+  // equipo activo, si es independiente…
   const teamCov = useSubscriptionStore((s) =>
     team && !team.club_id ? s.teamCoverage[team.id] ?? null : null,
+  );
+  // …y el equipo que cubre MI plan (uno solo: el mío o, si no tengo, aquel
+  // en el que soy capitán desde hace más tiempo). Puede no ser el activo.
+  const myPlanCov = useSubscriptionStore((s) =>
+    Object.values(s.teamCoverage).find((r) => r.covered && r.payer_user_id === userId) ?? null,
   );
 
   // Una «Mi suscripción» por rol: el jugador no compra nada, el club va a la
@@ -196,16 +201,18 @@ export const SubscriptionScreen = ({
 
   const plan = mySub ? PLAN_BY_TIER[mySub.plan_tier] : null;
 
-  // Pago yo el plan del equipo: «Cubre a las capitanas de X: Ana, Leti».
-  const iPayTeam = !!teamCov?.covered && teamCov.payer_user_id === userId;
-  const mates = teamCov ? captainFirstNames(teamCov.captains, userId) : [];
+  // Pago yo el plan: «Cubre a los capitanes de X: Ana, Leti».
+  const myPlanTeamName = myPlanCov
+    ? teams.find((t) => t.id === myPlanCov.team_id)?.name ?? null
+    : null;
+  const mates = myPlanCov ? captainFirstNames(myPlanCov.captains, userId) : [];
   const seatsLine =
-    iPayTeam && team
+    myPlanCov && myPlanTeamName
       ? mates.length > 0
-        ? `Cubre a las capitanas de ${team.name}: ${mates.join(', ')}`
-        : `Cubre a ${team.name} y hasta ${CAPTAIN_SEATS - 1} capitanas más`
+        ? `Cubre a los capitanes de ${myPlanTeamName}: ${mates.join(', ')}`
+        : `Cubre a ${myPlanTeamName} y hasta ${CAPTAIN_SEATS - 1} capitanes más`
       : null;
-  // Me cubre el plan de otra capitana del equipo (no pago yo).
+  // Me cubre el plan de otro capitán del equipo (no pago yo).
   const coveredByMate =
     !!teamCov?.covered &&
     teamCov.payer_user_id !== userId &&
@@ -375,7 +382,7 @@ export const SubscriptionScreen = ({
                   <Pressable onPress={goManageCaptains} accessibilityRole="link" hitSlop={6}>
                     <Text style={styles.planMeta}>{seatsLine}</Text>
                     <Text style={[styles.planMeta, { color: c.accent, fontWeight: '700' }]}>
-                      Gestionar capitanas ›
+                      Gestionar capitanes ›
                     </Text>
                   </Pressable>
                 ) : null}
@@ -422,7 +429,7 @@ export const SubscriptionScreen = ({
                       <Pressable onPress={goManageCaptains} accessibilityRole="link" hitSlop={6}>
                         <Text style={styles.planMeta}>{seatsLine}</Text>
                         <Text style={[styles.planMeta, { color: c.accent, fontWeight: '700' }]}>
-                          Gestionar capitanas ›
+                          Gestionar capitanes ›
                         </Text>
                       </Pressable>
                     ) : (
@@ -505,7 +512,7 @@ export const SubscriptionScreen = ({
           ) : coveredByMate && teamCov && team ? (
             <>
               <Text style={styles.planName}>
-                Te cubre el plan de {teamCov.payer_name?.split(/\s+/)[0] ?? 'otra capitana'}
+                Te cubre el plan de {teamCov.payer_name?.split(/\s+/)[0] ?? 'otro capitán'}
               </Text>
               <Text style={styles.planMeta}>
                 Pro en {team.name} hasta {formatCoverDate(teamCov.period_end)} · sin pagar nada
@@ -515,13 +522,13 @@ export const SubscriptionScreen = ({
                   <IconCheck size={12} color={c.accent} />
                 </View>
                 <Text style={styles.coverText}>
-                  El plan Capitán cubre a las {CAPTAIN_SEATS} capitanas del equipo. En
+                  El plan Capitán cubre a los {CAPTAIN_SEATS} capitanes del equipo. En
                   otro equipo necesitarías tu propio plan.
                 </Text>
               </View>
               <Pressable onPress={goManageCaptains} accessibilityRole="link" hitSlop={6}>
                 <Text style={[styles.planMeta, { color: c.accent, fontWeight: '700', marginTop: 12 }]}>
-                  Ver las capitanas ›
+                  Ver los capitanes ›
                 </Text>
               </Pressable>
             </>

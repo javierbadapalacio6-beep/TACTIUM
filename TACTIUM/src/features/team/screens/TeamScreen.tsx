@@ -407,7 +407,7 @@ export const TeamScreen = () => {
   // ── Datos de apoyo: capitanes, ficha y parejas ────────────────────────
   const [captainIds, setCaptainIds] = useState<Set<string>>(new Set());
   const [captainName, setCaptainName] = useState<string | null>(null);
-  // Se sube al quitar a una capitana (bloque «Capitanas · 2 de 3»).
+  // Se sube al quitar a un capitán (bloque «Capitanes · 2 de 3»).
   const [capsVersion, setCapsVersion] = useState(0);
   useEffect(() => {
     if (!team?.id) return;
@@ -1001,7 +1001,7 @@ export const TeamScreen = () => {
           </Pressable>
         ) : null}
 
-        {/* ── Capitanas · 2 de 3 (equipos independientes) ─────────── */}
+        {/* ── Capitanes · 2 de 3 (equipos independientes) ─────────── */}
         {canManage && team && !team.club_id ? (
           <CaptainSeatsCard
             team={{ id: team.id, name: team.name, club_id: team.club_id, owner_id: team.owner_id }}

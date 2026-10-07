@@ -17,7 +17,7 @@ export interface EntitlementContext {
   // aunque el club pague. Irrelevante para equipos independientes.
   teamCovered?: boolean;
   // «El plan Capitán cubre al equipo»: el equipo INDEPENDIENTE está cubierto
-  // por el plan Capitán de otra capitana (o del dueño) de ESE equipo. El
+  // por el plan Capitán de otro capitán (o del dueño) de ESE equipo. El
   // cliente no puede leer subs ajenas (RLS), así que sale de la RPC
   // `team_captain_coverage` (cacheada en subscriptionStore.teamCoverage).
   // Solo vale para ESTE equipo; ignorado en equipos de club.
@@ -50,8 +50,8 @@ export type EntitlementResult =
  *   3. Si el user es `captain`/`admin` de un equipo independiente y tiene una
  *      sub `captain` propia activa → true.
  *   4. Si el user es `captain`/`admin` de un equipo independiente cubierto por
- *      el plan Capitán de otra capitana (o del dueño) de ese equipo → true.
- *      Máximo 3 capitanas por equipo (trigger `team_captain_limit`).
+ *      el plan Capitán de otro capitán (o del dueño) de ese equipo → true.
+ *      Máximo 3 capitanes por equipo (trigger `team_captain_limit`).
  *   5. Cualquier otro caso → false.
  *
  * `now` parameterizable para testing determinista.
@@ -107,7 +107,7 @@ export function hasPremiumAccess(
     );
     if (hit) return { allowed: true, source: 'captain_self' };
 
-    // 4) Cubierto por el plan de otra capitana de ESTE equipo.
+    // 4) Cubierto por el plan de otro capitán de ESTE equipo.
     const cover = ctx.teamCaptainCover;
     if (cover && new Date(cover.coveredUntil) > now) {
       return { allowed: true, source: 'captain_team' };

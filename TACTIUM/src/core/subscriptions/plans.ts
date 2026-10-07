@@ -137,7 +137,7 @@ export const CAPTAIN_BENEFITS: string[] = [
   'Parejas por puntos, en 5 variantes',
   'Calendario y plantilla desde la federación',
   'Acta, resultados y clasificación con zonas',
-  'Hasta 3 capitanas por equipo con un solo plan',
+  'Hasta 3 capitanes por equipo con un solo plan',
 ];
 
 export const CLUB_BENEFITS: string[] = [
