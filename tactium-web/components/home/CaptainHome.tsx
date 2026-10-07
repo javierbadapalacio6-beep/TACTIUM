@@ -39,6 +39,7 @@ import { OtherTeamsStrip } from "@/components/home/OtherTeamsStrip";
 import { Crest } from "@/components/Crest";
 import { TrialCard } from "@/components/subscription/TrialCard";
 import { LiveHomeCard } from "@/components/matchday/LiveHomeCard";
+import { fetchLiveState, isLiveNow } from "@/lib/live";
 import {
   IconCalendar,
   IconCheck,
@@ -129,6 +130,8 @@ interface HomeData {
   /** Alineación oficial (variante activa) de la próxima jornada. */
   lineup: DbLineupRow[];
   lastReminder: Date | null;
+  /** Jornada que se está jugando ahora con marcador en vivo (si la hay). */
+  liveId: string | null;
 }
 
 /** Panel del capitán / jugador de equipo, con datos reales del equipo activo. */
@@ -150,7 +153,13 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         season ? fetchMatchdays(season.id) : Promise.resolve([]),
         fetchPlayers(teamId!),
       ]);
-      const next = matchdays.find((m) => m.status !== "finished");
+      // Si la primera sin terminar se está jugando AHORA (marcador en vivo),
+      // va arriba como «En directo» y la «próxima» pasa a ser la siguiente,
+      // igual que en la app: antes salía la misma jornada dos veces.
+      const first = matchdays.find((m) => m.status !== "finished");
+      const firstLive = first ? isLiveNow(await fetchLiveState(first.id).catch(() => null)) : false;
+      const liveId = firstLive && first ? first.id : null;
+      const next = matchdays.find((m) => m.status !== "finished" && m.id !== liveId);
       const team = await fetchTeam(teamId!).catch(() => null);
       const courts = getCourtsForCompetition(
         team?.federation,
@@ -158,7 +167,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         (team?.gender as TeamGender | null | undefined) ?? null,
       );
       if (!next) {
-        return { season, matchdays, players, availability: {}, deadline: null, courts, lineup: [], lastReminder: null };
+        return { season, matchdays, players, availability: {}, deadline: null, courts, lineup: [], lastReminder: null, liveId };
       }
       const [availability, deadline, lineup, lastReminder] = await Promise.all([
         fetchAvailabilityDetail(next.id),
@@ -172,7 +181,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
           .catch(() => [] as DbLineupRow[]),
         isCaptain ? fetchLastReminder(next.id) : Promise.resolve(null),
       ]);
-      return { season, matchdays, players, availability, deadline, courts, lineup, lastReminder };
+      return { season, matchdays, players, availability, deadline, courts, lineup, lastReminder, liveId };
     },
     [teamId, isCaptain],
     !!teamId
@@ -236,7 +245,9 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
     ? Math.round((availableCount / active.length) * 100)
     : 0;
 
-  const upcoming = matchdays.filter((m) => m.status !== "finished");
+  const liveId = data?.liveId ?? null;
+  const liveM = liveId ? matchdays.find((x) => x.id === liveId) ?? null : null;
+  const upcoming = matchdays.filter((m) => m.status !== "finished" && m.id !== liveId);
   const played = matchdays.filter((m) => m.status === "finished");
   const wins = played.filter((m) => m.outcome === "win").length;
   const losses = played.filter((m) => m.outcome === "loss").length;
@@ -406,8 +417,13 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
       <OtherTeamsStrip />
       {trial}
       {/* Jornada en juego: marcador global en directo (solo si hay). */}
-      {m ? (
-        <LiveHomeCard matchdayId={m.id} teamName={activeTeam?.name ?? "Nosotros"} opponent={m.opponent} jornada={m.round} />
+      {liveM ?? m ? (
+        <LiveHomeCard
+          matchdayId={(liveM ?? m)!.id}
+          teamName={activeTeam?.name ?? "Nosotros"}
+          opponent={(liveM ?? m)!.opponent}
+          jornada={(liveM ?? m)!.round}
+        />
       ) : null}
 
       <div className="bento">

@@ -59,6 +59,7 @@ import {
   formatMatchDate,
 } from '@features/home/components/OtherTeamsMatchdays';
 import { LiveHomeCard } from '@features/home/components/live/LiveHomeCard';
+import { fetchLiveState, isLiveNow } from '@core/services/live';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
 
@@ -84,6 +85,10 @@ export const HomeScreen = ({
 
   const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
   const [nextMatchday, setNextMatchday] = useState<MatchdaysApi.Matchday | null>(null);
+  // Jornada que se está jugando AHORA (con marcador en vivo). Si la hay, se
+  // enseña arriba como «En directo» y la tarjeta de próxima jornada pasa a la
+  // siguiente: antes salía la misma jornada dos veces.
+  const [liveMatchday, setLiveMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   // Nº de jornadas de la temporada activa: distingue "sin jornadas" (escanear)
   // de "calendario ya cargado y sin jornadas pendientes" (temporada al día).
   const [seasonMatchdayCount, setSeasonMatchdayCount] = useState(0);
@@ -111,6 +116,7 @@ export const HomeScreen = ({
     if (prevTeamIdRef.current !== null && prevTeamIdRef.current !== currentId) {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       setNextMatchday(null);
+      setLiveMatchday(null);
       setSeasonMatchdayCount(0);
       setLineupFilled(0);
       setLineupPairs([]);
@@ -146,11 +152,32 @@ export const HomeScreen = ({
           if (cancelled) return;
           setActiveSeason(season);
           if (season) {
-            const [md, mdCount] = await Promise.all([
+            const [upcoming, mdCount] = await Promise.all([
               MatchdaysApi.fetchUpcomingMatchday(season.id),
               MatchdaysApi.countMatchdays(season.id),
             ]);
             if (cancelled) return;
+            let md = upcoming;
+            let live: MatchdaysApi.Matchday | null = null;
+            if (upcoming) {
+              const ls = await fetchLiveState(upcoming.id).catch(() => null);
+              if (cancelled) return;
+              if (isLiveNow(ls)) {
+                live = upcoming;
+                const all = await MatchdaysApi.fetchMatchdays(season.id).catch(() => []);
+                if (cancelled) return;
+                md =
+                  all
+                    .filter(
+                      (m) =>
+                        m.id !== upcoming.id &&
+                        m.status === 'upcoming' &&
+                        m.jornada_number > upcoming.jornada_number,
+                    )
+                    .sort((a, b) => a.jornada_number - b.jornada_number)[0] ?? null;
+              }
+            }
+            setLiveMatchday(live);
             setNextMatchday(md);
             setSeasonMatchdayCount(mdCount);
 
@@ -178,6 +205,7 @@ export const HomeScreen = ({
             }
           } else {
             setNextMatchday(null);
+            setLiveMatchday(null);
             setSeasonMatchdayCount(0);
             setLineupFilled(0);
             setLineupPairs([]);
@@ -351,13 +379,15 @@ export const HomeScreen = ({
         <OtherTeamsMatchdays bleed={22} />
 
         {/* Jornada en juego: marcador global en directo (solo si hay). */}
-        {nextMatchday ? (
+        {liveMatchday ?? nextMatchday ? (
           <LiveHomeCard
-            matchdayId={nextMatchday.id}
+            matchdayId={(liveMatchday ?? nextMatchday)!.id}
             teamName={team?.name ?? 'Nosotros'}
-            opponent={nextMatchday.opponent}
-            jornadaNumber={nextMatchday.jornada_number}
-            onOpen={() => navigation.navigate('Jornada', { matchdayId: nextMatchday.id })}
+            opponent={(liveMatchday ?? nextMatchday)!.opponent}
+            jornadaNumber={(liveMatchday ?? nextMatchday)!.jornada_number}
+            onOpen={() =>
+              navigation.navigate('Jornada', { matchdayId: (liveMatchday ?? nextMatchday)!.id })
+            }
           />
         ) : null}
 
