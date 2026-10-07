@@ -16,13 +16,22 @@ export interface EntitlementContext {
   // gestor los marca como `covered`. Un equipo NO cubierto queda read-only
   // aunque el club pague. Irrelevante para equipos independientes.
   teamCovered?: boolean;
+  // «El plan Capitán cubre al equipo»: el equipo INDEPENDIENTE está cubierto
+  // por el plan Capitán de otra capitana (o del dueño) de ESE equipo. El
+  // cliente no puede leer subs ajenas (RLS), así que sale de la RPC
+  // `team_captain_coverage` (cacheada en subscriptionStore.teamCoverage).
+  // Solo vale para ESTE equipo; ignorado en equipos de club.
+  teamCaptainCover?: { coveredUntil: string } | null;
   // Subscripciones del usuario y de los clubs que ve. La función filtra
   // localmente — el caller debe asegurarse de que las haya cargado.
   subscriptions: Subscription[];
 }
 
 export type EntitlementResult =
-  | { allowed: true; source: 'player_free' | 'club_inherited' | 'captain_self' }
+  | {
+      allowed: true;
+      source: 'player_free' | 'club_inherited' | 'captain_self' | 'captain_team';
+    }
   | {
       allowed: false;
       reason: 'no_user' | 'no_subscription' | 'not_covered';
@@ -38,9 +47,12 @@ export type EntitlementResult =
  *      (heredado). Cubre `club_admin` y a los `captain` de ese club.
  *   2. Si el user es `player` en ese team → true (los players son siempre
  *      free, da igual el estado de subs).
- *   3. Si el user es `captain`/`admin` y tiene una sub `captain` propia
- *      activa → true.
- *   4. Cualquier otro caso → false.
+ *   3. Si el user es `captain`/`admin` de un equipo independiente y tiene una
+ *      sub `captain` propia activa → true.
+ *   4. Si el user es `captain`/`admin` de un equipo independiente cubierto por
+ *      el plan Capitán de otra capitana (o del dueño) de ese equipo → true.
+ *      Máximo 3 capitanas por equipo (trigger `team_captain_limit`).
+ *   5. Cualquier otro caso → false.
  *
  * `now` parameterizable para testing determinista.
  */
@@ -94,6 +106,12 @@ export function hasPremiumAccess(
         new Date(s.current_period_end) > now,
     );
     if (hit) return { allowed: true, source: 'captain_self' };
+
+    // 4) Cubierto por el plan de otra capitana de ESTE equipo.
+    const cover = ctx.teamCaptainCover;
+    if (cover && new Date(cover.coveredUntil) > now) {
+      return { allowed: true, source: 'captain_team' };
+    }
   }
 
   return { allowed: false, reason: 'no_subscription' };

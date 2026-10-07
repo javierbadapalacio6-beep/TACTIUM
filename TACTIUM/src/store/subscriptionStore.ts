@@ -11,6 +11,10 @@ import {
   type EntitlementResult,
   type TeamRole,
 } from '@core/entitlements/hasPremiumAccess';
+import {
+  fetchTeamCaptainCoverage,
+  type TeamCaptainCoverage,
+} from '@core/services/teamCaptains';
 
 // ── Selectors helpers ──────────────────────────────────────────────────────
 
@@ -34,9 +38,16 @@ interface State {
   loading: boolean;
   lastSyncedAt: number | null;
   realtimeChannel: RealtimeChannel | null;
+  // «El plan Capitán cubre al equipo»: cobertura por equipo independiente
+  // (RPC `team_captain_coverage`), indexada por team_id. Incluye la lista de
+  // capitanas para el bloque «Capitanas · 2 de 3».
+  teamCoverage: Record<string, TeamCaptainCoverage>;
 
   // Mutaciones
   refresh: (userId: string) => Promise<void>;
+  // Recarga la cobertura de un equipo (o de todos si no se pasa). Devuelve la
+  // fila del equipo pedido, si la hay.
+  refreshTeamCoverage: (teamId?: string | null) => Promise<TeamCaptainCoverage | null>;
   subscribeRealtime: (userId: string) => void;
   unsubscribeRealtime: () => void;
   addOptimistic: (sub: Subscription) => void;
@@ -57,6 +68,25 @@ export const useSubscriptionStore = create<State>((set, get) => ({
   loading: false,
   lastSyncedAt: null,
   realtimeChannel: null,
+  teamCoverage: {},
+
+  refreshTeamCoverage: async (teamId) => {
+    try {
+      const rows = await fetchTeamCaptainCoverage(teamId ?? null);
+      set((s) => {
+        const next = teamId ? { ...s.teamCoverage } : {};
+        if (teamId) delete next[teamId];
+        for (const r of rows) next[r.team_id] = r;
+        // Lista nueva de subs (mismas filas) para que los hooks suscritos a
+        // `subscriptions` se repinten también al cambiar la cobertura.
+        return { teamCoverage: next, subscriptions: [...s.subscriptions] };
+      });
+      return teamId ? rows.find((r) => r.team_id === teamId) ?? null : null;
+    } catch (e) {
+      console.warn('subscriptionStore:refreshTeamCoverage', e);
+      return null;
+    }
+  },
 
   refresh: async (userId) => {
     if (!userId) return;
@@ -76,6 +106,11 @@ export const useSubscriptionStore = create<State>((set, get) => ({
       // tipo `Subscription` (PII revocada a nivel DB). Ningún consumer
       // del store lee revenuecat_customer_id ni original_transaction_id.
       const dbSubs = ((data ?? []) as unknown) as Subscription[];
+      // Cobertura por equipo (plan Capitán compartido). No es fatal.
+      const coverageRows = await fetchTeamCaptainCoverage().catch((e) => {
+        console.warn('subscriptionStore:teamCoverage', e);
+        return null;
+      });
       const optimistic = get().subscriptions.filter((s) =>
         s.id.startsWith('optimistic_'),
       );
@@ -87,6 +122,13 @@ export const useSubscriptionStore = create<State>((set, get) => ({
       );
       set({
         subscriptions: [...dedupedDb, ...optimistic],
+        ...(coverageRows
+          ? {
+              teamCoverage: Object.fromEntries(
+                coverageRows.map((r) => [r.team_id, r]),
+              ),
+            }
+          : {}),
         loading: false,
         lastSyncedAt: Date.now(),
       });
@@ -152,6 +194,7 @@ export const useSubscriptionStore = create<State>((set, get) => ({
       loading: false,
       lastSyncedAt: null,
       realtimeChannel: null,
+      teamCoverage: {},
     });
   },
 
@@ -161,6 +204,7 @@ export const useSubscriptionStore = create<State>((set, get) => ({
       role,
       clubId: team?.club_id ?? null,
       teamCovered: team?.covered ?? false,
+      teamCaptainCover: captainCoverFor(get().teamCoverage, team),
       subscriptions: get().subscriptions,
     });
   },
@@ -205,6 +249,16 @@ export function selectIsPremium(
     role,
     clubId: team?.club_id ?? null,
     teamCovered: team?.covered ?? false,
+    teamCaptainCover: captainCoverFor(state.teamCoverage, team),
     subscriptions: state.subscriptions,
   });
+}
+
+function captainCoverFor(
+  coverage: Record<string, TeamCaptainCoverage>,
+  team: TeamLikeForEntitlement | null,
+): { coveredUntil: string } | null {
+  if (!team || team.club_id) return null;
+  const row = coverage[team.id];
+  return row?.covered && row.period_end ? { coveredUntil: row.period_end } : null;
 }

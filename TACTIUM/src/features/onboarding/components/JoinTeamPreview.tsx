@@ -15,6 +15,7 @@ import { IconCheck, IconArrowRight } from '@components/ui';
 import * as InvitationsApi from '@core/services/invitations';
 import * as PlayersApi from '@core/services/players';
 import { useAuthStore } from '@store/authStore';
+import { useSubscriptionStore } from '@store/subscriptionStore';
 import { useTeamStore } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
 import { toast } from '@store/toastStore';
@@ -169,6 +170,9 @@ export const JoinTeamPreview: React.FC<{
         await setActiveTeam(teamId).catch(() => {});
       }
       await refreshMyPlayer().catch(() => {});
+      // Si entra como capitana en un equipo ya cubierto por el plan de otra
+      // capitana, que no vea ningún paywall desde el primer momento.
+      await useSubscriptionStore.getState().refreshTeamCoverage(teamId);
     } catch (e) {
       console.warn('JoinTeamPreview: recarga tras unirse', e);
     }

@@ -37,6 +37,7 @@ function useGateRunner() {
   const coverTeamAction = useTeamStore((s) => s.coverTeam);
   const isPremiumFn = useSubscriptionStore((s) => s.isPremium);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
+  const refreshTeamCoverage = useSubscriptionStore((s) => s.refreshTeamCoverage);
 
   return useCallback(
     (team: GateTeam | null, fn: GateFn, intent?: PaywallIntent) => {
@@ -99,10 +100,34 @@ function useGateRunner() {
         return;
       }
 
+      // Equipo independiente: puede que otra capitana del equipo haya
+      // empezado el plan después de la última carga (la cobertura por equipo
+      // no llega por realtime). Se pregunta una vez más antes del paywall.
+      if (team && !team.club_id && role === 'captain') {
+        void (async () => {
+          const row = await refreshTeamCoverage(team.id);
+          if (row?.covered && row.period_end && new Date(row.period_end) > new Date()) {
+            await fn();
+            return;
+          }
+          navigation.navigate('Paywall', { intent });
+        })();
+        return;
+      }
+
       // Sin sub → paywall con el motivo, para que diga por qué estás ahí.
       navigation.navigate('Paywall', { intent });
     },
-    [userId, role, teams, subscriptions, coverTeamAction, isPremiumFn, navigation],
+    [
+      userId,
+      role,
+      teams,
+      subscriptions,
+      coverTeamAction,
+      isPremiumFn,
+      refreshTeamCoverage,
+      navigation,
+    ],
   );
 }
 
