@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 
-import { proHref } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { Avatar, Btn, BtnLink, Card, Chip, ListRow, Note, SectionHead } from "@/components/ui";
@@ -10,7 +9,6 @@ import { IconCalendar, IconInfo, IconSearch } from "@/components/Icon";
 
 import {
   fetchClubTeamsLite,
-  fetchFcpGroupUnlocked,
   fetchMyFollows,
   fetchTeamStanding,
   fmtFcpDate,
@@ -53,14 +51,6 @@ export function FederationMine({
     [teamId],
     !!user && isTeam && !!teamId,
   );
-  // «Tu grupo» es Pro (como en la app; el explorador de debajo, no). Mismo
-  // gate por equipo: al jugador no se le bloquea.
-  const groupAccess = useAsync(
-    () => fetchFcpGroupUnlocked(teamId!, role === "capitan"),
-    [teamId, role],
-    !!user && isTeam && !!teamId,
-  );
-  const groupLocked = groupAccess.data === false;
   const club = useAsync(
     async () => {
       const teams = await fetchClubTeamsLite(clubId!);
@@ -161,14 +151,7 @@ export function FederationMine({
           ) : null}
 
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            {st.idGrupo && groupLocked ? (
-              <BtnLink href={proHref("fcp_group")} size="sm" aria-label="Ver clasificación (Pro)">
-                Ver clasificación
-                <Chip tone="accent" plain>
-                  Pro
-                </Chip>
-              </BtnLink>
-            ) : st.idGrupo ? (
+            {st.idGrupo ? (
               <BtnLink
                 href={`${base}/grupo/${encodeURIComponent(st.idGrupo)}`}
                 size="sm"

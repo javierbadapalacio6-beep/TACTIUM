@@ -16,7 +16,6 @@ import {
   fetchTeamFcpId,
 } from "@/lib/queries";
 import { legendFor, type FcpZone } from "@/lib/fcp-zones";
-import { fetchTeamPro } from "@/lib/account-queries";
 import type { FcpMatch, FcpStanding } from "@/lib/fcp-public";
 
 /* ── Puesto de un equipo TACTIUM en la Federación ─────────────────── */
@@ -216,17 +215,6 @@ export async function fetchTeamStanding(
   };
   cache.set(key, { at: Date.now(), v });
   return v;
-}
-
-/* ── «Tu grupo de la Federación» es Pro ───────────────────────────────
-   Misma regla que el gate de la app (`hasPremiumAccess`): al jugador no se
-   le bloquea nunca; al capitán, según el EQUIPO (sub del club con el equipo
-   cubierto, o la del dueño si es independiente). El explorador público de
-   /federacion NO pasa por aquí. `true` = puede entrar; ante la duda (null de
-   `fetchTeamPro`) no se bloquea. */
-export async function fetchFcpGroupUnlocked(teamId: string, isManager: boolean): Promise<boolean> {
-  if (!isManager) return true;
-  return (await fetchTeamPro(teamId).catch(() => null)) !== false;
 }
 
 /* ── Volcar la temporada anterior: aviso, no volcado ──────────────────

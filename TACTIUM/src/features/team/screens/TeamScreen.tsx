@@ -95,7 +95,7 @@ import {
 } from '@core/utils/validation';
 import type { ScannedPlayer } from '@core/services/imageRecognition';
 import { bulkUpsertPlayers } from '@core/utils/bulkUpsertPlayers';
-import { useIsPremium, usePremiumGate } from '@core/hooks/usePremiumGate';
+import { useIsPremium } from '@core/hooks/usePremiumGate';
 import type { RootStackParamList } from '@navigation/types';
 import { uploadPlayerPhoto, removePlayerPhoto } from '@core/services/playerPhoto';
 import { displayName, initialsOf, photoOf } from '@core/utils/playerName';
@@ -355,7 +355,6 @@ export const TeamScreen = () => {
   // es premium. Mismo aviso de siempre: con premium abre directo; si no,
   // «A mano / Ver planes» → paywall con motivo `roster_import`.
   const isPremium = useIsPremium();
-  const gate = usePremiumGate();
   const requestImport = (open: () => void) => {
     if (isPremium) {
       open();
@@ -1344,10 +1343,7 @@ export const TeamScreen = () => {
           signing={fcpStatus.signing}
           resyncing={resyncing}
           refreshing={refrescando}
-          // Tu grupo de la Federación es Pro (mismo gate por equipo que el
-          // resto; al jugador no lo bloquea).
-          groupPro={!isPremium}
-          onOpenGroup={gate(() => setGroupOpen(true), 'fcp_group')}
+          onOpenGroup={() => setGroupOpen(true)}
           onPrepareSeason={() => setSeasonOpen(true)}
           onResync={doResync}
           onRefresh={refrescarInscripcion}

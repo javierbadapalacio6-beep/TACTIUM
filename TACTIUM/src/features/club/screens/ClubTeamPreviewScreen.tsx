@@ -28,7 +28,6 @@ import { matchdayState } from '@core/utils/matchday';
 import { FcpSeasonUpdateSheet } from '../components/FcpSeasonUpdateSheet';
 import { FcpGroupSheet } from '../components/FcpGroupSheet';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
-import { usePremiumGate, useIsPremium } from '@core/hooks/usePremiumGate';
 
 import type { TeamStackScreenProps } from '@navigation/types';
 
@@ -62,8 +61,6 @@ export const ClubTeamPreviewScreen = ({
   const [rosterOpen, setRosterOpen] = useState(false);
   const [seasonOpen, setSeasonOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
-  const gate = usePremiumGate();
-  const isPremium = useIsPremium();
   const [loading, setLoading] = useState(true);
   // «Capitán y miembros»: abre la TeamMembersSheet que ya existía (roles,
   // invitar al capitán, liberar un hueco, borrar el equipo). Antes solo se
@@ -322,11 +319,8 @@ export const ClubTeamPreviewScreen = ({
                 </View>
               ) : null}
               {isFcpTeam ? (
-                // El grupo de la Federación es Pro (mismo gate por equipo: el
-                // del club tiene que estar cubierto). Sin Pro la fila se ve,
-                // con el distintivo, y abre el paywall.
                 <Pressable
-                  onPress={gate(() => setGroupOpen(true), 'fcp_group')}
+                  onPress={() => setGroupOpen(true)}
                   accessibilityRole="button"
                   style={({ pressed }) => [
                     styles.navRow,
@@ -341,13 +335,7 @@ export const ClubTeamPreviewScreen = ({
                     <Text style={styles.navTitle}>Federación</Text>
                     <Text style={styles.navSub}>Clasificación y jornadas del grupo</Text>
                   </View>
-                  {isPremium ? (
-                    <IconChevron size={14} color={c.textFaint} />
-                  ) : (
-                    <View style={styles.pro}>
-                      <Text style={styles.proText}>PRO</Text>
-                    </View>
-                  )}
+                  <IconChevron size={14} color={c.textFaint} />
                 </Pressable>
               ) : null}
               {isFcpTeam && seasonClosed ? (
@@ -509,19 +497,6 @@ const makeStatStyles = (c: Palette) => StyleSheet.create({
 });
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  pro: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: c.accent15,
-  },
-  proText: {
-    fontFamily: Fonts.mono,
-    color: c.accent,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
   root: { flex: 1, backgroundColor: c.background },
   readOnly: {
     paddingHorizontal: 10,
