@@ -7,12 +7,12 @@ import { motion, useReducedMotion } from "motion/react";
 import {
   createMatchday,
   fetchMatchdays,
-  fetchSubscription,
   renumberSeasonMatchdays,
   fetchSeasons,
   type DbMatchday,
   type DbSeason,
 } from "@/lib/queries";
+import { fetchProForTeam } from "@/lib/team-captains";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { useDismiss } from "@/lib/use-dismiss";
@@ -93,7 +93,12 @@ export function SeasonDetail({ id }: { id: string }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
   // Escanear el calendario es premium, como en la app (`calendar_scan`).
-  const sub = useAsync(() => fetchSubscription(), [scanOpen], scanOpen);
+  // Premium: mi plan o el de otra capitana de este equipo independiente.
+  const sub = useAsync(
+    () => fetchProForTeam(activeTeam?.clubId ? null : teamId),
+    [scanOpen],
+    scanOpen,
+  );
 
   // «＋ Crear → Nueva jornada» llega con `?nueva=1` y el atajo «Escanear
   // calendario» con `?escanear=1`: el modal se abre solo y el parámetro se

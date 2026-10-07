@@ -13,12 +13,13 @@ import {
   fetchTeamFcpGroup,
   setSelfAvailability,
   updatePlayer,
-  fetchSubscription,
   fetchTeamInscripcion,
   type DbPlayer,
 } from "@/lib/queries";
 import { fetchLeagueStatsBundle, type LeagueStatsBundle } from "@/lib/player-stats";
 import { FcpGroupRivals } from "@/components/federation/FcpGroupRivals";
+import { CaptainSeats } from "@/components/team/CaptainSeats";
+import { fetchProForTeam } from "@/lib/team-captains";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -282,6 +283,8 @@ export function Roster() {
   );
   const PLAYERS: DbPlayer[] = data ?? [];
 
+  // Se sube al quitar a una capitana (bloque «Capitanas · 2 de 3»).
+  const [capsReload, setCapsReload] = useState(0);
   // Capitanes del equipo (para «CAP» y «capitán: …»). Lectura bajo RLS.
   const captains = useAsync(
     async () => {
@@ -292,7 +295,7 @@ export function Roster() {
         .in("role", ["captain", "admin"]);
       return new Set(((rows ?? []) as { user_id: string }[]).map((r) => r.user_id));
     },
-    [teamId],
+    [teamId, capsReload],
     !!teamId
   );
   const captainIds = captains.data ?? new Set<string>();
@@ -340,9 +343,10 @@ export function Roster() {
   const [fcpBusy, setFcpBusy] = useState(false);
   const [fcpErr, setFcpErr] = useState<string | null>(null);
 
-  // El volcado masivo es premium en las cinco superficies.
+  // El volcado masivo es premium en las cinco superficies. Cuenta también el
+  // plan Capitán de otra capitana de este equipo (hasta 3 comparten uno).
   const sub = useAsync(
-    () => fetchSubscription(),
+    () => fetchProForTeam(activeTeam?.clubId ? null : teamId),
     [fcpOpen, menuOpen, scanOpen],
     fcpOpen || menuOpen || scanOpen,
   );
@@ -646,6 +650,17 @@ export function Roster() {
             </button>
           </span>
         </Note>
+      )}
+
+      {/* ── Capitanas · 2 de 3 (equipos independientes) ─────────── */}
+      {canManage && teamId && activeTeam && !activeTeam.clubId && (
+        <CaptainSeats
+          teamId={teamId}
+          teamName={activeTeam.name}
+          userId={user?.id ?? null}
+          onChanged={() => setCapsReload((k) => k + 1)}
+          onToast={setToast}
+        />
       )}
 
       {/* ── Federación: inscripción y grupo en un sitio ─────────── */}
