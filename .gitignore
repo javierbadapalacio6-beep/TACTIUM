@@ -63,3 +63,6 @@ TACTIUM/android/
 /SCREENS/MOTION GRAPICHS TACTIUM/
 /TACTIUM-AI/
 .playwright-mcp/
+
+# Caché del recopilador de circuitos FCP (HTML crudo, privado)
+TACTIUM/scripts/fcp-circuito/cache/

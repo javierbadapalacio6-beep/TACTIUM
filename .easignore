@@ -83,3 +83,6 @@ app-store-assets/
 .claude/
 .github/
 .playwright-mcp/
+
+# Caché del recopilador de circuitos FCP (HTML crudo, privado)
+/TACTIUM/scripts/fcp-circuito/cache/
