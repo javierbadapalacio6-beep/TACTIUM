@@ -390,7 +390,7 @@ export const SettingsScreen = () => {
               onPress={() => setInviteOpen(true)}
             />
           ) : null}
-          {isPlayer && team ? (
+          {(isPlayer || isCaptain) && team ? (
             myPlayer ? (
               <Row
                 icon={<CommunityAvatar name={myPlayer.name} size={24} />}
