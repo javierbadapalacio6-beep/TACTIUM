@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import {
+  fcpDisplayName,
   fetchFcpGroupHeader,
   fetchFcpMatches,
   fetchFcpStandings,
@@ -301,4 +303,99 @@ export function teamJsonLd(idEquipo: number, data: FcpTeamBundle): object[] {
       })),
     },
   ];
+}
+
+
+/* ── Directorio de grupos (para enlazar desde el explorador) ───── */
+
+export interface FcpDirectoryGroup {
+  idGrupo: string;
+  nombre: string;
+}
+export interface FcpDirectorySeason {
+  temporada: string;
+  grupos: FcpDirectoryGroup[];
+}
+
+/**
+ * Todos los grupos de la Federación agrupados por temporada, la más reciente
+ * primero. Alimenta el bloque de enlaces del explorador: sin él, las fichas de
+ * grupo sólo se descubrían por el sitemap, sin ninguna página que las enlace.
+ * Cacheado una hora: cambia cuando la Federación publica un sorteo.
+ */
+export const loadFcpDirectory = unstable_cache(
+  async (): Promise<FcpDirectorySeason[]> => {
+    const sb = supabaseAnon();
+    if (!sb) return [];
+    try {
+      const rows: { id_grupo: string; nombre: string | null; temporada: string | null }[] = [];
+      for (let from = 0; from < 5000; from += 1000) {
+        const { data, error } = await sb
+          .from("fcp_grupos")
+          .select("id_grupo, nombre, temporada")
+          .range(from, from + 999);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < 1000) break;
+      }
+      const bySeason = new Map<string, FcpDirectoryGroup[]>();
+      for (const r of rows) {
+        const t = r.temporada ?? "Sin temporada";
+        const list = bySeason.get(t) ?? [];
+        list.push({ idGrupo: r.id_grupo, nombre: prettyFcpName(r.nombre) || r.id_grupo });
+        bySeason.set(t, list);
+      }
+      return [...bySeason.entries()]
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([temporada, grupos]) => ({
+          temporada,
+          grupos: grupos.sort((x, y) =>
+            x.nombre.localeCompare(y.nombre, "es", { numeric: true })
+          ),
+        }));
+    } catch {
+      return [];
+    }
+  },
+  ["fcp-directory"],
+  { revalidate: 3600 }
+);
+
+
+/* ── Jugador ───────────────────────────────────────────────────── */
+
+/** Nombre para el título de la pestaña. Una consulta mínima, memoizada. */
+export const loadFcpPlayerName = cache(async (idJugador: string): Promise<string | null> => {
+  const sb = supabaseAnon();
+  if (!sb) return null;
+  try {
+    const { data } = await sb
+      .from("fcp_jugadores")
+      .select("nombre_pila, apellido1, apellido2, nombre")
+      .eq("id_jugador", idJugador)
+      .maybeSingle();
+    return data ? fcpDisplayName(data) : null;
+  } catch {
+    return null;
+  }
+});
+
+/**
+ * Las fichas de jugador llevan título propio pero NO se indexan.
+ *
+ * Son páginas sobre una persona concreta (nombre, equipo, resultados) y la
+ * Federación no distingue edades: puede haber menores. Los equipos y los grupos
+ * ya dan el tráfico útil («clasificación 3ª masculina», «club X»); poner a
+ * cada jugador a competir por su nombre en Google es una decisión de producto
+ * y de privacidad que no se toma por defecto. `follow` se mantiene para que
+ * el rastreo siga pasando por los enlaces. Si se decide indexarlas, es este el
+ * único sitio que hay que cambiar.
+ */
+export function playerMetadata(idJugador: string, name: string | null): Metadata {
+  const path = `/federacion/${FCP_SLUG}/jugador/${enc(idJugador)}`;
+  return {
+    title: name ? `${name} · Jugador federado` : "Jugador federado",
+    alternates: { canonical: path },
+    robots: { index: false, follow: true },
+  };
 }

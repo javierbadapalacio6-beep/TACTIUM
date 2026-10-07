@@ -2547,6 +2547,16 @@ export function FcpTeamView({
               ]
                 .filter(Boolean)
                 .join(" · ") || null
+            : data.grupo && data.idGrupo && !embedded ? (
+                // Enlace real a la clasificación del grupo: es lo que une la
+                // ficha del equipo con su grupo para quien rastrea la web.
+                <Link
+                  href={`/federacion/${slug}/grupo/${encodeURIComponent(data.idGrupo)}`}
+                  className="link-action"
+                >
+                  {data.grupo}
+                </Link>
+              )
             : (data.grupo ?? null),
         ]}
         actions={

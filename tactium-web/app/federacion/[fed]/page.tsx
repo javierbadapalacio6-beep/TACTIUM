@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { FederationExplore } from "@/components/federation/Federation";
+import { FcpDirectory } from "@/components/federation/FcpDirectory";
 import { FCP_FED_NAME, FCP_SLUG } from "@/lib/seo/fcp";
 
 type Params = Promise<{ fed: string }>;
@@ -17,5 +18,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function FedPage({ params }: { params: Params }) {
   const { fed } = await params;
-  return <FederationExplore slug={fed} />;
+  return (
+    <>
+      <FederationExplore slug={fed} />
+      {/* Sólo la Cántabra tiene datos: el directorio no aplica al resto. */}
+      {fed === FCP_SLUG ? <FcpDirectory /> : null}
+    </>
+  );
 }
