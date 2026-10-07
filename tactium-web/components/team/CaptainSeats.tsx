@@ -28,9 +28,9 @@ function initials(name: string | null): string {
 }
 
 /**
- * Bloque «Capitanas · 2 de 3» (equipos independientes). Misma lógica que la
- * app (`CaptainSeatsCard`): el plan Capitán cubre a TODAS las capitanas del
- * equipo, hasta 3.
+ * Bloque «Capitanes · 2 de 3» (equipos independientes). Misma lógica que la
+ * app (`CaptainSeatsCard`): el plan Capitán cubre a TODOS los capitanes del
+ * equipo, hasta 3 (un plan, un solo equipo).
  *
  * Patrones (Mobbin): cabecera con plazas usadas — Featurebase «Team members»
  * y Tolan «Family · 5 seats left»; huecos libres como fila con «+» — Tolan
@@ -69,7 +69,7 @@ export function CaptainSeats({
   async function addCaptain() {
     if (sharing) return;
     setSharing(true);
-    const res = await guardedWrite("crear el código de capitana", () => createInvitation(teamId, "captain"));
+    const res = await guardedWrite("crear el código de capitán", () => createInvitation(teamId, "captain"));
     setSharing(false);
     if (!res.ok) {
       onToast(res.reason);
@@ -82,31 +82,31 @@ export function CaptainSeats({
     if (!confirm || busy) return;
     setBusy(true);
     setErr(null);
-    const res = await guardedWrite("quitar a la capitana", () => demoteTeamCaptain(teamId, confirm.user_id));
+    const res = await guardedWrite("quitar al capitán", () => demoteTeamCaptain(teamId, confirm.user_id));
     setBusy(false);
     if (!res.ok) {
       setErr(res.reason);
       return;
     }
-    onToast(`${confirm.name ?? "La capitana"} ya es jugadora. Su plaza queda libre.`);
+    onToast(`${confirm.name ?? "El capitán"} ya es jugador. Su plaza queda libre.`);
     setConfirm(null);
     setReload((k) => k + 1);
     onChanged?.();
   }
 
   function sub(c: TeamCaptain): string {
-    if (c.is_payer) return until ? `Cubre a todas hasta ${until}` : "Cubre a todas";
+    if (c.is_payer) return until ? `Cubre a todos hasta ${until}` : "Cubre a todos";
     if (c.is_owner) return "Dueño del equipo";
-    return cov!.covered ? "Capitana · con Pro" : "Capitana";
+    return cov!.covered ? "Capitán · con Pro" : "Capitán";
   }
 
   return (
     <section style={{ marginBottom: 16 }}>
       <Card flush>
         <CardHead
-          title="Capitanas"
+          title="Capitanes"
           count={`${count} de ${CAPTAIN_SEATS}`}
-          sub={cov.covered ? "Un solo plan Capitán cubre a todas" : "Hasta 3 por equipo"}
+          sub={cov.covered ? "Un solo plan Capitán cubre a todos" : "Hasta 3 por equipo"}
         >
           {cov.covered && <Chip tone="accent">Pro</Chip>}
         </CardHead>
@@ -160,7 +160,7 @@ export function CaptainSeats({
                 <IconPlus size={15} />
               </span>
             }
-            title={<span style={{ color: "var(--accent)" }}>{sharing && i === 0 ? "Creando el código…" : "Añadir capitana"}</span>}
+            title={<span style={{ color: "var(--accent)" }}>{sharing && i === 0 ? "Creando el código…" : "Añadir capitán"}</span>}
             sub={cov.covered ? "Entra con Pro, sin pagar nada" : "Código de un solo uso · 7 días"}
           />
         ))}
@@ -176,7 +176,7 @@ export function CaptainSeats({
         {!cov.covered && (
           <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span style={{ flex: 1, minWidth: 220, fontSize: 13.5, color: "var(--text-muted)" }}>
-              Con el plan Capitán, las {CAPTAIN_SEATS} capitanas tienen todas las funciones.
+              Con el plan Capitán, los {CAPTAIN_SEATS} capitanes tienen todas las funciones.
             </span>
             <BtnLink href="/pro?para=capitan" size="sm">
               Ver el plan
@@ -188,10 +188,10 @@ export function CaptainSeats({
       <Modal
         open={!!confirm}
         onClose={() => !busy && setConfirm(null)}
-        labelledBy="quitar-capitana"
+        labelledBy="quitar-capitan"
         width={420}
-        title={`¿Quitar a ${confirm?.name ?? "esta capitana"} como capitana?`}
-        lede="Pasa a jugadora: sigue en el equipo, pero ya no gestiona jornadas ni alineaciones. Su plaza queda libre."
+        title={`¿Quitar a ${confirm?.name ?? "este capitán"} como capitán?`}
+        lede="Pasa a jugador: sigue en el equipo, pero ya no gestiona jornadas ni alineaciones. Su plaza queda libre."
         footer={
           <>
             <Btn onClick={() => setConfirm(null)} disabled={busy}>

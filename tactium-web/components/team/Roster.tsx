@@ -283,7 +283,7 @@ export function Roster() {
   );
   const PLAYERS: DbPlayer[] = data ?? [];
 
-  // Se sube al quitar a una capitana (bloque «Capitanas · 2 de 3»).
+  // Se sube al quitar a un capitán (bloque «Capitanes · 2 de 3»).
   const [capsReload, setCapsReload] = useState(0);
   // Capitanes del equipo (para «CAP» y «capitán: …»). Lectura bajo RLS.
   const captains = useAsync(
@@ -344,7 +344,7 @@ export function Roster() {
   const [fcpErr, setFcpErr] = useState<string | null>(null);
 
   // El volcado masivo es premium en las cinco superficies. Cuenta también el
-  // plan Capitán de otra capitana de este equipo (hasta 3 comparten uno).
+  // plan Capitán que cubre este equipo (hasta 3 capitanes comparten uno).
   const sub = useAsync(
     () => fetchProForTeam(activeTeam?.clubId ? null : teamId),
     [fcpOpen, menuOpen, scanOpen],
@@ -652,7 +652,7 @@ export function Roster() {
         </Note>
       )}
 
-      {/* ── Capitanas · 2 de 3 (equipos independientes) ─────────── */}
+      {/* ── Capitanes · 2 de 3 (equipos independientes) ─────────── */}
       {canManage && teamId && activeTeam && !activeTeam.clubId && (
         <CaptainSeats
           teamId={teamId}

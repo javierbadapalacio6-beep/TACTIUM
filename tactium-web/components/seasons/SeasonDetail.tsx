@@ -93,7 +93,7 @@ export function SeasonDetail({ id }: { id: string }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
   // Escanear el calendario es premium, como en la app (`calendar_scan`).
-  // Premium: mi plan o el de otra capitana de este equipo independiente.
+  // Premium: mi plan o el plan Capitán que cubre este equipo independiente.
   const sub = useAsync(
     () => fetchProForTeam(activeTeam?.clubId ? null : teamId),
     [scanOpen],

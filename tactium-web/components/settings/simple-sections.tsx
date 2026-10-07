@@ -333,7 +333,7 @@ export function SuscripcionResumen() {
   );
   const { data, loading } = useAsync(() => fetchSubscription(), [], !isPlayer);
   const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), [], role === "capitan");
-  // Plan Capitán compartido: me cubre el plan de otra capitana del equipo.
+  // Plan Capitán compartido: me cubre el plan de otro capitán del equipo.
   const { user } = useSession();
   const { data: cov } = useAsync(
     () => fetchTeamCaptainCoverage(activeTeam!.id).catch(() => null),
@@ -424,7 +424,7 @@ export function SuscripcionResumen() {
               : daysLeft !== null
                 ? `Prueba de Pro · ${plan?.displayName ?? "Capitán"}`
                 : mate
-                  ? `Te cubre el plan de ${mate.payer_name?.split(/\s+/)[0] ?? "otra capitana"}`
+                  ? `Te cubre el plan de ${mate.payer_name?.split(/\s+/)[0] ?? "otro capitán"}`
                   : (plan?.displayName ?? (isClub ? "El club está en el plan gratis" : "Plan gratuito"))}
           </div>
           <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>

@@ -4,11 +4,13 @@ import { supabaseBrowser } from "./supabase/client";
 import { fetchSubscription } from "./queries";
 
 /**
- * «El plan Capitán cubre al equipo»: hasta 3 capitanas por equipo
- * independiente comparten el Pro de una sola suscripción. Misma regla que la
+ * «El plan Capitán cubre al equipo»: hasta 3 capitanes por equipo
+ * independiente comparten el Pro de una sola suscripción. Un plan cubre UN
+ * solo equipo: el de quien paga o, si no es dueño de ninguno, aquel en el que
+ * es capitán desde hace más tiempo. Misma regla que la
  * app (`TACTIUM/src/core/services/teamCaptains.ts`).
  *
- * La sub de otra capitana no se puede leer (RLS): todo sale de la RPC
+ * La sub de otro capitán no se puede leer (RLS): todo sale de la RPC
  * `team_captain_coverage` (SECURITY DEFINER). El límite de 3 lo pone un
  * trigger en `team_members`, tanto al canjear el código como al ascender.
  */
@@ -43,7 +45,7 @@ export async function fetchTeamCaptainCoverage(teamId: string): Promise<TeamCapt
   return row ? { ...row, captains: Array.isArray(row.captains) ? row.captains : [] } : null;
 }
 
-/** Pasa a una capitana a jugadora. Solo el dueño o quien paga el plan. */
+/** Pasa a un capitán a jugador. Solo el dueño o quien paga el plan. */
 export async function demoteTeamCaptain(teamId: string, userId: string): Promise<void> {
   const { error } = await supabaseBrowser().rpc("demote_team_captain", {
     p_team_id: teamId,
@@ -52,16 +54,35 @@ export async function demoteTeamCaptain(teamId: string, userId: string): Promise
   if (error) throw error;
 }
 
+/** Cobertura de TODOS mis equipos independientes (para «Mi suscripción»). */
+export async function fetchAllTeamCaptainCoverage(): Promise<TeamCaptainCoverage[]> {
+  const { data, error } = await supabaseBrowser().rpc("team_captain_coverage", {});
+  if (error) throw error;
+  return ((data ?? []) as TeamCaptainCoverage[]).map((r) => ({
+    ...r,
+    captains: Array.isArray(r.captains) ? r.captains : [],
+  }));
+}
+
 /**
- * ¿Tengo Pro para gestionar ESTE equipo? Mi suscripción viva o, en un equipo
- * independiente, el plan Capitán de otra capitana del equipo.
+ * ¿Tengo Pro para gestionar ESTE equipo? En un equipo independiente lo decide
+ * la base (`fn_has_premium_access`): mi plan, o el plan Capitán que cubre este
+ * equipo (uno por plan). Sin equipo independiente (`null`): cualquier
+ * suscripción viva, como antes.
  */
 export async function fetchProForTeam(teamId: string | null): Promise<boolean> {
-  const own = await fetchSubscription().catch(() => null);
-  if (own) return true;
-  if (!teamId) return false;
-  const cov = await fetchTeamCaptainCoverage(teamId).catch(() => null);
-  return !!cov?.covered && !!cov.period_end && new Date(cov.period_end) > new Date();
+  if (!teamId) return !!(await fetchSubscription().catch(() => null));
+  const sb = supabaseBrowser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return false;
+  const { data, error } = await sb.rpc("fn_has_premium_access", {
+    p_user_id: user.id,
+    p_team_id: teamId,
+  });
+  if (error) return !!(await fetchSubscription().catch(() => null));
+  return data === true;
 }
 
 /** dd/mm/aaaa */
@@ -71,7 +92,7 @@ export function formatCoverDate(iso: string | null): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
-/** Nombres de pila de las capitanas, sin la persona indicada. */
+/** Nombres de pila de los capitanes, sin la persona indicada. */
 export function captainFirstNames(captains: TeamCaptain[], excludeUserId?: string | null): string[] {
   return captains
     .filter((c) => c.user_id !== excludeUserId)

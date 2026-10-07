@@ -28,7 +28,7 @@ import { RedeemCode } from "./RedeemCode";
 import {
   CAPTAIN_SEATS,
   captainFirstNames,
-  fetchTeamCaptainCoverage,
+  fetchAllTeamCaptainCoverage,
   formatCoverDate,
 } from "@/lib/team-captains";
 import { IconCheck, IconClock, IconLock } from "@/components/Icon";
@@ -160,14 +160,20 @@ export function MiSuscripcion() {
 function CaptainSubscription() {
   const { data, loading, error } = useAsync(() => fetchSubscription(), []);
   const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), []);
-  // Plan Capitán compartido (hasta 3 capitanas por equipo independiente).
-  const { activeTeam, user } = useSession();
+  // Plan Capitán compartido (hasta 3 capitanes por equipo independiente; un
+  // plan cubre UN solo equipo, que puede no ser el activo).
+  const { activeTeam, user, teams: myTeams } = useSession();
   const covTeam = activeTeam && !activeTeam.clubId ? activeTeam : null;
-  const { data: cov } = useAsync(
-    () => fetchTeamCaptainCoverage(covTeam!.id).catch(() => null),
-    [covTeam?.id],
-    !!covTeam,
+  const { data: covRows } = useAsync(
+    () => fetchAllTeamCaptainCoverage().catch(() => []),
+    [user?.id],
+    !!user,
   );
+  const cov = covTeam ? covRows?.find((r) => r.team_id === covTeam.id) ?? null : null;
+  const myPlanCov = covRows?.find((r) => r.covered && r.payer_user_id === user?.id) ?? null;
+  const myPlanTeamName = myPlanCov
+    ? myTeams.find((t) => t.id === myPlanCov.team_id)?.name ?? null
+    : null;
   const sub = toSubscription(data);
   const nextCharge = nextChargeLine(data);
   const [portalBusy, setPortalBusy] = useState(false);
@@ -199,9 +205,8 @@ function CaptainSubscription() {
   const storeManaged = isStoreManaged(sub.source);
   const webManaged = sub.source === "stripe";
   const noPlan = sub.source === "none";
-  const iPayTeam =
-    !!cov?.covered && cov.payer_user_id === user?.id && data?.planTier === "captain";
-  const mates = cov ? captainFirstNames(cov.captains, user?.id) : [];
+  const iPayTeam = !!myPlanCov && !!myPlanTeamName && data?.planTier === "captain";
+  const mates = myPlanCov ? captainFirstNames(myPlanCov.captains, user?.id) : [];
   const coveredByMate = noPlan && !!cov?.covered && cov.payer_user_id !== user?.id;
 
   return (
@@ -222,12 +227,12 @@ function CaptainSubscription() {
       {coveredByMate && cov && covTeam && (
         <Note tone="accent" icon={<IconCheck size={16} />} style={{ marginBottom: 16 }}>
           <span style={{ display: "block", fontWeight: 700, color: "var(--text)" }}>
-            Te cubre el plan de {cov.payer_name?.split(/\s+/)[0] ?? "otra capitana"}
+            Te cubre el plan de {cov.payer_name?.split(/\s+/)[0] ?? "otro capitán"}
           </span>
           <span style={{ display: "block", marginTop: 4 }}>
             Tienes Pro en {covTeam.name} hasta{" "}
             <span className="mono">{formatCoverDate(cov.period_end)}</span>, sin pagar nada. El plan
-            Capitán cubre a las {CAPTAIN_SEATS} capitanas del equipo; en otro equipo necesitarías tu
+            Capitán cubre a los {CAPTAIN_SEATS} capitanes del equipo; en otro equipo necesitarías tu
             propio plan.
           </span>
         </Note>
@@ -288,13 +293,13 @@ function CaptainSubscription() {
                 {nextCharge}
               </div>
             )}
-            {iPayTeam && covTeam && (
+            {iPayTeam && myPlanTeamName && (
               <div style={{ marginTop: 8, fontSize: 13.5, color: "var(--text-muted)" }}>
                 {mates.length > 0
-                  ? `Cubre a las capitanas de ${covTeam.name}: ${mates.join(", ")}`
-                  : `Cubre a ${covTeam.name} y hasta ${CAPTAIN_SEATS - 1} capitanas más`}
+                  ? `Cubre a los capitanes de ${myPlanTeamName}: ${mates.join(", ")}`
+                  : `Cubre a ${myPlanTeamName} y hasta ${CAPTAIN_SEATS - 1} capitanes más`}
                 {" · "}
-                <Link href="/equipo">Gestionar capitanas</Link>
+                <Link href="/equipo">Gestionar capitanes</Link>
               </div>
             )}
           </div>
@@ -391,10 +396,10 @@ function CaptainSubscription() {
           </div>
         )}
 
-        {/* Sin plan propio pero cubierta por otra capitana: sin compra. */}
+        {/* Sin plan propio pero cubierto por otro capitán: sin compra. */}
         {coveredByMate && (
           <div style={{ marginTop: 18 }}>
-            <BtnLink href="/equipo">Ver las capitanas</BtnLink>
+            <BtnLink href="/equipo">Ver los capitanes</BtnLink>
           </div>
         )}
 
