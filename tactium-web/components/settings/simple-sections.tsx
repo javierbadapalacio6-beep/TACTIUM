@@ -5,6 +5,7 @@ import { useState } from "react";
 import { initials } from "@/lib/account-data";
 import { ALL_PLANS, formatEur } from "@/lib/plans";
 import { fetchMyDbTrialEnd, fetchTeamPro } from "@/lib/account-queries";
+import { fetchTeamCaptainCoverage, formatCoverDate } from "@/lib/team-captains";
 import {
   fetchSubscription,
   fetchActiveSeason,
@@ -332,6 +333,13 @@ export function SuscripcionResumen() {
   );
   const { data, loading } = useAsync(() => fetchSubscription(), [], !isPlayer);
   const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), [], role === "capitan");
+  // Plan Capitán compartido: me cubre el plan de otra capitana del equipo.
+  const { user } = useSession();
+  const { data: cov } = useAsync(
+    () => fetchTeamCaptainCoverage(activeTeam!.id).catch(() => null),
+    [activeTeam?.id],
+    role === "capitan" && !!activeTeam && !activeTeam.clubId,
+  );
 
   if (isPlayer) {
     const name = activeTeam?.name ?? "Tu equipo";
@@ -366,6 +374,8 @@ export function SuscripcionResumen() {
         month: "long",
       })
     : null;
+  const mate =
+    !plan && !loading && cov?.covered && cov.payer_user_id !== user?.id ? cov : null;
   const daysLeft = trialEnd
     ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000))
     : null;
@@ -373,9 +383,13 @@ export function SuscripcionResumen() {
   return (
     <Card flush>
       <CardHead title="Tu plan">
-        <Chip tone={!plan ? "mute" : data?.status === "trialing" ? "warning" : "accent"}>
-          {!plan ? "Sin plan" : data?.status === "trialing" ? "En prueba" : "Activa"}
-        </Chip>
+        {mate ? (
+          <Chip tone="accent">Pro</Chip>
+        ) : (
+          <Chip tone={!plan ? "mute" : data?.status === "trialing" ? "warning" : "accent"}>
+            {!plan ? "Sin plan" : data?.status === "trialing" ? "En prueba" : "Activa"}
+          </Chip>
+        )}
       </CardHead>
       <div
         className="card-body"
@@ -409,7 +423,9 @@ export function SuscripcionResumen() {
               ? "…"
               : daysLeft !== null
                 ? `Prueba de Pro · ${plan?.displayName ?? "Capitán"}`
-                : (plan?.displayName ?? (isClub ? "El club está en el plan gratis" : "Plan gratuito"))}
+                : mate
+                  ? `Te cubre el plan de ${mate.payer_name?.split(/\s+/)[0] ?? "otra capitana"}`
+                  : (plan?.displayName ?? (isClub ? "El club está en el plan gratis" : "Plan gratuito"))}
           </div>
           <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>
             {daysLeft !== null && trialEnd ? (
@@ -422,6 +438,8 @@ export function SuscripcionResumen() {
                 {yearly ? " al año" : " al mes"}
                 {renews ? ` · renueva el ${renews}` : ""}
               </>
+            ) : mate ? (
+              `Pro en ${activeTeam?.name ?? "tu equipo"} hasta ${formatCoverDate(mate.period_end)} · sin pagar nada`
             ) : (
               "Sin renovación ni cobros"
             )}

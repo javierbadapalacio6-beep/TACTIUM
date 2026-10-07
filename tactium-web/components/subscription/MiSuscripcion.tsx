@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 
 import {
@@ -24,6 +25,12 @@ import { Btn, BtnLink, Card, CardHead, Chip, Note, PageHeader, Progress } from "
 import { SkeletonPage } from "@/components/states";
 import { CountUp, EASE } from "@/components/entry/motion-bits";
 import { RedeemCode } from "./RedeemCode";
+import {
+  CAPTAIN_SEATS,
+  captainFirstNames,
+  fetchTeamCaptainCoverage,
+  formatCoverDate,
+} from "@/lib/team-captains";
 import { IconCheck, IconClock, IconLock } from "@/components/Icon";
 
 /** Ayuda oficial para gestionar una suscripción de tienda (antes el enlace
@@ -153,6 +160,14 @@ export function MiSuscripcion() {
 function CaptainSubscription() {
   const { data, loading, error } = useAsync(() => fetchSubscription(), []);
   const { data: trialEnd } = useAsync(() => fetchMyDbTrialEnd(), []);
+  // Plan Capitán compartido (hasta 3 capitanas por equipo independiente).
+  const { activeTeam, user } = useSession();
+  const covTeam = activeTeam && !activeTeam.clubId ? activeTeam : null;
+  const { data: cov } = useAsync(
+    () => fetchTeamCaptainCoverage(covTeam!.id).catch(() => null),
+    [covTeam?.id],
+    !!covTeam,
+  );
   const sub = toSubscription(data);
   const nextCharge = nextChargeLine(data);
   const [portalBusy, setPortalBusy] = useState(false);
@@ -184,6 +199,10 @@ function CaptainSubscription() {
   const storeManaged = isStoreManaged(sub.source);
   const webManaged = sub.source === "stripe";
   const noPlan = sub.source === "none";
+  const iPayTeam =
+    !!cov?.covered && cov.payer_user_id === user?.id && data?.planTier === "captain";
+  const mates = cov ? captainFirstNames(cov.captains, user?.id) : [];
+  const coveredByMate = noPlan && !!cov?.covered && cov.payer_user_id !== user?.id;
 
   return (
     <div className="tw-page-narrow">
@@ -199,6 +218,20 @@ function CaptainSubscription() {
       )}
 
       {trialEnd && <DbTrialHero endIso={trialEnd} />}
+
+      {coveredByMate && cov && covTeam && (
+        <Note tone="accent" icon={<IconCheck size={16} />} style={{ marginBottom: 16 }}>
+          <span style={{ display: "block", fontWeight: 700, color: "var(--text)" }}>
+            Te cubre el plan de {cov.payer_name?.split(/\s+/)[0] ?? "otra capitana"}
+          </span>
+          <span style={{ display: "block", marginTop: 4 }}>
+            Tienes Pro en {covTeam.name} hasta{" "}
+            <span className="mono">{formatCoverDate(cov.period_end)}</span>, sin pagar nada. El plan
+            Capitán cubre a las {CAPTAIN_SEATS} capitanas del equipo; en otro equipo necesitarías tu
+            propio plan.
+          </span>
+        </Note>
+      )}
 
       {/* Cambio de plan diferido: Apple/Google aplican los downgrades al
           final del ciclo, así que se anuncia de forma persistente. */}
@@ -253,6 +286,15 @@ function CaptainSubscription() {
             {nextCharge && (
               <div style={{ marginTop: 8, fontSize: 13.5, color: "var(--text-muted)" }}>
                 {nextCharge}
+              </div>
+            )}
+            {iPayTeam && covTeam && (
+              <div style={{ marginTop: 8, fontSize: 13.5, color: "var(--text-muted)" }}>
+                {mates.length > 0
+                  ? `Cubre a las capitanas de ${covTeam.name}: ${mates.join(", ")}`
+                  : `Cubre a ${covTeam.name} y hasta ${CAPTAIN_SEATS - 1} capitanas más`}
+                {" · "}
+                <Link href="/equipo">Gestionar capitanas</Link>
               </div>
             )}
           </div>
@@ -349,8 +391,15 @@ function CaptainSubscription() {
           </div>
         )}
 
+        {/* Sin plan propio pero cubierta por otra capitana: sin compra. */}
+        {coveredByMate && (
+          <div style={{ marginTop: 18 }}>
+            <BtnLink href="/equipo">Ver las capitanas</BtnLink>
+          </div>
+        )}
+
         {/* CASO A · sin plan: es el único caso que puede contratar. */}
-        {noPlan && (
+        {noPlan && !coveredByMate && (
           <div
             style={{
               marginTop: 18,

@@ -74,6 +74,7 @@ const BENEFITS: Record<Family, string[]> = {
     "Parejas por puntos, en 5 variantes",
     "Calendario y plantilla desde la federación",
     "Acta, resultados y clasificación con zonas",
+    "Hasta 3 capitanas por equipo con un solo plan",
   ],
   club: [
     "Todos tus equipos en un panel",
