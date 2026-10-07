@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
+  claimPlayer,
   joinTeamWithInvite,
   previewInvitation,
   type InvitationPreview,
   type InvitationPreviewPlayer,
 } from "@/lib/queries";
 import { normalizeInviteCode } from "@/lib/invite";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import { useAsync } from "@/lib/use-async";
 import { useSession } from "@/lib/session";
 import { guardedWrite } from "@/lib/writes";
 import { Btn, Eyebrow, Note } from "@/components/ui";
@@ -376,6 +379,36 @@ export function JoinInvite({ code, preview }: { code: string; preview: ValidPrev
 
   const alreadyMember = teams.some((t) => t.id === preview.team.id);
 
+  // Ya es del equipo (p. ej. capitán) pero sin ficha de jugador: con un
+  // código de jugador puede vincularla aquí. Misma regla que la app.
+  const { data: hasMyPlayer } = useAsync(
+    async () => {
+      const { data } = await supabaseBrowser()
+        .from("players")
+        .select("id")
+        .eq("team_id", preview.team.id)
+        .eq("user_id", user!.id)
+        .limit(1);
+      return (data ?? []).length > 0;
+    },
+    [preview.team.id, user?.id],
+    alreadyMember && isPlayerInvite && !!user,
+  );
+  const [claimed, setClaimed] = useState<string | null>(null);
+
+  async function claimOnly() {
+    if (busy || !picked) return;
+    setBusy(true);
+    setErr(null);
+    const res = await guardedWrite("vincular tu ficha", () => claimPlayer(picked));
+    setBusy(false);
+    if (!res.ok) {
+      setErr(res.reason);
+      return;
+    }
+    setClaimed(roster.find((p) => p.id === picked)?.name ?? "tu ficha");
+  }
+
   function goToTeam() {
     try {
       localStorage.setItem(ACTIVE_TEAM_KEY, preview.team.id);
@@ -384,6 +417,46 @@ export function JoinInvite({ code, preview }: { code: string; preview: ValidPrev
     }
     // Recarga completa: la sesión tiene que descubrir el equipo nuevo.
     window.location.href = "/equipo";
+  }
+
+  if (alreadyMember && claimed) {
+    return (
+      <Note tone="accent" icon={<IconCheck size={16} />}>
+        <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 180 }}>
+            Ficha vinculada: ya eres {claimed} en {preview.team.name}.
+          </span>
+          <Btn variant="accent" size="sm" onClick={goToTeam}>
+            Ir a mi equipo
+          </Btn>
+        </span>
+      </Note>
+    );
+  }
+
+  if (alreadyMember && isPlayerInvite && hasMyPlayer === false) {
+    const free = roster.filter((p) => !p.claimed);
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        <Note tone="accent" icon={<IconCheck size={16} />}>
+          Ya estás en este equipo, pero sin ficha de jugador.
+        </Note>
+        {free.length > 0 ? (
+          <>
+            <RosterPicker roster={roster} value={picked} onChange={setPicked} />
+            {err && <Note tone="error">{err}</Note>}
+            <Btn variant="accent" size="lg" block disabled={busy || !picked} onClick={claimOnly}>
+              {busy ? "Vinculando…" : "Vincular mi ficha"}
+            </Btn>
+          </>
+        ) : (
+          <Note>No quedan fichas libres. Añádete a la plantilla desde Equipo.</Note>
+        )}
+        <Btn variant="quiet" onClick={goToTeam}>
+          Ir a mi equipo
+        </Btn>
+      </div>
+    );
   }
 
   if (alreadyMember) {
