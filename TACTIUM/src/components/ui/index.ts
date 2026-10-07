@@ -70,3 +70,4 @@ export {
   type Layout,
   type LayoutMode,
 } from './ResponsiveFrame';
+export { WhatsNewSheet } from './WhatsNewSheet';

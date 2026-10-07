@@ -44,6 +44,7 @@ import {
   ToastHost,
   OfflineBanner,
   UpdateBanner,
+  WhatsNewSheet,
   ResponsiveFrame,
 } from './src/components/ui';
 import { TrialStartedModal } from './src/features/subscription/components/TrialStartedModal';
@@ -262,6 +263,7 @@ export default function App() {
                 porque su zIndex es mayor). */}
             <OfflineBanner />
             <UpdateBanner />
+            <WhatsNewSheet />
             <ToastHost />
             {/* Modal one-shot que da la bienvenida al trial al detectar
                 una sub trialing nueva (auto-creada por trigger DB tras
