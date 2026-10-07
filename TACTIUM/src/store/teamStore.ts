@@ -569,6 +569,13 @@ export const useTeamStore = create<TeamState>()(
         const { team, activeRole } = get();
         const myPlayer = await resolveMyPlayerId(team, activeRole);
         set({ myPlayerId: myPlayer.id, myPlayerLoaded: myPlayer.loaded });
+        // Tras vincular una ficha, el capitán pasa a tener también el rol de
+        // jugador: refrescar la lista hace aparecer «Ver como» sin reiniciar.
+        const uid = useAuthStore.getState().user?.id ?? null;
+        if (uid) {
+          const ids = await PlayersApi.fetchMyPlayerTeamIds(uid).catch(() => null);
+          if (ids) set({ myPlayerTeamIds: ids });
+        }
       },
 
       createTeam: async (input) => {
