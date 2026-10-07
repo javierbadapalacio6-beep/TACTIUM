@@ -130,13 +130,14 @@ export const PLAN_BY_TIER: Record<PlanTier, PlanDescriptor> = {
 };
 
 // ── Ventajas por familia (paywall) ─────────────────────────────────────────
-// Las 4 líneas que el paywall enseña arriba. Distintas para capitán y club:
+// Las líneas que el paywall enseña arriba. Distintas para capitán y club:
 // cada uno paga por cosas distintas.
 export const CAPTAIN_BENEFITS: string[] = [
   'Convocatoria con Voy/Duda/No y recordatorios',
   'Parejas por puntos, en 5 variantes',
   'Calendario y plantilla desde la federación',
   'Acta, resultados y clasificación con zonas',
+  'Hasta 3 capitanas por equipo con un solo plan',
 ];
 
 export const CLUB_BENEFITS: string[] = [

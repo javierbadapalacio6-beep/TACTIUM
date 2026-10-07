@@ -39,6 +39,11 @@ import {
   isLiveSub,
 } from '@core/subscriptions/plans';
 import type { Subscription } from '@core/entitlements/hasPremiumAccess';
+import {
+  CAPTAIN_SEATS,
+  captainFirstNames,
+  formatCoverDate,
+} from '@core/services/teamCaptains';
 import { restorePurchases, presentCodeRedemption } from '@core/purchases';
 
 import type { RootStackParamList, RootStackScreenProps } from '@navigation/types';
@@ -123,6 +128,11 @@ export const SubscriptionScreen = ({
   const clubs = useClubStore((s) => s.clubs);
   const activeClubId = useClubStore((s) => s.activeClubId);
   const [period, setPeriod] = useState<BillingPeriod>('yearly');
+  // «El plan Capitán cubre al equipo» (hasta 3 capitanas): cobertura del
+  // equipo activo, si es independiente.
+  const teamCov = useSubscriptionStore((s) =>
+    team && !team.club_id ? s.teamCoverage[team.id] ?? null : null,
+  );
 
   // Una «Mi suscripción» por rol: el jugador no compra nada, el club va a la
   // facturación del club y el capitán (o quien no tiene rol de gestión) ve
@@ -185,6 +195,23 @@ export const SubscriptionScreen = ({
     : null;
 
   const plan = mySub ? PLAN_BY_TIER[mySub.plan_tier] : null;
+
+  // Pago yo el plan del equipo: «Cubre a las capitanas de X: Ana, Leti».
+  const iPayTeam = !!teamCov?.covered && teamCov.payer_user_id === userId;
+  const mates = teamCov ? captainFirstNames(teamCov.captains, userId) : [];
+  const seatsLine =
+    iPayTeam && team
+      ? mates.length > 0
+        ? `Cubre a las capitanas de ${team.name}: ${mates.join(', ')}`
+        : `Cubre a ${team.name} y hasta ${CAPTAIN_SEATS - 1} capitanas más`
+      : null;
+  // Me cubre el plan de otra capitana del equipo (no pago yo).
+  const coveredByMate =
+    !!teamCov?.covered &&
+    teamCov.payer_user_id !== userId &&
+    !(mySub && isLiveSub(mySub));
+  const goManageCaptains = () =>
+    navigation.navigate('MainTabs', { screen: 'Team', params: { screen: 'TeamRoot' } });
   const status = mySub?.status ?? null;
   // Prueba SIN tarjeta de la base (product_id `trial_*`): mismo bloque que el
   // paywall (días que quedan y línea de tiempo).
@@ -344,6 +371,14 @@ export const SubscriptionScreen = ({
                 <Text style={styles.planMeta}>
                   {team?.name && !team.club_id ? `Cubre a ${team.name}` : '1 equipo'} · todo Pro
                 </Text>
+                {seatsLine ? (
+                  <Pressable onPress={goManageCaptains} accessibilityRole="link" hitSlop={6}>
+                    <Text style={styles.planMeta}>{seatsLine}</Text>
+                    <Text style={[styles.planMeta, { color: c.accent, fontWeight: '700' }]}>
+                      Gestionar capitanas ›
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
               <Text style={styles.trialPrice}>
                 {formatEur(billed)}
@@ -383,7 +418,16 @@ export const SubscriptionScreen = ({
                       : formatEur(plan.priceMonthlyEur)}
                   </Text>
                   {mySub.plan_tier === 'captain' && team && !team.club_id ? (
-                    <Text style={styles.planMeta}>Cubre a {team.name}</Text>
+                    seatsLine ? (
+                      <Pressable onPress={goManageCaptains} accessibilityRole="link" hitSlop={6}>
+                        <Text style={styles.planMeta}>{seatsLine}</Text>
+                        <Text style={[styles.planMeta, { color: c.accent, fontWeight: '700' }]}>
+                          Gestionar capitanas ›
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.planMeta}>Cubre a {team.name}</Text>
+                    )
                   ) : null}
                 </View>
                 <View
@@ -458,6 +502,29 @@ export const SubscriptionScreen = ({
                 </View>
               ) : null}
             </>
+          ) : coveredByMate && teamCov && team ? (
+            <>
+              <Text style={styles.planName}>
+                Te cubre el plan de {teamCov.payer_name?.split(/\s+/)[0] ?? 'otra capitana'}
+              </Text>
+              <Text style={styles.planMeta}>
+                Pro en {team.name} hasta {formatCoverDate(teamCov.period_end)} · sin pagar nada
+              </Text>
+              <View style={[styles.coverNotice, { marginTop: 14 }]}>
+                <View style={styles.coverDot}>
+                  <IconCheck size={12} color={c.accent} />
+                </View>
+                <Text style={styles.coverText}>
+                  El plan Capitán cubre a las {CAPTAIN_SEATS} capitanas del equipo. En
+                  otro equipo necesitarías tu propio plan.
+                </Text>
+              </View>
+              <Pressable onPress={goManageCaptains} accessibilityRole="link" hitSlop={6}>
+                <Text style={[styles.planMeta, { color: c.accent, fontWeight: '700', marginTop: 12 }]}>
+                  Ver las capitanas ›
+                </Text>
+              </Pressable>
+            </>
           ) : (
             <>
               <Text style={styles.planName}>Plan gratuito</Text>
@@ -508,7 +575,7 @@ export const SubscriptionScreen = ({
         ) : null}
 
         {/* === CTA PRINCIPAL === */}
-        {!mySub || status === 'expired' || status === 'canceled' ? (
+        {coveredByMate ? null : !mySub || status === 'expired' || status === 'canceled' ? (
           <Pressable
             onPress={() => navigation.navigate('Paywall', { intent: 'upgrade' })}
             style={({ pressed }) => [

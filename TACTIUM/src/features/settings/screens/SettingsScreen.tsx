@@ -727,6 +727,13 @@ const PlanCard: React.FC<{
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
+  // Plan Capitán compartido: me cubre el plan de otra capitana del equipo.
+  const activeTeam = useTeamStore((s) => s.team);
+  const mateCover = useSubscriptionStore((s) => {
+    if (activeRole !== 'captain' || !activeTeam || activeTeam.club_id) return null;
+    const row = s.teamCoverage[activeTeam.id];
+    return row?.covered && row.payer_user_id !== userId ? row : null;
+  });
 
   const activeSub = useMemo(() => {
     const live = subscriptions.filter((s) => isLiveSub(s));
@@ -786,7 +793,9 @@ const PlanCard: React.FC<{
       : plan?.displayName ?? 'TACTIUM Pro'
     : isClubAdmin
       ? 'Suscribir el club'
-      : 'Probar TACTIUM Pro';
+      : mateCover
+        ? 'TACTIUM Pro · Capitán'
+        : 'Probar TACTIUM Pro';
   const sub = activeSub
     ? activeSub.cancel_at_period_end
       ? `No se renovará · termina el ${endDate}`
@@ -795,7 +804,9 @@ const PlanCard: React.FC<{
         : 'Activa · Gestionar plan'
     : isClubAdmin
       ? 'Cubre a todos los capitanes del club'
-      : '14 días de prueba, sin compromiso';
+      : mateCover
+        ? `Te cubre el plan de ${mateCover.payer_name?.split(/\s+/)[0] ?? 'otra capitana'}`
+        : '14 días de prueba, sin compromiso';
 
   return (
     <Pressable
@@ -821,7 +832,7 @@ const PlanCard: React.FC<{
               {trialDaysLeft === 1 ? 'DÍA' : 'DÍAS'}
             </Text>
           </>
-        ) : activeSub ? (
+        ) : activeSub || mateCover ? (
           <Text style={[styles.planDaysUnit, { color: c.accent, fontSize: 10 }]}>PRO</Text>
         ) : (
           <IconTeam size={16} color={c.accent} />
