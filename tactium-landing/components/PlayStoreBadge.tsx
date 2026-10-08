@@ -1,8 +1,9 @@
-// Badge "Disponible en Google Play" → ficha de TACTIUM en Android.
-// Réplica del badge (misma píldora negra que AppStoreBadge, logo Play + 2 líneas)
-// con el estilo del sitio. Si quieres el asset oficial exacto de Google, sustituye
-// el contenido por el badge oficial:
-// https://play.google.com/intl/es_es/badges/
+// Badge OFICIAL «Disponible en Google Play» → ficha de TACTIUM en Android.
+// Archivo de Google en /public/brand/stores/google-play-es.png (646×250; el badge visible mide
+// 646×192 y el resto son 29 px transparentes arriba y abajo, que se recortan con la ventana, no
+// tocando el archivo). Normas de Google: no modificarlo ni animarlo; igual o mayor que el resto
+// de badges de la fila. Versión vigente: Partner Marketing Hub (requiere solicitar acceso):
+// https://partnermarketinghub.withgoogle.com/brands/google-play/google-play/lockups-icons-badges/
 //
 // RSC pura (sin estado): es solo un enlace externo.
 
@@ -18,38 +19,17 @@ export function PlayStoreBadge({ className = "" }: { className?: string }) {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Disponible en Google Play"
-      className={`inline-flex items-center gap-3 h-[54px] px-5 rounded-xl bg-black border border-[var(--color-hair-strong)] hover:opacity-90 active:opacity-80 transition ${className}`}
+      className={`inline-block shrink-0 overflow-hidden h-[54px] aspect-[646/192] ${className}`}
     >
-      <svg
-        viewBox="0 0 512 512"
-        aria-hidden="true"
-        className="h-6 w-auto shrink-0"
-      >
-        <path
-          fill="#00D3FF"
-          d="M47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l1.9 1L284 256v-1L48.9 -0.9 47 0z"
-        />
-        <path
-          fill="#FFCE00"
-          d="M363.3 340.1l-79.4-79.4v-9.4l79.5-79.5 1.8 1 94 53.4c26.8 15.2 26.8 40.2 0 55.5l-94 53.4z"
-        />
-        <path
-          fill="#FF3A44"
-          d="M365.2 339.1L283.9 256 47 493c8.8 9.4 23.4 10.5 39.9 1.2z"
-        />
-        <path
-          fill="#00E676"
-          d="M365.2 172.9L86.9 17.8C70.4 8.4 55.8 9.6 47 19L283.9 256z"
-        />
-      </svg>
-      <span className="flex flex-col leading-none text-left">
-        <span className="text-[10px] text-white/80 font-medium tracking-wide">
-          Disponible en
-        </span>
-        <span className="text-[19px] text-white font-semibold tracking-tight mt-0.5">
-          Google Play
-        </span>
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/stores/google-play-es.png"
+        alt="Disponible en Google Play"
+        width={646}
+        height={250}
+        className="block w-full h-auto"
+        style={{ marginTop: "calc(54px * -29 / 192)" }}
+      />
     </a>
   );
 }

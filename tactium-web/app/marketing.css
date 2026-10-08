@@ -154,41 +154,48 @@
   color: var(--text-faint);
 }
 
-/* ── Badges de tienda ────────────────────────────────────────────── */
+/* ── Badges de tienda (OFICIALES: ver StoreBadges.tsx) ────────────────
+   Sin hover, sin transición, sin sombra ni filtro: Apple y Google prohíben modificarlos o animarlos.
+   Separación mínima = 1/4 del alto (52 px → 13 px; se deja 14). */
 .mk-stores {
+  --badge-h: 52px;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
 }
 .mk-store {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 50px;
-  padding: 0 16px 0 14px;
-  border-radius: 12px;
-  background: #000;
-  color: #fff;
-  border: 1px solid var(--hair-strong);
-  text-decoration: none;
-  transition: border-color var(--dur-fast) var(--ease);
-}
-.mk-store:hover {
-  border-color: var(--text-faint);
-}
-.mk-store small {
   display: block;
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.8;
+  line-height: 0;
+  border-radius: 10px;
 }
-.mk-store strong {
+.mk-store:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+/* Pantallas estrechas: 44 px de alto (mínimo de Apple 40 px) para que los dos quepan en una fila. */
+@media (max-width: 420px) {
+  .mk-stores {
+    --badge-h: 44px;
+    gap: 12px;
+  }
+}
+.mk-store--apple img {
   display: block;
-  margin-top: 3px;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1;
+  height: var(--badge-h);
+  width: auto;
+}
+/* Google igual o mayor que Apple. El PNG trae 29 px transparentes arriba y abajo de 250. */
+.mk-store--google {
+  width: calc(var(--badge-h) * 646 / 192);
+  height: var(--badge-h);
+  overflow: hidden;
+}
+.mk-store--google img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: calc(var(--badge-h) * -29 / 192);
 }
 
 /* ── Hero ────────────────────────────────────────────────────────── */
