@@ -64,6 +64,7 @@ import { InlineInvitePreview } from "@/components/invite/InviteJoin";
 import { InvitePanel } from "@/components/invite/InvitePanel";
 import { ScanModal } from "@/components/team/ScanModal";
 import { FcpRosterModal } from "@/components/team/FcpRosterModal";
+import { useSustituciones } from "@/components/club/SustituirEquipo";
 import { normalizeName, type ScannedPlayer } from "@/lib/parse-image";
 import { guardedWrite } from "@/lib/writes";
 import { TOURNAMENT_FREE_PAIRS } from "@/lib/tournament-billing";
@@ -485,6 +486,9 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
   const [fcpLoading, setFcpLoading] = useState(false);
   const [fcpBusy, setFcpBusy] = useState(false);
   const [fcpErr, setFcpErr] = useState<string | null>(null);
+  // Anti-duplicados, como la app: si ya hay un equipo creado a mano que se le parece, se
+  // pregunta si es el mismo en vez de crear otro.
+  const { resolver: resolverSust, dialog: dialogSust } = useSustituciones(clubId ?? null);
 
   const preset = COMPETITION_PRESETS.find((p) => p.id === comp) ?? COMPETITION_PRESETS[0];
   const isFederada = comp === "federada";
@@ -498,7 +502,13 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
     const h = setTimeout(() => {
       searchFcpClubs(fcpQuery)
         .then((r) => alive && setFcpResults(r))
-        .catch(() => alive && setFcpResults([]))
+        .catch((e) => {
+          if (!alive) return;
+          setFcpResults([]);
+          setFcpErr(
+            `No se pudo cargar el catálogo de la Federación${e?.message ? `: ${e.message}` : ""}`,
+          );
+        })
         .finally(() => alive && setFcpLoading(false));
     }, 250);
     return () => {
@@ -511,8 +521,9 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
     if (fcpBusy) return;
     setFcpBusy(true);
     setFcpErr(null);
+    const reuse = await resolverSust([t]);
     const res = await guardedWrite("importar el equipo", () =>
-      importFcpTeams(clubId ?? null, [t]),
+      importFcpTeams(clubId ?? null, [t], "owned", reuse),
     );
     setFcpBusy(false);
     if (!res.ok) {
@@ -842,7 +853,10 @@ export function CreateTeam({ clubId }: { clubId?: string }) {
       <Card>{body}</Card>
     </div>
   ) : (
-    <EntryFrame>{body}</EntryFrame>
+    <EntryFrame>
+      {body}
+      {dialogSust}
+    </EntryFrame>
   );
 }
 
@@ -1076,8 +1090,14 @@ export function CreateClubTeams() {
   );
 }
 
-/** Import de club: busca en la Federación Cántabra y crea TODOS los equipos
- *  elegidos con su plantilla y sus puntos (multi-selección). */
+/** Import de club: busca en la Federación Cántabra y crea TODOS los equipos elegidos.
+ *
+ *  Igual que la app (`FcpImportSheet`): cada equipo marcado lleva SU papel —del club (se vuelca
+ *  su plantilla con los puntos oficiales) o «solo juega aquí» (invitado: solo horario)— y se
+ *  pueden mezclar y marcar de varios clubes en la misma pasada. El primer club donde se marca
+ *  algo se da por «el tuyo»; lo que se marque en los siguientes nace como invitado, y se cambia
+ *  en su fila. Si ya hay un equipo creado a mano que se le parece, se pregunta si es el mismo
+ *  antes de duplicarlo. */
 export function ClubFcpImport({
   clubId,
   clubName,
@@ -1093,20 +1113,34 @@ export function ClubFcpImport({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FcpClubGroup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<Record<number, FcpTeamOption>>({});
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+  const [selected, setSelected] = useState<
+    Record<number, { team: FcpTeamOption; mode: FcpImportMode }>
+  >({});
+  // Primer club donde se marcó algo = «el tuyo».
+  const [primerClub, setPrimerClub] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Propios o INVITADOS: equipos que juegan en estas pistas sin ser del club.
-  // La app lo tiene desde hace tiempo; la web no lo tenía en absoluto.
-  const [mode, setMode] = useState<FcpImportMode>("owned");
+  const { resolver, dialog } = useSustituciones(clubId);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     const h = setTimeout(() => {
       searchFcpClubs(query)
-        .then((r) => alive && setResults(r))
-        .catch(() => alive && setResults([]))
+        .then((r) => {
+          if (!alive) return;
+          setResults(r);
+          setSearchErr(null);
+        })
+        .catch((e) => {
+          if (!alive) return;
+          setResults([]);
+          // Antes se tragaba el error y salía «Sin resultados»: parecía que no había datos.
+          setSearchErr(
+            `No se pudo cargar el catálogo de la Federación${e?.message ? `: ${e.message}` : ""}`,
+          );
+        })
         .finally(() => alive && setLoading(false));
     }, 250);
     return () => {
@@ -1115,22 +1149,59 @@ export function ClubFcpImport({
     };
   }, [query]);
 
-  const selCount = Object.keys(selected).length;
-  const toggle = (t: FcpTeamOption) =>
+  const marcas = Object.values(selected);
+  const selCount = marcas.length;
+  const propios = marcas.filter((m) => m.mode === "owned").length;
+  const invitados = selCount - propios;
+
+  // Sin nada marcado, el siguiente club que se toque vuelve a ser «el tuyo».
+  useEffect(() => {
+    if (selCount === 0) setPrimerClub(null);
+  }, [selCount]);
+
+  /** Marca (o desmarca) un equipo. Si es de un club distinto del primero, nace invitado. */
+  const toggle = (t: FcpTeamOption, club: string) => {
+    if (selected[t.id_equipo]) {
+      setSelected((s) => {
+        const n = { ...s };
+        delete n[t.id_equipo];
+        return n;
+      });
+      return;
+    }
+    const mode: FcpImportMode = primerClub !== null && club !== primerClub ? "venue" : "owned";
+    if (primerClub === null) setPrimerClub(club);
+    setSelected((s) => ({ ...s, [t.id_equipo]: { team: t, mode } }));
+  };
+
+  /** Marca de golpe todos los equipos de un club (el equivalente a abrir «tu club» en la app). */
+  const marcarTodos = (cg: FcpClubGroup) => {
+    const mode: FcpImportMode = primerClub !== null && cg.club !== primerClub ? "venue" : "owned";
+    if (primerClub === null) setPrimerClub(cg.club);
     setSelected((s) => {
       const n = { ...s };
-      if (n[t.id_equipo]) delete n[t.id_equipo];
-      else n[t.id_equipo] = t;
+      for (const t of cg.teams) if (!n[t.id_equipo]) n[t.id_equipo] = { team: t, mode };
       return n;
     });
+  };
+
+  const setMode = (id: number, mode: FcpImportMode) =>
+    setSelected((s) => (s[id] ? { ...s, [id]: { ...s[id], mode } } : s));
 
   async function importSelected() {
     if (busy || selCount === 0) return;
     setBusy(true);
     setErr(null);
-    const res = await guardedWrite("importar los equipos", () =>
-      importFcpTeams(clubId, Object.values(selected), mode),
-    );
+    const own = marcas.filter((m) => m.mode === "owned").map((m) => m.team);
+    const guests = marcas.filter((m) => m.mode === "venue").map((m) => m.team);
+    // Anti-duplicados: solo para los del club (un invitado siempre se crea aparte).
+    const reuse = own.length ? await resolver(own) : {};
+    // Los del club y los invitados van en pasadas distintas: cada uno se da de alta de una
+    // forma (plantilla volcada vs. solo sede).
+    const res = await guardedWrite("importar los equipos", async () => [
+      ...(own.length ? await importFcpTeams(clubId, own, "owned", reuse) : []),
+      ...(guests.length ? await importFcpTeams(clubId, guests, "venue") : []),
+    ]);
     setBusy(false);
     if (res.ok) window.location.href = doneHref;
     else setErr(res.reason);
@@ -1141,26 +1212,11 @@ export function ClubFcpImport({
       {onboarding && <StepProgress step={1} />}
       <h1>Importa los equipos de {clubName}</h1>
       <p style={{ margin: "8px 0 14px", fontSize: 13.5, color: "var(--text-muted)" }}>
-        {mode === "owned"
-          ? "Busca tu club en la Federación Cántabra y crea todos sus equipos con su plantilla y sus puntos oficiales."
-          : "Equipos de OTROS clubes que juegan en tus pistas. Les pondrás día, hora y pista, y nada más: ni plantilla ni alineaciones. No consumen cuota de tu plan."}
+        Busca tu club en la Federación Cántabra, marca los equipos y di de cada uno si es de tu
+        club o solo juega en tus pistas. Puedes mezclar los dos. De los de tu club se vuelca la
+        plantilla con sus puntos oficiales; de los que solo juegan aquí gestionarás el horario:
+        ni plantilla ni alineaciones, y no gastan plaza de tu plan.
       </p>
-
-      <div style={{ marginBottom: 18 }}>
-        <UiSegmented
-          label="Qué equipos vas a importar"
-          value={mode}
-          onChange={(v) => {
-            setMode(v as FcpImportMode);
-            // Lo elegido en un modo no vale para el otro: se crean distinto.
-            setSelected({});
-          }}
-          options={[
-            { value: "owned", label: "Equipos del club" },
-            { value: "venue", label: "Equipos invitados" },
-          ]}
-        />
-      </div>
 
       <Input
         type="text"
@@ -1168,69 +1224,108 @@ export function ClubFcpImport({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      {err && (
+      {(err || searchErr) && (
         <Note tone="error" style={{ marginTop: 12 }}>
-          {err}
+          {err ?? searchErr}
         </Note>
       )}
+      {selCount > 0 && (
+        <p style={{ margin: "14px 0 0", fontSize: 12.5, fontWeight: 600, color: "var(--accent)" }}>
+          Llevas {selCount} marcado{selCount === 1 ? "" : "s"}
+          {propios > 0 ? ` · ${propios} de tu club` : ""}
+          {invitados > 0
+            ? ` · ${invitados} que solo juega${invitados === 1 ? "" : "n"} aquí`
+            : ""}
+        </p>
+      )}
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-faint)" }}>
+        Puedes ir club por club y marcar equipos de varios: lo elegido no se pierde al buscar otra
+        cosa. Los equipos de otros clubes entran como «solo juega aquí»; lo cambias en su fila.
+      </p>
 
       <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         {loading && (
           <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Buscando…</p>
         )}
-        {!loading && results.length === 0 && query.trim().length > 0 && (
+        {!loading && !searchErr && results.length === 0 && (
           <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
-            Sin resultados para «{query.trim()}».
+            {query.trim().length > 0
+              ? `Sin resultados para «${query.trim()}».`
+              : "Aún no hay datos de la Federación cargados. Se sincronizan aparte; inténtalo más tarde o crea los equipos a mano."}
           </p>
         )}
         {results.map((cg) => (
           <Card key={cg.club} flush>
-            <CardHead title={cg.club} count={cg.teams.length} />
+            <CardHead title={cg.club} count={cg.teams.length}>
+              <button
+                type="button"
+                className="link-action"
+                onClick={() => marcarTodos(cg)}
+                disabled={cg.teams.every((t) => !!selected[t.id_equipo])}
+              >
+                Marcar todos
+              </button>
+            </CardHead>
             {cg.teams.map((t, i) => {
-              const on = !!selected[t.id_equipo];
+              const marca = selected[t.id_equipo];
+              const on = !!marca;
               return (
-                <button
+                <div
                   key={t.id_equipo}
-                  type="button"
-                  onClick={() => toggle(t)}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 18px",
-                    border: "none",
-                    borderTop: i === 0 ? "none" : "1px solid var(--line)",
-                    background: on ? "var(--accent-10)" : "transparent",
-                    color: "var(--text)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontFamily: "var(--font-ui)",
-                  }}
+                  style={{ borderTop: i === 0 ? "none" : "1px solid var(--line)" }}
                 >
-                  <span
+                  <button
+                    type="button"
+                    onClick={() => toggle(t, cg.club)}
                     style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: "var(--r-xs)",
-                      border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
-                      background: on ? "var(--accent)" : "transparent",
-                      color: "var(--text-inverse)",
+                      width: "100%",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      flex: "none",
+                      gap: 12,
+                      padding: "12px 18px",
+                      border: "none",
+                      background: on ? "var(--accent-10)" : "transparent",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      fontFamily: "var(--font-ui)",
                     }}
                   >
-                    {on && <IconCheck size={13} />}
-                  </span>
-                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>
-                    {t.equipo}
-                  </span>
-                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                    {[t.category, t.gender].filter(Boolean).join(" · ")}
-                  </span>
-                </button>
+                    <span
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: "var(--r-xs)",
+                        border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
+                        background: on ? "var(--accent)" : "transparent",
+                        color: "var(--text-inverse)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flex: "none",
+                      }}
+                    >
+                      {on && <IconCheck size={13} />}
+                    </span>
+                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{t.equipo}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                      {[t.category, t.gender, t.grupo].filter(Boolean).join(" · ")}
+                    </span>
+                  </button>
+                  {marca && (
+                    <div style={{ padding: "0 18px 12px 50px" }}>
+                      <UiSegmented
+                        label={`Papel de ${t.equipo}`}
+                        value={marca.mode}
+                        onChange={(v) => setMode(t.id_equipo, v as FcpImportMode)}
+                        options={[
+                          { value: "owned", label: "De mi club" },
+                          { value: "venue", label: "Solo juega aquí" },
+                        ]}
+                      />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </Card>
@@ -1260,6 +1355,7 @@ export function ClubFcpImport({
           Omitir · lo hago luego
         </Btn>
       </div>
+      {dialog}
     </EntryFrame>
   );
 }

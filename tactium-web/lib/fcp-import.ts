@@ -5,15 +5,28 @@
  * Lee el catálogo federativo espejado en las tablas `fcp_*` (las mismas que usa
  * el explorador de /federacion) y crea equipos TACTIUM con su plantilla real y
  * sus puntos. Las escrituras pasan por el llamador (guardedWrite).
+ *
+ * REGLA: esto se comporta IGUAL que la app. Si se cambia una de las dos, se cambia la otra.
+ * La agrupación por club vive aparte (`fcp-club-grouping.ts`, código puro) para poder
+ * comprobarla contra el catálogo real.
  */
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { createTeam } from "@/lib/queries";
 import { FCP_FEDERATION_CODE } from "@/lib/federations";
+import {
+  NON_TEAM_ROW,
+  categoryOf,
+  clubOf,
+  genderOf,
+  groupByClub,
+} from "@/lib/fcp-club-grouping";
 
 const FCP_LEAGUE = "Liga Cántabra de Pádel";
 
 export interface FcpTeamOption {
   id_equipo: number;
+  /** Liga/temporada a la que pertenece. */
+  id_liga: number | null;
   equipo: string; // "CENTRAL PADEL A"
   club: string; // "CENTRAL PADEL"
   grupo: string;
@@ -25,32 +38,51 @@ export interface FcpClubGroup {
   teams: FcpTeamOption[];
 }
 
-function clubOf(equipo: string): string {
-  let s = equipo.trim().replace(/\s+/g, " ");
-  s = s.replace(/\s*[-–]\s*[^-–]+$/, "").trim() || equipo.trim();
-  s = s.replace(/\s+(MASCULINO|FEMENINO)?\s*([A-F]|\d{1,2})$/i, "").trim();
-  return s || equipo.trim();
-}
-const genderOf = (g: string | null): string =>
-  (g ?? "").toUpperCase().startsWith("F") ? "femenino" : "masculino";
-const categoryOf = (grupo: string | null): string | null => {
-  const m = (grupo ?? "").match(/(\d+)\s*ª/);
-  return m ? `${m[1]}ª` : null;
-};
+// Se pregunta en cada búsqueda, o sea a cada tecleo, y la respuesta solo cambia cuando la
+// Federación publica el calendario de la temporada siguiente: una vez al año.
+let ligaCache: { at: number; value: number | null } | null = null;
+const LIGA_TTL_MS = 5 * 60 * 1000;
 
-/** Busca clubes/equipos federativos por nombre (typeahead), agrupados por club.
- *  Solo la temporada actual (mayor id_liga) y su liga regular (sin playoff). */
-export async function searchFcpClubs(query: string): Promise<FcpClubGroup[]> {
+/**
+ * Liga ACTUAL = la que se está jugando, NO la más nueva que exista.
+ *
+ * Antes la web cogía la de mayor id en la clasificación, y eso se rompe en cuanto la
+ * Federación abre las inscripciones de la temporada siguiente: esa liga nace con sus equipos
+ * meses antes de tener un solo partido, así que un club que importase a mitad de temporada se
+ * traía los equipos del año que viene, con sus letras y categorías nuevas. La que se juega es
+ * la de mayor id CON PARTIDOS (misma lógica que la app: `fetchCurrentLiga`).
+ */
+export async function fetchCurrentLiga(): Promise<number | null> {
+  if (ligaCache && Date.now() - ligaCache.at < LIGA_TTL_MS) return ligaCache.value;
   const sb = supabaseBrowser();
-  const { data: maxRow } = await sb
-    .from("fcp_clasificacion")
+  const { data } = await sb
+    .from("fcp_partidos")
     .select("id_liga")
     .order("id_liga", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const currentLiga = (maxRow as { id_liga: number } | null)?.id_liga ?? null;
-  if (currentLiga == null) return [];
+  const value = data ? ((data as { id_liga: number }).id_liga ?? null) : null;
+  ligaCache = { at: Date.now(), value };
+  return value;
+}
 
+// Catálogo de la liga actual: lo mismo para todos y casi nunca cambia, así que se lee una vez
+// y se filtra en local (la app hace igual). Cada tecleo del buscador ya no son tres consultas.
+let catalogCache: { liga: number; at: number; opts: FcpTeamOption[] } | null = null;
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+async function loadCatalog(): Promise<FcpTeamOption[]> {
+  const currentLiga = await fetchCurrentLiga();
+  if (currentLiga == null) return [];
+  if (
+    catalogCache &&
+    catalogCache.liga === currentLiga &&
+    Date.now() - catalogCache.at < CATALOG_TTL_MS
+  ) {
+    return catalogCache.opts;
+  }
+
+  const sb = supabaseBrowser();
   const { data: clasif, error } = await sb
     .from("fcp_clasificacion")
     .select("id_equipo, equipo, id_grupo, id_liga")
@@ -72,13 +104,18 @@ export async function searchFcpClubs(query: string): Promise<FcpClubGroup[]> {
     id_equipo: number | null;
     equipo: string | null;
     id_grupo: string | null;
+    id_liga: number | null;
   }[]) {
     if (row.id_equipo == null || !row.equipo || seen.has(row.id_equipo)) continue;
+    // "EXENTO", "Eliminatoria"… son huecos del cuadro, no equipos.
+    if (NON_TEAM_ROW.test(row.equipo.trim())) continue;
+    // Saltar grupos de playoff (fase): el equipo se importa por su liga regular.
     if (typeof row.id_grupo === "string" && /^fase/i.test(row.id_grupo)) continue;
     seen.add(row.id_equipo);
     const g = row.id_grupo ? gById.get(row.id_grupo) : undefined;
     opts.push({
       id_equipo: row.id_equipo,
+      id_liga: row.id_liga ?? null,
       equipo: row.equipo,
       club: clubOf(row.equipo),
       grupo: g?.nombre ?? "",
@@ -86,21 +123,15 @@ export async function searchFcpClubs(query: string): Promise<FcpClubGroup[]> {
       category: categoryOf(g?.nombre ?? null),
     });
   }
+  catalogCache = { liga: currentLiga, at: Date.now(), opts };
+  return opts;
+}
 
-  const q = query.trim().toLowerCase();
-  const byClub = new Map<string, FcpTeamOption[]>();
-  for (const o of opts) {
-    if (q && !o.club.toLowerCase().includes(q) && !o.equipo.toLowerCase().includes(q))
-      continue;
-    if (!byClub.has(o.club)) byClub.set(o.club, []);
-    byClub.get(o.club)!.push(o);
-  }
-  return Array.from(byClub.entries())
-    .map(([club, teams]) => ({
-      club,
-      teams: teams.sort((a, b) => a.equipo.localeCompare(b.equipo)),
-    }))
-    .sort((a, b) => a.club.localeCompare(b.club));
+/** Busca clubes/equipos federativos por nombre (typeahead), agrupados por club.
+ *  Solo la temporada ACTUAL y su liga regular (sin playoff). Clubes que la Federación escribe
+ *  con nombres distintos salen fundidos en uno. */
+export async function searchFcpClubs(query: string): Promise<FcpClubGroup[]> {
+  return groupByClub(await loadCatalog(), query);
 }
 
 export interface FcpImportResult {
@@ -109,8 +140,6 @@ export interface FcpImportResult {
   players: number;
 }
 
-/** Crea un equipo TACTIUM por cada equipo federativo elegido, con su vínculo y
- *  su plantilla real volcada (nombre + puntos vía RPC import_fcp_roster). */
 /**
  * Modo de importación, igual que en la app:
  *
@@ -123,16 +152,95 @@ export interface FcpImportResult {
  */
 export type FcpImportMode = "owned" | "venue";
 
+/** Equipo del club (o independiente) que AÚN NO está vinculado a la Federación:
+ *  candidato a ser «sustituido» por un equipo federado al importar, en vez de duplicarlo. */
+export interface UnlinkedTeam {
+  id: string;
+  name: string;
+  gender: string | null;
+  category: string | null;
+  group: string | null;
+}
+
 /**
- * ¿Ya tengo un equipo vinculado a este id federado, del tipo que toca?
+ * Equipos del usuario (del club, o independientes si `clubId` es null) que todavía NO tienen
+ * vínculo con la Federación. Se ofrecen para «sustituir» al importar y no duplicar lo creado
+ * a mano.
  *
- * Sin esto, dar de alta dos veces el mismo equipo crea DOS equipos, y es un
- * clic que se da solo: el club busca «ZINK», lo añade, no ve el cambio y
- * vuelve a pulsar. Port de `findMyLinkedTeam` de la app.
+ * Con `clubId` null se piden solo los que son MÍOS y no son invitados de nadie: la RLS deja
+ * ver más equipos (donde soy jugador) y los invitados también tienen `club_id` nulo, y
+ * ofrecer «sustituir» uno que no es mío acabaría en una escritura rechazada.
+ */
+export async function fetchUnlinkedClubTeams(clubId: string | null): Promise<UnlinkedTeam[]> {
+  const sb = supabaseBrowser();
+  let q = sb.from("teams").select("id, name, gender, category, group_name, club_id");
+  if (clubId) {
+    q = q.eq("club_id", clubId);
+  } else {
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) return [];
+    q = q.is("club_id", null).is("venue_club_id", null).eq("owner_id", user.id);
+  }
+  const { data: teams, error } = await q;
+  if (error) throw error;
+  const list = (teams ?? []) as {
+    id: string;
+    name: string;
+    gender: string | null;
+    category: string | null;
+    group_name: string | null;
+  }[];
+  if (!list.length) return [];
+  const { data: links } = await sb
+    .from("fcp_team_links")
+    .select("team_id")
+    .in(
+      "team_id",
+      list.map((t) => t.id),
+    );
+  const linked = new Set(((links ?? []) as { team_id: string }[]).map((l) => l.team_id));
+  return list
+    .filter((t) => !linked.has(t.id))
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      gender: t.gender,
+      category: t.category,
+      group: t.group_name,
+    }));
+}
+
+/**
+ * El equipo tuyo creado a mano que más se parece a un equipo federado elegido: mismo género y
+ * categoría y que no se haya usado ya; si hay varios, el que lleva en su grupo la letra del
+ * grupo federativo (desambigua «A» y «B» del mismo nivel). null si no hay candidato. Misma
+ * regla que la app (`FcpImportSheet.doImport`). Quien llama marca el candidato como usado SOLO
+ * si el usuario acepta sustituir.
+ */
+export function buscarSustituto(
+  opt: FcpTeamOption,
+  candidatos: UnlinkedTeam[],
+  usados: Set<string>,
+): UnlinkedTeam | null {
+  const pool = candidatos.filter(
+    (t) =>
+      !usados.has(t.id) &&
+      (t.gender ?? "") === opt.gender &&
+      (t.category ?? "") === (opt.category ?? ""),
+  );
+  if (!pool.length) return null;
+  const fedGroup = (opt.grupo ?? "").toUpperCase();
+  return pool.find((t) => t.group && fedGroup.includes(t.group.toUpperCase())) ?? pool[0];
+}
+
+/**
+ * Equipo YA vinculado a este id federado que sea MÍO en el sentido que toca: del club que
+ * importa, invitado de su sede, o el equipo suelto del capitán. null si no hay ninguno. La RLS
+ * ya limita lo que se puede ver; esto además evita reutilizar el equipo de otro club.
  *
- * La búsqueda no puede ser global: al mismo equipo federado lo importan varios
- * clubes, así que hay que quedarse con el que sea MÍO —del club, o invitado de
- * mi sede— o acabaríamos editando el equipo de otro.
+ * La búsqueda no puede ser global: al mismo equipo federado lo importan varios clubes.
  */
 async function findMyLinkedTeam(
   fcpIdEquipo: number,
@@ -159,61 +267,146 @@ async function findMyLinkedTeam(
     club_id: string | null;
     venue_club_id: string | null;
   }[];
-  const mine = rows.find((t) =>
-    guest ? t.venue_club_id === clubId : t.club_id === clubId,
-  );
+
+  const mine = rows.find((t) => {
+    if (guest) return t.venue_club_id === clubId;
+    if (clubId) return t.club_id === clubId;
+    // Capitán sin club: su equipo suelto, no el invitado de nadie.
+    return t.club_id === null && t.venue_club_id === null;
+  });
   return mine?.id ?? null;
 }
 
+/** Datos oficiales del equipo federado, tal como los pone la app al importar. */
+function canonicalOf(t: FcpTeamOption) {
+  return {
+    name: t.equipo,
+    federation: FCP_FEDERATION_CODE,
+    league: FCP_LEAGUE,
+    category: t.category ?? null,
+    gender: t.gender,
+  };
+}
+
+async function updateTeamRow(
+  teamId: string,
+  patch: Record<string, string | null>,
+): Promise<void> {
+  const { error } = await supabaseBrowser().from("teams").update(patch).eq("id", teamId);
+  if (error) throw error;
+}
+
+/**
+ * Deja el equipo vinculado a ESTE id federado, con un solo vínculo (índice único por equipo,
+ * 26-09-2026). Tres casos:
+ *
+ *  · sin vínculo → se inserta;
+ *  · ya vinculado a este mismo id → no hay nada que hacer;
+ *  · vinculado a OTRO id (p. ej. «Preparar temporada» lo apuntó a la inscripción del año que
+ *    viene) → hay que sustituirlo. `fcp_team_links` solo tiene políticas de lectura e
+ *    inserción: un `delete` desde el cliente no borra nada y el insert posterior chocaba con
+ *    el índice único. Lo hace `apply_fcp_season_update` (SECURITY DEFINER, comprueba que el
+ *    equipo es tuyo o de tu club): borra el vínculo viejo, inserta el nuevo y, sin listas de
+ *    jugadores, no toca la plantilla.
+ */
+async function linkTeamToFcp(teamId: string, fcpIdEquipo: number): Promise<void> {
+  const sb = supabaseBrowser();
+  const { data: cur, error: curErr } = await sb
+    .from("fcp_team_links")
+    .select("fcp_id_equipo")
+    .eq("team_id", teamId)
+    .limit(1);
+  if (curErr) throw curErr;
+  const have = ((cur ?? []) as { fcp_id_equipo: number }[])[0]?.fcp_id_equipo ?? null;
+  if (have === fcpIdEquipo) return;
+
+  if (have == null) {
+    const { data: t } = await sb.from("teams").select("club_id").eq("id", teamId).maybeSingle();
+    const { error } = await sb.from("fcp_team_links").insert({
+      fcp_id_equipo: fcpIdEquipo,
+      team_id: teamId,
+      club_id: (t as { club_id: string | null } | null)?.club_id ?? null,
+    });
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await sb.rpc("apply_fcp_season_update", {
+    p_team_id: teamId,
+    p_new_fcp_id_equipo: fcpIdEquipo,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Crea (o REUTILIZA) un equipo TACTIUM por cada equipo federativo elegido, con su vínculo y su
+ * plantilla real volcada (nombre + puntos vía RPC `import_fcp_roster`) y su temporada.
+ *
+ * `reuse` mapea `fcp_id_equipo → id de un equipo YA creado a mano` que el usuario decidió
+ * sustituir: en vez de crear otro, se vincula ese equipo, se actualizan sus datos a los
+ * oficiales y se le vuelca la plantilla. Además hay idempotencia: si un equipo federado YA es
+ * mío, se reutiliza (no se duplica al reimportar) y se refrescan sus datos y su plantilla.
+ */
 export async function importFcpTeams(
   clubId: string | null,
   selected: FcpTeamOption[],
   mode: FcpImportMode = "owned",
+  reuse: Record<number, string> = {},
 ): Promise<FcpImportResult[]> {
   const sb = supabaseBrowser();
   const guest = mode === "venue";
   const out: FcpImportResult[] = [];
   for (const t of selected) {
-    // Reimportar no duplica: si ya es mío, se reutiliza.
-    const yaEsMio = await findMyLinkedTeam(t.id_equipo, clubId, guest);
-    if (yaEsMio) {
-      // Si lo que hay es la temporada anterior y ya está en su histórico, el
-      // RPC responde «ya está en tu histórico» y no duplica: se ignora a
-      // propósito (es un alta de equipos, no hay temporada nueva que volcar).
-      try {
-        await sb.rpc("import_fcp_season", {
-          p_team_id: yaEsMio,
-          p_fcp_id_equipo: t.id_equipo,
-          p_season_name: FCP_LEAGUE,
-        });
-      } catch {
-        /* no bloqueante */
-      }
-      out.push({ teamId: yaEsMio, equipo: t.equipo, players: 0 });
-      continue;
+    const canonical = canonicalOf(t);
+
+    // 1) ¿YO ya tengo un equipo vinculado a este id federado? → reutilízalo (reimportar no
+    //    duplica) y refresca sus datos oficiales.
+    const mineTeamId = await findMyLinkedTeam(t.id_equipo, clubId, guest);
+
+    let teamId: string;
+    if (mineTeamId) {
+      teamId = mineTeamId;
+      await updateTeamRow(teamId, canonical);
+      if (guest) await updateTeamRow(teamId, { venue_club_id: clubId });
+    } else if (guest) {
+      // Invitado: sin club_id (no consume cuota) y con la sede apuntada.
+      teamId = await createTeam({
+        name: t.equipo,
+        federation: FCP_FEDERATION_CODE,
+        league: FCP_LEAGUE,
+        category: t.category ?? undefined,
+        gender: t.gender,
+        // Excluyente a propósito: un invitado NO es del club.
+        venueClubId: clubId,
+      });
+      const { error: linkErr } = await sb
+        .from("fcp_team_links")
+        .insert({ fcp_id_equipo: t.id_equipo, team_id: teamId, club_id: null });
+      if (linkErr) throw linkErr;
+    } else if (reuse[t.id_equipo]) {
+      // 2) El usuario decidió sustituir un equipo suyo creado a mano.
+      teamId = reuse[t.id_equipo];
+      await updateTeamRow(teamId, { ...canonical, club_id: clubId });
+      await linkTeamToFcp(teamId, t.id_equipo);
+    } else {
+      // 3) Sin coincidencia: crea uno nuevo.
+      teamId = await createTeam({
+        name: t.equipo,
+        federation: FCP_FEDERATION_CODE,
+        league: FCP_LEAGUE,
+        category: t.category ?? undefined,
+        gender: t.gender,
+        clubId: clubId ?? undefined,
+      });
+      const { error: linkErr } = await sb
+        .from("fcp_team_links")
+        .insert({ fcp_id_equipo: t.id_equipo, team_id: teamId, club_id: clubId });
+      if (linkErr) throw linkErr;
     }
 
-    const teamId = await createTeam({
-      name: t.equipo,
-      federation: FCP_FEDERATION_CODE,
-      league: FCP_LEAGUE,
-      category: t.category ?? undefined,
-      gender: t.gender,
-      // Excluyente a propósito: un invitado NO es del club.
-      clubId: guest ? undefined : (clubId ?? undefined),
-      venueClubId: guest ? clubId : undefined,
-    });
-    const { error: linkErr } = await sb
-      .from("fcp_team_links")
-      .insert({
-        fcp_id_equipo: t.id_equipo,
-        team_id: teamId,
-        club_id: guest ? null : clubId,
-      });
-    if (linkErr) throw linkErr;
-
-    // La plantilla SOLO para equipos propios: en un invitado estaríamos
-    // metiendo jugadores de otro club en esta cuenta.
+    // La plantilla SOLO para equipos propios: en un invitado estaríamos metiendo jugadores de
+    // otro club en esta cuenta. También al reimportar: el RPC salta a los ya vinculados y solo
+    // añade los nuevos.
     let players = 0;
     if (!guest) {
       const { data: added, error } = await sb.rpc("import_fcp_roster", {
@@ -224,12 +417,11 @@ export async function importFcpTeams(
       players = (added as number) ?? 0;
     }
 
-    // El CALENDARIO sí, y también para los invitados: sin jornadas el equipo
-    // se da de alta y no aparece por ningún lado, porque no hay partido que
-    // colocar. Es justo lo que el club viene a hacer aquí.
-    //
-    // No bloquea el alta si falla: el equipo ya está vinculado y la temporada
-    // se puede rehacer.
+    // Vuelca también la temporada (calendario + resultados), y para los invitados también: sin
+    // jornadas el equipo se da de alta y no aparece por ningún lado. No bloquea el alta si
+    // falla (el equipo ya está vinculado y se puede rehacer). Si el id es una inscripción sin
+    // grupos, el RPC puede caer a la temporada anterior; y si ya la tiene en el histórico
+    // responde «ya está en tu histórico» y no duplica: ese error se ignora a propósito.
     try {
       await sb.rpc("import_fcp_season", {
         p_team_id: teamId,
@@ -248,16 +440,13 @@ export async function importFcpTeams(
 /**
  * Vuelca la plantilla federativa en un equipo QUE YA EXISTE.
  *
- * Distinto de `importFcpTeams`, que CREA equipos: esto es para el capitán que
- * ya tiene su equipo montado en TACTIUM y quiere traerse los jugadores con sus
- * puntos oficiales en vez de teclearlos uno a uno. Hasta ahora la web no tenía
- * forma de hacerlo —el botón «Importar de la Federación» de la plantilla era
- * un enlace al explorador y no importaba nada— mientras que la app sí.
+ * Distinto de `importFcpTeams`, que CREA equipos: esto es para el capitán que ya tiene su
+ * equipo montado en TACTIUM y quiere traerse los jugadores con sus puntos oficiales. Es el
+ * «Sustituir» de la app: el equipo pasa a llevar los datos oficiales, un solo vínculo con el
+ * equipo federado elegido, su plantilla y su temporada.
  *
- * La RPC `import_fcp_roster` hace el trabajo y es la misma que usa el
- * importador del club: comprueba permisos (dueño del equipo o del club),
- * SALTA a los jugadores ya vinculados —así que repetir la importación no
- * duplica a nadie— y devuelve cuántos ha añadido.
+ * `import_fcp_roster` comprueba permisos (dueño del equipo o del club) y SALTA a los jugadores
+ * ya vinculados, así que repetir no duplica a nadie.
  */
 export async function importFcpRosterIntoTeam(
   teamId: string,
@@ -265,31 +454,29 @@ export async function importFcpRosterIntoTeam(
 ): Promise<number> {
   const sb = supabaseBrowser();
 
-  // El vínculo es (fcp_id_equipo, team_id), así que un equipo acumula un
-  // vínculo por temporada: es historial, no un duplicado.
-  //
-  // `ignoreDuplicates` NO es un detalle de estilo: `fcp_team_links` sólo tiene
-  // políticas de INSERT y SELECT, ninguna de UPDATE. Un upsert normal hace
-  // `ON CONFLICT DO UPDATE`, y ese UPDATE se estrella contra la RLS en cuanto
-  // el vínculo ya existe — o sea, la segunda vez que alguien importa:
-  //
-  //     new row violates row-level security policy (USING expression)
-  //
-  // Con `ignoreDuplicates` sale `ON CONFLICT DO NOTHING`, que no necesita
-  // política de UPDATE. Y es la semántica correcta: la fila es el par de
-  // claves, aquí no hay nada que actualizar.
-  const { error: linkErr } = await sb
-    .from("fcp_team_links")
-    .upsert(
-      { fcp_id_equipo: team.id_equipo, team_id: teamId },
-      { onConflict: "fcp_id_equipo,team_id", ignoreDuplicates: true },
-    );
-  if (linkErr) throw linkErr;
+  await updateTeamRow(teamId, canonicalOf(team));
+  // Un equipo tiene UN vínculo (ver `linkTeamToFcp`). Antes se hacía un upsert con
+  // `ignoreDuplicates` sobre (fcp_id_equipo, team_id): valía con la clave primaria antigua,
+  // pero con el índice único por equipo, un equipo ya vinculado a otro id federado fallaba con
+  // «duplicate key value violates unique constraint "fcp_team_links_team_unique"».
+  await linkTeamToFcp(teamId, team.id_equipo);
 
   const { data, error } = await sb.rpc("import_fcp_roster", {
     p_team_id: teamId,
     p_fcp_id_equipo: team.id_equipo,
   });
   if (error) throw error;
+
+  // La temporada también, igual que la app al sustituir. No bloquea.
+  try {
+    await sb.rpc("import_fcp_season", {
+      p_team_id: teamId,
+      p_fcp_id_equipo: team.id_equipo,
+      p_season_name: FCP_LEAGUE,
+    });
+  } catch {
+    /* no bloqueante */
+  }
+
   return (data as number) ?? 0;
 }
