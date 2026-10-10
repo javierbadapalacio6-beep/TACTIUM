@@ -1,6 +1,12 @@
 import { FAQ_QUESTIONS } from "@/lib/faq";
 import { ALL_PLANS, formatEur } from "@/lib/plans";
-import { CONTACT_EMAIL, SITE_DESCRIPTION } from "@/lib/site";
+import {
+  APP_STORE_URL,
+  BRAND_DEFINITION,
+  CONTACT_EMAIL,
+  PLAY_STORE_URL,
+  SITE_DESCRIPTION,
+} from "@/lib/site";
 
 // JSON-LD (schema.org) que va en el <head> de todas las páginas. Rich snippets
 // en Google (FAQ, ficha de app, organización) y contexto para los asistentes
@@ -17,6 +23,8 @@ export function organizationSchema(siteUrl: string) {
     sameAs: [
       "https://instagram.com/tactium.io",
       "https://tiktok.com/@tactium.io",
+      APP_STORE_URL,
+      PLAY_STORE_URL,
     ],
     contactPoint: {
       "@type": "ContactPoint",
@@ -32,6 +40,7 @@ export function websiteSchema(siteUrl: string) {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "TACTIUM",
+    alternateName: ["Tactium", "TACTIUM app", "Tactium pádel"],
     url: siteUrl,
     inLanguage: "es-ES",
     publisher: { "@type": "Organization", name: "TACTIUM" },
@@ -46,8 +55,8 @@ export function softwareApplicationSchema(siteUrl: string) {
     applicationCategory: "SportsApplication",
     operatingSystem: "iOS, Android, Web",
     url: siteUrl,
-    description:
-      "App para capitanes y clubs de pádel federado en España. Alineaciones con orden de fuerza, hasta 5 variantes por jornada, disponibilidad de jugadores, torneos y competición federada.",
+    downloadUrl: [APP_STORE_URL, PLAY_STORE_URL],
+    description: `${BRAND_DEFINITION}. Para capitanes y clubs de pádel federado en España: alineaciones con orden de fuerza, hasta 5 variantes por jornada, disponibilidad de jugadores, torneos y competición federada.`,
     offers: ALL_PLANS.map((plan) => ({
       "@type": "Offer",
       name: plan.displayName,

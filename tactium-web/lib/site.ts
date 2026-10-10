@@ -25,6 +25,14 @@ export function canonicalOrigin(): string {
   return SITE_URL;
 }
 
-export const SITE_TITLE = "TACTIUM · Alineaciones inteligentes para tu equipo de pádel";
+/**
+ * La frase que define el producto, tal cual. Google y los asistentes que
+ * resumen una marca citan una definición, no un eslogan: va en el hero, en la
+ * descripción y en los datos estructurados con las mismas palabras.
+ */
+export const BRAND_DEFINITION =
+  "TACTIUM es la app de gestión de equipos de pádel federado";
+
+export const SITE_TITLE = "TACTIUM · App para equipos de pádel federado";
 export const SITE_DESCRIPTION =
-  "El sistema operativo del pádel federado. Alineaciones con orden de fuerza, hasta 5 variantes por jornada, torneos y la competición federada al día. Para capitanes, clubs y jugadores.";
+  `${BRAND_DEFINITION}: convocatoria, alineaciones con orden de fuerza, hasta 5 variantes por jornada, torneos y la competición federada al día. Para capitanes, clubs y jugadores.`;

@@ -4,6 +4,7 @@ import { HeroBackdrop } from "./HeroBackdrop";
 import { PhoneFrame } from "./PhoneFrame";
 import { StoreBadges } from "./StoreBadges";
 import { SIGNUP_HREF } from "@/lib/nav";
+import { BRAND_DEFINITION } from "@/lib/site";
 
 export function Hero() {
   return (
@@ -17,13 +18,16 @@ export function Hero() {
             El sistema operativo del <em>pádel federado</em>
           </h1>
           <p className="mk-lede">
-            {/* La frase de producto, la misma que abre la app. */}
+            {/* Primero la definición (la cita Google y quien resume la marca);
+                la frase de producto de la app, «Convoca, alinea y cierra la
+                jornada», va justo detrás. */}
             <strong style={{ color: "var(--text)", fontWeight: 700 }}>
-              Convoca, alinea y cierra la jornada.
+              {BRAND_DEFINITION}.
             </strong>{" "}
-            Disponibilidad de la plantilla, alineaciones con orden de fuerza,
-            torneos completos y la competición federada al día. Para capitanes,
-            clubs y jugadores, en iOS, Android y web.
+            Convoca, alinea y cierra la jornada: disponibilidad de la plantilla,
+            alineaciones con orden de fuerza, torneos completos y la competición
+            federada al día. Para capitanes, clubs y jugadores, en iOS, Android
+            y web.
           </p>
           <div className="mk-actions">
             <BtnLink href={SIGNUP_HREF} variant="accent" size="lg">
