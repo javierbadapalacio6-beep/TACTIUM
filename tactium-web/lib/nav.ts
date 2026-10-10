@@ -164,6 +164,8 @@ export const PUBLIC_ROUTES = [
   "/partido/",
   // Directo público de una jornada (tactium.io/directo/TOKEN, RPC anon).
   "/directo/",
+  // Disponibilidad de una jornada para el grupo de WhatsApp (tactium.io/d/TOKEN, RPC anon).
+  "/d/",
 ];
 
 /**
@@ -190,6 +192,7 @@ const KNOWN_ROUTE_PREFIXES = [
   "/i/",
   "/partido/",
   "/directo/",
+  "/d/",
   "/entrar",
   "/empezar",
   "/auth",

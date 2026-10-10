@@ -255,6 +255,9 @@ export const HomeScreen = ({
     matchdayId: nextMatchday?.id,
     opponent: nextMatchday?.opponent,
     jornadaNumber: nextMatchday?.jornada_number,
+    matchDate: nextMatchday?.match_date,
+    matchTime: nextMatchday?.match_time,
+    isHome: nextMatchday?.is_home,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,
   });
@@ -569,6 +572,8 @@ export const HomeScreen = ({
             onRemind={remind.remind}
             remindDisabledUntil={remind.cooldownUntil}
             sending={remind.sending}
+            onShareLink={() => void remind.shareLink()}
+            sharingLink={remind.sharingLink}
             onOpen={() => navigation.navigate('Availability', { matchdayId: nextMatchday.id })}
           />
         ) : null}

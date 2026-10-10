@@ -26,6 +26,12 @@ import {
 import { getCourtsForCompetition, type TeamGender } from "@/lib/courts";
 import { guardedWrite, WRITES_ENABLED } from "@/lib/writes";
 import {
+  availabilityShareText,
+  createAvailabilityLink,
+  rotateAvailabilityLink,
+} from "@/lib/availability-link";
+import { canNativeShare, copyText, whatsappShareUrl } from "@/lib/invite";
+import {
   Avatar,
   Btn,
   Card,
@@ -97,6 +103,7 @@ export function AvailabilityView({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>("pending");
   const [toast, setToast] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [linking, setLinking] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -186,6 +193,41 @@ export function AvailabilityView({ id }: { id: string }) {
     }
   }
 
+  /**
+   * Enlace público para el grupo de WhatsApp (gratis para todo capitán). Hoja de
+   * compartir nativa si existe; si no, WhatsApp web. `renew` invalida el anterior
+   * por si se ha colado donde no debía.
+   */
+  async function shareLink(renew = false) {
+    if (!matchday) return;
+    setLinking(true);
+    const res = await (renew ? rotateAvailabilityLink(id) : createAvailabilityLink(id));
+    setLinking(false);
+    if (!res.ok) return setToast(res.reason);
+    const text = availabilityShareText({
+      opponent: matchday.opponent,
+      jornada: matchday.round,
+      date: matchday.date,
+      time: matchday.time,
+      isHome: matchday.isHome,
+      token: res.data,
+    });
+    if (canNativeShare()) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+      }
+    }
+    if (renew) {
+      // Cambiar el enlace no abre WhatsApp: se copia el nuevo y se avisa.
+      setToast((await copyText(text)) ? "Enlace nuevo copiado. El anterior ya no funciona." : "Enlace cambiado. Vuelve a pulsar «Compartir» para copiarlo.");
+      return;
+    }
+    window.open(whatsappShareUrl(text), "_blank", "noopener,noreferrer");
+  }
+
   async function remind() {
     setSending(true);
     const res = await guardedWrite("recordar a los pendientes", () => remindPendingAvailability(id));
@@ -273,6 +315,26 @@ export function AvailabilityView({ id }: { id: string }) {
                   ? `Tienes ${counts.yes} para ${courts} pistas: equipo completo`
                   : `Necesitas ${needed} para ${courts} pistas: te ${missing === 1 ? "falta 1" : `faltan ${missing}`}`}
               </span>
+              {matchday.status === "upcoming" && (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <Btn variant="accent" onClick={() => void shareLink()} disabled={linking}>
+                      {linking ? "Preparando…" : "Compartir enlace en el grupo"}
+                    </Btn>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void shareLink(true)}
+                      disabled={linking}
+                    >
+                      Cambiar enlace
+                    </button>
+                  </div>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                    Cada jugador responde con un toque desde el navegador, sin app ni cuenta.
+                  </span>
+                </div>
+              )}
               {toRemind > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <Btn variant="accent" onClick={remind} disabled={sending || !!cooldownUntil}>

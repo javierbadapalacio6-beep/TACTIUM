@@ -68,6 +68,9 @@ export const AvailabilityScreen = ({
     matchdayId,
     opponent: matchday?.opponent,
     jornadaNumber: matchday?.jornada_number,
+    matchDate: matchday?.match_date,
+    matchTime: matchday?.match_time,
+    isHome: matchday?.is_home,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,
   });
@@ -179,6 +182,8 @@ export const AvailabilityScreen = ({
             onRemind={remind.remind}
             remindDisabledUntil={remind.cooldownUntil}
             sending={remind.sending}
+            onShareLink={() => void remind.shareLink()}
+            sharingLink={remind.sharingLink}
             onOpen={() => setTab('pending')}
           />
         ) : null}

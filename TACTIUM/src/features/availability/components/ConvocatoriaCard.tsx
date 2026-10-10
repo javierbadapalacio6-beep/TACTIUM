@@ -18,11 +18,15 @@ interface Props {
   remindDisabledUntil: Date | null;
   sending: boolean;
   onOpen: () => void;
+  /** Enlace público para el grupo de WhatsApp (gratis, sin app para el jugador). */
+  onShareLink?: () => void;
+  sharingLink?: boolean;
 }
 
 /**
  * Convocatoria del capitán en Inicio: los cuatro estados de un vistazo, el
- * dato que importa («te falta 1») y «Recordar ahora» (premium, 1 vez / 12 h).
+ * dato que importa («te falta 1»), «Compartir enlace en el grupo» (gratis) y
+ * «Recordar ahora» (premium, 1 vez / 12 h).
  */
 export const ConvocatoriaCard: React.FC<Props> = ({
   counts,
@@ -32,6 +36,8 @@ export const ConvocatoriaCard: React.FC<Props> = ({
   remindDisabledUntil,
   sending,
   onOpen,
+  onShareLink,
+  sharingLink,
 }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -94,6 +100,27 @@ export const ConvocatoriaCard: React.FC<Props> = ({
           : `Necesitas ${needed} para ${courts} ${courts === 1 ? 'pista' : 'pistas'}: te ${missing === 1 ? 'falta 1' : `faltan ${missing}`}`}
       </Text>
 
+      {onShareLink ? (
+        <View style={styles.shareBlock}>
+          <Pressable
+            onPress={onShareLink}
+            disabled={sharingLink}
+            accessibilityRole="button"
+            accessibilityLabel="Compartir enlace de disponibilidad en el grupo de WhatsApp"
+            style={({ pressed }) => [
+              styles.remind,
+              styles.remindPrimary,
+              (pressed || sharingLink) && { opacity: 0.8 },
+            ]}
+          >
+            <Text style={[styles.remindLabel, { color: c.textInverse }]}>
+              {sharingLink ? 'Preparando…' : 'Compartir enlace en el grupo'}
+            </Text>
+          </Pressable>
+          <Text style={styles.foot}>Cada jugador responde con un toque, sin app ni cuenta.</Text>
+        </View>
+      ) : null}
+
       {pendingToRemind > 0 ? (
         <View style={styles.actions}>
           <Pressable
@@ -102,12 +129,13 @@ export const ConvocatoriaCard: React.FC<Props> = ({
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.remind,
-              isPremium && !blocked ? styles.remindPrimary : styles.remindGhost,
+              // Un solo botón principal: con el enlace del grupo delante, «Recordar» queda secundario.
+              isPremium && !blocked && !onShareLink ? styles.remindPrimary : styles.remindGhost,
               (pressed || sending) && { opacity: 0.8 },
               blocked && { opacity: 0.55 },
             ]}
           >
-            <Text style={[styles.remindLabel, isPremium && !blocked && { color: c.textInverse }]}>
+            <Text style={[styles.remindLabel, isPremium && !blocked && !onShareLink && { color: c.textInverse }]}>
               {sending ? 'Enviando…' : blocked ? 'Recordado' : `Recordar ahora a ${pendingToRemind}`}
             </Text>
             {!isPremium ? (
@@ -168,6 +196,7 @@ const makeStyles = (c: Palette) =>
     legendValue: { fontFamily: Fonts.mono, color: c.text, fontSize: 12.5, fontWeight: '700' },
     need: { color: c.text, fontSize: 13.5, fontWeight: '600' },
     actions: { flexDirection: 'row', gap: 8 },
+    shareBlock: { gap: 6 },
     remind: {
       flex: 1,
       height: 42,

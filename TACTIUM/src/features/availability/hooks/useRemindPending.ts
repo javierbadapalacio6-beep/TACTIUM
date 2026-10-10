@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import * as AvailabilityApi from '@core/services/availability';
+import * as LinkApi from '@core/services/availabilityLink';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { toast } from '@store/toastStore';
 import type { RootStackParamList } from '@navigation/types';
@@ -27,13 +28,18 @@ export function useRemindPending(params: {
   matchdayId: string | null | undefined;
   opponent?: string | null;
   jornadaNumber?: number | null;
+  /** Para el mensaje del enlace del grupo. */
+  matchDate?: string | null;
+  matchTime?: string | null;
+  isHome?: boolean | null;
   lastReminder: Date | null;
   setLastReminder: (d: Date) => void;
 }) {
-  const { matchdayId, opponent, jornadaNumber, lastReminder, setLastReminder } = params;
+  const { matchdayId, opponent, jornadaNumber, matchDate, matchTime, isHome, lastReminder, setLastReminder } = params;
   const gate = usePremiumGate();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [sending, setSending] = useState(false);
+  const [sharingLink, setSharingLink] = useState(false);
 
   const cooldownUntil =
     lastReminder && Date.now() - lastReminder.getTime() < REMIND_COOLDOWN_MS
@@ -54,6 +60,42 @@ export function useRemindPending(params: {
       }
     },
     [jornadaNumber, opponent],
+  );
+
+  /**
+   * Enlace público para el grupo de WhatsApp: gratis para todo capitán y sin que
+   * el jugador instale nada. Un enlace por jornada (se reutiliza); `renew` lo
+   * cambia y el anterior deja de valer.
+   */
+  const shareLink = useCallback(
+    async (renew = false) => {
+      if (!matchdayId || sharingLink) return;
+      setSharingLink(true);
+      try {
+        const token = renew
+          ? await LinkApi.rotateAvailabilityLink(matchdayId)
+          : await LinkApi.createAvailabilityLink(matchdayId);
+        const message = LinkApi.availabilityShareText({
+          opponent: opponent ?? 'el rival',
+          jornada: jornadaNumber ?? null,
+          date: matchDate ?? null,
+          time: matchTime ?? null,
+          isHome: isHome ?? null,
+          token,
+        });
+        if (renew) toast.success('Enlace cambiado', 'El anterior ya no funciona. Comparte el nuevo.');
+        try {
+          await Share.share({ message });
+        } catch {
+          // cancelado
+        }
+      } catch (e) {
+        toast.error('No se pudo crear el enlace', (e as Error)?.message);
+      } finally {
+        setSharingLink(false);
+      }
+    },
+    [matchdayId, sharingLink, opponent, jornadaNumber, matchDate, matchTime, isHome],
   );
 
   const run = useCallback(async () => {
@@ -95,5 +137,5 @@ export function useRemindPending(params: {
   // El gate abre el paywall sin plan; con plan, ejecuta.
   const remind = gate(run, 'availability_remind');
 
-  return { remind, sending, cooldownUntil, shareWithoutApp };
+  return { remind, sending, cooldownUntil, shareWithoutApp, shareLink, sharingLink };
 }

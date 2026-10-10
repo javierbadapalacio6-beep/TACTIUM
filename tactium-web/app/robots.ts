@@ -15,6 +15,8 @@ const PRIVATE = [
   "/connect",
   // Directos públicos: se comparten por WhatsApp, no se indexan.
   "/directo",
+  // Disponibilidad por enlace (grupo de WhatsApp): tampoco se indexa.
+  "/d/",
   "/empezar",
   "/entrar",
   "/equipo",
