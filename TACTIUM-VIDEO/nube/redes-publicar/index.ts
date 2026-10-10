@@ -6,13 +6,17 @@
 // `x-redes-secreto` (clave `cron_secreto` de `redes_config`): por eso verify_jwt va apagado.
 //
 // Cuerpo opcional: { pieza } procesa solo esa pieza ya; { accion: "resumen" } manda el
-// resumen del día; { accion: "mantenimiento" } renueva el token si le queda poco.
+// resumen del día; { accion: "mantenimiento" } renueva el token si le queda poco;
+// { accion: "informes" } manda el informe de 48 h de lo publicado; { accion: "semanal" }, el
+// resumen de los lunes.
 //
 // Una pieza pasa por: programada → (se crea el contenedor hasta 60 min antes)
 // procesando → (a su hora, con el contenedor listo) publicada | error.
 // Las de tipo «aviso» (stories con sticker) no se publican: a su hora se manda la imagen
 // por Telegram para subirla a mano. Las de tipo «grabacion» mandan el guion.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { informePieza, informeSemanal, resumirRef } from "./informes.ts";
+import type { Formato, Metricas, NavHistoria, PiezaSemana, Ref } from "./informes.ts";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const IG = "https://graph.instagram.com/v22.0";
@@ -90,6 +94,13 @@ async function avisar(cfg: Cfg, pieza: string | null, texto: string, sig: string
 const actualizar = (pieza: string, cambios: Record<string, unknown>) =>
   sb.from("redes_publicaciones").update({ ...cambios, actualizado: new Date().toISOString() }).eq("pieza", pieza);
 
+/** Recuerda qué piezas salieron como reel de prueba (para informarlas a las 24 h y decidir si se gradúan). */
+async function marcarPrueba(cfg: Cfg, pieza: string) {
+  const l = new Set((cfg.reels_prueba_publicados || "").split(",").filter(Boolean));
+  l.add(pieza);
+  await sb.from("redes_config").upsert([{ clave: "reels_prueba_publicados", valor: [...l].slice(-60).join(","), actualizado: new Date().toISOString() }]);
+}
+
 /** Crea el contenedor de Instagram (y los de cada imagen si es carrusel). */
 async function preparar(cfg: Cfg, f: Fila) {
   const url = (i: number) => PUBLICO + f.media[i];
@@ -97,19 +108,61 @@ async function preparar(cfg: Cfg, f: Fila) {
   // lugar (no el número de la URL de instagram.com/explore/locations). Vacío = sin ubicación.
   // Las stories no la admiten por API.
   const loc: Record<string, string> = cfg.ig_ubicacion ? { location_id: cfg.ig_ubicacion } : {};
+  // Colaboradores (clave `ig_colaboradores` de redes_config: usuarios separados por comas, máximo 3).
+  // La publicación sale en sus perfiles y suma su alcance cuando aceptan la invitación. Reels,
+  // posts y carruseles (en el contenedor padre); las stories no lo admiten.
+  const lista = (cfg.ig_colaboradores || "").split(",").map((s) => s.trim().replace(/^@/, "")).filter(Boolean).slice(0, 3);
+  const colab: Record<string, string> = lista.length ? { collaborators: JSON.stringify(lista) } : {};
+  // Reels de prueba (clave `ig_reels_prueba` = MANUAL | SS_PERFORMANCE; vacío u «off» = desactivado).
+  // Solo los ven quienes NO te siguen y no salen en tu perfil: sirven para probar ganchos sin quemar
+  // a los seguidores. MANUAL: los pasas a seguidores tú desde la app; SS_PERFORMANCE: Instagram los
+  // gradúa solo si rinden. `ig_reels_prueba_piezas` (IDs separados por comas) limita cuáles; vacío = todos.
+  const modoRaw = (cfg.ig_reels_prueba || "").trim().toUpperCase();
+  const modoPrueba = modoRaw === "MANUAL" || modoRaw === "SS_PERFORMANCE" ? modoRaw : null;
+  const soloPiezas = (cfg.ig_reels_prueba_piezas || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const esPrueba = f.tipo === "reel" && !!modoPrueba && (soloPiezas.length === 0 || soloPiezas.includes(f.pieza));
+  const prueba: Record<string, string> = esPrueba ? { trial_params: JSON.stringify({ graduation_strategy: modoPrueba }) } : {};
+  const normal: Record<string, string> = f.tipo === "reel" ? { share_to_feed: "true" } : {};
+  const crear = async (p: Record<string, string>) => {
+    // De más a menos ambicioso: un extra que Instagram rechace nunca hace perder la publicación.
+    const intentos: { quita: string; extra: Record<string, string> }[] = esPrueba
+      ? [
+          { quita: "", extra: { ...prueba, ...colab } },
+          ...(lista.length ? [{ quita: "los colaboradores", extra: { ...prueba } }] : []),
+          { quita: "el modo prueba (saldrá como reel normal)", extra: { ...normal } },
+        ]
+      : [
+          { quita: "", extra: { ...normal, ...colab } },
+          ...(lista.length ? [{ quita: "los colaboradores", extra: { ...normal } }] : []),
+        ];
+    let ultimo: unknown;
+    for (let i = 0; i < intentos.length; i++) {
+      try {
+        const id = (await ig(cfg, `${cfg.ig_cuenta}/media`, { ...p, ...intentos[i].extra }, "POST")).id as string;
+        if ("trial_params" in intentos[i].extra) await marcarPrueba(cfg, f.pieza);
+        return id;
+      } catch (e) {
+        ultimo = e;
+        if (i < intentos.length - 1) {
+          await avisar(cfg, f.pieza, `Instagram no aceptó ${intentos[i + 1].quita} en ${f.pieza}: ${String((e as Error).message || e)}. Reintento sin eso.`, "");
+        }
+      }
+    }
+    throw ultimo;
+  };
   if (f.tipo === "reel") {
-    const p: Record<string, string> = { media_type: "REELS", video_url: url(0), caption: f.caption, share_to_feed: "true", ...loc };
+    const p: Record<string, string> = { media_type: "REELS", video_url: url(0), caption: f.caption, ...loc };
     // Portada propia (segundo archivo, JPEG): manda sobre el fotograma de `portada_ms`.
     if (f.media[1]) p.cover_url = url(1);
     else if (f.portada_ms != null) p.thumb_offset = String(f.portada_ms);
-    return (await ig(cfg, `${cfg.ig_cuenta}/media`, p, "POST")).id as string;
+    return await crear(p);
   }
   if (f.tipo === "story") {
     const esVideo = f.media[0].endsWith(".mp4");
     return (await ig(cfg, `${cfg.ig_cuenta}/media`, { media_type: "STORIES", [esVideo ? "video_url" : "image_url"]: url(0) }, "POST")).id as string;
   }
   if (f.tipo === "post") {
-    return (await ig(cfg, `${cfg.ig_cuenta}/media`, { image_url: url(0), caption: f.caption, ...loc }, "POST")).id as string;
+    return await crear({ image_url: url(0), caption: f.caption, ...loc });
   }
   // Carrusel: una imagen cada vez, guardando lo hecho por si la ejecución se corta.
   const hijos = [...(f.hijos || [])];
@@ -117,7 +170,7 @@ async function preparar(cfg: Cfg, f: Fila) {
     hijos.push((await ig(cfg, `${cfg.ig_cuenta}/media`, { image_url: url(i), is_carousel_item: "true" }, "POST")).id);
     await actualizar(f.pieza, { hijos });
   }
-  return (await ig(cfg, `${cfg.ig_cuenta}/media`, { media_type: "CAROUSEL", children: hijos.join(","), caption: f.caption, ...loc }, "POST")).id as string;
+  return await crear({ media_type: "CAROUSEL", children: hijos.join(","), caption: f.caption, ...loc });
 }
 
 async function estadoContenedor(cfg: Cfg, id: string) {
@@ -183,6 +236,192 @@ async function resumen(cfg: Cfg) {
   return "enviado";
 }
 
+// ── Informes: cada formato con su propio análisis (lógica en informes.ts) ───────────────
+// Reel, carrusel, post e historia se ganan de formas distintas, así que cada uno tiene su
+// informe, su referencia (medianas del MISMO formato) y su siguiente paso. Los informes de
+// piezas del feed salen a las 48 h; las historias, a las ~16-24 h (caducan a las 24 h).
+
+const METRICAS_BASE: Record<Formato, string[]> = {
+  reel: ["reach", "views", "saved", "shares", "likes", "comments", "total_interactions", "ig_reels_avg_watch_time"],
+  carrusel: ["reach", "views", "saved", "shares", "likes", "comments", "total_interactions"],
+  post: ["reach", "views", "saved", "shares", "likes", "comments", "total_interactions"],
+  story: ["reach", "views", "replies", "shares", "total_interactions"],
+};
+// Para medir el CRECIMIENTO por pieza. No todos los formatos las admiten: se piden una a una.
+const METRICAS_CRECIMIENTO = ["follows", "profile_visits"];
+
+// deno-lint-ignore no-explicit-any
+const aMetricas = (r: any): Metricas => Object.fromEntries((r.data || []).map((d: any) => [d.name, d.values?.[0]?.value ?? d.total_value?.value ?? 0]));
+
+/** Métricas de una pieza. Si Instagram rechaza alguna para ese formato, se piden de una en una y se quedan las válidas. */
+async function metricasDe(cfg: Cfg, id: string, formato: Formato): Promise<Metricas> {
+  const pedir = async (ms: string[]) => aMetricas(await ig(cfg, `${id}/insights`, { metric: ms.join(",") }));
+  let out: Metricas = {};
+  try {
+    out = await pedir(METRICAS_BASE[formato]);
+  } catch {
+    for (const m of METRICAS_BASE[formato]) {
+      try { Object.assign(out, await pedir([m])); } catch { /* no disponible en este formato */ }
+    }
+  }
+  for (const m of METRICAS_CRECIMIENTO) {
+    try { Object.assign(out, await pedir([m])); } catch { /* no disponible en este formato */ }
+  }
+  return out;
+}
+
+/** Toques de una historia: adelante, atrás, salidas y paso a la siguiente. */
+async function navegacionHistoria(cfg: Cfg, id: string): Promise<NavHistoria | null> {
+  try {
+    const r = await ig(cfg, `${id}/insights`, { metric: "navigation", breakdown: "story_navigation_action_type" });
+    // deno-lint-ignore no-explicit-any
+    const res: any[] = r.data?.[0]?.total_value?.breakdowns?.[0]?.results || [];
+    const v = (k: string) => res.filter((x) => String(x.dimension_values?.[0] || "").toLowerCase().includes(k)).reduce((a, x) => a + (x.value || 0), 0);
+    return { adelante: v("tap_forward"), atras: v("tap_back"), salidas: v("exit"), siguiente: v("swipe_forward") };
+  } catch {
+    return null;
+  }
+}
+
+/** Medianas de las últimas 12 piezas publicadas del MISMO formato (guardadas en cada informe). */
+async function referencia(formato: Formato, excluir: string): Promise<Ref | null> {
+  if (formato === "story") return null;
+  const { data } = await sb.from("redes_publicaciones").select("metricas")
+    .eq("tipo", formato).eq("estado", "publicada").not("metricas", "is", null).neq("pieza", excluir)
+    .order("publicada_at", { ascending: false }).limit(12);
+  return resumirRef((data || []).map((x) => x.metricas as Metricas));
+}
+
+/**
+ * Informe de cada publicación del feed sin informe todavía: a las 48 h, y a las 24 h si fue un reel de
+ * prueba (hay que decidir pronto si se gradúa a seguidores; Instagram da unas 72 h).
+ */
+async function informes(cfg: Cfg) {
+  const pruebas = new Set((cfg.reels_prueba_publicados || "").split(",").filter(Boolean));
+  const { data } = await sb.from("redes_publicaciones").select("pieza,tipo,titulo,ig_media_id,ig_enlace,publicada_at")
+    .eq("estado", "publicada").is("informe_at", null).not("ig_media_id", "is", null).in("tipo", ["reel", "carrusel", "post"])
+    .gte("publicada_at", new Date(Date.now() - 7 * 86400000).toISOString())
+    .lte("publicada_at", new Date(Date.now() - 24 * 3600000).toISOString())
+    .order("publicada_at").limit(6);
+  const hechos: string[] = [];
+  for (const f of data || []) {
+    const prueba = f.tipo === "reel" && pruebas.has(f.pieza);
+    const horas = prueba ? 24 : 48;
+    if (Date.now() - new Date(f.publicada_at).getTime() < horas * 3600000) continue;
+    if (hechos.length >= 3) break;
+    const formato = f.tipo as Formato;
+    const m = await metricasDe(cfg, f.ig_media_id, formato);
+    if (prueba && m.views === undefined) {
+      // Instagram no devuelve los datos del reel de prueba por la API: hay que mirarlos en la app.
+      await avisar(cfg, f.pieza, `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo}\nHan pasado 24 h. Instagram no da por API los datos de los reels de prueba: míralos en la app (Perfil → Panel profesional → Reels de prueba) y decide si lo compartes con tus seguidores. Criterio: ≥ 5 s de visionado medio y que se envíe a amigos.`, "");
+      await actualizar(f.pieza, { informe_at: new Date().toISOString() });
+      hechos.push(f.pieza);
+      continue;
+    }
+    const ref = await referencia(formato, f.pieza);
+    const texto = informePieza({ formato, pieza: f.pieza, titulo: f.titulo, publicada: new Date(f.publicada_at), horas, m, ref, enlace: f.ig_enlace, prueba });
+    await avisar(cfg, f.pieza, texto, "");
+    await actualizar(f.pieza, { informe_at: new Date().toISOString(), metricas: m });
+    hechos.push(f.pieza);
+  }
+  return hechos;
+}
+
+/**
+ * Informe de las historias activas (tanto las que sube la función como las que se suben a mano
+ * desde el aviso de Telegram). Caducan a las 24 h y sus datos casi se cierran a las ~16 h, así que
+ * se informa entre las 16 y las 24 h. Las ya informadas se recuerdan en `stories_informadas`.
+ */
+async function historias(cfg: Cfg) {
+  const hechas = new Set((cfg.stories_informadas || "").split(",").filter(Boolean));
+  const lista = (await ig(cfg, `${cfg.ig_cuenta}/stories`, { fields: "id,timestamp,media_type" })).data || [];
+  const nuevas: string[] = [];
+  // deno-lint-ignore no-explicit-any
+  for (const s of lista as any[]) {
+    if (hechas.has(s.id)) continue;
+    const t = new Date(s.timestamp).getTime();
+    const horas = (Date.now() - t) / 3600000;
+    if (horas < 16) continue;
+    const m = await metricasDe(cfg, s.id, "story");
+    const nav = await navegacionHistoria(cfg, s.id);
+    // La pieza programada más cercana (aviso o story) da nombre a la historia.
+    const { data: cerca } = await sb.from("redes_publicaciones").select("pieza,titulo")
+      .in("tipo", ["aviso", "story"])
+      .gte("programada_para", new Date(t - 3 * 3600000).toISOString())
+      .lte("programada_para", new Date(t + 3 * 3600000).toISOString()).limit(1);
+    const p = cerca?.[0];
+    const texto = informePieza({
+      formato: "story", pieza: p?.pieza ?? "historia", titulo: p?.titulo ?? (s.media_type === "VIDEO" ? "Historia en vídeo" : "Historia"),
+      publicada: new Date(t), horas: Math.round(horas), m, ref: null, nav,
+    });
+    await avisar(cfg, p?.pieza ?? null, texto, "");
+    hechas.add(s.id);
+    nuevas.push(s.id);
+  }
+  if (nuevas.length) {
+    await sb.from("redes_config").upsert([{ clave: "stories_informadas", valor: [...hechas].slice(-60).join(","), actualizado: new Date().toISOString() }]);
+  }
+  return nuevas;
+}
+
+/** Un dato de la cuenta de los últimos 7 días (null si Instagram no lo da). */
+async function cuenta7(cfg: Cfg, metrica: string, extra: Record<string, string> = {}): Promise<{ total: number | null; desglose: Record<string, number> }> {
+  try {
+    const ahora = Math.floor(Date.now() / 1000);
+    const r = await ig(cfg, `${cfg.ig_cuenta}/insights`, { metric: metrica, metric_type: "total_value", period: "day", since: String(ahora - 7 * 86400), until: String(ahora), ...extra });
+    const tv = r.data?.[0]?.total_value;
+    const desglose: Record<string, number> = {};
+    // deno-lint-ignore no-explicit-any
+    for (const x of (tv?.breakdowns?.[0]?.results || []) as any[]) desglose[String(x.dimension_values?.[0] || "")] = x.value || 0;
+    return { total: tv?.value ?? null, desglose };
+  } catch {
+    return { total: null, desglose: {} };
+  }
+}
+
+/** Resumen de los lunes: crecimiento, lectura por formato y la apuesta de la semana. */
+async function semanal(cfg: Cfg) {
+  const cuenta = await ig(cfg, cfg.ig_cuenta, { fields: "followers_count" });
+  const alcance = await cuenta7(cfg, "reach");
+  const porTipo = await cuenta7(cfg, "reach", { breakdown: "follow_type" });
+  const visitas = await cuenta7(cfg, "profile_views");
+  const clics = await cuenta7(cfg, "website_clicks");
+  const noSeg = Object.entries(porTipo.desglose).find(([k]) => k.toUpperCase().includes("NON"))?.[1];
+  const totalSeg = Object.values(porTipo.desglose).reduce((a, b) => a + b, 0);
+
+  const { data } = await sb.from("redes_publicaciones").select("pieza,tipo,titulo,ig_media_id")
+    .eq("estado", "publicada").not("ig_media_id", "is", null).in("tipo", ["reel", "carrusel", "post"])
+    .gte("publicada_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("publicada_at");
+  const piezas: PiezaSemana[] = [];
+  for (const f of data || []) {
+    try { piezas.push({ pieza: f.pieza, titulo: f.titulo, formato: f.tipo as Formato, m: await metricasDe(cfg, f.ig_media_id, f.tipo as Formato) }); } catch { /* sin métricas */ }
+  }
+
+  const { data: prog } = await sb.from("redes_publicaciones").select("pieza,tipo,titulo,programada_para")
+    .in("estado", ["programada", "procesando"]).neq("tipo", "grabacion")
+    .gte("programada_para", new Date().toISOString()).lte("programada_para", new Date(Date.now() + 7 * 86400000).toISOString())
+    .order("programada_para");
+  const programadas: Record<string, number> = {};
+  for (const x of prog || []) programadas[NOMBRE[x.tipo] || x.tipo] = (programadas[NOMBRE[x.tipo] || x.tipo] || 0) + 1;
+  const primera = prog?.[0];
+
+  const partes = informeSemanal({
+    seguidores: cuenta.followers_count,
+    seguidoresAntes: Number(cfg.seguidores_ultimo || 0) || null,
+    meta: Number(cfg.meta_seguidores || 0) || null,
+    alcance7: alcance.total,
+    alcanceNoSeguidores: noSeg !== undefined && totalSeg > 0 ? Math.round((noSeg / totalSeg) * 100) : null,
+    visitasPerfil: visitas.total,
+    clicsEnlace: clics.total,
+    piezas,
+    programadas,
+    proxima: primera ? `${primera.pieza} ${NOMBRE[primera.tipo] || primera.tipo} (${cuando(primera.programada_para)})` : null,
+  });
+  for (const t of partes) await avisar(cfg, null, t, "");
+  await sb.from("redes_config").upsert([{ clave: "seguidores_ultimo", valor: String(cuenta.followers_count), actualizado: new Date().toISOString() }]);
+  return "enviado";
+}
+
 async function mantenimiento(cfg: Cfg) {
   const caduca = Number(cfg.ig_token_caduca || 0);
   if (caduca && caduca - Date.now() > 10 * 86400000) return "token al día";
@@ -210,6 +449,9 @@ Deno.serve(async (req) => {
 
   if (cuerpo.accion === "resumen") return json({ resumen: await resumen(cfg) });
   if (cuerpo.accion === "mantenimiento") return json({ token: await mantenimiento(cfg) });
+  if (cuerpo.accion === "informes") return json({ informes: await informes(cfg) });
+  if (cuerpo.accion === "semanal") return json({ semanal: await semanal(cfg) });
+  if (cuerpo.accion === "historias") return json({ historias: await historias(cfg) });
   if (cuerpo.accion === "avisar" && cuerpo.texto) { await avisar(cfg, null, String(cuerpo.texto), await siguiente()); return json({ ok: true }); }
 
   // Qué toca: una pieza concreta, o todo lo pendiente de la próxima hora.
