@@ -48,26 +48,48 @@ export interface FcpTeamBundle {
   temporada: string | null;
 }
 
-export const loadFcpGroup = cache(async (idGrupo: string): Promise<FcpGroupBundle | null> => {
-  const sb = supabaseAnon();
-  if (!sb) return null;
-  try {
+/**
+ * Caché de datos (15 min) por grupo y por equipo.
+ *
+ * Las fichas se renderizan en servidor en cada visita (el layout lee la sesión por cookies, así que la
+ * página no se puede servir desde la CDN), y cada render hacía 3-4 consultas a Supabase: 0,6-1,8 s de
+ * servidor. Los datos son públicos (cliente anónimo, sin nada del usuario), así que se guardan en la
+ * caché de datos de Next y la mayoría de visitas, incluidas las de Googlebot, salen sin tocar la base.
+ *
+ * Un fallo NO se cachea: la función interna lanza y la de fuera lo convierte en `null`. Si se cacheara
+ * el `null`, una caída de un segundo dejaría 15 minutos la ficha vacía y con título genérico.
+ */
+const FCP_REVALIDATE_S = 900;
+
+const grupoCacheado = unstable_cache(
+  async (idGrupo: string): Promise<FcpGroupBundle> => {
+    const sb = supabaseAnon();
+    if (!sb) throw new Error("sin cliente anónimo");
     const [header, standings, matches] = await Promise.all([
       fetchFcpGroupHeader(sb, idGrupo),
       fetchFcpStandings(sb, idGrupo),
       fetchFcpMatches(sb, idGrupo),
     ]);
     return { header, standings, matches };
+  },
+  ["fcp-grupo"],
+  { revalidate: FCP_REVALIDATE_S, tags: ["fcp"] }
+);
+
+export const loadFcpGroup = cache(async (idGrupo: string): Promise<FcpGroupBundle | null> => {
+  try {
+    return await grupoCacheado(idGrupo);
   } catch {
     return null;
   }
 });
 
-export const loadFcpTeam = cache(async (idEquipo: number): Promise<FcpTeamBundle | null> => {
-  const sb = supabaseAnon();
-  if (!sb || !Number.isFinite(idEquipo)) return null;
-  try {
+const equipoCacheado = unstable_cache(
+  async (idEquipo: number): Promise<FcpTeamBundle | null> => {
+    const sb = supabaseAnon();
+    if (!sb) throw new Error("sin cliente anónimo");
     const profile = await fetchFcpTeamProfile(sb, idEquipo);
+    // Un equipo que no existe sí se cachea como `null`: es una respuesta, no un fallo.
     if (!profile) return null;
     let temporada = profile.preseason?.temporada ?? null;
     if (!temporada && profile.idGrupo) {
@@ -75,6 +97,15 @@ export const loadFcpTeam = cache(async (idEquipo: number): Promise<FcpTeamBundle
       temporada = h?.temporada ?? null;
     }
     return { profile, temporada };
+  },
+  ["fcp-equipo"],
+  { revalidate: FCP_REVALIDATE_S, tags: ["fcp"] }
+);
+
+export const loadFcpTeam = cache(async (idEquipo: number): Promise<FcpTeamBundle | null> => {
+  if (!Number.isFinite(idEquipo)) return null;
+  try {
+    return await equipoCacheado(idEquipo);
   } catch {
     return null;
   }
@@ -323,43 +354,46 @@ export interface FcpDirectorySeason {
  * grupo sólo se descubrían por el sitemap, sin ninguna página que las enlace.
  * Cacheado una hora: cambia cuando la Federación publica un sorteo.
  */
-export const loadFcpDirectory = unstable_cache(
+const directorioCacheado = unstable_cache(
   async (): Promise<FcpDirectorySeason[]> => {
     const sb = supabaseAnon();
-    if (!sb) return [];
-    try {
-      const rows: { id_grupo: string; nombre: string | null; temporada: string | null }[] = [];
-      for (let from = 0; from < 5000; from += 1000) {
-        const { data, error } = await sb
-          .from("fcp_grupos")
-          .select("id_grupo, nombre, temporada")
-          .range(from, from + 999);
-        if (error) throw error;
-        rows.push(...(data ?? []));
-        if (!data || data.length < 1000) break;
-      }
-      const bySeason = new Map<string, FcpDirectoryGroup[]>();
-      for (const r of rows) {
-        const t = r.temporada ?? "Sin temporada";
-        const list = bySeason.get(t) ?? [];
-        list.push({ idGrupo: r.id_grupo, nombre: prettyFcpName(r.nombre) || r.id_grupo });
-        bySeason.set(t, list);
-      }
-      return [...bySeason.entries()]
-        .sort(([a], [b]) => b.localeCompare(a))
-        .map(([temporada, grupos]) => ({
-          temporada,
-          grupos: grupos.sort((x, y) =>
-            x.nombre.localeCompare(y.nombre, "es", { numeric: true })
-          ),
-        }));
-    } catch {
-      return [];
+    if (!sb) throw new Error("sin cliente anónimo");
+    const rows: { id_grupo: string; nombre: string | null; temporada: string | null }[] = [];
+    for (let from = 0; from < 5000; from += 1000) {
+      const { data, error } = await sb
+        .from("fcp_grupos")
+        .select("id_grupo, nombre, temporada")
+        .range(from, from + 999);
+      if (error) throw error;
+      rows.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
     }
+    const bySeason = new Map<string, FcpDirectoryGroup[]>();
+    for (const r of rows) {
+      const t = r.temporada ?? "Sin temporada";
+      const list = bySeason.get(t) ?? [];
+      list.push({ idGrupo: r.id_grupo, nombre: prettyFcpName(r.nombre) || r.id_grupo });
+      bySeason.set(t, list);
+    }
+    return [...bySeason.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([temporada, grupos]) => ({
+        temporada,
+        grupos: grupos.sort((x, y) => x.nombre.localeCompare(y.nombre, "es", { numeric: true })),
+      }));
   },
   ["fcp-directory"],
-  { revalidate: 3600 }
+  { revalidate: 3600, tags: ["fcp"] }
 );
+
+/** Un fallo no se cachea (si no, una caída dejaría una hora el directorio vacío y sin enlaces a los grupos). */
+export async function loadFcpDirectory(): Promise<FcpDirectorySeason[]> {
+  try {
+    return await directorioCacheado();
+  } catch {
+    return [];
+  }
+}
 
 
 /* ── Jugador ───────────────────────────────────────────────────── */

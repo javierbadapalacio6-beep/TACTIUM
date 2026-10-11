@@ -19,7 +19,8 @@ lo técnico y propone; no puede medir resultados.
 | Páginas de grupo y equipo | Título y descripción propios y canónica correcta; un `<h1>`; JSON-LD |
 | `hreflang` | Ninguno (un solo idioma, es-ES): correcto |
 | Velocidad (servidor) | Portada 0,4 s · torneos 0,3 s · grupo 0,6-1,8 s · equipo 1,5 s · federación/cántabra 1,5 s (226 KB) |
-| **Caché** | Las páginas de la federación se sirven con `Cache-Control: private, no-cache, no-store` y `X-Vercel-Cache: MISS`: **se renderizan en cada visita**, también las de temporadas cerradas |
+| **Caché** (antes del 11-10) | Las páginas de la federación se sirven con `Cache-Control: private, no-cache, no-store` y `X-Vercel-Cache: MISS`: se renderizan en cada visita porque el layout raíz lee la sesión. Desde el 11-10 los datos van en caché de datos (ver P0 n.º 2); la cabecera sigue igual a propósito |
+| Ya existente (bien) | Migas de pan (`BreadcrumbList`) y `ItemList` de la clasificación en cada grupo; `lastmod` real por URL; directorio de grupos rastreable; perfiles de jugador fuera del sitemap |
 | Verificación de Search Console | No hay etiqueta `google-site-verification` en el HTML (puede estar verificada por DNS) |
 | Marca | «Tactium» se parece a «tactic» y a «Tactiq»; el competidor define su producto con una frase clara en la portada |
 
@@ -28,12 +29,13 @@ lo técnico y propone; no puede medir resultados.
 ### P0 · lo que más puede mover la aguja
 
 1. **Medir: abrir Search Console** (propiedad de dominio), enviar `sitemap.xml`, mirar Informe de páginas (¿cuántas de las 2.525 están «Rastreada: actualmente sin indexar» o «Descubierta»?) y consultas de «tactium». *Lo hace Javier; pega el resultado.*
-2. **Caché de las páginas de la federación.** Hoy cada visita cuesta entre 0,6 y 1,8 s de servidor y nada se sirve desde la CDN. Las temporadas cerradas no cambian nunca. Hipótesis ⚪: la lectura de la sesión (`serverUser()`/cookies) convierte todo en dinámico. Propuesta: que las rutas públicas de federación no dependan de cookies y usen regeneración (`revalidate`) — larga para temporadas cerradas, corta (p. ej. 1 h) para la actual. Mejora la velocidad real, el rastreo y el coste. 🟡 Un servidor lento reduce el ritmo de rastreo.
+2. **Caché de las páginas de la federación.** ✅ **Hecho el 11-10-2026 (caché de datos).** Causa confirmada: el layout raíz llama a `serverUser()` (lee cookies), así que TODAS las rutas son dinámicas y nada se sirve desde la CDN (`Cache-Control: private, no-store`). Cada visita hacía 3-4 consultas a Supabase (0,6-1,8 s de servidor). Se ha envuelto la carga de grupo, equipo y directorio en `unstable_cache` (15 min grupo y equipo, 1 h el directorio; **un fallo no se cachea**). En local con compilación de producción: de ~220 ms en frío a ~15-40 ms en caliente. **Lo que NO se ha tocado (a propósito):** poner `Cache-Control: public` en esas rutas. El HTML lleva el estado de sesión del usuario (`SessionProvider initialUser`), y una caché de CDN sin variar por cookie serviría la sesión de una persona a otra. Para llegar a CDN pura habría que sacar la sesión del layout raíz (refactor de toda la app) o dar a las rutas públicas un layout sin sesión; no se hace sin decisión de Javier.
 3. **Frase definitoria y entidad de marca.** Hecho hoy en portada y datos estructurados. Falta repetirla en lo que Google muestra de la marca: ficha de App Store, ficha de Google Play, bio de Instagram y TikTok, Search Console. 🟡 Una definición clara y consistente ayuda a que los resúmenes (también de IA) acierten.
 
 ### P1 · alto impacto, pide decisión
 
 4. **Páginas de equipo duplicadas por temporada** (1.914 URLs, un id distinto por equipo y temporada). Muchas son casi idénticas entre sí y compiten. Opciones: (a) mantener todas con contenido propio de la temporada (plantilla, clasificación); (b) fijar una canónica hacia la temporada actual del mismo equipo; (c) `noindex` en temporadas antiguas de equipos. ⚪ Decidir con datos de Search Console (¿qué se indexa? ¿qué da clics?).
+4b. **Privacidad de los datos estructurados de equipo (decisión de Javier).** `teamJsonLd` (en `lib/seo/fcp.ts`) lista a **todos los jugadores del equipo con nombre y enlace** (`athlete: [Person…]`), y los perfiles de jugador están fuera del índice a propósito. Son datos públicos de la Federación, pero es incoherente con el criterio de no indexar jugadores y con la regla de contenido (solo equipos y clubs). Opciones: (a) quitar `athlete` de los datos estructurados (recomendado: no cuesta posicionamiento de equipo); (b) dejarlo. Los nombres siguen en el HTML visible de la ficha del equipo. No se ha tocado.
 5. **Páginas de grupo de temporadas antiguas** sí tienen búsquedas reales («clasificación liga cántabra pádel 2023»): conviene que sean rápidas y tengan texto único (descripción con los equipos que encabezan, ya la tiene).
 6. **Enlaces internos:** portada → federación → grupo → equipo → grupo hermano. Hecho el directorio de grupos rastreable (commit `97eeb8c1`); comprobar que ningún grupo queda a más de 3 clics de la portada.
 7. **Enlaces entrantes** (la palanca que más cuesta): la FCP, los clubs (G6, Smash, Alday, Medio Cudeyo…), medios de pádel locales, directorios. Cada club que enlace a su ficha en tactium.io vale más que mil descripciones.
@@ -41,7 +43,7 @@ lo técnico y propone; no puede medir resultados.
 
 ### P2 · mantenimiento
 
-9. `lastmod` real por URL en el sitemap (hoy hay fechas repetidas de 31-07 y otras de hoy).
+9. ~~`lastmod` real en el sitemap~~: **ya es real** (sale de `updated_at` de cada grupo y equipo; las fechas repetidas de 31-07 son de una importación masiva). Nada que hacer.
 10. Textos alternativos y nombres de fichero de imágenes; imágenes OG por grupo/equipo ya existen.
 11. Texto en pantalla, voz y pie de los reels con las mismas palabras que se buscan («liga cántabra pádel», «clasificación», «orden de fuerza»): es el SEO de Instagram.
 12. Páginas de guía propias (normativa de la Liga Cántabra, orden de fuerza, cómo montar la alineación, calendario de jornadas) con enlace a la app.
