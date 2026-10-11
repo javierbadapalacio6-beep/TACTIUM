@@ -327,11 +327,8 @@ export function teamJsonLd(idEquipo: number, data: FcpTeamBundle): object[] {
       url: `${SITE_URL}${path}`,
       memberOf: FED_ORG,
       ...(p.preseason?.sede ? { location: { "@type": "Place", name: p.preseason.sede } } : {}),
-      athlete: p.roster.map((r) => ({
-        "@type": "Person",
-        name: r.name,
-        url: `${SITE_URL}/federacion/${FCP_SLUG}/jugador/${enc(r.idJugador)}`,
-      })),
+      // Sin `athlete`: los perfiles de jugador están fuera del índice a propósito, y listar a cada
+      // jugador con nombre y enlace en los datos estructurados lo contradecía (decisión 11-10-2026).
     },
   ];
 }
