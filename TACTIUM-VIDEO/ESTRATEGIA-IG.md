@@ -42,7 +42,7 @@ El competidor (Padel Pro Manager, 204 seguidores) ya hace una versión de esto: 
 |---|---|---|
 | Señales de ranking | Tiempo de visionado, likes/alcance y envíos/alcance. Likes algo más importantes para seguidores; envíos algo más para no seguidores | 🟡 |
 | «Envíos valen 3-5 × un like» | Cifra repetida en muchos blogs; Instagram nunca ha publicado un peso | ⚪ |
-| Reels de prueba | Solo los ven NO seguidores, no salen en el perfil, se gradúan a seguidores a mano o solos si rinden. Se publican por API con `trial_params` y `graduation_strategy` = `MANUAL` o `SS_PERFORMANCE` | ✅ (API) |
+| Reels de prueba | Solo los ven NO seguidores, no salen en el perfil, se gradúan a seguidores a mano o solos si rinden. La documentación de Meta describe `trial_params` para la API, pero **desde esta cuenta no se pueden subir por API (corrección de Javier, 11-10): se suben A MANO** | ✅ (propio) |
 | Alcance de las pruebas | Menor que un reel normal (no tienen el empujón inicial de los seguidores) | 🟡 |
 | Requisitos de las pruebas | Los blogs dicen entre 200 y 1.000 seguidores; la documentación de Meta no dice nada. **Hay que probarlo** | ⚪ |
 | Datos de las pruebas por API | Meta no dice si devuelven métricas; el informe del bot avisa si no llegan | ❓ |
@@ -71,7 +71,7 @@ Un reel de prueba cada día, a un público que no nos conoce, sin quemar a los s
 - Probar UNA variable por reel: el gancho, la duración o el tema.
 - Misma idea con 2-3 ganchos distintos en días distintos.
 - Objetivo: 7 pruebas a la semana, 2-3 graduadas.
-- Activar con `ig_reels_prueba = SS_PERFORMANCE` (se gradúa solo) o `MANUAL` (decides tú). Recomendado empezar en `MANUAL` una semana para aprender qué umbral usa Instagram.
+- Activar con `ig_reels_prueba = AVISO` (y `ig_reels_prueba_piezas` si solo quieres algunos): a la hora de cada reel el bot manda el vídeo, los pasos y el pie a Telegram, tú lo subes como reel de prueba y a las 24 h te recuerda qué mirar. Hoy está en `off`.
 
 ## 5. Sistema de contenido
 
