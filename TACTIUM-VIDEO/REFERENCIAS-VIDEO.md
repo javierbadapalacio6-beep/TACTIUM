@@ -64,11 +64,51 @@ historia: v1 de 45,6 s con personajes de dibujos → v3 de 30,3 s estilo keynote
 
 ---
 
-## 2. prompt-motion.com · ❓ pendiente
+## 2. prompt-motion.com · galería de motion hecho con Claude · 🟡
 
-Javier la pasó el 10-10-2026. **No cargó**: ni desde el servidor ni desde su Chrome (página de error). Hay que
-confirmar la dirección exacta o enviar capturas/contenido. Qué buscamos de ella: prompts de motion graphics
-reutilizables y su estructura.
+Javier la pasó el 10-10-2026 (la primera vez no cargó; el 11-10 sí). Es una **galería curada de vídeos de motion hechos
+con Claude (Opus 5.5) con el prompt o la «skill» que hay detrás de cada uno** (unas 240 entradas, cada una enlazada a su
+creador). Categorías por número de piezas: Product UI (~100), Kinetic type (~97), Music (~50), Shapes (~44), Particles
+(~43), Charts (~33), Diagrams (~31), Characters (~27), Photos (~23), Phone (~22), Code (~21). Plantillas: «showreel» (la
+más usada, una sola línea) y «3D a tiempo real» (three.js); vienen más (explainer, product film, short film).
+Los prompts pertenecen a sus creadores: **aquí se guarda la técnica, no el texto**.
+
+### La técnica que sale de ahí (la más completa que he visto, un prompt de bucle de 14 s)
+
+Un buen prompt de motion es un **plano de obra**, no un deseo. Cinco bloques:
+1. **Entradas:** pregunta primero lo que necesita (estados de interfaz, esquema de color, una canción).
+2. **Dirección:** UNA forma que se transforma entre estados sin cortes; una tipografía; solo muelles como curva de
+   movimiento (sin rebotes); y una lista de **prohibiciones** (sin partículas, sin brillos, sin degradados, sin diseños de plantilla).
+3. **Estructura sobre el compás:** 7 compases a 120 BPM = 28 tiempos ≈ 14 s, un evento en cada tiempo; el último
+   fotograma es igual al primero para que el **bucle** no salte.
+4. **Construcción determinista:** una sola página HTML donde todo es una función del tiempo (`seek(t)`), sin
+   transiciones CSS ni temporizadores; muelles en forma cerrada; los sonidos de interfaz se colocan en los picos medidos
+   del audio (análisis de la canción con numpy); el render se hace con Playwright y ffmpeg, promediando 4 subfotogramas
+   por fotograma para el **desenfoque de movimiento** a 60 fps; se renderiza **un fotograma por tiempo** para revisar antes
+   del render final.
+5. **Trampas:** no usar `will-change` en lo que escala con la cámara (texto borroso); cada texto necesita su entrada y su
+   salida; la posición y velocidad del cursor deben coincidir al principio y al final del bucle.
+
+Otro ejemplo, el contrario, también útil: la entrada más usada es una sola línea («haz un vídeo de 15 s que enseñe lo
+increíble motion designer que eres, como tu showreel; un lanzamiento de un SaaS»). **Una línea buena pide un resultado
+con un propósito; un plano de obra garantiza el nivel**. Para TACTIUM usaremos el plano de obra.
+
+### Cómo se aplica a TACTIUM
+
+- **Encaja con lo que ya tenemos:** `sin-remotion/` (HTML + Three.js, `render.mjs <escena>`) es exactamente este método.
+  Se puede reutilizar su esquema `seek(t)` y el desenfoque por subfotogramas para piezas de motion.
+- **Sincronía con el compás** (también está en la guía de Bosso): eventos de imagen sobre cada tiempo, sonidos en los
+  picos reales de la música, bucle perfecto. Sirve para los reels de motion y de cierre con música.
+- **Lista de prohibiciones propia ya escrita** (premium es sustracción): sin partículas ni brillos, sin diseños de
+  plantilla, un acento verde, una tipografía.
+- **Categorías útiles para nosotros:** Product UI (la app), Phone (móvil con captura real), Charts/Diagrams (el orden de
+  fuerza, la clasificación), Kinetic type (el gancho).
+- **Skill «Cinetic»** (`npx skills add Leonxlnx/cinetic`, código externo): NO se instala sin revisar el repositorio.
+- **Qué NO copiar:** las piezas de partículas o brillos, que van contra nuestra regla de sustracción; y el formato
+  cuadrado 1440×1440 (los nuestros son 9:16).
+- **Experimento:** una pieza de motion de 14 s con este método para «el orden de fuerza» (la ficha del equipo se
+  reordena sobre el compás), comparada con los reels «M» que se quedaron en ~100 visualizaciones: ¿cambia algo si el
+  motion lleva una situación humana delante?
 
 ---
 

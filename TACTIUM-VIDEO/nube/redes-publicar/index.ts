@@ -15,7 +15,7 @@
 // Las de tipo «aviso» (stories con sticker) no se publican: a su hora se manda la imagen
 // por Telegram para subirla a mano. Las de tipo «grabacion» mandan el guion.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { informePieza, informeSemanal, resumirRef } from "./informes.ts";
+import { informePieza, informeSemanal, num, resumirRef, seg } from "./informes.ts";
 import type { Formato, Metricas, NavHistoria, PiezaSemana, Ref } from "./informes.ts";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -69,20 +69,32 @@ async function siguiente(excluir?: string) {
 }
 
 /** Guarda el aviso y lo manda por Telegram si está configurado (tg_token + tg_chat).
- *  Con `foto`, va como imagen con el texto al pie (para guardarla en el móvil y subirla). */
-async function avisar(cfg: Cfg, pieza: string | null, texto: string, sig: string, foto?: string) {
+ *  Con `foto`, va como imagen con el texto al pie (para guardarla en el móvil y subirla).
+ *  Con `video`, va como vídeo con el texto al pie; si Telegram no lo acepta (por URL admite ~20 MB),
+ *  se manda el texto con el enlace de descarga. */
+async function avisar(cfg: Cfg, pieza: string | null, texto: string, sig: string, foto?: string, video?: string) {
   let enviado = false, error: string | null = null;
   if (cfg.tg_token && cfg.tg_chat) {
     try {
       const cuerpoTexto = sig ? `${texto}\n\nSiguiente: ${sig}` : texto;
-      const r = await fetch(`https://api.telegram.org/bot${cfg.tg_token}/${foto ? "sendPhoto" : "sendMessage"}`, {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify(foto
-          ? { chat_id: cfg.tg_chat, photo: foto, caption: cuerpoTexto.slice(0, 1024) }
-          : { chat_id: cfg.tg_chat, text: cuerpoTexto.slice(0, 4096) }),
-      });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.description || "Telegram no aceptó el mensaje");
+      const enviar = async (metodo: string, cuerpo: Record<string, unknown>) => {
+        const r = await fetch(`https://api.telegram.org/bot${cfg.tg_token}/${metodo}`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: cfg.tg_chat, ...cuerpo }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.description || "Telegram no aceptó el mensaje");
+      };
+      if (video) {
+        try {
+          await enviar("sendVideo", { video, caption: cuerpoTexto.slice(0, 1024), supports_streaming: true });
+        } catch {
+          await enviar("sendMessage", { text: `${cuerpoTexto}\n\nVídeo (descárgalo desde el enlace): ${video}`.slice(0, 4096) });
+        }
+      } else if (foto) {
+        await enviar("sendPhoto", { photo: foto, caption: cuerpoTexto.slice(0, 1024) });
+      } else {
+        await enviar("sendMessage", { text: cuerpoTexto.slice(0, 4096) });
+      }
       enviado = true;
     } catch (e) { error = String((e as Error).message || e); }
   } else {
@@ -94,11 +106,42 @@ async function avisar(cfg: Cfg, pieza: string | null, texto: string, sig: string
 const actualizar = (pieza: string, cambios: Record<string, unknown>) =>
   sb.from("redes_publicaciones").update({ ...cambios, actualizado: new Date().toISOString() }).eq("pieza", pieza);
 
-/** Recuerda qué piezas salieron como reel de prueba (para informarlas a las 24 h y decidir si se gradúan). */
+/**
+ * Reels de prueba: Instagram no deja subirlos por la API desde esta cuenta, así que NO salen solos.
+ * `ig_reels_prueba` (vacío u «off» = desactivado; cualquier otro valor lo activa) hace que, a la hora
+ * de cada reel, el bot mande por Telegram el vídeo y el pie para subirlo a mano como «reel de prueba»
+ * (solo lo ven quienes no te siguen y no sale en tu perfil hasta que lo compartas con seguidores).
+ * `ig_reels_prueba_piezas` (IDs separados por comas) limita cuáles; vacío = todos los reels.
+ * Un reel de prueba NUNCA se publica normal por el camino automático.
+ */
+function esReelDePrueba(cfg: Cfg, f: Fila): boolean {
+  const modo = (cfg.ig_reels_prueba || "").trim().toLowerCase();
+  if (f.tipo !== "reel" || !modo || modo === "off") return false;
+  const solo = (cfg.ig_reels_prueba_piezas || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return solo.length === 0 || solo.includes(f.pieza);
+}
+
+/** Recuerda qué reels se mandaron como prueba (para el recordatorio de las 24 h). */
 async function marcarPrueba(cfg: Cfg, pieza: string) {
   const l = new Set((cfg.reels_prueba_publicados || "").split(",").filter(Boolean));
   l.add(pieza);
   await sb.from("redes_config").upsert([{ clave: "reels_prueba_publicados", valor: [...l].slice(-60).join(","), actualizado: new Date().toISOString() }]);
+}
+
+/** Manda el vídeo y el pie por Telegram, con los pasos para subirlo a mano como reel de prueba. */
+async function avisarPrueba(cfg: Cfg, f: Fila) {
+  const video = PUBLICO + f.media[0];
+  await avisar(cfg, f.pieza, `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo}\nSúbelo a mano ahora (pasos en el mensaje siguiente).`, await siguiente(f.pieza), undefined, video);
+  await avisar(cfg, f.pieza, [
+    `PASOS para ${f.pieza}:`,
+    "1) Guarda el vídeo del mensaje anterior (o descárgalo del enlace).",
+    "2) Instagram → + → Reel → elige el vídeo → Siguiente.",
+    "3) En la pantalla final activa la opción de probar el reel con una audiencia más amplia primero (reel de prueba; el nombre exacto cambia según la versión).",
+    "4) Pega el pie de abajo, sin hashtags de más, y compártelo.",
+    "5) A las 24 h te mando qué mirar y si graduarlo a tus seguidores.",
+  ].join("\n"), "");
+  await avisar(cfg, f.pieza, `PIE DEL REEL (cópialo entero):\n\n${f.caption}`, "");
+  await marcarPrueba(cfg, f.pieza);
 }
 
 /** Crea el contenedor de Instagram (y los de cada imagen si es carrusel). */
@@ -113,42 +156,16 @@ async function preparar(cfg: Cfg, f: Fila) {
   // posts y carruseles (en el contenedor padre); las stories no lo admiten.
   const lista = (cfg.ig_colaboradores || "").split(",").map((s) => s.trim().replace(/^@/, "")).filter(Boolean).slice(0, 3);
   const colab: Record<string, string> = lista.length ? { collaborators: JSON.stringify(lista) } : {};
-  // Reels de prueba (clave `ig_reels_prueba` = MANUAL | SS_PERFORMANCE; vacío u «off» = desactivado).
-  // Solo los ven quienes NO te siguen y no salen en tu perfil: sirven para probar ganchos sin quemar
-  // a los seguidores. MANUAL: los pasas a seguidores tú desde la app; SS_PERFORMANCE: Instagram los
-  // gradúa solo si rinden. `ig_reels_prueba_piezas` (IDs separados por comas) limita cuáles; vacío = todos.
-  const modoRaw = (cfg.ig_reels_prueba || "").trim().toUpperCase();
-  const modoPrueba = modoRaw === "MANUAL" || modoRaw === "SS_PERFORMANCE" ? modoRaw : null;
-  const soloPiezas = (cfg.ig_reels_prueba_piezas || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const esPrueba = f.tipo === "reel" && !!modoPrueba && (soloPiezas.length === 0 || soloPiezas.includes(f.pieza));
-  const prueba: Record<string, string> = esPrueba ? { trial_params: JSON.stringify({ graduation_strategy: modoPrueba }) } : {};
   const normal: Record<string, string> = f.tipo === "reel" ? { share_to_feed: "true" } : {};
+  // Si Instagram rechazara a un colaborador, la pieza sale igual (sin él) y se avisa: nunca se pierde una publicación.
   const crear = async (p: Record<string, string>) => {
-    // De más a menos ambicioso: un extra que Instagram rechace nunca hace perder la publicación.
-    const intentos: { quita: string; extra: Record<string, string> }[] = esPrueba
-      ? [
-          { quita: "", extra: { ...prueba, ...colab } },
-          ...(lista.length ? [{ quita: "los colaboradores", extra: { ...prueba } }] : []),
-          { quita: "el modo prueba (saldrá como reel normal)", extra: { ...normal } },
-        ]
-      : [
-          { quita: "", extra: { ...normal, ...colab } },
-          ...(lista.length ? [{ quita: "los colaboradores", extra: { ...normal } }] : []),
-        ];
-    let ultimo: unknown;
-    for (let i = 0; i < intentos.length; i++) {
-      try {
-        const id = (await ig(cfg, `${cfg.ig_cuenta}/media`, { ...p, ...intentos[i].extra }, "POST")).id as string;
-        if ("trial_params" in intentos[i].extra) await marcarPrueba(cfg, f.pieza);
-        return id;
-      } catch (e) {
-        ultimo = e;
-        if (i < intentos.length - 1) {
-          await avisar(cfg, f.pieza, `Instagram no aceptó ${intentos[i + 1].quita} en ${f.pieza}: ${String((e as Error).message || e)}. Reintento sin eso.`, "");
-        }
-      }
+    try {
+      return (await ig(cfg, `${cfg.ig_cuenta}/media`, { ...p, ...normal, ...colab }, "POST")).id as string;
+    } catch (e) {
+      if (!lista.length) throw e;
+      await avisar(cfg, f.pieza, `Instagram no aceptó los colaboradores (${lista.join(", ")}) en ${f.pieza}: ${String((e as Error).message || e)}. Sale sin colaborador.`, "");
+      return (await ig(cfg, `${cfg.ig_cuenta}/media`, { ...p, ...normal }, "POST")).id as string;
     }
-    throw ultimo;
   };
   if (f.tipo === "reel") {
     const p: Record<string, string> = { media_type: "REELS", video_url: url(0), caption: f.caption, ...loc };
@@ -191,6 +208,14 @@ async function procesar(cfg: Cfg, f: Fila, forzar: boolean) {
   if (f.tipo === "grabacion") {
     if (!aHora) return "esperando";
     await avisar(cfg, f.pieza, f.caption, "");
+    await actualizar(f.pieza, { estado: "avisada", bloqueado_hasta: null });
+    return "avisada";
+  }
+
+  // Reel de prueba: no se publica por la API; a su hora se manda a Telegram para subirlo a mano.
+  if (esReelDePrueba(cfg, f)) {
+    if (!aHora) return "esperando";
+    await avisarPrueba(cfg, f);
     await actualizar(f.pieza, { estado: "avisada", bloqueado_hasta: null });
     return "avisada";
   }
@@ -293,40 +318,63 @@ async function referencia(formato: Formato, excluir: string): Promise<Ref | null
 }
 
 /**
- * Informe de cada publicación del feed sin informe todavía: a las 48 h, y a las 24 h si fue un reel de
- * prueba (hay que decidir pronto si se gradúa a seguidores; Instagram da unas 72 h).
+ * Recordatorio de las 24 h de cada reel de prueba (subido a mano): qué mirar en la app y el criterio para
+ * graduarlo a seguidores. Instagram no da por API los datos de los reels de prueba, así que decide la persona.
  */
+async function recordatoriosPrueba(cfg: Cfg) {
+  const manuales = new Set((cfg.reels_prueba_publicados || "").split(",").filter(Boolean));
+  const hechos = new Set((cfg.reels_prueba_recordados || "").split(",").filter(Boolean));
+  const { data } = await sb.from("redes_publicaciones").select("pieza,titulo,actualizado")
+    .eq("tipo", "reel").eq("estado", "avisada")
+    .gte("actualizado", new Date(Date.now() - 72 * 3600000).toISOString())
+    .lte("actualizado", new Date(Date.now() - 24 * 3600000).toISOString());
+  const nuevos: string[] = [];
+  let ref: Ref | null = null;
+  for (const f of data || []) {
+    if (!manuales.has(f.pieza) || hechos.has(f.pieza)) continue;
+    ref ??= await referencia("reel", f.pieza);
+    const med = ref ? `tu mediana de reels: ${num(ref.views)} visualizaciones` + (ref.watch ? ` y ${seg(ref.watch)} de visionado` : "") : "aún sin mediana propia";
+    await avisar(cfg, f.pieza, [
+      `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo} — han pasado 24 h`,
+      "",
+      "Abre el reel en Instagram → Ver estadísticas (o Panel profesional → Reels de prueba) y mira:",
+      "• Visionado medio (retención)",
+      "• Envíos (veces que lo mandaron por mensaje)",
+      "• Visualizaciones",
+      "",
+      `Graduarlo a tus seguidores si cumple 2 de 3: ≥ 5 s de visionado medio · ≥ 3 envíos por cada 1.000 cuentas alcanzadas · visualizaciones ≥ la mitad de lo normal (${med}).`,
+      "",
+      "Si lo graduas (Compartir con todos): mándalo tú a los grupos de los equipos que salgan y haz 2 historias. Si no cumple: archívalo y anota qué gancho falló en APRENDIZAJES-VIDEO.md.",
+    ].join("\n"), "");
+    hechos.add(f.pieza);
+    nuevos.push(f.pieza);
+  }
+  if (nuevos.length) {
+    await sb.from("redes_config").upsert([{ clave: "reels_prueba_recordados", valor: [...hechos].slice(-60).join(","), actualizado: new Date().toISOString() }]);
+  }
+  return nuevos;
+}
+
+/** Informe de cada publicación del feed que ha cumplido 48 h (de la última semana y sin informe todavía). */
 async function informes(cfg: Cfg) {
-  const pruebas = new Set((cfg.reels_prueba_publicados || "").split(",").filter(Boolean));
+  const recordados = await recordatoriosPrueba(cfg);
   const { data } = await sb.from("redes_publicaciones").select("pieza,tipo,titulo,ig_media_id,ig_enlace,publicada_at")
     .eq("estado", "publicada").is("informe_at", null).not("ig_media_id", "is", null).in("tipo", ["reel", "carrusel", "post"])
     .gte("publicada_at", new Date(Date.now() - 7 * 86400000).toISOString())
-    .lte("publicada_at", new Date(Date.now() - 24 * 3600000).toISOString())
-    .order("publicada_at").limit(6);
+    .lte("publicada_at", new Date(Date.now() - 48 * 3600000).toISOString())
+    .order("publicada_at").limit(3);
   const hechos: string[] = [];
   for (const f of data || []) {
-    const prueba = f.tipo === "reel" && pruebas.has(f.pieza);
-    const horas = prueba ? 24 : 48;
-    if (Date.now() - new Date(f.publicada_at).getTime() < horas * 3600000) continue;
-    if (hechos.length >= 3) break;
     const formato = f.tipo as Formato;
     const m = await metricasDe(cfg, f.ig_media_id, formato);
-    if (prueba && m.views === undefined) {
-      // Instagram no devuelve los datos del reel de prueba por la API: hay que mirarlos en la app.
-      await avisar(cfg, f.pieza, `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo}\nHan pasado 24 h. Instagram no da por API los datos de los reels de prueba: míralos en la app (Perfil → Panel profesional → Reels de prueba) y decide si lo compartes con tus seguidores. Criterio: ≥ 5 s de visionado medio y que se envíe a amigos.`, "");
-      await actualizar(f.pieza, { informe_at: new Date().toISOString() });
-      hechos.push(f.pieza);
-      continue;
-    }
     const ref = await referencia(formato, f.pieza);
-    const texto = informePieza({ formato, pieza: f.pieza, titulo: f.titulo, publicada: new Date(f.publicada_at), horas, m, ref, enlace: f.ig_enlace, prueba });
+    const texto = informePieza({ formato, pieza: f.pieza, titulo: f.titulo, publicada: new Date(f.publicada_at), horas: 48, m, ref, enlace: f.ig_enlace });
     await avisar(cfg, f.pieza, texto, "");
     await actualizar(f.pieza, { informe_at: new Date().toISOString(), metricas: m });
     hechos.push(f.pieza);
   }
-  return hechos;
+  return [...hechos, ...recordados.map((p) => `${p} (recordatorio de prueba)`)];
 }
-
 /**
  * Informe de las historias activas (tanto las que sube la función como las que se suben a mano
  * desde el aviso de Telegram). Caducan a las 24 h y sus datos casi se cierran a las ~16 h, así que
