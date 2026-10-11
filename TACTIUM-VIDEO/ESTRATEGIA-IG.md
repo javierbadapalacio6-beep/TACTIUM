@@ -42,7 +42,7 @@ El competidor (Padel Pro Manager, 204 seguidores) ya hace una versión de esto: 
 |---|---|---|
 | Señales de ranking | Tiempo de visionado, likes/alcance y envíos/alcance. Likes algo más importantes para seguidores; envíos algo más para no seguidores | 🟡 |
 | «Envíos valen 3-5 × un like» | Cifra repetida en muchos blogs; Instagram nunca ha publicado un peso | ⚪ |
-| Reels de prueba | Solo los ven NO seguidores, no salen en el perfil, se gradúan a seguidores a mano o solos si rinden. La documentación de Meta describe `trial_params` para la API, pero **desde esta cuenta no se pueden subir por API (corrección de Javier, 11-10): se suben A MANO** | ✅ (propio) |
+| Reels de prueba | Solo los ven NO seguidores, no salen en el perfil; se gradúan a seguidores a mano (`MANUAL`) o solos si rinden (`SS_PERFORMANCE`). **Se pueden publicar por la API con `trial_params`: comprobado el 11-10-2026 desde esta cuenta (acepta los dos modos y rechaza valores inventados).** Falta confirmar de punta a punta con la primera publicación real (H1, 13-10 a las 19:00) | ✅ (API, al preparar el vídeo) |
 | Alcance de las pruebas | Menor que un reel normal (no tienen el empujón inicial de los seguidores) | 🟡 |
 | Requisitos de las pruebas | Los blogs dicen entre 200 y 1.000 seguidores; la documentación de Meta no dice nada. **Hay que probarlo** | ⚪ |
 | Datos de las pruebas por API | Meta no dice si devuelven métricas; el informe del bot avisa si no llegan | ❓ |
@@ -71,7 +71,12 @@ Un reel de prueba cada día, a un público que no nos conoce, sin quemar a los s
 - Probar UNA variable por reel: el gancho, la duración o el tema.
 - Misma idea con 2-3 ganchos distintos en días distintos.
 - Objetivo: 7 pruebas a la semana, 2-3 graduadas.
-- Activar con `ig_reels_prueba = AVISO` (y `ig_reels_prueba_piezas` si solo quieres algunos): a la hora de cada reel el bot manda el vídeo, los pasos y el pie a Telegram, tú lo subes como reel de prueba y a las 24 h te recuerda qué mirar. Hoy está en `off`.
+- **Cada pieza decide si sale normal o como prueba** con la columna `redes_publicaciones.prueba`: vacío = sigue la clave global `ig_reels_prueba`; `no` = sale normal; `MANUAL` = prueba y la gradúas tú en la app; `SS_PERFORMANCE` = prueba y Instagram la gradúa sola si rinde.
+- Clave global `ig_reels_prueba` (hoy `off`): `MANUAL` | `SS_PERFORMANCE` (todos los reels como prueba por la API) | `AVISO` (sin API: el bot manda el vídeo y el pie a Telegram para subirlo a mano) | `off`. `ig_reels_prueba_piezas` limita la global a ciertas piezas.
+- **Si Instagram rechazara una prueba, NUNCA se publica normal en su lugar:** el bot avisa por Telegram con el vídeo y el pie para subirlo a mano.
+- Para fijar una pieza: `update redes_publicaciones set prueba = 'MANUAL' where pieza = 'H1';` (hoy: H1 en `MANUAL`, J2 normal).
+- **Qué NO se puede automatizar:** la graduación en `MANUAL` (se hace en la app). Con `SS_PERFORMANCE` la decide Instagram con su propio umbral, que no conocemos.
+- **Pendiente de verificar:** si Instagram devuelve las métricas de un reel de prueba por la API (si no, el informe de las 24 h lo avisa y se miran en la app).
 
 ## 5. Sistema de contenido
 

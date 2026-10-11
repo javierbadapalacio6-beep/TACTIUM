@@ -29,7 +29,12 @@ type Fila = {
   pieza: string; tipo: string; titulo: string; programada_para: string; caption: string;
   media: string[]; portada_ms: number | null; estado: string; contenedor: string | null;
   hijos: string[] | null; intentos: number;
+  /** null = sigue la clave global `ig_reels_prueba`; 'no' = normal; 'MANUAL' | 'SS_PERFORMANCE' = reel de prueba. */
+  prueba?: string | null;
 };
+
+/** Instagram no aceptó publicar el reel como prueba: NUNCA se publica normal en su lugar; se avisa para subirlo a mano. */
+class PruebaNoDisponible extends Error {}
 
 const leerCfg = async (): Promise<Cfg> => {
   const { data, error } = await sb.from("redes_config").select("clave,valor");
@@ -107,18 +112,26 @@ const actualizar = (pieza: string, cambios: Record<string, unknown>) =>
   sb.from("redes_publicaciones").update({ ...cambios, actualizado: new Date().toISOString() }).eq("pieza", pieza);
 
 /**
- * Reels de prueba: Instagram no deja subirlos por la API desde esta cuenta, así que NO salen solos.
- * `ig_reels_prueba` (vacío u «off» = desactivado; cualquier otro valor lo activa) hace que, a la hora
- * de cada reel, el bot mande por Telegram el vídeo y el pie para subirlo a mano como «reel de prueba»
- * (solo lo ven quienes no te siguen y no sale en tu perfil hasta que lo compartas con seguidores).
- * `ig_reels_prueba_piezas` (IDs separados por comas) limita cuáles; vacío = todos los reels.
- * Un reel de prueba NUNCA se publica normal por el camino automático.
+ * Reels de prueba (solo los ven quienes NO te siguen y no salen en tu perfil hasta que se gradúan a seguidores).
+ * Instagram los admite por la API (`trial_params`, comprobado el 11-10-2026: acepta los dos modos y rechaza valores
+ * inventados). Cada pieza decide con su columna `prueba`; si está vacía, manda la clave global `ig_reels_prueba`:
+ *   · MANUAL          → se publica como prueba y lo gradúas tú en la app.
+ *   · SS_PERFORMANCE  → se publica como prueba y Instagram lo gradúa solo si rinde.
+ *   · AVISO           → no se usa la API: a su hora el bot manda el vídeo y el pie a Telegram para subirlo a mano.
+ *   · off / vacío     → todos los reels salen normales.
+ * `ig_reels_prueba_piezas` (IDs separados por comas) limita la clave global a esas piezas. `prueba = 'no'` en una
+ * pieza la fuerza a salir normal. Un reel de prueba NUNCA se publica normal por el camino automático.
  */
-function esReelDePrueba(cfg: Cfg, f: Fila): boolean {
-  const modo = (cfg.ig_reels_prueba || "").trim().toLowerCase();
-  if (f.tipo !== "reel" || !modo || modo === "off") return false;
+function modoPrueba(cfg: Cfg, f: Fila): "MANUAL" | "SS_PERFORMANCE" | "AVISO" | null {
+  if (f.tipo !== "reel") return null;
+  const propio = (f.prueba || "").trim();
+  if (propio === "no") return null;
+  if (propio === "MANUAL" || propio === "SS_PERFORMANCE") return propio;
+  const g = (cfg.ig_reels_prueba || "").trim().toUpperCase();
+  if (g !== "MANUAL" && g !== "SS_PERFORMANCE" && g !== "AVISO") return null;
   const solo = (cfg.ig_reels_prueba_piezas || "").split(",").map((s) => s.trim()).filter(Boolean);
-  return solo.length === 0 || solo.includes(f.pieza);
+  if (solo.length && !solo.includes(f.pieza)) return null;
+  return g;
 }
 
 /** Recuerda qué reels se mandaron como prueba (para el recordatorio de las 24 h). */
@@ -129,9 +142,10 @@ async function marcarPrueba(cfg: Cfg, pieza: string) {
 }
 
 /** Manda el vídeo y el pie por Telegram, con los pasos para subirlo a mano como reel de prueba. */
-async function avisarPrueba(cfg: Cfg, f: Fila) {
+async function avisarPrueba(cfg: Cfg, f: Fila, motivo: string | null) {
   const video = PUBLICO + f.media[0];
-  await avisar(cfg, f.pieza, `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo}\nSúbelo a mano ahora (pasos en el mensaje siguiente).`, await siguiente(f.pieza), undefined, video);
+  const porque = motivo ? `Instagram no dejó publicarlo solo como prueba (${motivo.slice(0, 160)}).` : "Este reel va como prueba y se sube a mano.";
+  await avisar(cfg, f.pieza, `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo}\n${porque} Súbelo a mano ahora (pasos en el mensaje siguiente).`, await siguiente(f.pieza), undefined, video);
   await avisar(cfg, f.pieza, [
     `PASOS para ${f.pieza}:`,
     "1) Guarda el vídeo del mensaje anterior (o descárgalo del enlace).",
@@ -157,8 +171,25 @@ async function preparar(cfg: Cfg, f: Fila) {
   const lista = (cfg.ig_colaboradores || "").split(",").map((s) => s.trim().replace(/^@/, "")).filter(Boolean).slice(0, 3);
   const colab: Record<string, string> = lista.length ? { collaborators: JSON.stringify(lista) } : {};
   const normal: Record<string, string> = f.tipo === "reel" ? { share_to_feed: "true" } : {};
-  // Si Instagram rechazara a un colaborador, la pieza sale igual (sin él) y se avisa: nunca se pierde una publicación.
+  const modo = modoPrueba(cfg, f);
+  const estrategia = modo === "MANUAL" || modo === "SS_PERFORMANCE" ? modo : null;
   const crear = async (p: Record<string, string>) => {
+    if (estrategia) {
+      // Reel de prueba por la API. Si Instagram lo rechaza NO se publica normal: PruebaNoDisponible → aviso para subirlo a mano.
+      const prueba = { trial_params: JSON.stringify({ graduation_strategy: estrategia }) };
+      const intentos = [{ ...prueba, ...colab }, ...(lista.length ? [{ ...prueba }] : [])];
+      let ultimo: unknown;
+      for (const extra of intentos) {
+        try {
+          const id = (await ig(cfg, `${cfg.ig_cuenta}/media`, { ...p, ...extra }, "POST")).id as string;
+          await marcarPrueba(cfg, f.pieza);
+          await actualizar(f.pieza, { prueba: estrategia });
+          return id;
+        } catch (e) { ultimo = e; }
+      }
+      throw new PruebaNoDisponible(String((ultimo as Error)?.message || ultimo));
+    }
+    // Si Instagram rechazara a un colaborador, la pieza sale igual (sin él) y se avisa: nunca se pierde una publicación.
     try {
       return (await ig(cfg, `${cfg.ig_cuenta}/media`, { ...p, ...normal, ...colab }, "POST")).id as string;
     } catch (e) {
@@ -212,17 +243,29 @@ async function procesar(cfg: Cfg, f: Fila, forzar: boolean) {
     return "avisada";
   }
 
-  // Reel de prueba: no se publica por la API; a su hora se manda a Telegram para subirlo a mano.
-  if (esReelDePrueba(cfg, f)) {
+  // Modo AVISO: sin API. A su hora, el vídeo y el pie van a Telegram para subirlo a mano como reel de prueba.
+  if (modoPrueba(cfg, f) === "AVISO") {
     if (!aHora) return "esperando";
-    await avisarPrueba(cfg, f);
+    await avisarPrueba(cfg, f, null);
     await actualizar(f.pieza, { estado: "avisada", bloqueado_hasta: null });
     return "avisada";
   }
 
   let contenedor = f.contenedor;
   if (!contenedor) {
-    contenedor = await preparar(cfg, f);
+    try {
+      contenedor = await preparar(cfg, f);
+    } catch (e) {
+      if (!(e instanceof PruebaNoDisponible)) throw e;
+      // Instagram no acepta el reel de prueba: NUNCA se publica normal. A su hora se avisa para subirlo a mano.
+      if (!aHora) {
+        await actualizar(f.pieza, { error: `Reel de prueba no aceptado por la API: ${e.message}`.slice(0, 300) });
+        return "esperando";
+      }
+      await avisarPrueba(cfg, f, e.message);
+      await actualizar(f.pieza, { estado: "avisada", bloqueado_hasta: null });
+      return "avisada";
+    }
     await actualizar(f.pieza, { contenedor, estado: "procesando", intentos: f.intentos + 1 });
   }
 
@@ -358,17 +401,29 @@ async function recordatoriosPrueba(cfg: Cfg) {
 /** Informe de cada publicación del feed que ha cumplido 48 h (de la última semana y sin informe todavía). */
 async function informes(cfg: Cfg) {
   const recordados = await recordatoriosPrueba(cfg);
-  const { data } = await sb.from("redes_publicaciones").select("pieza,tipo,titulo,ig_media_id,ig_enlace,publicada_at")
+  const { data } = await sb.from("redes_publicaciones").select("pieza,tipo,titulo,ig_media_id,ig_enlace,publicada_at,prueba")
     .eq("estado", "publicada").is("informe_at", null).not("ig_media_id", "is", null).in("tipo", ["reel", "carrusel", "post"])
     .gte("publicada_at", new Date(Date.now() - 7 * 86400000).toISOString())
-    .lte("publicada_at", new Date(Date.now() - 48 * 3600000).toISOString())
-    .order("publicada_at").limit(3);
+    .lte("publicada_at", new Date(Date.now() - 24 * 3600000).toISOString())
+    .order("publicada_at").limit(8);
   const hechos: string[] = [];
   for (const f of data || []) {
+    // Un reel de prueba se informa a las 24 h (hay que decidir pronto si se gradúa); el resto, a las 48 h.
+    const prueba = f.tipo === "reel" && (f.prueba === "MANUAL" || f.prueba === "SS_PERFORMANCE");
+    const horas = prueba ? 24 : 48;
+    if (Date.now() - new Date(f.publicada_at).getTime() < horas * 3600000) continue;
+    if (hechos.length >= 3) break;
     const formato = f.tipo as Formato;
     const m = await metricasDe(cfg, f.ig_media_id, formato);
+    if (prueba && m.views === undefined) {
+      // Si Instagram no devuelve los datos del reel de prueba por la API, se miran en la app.
+      await avisar(cfg, f.pieza, `🧪 REEL DE PRUEBA · ${f.pieza} · ${f.titulo}\nHan pasado 24 h y Instagram no da por API los datos de este reel de prueba: míralos en la app (Estadísticas del reel) y decide si lo compartes con tus seguidores. Criterio: 2 de 3 → ≥ 5 s de visionado medio · ≥ 3 envíos por 1.000 de alcance · visualizaciones ≥ la mitad de lo normal. ${f.prueba === "SS_PERFORMANCE" ? "Este va con graduación automática: Instagram lo pasa a seguidores solo si rinde." : ""}`, "");
+      await actualizar(f.pieza, { informe_at: new Date().toISOString() });
+      hechos.push(f.pieza);
+      continue;
+    }
     const ref = await referencia(formato, f.pieza);
-    const texto = informePieza({ formato, pieza: f.pieza, titulo: f.titulo, publicada: new Date(f.publicada_at), horas: 48, m, ref, enlace: f.ig_enlace });
+    const texto = informePieza({ formato, pieza: f.pieza, titulo: f.titulo, publicada: new Date(f.publicada_at), horas, m, ref, enlace: f.ig_enlace, prueba });
     await avisar(cfg, f.pieza, texto, "");
     await actualizar(f.pieza, { informe_at: new Date().toISOString(), metricas: m });
     hechos.push(f.pieza);
