@@ -155,3 +155,73 @@ Cuenta de la ventaja: ganar 8 seguidores al día con una conversión del 0,3 % d
 - Reutilizar vídeos ya publicados.
 - Mensajes directos en frío por Instagram a clubs (riesgo de bloqueo): usar email o WhatsApp al contacto del club.
 - Prometer en la bio cosas que la app no hace.
+
+## 14. Auditoría de perfil · rúbrica de 100 puntos (11-10-2026)
+
+Método adaptado de «instagram-agent-skill» (Jake Schincariol, MIT): el perfil es una **pantalla de decisión**, no un
+escaparate: se llega desde UN reel y en ~3 segundos hay que responder «¿hay más de esto y es para mí?». Doce partes, con
+más peso en el campo de nombre, la primera línea de la bio y los tres fijados. La primera pasada casi siempre cae en
+los 30-50. **Puntuación provisional de @tactium.io según lo que se ve desde fuera (no he podido comprobar los botones de
+contacto):**
+
+| Parte | Hoy | Qué se ve | Cómo se sube |
+|---|---|---|---|
+| Campo de nombre (30 car.) | 7/12 | «TACTIUM • App de Pádel»: tiene una frase que se busca, pero no «Liga Cántabra» ni «federado» | Ver opciones abajo |
+| Primera línea de la bio | 5/12 | «La app para clubs, capitanes y jugadores de pádel»: dice para quién, no qué cambia | Beneficio concreto («Alinea tu equipo en 20 s») |
+| Resto de la bio | 4/8 | «Ya disponible · 14 días gratis · Descarga para iOS y Android»: oferta, sin una prueba | Un dato real («323 equipos, 41 grupos») |
+| Tres fijados | 3/10 | Solo UNO fijado y es el cartel «Descárgala ya» (un anuncio, no una prueba) | Fijar tres con tres trabajos distintos |
+| Enlace | 5/8 | «tactium.io y 2 más» = un menú | Un solo destino (tactium.io ya lleva las tiendas) |
+| Destacadas | 0/8 | Ninguna | Subir las 6 ya renderizadas (`D1`-`D6`) |
+| Legibilidad de la cuadrícula | 6/8 | Portadas con texto y muy reconocibles; algunas repiten la misma toma de cara y una (tablón) no lleva texto | Texto de 4 palabras en cada portada |
+| Foto | 4/6 | Logotipo de marca sobre negro: correcto para una marca | — |
+| Usuario | 5/6 | `tactium.io`: legible y dicho en voz alta es fácil | — |
+| Categoría y contacto | 5/6 | Cuenta profesional, categoría «Deportes» | Comprobar botones de contacto y correo |
+| Actividad reciente | 8/10 | Publicó hace menos de 7 días; 0 comentarios que responder | Responder a todos en la primera hora |
+| Historias | 3/6 | Hay una nota, pero no hay anillo de historia activo | 3-5 historias al día con una pregunta |
+| **Total** | **≈ 55/100** | | **Con los cambios de abajo: ~84** |
+
+**Reescrituras, de la que más puntos da a la que menos** (copiar y pegar; Javier cambia cada campo a mano):
+
+1. **Campo de nombre (máx. 30 caracteres; es lo que busca Instagram).** Opciones:
+   - `TACTIUM | Liga Cántabra Pádel` (29) ← recomendada hoy: intención local y la marca delante.
+   - `TACTIUM | Pádel federado` (24)
+   - `TACTIUM | App para capitanes` (28)
+   Cuando otras federaciones estén activas, se cambia a «Pádel federado».
+2. **Primera línea y resto de la bio (máx. 150 caracteres), opciones:**
+   - A (recomendada): «Alinea tu equipo de pádel en 20 s ⏱️ / Liga Cántabra 26/27: 323 equipos, 41 grupos / 14 días gratis 👇»
+   - B: «Para capitanes y clubs de pádel federado. / Alineación, disponibilidad y jornada en un sitio. / Liga Cántabra al día 👇»
+   - C: «Tu equipo de pádel federado en un sitio 🎾 / Disponibilidad, alineación y la Liga Cántabra al día / 14 días gratis 👇»
+3. **Tres fijados (tres trabajos distintos), propuesta:** (1) la **prueba**: V1 «Se acabó el verano» (el que más alcance dio);
+   (2) la **explicación**: T1 «Montar una alineación en 20 segundos»; (3) la **presentación de la persona**: el reel de Javier
+   a cámara. El cartel «Descárgala ya» sale de los fijados y se queda en la destacada «Descargar».
+4. **Destacadas:** subir las 6 (`TACTIUM-VIDEO/renders/carruseles/D1`…`D6` y portadas `DC`).
+5. **Enlace:** dejar solo `tactium.io`.
+6. **Portadas de la cuadrícula:** que cada una lleve ≤ 4 palabras legibles a tamaño de miniatura (la del tablón no las lleva).
+
+## 15. Método de análisis (adoptado de instagram-agent-skill)
+
+Ideas que cambian cómo medimos, ya aplicadas a este documento y a los agentes:
+
+- **Las visualizaciones en bruto no son una prueba.** Se rankea por el **múltiplo sobre la mediana propia**: visualizaciones ÷
+  la mediana de esa cuenta. Más de 3× es una señal; menos de 1,5× es un día normal de esa cuenta. Para un viral ajeno, comparar con
+  **cuentas de un tamaño parecido al nuestro (hasta ~10×)**: una fórmula que funciona con 2 millones de seguidores muchas veces
+  funciona *porque* tiene 2 millones. Esto corrige mi primera muestra de `VIRALES.md`, que usaba «me gusta» absolutos.
+- **Retención a los 3 s («hold at 3 s») = la nota del gancho.** Es el dato que más enseña y la API NO lo da: sale del gráfico de
+  retención de cada reel en la app (Estadísticas → retención). **Petición:** captura de ese gráfico del mejor y del peor reel de cada
+  semana, y se anota en `APRENDIZAJES-VIDEO.md`.
+- **Visualizaciones sin seguidores = problema de perfil; sin visualizaciones = problema de gancho.** Separarlo antes de recomendar
+  nada: si el alcance a no seguidores es alto y los seguidores por alcance son pocos, se arregla el perfil (§14), no el guion.
+- **Pie: la ventana visible son ~125 caracteres** antes de «… más». Casi todos los pies que fallan, fallan ahí. `node scripts/guion.mjs pie`.
+- **Texto que suena a IA:** rayas largas, «descubre cómo», «desbloquea»… Se evitan en pies y guiones (se dicen mal en voz alta).
+- **Ronda de comentarios, 20 minutos al día, ANTES de publicar y a mano** (nunca automatizada): 5 cuentas de alcance (clubs y equipos
+  con público de la liga), 3 pares (cuentas de tamaño parecido del pádel o del deporte amateur local) y 2 posibles clientes (capitanes
+  y clubs). Comentarios con contenido, antes de que el hilo tenga 200. Sin pitch en comentarios ni mensajes directos en frío.
+- **Plan semanal con tipos de pieza, sin dos iguales seguidas:** prueba (un dato real, reel) · enseñanza (algo que se puede hacer hoy)
+  · opinión (una postura que puede costar seguidores) · historia con un coste · oferta (cada dos semanas, dicha sin rodeos).
+  Casan con nuestros pilares LIGA / CAPITÁN / CARA / PRODUCTO / TORNEOS.
+- **La hora importa mucho menos que los primeros dos segundos.** Instagram sigue enseñando un reel días si rinde y entierra uno bien
+  puesto que no. No optimizar horas antes de que funcionen los ganchos (cuadra con §6).
+- **Herramientas nuestras (Node, en español):** `scripts/guion.mjs` (`beats`, `pie`, `gancho`) y `GANCHOS-ES.md` (26 fórmulas).
+
+Lo que NO se adopta: instalar su plugin tal cual (sus puntuaciones y listas de «muletillas» están hechas para inglés), el flujo
+de «palabra clave por mensaje directo» (depende de automatizaciones que arriesgan la cuenta) y cualquier recolección automática de perfiles.

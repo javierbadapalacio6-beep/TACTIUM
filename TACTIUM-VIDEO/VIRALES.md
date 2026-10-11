@@ -21,13 +21,14 @@ poder responderse con «lo mismo que X, pero con nuestra liga / nuestro equipo /
 
 1. **Fuentes:** búsquedas de Instagram por palabra clave y hashtag (`#padelhumor`, `#padelamateur`, `#padelcantabria`,
    `#liga pádel`), cuentas que ya salen en nuestros seguidores y en los del competidor, y la web.
-2. **Se anota solo lo medible:** enlace, cuenta, fecha, «me gusta» y comentarios (Instagram da estos dos en la ficha;
-   las visualizaciones del reel no siempre salen), pie y hashtags.
-3. **Para entender la estructura de verdad:** ver el vídeo (la skill `watch` descarga, saca fotogramas y transcribe) y
+2. **Se anota lo medible, y se rankea por el MÚLTIPLO sobre la mediana de esa cuenta** (visualizaciones del reel ÷ la mediana de sus últimos ~12 reels; si no salen las visualizaciones, «me gusta» ÷ la mediana de «me gusta»). Más de **3×** es una señal; menos de **1,5×** es un día normal de esa cuenta y no enseña nada, por grande que sea la cifra. Una cuenta de 2 millones de seguidores con 400.000 visualizaciones tuvo un martes tranquilo; una de 4.000 con 400.000 encontró algo copiable.
+   Se apuntan también: cuenta, **seguidores**, fecha, comentarios, pie y hashtags.
+3. **Cuentas de un tamaño parecido al nuestro (hasta ~10×, es decir, hasta ~3.500 seguidores)** para aprender fórmulas; las grandes, solo para el FORMATO, nunca para cadencia ni tono. Incluir cuentas **adyacentes** (otro deporte amateur, misma audiencia: ligas de fútbol 7, baloncesto 3x3, clubes) porque ahí se toman prestados formatos antes de que los tenga el pádel.
+4. **Para entender la estructura de verdad:** ver el vídeo (la skill `watch` descarga, saca fotogramas y transcribe) y
    describir segundo a segundo: gancho, giro, cierre, sonido.
-4. **Filtro de relevancia:** ¿lo puede reconocer un jugador federado de Cantabria? ¿Se puede rehacer con nuestros
+5. **Filtro de relevancia:** ¿lo puede reconocer un jugador federado de Cantabria? ¿Se puede rehacer con nuestros
    materiales (capturas de la app, datos de la liga, cara de Javier, clips de partido propios)? Si no, se descarta.
-5. **Ritmo:** unas pocas páginas por sesión, con pausas. Nada de recorrer cientos de perfiles (Instagram limita las
+6. **Ritmo:** unas pocas páginas por sesión, con pausas. Nada de recorrer cientos de perfiles (Instagram limita las
    peticiones automáticas y ya nos bloqueó una vez con un 429). **Nunca** dar «me gusta», seguir, comentar ni escribir.
 
 ## Plantilla de ficha
@@ -45,7 +46,9 @@ Estado: idea · guion · grabado · publicado · resultado (ver APRENDIZAJES-VID
 
 ---
 
-## Primera muestra (11-10-2026) · sin ver los vídeos todavía
+## Primera muestra (11-10-2026) · sin ver los vídeos todavía y rankeada con «me gusta» absolutos
+
+> ⚠️ **Evidencia débil.** Estos cuatro reels se eligieron por sus «me gusta» en bruto y no por el múltiplo sobre la mediana de cada cuenta, y se desconoce el tamaño de las cuentas. Sirven como **hipótesis de formato**, no como prueba. Antes de rehacer ninguno hay que (1) abrir cada cuenta, (2) calcular su mediana y (3) comprobar que el múltiplo pasa de 3×. Para estimarlo hace falta ver ~12 reels de cada una.
 
 Datos de la ficha pública (cuenta, fecha, «me gusta» y comentarios). La estructura es una **hipótesis ⚪** hasta
 verlos con la skill `watch`.

@@ -44,7 +44,8 @@ export function delta(v: number, ref: number): string {
   if (!ref) return "";
   const d = ((v - ref) / ref) * 100;
   if (Math.abs(d) < 8) return "≈ igual que tu mediana";
-  return `${d > 0 ? "⬆️ +" : "⬇️ −"}${num(Math.abs(d))} % vs tu mediana (${num(ref)})`;
+  const x = dec(v / ref);
+  return `${d > 0 ? "⬆️ +" : "⬇️ −"}${num(Math.abs(d))} % vs tu mediana (${num(ref)}) · ${x}×${v / ref >= 3 ? " = SEÑAL (más de 3×)" : v / ref < 1.5 && v / ref > 0.67 ? " = día normal" : ""}`;
 }
 
 /** Medianas de varias piezas del mismo formato; con menos de 3 no hay referencia fiable. */
@@ -403,6 +404,9 @@ export function informeSemanal(d: DatosSemana): string[] {
     }
     const cb = cuelloDeBotella(d.piezas, d);
     A.push("", "LECTURA DEL EXPERTO", `• ${cb.texto}`, "", `🧪 APUESTA DE LA SEMANA: ${cb.experimento}`);
+    if (d.piezas.some((x) => x.formato === "reel")) {
+      A.push("", "📸 Para esta semana: captura del gráfico de retención (Estadísticas del reel) del mejor y del peor reel. Es el dato que más enseña (cuánta gente sigue a los 3 s) y la API de Instagram no lo da.");
+    }
   } else {
     A.push("", "Esta semana no ha salido nada: sin publicaciones no hay crecimiento. Lo primero es recuperar la frecuencia.");
   }
