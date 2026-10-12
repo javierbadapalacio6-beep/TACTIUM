@@ -19,6 +19,7 @@ import { MuestraV1, MUESTRA_MS } from "./reel/estilo/MuestraV1";
 import { ReelJuego, REELS_JUEGO, durJuego } from "./reel/estilo/ReelJuego";
 import { ReelHablado, HABLADOS, durHablado } from "./reel/estilo/ReelHablado";
 import { Portada, PORTADAS } from "./reel/estilo/Portada";
+import { ReelClasificacion, durClasif } from "./reel/estilo/ClasificacionCascada";
 import { CIERRE_MS } from "./reel/Reel";
 import { Memoria, durMemoria, FPS as FPS_MEMORIA } from "./memoria/Memoria";
 
@@ -167,6 +168,8 @@ export const Root: React.FC = () => (
         height={T.canvas.h}
       />
     ))}
+    {/* Cascada de la clasificación (curso, pr-15): tabla real de fcp_clasificacion, 9:16 sin voz. Datos: scripts/liga-clasificacion.mjs. */}
+    <Composition id="clasificacion-demo" component={ReelClasificacion} durationInFrames={Math.round((durClasif() / 1000) * T.canvas.fps)} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
     {/* Muestra del estilo cinético (texto grande en el hueco, tarjetas, descifrado…). */}
     <Composition
       id="estilo-V1"
