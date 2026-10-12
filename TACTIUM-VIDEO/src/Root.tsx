@@ -141,13 +141,13 @@ export const Root: React.FC = () => (
       <Composition key={`portada-${p.id}`} id={`portada-${p.id}`} component={Portada} defaultProps={{ id: p.id }}
         durationInFrames={1} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
     ))}
-    {/* Los mismos hablados en 9:16 (el formato que se publica en Reels): `hablado-<id>-vertical`. */}
+    {/* Los mismos hablados en 9:16 (el formato que se publica en Reels): `hablado-<id>-vertical`, con el estilo del curso. */}
     {HABLADOS.map((r) => (
       <Composition
         key={`hablado-${r.id}-vertical`}
         id={`hablado-${r.id}-vertical`}
         component={ReelHablado}
-        defaultProps={{ id: r.id, vertical: true }}
+        defaultProps={{ id: r.id, vertical: true, curso: true }}
         durationInFrames={Math.round(((durHablado(r) + CIERRE_MS) / 1000) * T.canvas.fps)}
         fps={T.canvas.fps}
         width={T.canvas.w}

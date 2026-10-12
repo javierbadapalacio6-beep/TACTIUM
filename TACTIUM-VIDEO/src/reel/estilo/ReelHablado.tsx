@@ -9,11 +9,13 @@
 // a la voz. Para montar uno nuevo: se une el plano (tomas por partes), se transcribe con
 // scripts/transcribir.py y se añade un bloque a HABLADOS con sus escenas en ms del plano.
 import React from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile } from "remotion";
+import { AbsoluteFill, Audio, Easing, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { T, ms } from "../tokens";
 import { CIERRE_MS, Cierre, Pantalla } from "../Reel";
 import { PALABRAS } from "../palabras";
+import { limpia } from "../Karaoke";
 import type { Palabra } from "../Karaoke";
+import { SubtitulosCurso } from "./SubtitulosCurso";
 import { AnimacionTexto, Efecto, Fondo, RiserGancho, TINTE_MARCA, TextoCinetico, WhooshCortes, esWhoosh, type AnimTexto, type IconoDe } from "./Cinetico";
 
 const W = 1920;
@@ -39,7 +41,11 @@ type EscenaH = {
   /** Tarjeta sobre un clip de apoyo 16:9 a pantalla completa (oscurecido), no sobre color. */
   fondoClip?: string;
   /** En `cara`: otro clip vertical en la columna en vez de tu plano (p. ej. el móvil con WhatsApp). */
-  clip?: { src: string; desdeS?: number; zoom?: number; origen?: string };
+  clip?: { src: string; desdeS?: number; zoom?: number; origen?: string; velocidad?: number };
+  /** Curso: tramos de zoom [desde ms, hasta ms, escala inicial, escala final] DENTRO de la escena. */
+  zooms?: [number, number, number, number][];
+  /** Curso: color por palabra clave (semántico: rojo = negativo). */
+  semantico?: Record<string, string>;
   /** Texto sin voz (p. ej. un cierre que no se grabó): palabras con su ms dentro de la escena. */
   frase?: [string, number][];
   /** Nota de voz que suena al empezar la escena (public/voz/…): la frase lleva sus tiempos. */
@@ -105,11 +111,11 @@ export const HABLADOS: ReelHabladoDef[] = [
     animTexto: "desenfoque",
     musica: { src: "musica/pack-lofi-25.mp3", volumen: 0.07, desdeMs: 24000 },
     escenas: [
-      { desde: 0, hasta: 3600, tipo: "cara", claves: ["20 segundos"], iconos: { "20 segundos": "crono" } },
+      { desde: 0, hasta: 3600, tipo: "cara", claves: ["20 segundos"], iconos: { "20 segundos": "crono" }, zooms: [[0, 2700, 1.0, 1.08], [2800, 3000, 1.08, 1.15]] },
       { desde: 3600, hasta: 6600, tipo: "pantalla", tono: "claro", claves: ["sábado"], iconos: { "sábado": "calendario" }, pantalla: { src: "app/reel/disponibilidad.png", pan: [0, 24] }, sfx: "sfx/swoosh.wav" },
       { desde: 6600, hasta: 9900, tipo: "pantalla", tono: "oscuro", claves: ["auto-orden", "puntos"], pantalla: { src: "img/alineacion-sinbarra.jpg", pan: [4, 40] }, sfx: "sfx/whoosh-1.mp3" },
       { desde: 9900, hasta: 12200, tipo: "pantalla", tono: "oscuro", claves: ["rojo"], iconos: { rojo: "aviso" }, pantalla: { src: "img/alineacion.jpg", pan: [10, 40] } },
-      { desde: 12200, hasta: 17000, tipo: "cara", claves: ["publicas", "vez"], serif: ["vez"], iconos: { vez: "check" } },
+      { desde: 12200, hasta: 17000, tipo: "cara", claves: ["publicas", "vez"], serif: ["vez"], iconos: { vez: "check" }, zooms: [[0, 1000, 1.0, 1.06], [1040, 1260, 1.06, 1.14], [1260, 4600, 1.14, 1.16]] },
     ],
   },
   {
@@ -144,14 +150,78 @@ const VW = 1080;
 const VM = 80;
 const V_ANCHO = VW - VM - 170; // 830 px útiles para texto
 
-const Escena: React.FC<{ r: ReelHabladoDef; e: EscenaH; vertical?: boolean }> = ({ r, e, vertical }) => {
-  const ws: Palabra[] = e.frase
+// ─────────────────────────────────────────────────────────────────────────────
+// ESTILO DEL CURSO (Creator Club de Diego NXT, 12-10): es el estilo por defecto de los reels hablados
+// VERTICALES (`hablado-<id>-vertical`). Resumen de las reglas y de dónde salen: CURSOS-DIEGONXT/INFORME-UNIFICADO.md.
+//  · Subtítulos (SubtitulosCurso.tsx): 1 línea, 1-3 palabras, ≤13 caracteres, bajo la cara.
+//  · Zoom en una capa que envuelve vídeo + texto: suave 100→108 % y golpe seco a ≤115 % en la palabra clave.
+//  · Transición: desenfoque 0 → pico → 0 de 0,3 s centrado en cada corte (sustituye al glitch).
+//  · Sonido: whoosh en cada corte y en cada golpe de zoom, tecla solo en cifras (máx. 2), música con ducking.
+// Las escenas de cara pueden fijar sus zooms a mano (`zooms`); si no, salen de la palabra clave (`zoomsDe`).
+// ─────────────────────────────────────────────────────────────────────────────
+const ORIGEN_CARA = "50% 24%";
+
+const TransicionBlur: React.FC<{ cortesMs: number[]; picoPx?: number; mitad?: number }> = ({ cortesMs, picoPx = 30, mitad = 5 }) => (
+  // mitad = 5 → 10 fotogramas en total ≈ 0,33 s a 30 fps
+  <>
+    {cortesMs.map((c, i) => (
+      <Sequence key={i} from={Math.max(0, ms(c) - mitad)} durationInFrames={mitad * 2} layout="none" name={`blur-corte-${i + 1}`}>
+        <BlurPico mitad={mitad} picoPx={picoPx} />
+      </Sequence>
+    ))}
+  </>
+);
+
+const BlurPico: React.FC<{ mitad: number; picoPx: number }> = ({ mitad, picoPx }) => {
+  const f = useCurrentFrame();
+  const px = interpolate(f, [0, mitad, mitad * 2], [0, picoPx, 0], { easing: Easing.inOut(Easing.quad), extrapolateRight: "clamp" });
+  return <AbsoluteFill style={{ backdropFilter: `blur(${px}px)`, WebkitBackdropFilter: `blur(${px}px)` }} />;
+};
+
+// Curso (pr-04): el zoom va en una «capa de ajuste» que envuelve TODO (vídeo + texto), hacia la cara,
+// con tramos: suave 100→110 % y golpe seco hasta 115 % en pocos fotogramas; curva rápida al principio y
+// lenta al final. Nunca por encima de 115 % con la cabeza en plano (125 % ya corta la cabeza).
+const ZoomCurso: React.FC<{ zooms?: [number, number, number, number][]; children: React.ReactNode }> = ({ zooms, children }) => {
+  const f = useCurrentFrame();
+  const t = (f / T.canvas.fps) * 1000;
+  let z = zooms && zooms.length ? zooms[0][2] : 1;
+  for (const [a, b, de, a2] of zooms ?? []) {
+    if (t < a) break;
+    const k = interpolate(t, [a, b], [0, 1], { easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    z = de + (a2 - de) * k;
+  }
+  return <AbsoluteFill style={{ transform: `scale(${z})`, transformOrigin: ORIGEN_CARA }}>{children}</AbsoluteFill>;
+};
+
+/** Palabras de una escena en ms DE LA ESCENA. Cada palabra pertenece a UNA sola escena (frontera igual por los dos lados). */
+const wsDe = (r: ReelHabladoDef, e: EscenaH): Palabra[] =>
+  e.frase
     ? e.frase.map(([t, a]) => ({ t, a, b: a + 300 }))
     : PALABRAS[r.plano].palabras
-        // Cada palabra pertenece a UNA sola escena: la frontera es la misma por los dos lados
-        // (antes, una palabra que empezaba justo en el corte salía en las dos: T1, 30-09).
         .filter((p) => p.a >= e.desde - 150 && p.a < e.hasta - 150)
         .map((p) => ({ ...p, a: p.a - e.desde, b: p.b - e.desde }));
+
+const esClave = (e: EscenaH, t: string) => (e.claves ?? []).some((c) => limpia(c).toLowerCase() === limpia(t).toLowerCase());
+
+/** Tramos de zoom de una escena de cara: los suyos o, si no los tiene, suave hasta la palabra clave y golpe seco en ella. */
+const zoomsDe = (r: ReelHabladoDef, e: EscenaH): [number, number, number, number][] => {
+  if (e.zooms) return e.zooms;
+  const dur = e.hasta - e.desde;
+  const clave = wsDe(r, e).find((w) => esClave(e, w.t));
+  if (clave && clave.a > 900) return [[0, clave.a - 100, 1.0, 1.07], [clave.a, clave.a + 220, 1.07, 1.14]];
+  return [[0, Math.max(600, dur * 0.9), 1.0, 1.07]];
+};
+
+/** Teclas del curso: solo en cifras de las claves (máx. 2 por reel; «cuanto más lo pongas, peor funciona»). */
+const teclasDe = (r: ReelHabladoDef): number[] =>
+  r.escenas
+    .filter((e) => !e.frase)
+    .flatMap((e) => wsDe(r, e).filter((w) => /\d/.test(w.t) && esClave(e, w.t)).map((w) => e.desde + w.a))
+    .slice(0, 2);
+
+const Escena: React.FC<{ r: ReelHabladoDef; e: EscenaH; vertical?: boolean; curso?: boolean }> = ({ r, e, vertical, curso }) => {
+  // (Antes, una palabra que empezaba justo en el corte salía en las dos escenas: T1, 30-09; ver wsDe.)
+  const ws = wsDe(r, e);
   const dur = e.hasta - e.desde;
   const tono = e.tono ?? "oscuro";
   const texto = (ancho: number, alinear: "izq" | "centro", escala = 1) => (
@@ -165,7 +235,7 @@ const Escena: React.FC<{ r: ReelHabladoDef; e: EscenaH; vertical?: boolean }> = 
   );
   if (vertical) {
     const video = e.clip ? (
-      <OffthreadVideo src={staticFile(e.clip.src)} trimBefore={Math.round((e.clip.desdeS ?? 0) * T.canvas.fps)} muted
+      <OffthreadVideo src={staticFile(e.clip.src)} trimBefore={Math.round((e.clip.desdeS ?? 0) * T.canvas.fps)} muted playbackRate={e.clip.velocidad ?? 1}
         style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${e.clip.zoom ?? 1})`, transformOrigin: e.clip.origen ?? "center" }} />
     ) : (
       <OffthreadVideo src={staticFile(`plano/${r.plano}.mp4`)} trimBefore={ms(e.desde)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -175,9 +245,19 @@ const Escena: React.FC<{ r: ReelHabladoDef; e: EscenaH; vertical?: boolean }> = 
         {e.tipo === "cara" ? (
           <>
             {/* Tu plano entero, sin recortar: la cara arriba y el texto abajo, sobre las piernas. */}
-            <AbsoluteFill>{video}</AbsoluteFill>
-            <AbsoluteFill style={{ background: "linear-gradient(to bottom, rgba(3,15,15,0) 45%, rgba(3,15,15,0.72) 66%, rgba(3,15,15,0.8) 100%)" }} />
-            <div style={{ position: "absolute", left: VM, top: 1120 }}>{texto(V_ANCHO, "izq", 1.2)}</div>
+            {curso && !e.clip ? (
+              <ZoomCurso zooms={zoomsDe(r, e)}>
+                <AbsoluteFill>{video}</AbsoluteFill>
+                <AbsoluteFill style={{ background: "linear-gradient(to bottom, rgba(3,15,15,0) 30%, rgba(3,15,15,0.55) 43%, rgba(3,15,15,0.72) 58%, rgba(3,15,15,0.84) 100%)" }} />
+                <SubtitulosCurso ws={ws} claves={e.claves} semantico={e.semantico} durMs={dur} />
+              </ZoomCurso>
+            ) : (
+              <>
+                <AbsoluteFill>{video}</AbsoluteFill>
+                <AbsoluteFill style={{ background: "linear-gradient(to bottom, rgba(3,15,15,0) 45%, rgba(3,15,15,0.72) 66%, rgba(3,15,15,0.8) 100%)" }} />
+                <div style={{ position: "absolute", left: VM, top: 1120 }}>{texto(V_ANCHO, "izq", 1.2)}</div>
+              </>
+            )}
           </>
         ) : e.tipo === "tarjeta" ? (
           <>
@@ -243,8 +323,19 @@ const Escena: React.FC<{ r: ReelHabladoDef; e: EscenaH; vertical?: boolean }> = 
   );
 };
 
-export const ReelHablado: React.FC<{ id: string; vertical?: boolean }> = ({ id, vertical }) => {
+/** Sonidos del curso que no salen solos de las palabras (ms del plano). Lo demás (whoosh, teclas en cifras, ducking) es automático. */
+type SfxCurso = { tecla?: number[]; risers?: number[]; silencioAntesMs?: { en: number; dur: number } };
+const SFX_CURSO: Record<string, SfxCurso> = {
+  // T1: tecla en «20 segundos» (2800) y en la clave del aviso «rojo» (11740); riser y subgrave justo antes de «rojo»,
+  // con la música cayendo en ese hueco.
+  T1: { tecla: [2800, 11740], risers: [11740], silencioAntesMs: { en: 11740, dur: 650 } },
+};
+
+/** `curso` (por defecto en los hablados verticales): subtítulos, zoom, transiciones y sonido del Creator Club. */
+export const ReelHablado: React.FC<{ id: string; vertical?: boolean; curso?: boolean }> = ({ id, vertical, curso }) => {
   const r = HABLADOS.find((x) => x.id === id)!;
+  const sp = curso ? SFX_CURSO[id] : undefined;
+  const teclas = curso ? (sp?.tecla ?? teclasDe(r)) : [];
   const fin = ms(durHablado(r));
   // Cuando acaba la voz (tramos de solo texto), la música sube: si no, ese silencio suena a
   // fallo de audio (feedback del 29-09 sobre el A2).
@@ -257,10 +348,25 @@ export const ReelHablado: React.FC<{ id: string; vertical?: boolean }> = ({ id, 
       <AbsoluteFill style={{ background: T.color.bg }}>
         {r.escenas.map((e, i) => (
           <Sequence key={i} from={ms(e.desde)} durationInFrames={ms(e.hasta - e.desde)} name={`${e.tipo}-${i + 1}`}>
-            <Escena r={r} e={e} vertical={vertical} />
+            <Escena r={r} e={e} vertical={vertical} curso={curso} />
           </Sequence>
         ))}
-        {r.escenas.filter((e) => e.efecto === "glitch").map((e, i) => (
+        {curso ? <TransicionBlur cortesMs={r.escenas.slice(1).map((e) => e.desde)} /> : null}
+        {curso ? (
+          <>
+            {teclas.map((t, i) => (
+              <Sequence key={`tecla${i}`} from={ms(t)} layout="none" name="tecla-cifra">
+                <Audio src={staticFile("sfx/tecla.mp3")} volume={0.5} />
+              </Sequence>
+            ))}
+            {sp?.silencioAntesMs ? (
+              <Sequence from={ms(sp.silencioAntesMs.en)} layout="none" name="subgrave-aviso">
+                <Audio src={staticFile("sfx/subbass.wav")} volume={0.45} />
+              </Sequence>
+            ) : null}
+          </>
+        ) : null}
+        {r.escenas.filter((e) => e.efecto === "glitch" && !curso).map((e, i) => (
           <Sequence key={`fx${i}`} from={Math.max(0, ms(e.desde) - 4)} durationInFrames={ms(900)} layout="none">
             <Efecto src="efectos/glitch.mp4" tinte={TINTE_MARCA} opacidad={0.9} />
           </Sequence>
@@ -285,10 +391,35 @@ export const ReelHablado: React.FC<{ id: string; vertical?: boolean }> = ({ id, 
               const g = r.musica!.volumenGancho;
               const finGancho = ms(r.escenas[0].hasta);
               const gancho = g === undefined ? 1 : interpolate(f, [finGancho - ms(300), finGancho + ms(300)], [g / r.musica!.volumen, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-              return r.musica!.volumen * base * sube * gancho;
+              // Curso: la música se cae en el hueco previo a la clave del aviso y vuelve después.
+              const s = sp?.silencioAntesMs;
+              const hueco = s
+                ? interpolate(f, [ms(s.en - s.dur), ms(s.en - s.dur + 150), ms(s.en), ms(s.en + 250)], [1, 0.1, 0.1, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+                : 1;
+              // Curso (pr-11): ducking por la voz de Whisper. La música baja mientras se habla y sube poco a poco
+              // en los silencios (ataque corto, suelta larga), sin saltos.
+              let duck = 1;
+              if (curso) {
+                const t = (f / T.canvas.fps) * 1000;
+                const d = ps.reduce((m, w) => Math.min(m, t < w.a ? w.a - t : t > w.b ? t - w.b : 0), 1e9);
+                duck = 1 + 0.9 * Math.min(1, Math.max(0, (d - 120) / 380));
+              }
+              return r.musica!.volumen * base * sube * gancho * hueco * duck;
             }}
           />
         ) : null}
+        {curso
+          ? r.escenas.filter((e) => e.tipo === "cara" && !e.clip).flatMap((e) => zoomsDe(r, e).filter(([a, b, de, a2]) => b - a <= 400 && a2 - de >= 0.05).map(([a]) => e.desde + a)).map((t, i) => (
+              <Sequence key={`zw${i}`} from={Math.max(0, ms(t - 500))} layout="none" name="whoosh-zoom">
+                <Audio src={staticFile("sfx/whip.mp3")} volume={0.3} />
+              </Sequence>
+            ))
+          : null}
+        {curso && sp?.risers ? sp.risers.map((t, i) => (
+          <Sequence key={`rs${i}`} from={Math.max(0, ms(t - 1200))} layout="none" name="riser-clave">
+            <Audio src={staticFile("sfx/riser-corto.mp3")} volume={0.28} />
+          </Sequence>
+        )) : null}
         <Sequence from={fin} durationInFrames={ms(CIERRE_MS)} name="cierre">
           <Cierre />
         </Sequence>
