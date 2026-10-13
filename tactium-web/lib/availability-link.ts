@@ -31,11 +31,25 @@ export interface PublicAvailability {
   jornada_number: number | null;
   match_date: string | null;
   match_time: string | null;
+  /** Fin de semana de la Federación («23 - 25 Oct») mientras no hay fecha exacta. */
+  fcp_date_range?: string | null;
+  time_poll?: PublicTimePoll | null;
   location: string | null;
   /** ISO: pasado este instante la duda ya no se puede dejar. */
   maybe_deadline: string | null;
   counts: { yes: number; maybe: number; no: number; pending: number };
   players: PublicAvailPlayer[];
+}
+
+/** Encuesta de hora abierta de la jornada (null si no hay): las horas y los votos por jugador. */
+export interface PublicTimePoll {
+  id: string;
+  message: string | null;
+  /** ISO: pasado este instante ya no se puede votar. */
+  deadline: string | null;
+  options: { id: string; date: string; time: string }[];
+  /** player_id → horas que puede. Sin clave = no ha votado; [] = «ninguna me va». */
+  votes: Record<string, string[]>;
 }
 
 export type LinkProblem = "not_found" | "expired" | "revoked";
@@ -88,6 +102,47 @@ export async function respondViaLink(
     if (error) throw error;
     return data as RespondOutcome;
   });
+}
+
+export type PollVoteOutcome = { ok: true; option_ids: string[] } | { ok: false; reason: string };
+
+/** Marca las horas que le van a un jugador (sin cuenta) en la encuesta de hora de la jornada. */
+export async function voteTimePollViaLink(
+  token: string,
+  playerId: string,
+  optionIds: string[],
+): Promise<WriteResult<PollVoteOutcome>> {
+  return guardedWrite("guardar tus horas", async () => {
+    const { data, error } = await supabaseBrowser().rpc("public_vote_time_poll", {
+      p_token: token,
+      p_player_id: playerId,
+      p_option_ids: optionIds,
+    });
+    if (error) throw error;
+    return data as PollVoteOutcome;
+  });
+}
+
+export function pollProblemText(reason: string): string {
+  switch (reason) {
+    case "poll_closed":
+      return "La votación de la hora ya está cerrada.";
+    case "no_poll":
+      return "El capitán ya ha cerrado la encuesta de hora.";
+    case "rate_limited":
+      return "Demasiadas respuestas seguidas. Prueba de nuevo en un rato.";
+    case "no_player":
+      return "No encuentro ese jugador. Recarga la página.";
+    case "bad_option":
+      return "Esa hora ya no está. Recarga la página.";
+    case "expired":
+      return "Esta jornada ya ha empezado.";
+    case "revoked":
+    case "not_found":
+      return "El capitán ha cambiado el enlace. Pídele el nuevo.";
+    default:
+      return "No se ha podido guardar. Inténtalo otra vez.";
+  }
 }
 
 /** Mensaje al usuario por cada motivo de rechazo del servidor. */

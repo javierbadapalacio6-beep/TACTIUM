@@ -166,6 +166,39 @@ export async function fixTimePoll(pollId: string, optionId: string, overwrite = 
   if (error) throw toPollError(error);
 }
 
+/** Añade una hora (día + «HH:MM») a una encuesta abierta, sin tocar los votos. Máximo 4 horas. */
+export async function addTimePollOption(pollId: string, date: string, time: string): Promise<void> {
+  const { error } = await rawRpc('add_time_poll_option', { p_poll_id: pollId, p_date: date, p_time: time });
+  if (error) throw toPollError(error);
+}
+
+/** Quita una hora de una encuesta abierta (quedan al menos 2); se borra solo de los votos esa hora. */
+export async function removeTimePollOption(pollId: string, optionId: string): Promise<void> {
+  const { error } = await rawRpc('remove_time_poll_option', { p_poll_id: pollId, p_option_id: optionId });
+  if (error) throw toPollError(error);
+}
+
+const MESES: Record<string, number> = {
+  ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11,
+};
+
+/**
+ * Primer día del rango de fechas de la Federación («23 - 25 Oct» → 'YYYY-10-23'; «30 Oct - 1 Nov» → 'YYYY-10-30').
+ * El año es el de la próxima vez que cae esa fecha (hasta un mes atrás). null si no se entiende.
+ */
+export function fcpRangeStart(range: string | null | undefined, now: Date = new Date()): string | null {
+  const s = (range ?? '').trim().toLowerCase();
+  const first = s.match(/^(\d{1,2})\s*([a-záéíóú]{3})?/);
+  if (!first) return null;
+  const day = Number(first[1]);
+  const mon = MESES[first[2] ?? ''] ?? MESES[(s.match(/([a-záéíóú]{3})\s*$/) ?? [])[1] ?? ''];
+  if (mon == null || day < 1 || day > 31) return null;
+  let year = now.getFullYear();
+  const floor = now.getTime() - 30 * 86_400_000;
+  if (new Date(year, mon, day, 12).getTime() < floor) year += 1;
+  return `${year}-${String(mon + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 export async function cancelTimePoll(pollId: string): Promise<void> {
   const { error } = await rawRpc('cancel_time_poll', { p_poll_id: pollId });
   if (error) throw toPollError(error);

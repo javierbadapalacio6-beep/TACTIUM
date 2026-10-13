@@ -75,6 +75,7 @@ import {
 import { notifySuccess, notifyWarning, tapLight } from '../components/match/haptics';
 
 import type { HomeStackScreenProps } from '@navigation/types';
+import { fmtRango } from '@features/seasons/components/ligaParts';
 
 /**
  * Alineación (rediseño bloque «Partido», 2026-10).
@@ -864,7 +865,9 @@ export const LineupScreen = ({
 
   const dateLabel = matchday.match_date
     ? formatShortDay(new Date(`${matchday.match_date}T12:00:00`))
-    : 'Fecha por confirmar';
+    : fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range)
+      ? `${fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range)} · por confirmar`
+      : 'Fecha por confirmar';
   const stripSub = [
     dateLabel,
     matchday.match_time ? matchday.match_time.slice(0, 5) : null,

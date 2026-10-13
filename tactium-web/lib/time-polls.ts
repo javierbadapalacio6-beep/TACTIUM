@@ -178,6 +178,18 @@ export async function fixTimePoll(pollId: string, optionId: string, overwrite = 
   if (error) throw toPollError(error);
 }
 
+/** Añade una hora (día + HH:MM) a una encuesta abierta, sin tocar los votos. Máximo 4. */
+export async function addTimePollOption(pollId: string, date: string, time: string): Promise<void> {
+  const { error } = await rawRpc('add_time_poll_option', { p_poll_id: pollId, p_date: date, p_time: time });
+  if (error) throw toPollError(error);
+}
+
+/** Quita una hora de una encuesta abierta (quedan al menos 2); se borra solo de los votos esa hora. */
+export async function removeTimePollOption(pollId: string, optionId: string): Promise<void> {
+  const { error } = await rawRpc('remove_time_poll_option', { p_poll_id: pollId, p_option_id: optionId });
+  if (error) throw toPollError(error);
+}
+
 export async function cancelTimePoll(pollId: string): Promise<void> {
   const { error } = await rawRpc('cancel_time_poll', { p_poll_id: pollId });
   if (error) throw toPollError(error);
@@ -318,6 +330,8 @@ export interface TimePollContext {
     status: string;
     match_date: string | null;
     match_time: string | null;
+    /** Fin de semana de la Federación («23 - 25 Oct») mientras no hay fecha exacta. */
+    fcp_date_range?: string | null;
     is_home: boolean;
     jornada_number: number | null;
     opponent: string | null;
@@ -338,7 +352,7 @@ export async function fetchTimePollContext(matchdayId: string): Promise<TimePoll
     data: { user },
   } = await sb.auth.getUser();
   const { data: md } = await rawFrom('matchdays')
-    .select('id, status, match_date, match_time, is_home, jornada_number, opponent, seasons(team_id)')
+    .select('id, status, match_date, match_time, fcp_date_range, is_home, jornada_number, opponent, seasons(team_id)')
     .eq('id', matchdayId)
     .maybeSingle();
   const s = md?.seasons;
@@ -365,6 +379,7 @@ export async function fetchTimePollContext(matchdayId: string): Promise<TimePoll
       status: md.status,
       match_date: md.match_date,
       match_time: md.match_time,
+      fcp_date_range: md.fcp_date_range ?? null,
       is_home: md.is_home,
       jornada_number: md.jornada_number,
       opponent: md.opponent,

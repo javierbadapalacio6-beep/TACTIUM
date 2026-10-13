@@ -45,6 +45,7 @@ import {
   StatRow,
 } from "@/components/ui";
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
+import { fmtRango } from "@/lib/fcp-range";
 import { TimePollPanel } from "@/components/matchday/TimePollPanel";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
 import {
@@ -135,8 +136,10 @@ function countdown(
   date: string | null,
   time: string | null,
   now: number,
+  range?: string | null,
 ): { big: string; small: string } {
-  if (!date) return { big: "—", small: "Fecha por confirmar" };
+  // Sin día exacto, el fin de semana que da la Federación («23-25 oct»).
+  if (!date) return range ? { big: fmtRango(range), small: "Día y hora por confirmar" } : { big: "—", small: "Fecha por confirmar" };
   const hhmm = time ? time.slice(0, 5) : null;
   const target = new Date(`${date}T${hhmm ?? "00:00"}:00`);
   if (Number.isNaN(target.getTime())) return { big: "—", small: "Fecha por confirmar" };
@@ -873,7 +876,7 @@ export function MatchdayView({ id }: { id: string }) {
       <div className="card-body">
         <dl className="kv" style={{ margin: 0 }}>
           <dt>Fecha</dt>
-          <dd>{m.date ? formatDate(m.date) : "—"}</dd>
+          <dd>{m.date ? formatDate(m.date) : m.dateRange ? `${fmtRango(m.dateRange)} · por confirmar` : "—"}</dd>
           <dt>Hora</dt>
           <dd className="mono">{m.time?.slice(0, 5) ?? "—"}</dd>
           <dt>Lugar</dt>
@@ -1305,10 +1308,10 @@ export function MatchdayView({ id }: { id: string }) {
                   className="mono"
                   style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1, color: "var(--text)", textAlign: "center", whiteSpace: "nowrap" }}
                 >
-                  {countdown(m.date, m.time, now).big}
+                  {countdown(m.date, m.time, now, m.dateRange).big}
                 </span>
                 <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {countdown(m.date, m.time, now).small}
+                  {countdown(m.date, m.time, now, m.dateRange).small}
                 </span>
               </>
             )}

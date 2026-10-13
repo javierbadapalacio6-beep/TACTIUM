@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   canProposeTimes,
+  addTimePollOption,
+  removeTimePollOption,
   cancelTimePoll,
   createTimePoll,
   fetchTimePollContext,
@@ -28,6 +30,7 @@ import { useSession } from "@/lib/session";
 import { Avatar, Btn, Card, CardHead, Field, Input, Modal, Note, Textarea, Toggle } from "@/components/ui";
 import { Toast } from "@/components/states";
 import { IconCheck, IconClock, IconPlus, IconX } from "@/components/Icon";
+import { fcpRangeStart } from "@/lib/fcp-range";
 
 /*
  * Encuesta de hora de la jornada (web). Espejo de la app
@@ -91,6 +94,10 @@ export function TimePollPanel({
   const [remindedAt, setRemindedAt] = useState<Date | null>(null);
   const [fixAsk, setFixAsk] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ optionId: string; current: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addDate, setAddDate] = useState("");
+  const [addTime, setAddTime] = useState("10:30");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => setMyVoteLocal(undefined), [ctx.data]);
 
@@ -152,7 +159,7 @@ export function TimePollPanel({
           open={proposeOpen}
           onClose={() => setProposeOpen(false)}
           title={title}
-          matchDate={matchday.match_date}
+          matchDate={matchday.match_date ?? fcpRangeStart(matchday.fcp_date_range)}
           matchTime={matchday.match_time}
           slots={team?.preferred_home_slots ?? []}
           onSubmit={async (input) => {
@@ -268,6 +275,26 @@ export function TimePollPanel({
     if (!res.ok) return setToast(res.reason);
     reload();
   }
+
+  // Editar las horas de una encuesta en marcha sin perder el resto de votos.
+  async function removeOpt(o: { id: string; date: string; time: string }) {
+    if (!window.confirm(`¿Quitar ${optionLabel(o)}? Se borra esa hora de los votos; el resto se mantiene.`)) return;
+    const res = await guardedWrite("quitar la hora", () => removeTimePollOption(p.id, o.id));
+    if (!res.ok) return setToast(res.reason);
+    reload();
+  }
+  async function addOpt() {
+    setAdding(true);
+    const res = await guardedWrite("añadir la hora", () => addTimePollOption(p.id, addDate, addTime));
+    setAdding(false);
+    if (!res.ok) return setToast(res.reason);
+    setAddOpen(false);
+    setToast("Hora añadida. Hemos avisado a quien ya había votado.");
+    reload();
+  }
+  const addKey = `${addDate} ${addTime}`;
+  const addDupe = p.options.some((o) => `${o.date} ${o.time.slice(0, 5)}` === addKey);
+  const addPast = !!addDate && addDate < isoDay(new Date());
 
   const meta =
     `${tally.voted.length} de ${ids.length} han votado` +
@@ -449,10 +476,38 @@ export function TimePollPanel({
                       Fijar
                     </Btn>
                   )}
+                  {canManage && p.options.length > 2 && (
+                    <Btn
+                      variant="quiet"
+                      size="sm"
+                      aria-label={`Quitar ${optionLabel(o)}`}
+                      disabled={!!busy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeOpt(o);
+                      }}
+                      icon={<IconX size={15} />}
+                    />
+                  )}
                 </div>
               </div>
             );
           })}
+
+          {canManage && p.options.length < 4 && (
+            <Btn
+              variant="ghost"
+              size="sm"
+              icon={<IconPlus size={15} />}
+              onClick={() => {
+                setAddDate(fcpRangeStart(matchday.fcp_date_range) ?? matchday.match_date ?? isoDay(new Date()));
+                setAddTime("10:30");
+                setAddOpen(true);
+              }}
+            >
+              Añadir hora
+            </Btn>
+          )}
 
           {canVote && (
             <Btn
@@ -492,6 +547,36 @@ export function TimePollPanel({
           )}
         </div>
       </Card>
+
+      <Modal
+        open={addOpen}
+        onClose={() => !adding && setAddOpen(false)}
+        labelledBy="anadir-hora-titulo"
+        width={420}
+        title="Añadir una hora"
+        lede="Se suma a las que ya hay. Los votos se mantienen y avisamos a quien ya ha votado."
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setAddOpen(false)} disabled={adding}>
+              Cancelar
+            </Btn>
+            <Btn variant="accent" disabled={adding || !addDate || !addTime || addDupe || addPast} onClick={addOpt}>
+              {adding ? "Añadiendo…" : "Añadir a la encuesta"}
+            </Btn>
+          </>
+        }
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
+          <Field label={`Día${addDate ? ` · ${optionDayLabel(addDate)}` : ""}`}>
+            <Input type="date" value={addDate} min={isoDay(new Date())} onChange={(e) => setAddDate(e.target.value)} />
+          </Field>
+          <Field label="Hora">
+            <Input type="time" value={addTime} step={900} onChange={(e) => setAddTime(e.target.value.slice(0, 5))} />
+          </Field>
+        </div>
+        {addDupe && <div style={{ fontSize: 12.5, color: "var(--error)", marginTop: 8 }}>Esa hora ya está en la encuesta.</div>}
+        {addPast && <div style={{ fontSize: 12.5, color: "var(--error)", marginTop: 8 }}>Ese día ya pasó.</div>}
+      </Modal>
 
       <Modal
         open={!!fixOpt}

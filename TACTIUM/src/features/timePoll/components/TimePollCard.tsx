@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, Image, Alert, Share, ActivityIndicat
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { IconCheck, IconClock } from '@components/ui/Icon';
+import { IconCheck, IconClock, IconPlus, IconX } from '@components/ui/Icon';
 import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
@@ -16,6 +16,7 @@ import type { RootStackParamList } from '@navigation/types';
 
 import { useTimePoll } from '../hooks/useTimePoll';
 import { ProposeTimesSheet } from './ProposeTimesSheet';
+import { AddTimeOptionSheet } from './AddTimeOptionSheet';
 
 const REMIND_COOLDOWN_MS = 12 * 3_600_000;
 const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -79,6 +80,8 @@ export const TimePollCard: React.FC<Props> = ({
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [remindedAt, setRemindedAt] = useState<Date | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   const { poll, matchday, team, players, myPlayerId, availability } = tp;
   if (tp.loading || !matchday) return null;
@@ -154,7 +157,7 @@ export const TimePollCard: React.FC<Props> = ({
           open={sheetOpen}
           onClose={() => setSheetOpen(false)}
           title={title}
-          matchDate={matchday.match_date}
+          matchDate={matchday.match_date ?? TimePollsApi.fcpRangeStart(matchday.fcp_date_range)}
           matchTime={matchday.match_time}
           slots={team?.preferred_home_slots ?? []}
           sending={creating}
@@ -288,6 +291,38 @@ export const TimePollCard: React.FC<Props> = ({
       } else toast.error('No se pudo recordar', (e as Error)?.message);
     } finally {
       setBusy(null);
+    }
+  };
+
+  // Editar las horas de una encuesta en marcha: se añade o se quita una sin tocar el resto de votos.
+  const removeOption = (o: TimePollsApi.TimePollOption) =>
+    Alert.alert(`¿Quitar ${TimePollsApi.optionLabel(o)}?`, 'Se borra esa hora de los votos. El resto se mantiene.', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Quitar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await TimePollsApi.removeTimePollOption(poll!.id, o.id);
+            toast.success('Hora quitada');
+            await tp.reload();
+          } catch (e) {
+            toast.error('No se pudo quitar', (e as Error)?.message);
+          }
+        },
+      },
+    ]);
+  const addOption = async (date: string, time: string) => {
+    setAdding(true);
+    try {
+      await TimePollsApi.addTimePollOption(poll!.id, date, time);
+      setAddOpen(false);
+      toast.success('Hora añadida', 'Hemos avisado a quien ya había votado.');
+      await tp.reload();
+    } catch (e) {
+      toast.error('No se pudo añadir', (e as Error)?.message);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -444,11 +479,39 @@ export const TimePollCard: React.FC<Props> = ({
                     )}
                   </Pressable>
                 ) : null}
+                {canManage && poll!.options.length > 2 ? (
+                  <Pressable
+                    onPress={() => removeOption(o)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Quitar ${TimePollsApi.optionLabel(o)}`}
+                  >
+                    <IconX size={16} color={c.textMuted} />
+                  </Pressable>
+                ) : null}
               </View>
             </Pressable>
           );
         })}
+        {canManage && poll!.options.length < 4 ? (
+          <Pressable
+            onPress={() => setAddOpen(true)}
+            style={({ pressed }) => [styles.addHour, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <IconPlus size={15} color={c.accent} />
+            <Text style={styles.addHourLabel}>Añadir hora</Text>
+          </Pressable>
+        ) : null}
       </View>
+      <AddTimeOptionSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        matchDate={matchday.match_date ?? TimePollsApi.fcpRangeStart(matchday.fcp_date_range)}
+        existing={poll!.options.map((o) => `${o.date} ${o.time.slice(0, 5)}`)}
+        sending={adding}
+        onSubmit={addOption}
+      />
 
       {canVote ? (
         <Pressable
@@ -611,6 +674,18 @@ const makeStyles = (c: Palette) =>
     },
     remindLabel: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
     cancel: { color: c.textMuted, fontSize: 13, textDecorationLine: 'underline' },
+    addHour: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 40,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: withAlpha(c.accent, 0.4),
+    },
+    addHourLabel: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
     fixedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     fixedIcon: {
       width: 26,
