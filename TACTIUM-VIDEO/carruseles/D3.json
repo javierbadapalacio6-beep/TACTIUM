@@ -1,0 +1,5 @@
+{ "id": "D3", "formato": "story", "slides": [
+  { "tipo": "portada", "foto": "gen/story-red.png", "eyebrow": "Equipos", "titulo": "Cada equipo, *con su ficha*", "tam": "sm", "sub": "Plantilla, clasificación y últimos resultados." },
+  { "tipo": "texto", "eyebrow": "Qué ves de un equipo", "titulo": "Todo lo que necesitas saber *del rival*", "ticks": ["Plantilla y puntos FCP", "Racha de las últimas jornadas", "Último cruce entre los dos", "Clasificación de su grupo"] },
+  { "tipo": "cierre", "titulo": "¿Capitán? *Lleva tu equipo*", "sub": "Disponibilidad, alineación y jornada, en un sitio.", "cta": "tactium.io" }
+] }

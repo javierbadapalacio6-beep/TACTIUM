@@ -1,0 +1,307 @@
+{
+  "id": "L2",
+  "titulo": "Todos los grupos · Femenino 2026/27",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/grada.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Todos los grupos. *Femenino.*",
+      "sub": "5 categorías, 16 grupos. Busca el tuyo 👉"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Femenino · 26/27",
+      "bandera": "cantabria",
+      "titulo": "1ª Femenina",
+      "grupos": [
+        {
+          "letra": "A",
+          "equipos": [
+            "CIRCULO DE RECREO A",
+            "EL TEMPLO A",
+            "G6 B",
+            "G6 C",
+            "LA MARINA B",
+            "MONTEVERDE A",
+            "PADEL X5 A",
+            "SMASH SANTANDER A"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "B",
+          "equipos": [
+            "BATHCO PADEL TEAM ATP A",
+            "CENTRAL PADEL A",
+            "G6 A",
+            "LA MARINA A",
+            "MONTEVERDE B",
+            "MOVE & GO A",
+            "RACKET SPORT A",
+            "SMASH SANTANDER B"
+          ],
+          "duro": true
+        }
+      ],
+      "dato": {
+        "eyebrow": "El más duro",
+        "titulo": "Grupo B: *3.519*",
+        "sub": "puntos de media por jugador, un 2 % por encima de la categoría."
+      }
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Femenino · 26/27",
+      "bandera": "cantabria",
+      "titulo": "2ª Femenina",
+      "grupos": [
+        {
+          "letra": "A",
+          "equipos": [
+            "+ PADEL SANTANDER A",
+            "CENTRAL PADEL D",
+            "G6 D",
+            "MIOÑO PADEL GYM",
+            "MONTEVERDE D",
+            "PONTEJOS CAMARSA",
+            "RACKET SPORT B",
+            "ZINK PADEL C"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "B",
+          "equipos": [
+            "C.D. LA PLAYUCA",
+            "CENTRAL PADEL C",
+            "CENTRAL PADEL E",
+            "G6 E",
+            "MONTEVERDE C",
+            "RACKET SPORT C",
+            "VILLAESCUSA A",
+            "ZINK PADEL B"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "C",
+          "equipos": [
+            "CENTRAL PADEL B",
+            "CLUB BAREYO",
+            "EL TEMPLO B",
+            "MARISMA DUIN A",
+            "MONTEVERDE E",
+            "OLIMPICO DE GAMA A",
+            "S.T.C. CASTRO URDIALES A",
+            "ZINK PADEL A"
+          ],
+          "duro": true
+        }
+      ],
+      "dato": {
+        "eyebrow": "El más duro",
+        "titulo": "Grupo C: *1.972*",
+        "sub": "puntos de media por jugador, un 6 % por encima de la categoría."
+      }
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Femenino · 26/27",
+      "bandera": "cantabria",
+      "titulo": "3ª Femenina",
+      "grupos": [
+        {
+          "letra": "A",
+          "equipos": [
+            "C.D. SALAS",
+            "CAMARGO",
+            "G6 F",
+            "MARISMA DUIN B",
+            "NUEVO SAN LAZARO - PONTEJOS",
+            "OLIMPICO DE GAMA B",
+            "RACKET SPORT D",
+            "T3 PADEL A"
+          ],
+          "duro": true
+        },
+        {
+          "letra": "B",
+          "equipos": [
+            "EL TEMPLO C",
+            "LA MARINA D",
+            "MONTEVERDE F",
+            "PADEL CAMPOO SUR DEL NORTE",
+            "RACKET SPORT E",
+            "REINOSA PADEL CLUB A",
+            "WALA PADEL-RESTAURANTE A BANDA",
+            "ZINK PADEL D"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "C",
+          "equipos": [
+            "CARTES",
+            "CIRCULO DE RECREO B",
+            "G6 G",
+            "LA MARINA C",
+            "MEDIO CUDEYO A",
+            "MOVE & GO B",
+            "SMASH PADEL A",
+            "VILLAESCUSA B"
+          ],
+          "duro": false
+        }
+      ],
+      "dato": {
+        "eyebrow": "El más duro",
+        "titulo": "Grupo A: *1.168*",
+        "sub": "puntos de media por jugador, un 8 % por encima de la categoría."
+      }
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Femenino · 26/27",
+      "bandera": "cantabria",
+      "titulo": "4ª Femenina",
+      "grupos": [
+        {
+          "letra": "A",
+          "equipos": [
+            "BATHCO PADEL TEAM ATP B",
+            "G6 I",
+            "LEGACY",
+            "MARISMA DUIN C",
+            "PADEL LIENCRES PIELAGOS",
+            "SANTOÑA - YOURPADELOFFICIAL.COM",
+            "VILLAESCUSA C",
+            "ZINK PADEL F"
+          ],
+          "duro": true
+        },
+        {
+          "letra": "B",
+          "equipos": [
+            "+ PADEL SANTANDER B",
+            "CENTRAL PADEL F",
+            "CIRCULO DE RECREO C",
+            "G6 K",
+            "LA MARINA F",
+            "OLIMPICO DE GAMA C",
+            "PADEL X5 B",
+            "S.T.C. CASTRO URDIALES B"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "C",
+          "equipos": [
+            "ALDAY BOUCO",
+            "CENTRAL PADEL G",
+            "CIRCULO DE RECREO D",
+            "EL TEMPLO D",
+            "G6 J",
+            "HOVELO A",
+            "P.A.G. ASTILLERO GUARNIZO",
+            "PADEL CAYON"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "D",
+          "equipos": [
+            "CENTRAL PADEL H",
+            "G6 H",
+            "LA MARINA E",
+            "MEDIO CUDEYO B",
+            "MONTEVERDE G",
+            "MOVE & GO C",
+            "RACKET SPORT F",
+            "T3 PADEL B"
+          ],
+          "duro": false
+        }
+      ],
+      "dato": {
+        "eyebrow": "El más duro",
+        "titulo": "Grupo A: *714*",
+        "sub": "puntos de media por jugador, un 17 % por encima de la categoría."
+      }
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Femenino · 26/27",
+      "bandera": "cantabria",
+      "titulo": "5ª Femenina",
+      "grupos": [
+        {
+          "letra": "A",
+          "equipos": [
+            "G6 M",
+            "HOVELO B",
+            "MEDIO CUDEYO C",
+            "MOVE & GO E",
+            "SMASH PADEL C",
+            "T3 PADEL D",
+            "ZINK PADEL G"
+          ],
+          "duro": true
+        },
+        {
+          "letra": "B",
+          "equipos": [
+            "C.D.E. ESCALANTE PADEL CLUB",
+            "G6 L",
+            "G6 Ñ",
+            "MONTEVERDE H",
+            "SMASH PADEL B",
+            "VILLAESCUSA D",
+            "ZINK PADEL F"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "C",
+          "equipos": [
+            "C.D.E. GED SPORTS",
+            "LA MARINA G",
+            "RACKET SPORT G",
+            "REINOSA PADEL CLUB B",
+            "SMASH PADEL D",
+            "T3 PADEL C",
+            "ZINK PADEL H"
+          ],
+          "duro": false
+        },
+        {
+          "letra": "D",
+          "equipos": [
+            "EL TEMPLO E",
+            "G6 N",
+            "LA MARINA H",
+            "MONTEVERDE I",
+            "MOVE & GO D",
+            "PADEL PIELAGOS RENEDO-RAYO PAS",
+            "S.T.C. CASTRO URDIALES C"
+          ],
+          "duro": false
+        }
+      ],
+      "dato": {
+        "eyebrow": "El más duro",
+        "titulo": "Grupo A: *157*",
+        "sub": "puntos de media por jugador, un 15 % por encima de la categoría."
+      }
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Y la plantilla de *tus rivales?*",
+      "sub": "En tactium.io ves cada equipo de tu grupo con sus jugadores y sus **puntos FCP**. Gratis.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

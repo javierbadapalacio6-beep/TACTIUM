@@ -146,6 +146,7 @@ Cuenta de la ventaja: ganar 8 seguidores al día con una conversión del 0,3 % d
 | (pendiente) | Un reel de ≤ 12 s retiene más que uno de 20 s | Duración | Retención | ≥ 5 s | — |
 | (pendiente) | Carrusel de consulta con «guárdalo» se guarda | CTA + contenido útil | Guardados/1.000 | ≥ 10 | — |
 | (pendiente) | Franja 21:30 supera a 19:00 | Hora | Mediana de visualizaciones | +20 % | — |
+| 15-10 (propuesto) | Las imágenes con música en reel fallaron por el tema (producto), no por el formato (ver §16) | Formato: el contenido de L6 (carrusel del 14-10) pasa a reel de imágenes, «L6R», prueba `MANUAL`, a las 19:00 | Alcance y envíos/1.000 | Alcance ≥ 350 y ≥ 3 envíos/1.000 · fracaso si el alcance < 150 | — |
 
 ## 12. Cómo leer los informes de Telegram
 
@@ -230,3 +231,33 @@ Ideas que cambian cómo medimos, ya aplicadas a este documento y a los agentes:
 
 Lo que NO se adopta: instalar su plugin tal cual (sus puntuaciones y listas de «muletillas» están hechas para inglés), el flujo
 de «palabra clave por mensaje directo» (depende de automatizaciones que arriesgan la cuenta) y cualquier recolección automática de perfiles.
+
+## 16. Reels de imágenes (decisión del 12-10-2026)
+
+**Pregunta:** ¿hacemos reels de imágenes o diapositivas con movimiento y música, sin vídeo ni voz, como el competidor?
+**Veredicto: no como formato del feed; solo una prueba condicionada.** Y si se hace, con contenido de LIGA, nunca de producto.
+
+**Datos propios ✅ (`redes_publicaciones`, 12-10, 10 reels medidos; J2 sin métricas aún):**
+
+| Grupo | Piezas | Alcance (mediana) | Visualizaciones (mediana) | Retención (mediana) | Envíos/1.000 | Likes/alcance |
+|---|---|---|---|---|---|---|
+| Reels con persona o clips (V1, A1, A2, A3, T1, J1, R2) | 7 | 731 | 1.053 | 4,2 s | 1,4 (T1: 6,0) | 1,8 % |
+| Reels de motion o imágenes (M1, M4, W1) | 3 | 77 (**0,11×**) | 101 (**0,10×**) | 4,0 s | 0 | 5,6 % |
+| Carruseles de LIGA (G1, L1, L2) | 3 | 165 | 373 | — | 2,0 · **43,9** · 0 | — |
+| Carruseles de producto o explicación (C1, C2) | 2 | 53 | 166 | — | 0 | — |
+
+Mediana de todos los reels: 749 visualizaciones y 693 de alcance (n = 10, ya con R2). Mediana de alcance de los carruseles: 114.
+
+- Los tres de motion retienen casi igual que los de persona (4,0 frente a 4,2 s) y gustan más a quien los ve, pero **Instagram no los repartió**: alcance de ~75, que con 346 seguidores apunta a que casi no salieron de los seguidores (dato no comprobado: falta el % de no seguidores de cada uno). M4 y W1 salieron a las 19:00, nuestra mejor hora: **la hora no lo explica**.
+- Los tres eran de **producto o de un tema que ya perdió** (orden de parejas). No se ha probado nunca un reel de imágenes con datos de LIGA y nombres de equipos: **formato y tema están mezclados**. Esa es la única razón para hacer una prueba.
+- L1 (carrusel con todos los grupos) dio 5 envíos con 114 de alcance: la mejor tasa de la cuenta, pero con números tan pequeños es **evidencia débil**.
+- **Competidor:** sin datos medidos (no se pudo abrir su perfil en esta sesión). Que publique así no demuestra que le funcione; falta su múltiplo sobre su propia mediana.
+- ⚪ Por qué no los repartió: hipótesis sin fuente (no hay cara ni voz con las que Instagram clasifique el tema, o lo trata como poco original). No se afirma nada.
+
+**La prueba (una sola variable: el formato).** «L6R» = el contenido de L6 (primeros de grupo 2026, con nombres de equipos) convertido en reel de imágenes con música, sin voz. Se mantienen el contenido, el CTA y la hora (19:00).
+- **Reel de prueba `MANUAL`**, miércoles 15-10 a las 19:00. Motivos: L6 sale el 14-10 como carrusel a los seguidores (con `SS_PERFORMANCE` Instagram podría graduarlo solo y los seguidores lo verían dos veces); las pruebas solo llegan a no seguidores; y ya van tres reels de motion al feed con ~100.
+- **Éxito:** alcance ≥ 350 (~4,5× el motion, la mitad de la mediana de reels) **y** ≥ 3 envíos/1.000. Si ya hay ≥ 2 pruebas medidas esa semana (H1, M2…), el alcance se compara con la mediana de las pruebas (≥ 0,5×), porque las pruebas llegan a menos gente 🟡. **Fracaso:** alcance < 150 → cuarto dato: los reels de imágenes no vuelven a salir y pasa a «Reglas aprendidas». **Entre medias:** se repite una vez con L5.
+- Se gradúa solo si cumple los tres criterios de §4; si no, se queda como prueba (no duplicar el carrusel en el feed).
+- Además se compara con M2 (motion de producto, prueba `SS_PERFORMANCE`, 16-10): mismo formato y otro tema. Así se separa el tema del formato.
+- **Montaje:** 9:16, texto dentro de la zona segura, la primera lista de equipos en el primer fotograma (sin portada, sin logo), 12-15 s, cada lista ≥ 2,5 s legible, música de Pixabay a 0,2, cierre tactium.io. Pie: «Liga Cántabra» y «primeros de grupo» en los primeros 125 caracteres, CTA «Mándaselo al grupo de tu equipo».
+- **Segunda pieza, solo si L6R pasa:** L5R (los equipos que suben a 1ª), martes 21-10 a las 19:00, mismo método. Si sale Smash Santander B, colaboración o etiqueta con `@smash_padel_club`.

@@ -184,7 +184,7 @@ export async function publicarAhora(id) {
 /** Estado de todo lo programado y los últimos avisos; pasa al calendario lo ya publicado. */
 export async function estado() {
   const [filas, avisos, cfg] = await Promise.all([
-    rest("redes_publicaciones?select=pieza,tipo,titulo,programada_para,estado,contenedor,ig_media_id,ig_enlace,error,intentos,publicada_at,actualizado,media&order=programada_para"),
+    rest("redes_publicaciones?select=pieza,tipo,titulo,programada_para,estado,contenedor,ig_media_id,ig_enlace,error,intentos,publicada_at,actualizado,media,prueba&order=programada_para"),
     rest("redes_avisos?select=id,creado,pieza,texto,siguiente,enviado,error&order=creado.desc&limit=40"),
     rest("redes_config?select=clave"),
   ]);

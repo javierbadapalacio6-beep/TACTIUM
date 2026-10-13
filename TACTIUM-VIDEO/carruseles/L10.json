@@ -1,0 +1,41 @@
+{
+  "id": "L10",
+  "titulo": "La temporada ya está cargada",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/tablon-club.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "La temporada *ya está cargada*",
+      "sub": "Calendario, grupos y plantillas 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Calendario publicado",
+      "valor": "14",
+      "sub": "jornadas, del **23 de octubre al 7 de marzo**. La primera, el fin de semana del 23 al 25."
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Ya dentro de TACTIUM",
+      "valor": "323",
+      "sub": "equipos en **41 grupos**, cada uno con su plantilla y su calendario."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "Tu grupo",
+      "titulo": "Mira *tu grupo y tus rivales*",
+      "sub": "Los cruces de la jornada 1 y las plantillas de cada equipo, **en tactium.io**."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "Jornada 1: *23, 24 y 25 de octubre*",
+      "sub": "¿Contra quién juegas? Míralo hoy.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

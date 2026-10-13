@@ -12,6 +12,14 @@ en su ficha al descargarlo (los marcados se descartaron: pueden generar reclamac
 | pixabay-charming-phonk.mp3 | Charming Phonk · FreeMusicLab | https://pixabay.com/music/beats-charming-phonk-i-free-background-music-i-free-music-lab-release-513626/ |
 | pixabay-no-sleep.mp3 | No Sleep · kontraa | https://pixabay.com/music/beats-no-sleep-hiphop-music-473847/ |
 
+Usos: `pixabay-vlog-hip-hop.mp3` → E1 «Tres a dos» (11-10-2026; la ficha leída ese día dice «Free for use under the Pixabay
+Content License» y no muestra «Content ID Registered»; volver a mirarlo el día de publicar).
+`pixabay-no-sleep.mp3` → L6R «Primeros de grupo» (12-10-2026; ficha leída ese día: «Free for use under the Pixabay Content
+License», sin «Content ID Registered»; 2:47; volver a mirarlo el día de publicar). v2: arranca a 46,7 s, volumen 0,2 y el audio final normalizado a −16 LUFS (−15,7 medido, pico −1,1 dBTP).
+`pixabay-creative-technology-showreel.mp3` → J1R «Calendario: jornada 1» (13-10-2026; ficha leída ese día: «Free for use under the
+Pixabay Content License», sin «Content ID Registered»; 1:50; volver a mirarlo el día de publicar). Arranca a 62,0 s, volumen 0,2;
+audio final a −16 LUFS (−16,0 medido, pico −1,9 dBTP; +8,4 dB y limitador con ffmpeg).
+
 ## Ojo
 
 - `ncs-hold-you.mp3` (NCS): gratis solo para creadores. Para una marca que promociona su

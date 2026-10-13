@@ -1,0 +1,35 @@
+{
+  "id": "L8",
+  "titulo": "Tu equipo ya está cargado",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/tablon-club.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Tu equipo *ya está cargado*",
+      "sub": "Sin formularios. Sin esperas 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Ya dentro de TACTIUM",
+      "valor": "323",
+      "sub": "equipos de la Liga Cántabra, cada uno con **su grupo y su plantilla** de la Federación."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "Cómo se empieza",
+      "titulo": "Lo buscas, lo importas y *a jugar*",
+      "sub": "Tu plantilla y tus rivales, **en el momento**. Sin pedirle nada a nadie."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "Hoy mismo, *tu equipo listo*",
+      "sub": "Y la liga arranca el 23 de octubre.",
+      "cta": "Enlace en la bio",
+      "bandera": "cantabria"
+    }
+  ]
+}

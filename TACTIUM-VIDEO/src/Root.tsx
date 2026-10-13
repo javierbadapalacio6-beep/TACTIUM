@@ -19,6 +19,9 @@ import { MuestraV1, MUESTRA_MS } from "./reel/estilo/MuestraV1";
 import { ReelJuego, REELS_JUEGO, durJuego } from "./reel/estilo/ReelJuego";
 import { ReelHablado, HABLADOS, durHablado } from "./reel/estilo/ReelHablado";
 import { Portada, PORTADAS } from "./reel/estilo/Portada";
+import { WebGrabada, GRABACIONES, durGrabacion, ReelWeb, REELS_WEB, durReelWeb } from "./reel/estilo/WebGrabada";
+import { Lanzamiento, durLanzamiento } from "./reel/estilo/Lanzamiento";
+import { ReelListas, REELS_LISTAS, durListas } from "./reel/estilo/ReelListas";
 import { ReelClasificacion, durClasif } from "./reel/estilo/ClasificacionCascada";
 import { CIERRE_MS } from "./reel/Reel";
 import { Memoria, durMemoria, FPS as FPS_MEMORIA } from "./memoria/Memoria";
@@ -112,7 +115,7 @@ export const Root: React.FC = () => (
       />
     ))}
     {/* Reel de juego: clips reales + estilo cinético, sin voz. */}
-    {REELS_JUEGO.map((r) => (
+    {REELS_JUEGO.filter((r) => !r.soloVertical).map((r) => (
       <Composition
         key={r.id}
         id={r.id}
@@ -136,6 +139,25 @@ export const Root: React.FC = () => (
         width={ANCHO.w}
         height={ANCHO.h}
       />
+    ))}
+    {/* Recorridos grabados de la web (scripts/grabar-web.mjs), en 9:16: `web-<recorrido>`. */}
+    {GRABACIONES.map((g) => (
+      <Composition key={`web-${g.nombre}`} id={`web-${g.nombre}`} component={WebGrabada} defaultProps={{ nombre: g.nombre }}
+        durationInFrames={Math.round((durGrabacion(g) / 1000) * T.canvas.fps)} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
+    ))}
+    {/* Reels montados sobre una grabación de la web: `reel-<id>` (gancho, pasos y cierre). */}
+    {REELS_WEB.map((r) => (
+      <Composition key={`reel-${r.id}`} id={`reel-${r.id}`} component={ReelWeb} defaultProps={{ id: r.id }}
+        durationInFrames={Math.round((durReelWeb(r) / 1000) * T.canvas.fps)} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
+    ))}
+    {/* Vídeo de lanzamiento (borrador): un verbo por función, móvil fijo, «Ya disponible». */}
+    <Composition id="lanzamiento-L1" component={Lanzamiento} defaultProps={{ variante: "oscuro" as const }} durationInFrames={durLanzamiento("oscuro")} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
+    {/* La misma pieza con fondos de rejilla de color, grano y cortina de papel. */}
+    <Composition id="lanzamiento-L2" component={Lanzamiento} defaultProps={{ variante: "color" as const }} durationInFrames={durLanzamiento("color")} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
+    {/* Reels de listas (carrusel de liga → reel de imágenes, sin voz), solo 9:16: `<id>`. */}
+    {REELS_LISTAS.map((r) => (
+      <Composition key={r.id} id={r.id} component={ReelListas} defaultProps={{ id: r.id }}
+        durationInFrames={durListas(r)} fps={T.canvas.fps} width={T.canvas.w} height={T.canvas.h} />
     ))}
     {/* Portadas de los reels (cover_url): `portada-<pieza>`, un solo fotograma. */}
     {PORTADAS.map((p) => (

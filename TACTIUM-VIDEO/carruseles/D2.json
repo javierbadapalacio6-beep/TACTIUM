@@ -1,0 +1,6 @@
+{ "id": "D2", "formato": "story", "slides": [
+  { "tipo": "portada", "foto": "gen/pista-noche.png", "eyebrow": "Liga Cántabra 26/27", "bandera": "cantabria", "titulo": "Todos los grupos, *al día*", "tam": "sm", "sub": "Clasificaciones, jornadas y actas. Sin cuenta." },
+  { "tipo": "numero", "eyebrow": "Liga Cántabra 26/27", "valor": "323", "sub": "equipos en *41 grupos* y 12 categorías" },
+  { "tipo": "pantalla", "alto": 1120, "src": "web/fed-grupo-clasificacion.png", "eyebrow": "Cada grupo", "titulo": "Clasificación y *resultados* de cada jornada", "sub": "Con las actas de cada partido." },
+  { "tipo": "cierre", "titulo": "Encuentra *tu grupo*", "sub": "Búscalo en Federación. Gratis, sin cuenta.", "cta": "tactium.io/federacion", "bandera": "cantabria" }
+] }

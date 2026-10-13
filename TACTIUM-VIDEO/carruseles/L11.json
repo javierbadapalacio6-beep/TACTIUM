@@ -1,0 +1,279 @@
+{
+  "id": "L11",
+  "titulo": "Jornada 1: los cruces de 2ª y 3ª masculina",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/tablon-club.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Jornada 1. *2ª y 3ª masculina.*",
+      "sub": "23, 24 y 25 de octubre. El local, primero 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "2ª Masculina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "C.P. ALFOZ",
+            "vs OLIMPICO DE GAMA A"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "MARISMA DUIN A",
+            "vs G6 C"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "MERUELO A",
+            "vs EL TEMPLO A"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "SMASH PADEL C",
+            "vs A.D.R.M. B"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "BATHCO ATP A",
+            "vs PADEL MIES DEL CORRO A"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "EL TEMPLO B",
+            "vs OLIMPICO DE GAMA B"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "MIOÑO PADEL GYM B",
+            "vs LIENCRES PIELAGOS A"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "SMASH PADEL B",
+            "vs LOS TROYANOS"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "2ª Masculina · Grupos C y D",
+      "grupos": [
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "C.D. SALAS A",
+            "vs VILLA DE COLINDRES A"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "G6 D",
+            "vs CENTRAL PADEL B"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "LA MARINA C",
+            "vs MOVE & GO A"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "VILLAESCUSA B",
+            "vs ZINK PADEL C"
+          ]
+        },
+        {
+          "etiqueta": "D · 1",
+          "equipos": [
+            "ASTILLERO GUARNIZO A",
+            "vs G6 E"
+          ]
+        },
+        {
+          "etiqueta": "D · 2",
+          "equipos": [
+            "CAMARGO B",
+            "vs MEDIO CUDEYO B"
+          ]
+        },
+        {
+          "etiqueta": "D · 3",
+          "equipos": [
+            "LA MARINA D",
+            "vs ARENAS AJO PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "D · 4",
+          "equipos": [
+            "MONTEVERDE C",
+            "vs CASTRO URDIALES B"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "3ª Masculina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "G6 H",
+            "vs BATHCO ATP B"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "LIENCRES PIELAGOS B",
+            "vs PENAGOS A"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "SAN LAZARO-PONTEJOS A",
+            "vs CENTRAL PADEL E"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "VILLAESCUSA C",
+            "vs MONTEVERDE D"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "C.D.E. EL REFUGIO",
+            "vs PESCADORES DE SOMO A"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "G6 F",
+            "vs PADEL X5 B"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "LA PLAYUCA ASTILLERO B",
+            "vs +PADEL SANTANDER B"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "RACKET SPORT C",
+            "vs ZINK PADEL E"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "3ª Masculina · Grupos C y D",
+      "grupos": [
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "ALDAY BOUCO B",
+            "vs REINOSA PADEL CLUB B"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "CARTES",
+            "vs PARAYAS"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "G6 G",
+            "vs CENTRAL PADEL C"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "ZINK PADEL D",
+            "vs MONTEVERDE F"
+          ]
+        },
+        {
+          "etiqueta": "D · 1",
+          "equipos": [
+            "GLASS PADEL 4",
+            "vs CIRCULO DE RECREO A"
+          ]
+        },
+        {
+          "etiqueta": "D · 2",
+          "equipos": [
+            "MOVE & GO B",
+            "vs G6 I"
+          ]
+        },
+        {
+          "etiqueta": "D · 3",
+          "equipos": [
+            "PADEL MIES DEL CORRO B",
+            "vs CENTRAL PADEL D"
+          ]
+        },
+        {
+          "etiqueta": "D · 4",
+          "equipos": [
+            "SANTOÑA A",
+            "vs MONTEVERDE E"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Y *tu jornada 1?*",
+      "sub": "Los cruces de tu grupo, con las plantillas y los puntos de cada rival, en tactium.io.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

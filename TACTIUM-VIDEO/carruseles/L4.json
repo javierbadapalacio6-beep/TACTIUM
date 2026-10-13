@@ -1,0 +1,86 @@
+{
+  "id": "L4",
+  "titulo": "La Liga Cántabra 2026/27 en números",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/grada.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "La liga, *en números.*"
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Equipos inscritos",
+      "valor": "323",
+      "sub": "en 12 categorías: 7 masculinas y 5 femeninas."
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Jugadores en las plantillas",
+      "valor": "5.925",
+      "sub": "Unos **18 por equipo**. Y cada jornada juegan 10."
+    },
+    {
+      "tipo": "barras",
+      "eyebrow": "Dónde se juega",
+      "titulo": "Las sedes con *más equipos*",
+      "filas": [
+        {
+          "etiqueta": "G6",
+          "valor": 40,
+          "texto": "40 equipos"
+        },
+        {
+          "etiqueta": "Monteverde",
+          "valor": 28,
+          "texto": "28 equipos"
+        },
+        {
+          "etiqueta": "Central",
+          "valor": 28,
+          "texto": "28 equipos"
+        },
+        {
+          "etiqueta": "Smash",
+          "valor": 22,
+          "texto": "22 equipos"
+        },
+        {
+          "etiqueta": "Racket",
+          "valor": 20,
+          "texto": "20 equipos"
+        },
+        {
+          "etiqueta": "Zink",
+          "valor": 20,
+          "texto": "20 equipos"
+        },
+        {
+          "etiqueta": "Bahiason",
+          "valor": 19,
+          "texto": "19 equipos"
+        },
+        {
+          "etiqueta": "La Marina",
+          "valor": 14,
+          "texto": "14 equipos"
+        }
+      ]
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "La plantilla más larga",
+      "valor": "42",
+      "sub": "jugadores inscritos en **ZINK PADEL G**. Montar esa alineación cada semana es otro deporte."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "Tu equipo, tu grupo y tus rivales en *tactium.io*",
+      "sub": "Y si eres capitán, la alineación de cada jornada en **dos minutos** con la app.",
+      "cta": "Enlace en la bio",
+      "bandera": "cantabria"
+    }
+  ]
+}
