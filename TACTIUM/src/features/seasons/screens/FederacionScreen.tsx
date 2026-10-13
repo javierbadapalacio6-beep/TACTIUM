@@ -89,7 +89,7 @@ const groupMetaLine = (g: FcpGroupItem, m?: FcpGroupMeta): string => {
   if (!m) return g.genero === 'F' ? 'FEMENINO' : 'MASCULINO';
   const parts: string[] = [];
   if (m.equiposCount) parts.push(`${m.equiposCount} EQUIPOS`);
-  if (m.jornadaTotal) parts.push(`J·${m.jornadaActual}/${m.jornadaTotal}`);
+  if (m.jornadaTotal) parts.push(`J·${Math.max(1, m.jornadaActual)}/${m.jornadaTotal}`);
   parts.push(estadoLabel(m.estado));
   return parts.join(' · ');
 };

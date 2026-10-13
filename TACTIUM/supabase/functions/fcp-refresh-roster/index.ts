@@ -139,7 +139,9 @@ Deno.serve(async (req: Request) => {
     { headers: { 'User-Agent': 'Mozilla/5.0 TACTIUM' } },
   );
   if (!res.ok) return json({ error: 'fcp_unavailable', status: res.status }, 502);
-  const html = await res.text();
+  // La ficha de la Federación va en ISO-8859-1: con `res.text()` (UTF-8) «IÑIGO» salía «I�IGO» y se
+  // guardaba así en `fcp_jugadores` (visto el 13-10-2026).
+  const html = new TextDecoder('windows-1252').decode(await res.arrayBuffer());
 
   const jugadores = parseRoster(html, insc.id_equipo, insc.id_liga, insc.equipo ?? team.name);
   const sede = (html.match(/Sede:\s*([^<]+)</i) ?? [])[1];

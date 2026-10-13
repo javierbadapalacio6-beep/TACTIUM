@@ -114,6 +114,85 @@ async function fetchFcpTeamInscrito(idEquipo: number): Promise<FcpTeamProfile | 
   };
 }
 
+/** Una temporada del MISMO equipo (el id federado cambia cada año, por eso se cruza por plantilla). */
+export interface FcpTeamSeason {
+  idEquipo: number;
+  idLiga: number;
+  /** Etiqueta corta: «2026/27». */
+  temporada: string;
+}
+
+/** «2026/2027» → «2026/27»; «2026» (la liga que acaba en 2026) → «2025/26». */
+const etiquetaTemporada = (t: string | null, nombre: string | null): string => {
+  const s = (t ?? '').trim();
+  let m = s.match(/^(\d{4})\s*[/-]\s*(\d{4})$/);
+  if (m) return `${m[1]}/${m[2].slice(2)}`;
+  m = s.match(/^(\d{4})$/);
+  if (m) return `${Number(m[1]) - 1}/${m[1].slice(2)}`;
+  return s || nombre || '—';
+};
+
+/**
+ * Las temporadas en las que juega este equipo, de la más nueva a la más vieja.
+ *
+ * El id de equipo de la Federación cambia cada temporada (y a veces la letra), así que el mismo
+ * equipo se reconoce por su plantilla: en cada liga, el equipo que comparte al menos el 40 % de
+ * los jugadores (y 3). Si no hay otra temporada, devuelve [] y la ficha se queda como estaba.
+ */
+export async function fetchFcpTeamSeasons(idEquipo: number): Promise<FcpTeamSeason[]> {
+  const { data: base } = await rawFrom('fcp_jugadores')
+    .select('nombre, id_liga')
+    .eq('id_equipo', idEquipo)
+    .limit(200);
+  const mine = (base ?? []) as { nombre: string | null; id_liga: number | null }[];
+  const names = [...new Set(mine.map((r) => r.nombre).filter((n): n is string => !!n))];
+  const ownLiga = mine[0]?.id_liga ?? null;
+  if (names.length < 4 || ownLiga == null) return [];
+
+  const { data: rows } = await rawFrom('fcp_jugadores')
+    .select('id_equipo, id_liga, nombre')
+    .in('nombre', names)
+    .limit(5000);
+  const overlap = new Map<string, { idEquipo: number; idLiga: number; n: number }>();
+  for (const r of (rows ?? []) as { id_equipo: number; id_liga: number; nombre: string }[]) {
+    const k = `${r.id_liga}:${r.id_equipo}`;
+    const cur = overlap.get(k) ?? { idEquipo: r.id_equipo, idLiga: r.id_liga, n: 0 };
+    cur.n += 1;
+    overlap.set(k, cur);
+  }
+  const min = Math.max(3, Math.ceil(names.length * 0.4));
+  const bestPorLiga = new Map<number, { idEquipo: number; idLiga: number; n: number }>();
+  for (const o of overlap.values()) {
+    if (o.idLiga === ownLiga) {
+      // En su propia liga manda el propio equipo.
+      if (o.idEquipo === idEquipo) bestPorLiga.set(o.idLiga, o);
+      continue;
+    }
+    if (o.n < min) continue;
+    const prev = bestPorLiga.get(o.idLiga);
+    if (!prev || o.n > prev.n) bestPorLiga.set(o.idLiga, o);
+  }
+  if (bestPorLiga.size < 2) return [];
+
+  const { data: ligas } = await rawFrom('fcp_ligas')
+    .select('id_liga, temporada, nombre')
+    .in('id_liga', [...bestPorLiga.keys()]);
+  const info = new Map(
+    ((ligas ?? []) as { id_liga: number; temporada: string | null; nombre: string | null }[]).map((l) => [
+      l.id_liga,
+      l,
+    ]),
+  );
+  return [...bestPorLiga.values()]
+    .filter((o) => !/escolar/i.test(info.get(o.idLiga)?.nombre ?? ''))
+    .sort((a, b) => b.idLiga - a.idLiga)
+    .map((o) => ({
+      idEquipo: o.idEquipo,
+      idLiga: o.idLiga,
+      temporada: etiquetaTemporada(info.get(o.idLiga)?.temporada ?? null, info.get(o.idLiga)?.nombre ?? null),
+    }));
+}
+
 export async function fetchFcpTeamProfile(idEquipo: number): Promise<FcpTeamProfile | null> {
   const main = await resolveMainGroup(idEquipo);
   // Sin clasificación puede ser un equipo INSCRITO en la temporada que viene:

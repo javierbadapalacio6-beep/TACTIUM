@@ -223,10 +223,23 @@ export const TeamScreen = () => {
     if (!team?.id || refrescando) return;
     setRefrescando(true);
     try {
-      await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
+      const r = await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
       setInscripcion(await cargarInscripcion());
+      // Antes se tragaba el resultado: si la Federación no respondía, el botón
+      // «no hacía nada» y no había forma de saber si había fallado o no había
+      // cambios.
+      if (!r.found) {
+        toast.error('No encontramos tu equipo', 'La Federación no lo tiene inscrito todavía.');
+      } else if (r.players == null) {
+        toast.info('Acabas de actualizar', 'Espera un minuto antes de volver a pedirlo.');
+      } else {
+        toast.success('Plantilla actualizada', `${r.players} jugadores en la Federación.`);
+      }
     } catch {
-      /* el texto ya dice de cuándo es la foto */
+      toast.error(
+        'No se pudo actualizar',
+        'La Federación no ha respondido. Se actualiza sola dos veces por semana.',
+      );
     } finally {
       setRefrescando(false);
     }

@@ -30,6 +30,8 @@ import {
   fetchFcpRanking,
   fetchFcpStandings,
   fetchFcpTeamProfile,
+  fetchFcpTeamSeasons,
+  type FcpTeamSeason,
   fetchTeamFcpId,
   fetchFcpTeamNameById,
   fcpSameTeam,
@@ -841,7 +843,7 @@ export function FederationExplore({
                   ? { label: "Finalizada", tone: "mute" as const }
                   : estado === "en_curso"
                     ? {
-                        label: `Jornada ${meta!.jornadaActual} de ${meta!.jornadaTotal}`,
+                        label: `Jornada ${Math.max(1, meta!.jornadaActual)} de ${meta!.jornadaTotal}`,
                         tone: "accent" as const,
                       }
                     : selectedLeague?.upcoming
@@ -1371,7 +1373,7 @@ export function FcpGroupView({
   const groupMeta = [
     header.data?.temporada ?? null,
     rows.length > 0 ? `${rows.length} equipos` : null,
-    jornadaTotal > 0 ? `Jornada ${jornadaActual} de ${jornadaTotal}` : null,
+    jornadaTotal > 0 ? `Jornada ${Math.max(1, jornadaActual)} de ${jornadaTotal}` : null,
   ].filter(Boolean);
 
   return (
@@ -2461,10 +2463,31 @@ export function FcpTeamView({
   const [sort, setSort] = useState<"puntos" | "nombre">("puntos");
   // Resumen · Partidos · Plantilla (como la ficha de equipo de la app).
   const [teamTab, setTeamTab] = useState<"resumen" | "partidos" | "plantilla">("resumen");
+  // Temporadas del equipo (su id federado cambia cada año). En el explorador (embedded), donde se
+  // abre un equipo seguido con el id de cuando se siguió, se ve la MÁS NUEVA por defecto; en la
+  // página de un id concreto (SEO) se queda en ese id y las demás temporadas van en el selector.
+  const [seasons, setSeasons] = useState<FcpTeamSeason[]>([]);
+  const [activeId, setActiveId] = useState<number>(idEquipo);
+  useEffect(() => {
+    setActiveId(idEquipo);
+    setSeasons([]);
+    if (!Number.isFinite(idEquipo)) return;
+    let alive = true;
+    fetchFcpTeamSeasons(idEquipo)
+      .then((s) => {
+        if (!alive) return;
+        setSeasons(s);
+        if (embedded && s.length) setActiveId(s[0].idEquipo);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [idEquipo, embedded]);
   const { data, loading, error } = useAsync(
-    () => fetchFcpTeamProfile(idEquipo),
-    [idEquipo, user?.id],
-    Number.isFinite(idEquipo),
+    () => fetchFcpTeamProfile(activeId),
+    [activeId, user?.id],
+    Number.isFinite(activeId),
     initial
   );
   // Próximo y últimos: las jornadas del grupo filtradas por este equipo.
@@ -2569,6 +2592,17 @@ export function FcpTeamView({
           ) : undefined
         }
       />
+
+      {seasons.length > 1 ? (
+        <div className="tw-toolbar">
+          <Segmented
+            label="Temporada del equipo"
+            value={String(activeId)}
+            onChange={(v) => setActiveId(Number(v))}
+            options={seasons.slice(0, 3).map((s) => ({ value: String(s.idEquipo), label: s.temporada }))}
+          />
+        </div>
+      ) : null}
 
       {/* Temporada en inscripción: sin sorteo no hay clasificación ni
           partidos. Pintar la fila de cifras a cero sería mentir —parecería un
