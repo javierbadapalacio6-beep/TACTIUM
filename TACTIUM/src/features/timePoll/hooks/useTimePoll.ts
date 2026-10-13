@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { supabase } from '@core/supabase/client';
+import { useAvailabilityRealtime } from '@core/hooks/useAvailabilityRealtime';
 import * as TimePollsApi from '@core/services/timePolls';
 import { fetchAvailability, type AvailabilityMap } from '@core/services/availability';
 import { useAuthStore } from '@store/authStore';
@@ -140,6 +141,9 @@ export function useTimePoll(matchdayId: string | null | undefined) {
       load();
     }, [load]),
   );
+
+  // En vivo: votos, horas nuevas/quitadas y encuesta abierta o cerrada.
+  useAvailabilityRealtime({ matchdayId, scope: 'poll', onChange: load });
 
   /** Voto optimista del propio jugador. */
   const setMyVote = useCallback((optionIds: string[]) => {

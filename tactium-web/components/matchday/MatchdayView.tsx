@@ -23,6 +23,7 @@ import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
+import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
 import { useDismiss } from "@/lib/use-dismiss";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import {
@@ -415,11 +416,14 @@ export function MatchdayView({ id }: { id: string }) {
   const seasons = useAsync(() => fetchSeasons(teamId!).catch(() => []), [teamId], !!teamId);
 
   // Convocatoria: respuestas con estado (va / duda / no).
+  const [availNonce, setAvailNonce] = useState(0);
   const avail = useAsync(
     () => fetchAvailabilityDetail(id).catch(() => ({})),
-    [id],
+    [id, availNonce],
     !!teamId
   );
+  // En vivo: el recuento de la convocatoria se actualiza cuando alguien responde.
+  useAvailabilityRealtime(id, () => setAvailNonce((n) => n + 1), "availability", !!teamId);
 
   const [rows, setRows] = useState<CourtRow[]>([]);
   const [confirmClose, setConfirmClose] = useState(false);

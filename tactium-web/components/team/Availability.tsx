@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/lib/session";
 import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { useAsync } from "@/lib/use-async";
+import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
 import {
   countAvail,
   fetchAvailabilityDetail,
@@ -80,6 +81,7 @@ export function AvailabilityView({ id }: { id: string }) {
   const teamId = owner.teamId;
   const isCaptain = (role === "capitan" && owner.isTeamCaptain) || role === "club";
 
+  const [nonce, setNonce] = useState(0);
   const { data, loading, error } = useAsync(
     () =>
       Promise.all([
@@ -90,9 +92,11 @@ export function AvailabilityView({ id }: { id: string }) {
         fetchLastReminder(id),
         fetchTeam(teamId!),
       ]),
-    [id, teamId],
+    [id, teamId, nonce],
     !!teamId,
   );
+  // En vivo: alguien responde y se ve sin recargar.
+  useAvailabilityRealtime(id, () => setNonce((n) => n + 1), "availability", !!teamId);
 
   const matchday: DbMatchday | null = data?.[0] ?? null;
   const players = useMemo(() => (data?.[1] ?? []).filter((p) => p.active), [data]);
@@ -106,12 +110,17 @@ export function AvailabilityView({ id }: { id: string }) {
   const [linking, setLinking] = useState(false);
   const router = useRouter();
 
+  // La pestaña se elige una sola vez: una recarga en vivo no debe sacar al capitán de la que está mirando.
+  const tabChosen = useRef(false);
   useEffect(() => {
     if (data) {
       setMap(data[2]);
       setLastReminder(data[4]);
-      const c = countAvail(data[1].filter((p) => p.active).map((p) => p.id), data[2]);
-      setTab(!isCaptain || c.pending === 0 ? "yes" : "pending");
+      if (!tabChosen.current) {
+        tabChosen.current = true;
+        const c = countAvail(data[1].filter((p) => p.active).map((p) => p.id), data[2]);
+        setTab(!isCaptain || c.pending === 0 ? "yes" : "pending");
+      }
     }
   }, [data, isCaptain]);
 
@@ -125,7 +134,7 @@ export function AvailabilityView({ id }: { id: string }) {
       </div>
     );
   }
-  if (loading) return <SkeletonPage />;
+  if (loading && !data) return <SkeletonPage />;
   if (error) {
     return (
       <div className="tw-page">

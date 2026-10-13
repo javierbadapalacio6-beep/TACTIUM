@@ -23,6 +23,7 @@ import {
   type TimePollContext,
 } from "@/lib/time-polls";
 import { fetchAvailabilityDetail, type AvailRow } from "@/lib/queries";
+import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
 import { guardedWrite } from "@/lib/writes";
 import { proHref } from "@/lib/nav";
 import { useAsync } from "@/lib/use-async";
@@ -86,6 +87,8 @@ export function TimePollPanel({
     !!user,
   );
   const reload = () => setNonce((n) => n + 1);
+  // En vivo: votos, horas y respuestas de los demás sin recargar la página.
+  useAvailabilityRealtime(matchdayId, reload, "poll", !!user);
 
   const [myVoteLocal, setMyVoteLocal] = useState<string[] | null | undefined>(undefined);
   const [toast, setToast] = useState<string | null>(null);
@@ -103,7 +106,8 @@ export function TimePollPanel({
 
   const data = ctx.data?.[0] ?? null;
   const availability = ctx.data?.[1] ?? {};
-  if (ctx.loading || !data) return null;
+  // Solo la primera carga oculta el panel: una recarga en vivo mantiene lo que ya se ve.
+  if (!data) return null;
 
   const { poll, matchday, team, players, myPlayerId } = data;
   const isOpen = poll?.status === "open";

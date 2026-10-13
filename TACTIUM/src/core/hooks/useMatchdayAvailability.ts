@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
+import { useAvailabilityRealtime } from '@core/hooks/useAvailabilityRealtime';
 import * as AvailabilityApi from '@core/services/availability';
 import type {
   AvailabilityMap,
@@ -59,6 +60,9 @@ export function useMatchdayAvailability(matchdayId: string | null | undefined) {
       refresh();
     }, [refresh]),
   );
+
+  // En vivo: alguien responde y se ve sin salir de la pantalla.
+  useAvailabilityRealtime({ matchdayId, onChange: refresh });
 
   // Al volver a la app (p. ej. tras contestar desde la notificación).
   useEffect(() => {
