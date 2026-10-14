@@ -140,6 +140,34 @@ type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean };
 const sameCourt = (a: string, b: string) =>
   !!a.trim() && !!b.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/**
+ * Jornada en juego. La Federación publica primero solo el fin de semana y el día
+ * lo fija el club local, así que al arrancar la liga NINGÚN partido tiene fecha:
+ * por eso se manda el número de jornada. Sin fecha: la primera jornada pendiente;
+ * con fechas: la semana del próximo partido (de hoy en adelante) más las jornadas
+ * de los que siguen sin día. Espejo de `currentRoundMatches` de la app.
+ */
+function currentRoundFixtures(list: Fixture[]): Fixture[] {
+  const undatedNums = list.filter((f) => !f.match_date && f.jornada_number != null).map((f) => f.jornada_number as number);
+  const firstUndated = undatedNums.length ? Math.min(...undatedNums) : null;
+  const dated = list.filter((f) => f.match_date).sort((a, b) => (a.match_date! < b.match_date! ? -1 : 1));
+  if (dated.length === 0) {
+    return firstUndated == null ? list : list.filter((f) => f.jornada_number == null || f.jornada_number === firstUndated);
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const anchor = dated.find((f) => f.match_date! >= today) ?? dated[dated.length - 1];
+  const d0 = anchor.match_date!;
+  const end = new Date(`${d0}T12:00:00`);
+  end.setDate(end.getDate() + 6);
+  const endIso = end.toISOString().slice(0, 10);
+  const inWindow = (f: Fixture) => !!f.match_date && f.match_date >= d0 && f.match_date <= endIso;
+  const roundNums = new Set(list.filter(inWindow).map((f) => f.jornada_number).filter((n): n is number => n != null));
+  return list.filter((f) => {
+    if (f.match_date) return inWindow(f);
+    return f.jornada_number == null || f.jornada_number === firstUndated || roundNums.has(f.jornada_number);
+  });
+}
+
 export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) {
   const { clubId } = useSession();
   const [reloadKey, setReloadKey] = useState(0);
@@ -166,6 +194,23 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
     !!clubId,
   );
   const fixtures: Fixture[] = useMemo(() => data ?? [], [data]);
+
+  // Qué jornada se enseña: la actual por defecto (antes salían los 126 partidos de
+  // la temporada), una concreta o todas.
+  const [round, setRound] = useState<"actual" | "todas" | number>("actual");
+  const jornadas = useMemo(
+    () => [...new Set(fixtures.map((f) => f.jornada_number).filter((n): n is number => n != null))].sort((a, b) => a - b),
+    [fixtures],
+  );
+  const shown = useMemo(
+    () =>
+      round === "todas"
+        ? fixtures
+        : round === "actual"
+          ? currentRoundFixtures(fixtures)
+          : fixtures.filter((f) => f.jornada_number === round),
+    [fixtures, round],
+  );
 
   // Franjas favoritas por JORNADA. Antes se indexaba por NOMBRE de equipo, y
   // el nombre no identifica a nadie: «MEDIO CUDEYO A» existe masculino y
@@ -255,6 +300,7 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   const [saving, setSaving] = useState(false);
 
   const assigned = fixtures.filter((f) => slots[f.matchday_id]).length;
+  const assignedShown = shown.filter((f) => slots[f.matchday_id]).length;
 
   // Pistas que el club ya ha usado: se ofrecen en una lista al escribir.
   const courts = useMemo(() => {
@@ -286,8 +332,8 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   const clashCount = Object.keys(clashWith).length;
 
   // Primero lo que falta (sin hora o sede por confirmar), después lo demás.
-  const missing = fixtures.filter((f) => !slots[f.matchday_id] || f.unconfirmed);
-  const ready = fixtures.filter((f) => slots[f.matchday_id] && !f.unconfirmed);
+  const missing = shown.filter((f) => !slots[f.matchday_id] || f.unconfirmed);
+  const ready = shown.filter((f) => slots[f.matchday_id] && !f.unconfirmed);
 
   /**
    * Guarda de verdad. Antes este botón solo enseñaba el aviso de éxito: el
@@ -524,9 +570,27 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
       <div className="tw-schedule-grid" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         {tab === "partidos" && (
         <Card flush>
-          <CardHead title="Partidos de local" count={fixtures.length}>
-            <Chip tone={assigned === fixtures.length ? "accent" : "warning"}>
-              {assigned} de {fixtures.length} asignados
+          <CardHead title="Partidos de local" count={shown.length}>
+            <select
+              className="tw-cell-input"
+              aria-label="Jornada"
+              value={String(round)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setRound(v === "actual" || v === "todas" ? v : Number(v));
+              }}
+              style={{ width: "auto", minWidth: 150 }}
+            >
+              <option value="actual">Jornada actual</option>
+              {jornadas.map((n) => (
+                <option key={n} value={n}>
+                  Jornada {n}
+                </option>
+              ))}
+              <option value="todas">Todas las jornadas ({fixtures.length})</option>
+            </select>
+            <Chip tone={assignedShown === shown.length ? "accent" : "warning"}>
+              {assignedShown} de {shown.length} asignados
             </Chip>
           </CardHead>
 

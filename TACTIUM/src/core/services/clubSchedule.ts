@@ -140,27 +140,57 @@ function addDays(iso: string, n: number): string {
 }
 
 /**
- * Partidos de la "jornada en juego": la ventana de ~1 semana desde el partido
- * de local más próximo. Evita mostrar todas las jornadas de la temporada
- * cuando el club tiene muchos equipos — solo el turno actual. Los partidos sin
- * fecha se incluyen siempre (aún por calendarizar). Comparación lexicográfica
- * de fechas ISO (válida para 'YYYY-MM-DD').
+ * Partidos de la "jornada en juego". Evita mostrar todas las jornadas de la
+ * temporada cuando el club tiene muchos equipos — solo el turno actual.
+ *
+ * Dos pistas para saber cuál es:
+ *  · Las FECHAS: la ventana de ~1 semana desde el partido de local más
+ *    próximo (de hoy en adelante; si todos son pasados, el más reciente, para
+ *    que un partido viejo sin cerrar no ancle la ventana al pasado).
+ *  · El NÚMERO DE JORNADA: la Federación publica primero solo el fin de semana
+ *    y deja el día para cuando el club local lo fija, así que al arrancar la
+ *    liga NINGÚN partido tiene fecha. Antes eso devolvía los partidos de TODA
+ *    la temporada (126 en un club grande); ahora los sin fecha se limitan a la
+ *    primera jornada pendiente (la de menor número) y a las que caen en la
+ *    ventana de las fechadas.
+ *
+ * Los partidos sin fecha ni número (aún por calendarizar) se incluyen siempre.
+ * Comparación lexicográfica de fechas ISO (válida para 'YYYY-MM-DD').
  */
 export function currentRoundMatches(matches: ClubHomeMatch[]): ClubHomeMatch[] {
   const dated = matches
     .filter((m) => m.match_date)
     .sort((a, b) => (a.match_date! < b.match_date! ? -1 : 1));
-  if (dated.length === 0) return matches;
+
+  // Primera jornada pendiente entre los partidos SIN fecha.
+  const undatedNums = matches
+    .filter((m) => !m.match_date && m.jornada_number != null)
+    .map((m) => m.jornada_number as number);
+  const firstUndated = undatedNums.length ? Math.min(...undatedNums) : null;
+
+  if (dated.length === 0) {
+    if (firstUndated == null) return matches;
+    return matches.filter((m) => m.jornada_number == null || m.jornada_number === firstUndated);
+  }
+
   // Anclamos al primer partido de HOY en adelante (la jornada realmente en
-  // juego). Si todos son pasados, al más reciente — así un partido viejo sin
-  // cerrar no ancla la ventana al pasado y oculta los próximos.
+  // juego). Si todos son pasados, al más reciente.
   const today = new Date().toISOString().slice(0, 10);
   const anchor = dated.find((m) => m.match_date! >= today) ?? dated[dated.length - 1];
   const d0 = anchor.match_date!;
   const end = addDays(d0, 6);
-  return matches.filter(
-    (m) => !m.match_date || (m.match_date >= d0 && m.match_date <= end),
+  const inWindow = (m: ClubHomeMatch) => !!m.match_date && m.match_date >= d0 && m.match_date <= end;
+  const roundNums = new Set(
+    matches.filter(inWindow).map((m) => m.jornada_number).filter((n): n is number => n != null),
   );
+  return matches.filter((m) => {
+    if (m.match_date) return inWindow(m);
+    return (
+      m.jornada_number == null ||
+      m.jornada_number === firstUndated ||
+      roundNums.has(m.jornada_number)
+    );
+  });
 }
 
 /** Franjas favoritas de un equipo INVITADO, que el club sede sí puede editar.
