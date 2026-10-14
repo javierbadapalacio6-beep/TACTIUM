@@ -20,27 +20,32 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-07',
+  id: '2026-10-14',
   items: [
     {
-      icon: '●',
-      title: 'Marcador en vivo',
-      text: 'Los compañeros que miran llevan el tanteo juego a juego y el equipo lo sigue al momento. Con enlace para quien no tenga la app.',
-    },
-    {
       icon: '◷',
-      title: 'Encuesta de hora',
-      text: 'Propón varias horas para la jornada, el equipo vota y fijas la que más gente puede.',
+      title: 'Encuesta de hora, más completa',
+      text: 'Añade o quita horas sin perder los votos y mira quién ha votado cada una en una tabla, con su Voy/Duda/No.',
     },
     {
-      icon: '!',
-      title: 'Temporadas sin sustos',
-      text: 'Si la Federación aún no ha publicado el calendario nuevo, te lo decimos en vez de volcar la temporada pasada.',
+      icon: '●',
+      title: 'Todo al momento',
+      text: 'La disponibilidad y los votos de la encuesta se actualizan solos, sin salir de la pantalla.',
     },
     {
-      icon: '✦',
-      title: 'Entrada nueva',
-      text: 'La animación completa al abrir la app, cada vez.',
+      icon: '▦',
+      title: 'Fin de semana de cada jornada',
+      text: 'Mientras el club no fija día y hora, la jornada muestra el fin de semana de la Federación (23-25 oct). También en el enlace.',
+    },
+    {
+      icon: '↗',
+      title: 'Enlace para el grupo',
+      text: 'Comparte el enlace de la jornada y quien no tenga la app responde Voy/Duda/No y vota la hora desde el navegador.',
+    },
+    {
+      icon: '✓',
+      title: 'Plantillas y escáner más fiables',
+      text: 'Al volcar la plantilla no se duplican jugadores y las bajas salen. El escáner de calendario respeta el fin de semana.',
     },
   ],
 };
