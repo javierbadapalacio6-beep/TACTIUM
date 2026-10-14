@@ -460,6 +460,33 @@ export const ClubScheduleScreen = ({
     </Animated.View>
   );
 
+  // Selector arriba, siempre a la vista: «Jornada actual» (la primera por jugar) o
+  // «Todas». Antes solo había un enlace al final de una lista larguísima.
+  const roundNums = roundMatches.map((m) => m.jornada_number).filter((n): n is number => n != null);
+  const roundNo = roundNums.length ? Math.min(...roundNums) : null;
+  const roundSwitch =
+    hasMore || showAll ? (
+      <View style={styles.roundSwitch}>
+        {[
+          { all: false, label: roundNo != null ? `Jornada ${roundNo}` : 'Jornada actual' },
+          { all: true, label: `Todas · ${matches.length}` },
+        ].map((o) => {
+          const on = showAll === o.all;
+          return (
+            <Pressable
+              key={String(o.all)}
+              onPress={on ? undefined : toggleShowAll}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              style={[styles.roundChip, on && styles.roundChipOn]}
+            >
+              <Text style={[styles.roundChipText, on && { color: c.textInverse }]}>{o.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    ) : null;
+
   const weekStrip = (
     <>
       {/* Tira de la semana */}
@@ -544,6 +571,7 @@ export const ClubScheduleScreen = ({
             }}
             showsVerticalScrollIndicator={false}
           >
+            {roundSwitch}
             {weekStrip}
             {missingAll.length > 0 ? (
               <View style={{ marginTop: 16 }}>
@@ -602,6 +630,7 @@ export const ClubScheduleScreen = ({
           {tab === 'partidos' ? (
             <>
               {/* La tira es de la semana en juego: con todas las jornadas no aplica. */}
+              {roundSwitch}
               {showAll ? null : weekStrip}
 
               {matches.length === 0 ? (
@@ -1470,6 +1499,17 @@ const makeStyles = (c: Palette) =>
     slotText: { color: c.accent, fontFamily: Fonts.mono, fontSize: 12, marginTop: 2 },
     slotEmpty: { color: c.textFaint, fontSize: 12 },
 
+    roundSwitch: { flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 4 },
+    roundChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.background,
+    },
+    roundChipOn: { backgroundColor: c.accent, borderColor: c.accent },
+    roundChipText: { color: c.text, fontSize: 13, fontWeight: '700' },
     weekStrip: { flexDirection: 'row', gap: 6, marginTop: 6 },
     weekCell: {
       flex: 1,
