@@ -1553,6 +1553,11 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
     case "time_poll_fixed":
       if (data?.for_club) return "/club/horarios";
       return jornada ? `/jornada/${jornada}` : null;
+    // «Subido a la Federación» y recordatorios del lunes: a la jornada, o a Horarios si es el aviso del club.
+    case "fcp_upload_done":
+    case "fcp_upload_reminder":
+      if (!jornada && g("clubId", "club_id")) return "/club/horarios";
+      return jornada ? `/jornada/${jornada}` : null;
     case "kudos": {
       // data = {type, actor_id, target_kind: 'casual'|'league', target_id}
       const target = g("target_id", "targetId");

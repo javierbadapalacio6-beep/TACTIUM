@@ -45,6 +45,7 @@ import {
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
+import { fetchFcpUploadedIds, setFcpUploaded } from '@core/services/fcpUpload';
 import { notifyPush } from '@core/push';
 import {
   PreferredSlotsEditor,
@@ -165,6 +166,9 @@ export const ClubScheduleScreen = ({
     { id: string; name: string; guest?: boolean } | null
   >(null);
   const [ranges, setRanges] = useState<Record<string, string>>({});
+  // Partidos ya subidos a la Federación (los suben los capitanes antes del lunes a las 20:00).
+  const [uploaded, setUploaded] = useState<Set<string>>(new Set());
+  const [uploading, setUploading] = useState(false);
   const [dayFilter, setDayFilter] = useState<string | null>(null);
   // TABLET: rejilla de pistas × horas. Se TOCA una celda libre y se abre el
   // panel de la hora con la pista y la hora ya puestas (el arrastre, después).
@@ -286,6 +290,7 @@ export const ClubScheduleScreen = ({
       }));
       setMatches(data);
       setRanges(await fetchDateRanges(data.map((m) => m.matchday_id)).catch(() => ({})));
+      setUploaded(await fetchFcpUploadedIds(data.map((m) => m.matchday_id)).catch(() => new Set<string>()));
       setSlotsByTeam((prev) => {
         const next = { ...prev };
         for (const t of vTeams) next[t.team_id] = t.preferred_home_slots ?? [];
@@ -344,6 +349,21 @@ export const ClubScheduleScreen = ({
 
   const filtered = dayFilter ? visible.filter((m) => m.match_date === dayFilter) : visible;
   // Primero lo que falta (sin hora o sede por confirmar), después lo que ya está.
+  // Marca como subidos a la Federación los partidos de una jornada (avisa a los capitanes).
+  const markUploaded = async (ids: string[]) => {
+    if (uploading || ids.length === 0) return;
+    setUploading(true);
+    try {
+      await setFcpUploaded(ids, true);
+      setUploaded((prev) => new Set([...prev, ...ids]));
+      toast.success('Marcado como subido', 'Hemos avisado a los capitanes.');
+    } catch (e: any) {
+      toast.error('No se pudo marcar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Cada jornada con TODOS los partidos de local de todos los equipos del club
   // (propios e invitados). Dentro de una jornada, primero lo que falta.
   const jornadaGroups = (list: ClubHomeMatch[]) => {
@@ -378,7 +398,21 @@ export const ClubScheduleScreen = ({
               <Text style={{ color: c.warning }}> · {pend} SIN HORA</Text>
             ) : null}
           </Text>
-          <View style={{ gap: 8 }}>{sorted.map(renderRow)}</View>
+          {sorted.some((m) => !uploaded.has(m.matchday_id)) ? (
+            <Pressable
+              onPress={() => markUploaded(sorted.filter((m) => !uploaded.has(m.matchday_id)).map((m) => m.matchday_id))}
+              disabled={uploading}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.uploadBtn, (pressed || uploading) && { opacity: 0.7 }]}
+            >
+              <Text style={styles.uploadBtnText}>
+                Marcar {sorted.filter((m) => !uploaded.has(m.matchday_id)).length === sorted.length ? 'toda la jornada' : 'los que faltan'} como subida a la Federación
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.rowWarn, { color: c.accent, marginTop: 6 }]}>✓ Toda la jornada está subida a la Federación</Text>
+          )}
+          <View style={{ gap: 8, marginTop: 8 }}>{sorted.map(renderRow)}</View>
         </View>
       );
     });
@@ -472,6 +506,9 @@ export const ClubScheduleScreen = ({
           </Text>
           {m.home_unconfirmed ? (
             <Text style={styles.rowWarn}>Sede de playoff por confirmar</Text>
+          ) : null}
+          {uploaded.has(m.matchday_id) ? (
+            <Text style={[styles.rowWarn, { color: c.accent }]}>✓ Subido a la Federación</Text>
           ) : null}
         </View>
         {m.match_time && !m.home_unconfirmed ? (
@@ -1495,6 +1532,16 @@ const makeStyles = (c: Palette) =>
     slotText: { color: c.accent, fontFamily: Fonts.mono, fontSize: 12, marginTop: 2 },
     slotEmpty: { color: c.textFaint, fontSize: 12 },
 
+    uploadBtn: {
+      alignSelf: 'flex-start',
+      marginTop: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    uploadBtnText: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
     jStrip: { flexDirection: 'row', gap: 8, paddingVertical: 8 },
     jChip: {
       flexDirection: 'row',

@@ -9,7 +9,7 @@ import {
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
-import { fetchDateRanges, fetchUnconfirmedVenues } from "@/lib/club-ops";
+import { fetchDateRanges, fetchFcpUploadedIds, fetchUnconfirmedVenues, setFcpUploaded } from "@/lib/club-ops";
 import {
   importFcpTeams,
   searchFcpClubs,
@@ -135,7 +135,7 @@ const DEFAULT_HOURS = [
 ];
 
 /** Un partido de local, de un equipo propio o de uno invitado. */
-type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean; range?: string | null };
+type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean; range?: string | null; uploaded?: boolean };
 
 const sameCourt = (a: string, b: string) =>
   !!a.trim() && !!b.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -162,7 +162,8 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
         () => new Set<string>(),
       );
       const ranges = await fetchDateRanges(all.map((m) => m.matchday_id)).catch(() => ({}) as Record<string, string>);
-      return all.map((m) => ({ ...m, unconfirmed: pending.has(m.matchday_id), range: ranges[m.matchday_id] ?? null })) as Fixture[];
+      const ups = await fetchFcpUploadedIds(all.map((m) => m.matchday_id)).catch(() => new Set<string>());
+      return all.map((m) => ({ ...m, unconfirmed: pending.has(m.matchday_id), range: ranges[m.matchday_id] ?? null, uploaded: ups.has(m.matchday_id) })) as Fixture[];
     },
     [clubId, reloadKey],
     !!clubId,
@@ -286,6 +287,20 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   // Primero lo que falta (sin hora o sede por confirmar), después lo demás.
   // Todas las jornadas, cada una con los partidos de local de todos los equipos
   // (propios e invitados). Dentro de una jornada, primero lo que falta.
+  const [uploading, setUploading] = useState(false);
+  async function marcarSubidos(ids: string[]) {
+    if (uploading || ids.length === 0) return;
+    setUploading(true);
+    const res = await guardedWrite("marcar como subido a la Federación", () => setFcpUploaded(ids, true));
+    setUploading(false);
+    if (!res.ok) {
+      setToast(res.reason);
+      return;
+    }
+    setReloadKey((k) => k + 1);
+    setToast("Marcado como subido. Hemos avisado a los capitanes.");
+  }
+
   const lacks = (f: Fixture) => !slots[f.matchday_id] || !!f.unconfirmed;
   // Una jornada cada vez (selector J1, J2…); por defecto la primera por jugar.
   const [jornadaSel, setJornadaSel] = useState<number | null>(null);
@@ -501,7 +516,7 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
           {clash ? (
             <Chip tone="warning">Pista ocupada</Chip>
           ) : s && !f.unconfirmed ? (
-            <Chip>Listo</Chip>
+            <Chip tone={f.uploaded ? "accent" : undefined}>{f.uploaded ? "En la Federación" : "Listo"}</Chip>
           ) : f.unconfirmed && s ? (
             <Chip tone="warning">Por confirmar</Chip>
           ) : (
@@ -602,6 +617,20 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
                     {n === null ? "Sin jornada" : `Jornada ${n}`}
                     {range ? ` · ${range}` : ""} · {sorted.length} {sorted.length === 1 ? "partido" : "partidos"}
                     {pend > 0 && <span style={{ color: "var(--warning)" }}> · {pend} sin hora</span>}
+                  </div>
+                  <div style={{ padding: "0 18px 10px" }}>
+                    {sorted.some((f) => !f.uploaded) ? (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        disabled={uploading}
+                        onClick={() => void marcarSubidos(sorted.filter((f) => !f.uploaded).map((f) => f.matchday_id))}
+                      >
+                        Marcar {sorted.every((f) => !f.uploaded) ? "toda la jornada" : "los que faltan"} como subida a la Federación
+                      </Btn>
+                    ) : (
+                      <span style={{ color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>✓ Toda la jornada está subida a la Federación</span>
+                    )}
                   </div>
                   {sorted.map(renderRow)}
                 </Fragment>

@@ -66,6 +66,7 @@ import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
+import { FederationUploadCard } from '@features/home/components/jornada/FederationUploadCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { LiveScoreboard } from '../components/live/LiveScoreboard';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
@@ -1043,6 +1044,11 @@ const JornadaDetail = ({
         {/* === ENCUESTA DE HORA === (lógica en features/timePoll) */}
         {tab === 'previa' && !closed ? (
           <TimePollCard matchdayId={matchday.id} canManage={isCaptain} onChanged={load} />
+        ) : null}
+
+        {/* === SUBIDO A LA FEDERACIÓN === partidos de local de la Cántabra por jugar */}
+        {tab === 'previa' && !closed && matchday.is_home && team?.federation === 'FCantP' ? (
+          <FederationUploadCard matchdayId={matchday.id} canManage={isCaptain} />
         ) : null}
 
         {/* === PREVIA === */}

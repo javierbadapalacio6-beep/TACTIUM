@@ -134,6 +134,50 @@ export async function fetchUnconfirmedVenues(matchdayIds: string[]): Promise<Set
   return out;
 }
 
+/** «Subido a la Federación»: estado de un partido. `applies` = es de local, está por jugar y es de la Cántabra. */
+export async function fetchFcpUpload(
+  matchdayId: string,
+): Promise<{ applies: boolean; uploadedAt: Date | null }> {
+  const { data } = await supabaseBrowser()
+    .from("matchdays")
+    .select("is_home, status, fcp_uploaded_at, seasons(teams(federation))")
+    .eq("id", matchdayId)
+    .maybeSingle();
+  const row = data as unknown as {
+    is_home: boolean;
+    status: string;
+    fcp_uploaded_at: string | null;
+    seasons?: { teams?: { federation?: string | null } | { federation?: string | null }[] | null } | { teams?: unknown }[] | null;
+  } | null;
+  if (!row) return { applies: false, uploadedAt: null };
+  const s = Array.isArray(row.seasons) ? row.seasons[0] : row.seasons;
+  const tm = (s as { teams?: { federation?: string | null } | { federation?: string | null }[] | null } | null)?.teams;
+  const fed = (Array.isArray(tm) ? tm[0]?.federation : tm?.federation) ?? null;
+  return {
+    applies: row.is_home && row.status === "upcoming" && fed === "FCantP",
+    uploadedAt: row.fcp_uploaded_at ? new Date(row.fcp_uploaded_at) : null,
+  };
+}
+
+/** Qué partidos de una lista ya están subidos a la Federación. */
+export async function fetchFcpUploadedIds(matchdayIds: string[]): Promise<Set<string>> {
+  if (matchdayIds.length === 0) return new Set();
+  const { data } = await supabaseBrowser().from("matchdays").select("id, fcp_uploaded_at").in("id", matchdayIds);
+  const out = new Set<string>();
+  for (const r of (data ?? []) as { id: string; fcp_uploaded_at: string | null }[]) if (r.fcp_uploaded_at) out.add(r.id);
+  return out;
+}
+
+/** Marca (o desmarca) partidos de local como subidos. Avisa a la otra parte al marcar. */
+export async function setFcpUploaded(matchdayIds: string[], uploaded = true): Promise<number> {
+  const { data, error } = await supabaseBrowser().rpc("set_fcp_uploaded", {
+    p_matchday_ids: matchdayIds,
+    p_uploaded: uploaded,
+  });
+  if (error) throw new Error(error.message);
+  return Number(data ?? 0);
+}
+
 /** Fin de semana de la Federación («23 - 25 Oct») de cada jornada, por matchday. */
 export async function fetchDateRanges(matchdayIds: string[]): Promise<Record<string, string>> {
   if (matchdayIds.length === 0) return {};

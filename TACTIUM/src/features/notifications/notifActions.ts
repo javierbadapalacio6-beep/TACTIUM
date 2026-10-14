@@ -59,6 +59,11 @@ export function targetOf(n: AppNotification): NavTarget | null {
     case 'time_poll_fixed':
       if (n.data?.for_club) return { kind: 'clubSchedule' };
       return md ? { kind: 'home', screen: 'Jornada', matchdayId: md } : null;
+    // «Subido a la Federación» / recordatorios del lunes: a la jornada, o a Horarios si es el aviso del club.
+    case 'fcp_upload_done':
+    case 'fcp_upload_reminder':
+      if (!md && n.data?.clubId) return { kind: 'clubSchedule' };
+      return md ? { kind: 'home', screen: 'Jornada', matchdayId: md } : null;
     case 'joined_team':
       return { kind: 'team', fallbackHome: true };
     case 'member_joined':
@@ -190,6 +195,9 @@ export function ctaLabel(type: string): string | null {
     case 'time_poll_reminder':
       return 'Votar';
     case 'time_poll_fixed':
+      return 'Ver jornada';
+    case 'fcp_upload_done':
+    case 'fcp_upload_reminder':
       return 'Ver jornada';
     case 'tournament_bracket':
       return 'Ver cuadro';

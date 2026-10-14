@@ -48,6 +48,7 @@ import {
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
 import { fmtRango } from "@/lib/fcp-range";
 import { TimePollPanel } from "@/components/matchday/TimePollPanel";
+import { FederationUploadCard } from "@/components/matchday/FederationUploadCard";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
 import {
   IconAlert,
@@ -1353,6 +1354,7 @@ export function MatchdayView({ id }: { id: string }) {
       <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
       {/* Encuesta de hora (lógica en TimePollPanel). */}
       {curTab === "previa" && !closed && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+      {curTab === "previa" && !closed && <FederationUploadCard matchdayId={m.id} canManage={isCaptain} />}
 
       {curTab === "previa" && (
         <div style={twoCols}>
