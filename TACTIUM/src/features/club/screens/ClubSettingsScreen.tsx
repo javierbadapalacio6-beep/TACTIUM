@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -95,7 +94,7 @@ export const ClubSettingsScreen = ({ navigation }: RootStackScreenProps<'ClubSet
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable

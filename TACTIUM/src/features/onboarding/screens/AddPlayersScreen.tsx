@@ -7,7 +7,6 @@ import {
   ScrollView,
   TextInput,
   KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
   Share,
@@ -213,7 +212,7 @@ export const AddPlayersScreen = ({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       style={styles.root}
     >
       <AmbientBackdrop intensity={0.6} />
