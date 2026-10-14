@@ -149,7 +149,7 @@ export const PanelModal: React.FC<PanelModalProps> = ({
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         </Animated.View>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={isSide ? styles.sideWrap : styles.modalWrap}
           pointerEvents="box-none"
         >
