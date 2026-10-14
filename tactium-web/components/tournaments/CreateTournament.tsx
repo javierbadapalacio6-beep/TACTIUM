@@ -19,6 +19,13 @@ import {
   fetchClubTournaments,
 } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { PlayWindowsEditor } from "@/components/tournaments/PlayWindowsEditor";
+import {
+  DEFAULT_PLAY_WINDOWS,
+  isoDaysBetween,
+  playWindowsValid,
+  type PlayWindows,
+} from "@/lib/tournament-windows";
 import {
   fetchTournamentStats,
   tournamentPhase,
@@ -291,10 +298,10 @@ export function CreateTournament() {
   const [deadlineDays, setDeadlineDays] = useState("3");
   const [startsOn, setStartsOn] = useState("");
   const [endsOn, setEndsOn] = useState("");
-  // Ventana horaria de juego: fija desde qué hora empieza y hasta cuándo se
-  // juega. Alimenta el horario y la rejilla de disponibilidad de la inscripción.
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("22:00");
+  // Franjas de juego por tipo de día (entre semana / fin de semana / festivos): alimentan el horario y la rejilla
+  // de disponibilidad de la inscripción. Los festivos son días del torneo que el club marca.
+  const [windows, setWindows] = useState<PlayWindows>(DEFAULT_PLAY_WINDOWS);
+  const [holidays, setHolidays] = useState<string[]>([]);
   const [created, setCreated] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -407,8 +414,8 @@ export function CreateTournament() {
             : null,
         startsOn: startsOn || null,
         endsOn: endsOn || null,
-        startTime: startTime || null,
-        endTime: endTime || null,
+        playWindows: windows,
+        holidays: holidays.filter((h) => isoDaysBetween(startsOn || null, endsOn || null).includes(h)),
         location: location.trim() || null,
         maxRemovableHours: removable ? parseInt(removable, 10) : null,
         categoryRules: (() => {
@@ -433,7 +440,7 @@ export function CreateTournament() {
     } else setErr(res.reason);
   }
 
-  const canNext = step !== 1 || name.trim().length > 2;
+  const canNext = (step !== 1 || name.trim().length > 2) && (step !== 3 || playWindowsValid(windows));
   const current = STEPS.find((s) => s.n === step) ?? STEPS[0];
 
   if (created) {
@@ -902,31 +909,13 @@ export function CreateTournament() {
               </Field>
             </div>
 
-            <div className="tw-form-grid">
-              <Field label="Hora de inicio de juego" htmlFor="ct-start-time">
-                <Input
-                  id="ct-start-time"
-                  type="time"
-                  value={startTime}
-                  step={3600}
-                  onChange={(e) => setStartTime(e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Hora de fin de juego"
-                hint="Desde y hasta qué hora se juega. Define las franjas de la inscripción y del horario."
-                htmlFor="ct-end-time"
-              >
-                <Input
-                  id="ct-end-time"
-                  type="time"
-                  value={endTime}
-                  step={3600}
-                  min={startTime || undefined}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </Field>
-            </div>
+            <PlayWindowsEditor
+              windows={windows}
+              onWindows={setWindows}
+              days={isoDaysBetween(startsOn || null, endsOn || null)}
+              holidays={holidays}
+              onHolidays={setHolidays}
+            />
 
             <Note icon={<IconInfo size={15} />}>
               Los días de cada fase (octavos, cuartos, semis, final…) se asignan
@@ -1113,7 +1102,7 @@ export function CreateTournament() {
                 title: [startsOn ? shortDate(startsOn) : null, endsOn && endsOn !== startsOn ? shortDate(endsOn) : null]
                   .filter(Boolean)
                   .join(" – ") || "Sin fechas",
-                sub: `De ${startTime} a ${endTime}`,
+                sub: `Entre semana ${windows.weekday.from}–${windows.weekday.to} · Fin de semana ${windows.weekend.from}–${windows.weekend.to}`,
               },
               {
                 n: 4,

@@ -59,6 +59,7 @@ import {
 } from "./signup/PlayerFields";
 import { AvailabilityGrid, RadioCard, StepBar } from "./signup/parts";
 import { SuccessTicket } from "./signup/SuccessTicket";
+import { hhmmToMinutes, isoDaysBetween, windowForDay, type PlayWindows } from "@/lib/tournament-windows";
 import { saveSignupDraft, takeSignupDraft } from "./signup/draft";
 
 const EMPTY_PLAYER: PlayerDraft = {
@@ -120,6 +121,25 @@ export function SignupForm({ id }: { id: string }) {
     () => buildSignupDays(real?.starts_on ?? null, real?.ends_on ?? null),
     [real?.starts_on, real?.ends_on],
   );
+  // Franjas por tipo de día del torneo (null = torneo antiguo: una sola ventana).
+  const [winInfo, setWinInfo] = useState<{
+    play_windows: PlayWindows | null;
+    holidays: string[];
+    start_time: string | null;
+    end_time: string | null;
+  } | null>(null);
+  // Ventana (en minutos) de cada día de la rejilla: solo se ofrecen las horas de su franja. Las rejillas de torneos
+  // sin franjas por tipo de día (o antes de cargarlas) no recortan nada.
+  const dayWindows = useMemo(() => {
+    const out: Record<string, { from: number; to: number }> = {};
+    if (!winInfo?.play_windows) return out;
+    const isos = isoDaysBetween(real?.starts_on, real?.ends_on).slice(0, availDays.length);
+    isos.forEach((iso, i) => {
+      const w = windowForDay(winInfo, iso);
+      out[availDays[i]] = { from: hhmmToMinutes(w.from), to: hhmmToMinutes(w.to) };
+    });
+    return out;
+  }, [winInfo, real?.starts_on, real?.ends_on, availDays]);
   const t: NormTournament | null = real
     ? {
         name: real.name,
@@ -330,6 +350,12 @@ export function SignupForm({ id }: { id: string }) {
           return;
         }
         setSlots(hourlyFranjas(w.start_time, w.end_time));
+        setWinInfo({
+          play_windows: w.play_windows,
+          holidays: w.holidays,
+          start_time: w.start_time,
+          end_time: w.end_time,
+        });
         setRemoveCap(w.max_removable_hours);
         setEntryFee2(w.entry_fee_2);
         setCategoryRules((w.category_rules as CategoryRules | null) ?? null);
@@ -397,11 +423,13 @@ export function SignupForm({ id }: { id: string }) {
     const out: string[] = [];
     for (const d of availDays)
       for (const s of slots) {
+        const w = dayWindows[d];
+        if (w && (s.from < w.from || s.to > w.to)) continue; // fuera de la franja de ese día
         const key = `${d} ${s.label}`;
         if (blocked.has(key)) out.push(key);
       }
     return out;
-  }, [availDays, slots, blocked]);
+  }, [availDays, slots, blocked, dayWindows]);
 
   function saveDraft() {
     saveSignupDraft(id, {
@@ -1257,6 +1285,7 @@ export function SignupForm({ id }: { id: string }) {
             <AvailabilityGrid
               days={availDays}
               slots={slots}
+              dayWindows={dayWindows}
               blocked={blocked}
               cap={removeCap}
               onToggle={toggleSlot}

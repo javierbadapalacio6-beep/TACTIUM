@@ -5,6 +5,7 @@ import { guardedWrite, type WriteResult } from "./writes";
 import type { Position } from "./team-data";
 import { FCP_FEDERATION_CODE } from "./federations";
 import { fetchClubInscripciones, fetchInscripcionGrupo } from "./club-ops";
+import { isoDaysBetween, windowsSpan, type PlayWindows } from "./tournament-windows";
 import type { FcpSeasonEstado } from "./fcp-season-diff";
 import {
   fcpDisplayName,
@@ -1857,7 +1858,7 @@ export async function fetchTournament(id: string) {
   const { data: direct } = await sb
     .from("tournaments")
     .select(
-      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, club_id, courts, start_time, end_time, slot_minutes, rest_minutes",
+      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, club_id, courts, start_time, end_time, play_windows, holidays, slot_minutes, rest_minutes",
     )
     .eq("id", id)
     .maybeSingle();
@@ -1871,6 +1872,9 @@ export async function fetchTournament(id: string) {
 export interface TournamentSignupWindow {
   start_time: string | null;
   end_time: string | null;
+  /** Franjas por tipo de día y festivos (null = torneo antiguo: vale start_time/end_time siempre). */
+  play_windows: PlayWindows | null;
+  holidays: string[];
   max_removable_hours: number | null;
   entry_fee: number | null;
   entry_fee_2: number | null;
@@ -1894,6 +1898,8 @@ export async function fetchTournamentSignupWindow(
   return {
     start_time: row.start_time ?? null,
     end_time: row.end_time ?? null,
+    play_windows: (row.play_windows as PlayWindows | null | undefined) ?? null,
+    holidays: row.holidays ?? [],
     max_removable_hours: row.max_removable_hours ?? null,
     entry_fee: row.entry_fee ?? null,
     entry_fee_2: row.entry_fee_2 ?? null,
@@ -1932,6 +1938,9 @@ export async function createTournament(input: {
   // inscripción). "HH:MM". Igual que en la app.
   startTime?: string | null;
   endTime?: string | null;
+  /** Franjas de juego por tipo de día y festivos marcados: mandan sobre startTime/endTime. */
+  playWindows?: PlayWindows | null;
+  holidays?: string[];
   maxRemovableHours?: number | null;
   /** Condiciones de participación que el inscrito tiene que aceptar. */
   terms?: string | null;
@@ -1965,8 +1974,16 @@ export async function createTournament(input: {
         : {}),
       ...(input.startsOn ? { starts_on: input.startsOn } : {}),
       ...(input.endsOn ? { ends_on: input.endsOn } : {}),
-      ...(input.startTime ? { start_time: input.startTime } : {}),
-      ...(input.endTime ? { end_time: input.endTime } : {}),
+      ...(input.playWindows
+        ? (() => {
+            const hol = (input.holidays ?? []).filter(Boolean);
+            const span = windowsSpan(input.playWindows, isoDaysBetween(input.startsOn, input.endsOn), hol);
+            return { play_windows: input.playWindows, holidays: hol, start_time: span.from, end_time: span.to };
+          })()
+        : {
+            ...(input.startTime ? { start_time: input.startTime } : {}),
+            ...(input.endTime ? { end_time: input.endTime } : {}),
+          }),
       ...(input.maxRemovableHours != null
         ? { max_removable_hours: input.maxRemovableHours }
         : {}),

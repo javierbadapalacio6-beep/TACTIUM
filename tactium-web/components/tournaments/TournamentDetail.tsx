@@ -67,6 +67,7 @@ import {
   IconUsers,
 } from "@/components/Icon";
 import { PayTournamentButton } from "@/components/tournaments/PayTournamentButton";
+import { windowForDay, type PlayWindows } from "@/lib/tournament-windows";
 import {
   Champions,
   FollowButton,
@@ -110,6 +111,8 @@ interface RealTournament {
   courts?: number | null;
   start_time?: string | null;
   end_time?: string | null;
+  play_windows?: PlayWindows | null;
+  holidays?: string[] | null;
   slot_minutes?: number | null;
   rest_minutes?: number | null;
   // No siempre lo devuelve la RPC pública; se usa si viene.
@@ -786,6 +789,8 @@ function ScheduleGrid({
   courtsCount,
   startTime,
   endTime,
+  playWindows,
+  holidays,
   slotMinutes,
   restMinutes,
   startsOn,
@@ -800,6 +805,8 @@ function ScheduleGrid({
   courtsCount: number;
   startTime: string | null;
   endTime: string | null;
+  playWindows: PlayWindows | null;
+  holidays: string[] | null;
   slotMinutes: number;
   restMinutes: number;
   startsOn: string | null;
@@ -851,21 +858,6 @@ function ScheduleGrid({
   // rejilla teórica: con franjas de 90 min desde las 17:00 no existe la fila de
   // las 19:00, y un partido puesto ahí desde la app se vería como «sin hora»
   // teniéndola. Antes esconder, mejor enseñar la fila de más.
-  const times = useMemo(() => {
-    const step = Math.max(15, slotMinutes || 60);
-    const from = hhmmToMin(startTime, 9 * 60);
-    const to = hhmmToMin(endTime, 22 * 60);
-    const set = new Set<number>();
-    for (let t = from; t + step <= to && set.size < 40; t += step) set.add(t);
-    for (const sl of Object.values(slots)) {
-      if (!sl.at) continue;
-      const d = new Date(sl.at);
-      set.add(d.getHours() * 60 + d.getMinutes());
-    }
-    const out = [...set].sort((a, b) => a - b);
-    return out.length ? out : [from];
-  }, [startTime, endTime, slotMinutes, slots]);
-
   // Días del torneo MÁS los que ya tengan partidos puestos: si el horario se
   // montó desde la app en otras fechas, esconderlas sería perderlos de vista.
   const days = useMemo(() => {
@@ -876,6 +868,31 @@ function ScheduleGrid({
   }, [startsOn, endsOn, slots]);
 
   const activeDay = day && days.includes(day) ? day : days[0];
+
+  // Ventana de juego del DÍA que se está viendo (entre semana / fin de semana / festivo).
+  const dayWin = useMemo(
+    () =>
+      windowForDay(
+        { play_windows: playWindows, holidays, start_time: startTime, end_time: endTime },
+        activeDay,
+      ),
+    [playWindows, holidays, startTime, endTime, activeDay],
+  );
+
+  const times = useMemo(() => {
+    const step = Math.max(15, slotMinutes || 60);
+    const from = hhmmToMin(dayWin.from, 9 * 60);
+    const to = hhmmToMin(dayWin.to, 22 * 60);
+    const set = new Set<number>();
+    for (let t = from; t + step <= to && set.size < 40; t += step) set.add(t);
+    for (const sl of Object.values(slots)) {
+      if (!sl.at) continue;
+      const d = new Date(sl.at);
+      set.add(d.getHours() * 60 + d.getMinutes());
+    }
+    const out = [...set].sort((a, b) => a - b);
+    return out.length ? out : [from];
+  }, [dayWin, slotMinutes, slots]);
 
   // Fases que existen de verdad (las que tienen partidos), no las teóricas.
   const phases = useMemo(() => {
@@ -2996,6 +3013,8 @@ export function TournamentDetail({
               courtsCount={Number(t?.courts ?? 3)}
               startTime={t?.start_time ?? null}
               endTime={t?.end_time ?? null}
+              playWindows={t?.play_windows ?? null}
+              holidays={t?.holidays ?? null}
               slotMinutes={Number(t?.slot_minutes ?? 60)}
               restMinutes={Number(t?.rest_minutes ?? 0)}
               startsOn={t?.starts_on ?? null}

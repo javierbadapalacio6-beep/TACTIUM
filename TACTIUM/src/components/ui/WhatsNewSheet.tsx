@@ -20,17 +20,17 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-14b',
+  id: '2026-10-15',
   items: [
+    {
+      icon: '◷',
+      title: 'Franjas de juego en los torneos',
+      text: 'Fija a qué horas se juega entre semana, en fin de semana y en festivos. El horario y la inscripción solo ofrecen esas horas.',
+    },
     {
       icon: '✓',
       title: 'Subido a la Federación',
-      text: 'Marca cada partido de local cuando la hora esté en la web de la Federación. El lunes a las 09:00 y a las 13:30 te avisamos de lo que falte (plazo: lunes 20:00).',
-    },
-    {
-      icon: '▦',
-      title: 'Horarios por jornada',
-      text: 'En «Horarios de local» elige la jornada (J1, J2…) y ve los partidos de local de todos tus equipos.',
+      text: 'Marca cada partido de local cuando la hora esté en la web de la Federación. Los lunes a las 09:00 y a las 13:30 te avisamos de lo que falte.',
     },
     {
       icon: '＋',
@@ -43,9 +43,9 @@ const NOVEDADES = {
       text: 'En un torneo con varias categorías, pon un premio distinto para cada una.',
     },
     {
-      icon: '◷',
-      title: 'Encuesta de hora, más completa',
-      text: 'Añade o quita horas sin perder votos y mira quién ha votado cada una. Todo se actualiza al momento.',
+      icon: '!',
+      title: 'Inscripciones más justas',
+      text: 'Quien se marca como no federado se comprueba con la Federación, y el nivel de cada categoría se fija como nivel máximo.',
     },
   ],
 };

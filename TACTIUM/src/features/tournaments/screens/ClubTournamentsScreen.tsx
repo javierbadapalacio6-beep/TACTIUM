@@ -61,8 +61,13 @@ import {
   type SeedingMode,
   type PrizeEntry,
   type InfoRow,
+  type PlayWindows,
+  DEFAULT_PLAY_WINDOWS,
+  isoDaysBetween,
+  windowsSpan,
 } from '@core/services/tournaments';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
+import { PlayWindowsEditor, playWindowsValid } from '../components/PlayWindowsEditor';
 import {
   TOURNAMENT_BILLING_ENABLED,
   computeTournamentBilling,
@@ -967,6 +972,9 @@ const CreateTournamentSheet: React.FC<{
     });
   const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
   const [prizesByCat, setPrizesByCat] = useState<Record<string, PrizeEntry[]>>({});
+  // Franjas de juego por tipo de día (entre semana / fin de semana / festivos) y festivos marcados.
+  const [playWindows, setPlayWindows] = useState<PlayWindows>(DEFAULT_PLAY_WINDOWS);
+  const [holidays, setHolidays] = useState<string[]>([]);
   const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
   const [observations, setObservations] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -1000,6 +1008,8 @@ const CreateTournamentSheet: React.FC<{
     setLocation('');
     setPrizesJson([]);
     setPrizesByCat({});
+    setPlayWindows(DEFAULT_PLAY_WINDOWS);
+    setHolidays([]);
     setInfoRows([]);
     setObservations('');
     setCoverUri(null);
@@ -1109,6 +1119,11 @@ const CreateTournamentSheet: React.FC<{
         seedingMode,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
+        playWindows,
+        // Solo los festivos que caen dentro de las fechas elegidas.
+        holidays: holidays.filter((h) =>
+          isoDaysBetween(startsOn ? dateToIsoDate(startsOn) : null, endsOn ? dateToIsoDate(endsOn) : null).includes(h),
+        ),
         location,
         prizesJson,
         // Solo las categorías elegidas (si se quitó una después de ponerle premios, no se guarda).
@@ -1148,7 +1163,13 @@ const CreateTournamentSheet: React.FC<{
   // Validación mínima por paso para poder avanzar. Solo el nombre (paso 0) y al
   // menos un género (paso 2) son obligatorios; el resto es opcional.
   const canNext =
-    step === 0 ? name.trim().length > 0 : step === 2 ? genders.length > 0 : true;
+    step === 0
+      ? name.trim().length > 0
+      : step === 2
+        ? genders.length > 0
+        : step === 3
+          ? playWindowsValid(playWindows)
+          : true;
 
   return (
     <BottomSheet
@@ -1617,6 +1638,16 @@ const CreateTournamentSheet: React.FC<{
               repartir cada fase por días.
             </Text>
           )}
+
+          <View style={{ marginTop: 18 }}>
+            <PlayWindowsEditor
+              windows={playWindows}
+              onWindows={setPlayWindows}
+              days={isoDaysBetween(startsOn ? dateToIsoDate(startsOn) : null, endsOn ? dateToIsoDate(endsOn) : null)}
+              holidays={holidays}
+              onHolidays={setHolidays}
+            />
+          </View>
         </>
       ) : null}
 
@@ -1787,6 +1818,7 @@ const CreateTournamentSheet: React.FC<{
           catThresh={catThresh}
           startsOn={startsOn}
           endsOn={endsOn}
+          playWindows={playWindows}
           maxPairs={maxPairs}
           fee={fee}
           costRule={billingLabel}
@@ -2158,6 +2190,7 @@ const ReviewStep: React.FC<{
   catThresh: Record<string, { nivel: string; puntos: string }>;
   startsOn: Date | null;
   endsOn: Date | null;
+  playWindows: PlayWindows;
   maxPairs: string;
   fee: string;
   costRule: string | null;
@@ -2193,7 +2226,7 @@ const ReviewStep: React.FC<{
         [fmtDate(p.startsOn), p.endsOn && p.startsOn && p.endsOn.getTime() !== p.startsOn.getTime() ? fmtDate(p.endsOn) : null]
           .filter(Boolean)
           .join(' – ') || 'Sin fechas',
-      sub: 'Los días de cada fase se pueden cambiar luego en Horario',
+      sub: `Entre semana ${p.playWindows.weekday.from}–${p.playWindows.weekday.to} · Fin de semana ${p.playWindows.weekend.from}–${p.playWindows.weekend.to}`,
     },
     {
       step: 4,
