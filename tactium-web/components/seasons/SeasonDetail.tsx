@@ -204,6 +204,7 @@ export function SeasonDetail({ id }: { id: string }) {
             match_date: m.match_date ?? null,
             match_time: m.match_time ?? null,
             is_home: m.is_home,
+            fcp_date_range: m.match_date ? null : m.date_range ?? null,
           });
         }
         if (!fcp) await renumberSeasonMatchdays(id);

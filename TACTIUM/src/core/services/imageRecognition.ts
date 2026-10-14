@@ -50,6 +50,8 @@ export interface ScannedMatchday {
   jornada_number?: number;
   opponent: string;
   match_date?: string; // 'YYYY-MM-DD'
+  /** Fin de semana impreso cuando no hay día concreto («23 - 25 Oct»). */
+  date_range?: string;
   match_time?: string; // 'HH:MM'
   is_home: boolean;
 }

@@ -203,6 +203,7 @@ export const SeasonDetailScreen = ({
           match_date: m.match_date,
           match_time: m.match_time,
           is_home: m.is_home,
+          fcp_date_range: m.match_date ? null : m.date_range ?? null,
         });
       }
       // Reordenar por fecha (como el alta manual). En ligas FCP NO: el número

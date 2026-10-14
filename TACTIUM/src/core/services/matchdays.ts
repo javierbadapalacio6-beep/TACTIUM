@@ -184,9 +184,11 @@ export async function createMatchday(
     // Distribución de las parejas en tandas horarias dentro de la jornada.
     // Formato "N-N-N". Opcional.
     tandas?: string | null;
+    // Fin de semana de la Federación («23 - 25 Oct») mientras no hay día exacto.
+    fcp_date_range?: string | null;
   },
 ): Promise<Matchday> {
-  const payload: MatchdayInsert = {
+  const payload = {
     season_id: seasonId,
     jornada_number: input.jornada_number,
     opponent: input.opponent,
@@ -195,7 +197,8 @@ export async function createMatchday(
     is_home: input.is_home ?? true,
     location: input.location ?? null,
     tandas: input.tandas ?? null,
-  };
+    fcp_date_range: input.fcp_date_range ?? null,
+  } as MatchdayInsert;
   const { data, error } = await supabase
     .from('matchdays')
     .insert(payload)

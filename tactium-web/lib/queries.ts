@@ -718,6 +718,8 @@ export async function createMatchday(
     match_time?: string | null;
     is_home?: boolean;
     location?: string | null;
+    /** Fin de semana de la Federación («23 - 25 Oct») mientras no hay día exacto. */
+    fcp_date_range?: string | null;
   },
 ): Promise<void> {
   const { error } = await supabaseBrowser().from("matchdays").insert({
@@ -728,6 +730,7 @@ export async function createMatchday(
     match_time: input.match_time ?? null,
     is_home: input.is_home ?? true,
     location: input.location ?? null,
+    fcp_date_range: input.fcp_date_range ?? null,
   });
   if (error) throw error;
 }
