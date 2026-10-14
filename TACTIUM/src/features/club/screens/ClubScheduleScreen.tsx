@@ -41,6 +41,7 @@ import {
   setVenueMatchdaySlot,
   fetchUnconfirmedVenues,
   currentRoundMatches,
+  fetchDateRanges,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
@@ -163,7 +164,7 @@ export const ClubScheduleScreen = ({
   const [editTeam, setEditTeam] = useState<
     { id: string; name: string; guest?: boolean } | null
   >(null);
-  const [showAll, setShowAll] = useState(false);
+  const [ranges, setRanges] = useState<Record<string, string>>({});
   const [dayFilter, setDayFilter] = useState<string | null>(null);
   // TABLET: rejilla de pistas × horas. Se TOCA una celda libre y se abre el
   // panel de la hora con la pista y la hora ya puestas (el arrastre, después).
@@ -284,6 +285,7 @@ export const ClubScheduleScreen = ({
         home_unconfirmed: pending.has(m.matchday_id),
       }));
       setMatches(data);
+      setRanges(await fetchDateRanges(data.map((m) => m.matchday_id)).catch(() => ({})));
       setSlotsByTeam((prev) => {
         const next = { ...prev };
         for (const t of vTeams) next[t.team_id] = t.preferred_home_slots ?? [];
@@ -303,17 +305,10 @@ export const ClubScheduleScreen = ({
     }, [load]),
   );
 
+  // Se enseñan TODAS las jornadas, cada una con sus partidos de local. La
+  // «jornada en juego» solo ancla la tira de la semana.
   const roundMatches = useMemo(() => currentRoundMatches(matches), [matches]);
-  const hasMore = matches.length > roundMatches.length;
-  const visible = showAll ? matches : roundMatches;
-  // Al cambiar entre «jornada actual» y «todas», el día marcado en la tira se
-  // suelta: si no, la lista seguía filtrada por ese día y el botón parecía no
-  // hacer nada.
-  const toggleShowAll = () => {
-    setShowAll((v) => !v);
-    if (!gridMode) setDayFilter(null);
-  };
-
+  const visible = matches;
   // Tira de la semana: 7 días desde el lunes de la semana de la jornada en
   // juego. Punto verde si todo tiene hora; ámbar si falta algo.
   const week = useMemo(() => {
@@ -335,20 +330,45 @@ export const ClubScheduleScreen = ({
 
   const filtered = dayFilter ? visible.filter((m) => m.match_date === dayFilter) : visible;
   // Primero lo que falta (sin hora o sede por confirmar), después lo que ya está.
-  const missing = filtered.filter((m) => !m.match_time || m.home_unconfirmed);
-  const done = filtered.filter((m) => m.match_time && !m.home_unconfirmed);
-  const groups = useMemo(() => {
-    const map = new Map<string, ClubHomeMatch[]>();
-    for (const m of done) {
-      const k = m.match_date ?? '—';
+  // Cada jornada con TODOS los partidos de local de todos los equipos del club
+  // (propios e invitados). Dentro de una jornada, primero lo que falta.
+  const jornadaGroups = (list: ClubHomeMatch[]) => {
+    const map = new Map<number | null, ClubHomeMatch[]>();
+    for (const m of list) {
+      const k = m.jornada_number ?? null;
       const arr = map.get(k) ?? [];
       arr.push(m);
       map.set(k, arr);
     }
-    for (const arr of map.values())
-      arr.sort((a, b) => hhmm(a.match_time).localeCompare(hhmm(b.match_time)));
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [done]);
+    const lacks = (m: ClubHomeMatch) => !m.match_time || !!m.home_unconfirmed;
+    const entries = Array.from(map.entries()).sort((a, b) =>
+      a[0] === null ? 1 : b[0] === null ? -1 : a[0] - b[0],
+    );
+    return entries.map(([n, items]) => {
+      const sorted = [...items].sort(
+        (a, b) =>
+          Number(lacks(b)) - Number(lacks(a)) ||
+          (a.match_date ?? '').localeCompare(b.match_date ?? '') ||
+          hhmm(a.match_time).localeCompare(hhmm(b.match_time)) ||
+          a.team_name.localeCompare(b.team_name, 'es'),
+      );
+      const range = sorted.map((m) => ranges[m.matchday_id]).find(Boolean);
+      const pend = sorted.filter(lacks).length;
+      return (
+        <View key={n ?? 'sin'} style={{ marginTop: 16 }}>
+          <Text style={styles.groupDate}>
+            {n === null ? 'SIN JORNADA' : `JORNADA ${n}`}
+            {range ? ` · ${range.toUpperCase()}` : ''} · {sorted.length}{' '}
+            {sorted.length === 1 ? 'PARTIDO' : 'PARTIDOS'}
+            {pend > 0 ? (
+              <Text style={{ color: c.warning }}> · {pend} SIN HORA</Text>
+            ) : null}
+          </Text>
+          <View style={{ gap: 8 }}>{sorted.map(renderRow)}</View>
+        </View>
+      );
+    });
+  };
 
   // ── Rejilla (tablet) ────────────────────────────────────────────────────
   // Lo que falta, de toda la jornada (o de todas), sin filtrar por día.
@@ -460,33 +480,6 @@ export const ClubScheduleScreen = ({
     </Animated.View>
   );
 
-  // Selector arriba, siempre a la vista: «Jornada actual» (la primera por jugar) o
-  // «Todas». Antes solo había un enlace al final de una lista larguísima.
-  const roundNums = roundMatches.map((m) => m.jornada_number).filter((n): n is number => n != null);
-  const roundNo = roundNums.length ? Math.min(...roundNums) : null;
-  const roundSwitch =
-    hasMore || showAll ? (
-      <View style={styles.roundSwitch}>
-        {[
-          { all: false, label: roundNo != null ? `Jornada ${roundNo}` : 'Jornada actual' },
-          { all: true, label: `Todas · ${matches.length}` },
-        ].map((o) => {
-          const on = showAll === o.all;
-          return (
-            <Pressable
-              key={String(o.all)}
-              onPress={on ? undefined : toggleShowAll}
-              accessibilityRole="button"
-              accessibilityState={{ selected: on }}
-              style={[styles.roundChip, on && styles.roundChipOn]}
-            >
-              <Text style={[styles.roundChipText, on && { color: c.textInverse }]}>{o.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    ) : null;
-
   const weekStrip = (
     <>
       {/* Tira de la semana */}
@@ -571,14 +564,13 @@ export const ClubScheduleScreen = ({
             }}
             showsVerticalScrollIndicator={false}
           >
-            {roundSwitch}
             {weekStrip}
             {missingAll.length > 0 ? (
-              <View style={{ marginTop: 16 }}>
-                <Text style={[styles.groupDate, { color: c.warning }]}>
+              <View>
+                <Text style={[styles.groupDate, { color: c.warning, marginTop: 16 }]}>
                   FALTA LA HORA · {missingAll.length}
                 </Text>
-                <View style={{ gap: 8 }}>{missingAll.map(renderRow)}</View>
+                {jornadaGroups(missingAll)}
                 <Text style={styles.footNote}>
                   Toca un hueco libre de la rejilla para ponerle esa pista y esa hora, o toca
                   el partido para elegirlas en el panel.
@@ -591,22 +583,9 @@ export const ClubScheduleScreen = ({
               </Text>
             ) : (
               <Text style={styles.emptyText}>
-                {showAll
-                  ? `Todas las jornadas tienen hora · ${matches.length} partidos de local.`
-                  : 'Todos los partidos de local de esta jornada tienen hora.'}
+                Todas las jornadas tienen hora · {matches.length} partidos de local.
               </Text>
             )}
-            {hasMore ? (
-              <Pressable
-                onPress={toggleShowAll}
-                hitSlop={8}
-                style={{ alignSelf: 'flex-start', marginTop: 18 }}
-              >
-                <Text style={styles.link}>
-                  {showAll ? 'Ver solo la jornada actual' : 'Ver todas las jornadas'}
-                </Text>
-              </Pressable>
-            ) : null}
           </ScrollView>
           <ScheduleGrid
             dayIso={gridDay}
@@ -629,9 +608,7 @@ export const ClubScheduleScreen = ({
         >
           {tab === 'partidos' ? (
             <>
-              {/* La tira es de la semana en juego: con todas las jornadas no aplica. */}
-              {roundSwitch}
-              {showAll ? null : weekStrip}
+              {weekStrip}
 
               {matches.length === 0 ? (
                 <Text style={styles.emptyText}>
@@ -640,42 +617,12 @@ export const ClubScheduleScreen = ({
                 </Text>
               ) : (
                 <>
-                  {missing.length > 0 ? (
-                    <View style={{ marginTop: 16 }}>
-                      <Text style={[styles.groupDate, { color: c.warning }]}>
-                        FALTA LA HORA · {missing.length}
-                      </Text>
-                      <View style={{ gap: 8 }}>{missing.map(renderRow)}</View>
-                    </View>
-                  ) : null}
-                  {groups.map(([date, items]) => (
-                    <View key={date} style={{ marginTop: 16 }}>
-                      <Text style={styles.groupDate}>
-                        {date === '—' ? 'SIN FECHA' : groupLabel(date)} · CON HORA
-                      </Text>
-                      <View style={{ gap: 8 }}>{items.map(renderRow)}</View>
-                    </View>
-                  ))}
+                  {jornadaGroups(filtered)}
                   {filtered.length === 0 ? (
                     <Text style={styles.emptyText}>Ese día no hay partidos en casa.</Text>
                   ) : null}
                 </>
               )}
-
-              {hasMore ? (
-                <Pressable
-                  onPress={toggleShowAll}
-                  hitSlop={8}
-                  style={{ alignSelf: 'center', marginTop: 18 }}
-                >
-                  <Text style={styles.linkMuted}>
-                    {showAll ? 'Todas las jornadas · ' : 'Jornada actual · '}
-                    <Text style={styles.link}>
-                      {showAll ? 'Ver solo la actual' : 'Ver todas las jornadas'}
-                    </Text>
-                  </Text>
-                </Pressable>
-              ) : null}
             </>
           ) : (
             <>
@@ -1499,17 +1446,6 @@ const makeStyles = (c: Palette) =>
     slotText: { color: c.accent, fontFamily: Fonts.mono, fontSize: 12, marginTop: 2 },
     slotEmpty: { color: c.textFaint, fontSize: 12 },
 
-    roundSwitch: { flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 4 },
-    roundChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: c.hairStrong,
-      backgroundColor: c.background,
-    },
-    roundChipOn: { backgroundColor: c.accent, borderColor: c.accent },
-    roundChipText: { color: c.text, fontSize: 13, fontWeight: '700' },
     weekStrip: { flexDirection: 'row', gap: 6, marginTop: 6 },
     weekCell: {
       flex: 1,

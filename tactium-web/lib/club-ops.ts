@@ -134,6 +134,19 @@ export async function fetchUnconfirmedVenues(matchdayIds: string[]): Promise<Set
   return out;
 }
 
+/** Fin de semana de la Federación («23 - 25 Oct») de cada jornada, por matchday. */
+export async function fetchDateRanges(matchdayIds: string[]): Promise<Record<string, string>> {
+  if (matchdayIds.length === 0) return {};
+  const { data } = await supabaseBrowser()
+    .from("matchdays")
+    .select("id, fcp_date_range")
+    .in("id", matchdayIds);
+  const out: Record<string, string> = {};
+  for (const r of (data ?? []) as { id: string; fcp_date_range: string | null }[])
+    if (r.fcp_date_range) out[r.id] = r.fcp_date_range;
+  return out;
+}
+
 /* ── La semana de todos los equipos (misma idea que fetchClubOverview de la app) ── */
 export interface WeekMatchday {
   id: string;
