@@ -876,7 +876,31 @@ export const InfoView: React.FC<{
         ))}
       </View>
 
-      {t.prizes_json && t.prizes_json.length ? (
+      {t.prizes_by_category && Object.keys(t.prizes_by_category).length ? (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
+            🏆 PREMIOS POR CATEGORÍA
+          </Text>
+          {(t.categories?.length ? t.categories : Object.keys(t.prizes_by_category))
+            .map((cat) => ({ cat, list: t.prizes_by_category?.[cat] ?? t.prizes_json ?? [] }))
+            .filter((x) => x.list.length > 0)
+            .map(({ cat, list }) => (
+              <View key={cat} style={{ marginBottom: 10 }}>
+                <Text style={[styles.infoLabel, { marginBottom: 4 }]}>{cat}</Text>
+                <View style={styles.infoCard}>
+                  {list.map((e, i) => (
+                    <View key={`${cat}-${e.place}-${i}`} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                      <Text style={styles.infoLabel}>{e.place}</Text>
+                      <Text style={styles.infoValue} numberOfLines={3}>
+                        {e.items.map(prizeItemLabel).join(' · ')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+        </>
+      ) : t.prizes_json && t.prizes_json.length ? (
         <>
           <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
             🏆 PREMIOS
@@ -2489,6 +2513,7 @@ const EditTournamentSheet: React.FC<{
   const [maxPairs, setMaxPairs] = useState('');
   const [fee, setFee] = useState('');
   const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
+  const [prizesByCat, setPrizesByCat] = useState<Record<string, PrizeEntry[]>>({});
   const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
   const [observations, setObservations] = useState('');
   // Condiciones de participación (vacío = las estándar de TACTIUM).
@@ -2516,6 +2541,7 @@ const EditTournamentSheet: React.FC<{
             ? [{ place: '1º', items: [{ type: 'otros', desc: tournament.prizes }] }]
             : []),
       );
+      setPrizesByCat(tournament.prizes_by_category ?? {});
       setInfoRows(
         tournament.info_rows ??
           (tournament.extra_info ? [{ label: 'Info', value: tournament.extra_info }] : []),
@@ -2580,6 +2606,9 @@ const EditTournamentSheet: React.FC<{
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         entryFee: fee ? parseFloat(fee) : null,
         prizesJson,
+        prizesByCategory: Object.fromEntries(
+          Object.entries(prizesByCat).filter(([k]) => (tournament.categories ?? []).includes(k)),
+        ),
         infoRows,
         observations,
         terms,
@@ -2827,6 +2856,9 @@ const EditTournamentSheet: React.FC<{
         <PrizeInfoEditor
           prizes={prizesJson}
           onPrizes={setPrizesJson}
+          categories={tournament?.categories ?? []}
+          prizesByCategory={prizesByCat}
+          onPrizesByCategory={setPrizesByCat}
           infoRows={infoRows}
           onInfoRows={setInfoRows}
           observations={observations}

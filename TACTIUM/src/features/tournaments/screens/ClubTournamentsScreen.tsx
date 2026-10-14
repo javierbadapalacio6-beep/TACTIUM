@@ -966,6 +966,7 @@ const CreateTournamentSheet: React.FC<{
       return copy;
     });
   const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
+  const [prizesByCat, setPrizesByCat] = useState<Record<string, PrizeEntry[]>>({});
   const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
   const [observations, setObservations] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -998,6 +999,7 @@ const CreateTournamentSheet: React.FC<{
     setPhasePlan({});
     setLocation('');
     setPrizesJson([]);
+    setPrizesByCat({});
     setInfoRows([]);
     setObservations('');
     setCoverUri(null);
@@ -1109,6 +1111,10 @@ const CreateTournamentSheet: React.FC<{
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
         location,
         prizesJson,
+        // Solo las categorías elegidas (si se quitó una después de ponerle premios, no se guarda).
+        prizesByCategory: Object.fromEntries(
+          Object.entries(prizesByCat).filter(([k]) => cats.includes(k)),
+        ),
         infoRows,
         observations,
         coverUrl,
@@ -1755,6 +1761,9 @@ const CreateTournamentSheet: React.FC<{
           <PrizeInfoEditor
             prizes={prizesJson}
             onPrizes={setPrizesJson}
+            categories={cats}
+            prizesByCategory={prizesByCat}
+            onPrizesByCategory={setPrizesByCat}
             infoRows={infoRows}
             onInfoRows={setInfoRows}
             observations={observations}

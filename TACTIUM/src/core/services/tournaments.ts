@@ -204,6 +204,8 @@ export interface Tournament {
   prizes: string | null;
   extra_info: string | null;
   prizes_json: PrizeEntry[] | null;
+  // Premios por categoría ({ '3ª': [...] }). `prizes_json` es el general, para las que no tengan el suyo.
+  prizes_by_category?: Record<string, PrizeEntry[]> | null;
   info_rows: InfoRow[] | null;
   observations: string | null;
   // Condiciones de participación del club (null = las estándar de TACTIUM).
@@ -313,6 +315,19 @@ function cleanPrizes(list?: PrizeEntry[] | null): PrizeEntry[] | null {
   return out.length ? out : null;
 }
 
+// Premios por categoría: limpia cada lista y descarta las categorías sin premios.
+function cleanPrizesByCategory(
+  map?: Record<string, PrizeEntry[]> | null,
+): Record<string, PrizeEntry[]> | null {
+  if (!map) return null;
+  const out: Record<string, PrizeEntry[]> = {};
+  for (const [cat, list] of Object.entries(map)) {
+    const clean = cleanPrizes(list);
+    if (clean && cat.trim()) out[cat] = clean;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // Normaliza las reglas de categoría: descarta topes vacíos y categorías LIBRE
 // (sin ningún límite). Devuelve null si al final no queda ninguna regla.
 function cleanCategoryRules(rules?: CategoryRules | null): CategoryRules | null {
@@ -376,6 +391,7 @@ export async function createTournament(input: {
   prizes?: string | null;
   extraInfo?: string | null;
   prizesJson?: PrizeEntry[] | null;
+  prizesByCategory?: Record<string, PrizeEntry[]> | null;
   infoRows?: InfoRow[] | null;
   observations?: string | null;
   coverUrl?: string | null;
@@ -417,6 +433,7 @@ export async function createTournament(input: {
     prizes: input.prizes?.trim() || null,
     extra_info: input.extraInfo?.trim() || null,
     prizes_json: cleanPrizes(input.prizesJson),
+    prizes_by_category: cleanPrizesByCategory(input.prizesByCategory),
     info_rows: cleanInfoRows(input.infoRows),
     observations: input.observations?.trim() || null,
     cover_url: input.coverUrl ?? null,
@@ -470,6 +487,7 @@ export async function updateTournament(
     prizes?: string | null;
     extraInfo?: string | null;
     prizesJson?: PrizeEntry[] | null;
+    prizesByCategory?: Record<string, PrizeEntry[]> | null;
     infoRows?: InfoRow[] | null;
     observations?: string | null;
     coverUrl?: string | null;
@@ -494,6 +512,8 @@ export async function updateTournament(
   if (fields.prizes !== undefined) payload.prizes = fields.prizes?.trim() || null;
   if (fields.extraInfo !== undefined) payload.extra_info = fields.extraInfo?.trim() || null;
   if (fields.prizesJson !== undefined) payload.prizes_json = cleanPrizes(fields.prizesJson);
+  if (fields.prizesByCategory !== undefined)
+    payload.prizes_by_category = cleanPrizesByCategory(fields.prizesByCategory);
   if (fields.infoRows !== undefined) payload.info_rows = cleanInfoRows(fields.infoRows);
   if (fields.observations !== undefined) payload.observations = fields.observations?.trim() || null;
   if (fields.coverUrl !== undefined) payload.cover_url = fields.coverUrl;
