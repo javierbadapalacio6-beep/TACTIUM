@@ -17,6 +17,7 @@ import type { RootStackParamList } from '@navigation/types';
 import { useTimePoll } from '../hooks/useTimePoll';
 import { ProposeTimesSheet } from './ProposeTimesSheet';
 import { AddTimeOptionSheet } from './AddTimeOptionSheet';
+import { PollWhoSheet } from './PollWhoSheet';
 
 const REMIND_COOLDOWN_MS = 12 * 3_600_000;
 const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -82,6 +83,9 @@ export const TimePollCard: React.FC<Props> = ({
   const [remindedAt, setRemindedAt] = useState<Date | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [whoOpen, setWhoOpen] = useState(false);
+  // Horas con la lista de nombres desplegada (se toca el recuento de la fila).
+  const [namesOpen, setNamesOpen] = useState<Record<string, boolean>>({});
 
   const { poll, matchday, team, players, myPlayerId, availability } = tp;
   if (tp.loading || !matchday) return null;
@@ -463,7 +467,16 @@ export const TimePollCard: React.FC<Props> = ({
                     {top ? ' · la más votada' : ''}
                   </Text>
                 </View>
-                <Avatars pids={who} />
+                {who.length > 0 ? (
+                  <Pressable
+                    onPress={() => setNamesOpen((m) => ({ ...m, [o.id]: !m[o.id] }))}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={namesOpen[o.id] ? 'Ocultar quién puede' : 'Ver quién puede'}
+                  >
+                    <Avatars pids={who} />
+                  </Pressable>
+                ) : null}
                 {canManage ? (
                   <Pressable
                     onPress={() => askFix(o.id)}
@@ -490,6 +503,17 @@ export const TimePollCard: React.FC<Props> = ({
                   </Pressable>
                 ) : null}
               </View>
+              {namesOpen[o.id] && who.length > 0 ? (
+                <Text style={styles.optionNames}>
+                  {who
+                    .map((id) => {
+                      const n = byId.get(id)?.name ?? '';
+                      const st = availability[id]?.status;
+                      return st === 'maybe' ? `${n} (duda)` : st === 'no' ? `${n} (no puede ese día)` : n;
+                    })
+                    .join(', ')}
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}
@@ -511,6 +535,22 @@ export const TimePollCard: React.FC<Props> = ({
         existing={poll!.options.map((o) => `${o.date} ${o.time.slice(0, 5)}`)}
         sending={adding}
         onSubmit={addOption}
+      />
+
+      <Pressable
+        onPress={() => setWhoOpen(true)}
+        style={({ pressed }) => [styles.whoBtn, pressed && { opacity: 0.75 }]}
+        accessibilityRole="button"
+      >
+        <Text style={styles.whoLabel}>Ver quién ha votado</Text>
+      </Pressable>
+      <PollWhoSheet
+        open={whoOpen}
+        onClose={() => setWhoOpen(false)}
+        poll={poll!}
+        players={players}
+        availability={availability}
+        topIds={tally.topIds}
       />
 
       {canVote ? (
@@ -619,6 +659,9 @@ const makeStyles = (c: Palette) =>
     },
     checkOn: { backgroundColor: c.accent, borderColor: c.accent },
     optionLabel: { color: c.text, fontSize: 15, fontWeight: '700', fontFamily: Fonts.mono },
+    optionNames: { color: c.textMuted, fontSize: 12.5, lineHeight: 17, paddingHorizontal: 12, paddingBottom: 10, marginTop: -2 },
+    whoBtn: { alignSelf: 'flex-start', paddingVertical: 8, marginTop: 6 },
+    whoLabel: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
     optionSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
     avatars: { flexDirection: 'row', alignItems: 'center' },
     avatar: {

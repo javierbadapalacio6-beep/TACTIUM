@@ -24,6 +24,7 @@ import {
 } from "@/lib/time-polls";
 import { fetchAvailabilityDetail, type AvailRow } from "@/lib/queries";
 import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
+import { PollWhoModal } from "./PollWhoModal";
 import { guardedWrite } from "@/lib/writes";
 import { proHref } from "@/lib/nav";
 import { useAsync } from "@/lib/use-async";
@@ -98,6 +99,9 @@ export function TimePollPanel({
   const [fixAsk, setFixAsk] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ optionId: string; current: string } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [whoOpen, setWhoOpen] = useState(false);
+  // Horas con la lista de nombres desplegada (se pulsa el recuento de la fila).
+  const [namesOpen, setNamesOpen] = useState<Record<string, boolean>>({});
   const [addDate, setAddDate] = useState("");
   const [addTime, setAddTime] = useState("10:30");
   const [adding, setAdding] = useState(false);
@@ -448,7 +452,33 @@ export function TimePollPanel({
                       {isTop ? " · la más votada" : ""}
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center" }} title={who.map((id) => byId.get(id)?.name).join(", ")}>
+                  <div
+                    role={who.length > 0 ? "button" : undefined}
+                    tabIndex={who.length > 0 ? 0 : undefined}
+                    aria-label={namesOpen[o.id] ? "Ocultar quién puede" : "Ver quién puede"}
+                    aria-expanded={who.length > 0 ? !!namesOpen[o.id] : undefined}
+                    onClick={
+                      who.length > 0
+                        ? (e) => {
+                            e.stopPropagation();
+                            setNamesOpen((m) => ({ ...m, [o.id]: !m[o.id] }));
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      who.length > 0
+                        ? (e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setNamesOpen((m) => ({ ...m, [o.id]: !m[o.id] }));
+                            }
+                          }
+                        : undefined
+                    }
+                    style={{ display: "flex", alignItems: "center", cursor: who.length > 0 ? "pointer" : "default" }}
+                    title={who.map((id) => byId.get(id)?.name).join(", ")}
+                  >
                     {who.slice(0, 5).map((id, i) => {
                       const pl = byId.get(id);
                       return (
@@ -494,6 +524,17 @@ export function TimePollPanel({
                     />
                   )}
                 </div>
+                {namesOpen[o.id] && who.length > 0 && (
+                  <div style={{ position: "relative", padding: "0 12px 10px", fontSize: 12.5, lineHeight: 1.4, color: "var(--text-muted)" }}>
+                    {who
+                      .map((id) => {
+                        const n = byId.get(id)?.name ?? "";
+                        const st = availability[id]?.status;
+                        return st === "maybe" ? `${n} (duda)` : st === "no" ? `${n} (no puede ese día)` : n;
+                      })
+                      .join(", ")}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -512,6 +553,19 @@ export function TimePollPanel({
               Añadir hora
             </Btn>
           )}
+
+          <Btn variant="quiet" size="sm" onClick={() => setWhoOpen(true)} style={{ alignSelf: "flex-start", color: "var(--accent)" }}>
+            Ver quién ha votado
+          </Btn>
+          <PollWhoModal
+            open={whoOpen}
+            onClose={() => setWhoOpen(false)}
+            poll={p}
+            votes={votes}
+            players={players}
+            availability={availability}
+            topIds={tally.topIds}
+          />
 
           {canVote && (
             <Btn
