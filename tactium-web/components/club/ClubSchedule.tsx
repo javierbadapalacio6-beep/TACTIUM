@@ -287,6 +287,8 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   // Todas las jornadas, cada una con los partidos de local de todos los equipos
   // (propios e invitados). Dentro de una jornada, primero lo que falta.
   const lacks = (f: Fixture) => !slots[f.matchday_id] || !!f.unconfirmed;
+  // Una jornada cada vez (selector J1, J2…); por defecto la primera por jugar.
+  const [jornadaSel, setJornadaSel] = useState<number | null>(null);
   const groups = useMemo(() => {
     const map = new Map<number | null, Fixture[]>();
     for (const f of fixtures) {
@@ -296,6 +298,9 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
     return [...map.entries()].sort((a, b) => (a[0] === null ? 1 : b[0] === null ? -1 : a[0] - b[0]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixtures]);
+  const jornadaNums = groups.map(([n]) => n).filter((n): n is number => n !== null);
+  const selJornada = jornadaSel != null && jornadaNums.includes(jornadaSel) ? jornadaSel : (jornadaNums[0] ?? null);
+  const visibleGroups = groups.filter(([n]) => n === selJornada || selJornada === null);
 
   /**
    * Guarda de verdad. Antes este botón solo enseñaba el aviso de éxito: el
@@ -538,6 +543,42 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
             </Chip>
           </CardHead>
 
+          {jornadaNums.length > 1 && (
+            <div role="tablist" aria-label="Jornada" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "4px 18px 12px" }}>
+              {jornadaNums.map((n) => {
+                const on = n === selJornada;
+                const pend = fixtures.some((f) => f.jornada_number === n && lacks(f));
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => setJornadaSel(n)}
+                    className="mono"
+                    style={{
+                      flex: "none",
+                      minWidth: 48,
+                      padding: "7px 12px",
+                      borderRadius: 999,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
+                      background: on ? "var(--accent)" : "transparent",
+                      color: on ? "var(--text-inverse)" : "var(--text)",
+                    }}
+                  >
+                    J{n}
+                    {pend && (
+                      <span aria-hidden="true" style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, marginLeft: 6, verticalAlign: "middle", background: on ? "var(--text-inverse)" : "var(--warning)" }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="tw-table-wrap">
             <div className="tw-sched-head">
               <span>Equipo</span>
@@ -546,7 +587,7 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
               <span>Estado</span>
             </div>
 
-            {groups.map(([n, items]) => {
+            {visibleGroups.map(([n, items]) => {
               const sorted = [...items].sort(
                 (a, b) =>
                   Number(lacks(b)) - Number(lacks(a)) ||

@@ -308,12 +308,26 @@ export const ClubScheduleScreen = ({
   // Se enseñan TODAS las jornadas, cada una con sus partidos de local. La
   // «jornada en juego» solo ancla la tira de la semana.
   const roundMatches = useMemo(() => currentRoundMatches(matches), [matches]);
-  const visible = matches;
+  // Selector de jornada: una cada vez, por defecto la primera por jugar.
+  const jornadaNums = useMemo(
+    () => [...new Set(matches.map((m) => m.jornada_number).filter((n): n is number => n != null))].sort((a, b) => a - b),
+    [matches],
+  );
+  const [jornadaSel, setJornadaSel] = useState<number | null>(null);
+  const defaultJornada = useMemo(() => {
+    const nums = roundMatches.map((m) => m.jornada_number).filter((n): n is number => n != null);
+    return nums.length ? Math.min(...nums) : jornadaNums[0] ?? null;
+  }, [roundMatches, jornadaNums]);
+  const selJornada = jornadaSel != null && jornadaNums.includes(jornadaSel) ? jornadaSel : defaultJornada;
+  const visible = useMemo(
+    () => (selJornada == null ? matches : matches.filter((m) => m.jornada_number === selJornada)),
+    [matches, selJornada],
+  );
   // Tira de la semana: 7 días desde el lunes de la semana de la jornada en
   // juego. Punto verde si todo tiene hora; ámbar si falta algo.
   const week = useMemo(() => {
     const anchor =
-      roundMatches.map((m) => m.match_date).filter(Boolean).sort()[0] ?? fmtIso(new Date());
+      visible.map((m) => m.match_date).filter(Boolean).sort()[0] ?? fmtIso(new Date());
     const monday = snapToDow(anchor!, 1);
     return [1, 2, 3, 4, 5, 6, 7].map((dow) => {
       const iso = snapToDow(monday, dow);
@@ -326,7 +340,7 @@ export const ClubScheduleScreen = ({
         state: items.length === 0 ? null : missing ? 'warn' : 'ok',
       } as const;
     });
-  }, [roundMatches, matches]);
+  }, [visible, matches]);
 
   const filtered = dayFilter ? visible.filter((m) => m.match_date === dayFilter) : visible;
   // Primero lo que falta (sin hora o sede por confirmar), después lo que ya está.
@@ -480,6 +494,38 @@ export const ClubScheduleScreen = ({
     </Animated.View>
   );
 
+  const lacksTime = (m: ClubHomeMatch) => !m.match_time || !!m.home_unconfirmed;
+  const jornadaStrip =
+    jornadaNums.length > 1 ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.jStrip}
+        style={{ flexGrow: 0 }}
+      >
+        {jornadaNums.map((n) => {
+          const on = n === selJornada;
+          const pend = matches.some((m) => m.jornada_number === n && lacksTime(m));
+          return (
+            <Pressable
+              key={n}
+              onPress={() => {
+                setJornadaSel(n);
+                setDayFilter(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Jornada ${n}`}
+              accessibilityState={{ selected: on }}
+              style={[styles.jChip, on && styles.jChipOn]}
+            >
+              <Text style={[styles.jChipText, on && { color: c.textInverse }]}>J{n}</Text>
+              {pend ? <View style={[styles.jDot, on && { backgroundColor: c.textInverse }]} /> : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    ) : null;
+
   const weekStrip = (
     <>
       {/* Tira de la semana */}
@@ -564,6 +610,7 @@ export const ClubScheduleScreen = ({
             }}
             showsVerticalScrollIndicator={false}
           >
+            {jornadaStrip}
             {weekStrip}
             {missingAll.length > 0 ? (
               <View>
@@ -608,7 +655,9 @@ export const ClubScheduleScreen = ({
         >
           {tab === 'partidos' ? (
             <>
-              {weekStrip}
+              {jornadaStrip}
+              {/* El selector de día solo sirve cuando la jornada ya tiene días puestos. */}
+              {visible.some((m) => m.match_date) ? weekStrip : null}
 
               {matches.length === 0 ? (
                 <Text style={styles.emptyText}>
@@ -1446,6 +1495,23 @@ const makeStyles = (c: Palette) =>
     slotText: { color: c.accent, fontFamily: Fonts.mono, fontSize: 12, marginTop: 2 },
     slotEmpty: { color: c.textFaint, fontSize: 12 },
 
+    jStrip: { flexDirection: 'row', gap: 8, paddingVertical: 8 },
+    jChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      minWidth: 52,
+      justifyContent: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.background,
+    },
+    jChipOn: { backgroundColor: c.accent, borderColor: c.accent },
+    jChipText: { color: c.text, fontSize: 14, fontWeight: '700', fontFamily: Fonts.mono },
+    jDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.warning },
     weekStrip: { flexDirection: 'row', gap: 6, marginTop: 6 },
     weekCell: {
       flex: 1,
