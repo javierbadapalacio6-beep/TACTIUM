@@ -20,32 +20,32 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-14',
+  id: '2026-10-14b',
   items: [
     {
-      icon: '◷',
-      title: 'Encuesta de hora, más completa',
-      text: 'Añade o quita horas sin perder los votos y mira quién ha votado cada una en una tabla, con su Voy/Duda/No.',
-    },
-    {
-      icon: '●',
-      title: 'Todo al momento',
-      text: 'La disponibilidad y los votos de la encuesta se actualizan solos, sin salir de la pantalla.',
+      icon: '✓',
+      title: 'Subido a la Federación',
+      text: 'Marca cada partido de local cuando la hora esté en la web de la Federación. El lunes a las 09:00 y a las 13:30 te avisamos de lo que falte (plazo: lunes 20:00).',
     },
     {
       icon: '▦',
-      title: 'Fin de semana de cada jornada',
-      text: 'Mientras el club no fija día y hora, la jornada muestra el fin de semana de la Federación (23-25 oct). También en el enlace.',
+      title: 'Horarios por jornada',
+      text: 'En «Horarios de local» elige la jornada (J1, J2…) y ve los partidos de local de todos tus equipos.',
     },
     {
-      icon: '↗',
-      title: 'Enlace para el grupo',
-      text: 'Comparte el enlace de la jornada y quien no tenga la app responde Voy/Duda/No y vota la hora desde el navegador.',
+      icon: '＋',
+      title: 'Gestores del club',
+      text: 'Invita a otra persona a gestionar el club contigo, con un código. Puede hacer lo mismo que tú, salvo borrar el club.',
     },
     {
-      icon: '✓',
-      title: 'Plantillas y escáner más fiables',
-      text: 'Al volcar la plantilla no se duplican jugadores y las bajas salen. El escáner de calendario respeta el fin de semana.',
+      icon: '🏆',
+      title: 'Premios por categoría',
+      text: 'En un torneo con varias categorías, pon un premio distinto para cada una.',
+    },
+    {
+      icon: '◷',
+      title: 'Encuesta de hora, más completa',
+      text: 'Añade o quita horas sin perder votos y mira quién ha votado cada una. Todo se actualiza al momento.',
     },
   ],
 };
