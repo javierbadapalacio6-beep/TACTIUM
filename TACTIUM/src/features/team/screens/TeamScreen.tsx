@@ -727,23 +727,26 @@ export const TeamScreen = () => {
               {!p.user_id && canManage ? ' · sin cuenta' : ''}
             </Text>
           </View>
-          {!p.available ? (
-            <View style={styles.bajaBadge}>
-              <Text style={styles.bajaBadgeText}>BAJA</Text>
-            </View>
-          ) : !p.user_id && canManage ? (
-            <Pressable
-              onPress={openInvite}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`Invitar a ${displayName(p)}`}
-              style={({ pressed }) => [styles.rowInvite, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.rowInviteText}>Invitar</Text>
-            </Pressable>
-          ) : (
+          {/* Los puntos salen SIEMPRE (también de quien aún no tiene cuenta); la baja o «Invitar» van debajo,
+              en vertical, para que en pantallas estrechas de Android no se apelotone la fila. */}
+          <View style={styles.rowRight}>
             <Text style={styles.ptsText}>{p.pts}</Text>
-          )}
+            {!p.available ? (
+              <View style={styles.bajaBadge}>
+                <Text style={styles.bajaBadgeText}>BAJA</Text>
+              </View>
+            ) : !p.user_id && canManage ? (
+              <Pressable
+                onPress={openInvite}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Invitar a ${displayName(p)}`}
+                style={({ pressed }) => [styles.rowInvite, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.rowInviteText}>Invitar</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </Pressable>
       </StaggerRow>
     );
@@ -2588,6 +2591,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   rowInviteText: { color: c.accent, fontSize: 12, fontWeight: '700' },
   ptsText: { fontFamily: Fonts.mono, color: c.text, fontSize: 14, fontWeight: '700' },
+  rowRight: { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
