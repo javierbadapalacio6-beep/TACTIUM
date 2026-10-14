@@ -141,14 +141,14 @@ export const rulesUseNivel = (rules: CategoryRules | null) =>
 export function shortEligibility(msg: string): string {
   let m = msg.match(/máximo de (\d+) puntos .*\(sumáis (\d+)\)/);
   if (m) return `Máximo ${m[1]} pts · sumáis ${m[2]}`;
-  m = msg.match(/≥ (\d+) .*\(sumáis (\d+)\)/);
-  if (m) return `Nivel mínimo ${m[1]} · sumáis ${m[2]}`;
+  m = msg.match(/tiene que ser (\d+) o más .*\(sumáis (\d+)\)/);
+  if (m) return `Nivel máx. ${m[1]}+ · sumáis ${m[2]}`;
   if (/^Indica los puntos/.test(msg)) return "Faltan los puntos de la pareja";
   if (/^Indica el nivel/.test(msg)) return "Falta el nivel (liga o circuito)";
   return msg;
 }
 
-/** Límites de una categoría en una línea («Hasta 300 pts · nivel ≥ 6»). */
+/** Límites de una categoría en una línea («Hasta 300 pts · nivel máx. 6+»). */
 export function describeThreshold(
   rules: CategoryRules | null,
   category: string,
@@ -160,6 +160,6 @@ export function describeThreshold(
   if ((rules.mode === "points" || rules.mode === "both") && t.puntos != null)
     parts.push(`Hasta ${t.puntos} pts`);
   if ((rules.mode === "nivel" || rules.mode === "both") && t.nivel != null)
-    parts.push(`nivel ≥ ${t.nivel}`);
+    parts.push(`nivel máx. ${t.nivel}+`);
   return parts.length ? capitalize(parts.join(" · ")) : "Sin límite de puntos";
 }

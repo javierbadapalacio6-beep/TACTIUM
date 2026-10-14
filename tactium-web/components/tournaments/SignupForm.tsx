@@ -508,6 +508,8 @@ export function SignupForm({ id }: { id: string }) {
         leagueSum: pairSum(noFed, level, mateNoFed, mateLevel),
         availability: avail,
         termsAccepted: true, // la casilla bloquea el envío si no está marcada
+        p1NotFed: noFed,
+        p2NotFed: mateNoFed,
       },
     ];
     if (category2) {
@@ -524,6 +526,8 @@ export function SignupForm({ id }: { id: string }) {
         leagueSum: pairSum(noFed, level, mate2NoFed, mate2Level),
         availability: avail,
         termsAccepted: true,
+        p1NotFed: noFed,
+        p2NotFed: mate2NoFed,
       });
     }
 

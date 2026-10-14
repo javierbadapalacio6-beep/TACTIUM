@@ -2114,6 +2114,9 @@ export async function tournamentSignup(input: {
   availability?: string[];
   // Casilla de condiciones: el servidor la exige.
   termsAccepted: boolean;
+  // «No federado» declarado por jugador: el servidor lo comprueba con la Federación.
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }): Promise<string> {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup", {
     p_code: input.code.trim().toUpperCase(),
@@ -2129,9 +2132,21 @@ export async function tournamentSignup(input: {
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
     p_terms_accepted: input.termsAccepted,
+    p1_not_fed: input.p1NotFed ?? null,
+    p2_not_fed: input.p2NotFed ?? null,
   });
   if (error) throw error;
   return data as string;
+}
+
+/** ¿Figuran estos nombres en la Federación (plantillas de liga o rankings de liga y circuito)? Sirve para no dejar
+ *  marcar como «no federado» a quien sí lo es. Con menos de 2 palabras no se puede comprobar (federated=false). */
+export async function checkNotFederated(
+  names: string[],
+): Promise<{ name: string; federated: boolean; fcp_name: string | null }[]> {
+  const { data, error } = await supabaseBrowser().rpc("check_not_federated", { p_names: names });
+  if (error) throw error;
+  return (data ?? []) as { name: string; federated: boolean; fcp_name: string | null }[];
 }
 
 /** Inscripción "pagar EN EL CLUB": inscribe como pendiente de pago en el club
@@ -2150,6 +2165,8 @@ export async function tournamentSignupOffline(input: {
   availability?: string[];
   // Casilla de condiciones: el servidor la exige.
   termsAccepted: boolean;
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }): Promise<string> {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup_offline", {
     p_code: input.code.trim().toUpperCase(),
@@ -2165,6 +2182,8 @@ export async function tournamentSignupOffline(input: {
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
     p_terms_accepted: input.termsAccepted,
+    p1_not_fed: input.p1NotFed ?? null,
+    p2_not_fed: input.p2NotFed ?? null,
   });
   if (error) throw error;
   return data as string;

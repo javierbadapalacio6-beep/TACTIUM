@@ -1440,9 +1440,12 @@ const CreateTournamentSheet: React.FC<{
             <>
               <Text style={styles.label}>LÍMITES POR CATEGORÍA · OPCIONAL</Text>
               <Text style={styles.catHint}>
-                Restringe quién puede inscribirse. NIVEL = suma de la categoría de la
-                pareja (mín. ≥), y de cada jugador cuenta la MEJOR entre su categoría
-                de liga y la de circuito. PUNTOS = suma de puntos de liga (máx. ≤).
+                Restringe quién puede inscribirse. NIVEL MÁX. = el mejor nivel de juego
+                permitido, como suma de las categorías de la pareja (2ª → 2, 5ª → 5:
+                cuanto más alto el número, más flojo el nivel). Con 10 pueden jugar dos
+                de 5ª, o una 4ª y una 6ª, pero no dos de 4ª. De cada jugador cuenta la
+                MEJOR entre su categoría de liga y la de circuito. PUNTOS = suma de
+                puntos de liga (máx. ≤).
                 Deja un campo en
                 «Libre» para no limitarlo (p. ej. nivel libre pero con tope de puntos);
                 una categoría con los dos en «Libre» es totalmente abierta.
@@ -1512,7 +1515,7 @@ const CreateTournamentSheet: React.FC<{
                       <Text style={styles.ruleCat}>{cat}</Text>
                       {ruleMode === 'nivel' || ruleMode === 'both' ? (
                         <View style={styles.ruleInputWrap}>
-                          <Text style={styles.ruleInputLabel}>NIVEL ≥</Text>
+                          <Text style={styles.ruleInputLabel}>NIVEL MÁX.</Text>
                           <TextInput
                             value={th.nivel}
                             onChangeText={(v) => setT({ nivel: v.replace(/[^0-9]/g, '') })}
@@ -2171,7 +2174,7 @@ const ReviewStep: React.FC<{
         .join(' · ');
   const limits = Object.entries(p.catThresh)
     .filter(([, v]) => v?.puntos || v?.nivel)
-    .map(([k, v]) => `${k.split('|').pop()}: ${v.puntos ? `puntos ≤ ${v.puntos}` : `nivel ≥ ${v.nivel}`}`);
+    .map(([k, v]) => `${k.split('|').pop()}: ${v.puntos ? `puntos ≤ ${v.puntos}` : `nivel máx. ${v.nivel}+`}`);
   const divisions = p.genders.length * Math.max(1, p.cats.length);
   const rows: { step: number; title: string; sub: string }[] = [
     { step: 0, title: p.name.trim() || 'Sin nombre', sub: p.location.trim() || 'Sin lugar' },

@@ -132,7 +132,8 @@ export interface InfoRow {
 }
 
 // Reglas de elegibilidad por categoría (nivel/puntos). Cada categoría tiene un
-// tope de PUNTOS (suma de la pareja ≤) y/o un mínimo de NIVEL de liga (suma ≥).
+// tope de PUNTOS (suma de la pareja ≤) y/o un NIVEL MÁXIMO de juego: nadie mejor que X. Como nivel = nº de
+// categoría (2ª → 2, 5ª → 5; cuanto más alto el número, más flojo el nivel), se guarda como suma ≥ X.
 // `mode` decide qué se valida. Categoría ausente o `null` = LIBRE (sin límite).
 export type CategoryRuleMode = 'points' | 'nivel' | 'both';
 export interface CategoryThreshold {
@@ -187,7 +188,7 @@ export function checkCategoryEligibility(
     if (pairNivel == null)
       return `Indica el nivel (liga o circuito) de cada jugador para la categoría ${category}.`;
     if (pairNivel < t.nivel)
-      return `Necesitáis nivel ≥ ${t.nivel} en ${category} (sumáis ${pairNivel}).`;
+      return `Superáis el nivel máximo de ${category}: la suma de categorías tiene que ser ${t.nivel} o más (sumáis ${pairNivel}).`;
   }
   return null;
 }
@@ -2404,6 +2405,9 @@ export async function signupByCode(input: {
   leagueSum?: number | null;
   // Casilla de condiciones. El servidor la exige: sin ella no hay inscripción.
   termsAccepted: boolean;
+  // «No federado» declarado por jugador: el servidor lo comprueba con la Federación.
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }): Promise<string> {
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
@@ -2423,9 +2427,25 @@ export async function signupByCode(input: {
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
     p_terms_accepted: input.termsAccepted,
+    p1_not_fed: input.p1NotFed ?? null,
+    p2_not_fed: input.p2NotFed ?? null,
   });
   if (error) throw new Error(error.message);
   return data as string;
+}
+
+export interface FederatedCheck {
+  name: string;
+  federated: boolean;
+  fcp_name: string | null;
+}
+
+/** ¿Figuran estos nombres en la Federación (plantillas de liga o rankings de liga y circuito)? Sirve para no dejar
+ *  marcar como «no federado» a quien sí lo es. Con menos de 2 palabras no se puede comprobar (federated=false). */
+export async function checkNotFederated(names: string[]): Promise<FederatedCheck[]> {
+  const { data, error } = await rpcCall('check_not_federated', { p_names: names });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as FederatedCheck[];
 }
 
 /** Condiciones estándar de TACTIUM (viven en el servidor: son las que se

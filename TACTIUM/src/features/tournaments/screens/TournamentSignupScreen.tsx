@@ -277,7 +277,7 @@ export const TournamentSignupScreen = ({
     () => (found?.categories ?? []).filter((cat) => catReasons[cat] == null),
     [found, catReasons],
   );
-  // Requisito legible de cada categoría («Hasta 900 pts · nivel ≥ 8» / «Libre»).
+  // Requisito legible de cada categoría («Hasta 900 pts · nivel máx. 8+» / «Libre»).
   const catDetails = useMemo(() => {
     const map: Record<string, string | null> = {};
     for (const cat of found?.categories ?? []) {
@@ -291,7 +291,7 @@ export const TournamentSignupScreen = ({
           ? `hasta ${t.puntos} pts`
           : null,
         t?.nivel != null && (rules.mode === 'nivel' || rules.mode === 'both')
-          ? `nivel ≥ ${t.nivel}`
+          ? `nivel máx. ${t.nivel}+`
           : null,
       ].filter(Boolean) as string[];
       const txt = parts.join(' · ');
@@ -542,6 +542,7 @@ export const TournamentSignupScreen = ({
         partnerEmail: string,
         seed: number,
         league: number | null,
+        partnerNotFed: boolean,
       ) => {
         const regId = await signupByCode({
           code,
@@ -556,6 +557,8 @@ export const TournamentSignupScreen = ({
           leagueSum: league,
           availability,
           termsAccepted: termsOk,
+          p1NotFed: me.noFed,
+          p2NotFed: isPair && partnerNotFed,
         });
         if (!isPair) return null;
         const partnerCode = await getRegistrationPartnerCode(regId).catch(() => null);
@@ -576,10 +579,10 @@ export const TournamentSignupScreen = ({
       };
 
       const results: DoneItem[] = [];
-      const r1 = await signupOne(category, p2, mate.email, seedPoints, leagueSum);
+      const r1 = await signupOne(category, p2, mate.email, seedPoints, leagueSum, mate.noFed);
       if (r1) results.push(r1);
       if (category2) {
-        const r2 = await signupOne(category2, p2b, mate2.email, seedPointsB, leagueSumB);
+        const r2 = await signupOne(category2, p2b, mate2.email, seedPointsB, leagueSumB, mate2.noFed);
         if (r2) results.push(r2);
       }
 

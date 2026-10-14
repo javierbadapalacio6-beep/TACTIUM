@@ -862,7 +862,7 @@ export function CreateTournament() {
                         }
                       />
                     </Field>
-                    <Field label="Nivel ≥">
+                    <Field label="Nivel máx. (suma de categorías)">
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -1105,7 +1105,7 @@ export function CreateTournament() {
                 title: `${genders.join(" y ") || "Sin género"} · ${cats.join(", ") || "categoría única"}`,
                 sub: `${Math.max(1, genders.length) * Math.max(1, cats.length)} cuadros${Object.entries(limits)
                   .filter(([c, l]) => cats.includes(c) && (l.puntos || l.nivel))
-                  .map(([c, l]) => ` · ${c}: ${l.puntos ? `puntos ≤ ${l.puntos}` : `nivel ≥ ${l.nivel}`}`)
+                  .map(([c, l]) => ` · ${c}: ${l.puntos ? `puntos ≤ ${l.puntos}` : `nivel máx. ${l.nivel}+`}`)
                   .join("")}`,
               },
               {

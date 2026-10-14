@@ -19,6 +19,9 @@ interface SignupReg {
   // Aceptación de las condiciones: la marcó en el formulario ANTES de pagar y
   // hay que arrastrarla, porque la inscripción se crea en el webhook.
   termsAccepted?: boolean;
+  // «No federado» declarado: se comprueba con la Federación ANTES de cobrar.
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }
 
 // POST /api/tournaments/signup-checkout
@@ -90,6 +93,28 @@ export async function POST(req: Request) {
     );
   }
 
+  // «No federado» con comprobación: si alguien marcado así figura en la Federación se rechaza AHORA, antes de cobrar
+  // (el webhook lo vuelve a comprobar al crear la inscripción, pero entonces habría que devolver el pago).
+  for (const r of regs) {
+    const toCheck = [r.p1NotFed ? r.p1Name : null, r.p2NotFed ? r.p2Name : null].filter(
+      (n): n is string => !!n,
+    );
+    if (toCheck.length === 0) continue;
+    const { data: chk } = await admin.rpc("check_not_federated", { p_names: toCheck });
+    const hit = (chk as { name: string; federated: boolean; fcp_name: string | null }[] | null)?.find(
+      (x) => x.federated,
+    );
+    if (hit) {
+      return NextResponse.json(
+        {
+          error: `${hit.fcp_name ?? hit.name} figura como jugador federado en la Federación Cántabra: no puede inscribirse como no federado. Indica sus puntos y su nivel.`,
+          reason: "federated",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   // Precio POR PERSONA (1 cat → entry_fee, 2 → entry_fee_2), calculado aquí.
   const pricing = priceSignup(
     regs.map((r) => ({
@@ -119,6 +144,8 @@ export async function POST(req: Request) {
     leagueSum: r.leagueSum ?? null,
     availability: r.availability ?? [],
     termsAccepted: r.termsAccepted === true,
+    p1NotFed: r.p1NotFed === true,
+    p2NotFed: r.p2NotFed === true,
   }));
   const payerEmail = payloadRegs[0]?.p1Email ?? null;
   // Usuario que paga (login obligatorio en la web): la inscripción se atará a su
