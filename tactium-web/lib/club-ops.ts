@@ -169,6 +169,17 @@ export async function fetchFcpUploadedIds(matchdayIds: string[]): Promise<Set<st
 }
 
 /** Marca (o desmarca) partidos de local como subidos. Avisa a la otra parte al marcar. */
+/** El club recuerda a los capitanes que suban la hora a la Federación (solo partidos de local sin subir; un
+ *  partido no se recuerda más de una vez cada 3 h). RPC `remind_fcp_upload`. */
+export async function remindFcpUpload(
+  matchdayIds: string[],
+): Promise<{ partidos: number; ya_recordados: number; avisos: number }> {
+  const { data, error } = await supabaseBrowser().rpc("remind_fcp_upload", { p_matchday_ids: matchdayIds });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as { partidos?: number; ya_recordados?: number; avisos?: number };
+  return { partidos: Number(r.partidos ?? 0), ya_recordados: Number(r.ya_recordados ?? 0), avisos: Number(r.avisos ?? 0) };
+}
+
 export async function setFcpUploaded(matchdayIds: string[], uploaded = true): Promise<number> {
   const { data, error } = await supabaseBrowser().rpc("set_fcp_uploaded", {
     p_matchday_ids: matchdayIds,

@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Share,
+  Alert,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -45,7 +46,7 @@ import {
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
-import { fetchFcpUploadedIds, setFcpUploaded } from '@core/services/fcpUpload';
+import { fetchFcpUploadedIds, remindFcpUpload, setFcpUploaded } from '@core/services/fcpUpload';
 import { notifyPush } from '@core/push';
 import {
   PreferredSlotsEditor,
@@ -364,6 +365,41 @@ export const ClubScheduleScreen = ({
     }
   };
 
+  // El club recuerda a los capitanes que suban la hora (los avisos automáticos solo salen los lunes).
+  const remindCaptains = (ids: string[]) => {
+    if (uploading || ids.length === 0) return;
+    Alert.alert(
+      'Recordar a los capitanes',
+      `Avisaremos ahora a los capitanes de ${ids.length} ${ids.length === 1 ? 'partido' : 'partidos'} de que suban la hora a la Federación antes del lunes a las 20:00.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Avisar',
+          onPress: async () => {
+            setUploading(true);
+            try {
+              const r = await remindFcpUpload(ids);
+              if (r.partidos === 0) {
+                toast.info('Ya se les avisó hace poco', 'Espera unas horas antes de volver a recordárselo.');
+              } else {
+                toast.success(
+                  'Avisados',
+                  r.avisos > 0
+                    ? `Hemos avisado a los capitanes de ${r.partidos} ${r.partidos === 1 ? 'partido' : 'partidos'}.`
+                    : 'Ningún capitán de esos partidos tiene la app con sesión iniciada.',
+                );
+              }
+            } catch (e: any) {
+              toast.error('No se pudo avisar', e?.message ?? 'Inténtalo de nuevo.');
+            } finally {
+              setUploading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // Cada jornada con TODOS los partidos de local de todos los equipos del club
   // (propios e invitados). Dentro de una jornada, primero lo que falta.
   const jornadaGroups = (list: ClubHomeMatch[]) => {
@@ -412,6 +448,20 @@ export const ClubScheduleScreen = ({
           ) : (
             <Text style={[styles.rowWarn, { color: c.accent, marginTop: 6 }]}>✓ Toda la jornada está subida a la Federación</Text>
           )}
+          {sorted.some((m) => !uploaded.has(m.matchday_id) && m.status === 'upcoming') ? (
+            <Pressable
+              onPress={() =>
+                remindCaptains(
+                  sorted.filter((m) => !uploaded.has(m.matchday_id) && m.status === 'upcoming').map((m) => m.matchday_id),
+                )
+              }
+              disabled={uploading}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.uploadBtn, (pressed || uploading) && { opacity: 0.7 }]}
+            >
+              <Text style={styles.uploadBtnText}>Recordar a los capitanes que suban la hora</Text>
+            </Pressable>
+          ) : null}
           <View style={{ gap: 8, marginTop: 8 }}>{sorted.map(renderRow)}</View>
         </View>
       );

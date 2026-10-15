@@ -9,7 +9,7 @@ import {
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
-import { fetchDateRanges, fetchFcpUploadedIds, fetchUnconfirmedVenues, setFcpUploaded } from "@/lib/club-ops";
+import { fetchDateRanges, fetchFcpUploadedIds, fetchUnconfirmedVenues, remindFcpUpload, setFcpUploaded } from "@/lib/club-ops";
 import {
   importFcpTeams,
   searchFcpClubs,
@@ -299,6 +299,35 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
     }
     setReloadKey((k) => k + 1);
     setToast("Marcado como subido. Hemos avisado a los capitanes.");
+  }
+
+  // El club recuerda a los capitanes que suban la hora (los avisos automáticos solo salen los lunes).
+  async function recordarCapitanes(ids: string[]) {
+    if (uploading || ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Avisaremos ahora a los capitanes de ${ids.length} ${ids.length === 1 ? "partido" : "partidos"} de que suban la hora a la Federación antes del lunes a las 20:00.`,
+      )
+    )
+      return;
+    setUploading(true);
+    let r: { partidos: number; ya_recordados: number; avisos: number } | null = null;
+    const res = await guardedWrite("recordar a los capitanes", async () => {
+      r = await remindFcpUpload(ids);
+    });
+    setUploading(false);
+    if (!res.ok) {
+      setToast(res.reason);
+      return;
+    }
+    const out = r as { partidos: number; avisos: number } | null;
+    setToast(
+      !out || out.partidos === 0
+        ? "Ya se les avisó hace poco. Espera unas horas antes de volver a recordárselo."
+        : out.avisos > 0
+          ? `Avisados los capitanes de ${out.partidos} ${out.partidos === 1 ? "partido" : "partidos"}.`
+          : "Ningún capitán de esos partidos tiene la app con sesión iniciada.",
+    );
   }
 
   const lacks = (f: Fixture) => !slots[f.matchday_id] || !!f.unconfirmed;
@@ -631,6 +660,21 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
                     ) : (
                       <span style={{ color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>✓ Toda la jornada está subida a la Federación</span>
                     )}
+                    {sorted.some((f) => !f.uploaded && f.status === "upcoming") ? (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        disabled={uploading}
+                        onClick={() =>
+                          void recordarCapitanes(
+                            sorted.filter((f) => !f.uploaded && f.status === "upcoming").map((f) => f.matchday_id),
+                          )
+                        }
+                        style={{ marginLeft: 8 }}
+                      >
+                        Recordar a los capitanes que suban la hora
+                      </Btn>
+                    ) : null}
                   </div>
                   {sorted.map(renderRow)}
                 </Fragment>
