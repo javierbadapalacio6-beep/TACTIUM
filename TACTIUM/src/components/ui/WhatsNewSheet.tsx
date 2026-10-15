@@ -20,8 +20,13 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-15b',
+  id: '2026-10-15c',
   items: [
+    {
+      icon: '🔔',
+      title: 'Recordar a los capitanes',
+      text: 'En la agenda del club, un toque avisa a los capitanes de que suban la hora a la Federación. Un partido no se recuerda más de una vez cada 3 horas.',
+    },
     {
       icon: '🏆',
       title: 'Creados por mí e Inscritos',
