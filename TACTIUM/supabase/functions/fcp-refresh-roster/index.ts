@@ -152,6 +152,18 @@ Deno.serve(async (req: Request) => {
       .from('fcp_jugadores')
       .upsert(jugadores, { onConflict: 'id_jugador' });
     if (error) return json({ error: 'db_error', details: error.message }, 500);
+
+    // Quien ya NO figura en la ficha de la Federación (lo dieron de baja) se quita de nuestra copia. Antes solo se
+    // hacía upsert, así que un jugador retirado seguía en `fcp_jugadores` para siempre y volvía a aparecer en
+    // la plantilla al volcarla (caso real: un capitán de Smash, 15-10-2026). Solo si la lectura trajo jugadores,
+    // para que una página vacía o rota no borre la plantilla entera. Los ids son slugs [a-z0-9_]: van sin escapar.
+    const frescos = jugadores.map((j) => j.id_jugador);
+    const { error: delErr } = await admin
+      .from('fcp_jugadores')
+      .delete()
+      .eq('id_equipo', insc.id_equipo)
+      .not('id_jugador', 'in', `(${frescos.map((id) => `"${id}"`).join(',')})`);
+    if (delErr) console.error('fcp-refresh-roster: no se pudieron quitar las bajas:', delErr.message);
   }
 
   await admin.from('fcp_inscripciones').update({
