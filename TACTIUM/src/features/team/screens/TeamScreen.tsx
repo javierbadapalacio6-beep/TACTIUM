@@ -721,32 +721,34 @@ export const TeamScreen = () => {
                   <Text style={styles.capBadgeText}>CAP</Text>
                 </View>
               ) : null}
+              {!p.available ? (
+                <View style={styles.bajaBadge}>
+                  <Text style={styles.bajaBadgeText}>BAJA</Text>
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.rowMeta} numberOfLines={1}>
-              {p.position}
-              {!p.user_id && canManage ? ' · sin cuenta' : ''}
-            </Text>
+            {/* «Invitar» vive en la línea de debajo del nombre, no en la columna de puntos: así todas las filas
+                miden lo mismo (antes las que tenían botón eran más altas y el nombre se cortaba). */}
+            <View style={styles.rowMetaRow}>
+              <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+                {p.position}
+                {!p.user_id && canManage ? ' · sin cuenta' : ''}
+              </Text>
+              {p.available && !p.user_id && canManage ? (
+                <Pressable
+                  onPress={openInvite}
+                  hitSlop={{ top: 10, bottom: 10, left: 8, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Invitar a ${displayName(p)}`}
+                  style={({ pressed }) => pressed && { opacity: 0.6 }}
+                >
+                  <Text style={styles.rowInviteText}>Invitar ›</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
-          {/* Los puntos salen SIEMPRE (también de quien aún no tiene cuenta); la baja o «Invitar» van debajo,
-              en vertical, para que en pantallas estrechas de Android no se apelotone la fila. */}
-          <View style={styles.rowRight}>
-            <Text style={styles.ptsText}>{p.pts}</Text>
-            {!p.available ? (
-              <View style={styles.bajaBadge}>
-                <Text style={styles.bajaBadgeText}>BAJA</Text>
-              </View>
-            ) : !p.user_id && canManage ? (
-              <Pressable
-                onPress={openInvite}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`Invitar a ${displayName(p)}`}
-                style={({ pressed }) => [styles.rowInvite, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.rowInviteText}>Invitar</Text>
-              </Pressable>
-            ) : null}
-          </View>
+          {/* Los puntos salen SIEMPRE (también de quien aún no tiene cuenta), en columna fija. */}
+          <Text style={styles.ptsText}>{p.pts}</Text>
         </Pressable>
       </StaggerRow>
     );
@@ -2590,7 +2592,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.accent40,
   },
   rowInviteText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-  ptsText: { fontFamily: Fonts.mono, color: c.text, fontSize: 14, fontWeight: '700' },
+  rowMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  ptsText: {
+    fontFamily: Fonts.mono,
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 44,
+    textAlign: 'right',
+  },
   rowRight: { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   accountCard: {
     flexDirection: 'row',

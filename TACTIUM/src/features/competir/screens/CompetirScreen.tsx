@@ -243,7 +243,7 @@ const ManageTournamentsCard: React.FC<{
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.manageTitle}>{title}</Text>
-        <Text style={styles.manageText} numberOfLines={1}>
+        <Text style={styles.manageText} numberOfLines={2}>
           {text}
         </Text>
       </View>

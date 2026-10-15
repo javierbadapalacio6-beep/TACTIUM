@@ -78,7 +78,7 @@ export const FederationUploadCard: React.FC<{ matchdayId: string; canManage: boo
           style={({ pressed }) => [done ? styles.quiet : styles.primary, (pressed || busy) && { opacity: 0.8 }]}
         >
           {busy ? (
-            <ActivityIndicator size="small" color={done ? c.textMuted : c.textInverse} />
+            <ActivityIndicator size="small" color={done ? c.textMuted : c.accent} />
           ) : (
             <Text style={done ? styles.quietText : styles.primaryText}>
               {done ? 'Quitar la marca' : 'Marcar como subido'}
@@ -94,6 +94,7 @@ const makeStyles = (c: Palette) =>
   StyleSheet.create({
     card: {
       marginTop: 12,
+      marginBottom: 12,
       padding: 14,
       borderRadius: Radius.lg,
       borderWidth: 1,
@@ -113,14 +114,17 @@ const makeStyles = (c: Palette) =>
     },
     title: { color: c.text, fontSize: 15, fontWeight: '700' },
     sub: { color: c.textMuted, fontSize: 13, lineHeight: 18, marginTop: 2 },
+    // Acción secundaria (contorno): el botón sólido de la pantalla es «Crear alineación».
     primary: {
       height: 44,
       borderRadius: Radius.md,
-      backgroundColor: c.accent,
+      backgroundColor: c.accent10,
+      borderWidth: 1,
+      borderColor: c.accent40,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    primaryText: { color: c.textInverse, fontSize: 14.5, fontWeight: '700' },
+    primaryText: { color: c.accent, fontSize: 14.5, fontWeight: '700' },
     quiet: {
       height: 38,
       borderRadius: Radius.md,

@@ -166,7 +166,7 @@ const Row: React.FC<{
         <Text style={s.rowName} numberOfLines={1}>
           {t.name}
         </Text>
-        <Text style={s.rowMeta} numberOfLines={1}>
+        <Text style={s.rowMeta} numberOfLines={2}>
           {meta.filter(Boolean).join(' · ') || 'Fecha por confirmar'}
         </Text>
         <Text
@@ -502,7 +502,12 @@ export const ExploreTournamentsScreen = ({
                 accessibilityState={{ selected: sel }}
                 style={s.modeTab}
               >
-                <Text style={[s.modeTabText, { color: sel ? c.text : c.textMuted, fontWeight: sel ? '800' : '600' }]}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                  style={[s.modeTabText, { color: sel ? c.text : c.textMuted, fontWeight: sel ? '800' : '600' }]}
+                >
                   {m === 'explore' ? 'Explorar' : m === 'mine' ? 'Inscritos' : 'Creados por mí'}
                 </Text>
                 <View style={[s.modeTabBar, sel && { backgroundColor: c.accent }]} />
@@ -510,6 +515,10 @@ export const ExploreTournamentsScreen = ({
             );
           })}
         </View>
+      </View>
+
+      {/* Fuera de la fila de pestañas: con tres no cabía y se montaba encima de «Creados por mí». */}
+      {mode !== 'created' ? (
         <Pressable
           onPress={() => {
             setCodeErr(null);
@@ -520,7 +529,7 @@ export const ExploreTournamentsScreen = ({
           <IconTicket size={14} color={c.accent} />
           <Text style={s.codeBtnText}>Tengo un código</Text>
         </Pressable>
-      </View>
+      ) : null}
 
       {mode === 'explore' ? (
         <>
@@ -757,26 +766,28 @@ const makeStyles = (c: Palette) =>
     topRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
       paddingHorizontal: 20,
       marginBottom: 12,
     },
     modeTabs: {
       flex: 1,
       flexDirection: 'row',
-      gap: 18,
       borderBottomWidth: 1,
       borderColor: c.hairStrong,
     },
-    modeTab: { paddingTop: 8, paddingBottom: 9 },
+    // Tres pestañas a partes iguales: nunca se montan unas con otras.
+    modeTab: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 9 },
     modeTabText: { fontSize: 14.5, letterSpacing: -0.2 },
     modeTabBar: { position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, borderRadius: 1 },
     codeBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      alignSelf: 'flex-end',
+      marginRight: 20,
+      marginBottom: 12,
       paddingHorizontal: 12,
-      height: 36,
+      height: 34,
       borderRadius: 10,
       backgroundColor: c.accent10,
       borderWidth: 1,
