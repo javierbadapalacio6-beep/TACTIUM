@@ -2532,6 +2532,18 @@ export async function myTournaments(): Promise<ExploreTournament[]> {
   }));
 }
 
+/** Torneos que organizo: los que creé yo o los de un club que gestiono (RPC `my_created_tournaments`,
+ *  mismas columnas que `my_tournaments`). */
+export async function myCreatedTournaments(): Promise<ExploreTournament[]> {
+  const { data, error } = await rpcCall('my_created_tournaments', {});
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ExploreTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
+  }));
+}
+
 /** Busca un torneo por código (para mostrar nombre + categorías al apuntarse). */
 export async function lookupTournament(
   code: string,

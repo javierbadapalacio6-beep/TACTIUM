@@ -2236,6 +2236,18 @@ export async function fetchMyTournaments(): Promise<MyTournament[]> {
   }));
 }
 
+/** Torneos que organizo: los que creé yo o los de un club que gestiono. RPC `my_created_tournaments`
+ *  (mismas columnas que `my_tournaments`); requiere sesión. Espejo de la app. */
+export async function fetchMyCreatedTournaments(): Promise<MyTournament[]> {
+  const { data, error } = await supabaseBrowser().rpc("my_created_tournaments", {});
+  if (error) throw error;
+  return ((data ?? []) as MyTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
+  }));
+}
+
 /** Código de compañero de una inscripción (solo lo ve el jugador 1 / vinculado).
  *  RPC `registration_partner_code`. Sirve para que P1 se lo pase a su pareja. */
 export async function getRegistrationPartnerCode(

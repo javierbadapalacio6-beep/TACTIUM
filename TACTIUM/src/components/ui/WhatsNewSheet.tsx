@@ -20,32 +20,22 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-15',
+  id: '2026-10-15b',
   items: [
     {
-      icon: '◷',
-      title: 'Franjas de juego en los torneos',
-      text: 'Fija a qué horas se juega entre semana, en fin de semana y en festivos. El horario y la inscripción solo ofrecen esas horas.',
-    },
-    {
-      icon: '✓',
-      title: 'Subido a la Federación',
-      text: 'Marca cada partido de local cuando la hora esté en la web de la Federación. Los lunes a las 09:00 y a las 13:30 te avisamos de lo que falte.',
+      icon: '🏆',
+      title: 'Creados por mí e Inscritos',
+      text: 'En Torneos ahora ves aparte los que organizas, con sus inscritos, y en los que juegas. Toca uno tuyo para gestionarlo.',
     },
     {
       icon: '＋',
-      title: 'Gestores del club',
-      text: 'Invita a otra persona a gestionar el club contigo, con un código. Puede hacer lo mismo que tú, salvo borrar el club.',
+      title: 'Capitanes: actualizar la plantilla',
+      text: 'Cualquier capitán puede traer la plantilla de la Federación. Y quien ya no figura allí deja de aparecer.',
     },
     {
-      icon: '🏆',
-      title: 'Premios por categoría',
-      text: 'En un torneo con varias categorías, pon un premio distinto para cada una.',
-    },
-    {
-      icon: '!',
-      title: 'Inscripciones más justas',
-      text: 'Quien se marca como no federado se comprueba con la Federación, y el nivel de cada categoría se fija como nivel máximo.',
+      icon: '⌨',
+      title: 'El teclado ya no tapa lo que escribes',
+      text: 'Las hojas y los formularios suben con el teclado en todas las pantallas, en iPhone y en Android.',
     },
   ],
 };
