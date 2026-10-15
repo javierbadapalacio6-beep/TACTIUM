@@ -20,8 +20,13 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-15c',
+  id: '2026-10-15d',
   items: [
+    {
+      icon: '✦',
+      title: 'Pantallas más claras',
+      text: 'Plantilla con filas iguales, convocatoria en chips y pestañas de Torneos que ya no se solapan.',
+    },
     {
       icon: '🔔',
       title: 'Recordar a los capitanes',
