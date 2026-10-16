@@ -713,17 +713,13 @@ export const TeamScreen = () => {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.rowNameRow}>
-              <Text style={styles.rowName} numberOfLines={1}>
+              {/* flexShrink: un nombre largo se corta con «…» en vez de empujar a CAP y pisar los puntos. */}
+              <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={1}>
                 {displayName(p)}
               </Text>
               {isCap ? (
-                <View style={styles.capBadge}>
+                <View style={[styles.capBadge, { flexShrink: 0 }]}>
                   <Text style={styles.capBadgeText}>CAP</Text>
-                </View>
-              ) : null}
-              {!p.available ? (
-                <View style={styles.bajaBadge}>
-                  <Text style={styles.bajaBadgeText}>BAJA</Text>
                 </View>
               ) : null}
             </View>
@@ -734,6 +730,11 @@ export const TeamScreen = () => {
                 {p.position}
                 {!p.user_id && canManage ? ' · sin cuenta' : ''}
               </Text>
+              {!p.available ? (
+                <View style={[styles.bajaBadge, { flexShrink: 0 }]}>
+                  <Text style={styles.bajaBadgeText}>BAJA</Text>
+                </View>
+              ) : null}
               {p.available && !p.user_id && canManage ? (
                 <Pressable
                   onPress={openInvite}
