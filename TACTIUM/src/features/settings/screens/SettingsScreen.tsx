@@ -34,6 +34,7 @@ import {
   IconBell,
   IconTicket,
   Toggle,
+  Input,
 } from '@components/ui';
 import { SegmentedControl } from '@components/ui/SegmentedControl';
 import { useAuthStore } from '@store/authStore';
@@ -46,6 +47,7 @@ import { PLAN_BY_TIER, isLiveSub } from '@core/subscriptions/plans';
 import { displayNameOf } from '@core/utils/format';
 import * as PlayersApi from '@core/services/players';
 import * as ProfileApi from '@core/services/profile';
+import * as AuthApi from '@core/services/auth';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
@@ -133,6 +135,40 @@ export const SettingsScreen = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Cambiar contraseña (solo cuentas con email y contraseña: Google y Apple no tienen).
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwCur, setPwCur] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwNew2, setPwNew2] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const canChangePw = !!user?.email && (user.identities ?? []).some((i) => i.provider === 'email');
+  const submitPw = async () => {
+    if (pwBusy || !user?.email) return;
+    if (pwNew.length < 6) {
+      toast.error('Contraseña muy corta', 'Mínimo 6 caracteres.');
+      return;
+    }
+    if (pwNew !== pwNew2) {
+      toast.error('No coinciden', 'Repite la misma contraseña nueva.');
+      return;
+    }
+    if (pwNew === pwCur) {
+      toast.error('Es la misma', 'Elige una contraseña distinta de la actual.');
+      return;
+    }
+    setPwBusy(true);
+    const { error } = await AuthApi.changePassword(user.email, pwCur, pwNew);
+    setPwBusy(false);
+    if (error) {
+      toast.error('No se pudo cambiar', error);
+      return;
+    }
+    setPwOpen(false);
+    setPwCur('');
+    setPwNew('');
+    setPwNew2('');
+    toast.success('Contraseña cambiada', 'Ya puedes entrar con la nueva.');
+  };
   const [unlinking, setUnlinking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [profile, setProfile] = useState<ProfileApi.Profile | null>(null);
@@ -485,6 +521,13 @@ export const SettingsScreen = () => {
             title="Mis datos"
             onPress={() => navigation.navigate('MyData')}
           />
+          {canChangePw ? (
+            <Row
+              icon={<IconUser size={14} color={c.textMuted} />}
+              title="Cambiar contraseña"
+              onPress={() => setPwOpen(true)}
+            />
+          ) : null}
           <Row
             icon={<IconMail size={14} color={c.textMuted} />}
             title="Ayuda y contacto"
@@ -553,6 +596,62 @@ export const SettingsScreen = () => {
       )}
 
       {/* Ayuda y contacto */}
+      <BottomSheet
+        open={pwOpen}
+        onClose={() => (pwBusy ? undefined : setPwOpen(false))}
+        footer={
+          <Pressable
+            onPress={submitPw}
+            disabled={pwBusy || !pwCur || !pwNew || !pwNew2}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              (pwBusy || !pwCur || !pwNew || !pwNew2) && { opacity: 0.5 },
+              pressed && !pwBusy && { opacity: 0.88 },
+            ]}
+          >
+            {pwBusy ? (
+              <ActivityIndicator size="small" color={c.textInverse} />
+            ) : (
+              <Text style={styles.primaryBtnLabel}>Cambiar contraseña</Text>
+            )}
+          </Pressable>
+        }
+      >
+        <Text style={styles.sheetEyebrow}>CUENTA</Text>
+        <Text style={styles.sheetTitle}>Cambiar contraseña</Text>
+        <Text style={[styles.sheetLede, { marginBottom: 12 }]}>
+          Escribe la actual para confirmar que eres tú, y después la nueva (mínimo 6 caracteres).
+        </Text>
+        <Input
+          label="Contraseña actual"
+          value={pwCur}
+          onChangeText={setPwCur}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="current-password"
+        />
+        <Input
+          label="Contraseña nueva"
+          value={pwNew}
+          onChangeText={setPwNew}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+        />
+        <Input
+          label="Repite la contraseña nueva"
+          value={pwNew2}
+          onChangeText={setPwNew2}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+        />
+      </BottomSheet>
+
       <BottomSheet open={helpOpen} onClose={() => setHelpOpen(false)}>
         <Text style={styles.sheetEyebrow}>AYUDA Y CONTACTO</Text>
         {helpRows}
@@ -1000,6 +1099,14 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     dangerBtnLabel: { color: '#2a0905', fontSize: 15, fontWeight: '700' },
+    primaryBtn: {
+      height: 50,
+      borderRadius: Radius.lg,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryBtnLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
     ghostBtn: {
       height: 48,
       borderRadius: Radius.lg,

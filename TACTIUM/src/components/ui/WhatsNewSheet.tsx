@@ -20,32 +20,32 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-15d',
+  id: '2026-10-16',
   items: [
     {
-      icon: '✦',
-      title: 'Pantallas más claras',
-      text: 'Plantilla con filas iguales, convocatoria en chips y pestañas de Torneos que ya no se solapan.',
+      icon: '🔒',
+      title: 'Cambiar la contraseña',
+      text: 'En Ajustes › Cuenta ya puedes ponerte una contraseña nueva, y el botón «¿Olvidaste?» funciona en Android.',
     },
     {
       icon: '🔔',
       title: 'Recordar a los capitanes',
-      text: 'En la agenda del club, un toque avisa a los capitanes de que suban la hora a la Federación. Un partido no se recuerda más de una vez cada 3 horas.',
+      text: 'En la agenda del club, un toque avisa a los capitanes de que suban la hora a la Federación.',
     },
     {
       icon: '🏆',
       title: 'Creados por mí e Inscritos',
-      text: 'En Torneos ahora ves aparte los que organizas, con sus inscritos, y en los que juegas. Toca uno tuyo para gestionarlo.',
+      text: 'En Torneos ves aparte los que organizas, con sus inscritos, y en los que juegas.',
     },
     {
       icon: '＋',
-      title: 'Capitanes: actualizar la plantilla',
-      text: 'Cualquier capitán puede traer la plantilla de la Federación. Y quien ya no figura allí deja de aparecer.',
+      title: 'Capitán y jugador a la vez',
+      text: 'Si ya estás en un equipo como jugador, un código de capitán te hace capitán sin perder tu ficha.',
     },
     {
-      icon: '⌨',
-      title: 'El teclado ya no tapa lo que escribes',
-      text: 'Las hojas y los formularios suben con el teclado en todas las pantallas, en iPhone y en Android.',
+      icon: '✦',
+      title: 'Pantallas más claras',
+      text: 'Plantilla con filas iguales, convocatoria en chips y pestañas de Torneos que no se solapan.',
     },
   ],
 };
