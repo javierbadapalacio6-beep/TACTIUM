@@ -228,6 +228,78 @@ export async function setVenueTeamSlots(
   if (error) throw new Error(error.message);
 }
 
+// ─── Tandas ──────────────────────────────────────────────────────────────────
+// Los partidos que se juegan a la misma hora. La normativa pide que el local ponga fecha, hora, sede Y tandas.
+
+export interface TeamTandasInfo {
+  team_id: string;
+  gender: string | null;
+  preferred_tandas: string | null;
+}
+
+/** Género y tanda habitual de varios equipos (propios e invitados del club). Nunca lanza. */
+export async function getTeamTandasInfo(teamIds: string[]): Promise<Record<string, TeamTandasInfo>> {
+  if (teamIds.length === 0) return {};
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { data, error } = await rpc('get_team_tandas_info', { p_team_ids: teamIds });
+  if (error) return {};
+  const out: Record<string, TeamTandasInfo> = {};
+  for (const r of (data ?? []) as TeamTandasInfo[]) out[r.team_id] = r;
+  return out;
+}
+
+/** Tandas ya puestas en cada partido (por matchday). */
+export async function fetchMatchdayTandas(matchdayIds: string[]): Promise<Record<string, string>> {
+  if (matchdayIds.length === 0) return {};
+  const from = supabase.from.bind(supabase) as unknown as (table: string) => {
+    select: (cols: string) => {
+      in: (col: string, vals: string[]) => PromiseLike<{
+        data: { id: string; tandas: string | null }[] | null;
+        error: { message: string } | null;
+      }>;
+    };
+  };
+  const { data, error } = await from('matchdays').select('id, tandas').in('id', matchdayIds);
+  if (error) return {};
+  const out: Record<string, string> = {};
+  for (const r of data ?? []) if (r.tandas) out[r.id] = r.tandas;
+  return out;
+}
+
+/** Tandas de un partido de un equipo INVITADO (las pone su club sede, junto con día, hora y pista). */
+export async function setVenueMatchdayTandas(matchdayId: string, tandas: string | null): Promise<void> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { error } = await rpc('set_venue_matchday_tandas', { p_matchday_id: matchdayId, p_tandas: tandas });
+  if (error) throw new Error(error.message);
+}
+
+/** Tanda habitual de un equipo INVITADO. */
+export async function setVenueTeamTandas(teamId: string, tandas: string | null): Promise<void> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<RpcResult>;
+  const { error } = await rpc('set_venue_team_tandas', { p_team_id: teamId, p_tandas: tandas });
+  if (error) throw new Error(error.message);
+}
+
+/** Tanda habitual de un equipo propio (update directo; la RLS deja al capitán y al gestor). */
+export async function setTeamPreferredTandas(teamId: string, tandas: string | null): Promise<void> {
+  const from = supabase.from.bind(supabase) as unknown as (table: string) => {
+    update: (values: Record<string, unknown>) => {
+      eq: (col: string, val: string) => PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+  const { error } = await from('teams').update({ preferred_tandas: tandas }).eq('id', teamId);
+  if (error) throw new Error(error.message);
+}
+
 /** Guarda las franjas favoritas de local de un equipo (array de 'HH:MM'). */
 export async function setTeamPreferredSlots(
   teamId: string,

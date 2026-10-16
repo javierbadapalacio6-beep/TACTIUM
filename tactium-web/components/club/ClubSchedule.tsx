@@ -9,7 +9,17 @@ import {
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
-import { fetchDateRanges, fetchFcpUploadedIds, fetchUnconfirmedVenues, remindFcpUpload, setFcpUploaded } from "@/lib/club-ops";
+import {
+  fetchDateRanges,
+  fetchFcpUploadedIds,
+  fetchMatchdayTandas,
+  fetchTeamTandasInfo,
+  fetchUnconfirmedVenues,
+  remindFcpUpload,
+  setFcpUploaded,
+  setHomeMatchTandas,
+} from "@/lib/club-ops";
+import { describeTandas, tandasChoices } from "@/lib/tandas";
 import {
   importFcpTeams,
   searchFcpClubs,
@@ -51,6 +61,8 @@ interface Slot {
   day: number;
   hour: string;
   court: string;
+  /** Tandas del partido («3-2»): cuántos se juegan a cada hora desde la de inicio. */
+  tandas?: string | null;
 }
 
 const WEEKDAY = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -135,7 +147,16 @@ const DEFAULT_HOURS = [
 ];
 
 /** Un partido de local, de un equipo propio o de uno invitado. */
-type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean; range?: string | null; uploaded?: boolean };
+type Fixture = DbClubHomeMatch & {
+  is_guest: boolean;
+  unconfirmed?: boolean;
+  range?: string | null;
+  uploaded?: boolean;
+  /** Tandas ya guardadas en el partido, género del equipo y su tanda habitual. */
+  tandas?: string | null;
+  gender?: string | null;
+  prefTandas?: string | null;
+};
 
 const sameCourt = (a: string, b: string) =>
   !!a.trim() && !!b.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -163,7 +184,17 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
       );
       const ranges = await fetchDateRanges(all.map((m) => m.matchday_id)).catch(() => ({}) as Record<string, string>);
       const ups = await fetchFcpUploadedIds(all.map((m) => m.matchday_id)).catch(() => new Set<string>());
-      return all.map((m) => ({ ...m, unconfirmed: pending.has(m.matchday_id), range: ranges[m.matchday_id] ?? null, uploaded: ups.has(m.matchday_id) })) as Fixture[];
+      const tandasBy = await fetchMatchdayTandas(all.map((m) => m.matchday_id));
+      const infoBy = await fetchTeamTandasInfo([...new Set(all.map((m) => m.team_id))]);
+      return all.map((m) => ({
+        ...m,
+        unconfirmed: pending.has(m.matchday_id),
+        range: ranges[m.matchday_id] ?? null,
+        uploaded: ups.has(m.matchday_id),
+        tandas: tandasBy[m.matchday_id] ?? null,
+        gender: infoBy[m.team_id]?.gender ?? null,
+        prefTandas: infoBy[m.team_id]?.preferred_tandas ?? null,
+      })) as Fixture[];
     },
     [clubId, reloadKey],
     !!clubId,
@@ -194,7 +225,7 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
         const day = dayOf(f.match_date);
         next[f.matchday_id] =
           f.match_time && day !== null
-            ? { day, hour: f.match_time.slice(0, 5), court: f.location ?? "" }
+            ? { day, hour: f.match_time.slice(0, 5), court: f.location ?? "", tandas: f.tandas ?? f.prefTandas ?? null }
             : null;
       }
       return next;
@@ -371,8 +402,17 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
           location: s.court.trim() || null,
         }),
       );
-      if (res.ok) ok += 1;
-      else fallos.push(`${f.team_name}: ${res.reason}`);
+      if (res.ok) {
+        // Las tandas van con la hora: es lo que pide la normativa al poner el horario de local.
+        const t = s.tandas ?? null;
+        if (t && t !== (f.tandas ?? null)) {
+          const rt = await guardedWrite("guardar las tandas", () =>
+            setHomeMatchTandas({ matchdayId: f.matchday_id, isGuest: f.is_guest, tandas: t }),
+          );
+          if (!rt.ok) fallos.push(`${f.team_name} (tandas): ${rt.reason}`);
+        }
+        ok += 1;
+      } else fallos.push(`${f.team_name}: ${res.reason}`);
     }
     setSaving(false);
     setReloadKey((k) => k + 1);
@@ -415,9 +455,16 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   }, [favByMatch, slots]);
 
   function assign(matchdayId: string, day: number, hour: string) {
+    const fx = fixtures.find((x) => x.matchday_id === matchdayId);
     setSlots((s) => ({
       ...s,
-      [matchdayId]: { day, hour, court: s[matchdayId]?.court ?? "" },
+      [matchdayId]: {
+        day,
+        hour,
+        court: s[matchdayId]?.court ?? "",
+        // Al poner la hora, las tandas salen ya marcadas: las que tenía el partido o la habitual del equipo.
+        tandas: s[matchdayId]?.tandas ?? fx?.tandas ?? fx?.prefTandas ?? null,
+      },
     }));
     setPicking(null);
   }
@@ -426,6 +473,13 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   function unassign(matchdayId: string) {
     setSlots((s) => ({ ...s, [matchdayId]: null }));
     setPicking(null);
+  }
+
+  function setTandas(matchdayId: string, tandas: string | null) {
+    setSlots((s) => ({
+      ...s,
+      [matchdayId]: s[matchdayId] ? { ...s[matchdayId]!, tandas } : null,
+    }));
   }
 
   function setCourt(matchdayId: string, court: string) {
@@ -541,6 +595,27 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
           style={{ borderColor: clash ? "var(--warning)" : undefined }}
         />
 
+        <select
+          className="tw-select"
+          value={s?.tandas ?? ""}
+          disabled={!s}
+          onChange={(e) => setTandas(f.matchday_id, e.target.value || null)}
+          aria-label={`Tandas de ${f.team_name}`}
+          title={
+            s?.tandas
+              ? describeTandas(s.tandas, f.gender, s.hour).join("\n")
+              : "Cuántos partidos se juegan a cada hora"
+          }
+          style={{ borderColor: s && !s.tandas ? "var(--warning)" : undefined }}
+        >
+          <option value="">{s ? "Sin tandas" : "—"}</option>
+          {tandasChoices(f.gender).map((tv) => (
+            <option key={tv} value={tv}>
+              {tv}
+            </option>
+          ))}
+        </select>
+
         <span>
           {clash ? (
             <Chip tone="warning">Pista ocupada</Chip>
@@ -628,6 +703,7 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
               <span>Equipo</span>
               <span>Día y hora</span>
               <span>Pista o lugar</span>
+              <span>Tandas</span>
               <span>Estado</span>
             </div>
 

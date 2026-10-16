@@ -40,12 +40,17 @@ import {
   getTeamGroups,
   type VenueTeam,
   setVenueMatchdaySlot,
+  setVenueMatchdayTandas,
+  getTeamTandasInfo,
+  fetchMatchdayTandas,
+  type TeamTandasInfo,
   fetchUnconfirmedVenues,
   currentRoundMatches,
   fetchDateRanges,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
+import { tandasChoices, describeTandas } from '@core/utils/tandas';
 import { fetchFcpUploadedIds, remindFcpUpload, setFcpUploaded } from '@core/services/fcpUpload';
 import { notifyPush } from '@core/push';
 import {
@@ -171,6 +176,9 @@ export const ClubScheduleScreen = ({
   const [uploaded, setUploaded] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
   const [dayFilter, setDayFilter] = useState<string | null>(null);
+  // Tandas: las ya puestas en cada partido y, por equipo, su género y su tanda habitual.
+  const [tandasByMatch, setTandasByMatch] = useState<Record<string, string>>({});
+  const [tandasInfo, setTandasInfo] = useState<Record<string, TeamTandasInfo>>({});
   // TABLET: rejilla de pistas × horas. Se TOCA una celda libre y se abre el
   // panel de la hora con la pista y la hora ya puestas (el arrastre, después).
   const layout = useLayout();
@@ -292,6 +300,8 @@ export const ClubScheduleScreen = ({
       setMatches(data);
       setRanges(await fetchDateRanges(data.map((m) => m.matchday_id)).catch(() => ({})));
       setUploaded(await fetchFcpUploadedIds(data.map((m) => m.matchday_id)).catch(() => new Set<string>()));
+      setTandasByMatch(await fetchMatchdayTandas(data.map((m) => m.matchday_id)));
+      setTandasInfo(await getTeamTandasInfo([...new Set(data.map((m) => m.team_id))]));
       setSlotsByTeam((prev) => {
         const next = { ...prev };
         for (const t of vTeams) next[t.team_id] = t.preferred_home_slots ?? [];
@@ -569,6 +579,15 @@ export const ClubScheduleScreen = ({
                 {m.location}
               </Text>
             ) : null}
+            {tandasByMatch[m.matchday_id] ? (
+              <Text style={styles.rowCourt} numberOfLines={1}>
+                Tandas {tandasByMatch[m.matchday_id]}
+              </Text>
+            ) : (
+              <Text style={[styles.rowCourt, { color: c.warning }]} numberOfLines={1}>
+                Sin tandas
+              </Text>
+            )}
           </View>
         ) : (
           <View style={styles.setBtn}>
@@ -887,6 +906,8 @@ export const ClubScheduleScreen = ({
         match={editing}
         all={matches}
         slots={editing ? slotsByTeam[editing.team_id] ?? editing.preferred_home_slots : []}
+        tandasInfo={editing ? tandasInfo[editing.team_id] : undefined}
+        currentTandas={editing ? tandasByMatch[editing.matchday_id] ?? null : null}
         preset={preset}
         onClose={() => {
           setEditing(null);
@@ -953,7 +974,11 @@ export const ClubScheduleScreen = ({
         team={editTeam}
         guest={!!editTeam?.guest}
         slots={editTeam ? slotsByTeam[editTeam.id] ?? [] : []}
-        onClose={() => setEditTeam(null)}
+        onClose={() => {
+          setEditTeam(null);
+          // Las tandas habituales se guardan dentro del editor: se vuelven a leer.
+          load();
+        }}
         onSaved={onSlotsSaved}
       />
     </View>
@@ -1015,11 +1040,15 @@ const EditScheduleSheet: React.FC<{
   match: ClubHomeMatch | null;
   all: ClubHomeMatch[];
   slots: string[];
+  /** Género y tanda habitual del equipo (para ofrecer las tandas válidas y marcar la habitual). */
+  tandasInfo?: TeamTandasInfo;
+  /** Tandas que ya tiene el partido. */
+  currentTandas?: string | null;
   /** Tablet: pista y hora de la celda tocada en la rejilla. */
   preset?: SlotPreset | null;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ match, all, slots, preset = null, onClose, onSaved }) => {
+}> = ({ match, all, slots, tandasInfo, currentTandas = null, preset = null, onClose, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
@@ -1029,6 +1058,14 @@ const EditScheduleSheet: React.FC<{
   const [addingCourt, setAddingCourt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [adhocDay, setAdhocDay] = useState<number | null>(null);
+  // Tandas del partido: las que ya tiene o, si no, la habitual del equipo.
+  const [tandas, setTandas] = useState<string | null>(null);
+  useEffect(() => {
+    if (!match) return;
+    setTandas(currentTandas ?? tandasInfo?.preferred_tandas ?? null);
+    // `currentTandas` y `tandasInfo` llegan junto con `match`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match]);
 
   useEffect(() => {
     if (!match) return;
@@ -1101,10 +1138,13 @@ const EditScheduleSheet: React.FC<{
           matchTime: patch.match_time,
           location: patch.location,
         });
+        // Las tandas van aparte (otro RPC de puerta estrecha); solo si se han marcado.
+        if (tandas) await setVenueMatchdayTandas(match.matchday_id, tandas);
         toast.success('Horario enviado al capitán');
       } else {
         await updateMatchday(match.matchday_id, {
           ...patch,
+          ...(tandas ? { tandas } : {}),
           // Ponerle día, hora y pista ES confirmar que se juega aquí.
           ...(match.home_unconfirmed ? { home_unconfirmed: false } : {}),
         });
@@ -1187,6 +1227,37 @@ const EditScheduleSheet: React.FC<{
             );
           })}
         </View>
+      )}
+
+      <Text style={[styles.sectionLabel, { marginTop: 18, marginBottom: 8 }]}>TANDAS</Text>
+      <View style={styles.chipsWrap}>
+        {tandasChoices(tandasInfo?.gender).map((tv) => {
+          const sel = tandas === tv;
+          return (
+            <Pressable
+              key={tv}
+              onPress={() => setTandas(sel ? null : tv)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: sel }}
+              style={[styles.chip, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+            >
+              <Text style={[styles.chipTextSans, { color: sel ? c.textInverse : c.text }]}>{tv}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {tandas ? (
+        <View style={{ marginTop: 8, gap: 2 }}>
+          {describeTandas(tandas, tandasInfo?.gender, parsed?.time ?? null).map((l) => (
+            <Text key={l} style={styles.hint}>
+              {l}
+            </Text>
+          ))}
+        </View>
+      ) : (
+        <Text style={[styles.hint, { marginTop: 8 }]}>
+          Cuántos partidos se juegan a cada hora. La normativa pide ponerlas junto con el día y la hora.
+        </Text>
       )}
 
       <Text style={[styles.sectionLabel, { marginTop: 18, marginBottom: 8 }]}>PISTA</Text>

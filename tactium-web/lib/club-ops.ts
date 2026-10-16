@@ -610,3 +610,52 @@ export function fetchInscripcionGrupo(fila: {
 }): Promise<FcpRival[]> {
   return fetchFcpGroupRivals(supabaseBrowser(), fila);
 }
+
+/* ── Tandas (partidos que se juegan a la misma hora) ─────────────── */
+
+export interface TeamTandasInfo {
+  team_id: string;
+  gender: string | null;
+  preferred_tandas: string | null;
+}
+
+/** Género y tanda habitual de varios equipos (propios e invitados del club). Nunca lanza. */
+export async function fetchTeamTandasInfo(teamIds: string[]): Promise<Record<string, TeamTandasInfo>> {
+  if (teamIds.length === 0) return {};
+  const { data, error } = await supabaseBrowser().rpc("get_team_tandas_info", { p_team_ids: teamIds });
+  if (error) return {};
+  const out: Record<string, TeamTandasInfo> = {};
+  for (const r of (data ?? []) as TeamTandasInfo[]) out[r.team_id] = r;
+  return out;
+}
+
+/** Tandas ya puestas en cada partido. */
+export async function fetchMatchdayTandas(matchdayIds: string[]): Promise<Record<string, string>> {
+  if (matchdayIds.length === 0) return {};
+  const { data } = await supabaseBrowser().from("matchdays").select("id, tandas").in("id", matchdayIds);
+  const out: Record<string, string> = {};
+  for (const r of (data ?? []) as { id: string; tandas: string | null }[]) if (r.tandas) out[r.id] = r.tandas;
+  return out;
+}
+
+/**
+ * Tandas de un partido de local. Equipo propio → update directo (la RLS deja al gestor); invitado → RPC de puerta
+ * estrecha del club sede, igual que día, hora y pista.
+ */
+export async function setHomeMatchTandas(input: {
+  matchdayId: string;
+  isGuest: boolean;
+  tandas: string | null;
+}): Promise<void> {
+  const sb = supabaseBrowser();
+  if (input.isGuest) {
+    const { error } = await sb.rpc("set_venue_matchday_tandas", {
+      p_matchday_id: input.matchdayId,
+      p_tandas: input.tandas,
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const { error } = await sb.from("matchdays").update({ tandas: input.tandas }).eq("id", input.matchdayId);
+  if (error) throw new Error(error.message);
+}

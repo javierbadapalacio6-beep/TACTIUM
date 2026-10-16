@@ -73,3 +73,38 @@ export function isValidTandas(value: string, total: number): boolean {
   const sum = parts.reduce((a, b) => a + b, 0);
   return sum === total;
 }
+
+// ─── Liga Cántabra (normativa VII.3 y XI.3.1) ────────────────────────────────
+// Masculino: 5 parejas, como mucho 3 tandas, entrada 5-4-1-2-3. Femenino: 4 parejas, como mucho 2 tandas, entrada
+// 4-3-1-2. «3-2» = las tres primeras parejas (en orden de entrada) a la hora de inicio y las otras dos una hora después.
+
+/** Parejas por enfrentamiento según el género del equipo. */
+export const pairsFor = (gender?: string | null): number => (gender === 'femenino' ? 4 : 5);
+/** Máximo de tandas por enfrentamiento. */
+export const maxTandasFor = (gender?: string | null): number => (gender === 'femenino' ? 2 : 3);
+const ENTRY_ORDER = (gender?: string | null): number[] => (gender === 'femenino' ? [4, 3, 1, 2] : [5, 4, 1, 2, 3]);
+
+/** Tandas posibles para un equipo (de «todos a la vez» a más repartidas). */
+export function tandasChoices(gender?: string | null): string[] {
+  return tandasOptions(pairsFor(gender)).filter((v) => v.split('-').length <= maxTandasFor(gender));
+}
+
+const joinPairs = (nums: number[]): string =>
+  nums.length <= 1 ? nums.join('') : `${nums.slice(0, -1).join(', ')} y ${nums[nums.length - 1]}`;
+const addHours = (hhmm: string, h: number): string => {
+  const [hh, mm] = hhmm.split(':').map(Number);
+  return `${String((hh + h) % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+};
+
+/** Una línea por tanda: «17:30 · parejas 5, 4 y 1». Sin hora de inicio: «1.ª tanda · parejas …». */
+export function describeTandas(value: string, gender?: string | null, start?: string | null): string[] {
+  if (!isValidTandas(value, pairsFor(gender))) return [];
+  const order = ENTRY_ORDER(gender);
+  let i = 0;
+  return value.split('-').map((n, idx) => {
+    const group = order.slice(i, i + Number(n));
+    i += Number(n);
+    const when = start ? addHours(start, idx) : `${idx + 1}.ª tanda`;
+    return `${when} · ${group.length === 1 ? 'pareja' : 'parejas'} ${joinPairs(group)}`;
+  });
+}
