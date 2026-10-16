@@ -25,6 +25,7 @@ import {
   IconEye,
   IconEyeOff,
   Input,
+  BottomSheet,
 } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 
@@ -59,6 +60,11 @@ export const LoginScreen = ({
   const [name, setName] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // «¿Olvidaste?» en Android: hoja con el campo del email (Android no tiene Alert.prompt, y el aviso de
+  // «escribe antes tu email» hacía creer que el botón no funcionaba).
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
 
   const insets = useSafeAreaInsets();
   const signIn = useAuthStore((s) => s.signInWithPassword);
@@ -152,7 +158,7 @@ export const LoginScreen = ({
                 } else {
                   Alert.alert(
                     'Email enviado',
-                    `Si existe una cuenta con ${target}, recibirás un enlace para restablecer la contraseña.`,
+                    `Si existe una cuenta con ${target}, recibirás un enlace para restablecer la contraseña. Mira también en spam o promociones.`,
                   );
                 }
               },
@@ -161,26 +167,30 @@ export const LoginScreen = ({
           'plain-text',
           trimmed,
         )
-      : // Android: Alert.prompt no existe. Si el usuario tecleó email lo
-        // usamos directamente; si no, pedimos que lo introduzca antes.
-        (async () => {
-          if (!trimmed.includes('@')) {
-            Alert.alert(
-              'Introduce tu email',
-              'Escribe primero tu email en el formulario y vuelve a pulsar "¿Olvidaste?".',
-            );
-            return;
-          }
-          const { error } = await sendPasswordReset(trimmed);
-          if (error) {
-            Alert.alert('No se pudo enviar', error);
-          } else {
-            Alert.alert(
-              'Email enviado',
-              `Si existe una cuenta con ${trimmed}, recibirás un enlace para restablecer la contraseña.`,
-            );
-          }
+      : (() => {
+          setResetEmail(trimmed);
+          setResetOpen(true);
         })();
+  };
+
+  const submitReset = async () => {
+    const target = resetEmail.trim();
+    if (!target.includes('@')) {
+      Alert.alert('Email inválido', 'Comprueba el email.');
+      return;
+    }
+    setResetBusy(true);
+    const { error } = await sendPasswordReset(target);
+    setResetBusy(false);
+    if (error) {
+      Alert.alert('No se pudo enviar', error);
+      return;
+    }
+    setResetOpen(false);
+    Alert.alert(
+      'Email enviado',
+      `Si existe una cuenta con ${target}, recibirás un enlace para restablecer la contraseña. Mira también en spam o promociones.`,
+    );
   };
 
   return (
@@ -226,6 +236,35 @@ export const LoginScreen = ({
           onForgotPassword={handleForgotPassword}
         />
       )}
+
+      <BottomSheet open={resetOpen} onClose={() => setResetOpen(false)}>
+        <Text style={styles.resetTitle}>Recuperar contraseña</Text>
+        <Text style={styles.resetText}>
+          Escribe el email de tu cuenta y te mandamos un enlace para poner una contraseña nueva.
+        </Text>
+        <Input
+          label="Email"
+          value={resetEmail}
+          onChangeText={setResetEmail}
+          placeholder="tu@email.com"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          autoComplete="email"
+        />
+        <Pressable
+          onPress={submitReset}
+          disabled={resetBusy}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.cta, resetBusy && { opacity: 0.5 }, pressed && !resetBusy && { opacity: 0.85 }]}
+        >
+          {resetBusy ? (
+            <ActivityIndicator color="#001810" />
+          ) : (
+            <Text style={styles.ctaLabel}>Enviar enlace</Text>
+          )}
+        </Pressable>
+      </BottomSheet>
     </KeyboardAvoidingView>
   );
 };
@@ -699,6 +738,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingTop: 8,
     gap: 12,
   },
+  resetTitle: { color: c.text, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
+  resetText: { color: c.textMuted, fontSize: 13.5, lineHeight: 19, marginTop: 6, marginBottom: 14 },
   cta: {
     height: 54,
     borderRadius: Radius.md,
