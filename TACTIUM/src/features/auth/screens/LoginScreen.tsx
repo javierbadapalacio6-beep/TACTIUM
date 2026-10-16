@@ -138,7 +138,9 @@ export const LoginScreen = ({
   const handleForgotPassword = () => {
     // Si el usuario ya tecleó email, lo prefilleamos.
     const trimmed = email.trim();
-    Alert.prompt
+    // OJO: `Alert.prompt` EXISTE en Android (es una función vacía), así que `Alert.prompt ? …` era siempre verdadero
+    // y el botón no hacía nada. Se decide por plataforma.
+    Platform.OS === 'ios'
       ? Alert.prompt(
           'Recuperar contraseña',
           'Introduce tu email. Recibirás un enlace para restablecer la contraseña.',
