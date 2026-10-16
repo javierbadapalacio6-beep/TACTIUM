@@ -852,7 +852,10 @@ const PlanCard: React.FC<{
 
   const plan = activeSub ? PLAN_BY_TIER[activeSub.plan_tier] : null;
   const isClubAdmin = activeRole === 'club_admin';
-  const isClubAdminInCaptainMode = canBeClubAdmin && activeRole === 'captain';
+  // Solo se propone cambiar a «Club» si la tarjeta enseña la suscripción DEL CLUB. Si enseña la tuya de capitán
+  // (lo normal en vista capitán), «Gestionar plan» abre «Mi suscripción» y no hay nada que cambiar.
+  const isClubAdminInCaptainMode =
+    canBeClubAdmin && activeRole === 'captain' && activeSub?.subject_type === 'club';
 
   const handlePress = () => {
     if (isClubAdminInCaptainMode) {
