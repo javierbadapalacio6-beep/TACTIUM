@@ -20,7 +20,7 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-16b',
+  id: '2026-10-16c',
   items: [
     {
       icon: '🔒',
@@ -33,9 +33,9 @@ const NOVEDADES = {
       text: 'En la agenda del club, un toque avisa a los capitanes de que suban la hora a la Federación.',
     },
     {
-      icon: '🏆',
-      title: 'Creados por mí e Inscritos',
-      text: 'En Torneos ves aparte los que organizas, con sus inscritos, y en los que juegas.',
+      icon: '🎁',
+      title: '14 días de prueba al reclamar tu equipo',
+      text: 'Si entras como capitán de un equipo invitado por un club, tienes todas las funciones 14 días. Después, hace falta el plan para que el equipo responda a la convocatoria.',
     },
     {
       icon: '＋',

@@ -80,6 +80,7 @@ export type RespondReason =
   | "bad_reason"
   | "no_player"
   | "maybe_closed"
+  | "team_not_covered"
   | "rate_limited";
 
 export type RespondOutcome = { ok: true; status: AvailStatus } | { ok: false; reason: RespondReason };
@@ -148,6 +149,8 @@ export function pollProblemText(reason: string): string {
 /** Mensaje al usuario por cada motivo de rechazo del servidor. */
 export function respondProblemText(reason: RespondReason): string {
   switch (reason) {
+    case "team_not_covered":
+      return "El capitán de este equipo tiene que activar el plan para que podáis responder. Díselo y vuelve a probar.";
     case "maybe_closed":
       return "Las dudas ya están cerradas: marca «Voy» o «No puedo».";
     case "rate_limited":
