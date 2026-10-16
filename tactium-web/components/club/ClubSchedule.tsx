@@ -17,7 +17,6 @@ import {
   fetchUnconfirmedVenues,
   remindFcpUpload,
   setFcpUploaded,
-  setHomeMatchTandas,
 } from "@/lib/club-ops";
 import { describeTandas, tandasChoices } from "@/lib/tandas";
 import {
@@ -400,19 +399,12 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
           matchDate: dateForSlot(f.match_date, s.day),
           matchTime: `${s.hour}:00`,
           location: s.court.trim() || null,
+          // Las tandas van con la hora, en la misma llamada: igual para propios e invitados.
+          tandas: s.tandas ?? null,
         }),
       );
-      if (res.ok) {
-        // Las tandas van con la hora: es lo que pide la normativa al poner el horario de local.
-        const t = s.tandas ?? null;
-        if (t && t !== (f.tandas ?? null)) {
-          const rt = await guardedWrite("guardar las tandas", () =>
-            setHomeMatchTandas({ matchdayId: f.matchday_id, isGuest: f.is_guest, tandas: t }),
-          );
-          if (!rt.ok) fallos.push(`${f.team_name} (tandas): ${rt.reason}`);
-        }
-        ok += 1;
-      } else fallos.push(`${f.team_name}: ${res.reason}`);
+      if (res.ok) ok += 1;
+      else fallos.push(`${f.team_name}: ${res.reason}`);
     }
     setSaving(false);
     setReloadKey((k) => k + 1);

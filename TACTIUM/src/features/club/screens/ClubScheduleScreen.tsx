@@ -40,7 +40,6 @@ import {
   getTeamGroups,
   type VenueTeam,
   setVenueMatchdaySlot,
-  setVenueMatchdayTandas,
   getTeamTandasInfo,
   fetchMatchdayTandas,
   type TeamTandasInfo,
@@ -1137,10 +1136,10 @@ const EditScheduleSheet: React.FC<{
           matchDate: patch.match_date ?? null,
           matchTime: patch.match_time,
           location: patch.location,
+          // Hora, pista y tandas en una sola llamada: igual que con un equipo propio.
+          tandas,
         });
-        // Las tandas van aparte (otro RPC de puerta estrecha); solo si se han marcado.
-        if (tandas) await setVenueMatchdayTandas(match.matchday_id, tandas);
-        toast.success('Horario enviado al capitán');
+        toast.success('Horario guardado y avisado');
       } else {
         await updateMatchday(match.matchday_id, {
           ...patch,
@@ -1149,7 +1148,7 @@ const EditScheduleSheet: React.FC<{
           ...(match.home_unconfirmed ? { home_unconfirmed: false } : {}),
         });
         notifyPush('schedule_set', match.matchday_id);
-        toast.success('Horario enviado al equipo');
+        toast.success('Horario guardado y avisado');
       }
       tapSuccess();
       onSaved();

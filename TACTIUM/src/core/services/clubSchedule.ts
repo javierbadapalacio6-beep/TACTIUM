@@ -114,16 +114,19 @@ export async function setVenueMatchdaySlot(input: {
   matchDate: string | null; // 'YYYY-MM-DD'
   matchTime: string | null; // 'HH:MM:SS'
   location: string | null;
+  /** Tandas («3-2»): van en la MISMA llamada, igual que con un equipo propio. */
+  tandas?: string | null;
 }): Promise<void> {
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
     args: Record<string, unknown>,
   ) => PromiseLike<RpcResult>;
-  const { error } = await rpc('set_venue_matchday_slot', {
+  const { error } = await rpc('set_venue_matchday_schedule', {
     p_matchday_id: input.matchdayId,
     p_match_date: input.matchDate,
     p_match_time: input.matchTime,
     p_location: input.location,
+    p_tandas: input.tandas ?? null,
   });
   if (error) throw new Error(error.message);
 }

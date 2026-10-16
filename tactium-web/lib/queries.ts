@@ -1428,14 +1428,17 @@ export async function setHomeMatchSlot(input: {
   matchDate: string | null;
   matchTime: string | null;
   location: string | null;
+  /** Tandas («3-2»): van con la hora, en la misma llamada, sea propio o invitado. */
+  tandas?: string | null;
 }): Promise<void> {
   const sb = supabaseBrowser();
   if (input.isGuest) {
-    const { error } = await sb.rpc("set_venue_matchday_slot", {
+    const { error } = await sb.rpc("set_venue_matchday_schedule", {
       p_matchday_id: input.matchdayId,
       p_match_date: input.matchDate,
       p_match_time: input.matchTime,
       p_location: input.location,
+      p_tandas: input.tandas ?? null,
     });
     if (error) throw error;
     return;
@@ -1447,6 +1450,7 @@ export async function setHomeMatchSlot(input: {
       ...(input.matchDate ? { match_date: input.matchDate } : {}),
       match_time: input.matchTime,
       location: input.location,
+      ...(input.tandas ? { tandas: input.tandas } : {}),
       home_unconfirmed: false,
     })
     .eq("id", input.matchdayId);
