@@ -20,7 +20,7 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-16',
+  id: '2026-10-16b',
   items: [
     {
       icon: '🔒',
@@ -43,9 +43,9 @@ const NOVEDADES = {
       text: 'Si ya estás en un equipo como jugador, un código de capitán te hace capitán sin perder tu ficha.',
     },
     {
-      icon: '✦',
-      title: 'Pantallas más claras',
-      text: 'Plantilla con filas iguales, convocatoria en chips y pestañas de Torneos que no se solapan.',
+      icon: '◷',
+      title: 'Tandas en los horarios',
+      text: 'Al poner la hora de un partido de local, marca también las tandas (propios e invitados). Cada equipo puede tener su tanda habitual.',
     },
   ],
 };
