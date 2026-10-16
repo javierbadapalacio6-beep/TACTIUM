@@ -226,6 +226,9 @@ export const JoinTeamPreview: React.FC<{
       // Si entra como capitán en un equipo ya cubierto por el plan de otro
       // capitán, que no vea ningún paywall desde el primer momento.
       await useSubscriptionStore.getState().refreshTeamCoverage(teamId);
+      // Si entra como capitán de un equipo invitado, el servidor le arranca una prueba de 14 días: se recarga para
+      // que las funciones Pro estén desbloqueadas desde el primer momento.
+      if (user?.id) await useSubscriptionStore.getState().refresh(user.id);
     } catch (e) {
       console.warn('JoinTeamPreview: recarga tras unirse', e);
     }
