@@ -12,27 +12,31 @@ import { APP_STORE_URL, PLAY_STORE_URL } from "@/lib/site";
  * El PNG de Google trae 29 px transparentes arriba y abajo (646×250, badge visible 646×192): se
  * recortan con CSS (`.mk-store--google`), no tocando el archivo.
  */
-export function StoreBadges() {
+export function StoreBadges({ only }: { only?: "apple" | "google" } = {}) {
   return (
     <div className="mk-stores">
-      <a
-        href={APP_STORE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mk-store mk-store--apple"
-        aria-label="Consíguelo en el App Store"
-      >
-        <img src="/brand/stores/app-store-es.svg" alt="Consíguelo en el App Store" width={120} height={40} />
-      </a>
-      <a
-        href={PLAY_STORE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mk-store mk-store--google"
-        aria-label="Disponible en Google Play"
-      >
-        <img src="/brand/stores/google-play-es.png" alt="Disponible en Google Play" width={646} height={250} />
-      </a>
+      {only !== "google" && (
+        <a
+          href={APP_STORE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mk-store mk-store--apple"
+          aria-label="Consíguelo en el App Store"
+        >
+          <img src="/brand/stores/app-store-es.svg" alt="Consíguelo en el App Store" width={120} height={40} />
+        </a>
+      )}
+      {only !== "apple" && (
+        <a
+          href={PLAY_STORE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mk-store mk-store--google"
+          aria-label="Disponible en Google Play"
+        >
+          <img src="/brand/stores/google-play-es.png" alt="Disponible en Google Play" width={646} height={250} />
+        </a>
+      )}
     </div>
   );
 }
