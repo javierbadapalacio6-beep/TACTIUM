@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Share,
+  Alert,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -39,11 +40,17 @@ import {
   getTeamGroups,
   type VenueTeam,
   setVenueMatchdaySlot,
+  getTeamTandasInfo,
+  fetchMatchdayTandas,
+  type TeamTandasInfo,
   fetchUnconfirmedVenues,
   currentRoundMatches,
+  fetchDateRanges,
   type ClubHomeMatch,
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
+import { tandasChoices, describeTandas } from '@core/utils/tandas';
+import { fetchFcpUploadedIds, remindFcpUpload, setFcpUploaded } from '@core/services/fcpUpload';
 import { notifyPush } from '@core/push';
 import {
   PreferredSlotsEditor,
@@ -163,8 +170,14 @@ export const ClubScheduleScreen = ({
   const [editTeam, setEditTeam] = useState<
     { id: string; name: string; guest?: boolean } | null
   >(null);
-  const [showAll, setShowAll] = useState(false);
+  const [ranges, setRanges] = useState<Record<string, string>>({});
+  // Partidos ya subidos a la Federación (los suben los capitanes antes del lunes a las 20:00).
+  const [uploaded, setUploaded] = useState<Set<string>>(new Set());
+  const [uploading, setUploading] = useState(false);
   const [dayFilter, setDayFilter] = useState<string | null>(null);
+  // Tandas: las ya puestas en cada partido y, por equipo, su género y su tanda habitual.
+  const [tandasByMatch, setTandasByMatch] = useState<Record<string, string>>({});
+  const [tandasInfo, setTandasInfo] = useState<Record<string, TeamTandasInfo>>({});
   // TABLET: rejilla de pistas × horas. Se TOCA una celda libre y se abre el
   // panel de la hora con la pista y la hora ya puestas (el arrastre, después).
   const layout = useLayout();
@@ -284,6 +297,10 @@ export const ClubScheduleScreen = ({
         home_unconfirmed: pending.has(m.matchday_id),
       }));
       setMatches(data);
+      setRanges(await fetchDateRanges(data.map((m) => m.matchday_id)).catch(() => ({})));
+      setUploaded(await fetchFcpUploadedIds(data.map((m) => m.matchday_id)).catch(() => new Set<string>()));
+      setTandasByMatch(await fetchMatchdayTandas(data.map((m) => m.matchday_id)));
+      setTandasInfo(await getTeamTandasInfo([...new Set(data.map((m) => m.team_id))]));
       setSlotsByTeam((prev) => {
         const next = { ...prev };
         for (const t of vTeams) next[t.team_id] = t.preferred_home_slots ?? [];
@@ -303,22 +320,29 @@ export const ClubScheduleScreen = ({
     }, [load]),
   );
 
+  // Se enseñan TODAS las jornadas, cada una con sus partidos de local. La
+  // «jornada en juego» solo ancla la tira de la semana.
   const roundMatches = useMemo(() => currentRoundMatches(matches), [matches]);
-  const hasMore = matches.length > roundMatches.length;
-  const visible = showAll ? matches : roundMatches;
-  // Al cambiar entre «jornada actual» y «todas», el día marcado en la tira se
-  // suelta: si no, la lista seguía filtrada por ese día y el botón parecía no
-  // hacer nada.
-  const toggleShowAll = () => {
-    setShowAll((v) => !v);
-    if (!gridMode) setDayFilter(null);
-  };
-
+  // Selector de jornada: una cada vez, por defecto la primera por jugar.
+  const jornadaNums = useMemo(
+    () => [...new Set(matches.map((m) => m.jornada_number).filter((n): n is number => n != null))].sort((a, b) => a - b),
+    [matches],
+  );
+  const [jornadaSel, setJornadaSel] = useState<number | null>(null);
+  const defaultJornada = useMemo(() => {
+    const nums = roundMatches.map((m) => m.jornada_number).filter((n): n is number => n != null);
+    return nums.length ? Math.min(...nums) : jornadaNums[0] ?? null;
+  }, [roundMatches, jornadaNums]);
+  const selJornada = jornadaSel != null && jornadaNums.includes(jornadaSel) ? jornadaSel : defaultJornada;
+  const visible = useMemo(
+    () => (selJornada == null ? matches : matches.filter((m) => m.jornada_number === selJornada)),
+    [matches, selJornada],
+  );
   // Tira de la semana: 7 días desde el lunes de la semana de la jornada en
   // juego. Punto verde si todo tiene hora; ámbar si falta algo.
   const week = useMemo(() => {
     const anchor =
-      roundMatches.map((m) => m.match_date).filter(Boolean).sort()[0] ?? fmtIso(new Date());
+      visible.map((m) => m.match_date).filter(Boolean).sort()[0] ?? fmtIso(new Date());
     const monday = snapToDow(anchor!, 1);
     return [1, 2, 3, 4, 5, 6, 7].map((dow) => {
       const iso = snapToDow(monday, dow);
@@ -331,24 +355,127 @@ export const ClubScheduleScreen = ({
         state: items.length === 0 ? null : missing ? 'warn' : 'ok',
       } as const;
     });
-  }, [roundMatches, matches]);
+  }, [visible, matches]);
 
   const filtered = dayFilter ? visible.filter((m) => m.match_date === dayFilter) : visible;
   // Primero lo que falta (sin hora o sede por confirmar), después lo que ya está.
-  const missing = filtered.filter((m) => !m.match_time || m.home_unconfirmed);
-  const done = filtered.filter((m) => m.match_time && !m.home_unconfirmed);
-  const groups = useMemo(() => {
-    const map = new Map<string, ClubHomeMatch[]>();
-    for (const m of done) {
-      const k = m.match_date ?? '—';
+  // Marca como subidos a la Federación los partidos de una jornada (avisa a los capitanes).
+  const markUploaded = async (ids: string[]) => {
+    if (uploading || ids.length === 0) return;
+    setUploading(true);
+    try {
+      await setFcpUploaded(ids, true);
+      setUploaded((prev) => new Set([...prev, ...ids]));
+      toast.success('Marcado como subido', 'Hemos avisado a los capitanes.');
+    } catch (e: any) {
+      toast.error('No se pudo marcar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // El club recuerda a los capitanes que suban la hora (los avisos automáticos solo salen los lunes).
+  const remindCaptains = (ids: string[]) => {
+    if (uploading || ids.length === 0) return;
+    Alert.alert(
+      'Recordar a los capitanes',
+      `Avisaremos ahora a los capitanes de ${ids.length} ${ids.length === 1 ? 'partido' : 'partidos'} de que suban la hora a la Federación antes del lunes a las 20:00.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Avisar',
+          onPress: async () => {
+            setUploading(true);
+            try {
+              const r = await remindFcpUpload(ids);
+              if (r.partidos === 0) {
+                toast.info('Ya se les avisó hace poco', 'Espera unas horas antes de volver a recordárselo.');
+              } else {
+                toast.success(
+                  'Avisados',
+                  r.avisos > 0
+                    ? `Hemos avisado a los capitanes de ${r.partidos} ${r.partidos === 1 ? 'partido' : 'partidos'}.`
+                    : 'Ningún capitán de esos partidos tiene la app con sesión iniciada.',
+                );
+              }
+            } catch (e: any) {
+              toast.error('No se pudo avisar', e?.message ?? 'Inténtalo de nuevo.');
+            } finally {
+              setUploading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Cada jornada con TODOS los partidos de local de todos los equipos del club
+  // (propios e invitados). Dentro de una jornada, primero lo que falta.
+  const jornadaGroups = (list: ClubHomeMatch[]) => {
+    const map = new Map<number | null, ClubHomeMatch[]>();
+    for (const m of list) {
+      const k = m.jornada_number ?? null;
       const arr = map.get(k) ?? [];
       arr.push(m);
       map.set(k, arr);
     }
-    for (const arr of map.values())
-      arr.sort((a, b) => hhmm(a.match_time).localeCompare(hhmm(b.match_time)));
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [done]);
+    const lacks = (m: ClubHomeMatch) => !m.match_time || !!m.home_unconfirmed;
+    const entries = Array.from(map.entries()).sort((a, b) =>
+      a[0] === null ? 1 : b[0] === null ? -1 : a[0] - b[0],
+    );
+    return entries.map(([n, items]) => {
+      const sorted = [...items].sort(
+        (a, b) =>
+          Number(lacks(b)) - Number(lacks(a)) ||
+          (a.match_date ?? '').localeCompare(b.match_date ?? '') ||
+          hhmm(a.match_time).localeCompare(hhmm(b.match_time)) ||
+          a.team_name.localeCompare(b.team_name, 'es'),
+      );
+      const range = sorted.map((m) => ranges[m.matchday_id]).find(Boolean);
+      const pend = sorted.filter(lacks).length;
+      return (
+        <View key={n ?? 'sin'} style={{ marginTop: 16 }}>
+          <Text style={styles.groupDate}>
+            {n === null ? 'SIN JORNADA' : `JORNADA ${n}`}
+            {range ? ` · ${range.toUpperCase()}` : ''} · {sorted.length}{' '}
+            {sorted.length === 1 ? 'PARTIDO' : 'PARTIDOS'}
+            {pend > 0 ? (
+              <Text style={{ color: c.warning }}> · {pend} SIN HORA</Text>
+            ) : null}
+          </Text>
+          {sorted.some((m) => !uploaded.has(m.matchday_id)) ? (
+            <Pressable
+              onPress={() => markUploaded(sorted.filter((m) => !uploaded.has(m.matchday_id)).map((m) => m.matchday_id))}
+              disabled={uploading}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.uploadBtn, (pressed || uploading) && { opacity: 0.7 }]}
+            >
+              <Text style={styles.uploadBtnText}>
+                Marcar {sorted.filter((m) => !uploaded.has(m.matchday_id)).length === sorted.length ? 'toda la jornada' : 'los que faltan'} como subida a la Federación
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.rowWarn, { color: c.accent, marginTop: 6 }]}>✓ Toda la jornada está subida a la Federación</Text>
+          )}
+          {sorted.some((m) => !uploaded.has(m.matchday_id) && m.status === 'upcoming') ? (
+            <Pressable
+              onPress={() =>
+                remindCaptains(
+                  sorted.filter((m) => !uploaded.has(m.matchday_id) && m.status === 'upcoming').map((m) => m.matchday_id),
+                )
+              }
+              disabled={uploading}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.uploadBtn, (pressed || uploading) && { opacity: 0.7 }]}
+            >
+              <Text style={styles.uploadBtnText}>Recordar a los capitanes que suban la hora</Text>
+            </Pressable>
+          ) : null}
+          <View style={{ gap: 8, marginTop: 8 }}>{sorted.map(renderRow)}</View>
+        </View>
+      );
+    });
+  };
 
   // ── Rejilla (tablet) ────────────────────────────────────────────────────
   // Lo que falta, de toda la jornada (o de todas), sin filtrar por día.
@@ -439,6 +566,9 @@ export const ClubScheduleScreen = ({
           {m.home_unconfirmed ? (
             <Text style={styles.rowWarn}>Sede de playoff por confirmar</Text>
           ) : null}
+          {uploaded.has(m.matchday_id) ? (
+            <Text style={[styles.rowWarn, { color: c.accent }]}>✓ Subido a la Federación</Text>
+          ) : null}
         </View>
         {m.match_time && !m.home_unconfirmed ? (
           <View style={styles.rowTimeWrap}>
@@ -448,6 +578,15 @@ export const ClubScheduleScreen = ({
                 {m.location}
               </Text>
             ) : null}
+            {tandasByMatch[m.matchday_id] ? (
+              <Text style={styles.rowCourt} numberOfLines={1}>
+                Tandas {tandasByMatch[m.matchday_id]}
+              </Text>
+            ) : (
+              <Text style={[styles.rowCourt, { color: c.warning }]} numberOfLines={1}>
+                Sin tandas
+              </Text>
+            )}
           </View>
         ) : (
           <View style={styles.setBtn}>
@@ -459,6 +598,38 @@ export const ClubScheduleScreen = ({
       </Pressable>
     </Animated.View>
   );
+
+  const lacksTime = (m: ClubHomeMatch) => !m.match_time || !!m.home_unconfirmed;
+  const jornadaStrip =
+    jornadaNums.length > 1 ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.jStrip}
+        style={{ flexGrow: 0 }}
+      >
+        {jornadaNums.map((n) => {
+          const on = n === selJornada;
+          const pend = matches.some((m) => m.jornada_number === n && lacksTime(m));
+          return (
+            <Pressable
+              key={n}
+              onPress={() => {
+                setJornadaSel(n);
+                setDayFilter(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Jornada ${n}`}
+              accessibilityState={{ selected: on }}
+              style={[styles.jChip, on && styles.jChipOn]}
+            >
+              <Text style={[styles.jChipText, on && { color: c.textInverse }]}>J{n}</Text>
+              {pend ? <View style={[styles.jDot, on && { backgroundColor: c.textInverse }]} /> : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    ) : null;
 
   const weekStrip = (
     <>
@@ -544,13 +715,14 @@ export const ClubScheduleScreen = ({
             }}
             showsVerticalScrollIndicator={false}
           >
+            {jornadaStrip}
             {weekStrip}
             {missingAll.length > 0 ? (
-              <View style={{ marginTop: 16 }}>
-                <Text style={[styles.groupDate, { color: c.warning }]}>
+              <View>
+                <Text style={[styles.groupDate, { color: c.warning, marginTop: 16 }]}>
                   FALTA LA HORA · {missingAll.length}
                 </Text>
-                <View style={{ gap: 8 }}>{missingAll.map(renderRow)}</View>
+                {jornadaGroups(missingAll)}
                 <Text style={styles.footNote}>
                   Toca un hueco libre de la rejilla para ponerle esa pista y esa hora, o toca
                   el partido para elegirlas en el panel.
@@ -563,22 +735,9 @@ export const ClubScheduleScreen = ({
               </Text>
             ) : (
               <Text style={styles.emptyText}>
-                {showAll
-                  ? `Todas las jornadas tienen hora · ${matches.length} partidos de local.`
-                  : 'Todos los partidos de local de esta jornada tienen hora.'}
+                Todas las jornadas tienen hora · {matches.length} partidos de local.
               </Text>
             )}
-            {hasMore ? (
-              <Pressable
-                onPress={toggleShowAll}
-                hitSlop={8}
-                style={{ alignSelf: 'flex-start', marginTop: 18 }}
-              >
-                <Text style={styles.link}>
-                  {showAll ? 'Ver solo la jornada actual' : 'Ver todas las jornadas'}
-                </Text>
-              </Pressable>
-            ) : null}
           </ScrollView>
           <ScheduleGrid
             dayIso={gridDay}
@@ -601,8 +760,9 @@ export const ClubScheduleScreen = ({
         >
           {tab === 'partidos' ? (
             <>
-              {/* La tira es de la semana en juego: con todas las jornadas no aplica. */}
-              {showAll ? null : weekStrip}
+              {jornadaStrip}
+              {/* El selector de día solo sirve cuando la jornada ya tiene días puestos. */}
+              {visible.some((m) => m.match_date) ? weekStrip : null}
 
               {matches.length === 0 ? (
                 <Text style={styles.emptyText}>
@@ -611,42 +771,12 @@ export const ClubScheduleScreen = ({
                 </Text>
               ) : (
                 <>
-                  {missing.length > 0 ? (
-                    <View style={{ marginTop: 16 }}>
-                      <Text style={[styles.groupDate, { color: c.warning }]}>
-                        FALTA LA HORA · {missing.length}
-                      </Text>
-                      <View style={{ gap: 8 }}>{missing.map(renderRow)}</View>
-                    </View>
-                  ) : null}
-                  {groups.map(([date, items]) => (
-                    <View key={date} style={{ marginTop: 16 }}>
-                      <Text style={styles.groupDate}>
-                        {date === '—' ? 'SIN FECHA' : groupLabel(date)} · CON HORA
-                      </Text>
-                      <View style={{ gap: 8 }}>{items.map(renderRow)}</View>
-                    </View>
-                  ))}
+                  {jornadaGroups(filtered)}
                   {filtered.length === 0 ? (
                     <Text style={styles.emptyText}>Ese día no hay partidos en casa.</Text>
                   ) : null}
                 </>
               )}
-
-              {hasMore ? (
-                <Pressable
-                  onPress={toggleShowAll}
-                  hitSlop={8}
-                  style={{ alignSelf: 'center', marginTop: 18 }}
-                >
-                  <Text style={styles.linkMuted}>
-                    {showAll ? 'Todas las jornadas · ' : 'Jornada actual · '}
-                    <Text style={styles.link}>
-                      {showAll ? 'Ver solo la actual' : 'Ver todas las jornadas'}
-                    </Text>
-                  </Text>
-                </Pressable>
-              ) : null}
             </>
           ) : (
             <>
@@ -775,6 +905,8 @@ export const ClubScheduleScreen = ({
         match={editing}
         all={matches}
         slots={editing ? slotsByTeam[editing.team_id] ?? editing.preferred_home_slots : []}
+        tandasInfo={editing ? tandasInfo[editing.team_id] : undefined}
+        currentTandas={editing ? tandasByMatch[editing.matchday_id] ?? null : null}
         preset={preset}
         onClose={() => {
           setEditing(null);
@@ -841,7 +973,11 @@ export const ClubScheduleScreen = ({
         team={editTeam}
         guest={!!editTeam?.guest}
         slots={editTeam ? slotsByTeam[editTeam.id] ?? [] : []}
-        onClose={() => setEditTeam(null)}
+        onClose={() => {
+          setEditTeam(null);
+          // Las tandas habituales se guardan dentro del editor: se vuelven a leer.
+          load();
+        }}
         onSaved={onSlotsSaved}
       />
     </View>
@@ -903,11 +1039,15 @@ const EditScheduleSheet: React.FC<{
   match: ClubHomeMatch | null;
   all: ClubHomeMatch[];
   slots: string[];
+  /** Género y tanda habitual del equipo (para ofrecer las tandas válidas y marcar la habitual). */
+  tandasInfo?: TeamTandasInfo;
+  /** Tandas que ya tiene el partido. */
+  currentTandas?: string | null;
   /** Tablet: pista y hora de la celda tocada en la rejilla. */
   preset?: SlotPreset | null;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ match, all, slots, preset = null, onClose, onSaved }) => {
+}> = ({ match, all, slots, tandasInfo, currentTandas = null, preset = null, onClose, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
@@ -917,6 +1057,14 @@ const EditScheduleSheet: React.FC<{
   const [addingCourt, setAddingCourt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [adhocDay, setAdhocDay] = useState<number | null>(null);
+  // Tandas del partido: las que ya tiene o, si no, la habitual del equipo.
+  const [tandas, setTandas] = useState<string | null>(null);
+  useEffect(() => {
+    if (!match) return;
+    setTandas(currentTandas ?? tandasInfo?.preferred_tandas ?? null);
+    // `currentTandas` y `tandasInfo` llegan junto con `match`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match]);
 
   useEffect(() => {
     if (!match) return;
@@ -988,16 +1136,19 @@ const EditScheduleSheet: React.FC<{
           matchDate: patch.match_date ?? null,
           matchTime: patch.match_time,
           location: patch.location,
+          // Hora, pista y tandas en una sola llamada: igual que con un equipo propio.
+          tandas,
         });
-        toast.success('Horario enviado al capitán');
+        toast.success('Horario guardado y avisado');
       } else {
         await updateMatchday(match.matchday_id, {
           ...patch,
+          ...(tandas ? { tandas } : {}),
           // Ponerle día, hora y pista ES confirmar que se juega aquí.
           ...(match.home_unconfirmed ? { home_unconfirmed: false } : {}),
         });
         notifyPush('schedule_set', match.matchday_id);
-        toast.success('Horario enviado al equipo');
+        toast.success('Horario guardado y avisado');
       }
       tapSuccess();
       onSaved();
@@ -1075,6 +1226,37 @@ const EditScheduleSheet: React.FC<{
             );
           })}
         </View>
+      )}
+
+      <Text style={[styles.sectionLabel, { marginTop: 18, marginBottom: 8 }]}>TANDAS</Text>
+      <View style={styles.chipsWrap}>
+        {tandasChoices(tandasInfo?.gender).map((tv) => {
+          const sel = tandas === tv;
+          return (
+            <Pressable
+              key={tv}
+              onPress={() => setTandas(sel ? null : tv)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: sel }}
+              style={[styles.chip, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+            >
+              <Text style={[styles.chipTextSans, { color: sel ? c.textInverse : c.text }]}>{tv}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {tandas ? (
+        <View style={{ marginTop: 8, gap: 2 }}>
+          {describeTandas(tandas, tandasInfo?.gender, parsed?.time ?? null).map((l) => (
+            <Text key={l} style={styles.hint}>
+              {l}
+            </Text>
+          ))}
+        </View>
+      ) : (
+        <Text style={[styles.hint, { marginTop: 8 }]}>
+          Cuántos partidos se juegan a cada hora. La normativa pide ponerlas junto con el día y la hora.
+        </Text>
       )}
 
       <Text style={[styles.sectionLabel, { marginTop: 18, marginBottom: 8 }]}>PISTA</Text>
@@ -1470,6 +1652,33 @@ const makeStyles = (c: Palette) =>
     slotText: { color: c.accent, fontFamily: Fonts.mono, fontSize: 12, marginTop: 2 },
     slotEmpty: { color: c.textFaint, fontSize: 12 },
 
+    uploadBtn: {
+      alignSelf: 'flex-start',
+      marginTop: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.accent40,
+    },
+    uploadBtnText: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
+    jStrip: { flexDirection: 'row', gap: 8, paddingVertical: 8 },
+    jChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      minWidth: 52,
+      justifyContent: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.background,
+    },
+    jChipOn: { backgroundColor: c.accent, borderColor: c.accent },
+    jChipText: { color: c.text, fontSize: 14, fontWeight: '700', fontFamily: Fonts.mono },
+    jDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.warning },
     weekStrip: { flexDirection: 'row', gap: 6, marginTop: 6 },
     weekCell: {
       flex: 1,

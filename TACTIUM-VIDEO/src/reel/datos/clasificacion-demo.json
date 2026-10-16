@@ -1,0 +1,71 @@
+{
+ "liga": "Liga Cántabra 2026",
+ "grupo": "1ª CATEGORIA MASCULINA - GRUPO A",
+ "fuente": "fcp_clasificacion (liga 28074), consultado el 12-10-2026",
+ "filas": [
+  {
+   "posicion": 1,
+   "equipo": "CENTRAL PADEL A",
+   "enf": 14,
+   "puntos": 14,
+   "sets_favor": 128,
+   "sets_contra": 12
+  },
+  {
+   "posicion": 2,
+   "equipo": "CAMARGO A",
+   "enf": 14,
+   "puntos": 12,
+   "sets_favor": 123,
+   "sets_contra": 27
+  },
+  {
+   "posicion": 3,
+   "equipo": "G6 A - HONDA TECNOCAS",
+   "enf": 14,
+   "puntos": 10,
+   "sets_favor": 97,
+   "sets_contra": 60
+  },
+  {
+   "posicion": 4,
+   "equipo": "ZINK PADEL B",
+   "enf": 14,
+   "puntos": 8,
+   "sets_favor": 88,
+   "sets_contra": 70
+  },
+  {
+   "posicion": 5,
+   "equipo": "VILLAESCUSA A",
+   "enf": 14,
+   "puntos": 6,
+   "sets_favor": 69,
+   "sets_contra": 90
+  },
+  {
+   "posicion": 6,
+   "equipo": "LA MARINA B",
+   "enf": 14,
+   "puntos": 4,
+   "sets_favor": 45,
+   "sets_contra": 107
+  },
+  {
+   "posicion": 7,
+   "equipo": "OLIMPICO DE GAMA A",
+   "enf": 14,
+   "puntos": 2,
+   "sets_favor": 34,
+   "sets_contra": 118
+  },
+  {
+   "posicion": 8,
+   "equipo": "CIRCULO DE RECREO A",
+   "enf": 14,
+   "puntos": 0,
+   "sets_favor": 24,
+   "sets_contra": 124
+  }
+ ]
+}

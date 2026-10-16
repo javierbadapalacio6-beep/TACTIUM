@@ -86,6 +86,27 @@ p.lead b{color:${C.fg.primary};font-weight:700}
 .codigo{font-family:JBMono,monospace;font-weight:500;font-size:200px;letter-spacing:.12em;color:${C.accent.base};text-align:center;line-height:1}
 .ticks{display:flex;flex-direction:column;gap:26px}
 .ticks div{display:flex;align-items:center;gap:22px;font-size:46px;font-weight:700;letter-spacing:-.02em}
+.gr{position:absolute;left:84px;right:84px;display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.gc{background:${C.bg.card};border:2px solid ${C.border.hair};border-radius:26px;padding:26px 28px 22px;min-width:0}
+.gc.duro{border-color:${C.accent.base};box-shadow:0 0 60px -20px rgba(0,223,130,.45)}
+.gc .gh{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.gc .gl{font-family:JBMono,monospace;font-size:24px;letter-spacing:.18em;text-transform:uppercase;color:${C.accent.base}}
+.gc .gd{font-family:JBMono,monospace;font-size:19px;letter-spacing:.06em;color:${C.accent.base};background:rgba(0,223,130,.12);border-radius:999px;padding:6px 14px}
+.gc .eq{font-size:23px;font-weight:500;line-height:1.62;color:${C.fg.primary};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+.gc .eq i{font-style:normal;color:${C.fg.faint};font-family:JBMono,monospace;font-size:18px;margin-right:12px}
+.gc.dato{display:flex;flex-direction:column;justify-content:center;border-style:dashed}
+.br{display:flex;flex-direction:column;gap:30px}
+.br .f{display:grid;grid-template-columns:230px 1fr 150px;align-items:center;gap:24px}
+.br .e{font-weight:700;font-size:32px;letter-spacing:-.02em;line-height:1.1}
+.br .e small{display:block;font-family:JBMono,monospace;font-weight:500;font-size:20px;letter-spacing:.06em;color:${C.fg.faint};margin-top:6px}
+.br .t{position:relative;height:56px;border-radius:14px;background:rgba(255,255,255,.04)}
+.br .b{position:absolute;left:0;top:0;bottom:0;border-radius:14px;background:linear-gradient(90deg,rgba(0,223,130,.35),${C.accent.base})}
+.br .v{font-family:JBMono,monospace;font-size:26px;color:${C.fg.primary};text-align:right;white-space:nowrap}
+.dest{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:56px}
+.dest .aro{width:470px;height:470px;border-radius:50%;border:6px solid ${C.accent.base};display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(0,223,130,.22),rgba(3,15,15,.2) 70%);box-shadow:0 0 140px -30px rgba(0,223,130,.55)}
+.dest .aro svg{width:230px;height:230px;stroke:${C.accent.base};fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.dest .aro .bandera{--bw:250px}
+.dest .et{font-family:JBMono,monospace;font-size:44px;letter-spacing:.22em;text-transform:uppercase;color:${C.fg.primary}}
 .ticks div::before{content:"✓";width:60px;height:60px;border-radius:50%;background:${C.accent.base};color:${C.fg.inverse};display:flex;align-items:center;justify-content:center;font-size:32px;flex:none}
 `;
 
@@ -166,6 +187,47 @@ function slideHtml(s, i, n) {
         ${s.sub ? `<p class="lead" style="margin-top:56px">${rich(s.sub)}</p>` : ""}
       </div>`;
       break;
+    case "grupos": {
+      // Una categoría: sus grupos con los equipos (2 columnas). Si queda un hueco, va un dato.
+      const celdas = s.grupos.map((g) => `<div class="gc ${g.duro ? "duro" : ""}">
+          <div class="gh"><span class="gl">${esc(g.etiqueta ?? "Grupo " + g.letra)}</span>${g.duro ? '<span class="gd">🔥 el más duro</span>' : ""}</div>
+          ${g.equipos.map((e) => `<div class="eq">${esc(e)}</div>`).join("")}
+        </div>`);
+      // Con 2 grupos el dato ocupa la fila de abajo entera.
+      if (s.dato && (celdas.length % 2 || celdas.length === 2)) celdas.push(`<div class="gc dato" style="${celdas.length === 2 ? "grid-column:1/-1;min-height:300px" : ""}"><div class="eyebrow" style="font-size:22px;margin-bottom:18px">${esc(s.dato.eyebrow)}</div><h2 style="font-size:46px">${rich(s.dato.titulo)}</h2>${s.dato.sub ? `<p class="lead" style="font-size:28px;margin-top:16px">${rich(s.dato.sub)}</p>` : ""}</div>`);
+      cuerpo = `<div class="pad" style="top:110px">
+        ${s.eyebrow ? `<div class="eyebrow ${s.bandera ? "conbandera" : ""}" style="margin-bottom:22px">${bandera(s.bandera, 48)}${esc(s.eyebrow)}</div>` : ""}
+        <h2>${rich(s.titulo)}</h2>
+      </div>
+      <div class="gr" style="top:300px">${celdas.join("")}</div>`;
+      break;
+    }
+    case "barras": {
+      const max = s.max ?? Math.max(...s.filas.map((f) => f.valor));
+      cuerpo = `<div class="pad" style="top:${s.filas.length > 6 ? 120 : 170}px">
+        ${s.eyebrow ? `<div class="eyebrow" style="margin-bottom:24px">${esc(s.eyebrow)}</div>` : ""}
+        <h2 style="font-size:58px">${rich(s.titulo)}</h2>
+        ${s.sub ? `<p class="lead" style="margin-top:18px;font-size:30px">${rich(s.sub)}</p>` : ""}
+        <div class="br" style="margin-top:${s.filas.length > 6 ? 44 : 64}px">${s.filas.map((f) => `<div class="f">
+          <div class="e">${esc(f.etiqueta)}${f.sub ? `<small>${esc(f.sub)}</small>` : ""}</div>
+          <div class="t"><div class="b" style="width:${Math.max(8, (f.valor / max) * 100)}%"></div></div><span class="v">${esc(f.texto ?? f.valor)}</span>
+        </div>`).join("")}</div>
+      </div>`;
+      break;
+    }
+    case "destacada": {
+      // Portada de una historia destacada. Instagram la recorta en círculo desde el centro:
+      // el aro y la etiqueta quedan dentro del tercio central de la imagen.
+      const ICONOS = {
+        zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+        equipos: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+        clubs: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/>',
+        torneos: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-1.97 1.5C7.03 18.99 6 20.2 6 22"/><path d="M14 14.66V17c0 .55.47.98 1.97 1.5 1 .49 2.03 1.7 2.03 3.5"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+        descargar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+      };
+      cuerpo = `<div class="dest"><div class="aro">${s.bandera ? bandera(s.bandera, 250) : `<svg viewBox="0 0 24 24">${ICONOS[s.icono] ?? ""}</svg>`}</div><div class="et">${esc(s.etiqueta)}</div></div>`;
+      break;
+    }
     case "cierre":
       cuerpo = `<div class="pad" style="top:50%;transform:translateY(-50%)">
         <h1 class="${s.tam ?? "md"}">${rich(s.titulo)}</h1>
@@ -175,7 +237,7 @@ function slideHtml(s, i, n) {
       break;
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css()}</style></head><body>
-  <div class="slide">${fondo}${cuerpo}${foot(i, n)}</div></body></html>`;
+  <div class="slide">${fondo}${cuerpo}${s.tipo === "destacada" ? "" : foot(i, n)}</div></body></html>`;
 }
 
 const only = process.argv.slice(2);

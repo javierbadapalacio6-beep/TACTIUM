@@ -1,0 +1,157 @@
+{
+  "id": "L6",
+  "titulo": "Los primeros de grupo de la Liga 2026",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/tablon-club.png",
+      "eyebrow": "Liga Cántabra 2026",
+      "bandera": "cantabria",
+      "titulo": "Quién acabó *primero* en cada grupo",
+      "sub": "Las tres categorías de arriba, antes de que empiece la 26/27 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Primeros de grupo · 2026",
+      "bandera": "cantabria",
+      "titulo": "Masculina: *1ª y 2ª*",
+      "grupos": [
+        {
+          "etiqueta": "1ª · Grupo A",
+          "equipos": [
+            "CENTRAL PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "1ª · Grupo B",
+          "equipos": [
+            "LA MARINA A"
+          ]
+        },
+        {
+          "etiqueta": "2ª · Grupo A",
+          "equipos": [
+            "A.D.R.M. A"
+          ]
+        },
+        {
+          "etiqueta": "2ª · Grupo B",
+          "equipos": [
+            "ALDAY BOUCO A"
+          ]
+        },
+        {
+          "etiqueta": "2ª · Grupo C",
+          "equipos": [
+            "MIOÑO PADEL GYM A"
+          ]
+        }
+      ],
+      "dato": {
+        "eyebrow": "Dato",
+        "titulo": "Los tres de 2ª *juegan en 1ª* esta temporada"
+      }
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Primeros de grupo · 2026",
+      "bandera": "cantabria",
+      "titulo": "Femenina: *1ª y 2ª*",
+      "grupos": [
+        {
+          "etiqueta": "1ª · Grupo A",
+          "equipos": [
+            "CENTRAL PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "1ª · Grupo B",
+          "equipos": [
+            "MONTEVERDE A"
+          ]
+        },
+        {
+          "etiqueta": "2ª · Grupo A",
+          "equipos": [
+            "SMASH SANTANDER B"
+          ]
+        },
+        {
+          "etiqueta": "2ª · Grupo B",
+          "equipos": [
+            "ZINK PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "2ª · Grupo C",
+          "equipos": [
+            "MOVE & GO A"
+          ]
+        }
+      ],
+      "dato": {
+        "eyebrow": "Dato",
+        "titulo": "Dos de 2ª *juegan en 1ª* esta temporada"
+      }
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Primeros de grupo · 2026",
+      "bandera": "cantabria",
+      "titulo": "Los de *3ª*",
+      "grupos": [
+        {
+          "etiqueta": "M · Grupo A",
+          "equipos": [
+            "LA MARINA F"
+          ]
+        },
+        {
+          "etiqueta": "M · Grupo B",
+          "equipos": [
+            "S.T.C. CASTRO URDIALES B"
+          ]
+        },
+        {
+          "etiqueta": "M · Grupo C",
+          "equipos": [
+            "SMASH PADEL C"
+          ]
+        },
+        {
+          "etiqueta": "M · Grupo D",
+          "equipos": [
+            "LOS TROYANOS"
+          ]
+        },
+        {
+          "etiqueta": "F · Grupo A",
+          "equipos": [
+            "MONTEVERDE F"
+          ]
+        },
+        {
+          "etiqueta": "F · Grupo B",
+          "equipos": [
+            "CENTRAL PADEL E"
+          ]
+        },
+        {
+          "etiqueta": "F · Grupo C",
+          "equipos": [
+            "ZINK PADEL C"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Tu equipo estaba *en la lista?*",
+      "sub": "Etiqueta a tu capitán. **Y mira tu grupo de esta temporada** en tactium.io.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

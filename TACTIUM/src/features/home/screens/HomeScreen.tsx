@@ -62,6 +62,7 @@ import { LiveHomeCard } from '@features/home/components/live/LiveHomeCard';
 import { fetchLiveState, isLiveNow } from '@core/services/live';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
+import { fmtRango } from '@features/seasons/components/ligaParts';
 
 export const HomeScreen = ({
   navigation,
@@ -257,6 +258,7 @@ export const HomeScreen = ({
     jornadaNumber: nextMatchday?.jornada_number,
     matchDate: nextMatchday?.match_date,
     matchTime: nextMatchday?.match_time,
+    matchRange: (nextMatchday as { fcp_date_range?: string | null } | null | undefined)?.fcp_date_range,
     isHome: nextMatchday?.is_home,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,
@@ -426,7 +428,11 @@ export const HomeScreen = ({
               <NeonDot size={6} />
               <Text style={heroStyles.heroLiveText} numberOfLines={1}>
                 J{String(nextMatchday.jornada_number).padStart(2, '0')}
-                {nextMatchday.match_date ? ` · ${formatMatchDate(nextMatchday.match_date)}` : ''}
+                {nextMatchday.match_date
+                  ? ` · ${formatMatchDate(nextMatchday.match_date)}`
+                  : fmtRango((nextMatchday as { fcp_date_range?: string | null }).fcp_date_range)
+                    ? ` · ${fmtRango((nextMatchday as { fcp_date_range?: string | null }).fcp_date_range)}`
+                    : ''}
                 {nextMatchday.match_time ? ` · ${nextMatchday.match_time.slice(0, 5)}` : ''}
               </Text>
               <View style={heroStyles.heroOpen}>

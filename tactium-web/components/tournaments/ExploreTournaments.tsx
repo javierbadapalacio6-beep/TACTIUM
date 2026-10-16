@@ -109,7 +109,10 @@ export function ExploreTournaments({ embedded = false }: { embedded?: boolean } 
               Explorar
             </span>
             <Link href="/torneos/mios" className="tw-fcp-chip" role="tab" aria-selected="false" style={{ display: "inline-flex", alignItems: "center" }}>
-              Mis torneos
+              Inscritos
+            </Link>
+            <Link href="/torneos/mios?ver=creados" className="tw-fcp-chip" role="tab" aria-selected="false" style={{ display: "inline-flex", alignItems: "center" }}>
+              Creados por mí
             </Link>
           </div>
         </>

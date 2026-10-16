@@ -98,7 +98,8 @@ const PETICIONES = [
   ["guardar", /\bguard(a|alo|ad|ar)\b/],
   ["etiquetar", /\betiquet(a|alo|ad|ar)\b/],
   ["seguir", /\bsigu(e|enos|ela)\b|\bsegu(ir|idnos)\b/],
-  ["enviar", /\b(envi(a|alo|ar)|mand(a|alo|ar))\b/],
+  // Con los enclíticos de verdad: «mándaselo», «envíaselo», «mándalo».
+  ["enviar", /\b(envi(a|alo|aselo|aselos|ar)|mand(a|alo|aselo|aselos|ar))\b/],
   ["responder", /\brespond(e|ed|er)\b/],
   ["enlace", /enlace en (la )?bio|link en (la )?bio/],
 ];

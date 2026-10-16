@@ -454,7 +454,7 @@ const MatchdayRow: React.FC<{
         <TextInput
           value={item.match_date ?? ''}
           onChangeText={(v) => onChange({ match_date: v || undefined })}
-          placeholder="YYYY-MM-DD"
+          placeholder={item.date_range ?? 'YYYY-MM-DD'}
           placeholderTextColor={c.textFaint}
           style={[styles.input, styles.inputDate]}
         />

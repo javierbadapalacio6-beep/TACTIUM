@@ -2,18 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { fmtRango } from "@/lib/fcp-range";
+import { optionLabel } from "@/lib/time-polls";
 import {
   fetchPublicAvailability,
   longDate,
+  pollProblemText,
   respondProblemText,
   respondViaLink,
+  voteTimePollViaLink,
   type InvalidAvailability,
   type PublicAvailability as PublicAvailabilityData,
 } from "@/lib/availability-link";
 import { STATUS_LABEL, type AvailRow, type AvailStatus, type MaybeReason } from "@/lib/queries";
 import { Btn, BtnLink, Card, Chip, Eyebrow } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconCalendar } from "@/components/Icon";
+import { IconCalendar, IconCheck } from "@/components/Icon";
 import {
   ConvoBar,
   RsvpButtons,
@@ -50,9 +54,9 @@ function saveMe(token: string, id: string | null) {
   }
 }
 
-function fmtWhen(d: string | null, t: string | null): string | null {
+function fmtWhen(d: string | null, t: string | null, range?: string | null): string | null {
   const day = longDate(d);
-  if (!day) return null;
+  if (!day) return range ? `${fmtRango(range)} · día y hora por confirmar` : null;
   return t ? `${day} · ${t.slice(0, 5)}` : day;
 }
 
@@ -156,7 +160,7 @@ export function PublicAvailability({ token }: { token: string }) {
   const meta = [
     d.jornada_number != null ? `Jornada ${d.jornada_number}` : null,
     d.category,
-    fmtWhen(d.match_date, d.match_time),
+    fmtWhen(d.match_date, d.match_time, d.fcp_date_range),
     d.location,
     d.is_home ? "En casa" : "Fuera",
   ]
@@ -196,6 +200,30 @@ export function PublicAvailability({ token }: { token: string }) {
       setToast({ tone: "success", title: `Guardado: ${STATUS_LABEL[status]}` });
     }
     void load();
+  }
+
+  // Encuesta de hora de la jornada: se vota con el mismo enlace (multiselección, editable hasta que se cierre).
+  const poll = d.time_poll ?? null;
+  const pollClosed = !!poll?.deadline && new Date(poll.deadline).getTime() <= Date.now();
+  const myPollVote = poll && player ? poll.votes[player.id] : undefined;
+  async function votePoll(next: string[]) {
+    if (!player || !poll || pollClosed) return;
+    setSaving(true);
+    setData((cur) =>
+      cur && cur.valid && cur.time_poll
+        ? { ...cur, time_poll: { ...cur.time_poll, votes: { ...cur.time_poll.votes, [player.id]: next } } }
+        : cur,
+    );
+    const res = await voteTimePollViaLink(token, player.id, next);
+    setSaving(false);
+    if (!res.ok) setToast({ tone: "warning", title: res.reason });
+    else if (!res.data.ok) setToast({ tone: "warning", title: pollProblemText(res.data.reason) });
+    else setToast({ tone: "success", title: next.length ? "Guardadas tus horas" : "Guardado: ninguna te va" });
+    void load();
+  }
+  function togglePollOption(optionId: string) {
+    const cur = myPollVote ?? [];
+    void votePoll(cur.includes(optionId) ? cur.filter((x) => x !== optionId) : [...cur, optionId]);
   }
 
   const value: AvailRow | undefined = player?.status
@@ -284,6 +312,63 @@ export function PublicAvailability({ token }: { token: string }) {
               <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
                 Las dudas se cierran el {formatDeadline(deadline)}.
               </span>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {poll && poll.options.length > 0 && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: "grid", gap: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>¿A qué hora puedes?</span>
+            {poll.message && <span style={{ fontSize: 13.5, fontStyle: "italic" }}>«{poll.message}»</span>}
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              {pollClosed
+                ? "La votación de la hora está cerrada."
+                : player
+                  ? "Marca todas las horas que te van. Puedes cambiarlo hasta que se cierre."
+                  : "Elige tu nombre arriba para marcar las horas que te van."}
+              {poll.deadline && !pollClosed ? ` Hasta el ${formatDeadline(new Date(poll.deadline))}.` : ""}
+            </span>
+            <div style={{ display: "grid", gap: 8 }}>
+              {poll.options.map((o) => {
+                const n = Object.values(poll.votes).filter((ids) => ids.includes(o.id)).length;
+                const on = !!myPollVote?.includes(o.id);
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={!player || pollClosed || saving}
+                    onClick={() => togglePollOption(o.id)}
+                    className="btn btn-ghost"
+                    style={{
+                      justifyContent: "space-between",
+                      minHeight: 46,
+                      ...(on
+                        ? { background: "var(--accent)", color: "var(--text-inverse)", borderColor: "var(--accent)", fontWeight: 700 }
+                        : {}),
+                    }}
+                  >
+                    <span className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      {on && <IconCheck size={14} />}
+                      {optionLabel(o)}
+                    </span>
+                    <span style={{ fontSize: 12.5, opacity: 0.85 }}>{n === 0 ? "Nadie todavía" : `${n} ${n === 1 ? "puede" : "pueden"}`}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {player && !pollClosed && (
+              <button
+                type="button"
+                className="btn btn-quiet btn-sm"
+                disabled={saving}
+                onClick={() => void votePoll([])}
+                style={myPollVote && myPollVote.length === 0 ? { color: "var(--error)" } : undefined}
+              >
+                {myPollVote && myPollVote.length === 0 ? "Has dicho que ninguna te va" : "Ninguna me va"}
+              </button>
             )}
           </div>
         </Card>

@@ -7,7 +7,7 @@ import { Radius } from '@core/theme/spacing';
 import { BottomSheet } from '@components/ui';
 import { useTeamStore } from '@store/teamStore';
 
-import { JoinTeamPreview } from './JoinTeamPreview';
+import { InvitationPreview } from './InvitationPreview';
 
 export const RedeemInvitationSheet: React.FC<{
   open: boolean;
@@ -57,7 +57,7 @@ export const RedeemInvitationSheet: React.FC<{
       {complete ? (
         <View style={{ marginTop: 14 }}>
           {/* key = código: al cambiarlo se vuelve a pedir la vista previa. */}
-          <JoinTeamPreview
+          <InvitationPreview
             key={trimmed}
             code={trimmed}
             onJoined={() => {

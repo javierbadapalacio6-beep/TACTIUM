@@ -1,0 +1,223 @@
+{
+  "id": "L14",
+  "titulo": "Jornada 1: los cruces de 2ª y 3ª femenina",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/grada.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Jornada 1. *2ª y 3ª femenina.*",
+      "sub": "23, 24 y 25 de octubre. El local, primero 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "2ª Femenina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "+PADEL SANTANDER A",
+            "vs MIOÑO PADEL GYM"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "CENTRAL PADEL D",
+            "vs G6 D"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "RACKET SPORT B",
+            "vs PONTEJOS CAMARSA"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "ZINK PADEL C",
+            "vs MONTEVERDE D"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "CENTRAL PADEL C",
+            "vs RACKET SPORT C"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "CENTRAL PADEL E",
+            "vs G6 E"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "LA PLAYUCA",
+            "vs VILLAESCUSA A"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "ZINK PADEL B",
+            "vs MONTEVERDE C"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "2ª Femenina · Grupo C",
+      "grupos": [
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "CASTRO URDIALES A",
+            "vs CENTRAL PADEL B"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "EL TEMPLO B",
+            "vs ZINK PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "MARISMA DUIN A",
+            "vs MONTEVERDE E"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "OLIMPICO DE GAMA A",
+            "vs CLUB BAREYO"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "3ª Femenina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "C.D. SALAS",
+            "vs MARISMA DUIN B"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "G6 F",
+            "vs SAN LAZARO-PONTEJOS"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "OLIMPICO DE GAMA B",
+            "vs CAMARGO"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "T3 PADEL A",
+            "vs RACKET SPORT D"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "CAMPOO SUR DEL NORTE",
+            "vs EL TEMPLO C"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "LA MARINA D",
+            "vs WALA PADEL"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "MONTEVERDE F",
+            "vs REINOSA PADEL CLUB A"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "RACKET SPORT E",
+            "vs ZINK PADEL D"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "3ª Femenina · Grupo C",
+      "grupos": [
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "CIRCULO DE RECREO B",
+            "vs G6 G"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "LA MARINA C",
+            "vs CARTES"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "MOVE & GO B",
+            "vs MEDIO CUDEYO A"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "VILLAESCUSA B",
+            "vs SMASH PADEL A"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Y *tu jornada 1?*",
+      "sub": "Los cruces de tu grupo, con las plantillas y los puntos de cada rival, en tactium.io.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

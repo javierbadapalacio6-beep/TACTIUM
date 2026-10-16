@@ -165,3 +165,34 @@ panel está cerrado y bajo la tarjeta cuando se abre; nunca se salen de su hueco
 Ojo: los tiempos de `cobertura` y `graficos` se sacan también del JSON de
 palabras (el instante en que dices la palabra que presenta la pantalla). Las
 frases a mano de V1 llegaron a ir 2 s tarde.
+
+## Reels hablados verticales: estilo del curso (desde el 12-10-2026)
+
+Los `hablado-<id>-vertical` (el formato que se publica) llevan por defecto el estilo del Creator Club
+y de AI Mastery de Diego NXT. Los resúmenes y la fuente de cada regla están en
+`Desktop/CURSOS-DIEGONXT/INFORME-UNIFICADO.md` (y `resumenes/`). No hay que hacer nada para activarlo:
+cualquier entrada nueva de `HABLADOS` (`estilo/ReelHablado.tsx`) lo hereda. Para montar uno nuevo se sigue como
+siempre: plano en `public/plano/`, transcribir con `scripts/transcribir.py` y añadir sus escenas.
+
+Qué hace solo:
+
+- **Subtítulos** (`estilo/SubtitulosCurso.tsx`) en las escenas de **cara**: una línea, 1-3 palabras, ≤13 caracteres,
+  partidos como habla la persona, centrados justo bajo la cara (y≈880, no abajo). Fuente base apagada y la palabra
+  clave (`claves` de la escena) en serif cursiva, más grande y en verde; `semantico` fija otro color (p. ej. rojo).
+  Entrada de 8 fotogramas con desenfoque y desplazamiento; tres animaciones que se alternan; los conectores
+  («de», «y») entran sin animación. Las escenas con `clip`, de `tarjeta` y de `pantalla` siguen con el texto cinético.
+- **Zoom** en una capa que envuelve vídeo + subtítulos, hacia la cara: suave hasta 107 % y golpe seco a 114-115 %
+  en la palabra clave. Nunca por encima de 115 % (125 % corta la cabeza). Se puede fijar a mano con `zooms`
+  (`[desdeMs, hastaMs, escalaInicial, escalaFinal][]`, en ms DENTRO de la escena).
+- **Transición** de desenfoque de 0,3 s sobre cada corte (sustituye al glitch en este formato) + whoosh.
+- **Sonido**: whoosh en cada golpe de zoom; tecla solo en cifras de las claves (máx. 2 por reel); música con
+  ducking según la voz de Whisper. Lo que no sale solo (riser y silencio antes de un dato clave, teclas a mano) va en
+  `SFX_CURSO` de `ReelHablado.tsx` (ver T1).
+
+Cosas del curso que **no** se aplican por regla de marca: anotaciones sobre capturas de la app, texto que no se dice
+en voz, stock genérico de creadores. El motion blur sobre el texto (`@remotion/motion-blur`) no está instalado: la
+entrada con desenfoque lo sustituye. Pendiente de verificar: texto detrás de la persona (necesita un recorte con
+alfa), J-cut y recorte automático de pausas.
+
+Para ver un hablado con el estilo antiguo (texto cinético a la izquierda) basta renderizar el 16:9
+(`hablado-<id>`), que no cambia.

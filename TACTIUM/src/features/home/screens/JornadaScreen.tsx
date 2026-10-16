@@ -66,6 +66,7 @@ import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
+import { FederationUploadCard } from '@features/home/components/jornada/FederationUploadCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { LiveScoreboard } from '../components/live/LiveScoreboard';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
@@ -80,6 +81,7 @@ import { JornadaSeasonList } from '../components/jornada/JornadaSeasonList';
 import { SplitView, useIsSplit } from '@components/layout';
 
 import type { HomeStackScreenProps } from '@navigation/types';
+import { fmtRango } from '@features/seasons/components/ligaParts';
 
 type Status =
   | 'pending'
@@ -1016,6 +1018,7 @@ const JornadaDetail = ({
         <JornadaScoreHeader
           jornadaNumber={matchday.jornada_number}
           date={dateObj}
+          rangeLabel={fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range)}
           time={time}
           isHome={isHome}
           teamName={teamName}
@@ -1041,6 +1044,11 @@ const JornadaDetail = ({
         {/* === ENCUESTA DE HORA === (lógica en features/timePoll) */}
         {tab === 'previa' && !closed ? (
           <TimePollCard matchdayId={matchday.id} canManage={isCaptain} onChanged={load} />
+        ) : null}
+
+        {/* === SUBIDO A LA FEDERACIÓN === partidos de local de la Cántabra por jugar */}
+        {tab === 'previa' && !closed && matchday.is_home && team?.federation === 'FCantP' ? (
+          <FederationUploadCard matchdayId={matchday.id} canManage={isCaptain} />
         ) : null}
 
         {/* === PREVIA === */}
@@ -1962,7 +1970,9 @@ const ShareLineupSheet: React.FC<{
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const dateObj = isoDateToDate(matchday.match_date);
-  const shortDate = dateObj ? formatShortDay(dateObj) : 'Fecha pendiente';
+  const shortDate = dateObj
+    ? formatShortDay(dateObj)
+    : fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range) || 'Fecha pendiente';
   const time = matchday.match_time?.slice(0, 5) ?? '';
 
   const text = [

@@ -1,6 +1,7 @@
 import { supabaseAnon } from "@/lib/supabase/anon";
 import { cleanToken } from "@/lib/seo/live";
 import { longDate } from "@/lib/availability-text";
+import { fmtRango } from "@/lib/fcp-range";
 
 /** Cabecera del enlace de disponibilidad para metadatos y OG (anon, sin cookies). */
 export interface AvailabilityHead {
@@ -9,6 +10,8 @@ export interface AvailabilityHead {
   jornada_number: number | null;
   date: string | null;
   time: string | null;
+  /** Fin de semana de la Federación mientras no hay fecha exacta. */
+  range: string | null;
   category: string | null;
   pending: number;
   yes: number;
@@ -25,6 +28,7 @@ export async function loadAvailabilityHead(token: string): Promise<AvailabilityH
     jornada_number: number | null;
     match_date: string | null;
     match_time: string | null;
+    fcp_date_range?: string | null;
     category: string | null;
     counts: { yes: number; pending: number };
   };
@@ -34,6 +38,7 @@ export async function loadAvailabilityHead(token: string): Promise<AvailabilityH
     jornada_number: d.jornada_number,
     date: d.match_date,
     time: d.match_time,
+    range: d.fcp_date_range ?? null,
     category: d.category,
     pending: d.counts?.pending ?? 0,
     yes: d.counts?.yes ?? 0,
@@ -46,6 +51,6 @@ export function availabilityTitle(h: AvailabilityHead): string {
 
 export function availabilityWhen(h: AvailabilityHead): string | null {
   const d = longDate(h.date);
-  if (!d) return null;
+  if (!d) return h.range ? `${fmtRango(h.range)} · día y hora por confirmar` : null;
   return h.time ? `${d} · ${h.time.slice(0, 5)}` : d;
 }

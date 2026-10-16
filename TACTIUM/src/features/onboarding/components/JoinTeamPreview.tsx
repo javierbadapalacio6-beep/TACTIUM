@@ -81,6 +81,7 @@ export const JoinTeamPreview: React.FC<{
   const finishOnboarding = useTeamStore((s) => s.finishOnboarding);
   const loadClubs = useClubStore((s) => s.loadForUser);
   const myPlayerTeamIds = useTeamStore((s) => s.myPlayerTeamIds);
+  const memberships = useTeamStore((s) => s.memberships);
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -137,6 +138,16 @@ export const JoinTeamPreview: React.FC<{
     isAuthenticated &&
     valid?.role === 'player' &&
     !myPlayerTeamIds.includes(valid.team.id);
+
+  // Ya es del equipo como JUGADOR y le han dado un código de CAPITÁN: el servidor lo asciende (el canje solo
+  // sube de rol, nunca baja a un capitán). Antes se quedaba en «Ya estás en este equipo» sin canjear nada.
+  const myRoleHere = valid ? memberships.find((m) => m.team_id === valid.team.id)?.role : undefined;
+  const canUpgrade =
+    alreadyMember &&
+    isAuthenticated &&
+    valid?.role === 'captain' &&
+    myRoleHere !== 'captain' &&
+    myRoleHere !== 'admin';
 
   const handleClaimOnly = async () => {
     if (!valid || claiming || !pick || pick === 'none') return;
@@ -215,6 +226,9 @@ export const JoinTeamPreview: React.FC<{
       // Si entra como capitán en un equipo ya cubierto por el plan de otro
       // capitán, que no vea ningún paywall desde el primer momento.
       await useSubscriptionStore.getState().refreshTeamCoverage(teamId);
+      // Si entra como capitán de un equipo invitado, el servidor le arranca una prueba de 14 días: se recarga para
+      // que las funciones Pro estén desbloqueadas desde el primer momento.
+      if (user?.id) await useSubscriptionStore.getState().refresh(user.id);
     } catch (e) {
       console.warn('JoinTeamPreview: recarga tras unirse', e);
     }
@@ -222,8 +236,10 @@ export const JoinTeamPreview: React.FC<{
     setJoining(false);
 
     toast.success(
-      `¡Ya estás en ${valid.team.name}!`,
-      'Marca tu disponibilidad para la próxima jornada cuando puedas.',
+      canUpgrade ? `Ahora eres capitán de ${valid.team.name}` : `¡Ya estás en ${valid.team.name}!`,
+      canUpgrade
+        ? 'Ya puedes gestionar la plantilla, las jornadas y las invitaciones.'
+        : 'Marca tu disponibilidad para la próxima jornada cuando puedas.',
     );
     if (claimWarning) {
       setTimeout(() => toast.warn('Falta elegir tu ficha', claimWarning ?? ''), 1200);
@@ -367,6 +383,40 @@ export const JoinTeamPreview: React.FC<{
               No quedan fichas libres. Añádete a la plantilla desde Equipo.
             </Text>
           )}
+          <Pressable
+            onPress={() => onGoToTeam?.(t.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={{ marginTop: 14, alignSelf: 'center' }}
+          >
+            <Text style={[styles.memberNoteText, { color: c.accent }]}>Ir a mi equipo</Text>
+          </Pressable>
+        </>
+      ) : canUpgrade ? (
+        <>
+          <View style={styles.memberNote}>
+            <IconCheck size={14} color={c.accent} />
+            <Text style={styles.memberNoteText}>Ya estás en este equipo como jugador</Text>
+          </View>
+          <Text style={styles.hint}>
+            Este código es de capitán: al usarlo pasas a ser capitán de {t.name}.
+          </Text>
+          <Pressable
+            onPress={handleJoin}
+            disabled={joining}
+            style={({ pressed }) => [
+              styles.cta,
+              joining && { opacity: 0.5 },
+              pressed && !joining && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+          >
+            {joining ? (
+              <ActivityIndicator color={c.textInverse} />
+            ) : (
+              <Text style={styles.ctaLabel}>Hacerme capitán</Text>
+            )}
+          </Pressable>
           <Pressable
             onPress={() => onGoToTeam?.(t.id)}
             hitSlop={8}

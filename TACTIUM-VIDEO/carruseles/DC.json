@@ -1,0 +1,8 @@
+{ "id": "DC", "formato": "story", "slides": [
+  { "tipo": "destacada", "icono": "zap", "etiqueta": "Cómo funciona" },
+  { "tipo": "destacada", "bandera": "cantabria", "etiqueta": "Liga 26/27" },
+  { "tipo": "destacada", "icono": "equipos", "etiqueta": "Equipos" },
+  { "tipo": "destacada", "icono": "clubs", "etiqueta": "Clubs" },
+  { "tipo": "destacada", "icono": "torneos", "etiqueta": "Torneos" },
+  { "tipo": "destacada", "icono": "descargar", "etiqueta": "Descargar" }
+] }

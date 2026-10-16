@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { supabase } from '@core/supabase/client';
+import { useAvailabilityRealtime } from '@core/hooks/useAvailabilityRealtime';
 import * as TimePollsApi from '@core/services/timePolls';
 import { fetchAvailability, type AvailabilityMap } from '@core/services/availability';
 import { useAuthStore } from '@store/authStore';
@@ -21,6 +22,8 @@ export interface PollMatchday {
   status: string;
   match_date: string | null;
   match_time: string | null;
+  /** Fin de semana que da la Federación («23 - 25 Oct») mientras no hay fecha exacta. */
+  fcp_date_range?: string | null;
   is_home: boolean;
   jornada_number: number | null;
   opponent: string | null;
@@ -71,7 +74,7 @@ export function useTimePoll(matchdayId: string | null | undefined) {
     }
     try {
       const { data: md } = await rawFrom('matchdays')
-        .select('id, status, match_date, match_time, is_home, jornada_number, opponent, seasons(team_id)')
+        .select('id, status, match_date, match_time, fcp_date_range, is_home, jornada_number, opponent, seasons(team_id)')
         .eq('id', matchdayId)
         .maybeSingle();
       const s = md?.seasons;
@@ -107,6 +110,7 @@ export function useTimePoll(matchdayId: string | null | undefined) {
           status: md.status,
           match_date: md.match_date,
           match_time: md.match_time,
+          fcp_date_range: md.fcp_date_range ?? null,
           is_home: md.is_home,
           jornada_number: md.jornada_number,
           opponent: md.opponent,
@@ -137,6 +141,9 @@ export function useTimePoll(matchdayId: string | null | undefined) {
       load();
     }, [load]),
   );
+
+  // En vivo: votos, horas nuevas/quitadas y encuesta abierta o cerrada.
+  useAvailabilityRealtime({ matchdayId, scope: 'poll', onChange: load });
 
   /** Voto optimista del propio jugador. */
   const setMyVote = useCallback((optionIds: string[]) => {

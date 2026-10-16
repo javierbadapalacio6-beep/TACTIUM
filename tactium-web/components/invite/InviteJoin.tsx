@@ -378,6 +378,11 @@ export function JoinInvite({ code, preview }: { code: string; preview: ValidPrev
   const [claimWarn, setClaimWarn] = useState<string | null>(null);
 
   const alreadyMember = teams.some((t) => t.id === preview.team.id);
+  // Ya es del equipo como jugador y el código es de CAPITÁN: canjearlo lo asciende (el servidor nunca baja a un
+  // capitán). Antes se quedaba en «Ya estás en este equipo» sin canjear nada.
+  const myRoleHere = teams.find((t) => t.id === preview.team.id)?.role;
+  const canUpgrade =
+    alreadyMember && preview.role === "captain" && myRoleHere !== "captain" && myRoleHere !== "admin";
 
   // Ya es del equipo (p. ej. capitán) pero sin ficha de jugador: con un
   // código de jugador puede vincularla aquí. Misma regla que la app.
@@ -452,6 +457,24 @@ export function JoinInvite({ code, preview }: { code: string; preview: ValidPrev
         ) : (
           <Note>No quedan fichas libres. Añádete a la plantilla desde Equipo.</Note>
         )}
+        <Btn variant="quiet" onClick={goToTeam}>
+          Ir a mi equipo
+        </Btn>
+      </div>
+    );
+  }
+
+  if (canUpgrade) {
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        <Note tone="accent" icon={<IconCheck size={16} />}>
+          Ya estás en este equipo como jugador. Este código es de capitán: al usarlo pasas a ser capitán
+          de {preview.team.name}.
+        </Note>
+        {err && <Note tone="error">{err}</Note>}
+        <Btn variant="accent" size="lg" block disabled={busy} onClick={join}>
+          {busy ? "Un momento…" : "Hacerme capitán"}
+        </Btn>
         <Btn variant="quiet" onClick={goToTeam}>
           Ir a mi equipo
         </Btn>

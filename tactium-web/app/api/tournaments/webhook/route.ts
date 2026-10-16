@@ -69,6 +69,8 @@ export async function POST(req: Request) {
           availability: string[];
           // Aceptó las condiciones en el formulario, antes de pagar.
           termsAccepted?: boolean;
+          p1NotFed?: boolean;
+          p2NotFed?: boolean;
         }
         const p = sp.signup_payload as {
           code: string;
@@ -136,6 +138,8 @@ export async function POST(req: Request) {
             // Pagos creados ANTES de esta versión no traen el flag: la
             // aceptación se dio igualmente en el formulario, no se les bloquea.
             p_terms_accepted: r.termsAccepted !== false,
+            p1_not_fed: r.p1NotFed === true ? true : null,
+            p2_not_fed: r.p2NotFed === true ? true : null,
           });
           const rid = typeof regId === "string" ? regId : null;
           if (regErr || !rid) {

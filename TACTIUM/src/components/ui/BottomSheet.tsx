@@ -106,7 +106,7 @@ const PhoneSheet: React.FC<Omit<Props, 'variant' | 'title'>> = ({
             columna). El UX guide pide opacidad 40-60% — usamos 55%. */}
         <Pressable style={styles.scrim} onPress={onClose} />
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.sheetWrap}
         >
           <View style={styles.sheet}>

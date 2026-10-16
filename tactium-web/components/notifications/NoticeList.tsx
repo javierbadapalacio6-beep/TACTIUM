@@ -491,6 +491,9 @@ function linkAction(n: Notice): [string, string] | null {
       return n.href ? ["Votar", n.href] : null;
     case "time_poll_fixed":
       return n.href ? [n.href === "/club/horarios" ? "Ver horario" : "Ver jornada", n.href] : null;
+    case "fcp_upload_done":
+    case "fcp_upload_reminder":
+      return n.href ? [n.href === "/club/horarios" ? "Ver horarios" : "Ver jornada", n.href] : null;
     case "tournament_bracket":
       return t ? ["Ver cuadro", `/torneos/${t}`] : null;
     case "tournament_schedule":

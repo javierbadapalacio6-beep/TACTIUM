@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,6 +24,8 @@ import { updateClub } from '@core/services/clubs';
 import { FEDERATIONS } from '@core/data/federations';
 import { toast } from '@store/toastStore';
 import { DeleteClubSheet } from '../components/DeleteClubSheet';
+import { ClubManagersCard } from '../components/ClubManagersCard';
+import { useAuthStore } from '@store/authStore';
 import { tapSuccess } from '../clubOps';
 
 import type { RootStackScreenProps } from '@navigation/types';
@@ -45,6 +46,8 @@ export const ClubSettingsScreen = ({ navigation }: RootStackScreenProps<'ClubSet
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
   const coverage = clubCoverage(club?.id ?? null, teams, subscriptions);
 
+  const myUserId = useAuthStore((s) => s.user?.id ?? null);
+  const isOwner = !!club && club.owner_id === myUserId;
   const [name, setName] = useState(club?.name ?? '');
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -91,7 +94,7 @@ export const ClubSettingsScreen = ({ navigation }: RootStackScreenProps<'ClubSet
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable
@@ -151,7 +154,10 @@ export const ClubSettingsScreen = ({ navigation }: RootStackScreenProps<'ClubSet
           )}
         </Pressable>
 
-        {/* ZONA DE PELIGRO · borrar club (cascada irreversible) */}
+        {club ? <ClubManagersCard clubId={club.id} clubName={club.name} myUserId={myUserId} /> : null}
+
+        {/* ZONA DE PELIGRO · borrar club (cascada irreversible). Solo el dueño. */}
+        {isOwner ? (
         <View style={styles.danger}>
           <Text style={styles.dangerEyebrow}>ZONA DE PELIGRO</Text>
           <Text style={styles.dangerText}>
@@ -174,6 +180,7 @@ export const ClubSettingsScreen = ({ navigation }: RootStackScreenProps<'ClubSet
             <Text style={styles.deleteLabel}>Borrar club</Text>
           </Pressable>
         </View>
+        ) : null}
       </ScrollView>
 
       <DeleteClubSheet

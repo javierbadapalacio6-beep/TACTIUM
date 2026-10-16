@@ -7,6 +7,7 @@ import type {
 
 // ─── Auth Stack ─────────────────────────────────────────────────────
 export type AuthStackParamList = {
+  // Bienvenida con Apple/Google/email: SEGUNDA pantalla, desde «Iniciar sesión».
   Welcome: undefined;
   // Home PÚBLICA: lo primero al abrir sin cuenta. El login es un botón
   // dentro de ella, no la puerta de entrada.

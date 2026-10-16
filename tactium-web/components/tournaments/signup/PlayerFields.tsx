@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { resolveFcpPlayer } from "@/lib/queries";
+import { checkNotFederated, resolveFcpPlayer } from "@/lib/queries";
 import { Field, Input } from "@/components/ui";
 import { IconCheck } from "@/components/Icon";
 import { isFullName, looksLikeEmail, phoneDigits } from "./helpers";
@@ -161,6 +161,51 @@ export function PlayerFields({
   const visible = hints.filter((h) => !rejected.has(h.matched));
   const e = errors ?? {};
 
+  // «No juega federado» con comprobación: si el nombre figura en la Federación no se deja marcar (y si ya estaba
+  // marcado y se cambia el nombre por el de un federado, se desmarca). El servidor lo vuelve a comprobar.
+  const [fedWarn, setFedWarn] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const federatedMsg = (fcpName: string | null, name: string) =>
+    `${fcpName ?? name} figura como federado en la Federación Cántabra: no se puede marcar como no federado. Elige su ficha y usamos sus puntos y su nivel.`;
+  async function tryNotFed() {
+    const q = value.name.trim();
+    if (!isFullName(q)) {
+      setFedWarn("Escribe primero su nombre y apellidos: lo comprobamos con la Federación.");
+      return;
+    }
+    setChecking(true);
+    setFedWarn(null);
+    try {
+      const r = await checkNotFederated([q]);
+      if (r[0]?.federated) {
+        setFedWarn(federatedMsg(r[0].fcp_name, q));
+        return;
+      }
+    } catch {
+      /* sin conexión: se deja seguir; el servidor lo comprueba al inscribir */
+    } finally {
+      setChecking(false);
+    }
+    onChange({ noFed: true, pts: "", level: "", fedName: null, fedGender: null });
+  }
+  useEffect(() => {
+    if (!value.noFed) return;
+    const q = value.name.trim();
+    if (!isFullName(q)) return;
+    const t = setTimeout(() => {
+      checkNotFederated([q])
+        .then((r) => {
+          if (r[0]?.federated) {
+            onChangeRef.current({ noFed: false });
+            setFedWarn(federatedMsg(r[0].fcp_name, q));
+          }
+        })
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.name, value.noFed]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Field
@@ -289,21 +334,18 @@ export function PlayerFields({
         </div>
       ) : (
         <div>
-          <LinkBtn
-            onClick={() =>
-              onChange({
-                noFed: true,
-                pts: "",
-                level: "",
-                fedName: null,
-                fedGender: null,
-              })
-            }
-          >
-            {self
-              ? "No juego federado (cuenta 0 puntos)"
-              : "No juega federado (cuenta 0 puntos)"}
+          <LinkBtn onClick={() => void tryNotFed()}>
+            {checking
+              ? "Comprobando con la Federación…"
+              : self
+                ? "No juego federado (cuenta 0 puntos)"
+                : "No juega federado (cuenta 0 puntos)"}
           </LinkBtn>
+          {fedWarn && (
+            <div role="alert" style={{ marginTop: 6, fontSize: 12.5, fontWeight: 600, color: "var(--error)" }}>
+              {fedWarn}
+            </div>
+          )}
         </div>
       )}
 

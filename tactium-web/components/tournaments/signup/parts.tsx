@@ -121,12 +121,15 @@ export function RadioCard({
 export function AvailabilityGrid({
   days,
   slots,
+  dayWindows,
   blocked,
   cap,
   onToggle,
 }: {
   days: string[];
   slots: Franja[];
+  /** Franja de juego de cada día (minutos). Las horas fuera de ella no se ofrecen. Vacío = todas. */
+  dayWindows?: Record<string, { from: number; to: number }>;
   blocked: Set<string>;
   cap: number | null;
   onToggle: (key: string) => void;
@@ -182,6 +185,19 @@ export function AvailabilityGrid({
                   {d}
                 </span>
                 {slots.map((s) => {
+                  const w = dayWindows?.[d];
+                  if (w && (s.from < w.from || s.to > w.to)) {
+                    // Ese día no se juega a esa hora: no se puede marcar.
+                    return (
+                      <span
+                        key={`${d} ${s.label}`}
+                        aria-hidden="true"
+                        style={{ padding: "11px 4px", textAlign: "center", fontSize: 12, color: "var(--line-strong)" }}
+                      >
+                        –
+                      </span>
+                    );
+                  }
                   const key = `${d} ${s.label}`;
                   const on = blocked.has(key);
                   const locked = !on && atCap;

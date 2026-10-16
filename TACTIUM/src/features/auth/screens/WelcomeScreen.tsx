@@ -40,8 +40,8 @@ import type { AuthStackScreenProps } from '@navigation/types';
 // Bienvenida (primera vez sin sesión). Sustituye al carrusel de 5 diapositivas:
 // el producto se enseña con una jornada dibujada (no una imagen) y los botones
 // para entrar están en la misma pantalla. Quien no quiere cuenta tiene
-// «Explorar torneos sin cuenta», y quien vuelve sin sesión ya no pasa por aquí
-// (`hasSeenWelcome` → PublicHome).
+// «Explorar torneos sin cuenta». Ya NO es la primera pantalla: la app abre en
+// la home pública y se llega aquí desde «Iniciar sesión» / «Crear cuenta».
 
 // Datos de ejemplo FIJOS de la tarjeta. No salen de la BD.
 const PAIRS: { label: string; pts: string }[] = [
@@ -73,8 +73,8 @@ export const WelcomeScreen = ({
   const markWelcomeSeen = useAuthStore((s) => s.markWelcomeSeen);
   const { busy, handleApple, handleGoogle } = useOAuthSignIn();
 
-  // Cualquier salida de la bienvenida la da por vista: la próxima vez sin
-  // sesión se entra directo a Explorar, como antes con el carrusel.
+  // Cualquier salida de la bienvenida la da por vista (se conserva por si
+  // algo más lo consulta; ya no decide la pantalla de arranque).
   const leave = (fn: () => void) => () => {
     markWelcomeSeen();
     fn();
@@ -165,7 +165,9 @@ export const WelcomeScreen = ({
         </Pressable>
 
         <Pressable
-          onPress={leave(() => navigation.replace('PublicHome'))}
+          onPress={leave(() =>
+            navigation.canGoBack() ? navigation.goBack() : navigation.replace('PublicHome'),
+          )}
           hitSlop={8}
           accessibilityRole="link"
           style={({ pressed }) => [styles.exploreBtn, pressed && { opacity: 0.6 }]}

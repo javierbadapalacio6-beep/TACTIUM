@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -17,6 +17,23 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 registerAvailabilityCategories();
 // Botón «Votar» de los avisos de la encuesta de hora.
 registerTimePollCategories();
+
+// Tope al «tamaño de fuente» del sistema. En Android, con «Tamaño de pantalla y texto» al máximo (hasta 2×), los
+// botones de altura fija y las filas con varios elementos se apelotonan o se solapan. Con 1,25× sigue siendo
+// legible y la interfaz mantiene su forma. React 19 ignora `defaultProps`, así que se envuelve el render de Text y
+// TextInput (si RN cambiara su forma interna, simplemente no se aplica). Un `maxFontSizeMultiplier` explícito
+// en un componente sigue mandando.
+const FONT_SCALE_CAP = 1.25;
+for (const Comp of [Text, TextInput] as unknown as Array<{
+  render?: (props: Record<string, unknown>, ref: unknown) => unknown;
+  __fontCap?: boolean;
+}>) {
+  const orig = Comp?.render;
+  if (typeof orig === 'function' && !Comp.__fontCap) {
+    Comp.render = (props, ref) => orig({ maxFontSizeMultiplier: FONT_SCALE_CAP, ...props }, ref);
+    Comp.__fontCap = true;
+  }
+}
 
 import { RootNavigator } from './src/navigation';
 import { linking } from './src/navigation/linking';

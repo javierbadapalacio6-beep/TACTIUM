@@ -10,7 +10,12 @@ import { StatCell, FormChips, ListHeader, Segmented } from '../components/fcpUi'
 import { useFavoritesStore } from '@store/favoritesStore';
 import { useTeamStore } from '@store/teamStore';
 import { toggleFavorite } from '@core/services/favorites';
-import { fetchFcpTeamProfile, type FcpTeamProfile } from '@core/services/fcpProfiles';
+import {
+  fetchFcpTeamProfile,
+  fetchFcpTeamSeasons,
+  type FcpTeamProfile,
+  type FcpTeamSeason,
+} from '@core/services/fcpProfiles';
 import { fetchGroupSchedule, type FcpBrowseMatch } from '@core/services/fcpBrowse';
 import { fetchFcpActa, normFcpName, type FcpActaPartido } from '@core/services/fcpSeason';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
@@ -87,7 +92,14 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
     myTeam?.id,
     myTeam?.federation === FCP_FEDERATION_CODE,
   );
-  const isMine = mine.me?.id_equipo === idEquipo || mine.idEquipo === idEquipo;
+  // La temporada que se ve: por defecto la MÁS NUEVA del equipo. Un equipo seguido guarda el id de
+  // cuando se siguió (la temporada pasada) y abría esa ficha: grupo y datos del año anterior.
+  const [seasons, setSeasons] = useState<FcpTeamSeason[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const isMine =
+    mine.me?.id_equipo === idEquipo ||
+    mine.idEquipo === idEquipo ||
+    (activeId != null && (mine.me?.id_equipo === activeId || mine.idEquipo === activeId));
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FcpTeamProfile | null>(null);
@@ -97,8 +109,25 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
 
   useEffect(() => {
     let alive = true;
+    setActiveId(null);
     setLoading(true);
-    fetchFcpTeamProfile(idEquipo)
+    fetchFcpTeamSeasons(idEquipo)
+      .catch(() => [] as FcpTeamSeason[])
+      .then((s) => {
+        if (!alive) return;
+        setSeasons(s);
+        setActiveId(s.length ? s[0].idEquipo : idEquipo);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [idEquipo]);
+
+  useEffect(() => {
+    if (activeId == null) return;
+    let alive = true;
+    setLoading(true);
+    fetchFcpTeamProfile(activeId)
       .then(async (d) => {
         if (!alive) return;
         setData(d);
@@ -116,7 +145,7 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
     return () => {
       alive = false;
     };
-  }, [idEquipo]);
+  }, [activeId]);
 
   const sd = data ? data.setsFavor - data.setsContra : 0;
 
@@ -194,6 +223,18 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
+          {/* Temporadas del equipo: la más nueva por defecto, las anteriores a un toque */}
+          {seasons.length > 1 && activeId != null ? (
+            <View style={{ marginBottom: 14 }}>
+              <Segmented<string>
+                size="sm"
+                items={seasons.slice(0, 3).map((s): [string, string] => [String(s.idEquipo), s.temporada])}
+                value={String(activeId)}
+                onChange={(v) => setActiveId(Number(v))}
+              />
+            </View>
+          ) : null}
+
           {/* Hero */}
           <View style={styles.hero}>
             <View style={styles.heroTile}>

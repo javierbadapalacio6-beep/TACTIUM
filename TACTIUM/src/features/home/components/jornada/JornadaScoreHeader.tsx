@@ -15,6 +15,8 @@ import type { FcpStandingRow } from '@core/services/fcpSeason';
 export interface JornadaScoreHeaderProps {
   jornadaNumber: number;
   date: Date | null;
+  /** Fin de semana que da la Federación («23-25 oct») mientras no hay fecha exacta. */
+  rangeLabel?: string;
   /** 'HH:MM' o '' */
   time: string;
   isHome: boolean;
@@ -61,6 +63,7 @@ function countdown(
 export const JornadaScoreHeader: React.FC<JornadaScoreHeaderProps> = ({
   jornadaNumber,
   date,
+  rangeLabel,
   time,
   isHome,
   teamName,
@@ -96,7 +99,11 @@ export const JornadaScoreHeader: React.FC<JornadaScoreHeaderProps> = ({
 
   const eyebrow = [
     `JORNADA ${String(jornadaNumber).padStart(2, '0')}`,
-    date ? formatShortDay(date).toUpperCase() : 'FECHA POR CONFIRMAR',
+    date
+      ? formatShortDay(date).toUpperCase()
+      : rangeLabel
+        ? `${rangeLabel.toUpperCase()} · POR CONFIRMAR`
+        : 'FECHA POR CONFIRMAR',
     time || null,
     isHome ? 'LOCAL' : 'VISITANTE',
   ]

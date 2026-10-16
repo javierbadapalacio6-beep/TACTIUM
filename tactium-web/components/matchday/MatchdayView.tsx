@@ -23,6 +23,7 @@ import { useMatchdayTeam } from "@/lib/use-matchday-team";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
+import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
 import { useDismiss } from "@/lib/use-dismiss";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import {
@@ -45,7 +46,9 @@ import {
   StatRow,
 } from "@/components/ui";
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
+import { fmtRango } from "@/lib/fcp-range";
 import { TimePollPanel } from "@/components/matchday/TimePollPanel";
+import { FederationUploadCard } from "@/components/matchday/FederationUploadCard";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
 import {
   IconAlert,
@@ -135,8 +138,10 @@ function countdown(
   date: string | null,
   time: string | null,
   now: number,
+  range?: string | null,
 ): { big: string; small: string } {
-  if (!date) return { big: "—", small: "Fecha por confirmar" };
+  // Sin día exacto, el fin de semana que da la Federación («23-25 oct»).
+  if (!date) return range ? { big: fmtRango(range), small: "Día y hora por confirmar" } : { big: "—", small: "Fecha por confirmar" };
   const hhmm = time ? time.slice(0, 5) : null;
   const target = new Date(`${date}T${hhmm ?? "00:00"}:00`);
   if (Number.isNaN(target.getTime())) return { big: "—", small: "Fecha por confirmar" };
@@ -412,11 +417,14 @@ export function MatchdayView({ id }: { id: string }) {
   const seasons = useAsync(() => fetchSeasons(teamId!).catch(() => []), [teamId], !!teamId);
 
   // Convocatoria: respuestas con estado (va / duda / no).
+  const [availNonce, setAvailNonce] = useState(0);
   const avail = useAsync(
     () => fetchAvailabilityDetail(id).catch(() => ({})),
-    [id],
+    [id, availNonce],
     !!teamId
   );
+  // En vivo: el recuento de la convocatoria se actualiza cuando alguien responde.
+  useAvailabilityRealtime(id, () => setAvailNonce((n) => n + 1), "availability", !!teamId);
 
   const [rows, setRows] = useState<CourtRow[]>([]);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -873,7 +881,7 @@ export function MatchdayView({ id }: { id: string }) {
       <div className="card-body">
         <dl className="kv" style={{ margin: 0 }}>
           <dt>Fecha</dt>
-          <dd>{m.date ? formatDate(m.date) : "—"}</dd>
+          <dd>{m.date ? formatDate(m.date) : m.dateRange ? `${fmtRango(m.dateRange)} · por confirmar` : "—"}</dd>
           <dt>Hora</dt>
           <dd className="mono">{m.time?.slice(0, 5) ?? "—"}</dd>
           <dt>Lugar</dt>
@@ -1305,10 +1313,10 @@ export function MatchdayView({ id }: { id: string }) {
                   className="mono"
                   style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1, color: "var(--text)", textAlign: "center", whiteSpace: "nowrap" }}
                 >
-                  {countdown(m.date, m.time, now).big}
+                  {countdown(m.date, m.time, now, m.dateRange).big}
                 </span>
                 <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {countdown(m.date, m.time, now).small}
+                  {countdown(m.date, m.time, now, m.dateRange).small}
                 </span>
               </>
             )}
@@ -1346,6 +1354,7 @@ export function MatchdayView({ id }: { id: string }) {
       <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
       {/* Encuesta de hora (lógica en TimePollPanel). */}
       {curTab === "previa" && !closed && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+      {curTab === "previa" && !closed && <FederationUploadCard matchdayId={m.id} canManage={isCaptain} />}
 
       {curTab === "previa" && (
         <div style={twoCols}>

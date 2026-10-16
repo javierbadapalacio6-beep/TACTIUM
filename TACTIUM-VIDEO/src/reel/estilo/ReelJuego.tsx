@@ -27,11 +27,23 @@ type Escena = {
   hasta?: number;
   /** Cómo entra la escena (varía de un reel a otro): `flash` (destello claro de 5
    *  fotogramas), `barrido` (entra deslizando y desenfocada) o `zoom` (golpe de zoom). */
-  entrada?: "flash" | "barrido" | "zoom";
+  entrada?: "flash" | "barrido" | "zoom" | "subida";
   /** `vertical`: clip 9:16, en columna redondeada al lado contrario del texto. */
   /** `zoom`: acerca el clip hacia `origen` (CSS transform-origin), para que la acción no
    *  quede diminuta o para sacar del cuadro algo que no debe verse (marcas de agua). */
-  clip?: { src: string; desdeS: number; velocidad?: number; vertical?: boolean; zoom?: number; origen?: string };
+  clip?: {
+    src: string; desdeS: number; velocidad?: number; vertical?: boolean; zoom?: number; origen?: string;
+    /** Solo 9:16 · clip horizontal que sigue al jugador: [segundo del clip, posición x %] (object-position). */
+    paneo?: [number, number][];
+    /** Solo 9:16 · el clip empieza a esta altura (px) y deja arriba una franja limpia para el texto. */
+    techo?: number;
+    /** Solo 9:16 · punch-in: el zoom crece de `zoom` a `zoom × punch` a lo largo de la escena. */
+    punch?: number;
+  };
+  /** Solo 9:16 · objeto héroe: el marcador de 5 parejas (3 ganan, 2 pierden: un 3-2).
+   *  `llenar`: las filas entran una a una · `extremos`: laten la pareja 1 y la 5, el resto se apaga.
+   *  Si la escena lleva `clip`, el clip va de fondo, desenfocado y oscuro. */
+  grafico?: { tipo: "marcador"; modo: "llenar" | "extremos"; /** `extremos`: pulso en que se enciende la pareja 5 y la 1. */ focoP?: [number, number] };
   fondo?: "oscuro" | "claro";
   texto?: {
     ws: Palabra[];
@@ -55,13 +67,19 @@ export type ReelDeJuego = {
   id: string;
   /** Además del 16:9, sale una versión 9:16 (`<id>-vertical`): para reels de solo clips verticales. */
   vertical?: boolean;
+  /** Solo existe en 9:16 (no se registra la composición 16:9). */
+  soloVertical?: boolean;
+  /** Texto en la zona segura estricta de la casa (x 80-910) en lugar de los márgenes del token. */
+  zonaEstricta?: boolean;
+  /** Tamaño del texto en 9:16 (1 = el de siempre). Sin voz, el texto tiene que leerse a la primera. */
+  escalaTexto?: number;
   idea: string;
   /** Animación del texto de este reel (cada reel la suya, para no repetir la serie). */
   animTexto: AnimTexto;
   bpm: number;
   /** `subidaMs`: segundo de la canción en que entra la parte fuerte. Cae en la escena con
    *  `efecto: "quemado"` (el golpe); la música arranca lo que haga falta antes. */
-  musica: { src: string; subidaMs: number };
+  musica: { src: string; subidaMs: number; /** Volumen de la música (por defecto 0,85, pensado para ir bajo la voz). */ volumen?: number };
   /** Voz en off (nota de voz de Javier, public/voz/…): cada escena dice qué tramo suena. */
   voz?: string;
   escenas: Escena[];
@@ -136,6 +154,48 @@ export const REELS_JUEGO: ReelDeJuego[] = [
         txtMs(117.5, ["tu", 100], ["equipo,", 200], ["organizado.", 540], ["tú, a", 1880], ["jugar", 2560])),
     ],
   },
+  {
+    // E1 «Tres a dos» (parrilla 12-18 oct, GUIONES-REELS.md). Sin voz: todo va escrito.
+    // Datos reales (fcp_partidos, liga 28074, consultados el 11-10): 1.481 encuentros
+    // masculinos jugados, 588 acabaron 3-2 o 2-3. No hay ningún otro dato en la pieza.
+    id: "E1-tres-a-dos",
+    vertical: true,
+    soloVertical: true,
+    zonaEstricta: true,
+    escalaTexto: 1.35,
+    idea: "4 de cada 10 encuentros de la Liga Cántabra masculina acabaron 3-2: el punto de la pareja 5 vale lo mismo que el de la 1. Clips nuevos, sin voz.",
+    // Receta distinta a J1 y J2: texto tecleado (máquina) + entradas que suben + paneo que
+    // sigue al jugador en un clip horizontal + objeto héroe (el marcador de 5 parejas) sobre
+    // el clip desenfocado + un solo quemado en el remate + punch-in al final. Sin glitch ni flash.
+    animTexto: "maquina",
+    bpm: 93.5,
+    // Vlog Hip-Hop (Pixabay, licencia verificada en LICENCIAS.md), ~93,5 BPM. A los 64,55 s
+    // vuelve la base tras el puente: la música ARRANCA ahí (primer golpe en el fotograma 1, nunca
+    // en silencio; el puente a 0,2 se quedaba en -45 dB bajo el dato). `subidaMs` = 64,55 s +
+    // 10,5 pulsos, para que el remate (quemado) caiga en un tiempo de la base.
+    musica: { src: "musica/pixabay-vlog-hip-hop.mp3", subidaMs: 64550 + Math.round(10.5 * (60000 / 93.5)), volumen: 0.2 },
+    escenas: [
+      // Gancho: ya en el fotograma 1 hay jugador en movimiento (cámara lenta, 60 fps) y el
+      // texto entero (tiempos negativos = ya escrito). El clip baja a y=640 para dejar la
+      // franja de arriba al texto y el paneo sigue al jugador hasta el golpe (~2,9 s del clip).
+      { pulsos: 5, clip: { src: "broll/juego-04.mp4", desdeS: 2.0, velocidad: 0.5, techo: 640,
+          paneo: [[2.0, 2], [2.1, 4], [2.35, 19], [2.6, 46], [2.85, 68], [3.1, 86], [3.6, 88]] },
+        texto: { ws: txt(["4", -2], ["de", -2], ["cada", -2], ["10:", -2], ["3-2", -1.6]), claves: ["3-2"] } },
+      // El dato, con el objeto héroe: las 5 parejas entran a corcheas (3 ganan, 2 pierden).
+      { pulsos: 5.5, entrada: "subida", clip: { src: "broll/juego-14.mp4", desdeS: 3.2 }, grafico: { tipo: "marcador", modo: "llenar" },
+        texto: { ws: txt(["4", 0], ["de", 0.04], ["cada", 0.08], ["10", 0.12], ["encuentros", 0.16], ["acabaron", 0.24], ["3-2:", 0.32], ["588 de 1.481", 0.45],
+          ["Liga", 2.85], ["Cántabra", 2.9], ["masculina", 2.95], ["2026", 3.0]), claves: ["588 de 1.481"] } },
+      // El remate, a cámara lenta, cuando vuelve la base de la música.
+      { pulsos: 2.5, entrada: "zoom", efecto: "quemado", clip: { src: "broll/juego-19.mp4", desdeS: 8.55, velocidad: 0.5, zoom: 2, origen: "40% 54%" } },
+      // Pareja 5 y pareja 1: se encienden cuando se nombran y laten igual.
+      { pulsos: 6, entrada: "subida", clip: { src: "broll/juego-26.mp4", desdeS: 3.0 }, grafico: { tipo: "marcador", modo: "extremos", focoP: [0.5, 3.45] },
+        texto: { ws: txt(["el", 0.1], ["punto", 0.15], ["de", 0.2], ["la", 0.25], ["pareja 5", 0.5],
+          ["vale", 2.9], ["lo", 2.95], ["mismo", 3.0], ["que", 3.05], ["el", 3.1], ["de", 3.15], ["la", 3.2], ["pareja 1", 3.45]), claves: ["pareja 5", "pareja 1"] } },
+      // Cierre con bucle: vuelve el 3-2 del gancho, con punch-in sobre la volea.
+      { pulsos: 4, clip: { src: "broll/juego-23.mp4", desdeS: 5.0, velocidad: 0.5, zoom: 1.12, punch: 1.22, origen: "52% 56%" },
+        texto: { ws: txt(["piensa", 0.1], ["quién", 0.2], ["te", 0.3], ["cierra", 0.35], ["el", 0.45], ["3-2", 0.8]), claves: ["3-2"] } },
+    ],
+  },
 ];
 
 /** Coloca las escenas una tras otra y arranca la música para que la subida caiga en el golpe. */
@@ -178,25 +238,147 @@ const ColumnaVertical: React.FC<{ e: Escena }> = ({ e }) => {
  * La escena en 9:16: el clip llena el lienzo, el texto arriba (debajo de la zona segura
  * superior) con una sombra que baja desde el borde, y las tarjetas igual que en el 16:9.
  */
-const EscenaVertical: React.FC<{ e: Escena; ws: Palabra[]; dur: number }> = ({ e, ws, dur }) => {
+/** Zona segura estricta de la casa para el texto en 9:16 (x 80-910). */
+const ESTRICTA = { izq: 80, ancho: 830 };
+
+/** El clip en 9:16: con zoom, punch-in, paneo (clips horizontales) y techo (franja libre arriba). */
+const ClipVertical: React.FC<{ c: NonNullable<Escena["clip"]>; durMs: number; fondo?: boolean }> = ({ c, durMs, fondo }) => {
+  const frame = useCurrentFrame();
+  const fuenteS = c.desdeS + (frame / T.canvas.fps) * (c.velocidad ?? 1);
+  const x = c.paneo
+    ? interpolate(fuenteS, c.paneo.map((p) => p[0]), c.paneo.map((p) => p[1]), { easing: Easing.inOut(Easing.sin), extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+    : 50;
+  const z = (c.zoom ?? 1) * (c.punch ? interpolate(frame, [0, ms(durMs)], [1, c.punch], { easing: Easing.out(Easing.quad), extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 1);
+  const techo = c.techo ?? 0;
+  return (
+    <div
+      style={{
+        position: "absolute", left: 0, right: 0, top: techo, bottom: 0, overflow: "hidden",
+        // El borde de arriba se funde con el lienzo (sin línea dura bajo el texto).
+        WebkitMaskImage: techo ? "linear-gradient(180deg, transparent 0px, black 90px)" : undefined,
+        maskImage: techo ? "linear-gradient(180deg, transparent 0px, black 90px)" : undefined,
+      }}
+    >
+      <OffthreadVideo
+        src={staticFile(c.src)}
+        trimBefore={Math.round(c.desdeS * T.canvas.fps)}
+        playbackRate={c.velocidad ?? 1}
+        muted
+        style={{
+          width: "100%", height: "100%", objectFit: "cover", objectPosition: `${x}% 50%`,
+          transform: `scale(${fondo ? 1.12 : z})`, transformOrigin: c.origen ?? "center",
+          filter: fondo ? "blur(22px) brightness(0.42) saturate(0.8)" : undefined,
+        }}
+      />
+    </div>
+  );
+};
+
+/** Una palomita (gana) o una raya (pierde), dibujadas: nada de emojis. */
+const Resultado: React.FC<{ gana: boolean; t: number; lado: number }> = ({ gana, t, lado }) => (
+  <div
+    style={{
+      width: lado, height: lado, borderRadius: "50%", flex: "none",
+      background: gana ? T.color.accent : "transparent",
+      boxShadow: gana ? "none" : "inset 0 0 0 4px rgba(232,245,239,0.35)",
+      transform: `scale(${0.4 + 0.6 * t})`, opacity: t,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}
+  >
+    <svg width={lado * 0.5} height={lado * 0.5} viewBox="0 0 24 24" fill="none" stroke={gana ? T.color.bg : "rgba(232,245,239,0.55)"} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round">
+      {gana ? <path d="M4.5 12.5l5 5L19.5 7" /> : <path d="M6 12h12" />}
+    </svg>
+  </div>
+);
+
+/**
+ * Objeto héroe de E1: el marcador de un encuentro de liga, 5 parejas, un 3-2 (ganan la 1, la 3
+ * y la 5; es una ilustración, no un encuentro real). Vive en la mitad de abajo de la zona segura.
+ */
+const GANAN = [true, false, true, false, true];
+const Marcador: React.FC<{ g: NonNullable<Escena["grafico"]>; pulso: number; izq: number; ancho: number }> = ({ g, pulso, izq, ancho }) => {
+  const frame = useCurrentFrame();
+  const now = (frame / T.canvas.fps) * 1000;
+  const alto = 112;
+  const hueco = 20;
+  const suave = Easing.bezier(0.25, 1, 0.5, 1);
+  return (
+    <div style={{ position: "absolute", left: izq, width: ancho, top: 830, display: "flex", flexDirection: "column", gap: hueco }}>
+      {GANAN.map((gana, i) => {
+        const n = i + 1;
+        let entra = 1;
+        let chip = 1;
+        let apagada = 0;
+        let foco = 0;
+        let late = 0;
+        if (g.modo === "llenar") {
+          const a = (0.5 + i * 0.5) * pulso;
+          entra = interpolate(now, [a - 40, a + 220], [0, 1], { easing: suave, extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+          chip = interpolate(now, [a + 120, a + 320], [0, 1], { easing: Easing.out(Easing.back(2)), extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+        } else {
+          const [p5, p1] = g.focoP ?? [0.5, 3.5];
+          const encendida = n === 5 ? p5 * pulso : n === 1 ? p1 * pulso : null;
+          apagada = interpolate(now, [0, 300], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+          if (encendida !== null) {
+            foco = interpolate(now, [encendida - 60, encendida + 200], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+            // Late en cada pulso desde que se nombra (las dos al mismo compás, mismo tamaño).
+            const fase = ((now - encendida) % pulso + pulso) % pulso;
+            late = now >= encendida ? Math.exp(-fase / 140) : 0;
+          }
+        }
+        const enFoco = g.modo === "extremos" && (n === 1 || n === 5);
+        const opacidad = g.modo === "llenar" ? entra : enFoco ? 0.55 + 0.45 * foco : 1 - 0.7 * apagada;
+        return (
+          <div
+            key={n}
+            style={{
+              height: alto, borderRadius: 26, padding: "0 30px 0 36px",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: `rgba(${enFoco && foco > 0 ? "0,223,130" : "232,245,239"},${enFoco ? 0.06 + 0.1 * foco : 0.07})`,
+              boxShadow: `inset 0 0 0 ${enFoco ? 2 + 2 * foco : 2}px ${enFoco && foco > 0 ? `rgba(0,223,130,${0.35 + 0.65 * foco})` : "rgba(232,245,239,0.14)"}`,
+              backdropFilter: "blur(6px)",
+              opacity: opacidad,
+              transform: `translateX(${(1 - entra) * -60}px) scale(${1 + 0.035 * late})`,
+            }}
+          >
+            <div style={{ fontFamily: T.font.sans, fontWeight: 900, fontSize: 50, letterSpacing: "-0.02em", color: T.color.ink, textTransform: "uppercase" }}>
+              <span style={{ fontWeight: 500, fontSize: 34, letterSpacing: "0.06em", color: "rgba(232,245,239,0.7)", marginRight: 18 }}>PAREJA</span>
+              {n}
+            </div>
+            <Resultado gana={gana} t={chip} lado={72} />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const EscenaVertical: React.FC<{ e: Escena; ws: Palabra[]; dur: number; pulso: number; estricta?: boolean; escala?: number }> = ({ e, ws, dur, pulso, estricta, escala = 1 }) => {
   const tono = e.fondo === "claro" ? "claro" : "oscuro";
-  const ancho = T.canvas.w - T.safe.sides * 2;
+  const izq = estricta ? ESTRICTA.izq : T.safe.sides;
+  const ancho = estricta ? ESTRICTA.ancho : T.canvas.w - T.safe.sides * 2;
+  const arriba = !!e.clip || !!e.grafico;
   return (
     <AbsoluteFill style={{ background: T.color.bg }}>
       {e.clip ? (
         <>
-          <OffthreadVideo
-            src={staticFile(e.clip.src)}
-            trimBefore={Math.round(e.clip.desdeS * T.canvas.fps)}
-            playbackRate={e.clip.velocidad ?? 1}
-            muted
-            style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${e.clip.zoom ?? 1})`, transformOrigin: e.clip.origen ?? "center" }}
-          />
-          {e.texto ? <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(3,15,15,0.92) 0%, rgba(3,15,15,0.7) 30%, rgba(3,15,15,0) 52%)" }} /> : null}
+          {e.grafico || e.clip.paneo || e.clip.techo || e.clip.punch ? (
+            <ClipVertical c={e.clip} durMs={dur} fondo={!!e.grafico} />
+          ) : (
+            <OffthreadVideo
+              src={staticFile(e.clip.src)}
+              trimBefore={Math.round(e.clip.desdeS * T.canvas.fps)}
+              playbackRate={e.clip.velocidad ?? 1}
+              muted
+              style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${e.clip.zoom ?? 1})`, transformOrigin: e.clip.origen ?? "center" }}
+            />
+          )}
+          {e.texto && !e.grafico ? <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(3,15,15,0.92) 0%, rgba(3,15,15,0.7) 30%, rgba(3,15,15,0) 52%)" }} /> : null}
         </>
       ) : (
         <Fondo tono={tono} />
       )}
+      {e.grafico ? <Marcador g={e.grafico} pulso={pulso} izq={izq} ancho={ancho} /> : null}
       {e.texto?.lista ? (
         <div style={{ position: "absolute", left: T.safe.sides, right: T.safe.sides, top: 0, bottom: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
           <div style={{ fontFamily: T.font.sans, fontWeight: 500, fontSize: 46, color: "rgba(232,245,239,0.78)", marginBottom: 18 }}>{e.texto.lista}</div>
@@ -205,15 +387,15 @@ const EscenaVertical: React.FC<{ e: Escena; ws: Palabra[]; dur: number }> = ({ e
       ) : e.texto ? (
         <AbsoluteFill
           style={{
-            justifyContent: e.clip ? "flex-start" : "center",
+            justifyContent: arriba ? "flex-start" : "center",
             alignItems: e.texto.centro ? "center" : "flex-start",
-            paddingTop: e.clip ? T.safe.top + 60 : 0,
-            paddingLeft: e.texto.centro ? 0 : T.safe.sides,
+            paddingTop: arriba ? T.safe.top + 60 : 0,
+            paddingLeft: e.texto.centro ? 0 : izq,
           }}
         >
           {/* Sobre el clip el techo de la pista es claro: sombra al texto (se hereda). */}
           <div style={{ textShadow: e.clip ? "0 4px 28px rgba(3,15,15,0.85), 0 1px 3px rgba(3,15,15,0.9)" : undefined }}>
-            <TextoCinetico ws={ws} claves={e.texto.claves} serif={e.texto.serif} tono={tono} alinear={e.texto.centro ? "centro" : "izq"} ancho={ancho} finMs={dur} escala={1} iconos={e.texto.iconos} />
+            <TextoCinetico ws={ws} claves={e.texto.claves} serif={e.texto.serif} tono={tono} alinear={e.texto.centro ? "centro" : "izq"} ancho={ancho} finMs={dur} escala={escala} iconos={e.texto.iconos} />
           </div>
         </AbsoluteFill>
       ) : null}
@@ -226,6 +408,11 @@ const EscenaVertical: React.FC<{ e: Escena; ws: Palabra[]; dur: number }> = ({ e
 const Entrada: React.FC<{ tipo?: Escena["entrada"]; children: React.ReactNode }> = ({ tipo, children }) => {
   const frame = useCurrentFrame();
   if (!tipo) return <>{children}</>;
+  if (tipo === "subida") {
+    // Sube desde abajo con desenfoque de movimiento vertical (E1): 7 fotogramas.
+    const s = interpolate(frame, [0, 7], [0, 1], { easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    return <AbsoluteFill style={{ transform: `translateY(${(1 - s) * 12}%)`, filter: `blur(${(1 - s) * 16}px)` }}>{children}</AbsoluteFill>;
+  }
   const t = interpolate(frame, [0, tipo === "zoom" ? 8 : 6], [0, 1], { easing: Easing.bezier(0.25, 1, 0.5, 1), extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   if (tipo === "flash") {
     return (
@@ -242,12 +429,12 @@ const Entrada: React.FC<{ tipo?: Escena["entrada"]; children: React.ReactNode }>
   return <AbsoluteFill style={estilo}>{children}</AbsoluteFill>;
 };
 
-const EscenaJuego: React.FC<{ e: Escena & { desde: number; hasta: number }; pulso: number; vertical?: boolean }> = ({ e, pulso, vertical }) => {
+const EscenaJuego: React.FC<{ e: Escena & { desde: number; hasta: number }; pulso: number; vertical?: boolean; estricta?: boolean; escala?: number }> = ({ e, pulso, vertical, estricta, escala }) => {
   const dur = Math.round((e.hasta - e.desde) * pulso);
   const tono = e.fondo === "claro" ? "claro" : "oscuro";
   // Los tiempos del texto van en pulsos: aquí pasan a ms.
   const ws = (e.texto?.ws ?? []).map((p) => ({ ...p, a: Math.round(p.a * pulso), b: Math.round(p.b * pulso) }));
-  if (vertical) return <Entrada tipo={e.entrada}><EscenaVertical e={e} ws={ws} dur={dur} /></Entrada>;
+  if (vertical) return <Entrada tipo={e.entrada}><EscenaVertical e={e} ws={ws} dur={dur} pulso={pulso} estricta={estricta} escala={escala} /></Entrada>;
   return (
     <Entrada tipo={e.entrada}>
     <AbsoluteFill style={{ background: T.color.bg }}>
@@ -314,7 +501,7 @@ export const ReelJuego: React.FC<{ id: string; vertical?: boolean }> = ({ id, ve
     <AbsoluteFill style={{ background: T.color.bg }}>
       {escenas.map((e, i) => (
         <Sequence key={i} from={ms(Math.round(e.desde * pulso))} durationInFrames={ms(Math.round((e.hasta - e.desde) * pulso))} name={`escena-${i + 1}`}>
-          <EscenaJuego e={e} pulso={pulso} vertical={vertical} />
+          <EscenaJuego e={e} pulso={pulso} vertical={vertical} estricta={r.zonaEstricta} escala={r.escalaTexto} />
         </Sequence>
       ))}
       {/* Efectos de los packs, por encima del corte: empiezan un pelín antes para taparlo. */}
@@ -352,7 +539,8 @@ export const ReelJuego: React.FC<{ id: string; vertical?: boolean }> = ({ id, ve
         src={staticFile(r.musica.src)}
         trimBefore={Math.round((desdeMs / 1000) * T.canvas.fps)}
         volume={(f) => {
-          const base = interpolate(f, [0, ms(150), fin, fin + ms(CIERRE_MS)], [0, 0.85, 0.85, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+          const v = r.musica.volumen ?? 0.85;
+          const base = interpolate(f, [0, ms(150), fin, fin + ms(CIERRE_MS)], [0, v, v, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
           const tramos = escenas.filter((e) => e.voz).map((e) => {
             const a = ms(Math.round(e.desde * pulso));
             return [a, a + ms(e.voz![1] - e.voz![0])];

@@ -97,6 +97,12 @@ import {
   type PlayerStanding,
   type SeedingMode,
   type MatchFormat,
+  type PlayWindows,
+  DEFAULT_PLAY_WINDOWS,
+  isoDaysBetween,
+  windowsSpan,
+  windowForDay,
+  describePlayWindows,
 } from '@core/services/tournaments';
 import { requestTournamentPayment } from '@core/services/tournamentCheckout';
 import {
@@ -106,6 +112,7 @@ import {
 } from '@core/entitlements/tournamentBilling';
 import { useSubscriptionStore } from '@store/subscriptionStore';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
+import { PlayWindowsEditor, playWindowsValid } from '../components/PlayWindowsEditor';
 import { MatchesByDay, TrophyShine } from '../components/PlayerTournamentParts';
 
 import type { HomeStackScreenProps } from '@navigation/types';
@@ -876,7 +883,31 @@ export const InfoView: React.FC<{
         ))}
       </View>
 
-      {t.prizes_json && t.prizes_json.length ? (
+      {t.prizes_by_category && Object.keys(t.prizes_by_category).length ? (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
+            🏆 PREMIOS POR CATEGORÍA
+          </Text>
+          {(t.categories?.length ? t.categories : Object.keys(t.prizes_by_category))
+            .map((cat) => ({ cat, list: t.prizes_by_category?.[cat] ?? t.prizes_json ?? [] }))
+            .filter((x) => x.list.length > 0)
+            .map(({ cat, list }) => (
+              <View key={cat} style={{ marginBottom: 10 }}>
+                <Text style={[styles.infoLabel, { marginBottom: 4 }]}>{cat}</Text>
+                <View style={styles.infoCard}>
+                  {list.map((e, i) => (
+                    <View key={`${cat}-${e.place}-${i}`} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                      <Text style={styles.infoLabel}>{e.place}</Text>
+                      <Text style={styles.infoValue} numberOfLines={3}>
+                        {e.items.map(prizeItemLabel).join(' · ')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+        </>
+      ) : t.prizes_json && t.prizes_json.length ? (
         <>
           <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>
             🏆 PREMIOS
@@ -1101,8 +1132,8 @@ const OrganizerScheduleView: React.FC<{
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.schedConfigLabel}>CONFIGURACIÓN</Text>
               <Text style={styles.schedConfigValue}>
-                {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} · desde{' '}
-                {tournament.start_time} · {tournament.slot_minutes} min ·{' '}
+                {tournament.courts} {tournament.courts === 1 ? 'pista' : 'pistas'} ·{' '}
+                {describePlayWindows(tournament)} · {tournament.slot_minutes} min ·{' '}
                 {(tournament.rest_minutes ?? 0) === 0 ? 'seguido' : `+${tournament.rest_minutes} descanso`}
                 {!tournament.starts_on ? ' · sin fecha' : ''}
               </Text>
@@ -1285,11 +1316,13 @@ const ManualSlotSheet: React.FC<{
   const [court, setCourt] = useState(1);
   const [saving, setSaving] = useState(false);
 
-  const [sh, sm] = (tournament.start_time ?? '09:00').split(':').map(Number);
+  // Ventana del DÍA elegido (entre semana / fin de semana / festivo); sin día, la global del torneo.
+  const win = dayIso
+    ? windowForDay(tournament, dayIso)
+    : { from: tournament.start_time ?? '09:00', to: tournament.end_time ?? '23:00' };
+  const [sh, sm] = win.from.split(':').map(Number);
   const startMin = (sh || 9) * 60 + (sm || 0);
-  // Tope = end_time del torneo (igual que el motor de horario) para que la
-  // rejilla/manual cubran cualquier hora que el motor pueda colocar.
-  const [eh, em] = (tournament.end_time ?? '23:00').split(':').map(Number);
+  const [eh, em] = win.to.split(':').map(Number);
   const endMin = Math.max(startMin, (eh || 23) * 60 + (em || 0));
   const step = Math.max(15, tournament.slot_minutes);
   const times: number[] = [];
@@ -1611,11 +1644,13 @@ const SlotGridSheet: React.FC<{
   const isPastDay = (iso: string | null) => !!iso && iso < todayIso;
   const dayLocked = isPastDay(dayIso);
 
-  const [sh, sm] = (tournament.start_time ?? '09:00').split(':').map(Number);
+  // Ventana del DÍA elegido (entre semana / fin de semana / festivo); sin día, la global del torneo.
+  const win = dayIso
+    ? windowForDay(tournament, dayIso)
+    : { from: tournament.start_time ?? '09:00', to: tournament.end_time ?? '23:00' };
+  const [sh, sm] = win.from.split(':').map(Number);
   const startMin = (sh || 9) * 60 + (sm || 0);
-  // Tope = end_time del torneo (unificado con el motor y el manual), para que
-  // la rejilla tenga celda para cualquier hora colocada.
-  const [eh, em] = (tournament.end_time ?? '23:00').split(':').map(Number);
+  const [eh, em] = win.to.split(':').map(Number);
   const endMin = Math.max(startMin, (eh || 23) * 60 + (em || 0));
   const step = Math.max(15, tournament.slot_minutes);
   const times: number[] = [];
@@ -2091,7 +2126,8 @@ const ScheduleConfigSheet: React.FC<{
   c: Palette;
 }> = ({ open, tournament, onClose, onSaved, styles, c }) => {
   const [courts, setCourts] = useState('3');
-  const [startAt, setStartAt] = useState<Date | null>(null);
+  const [windows, setWindows] = useState<PlayWindows>(DEFAULT_PLAY_WINDOWS);
+  const [holidays, setHolidays] = useState<string[]>([]);
   const [minutes, setMinutes] = useState('60');
   const [rest, setRest] = useState('60');
   const [saving, setSaving] = useState(false);
@@ -2101,9 +2137,17 @@ const ScheduleConfigSheet: React.FC<{
       setCourts(String(tournament.courts ?? 3));
       setMinutes(String(tournament.slot_minutes ?? 60));
       setRest(String(tournament.rest_minutes ?? 0));
-      setStartAt(isoTimeToDate(`${tournament.start_time ?? '09:00'}:00`));
+      // Torneos antiguos (una sola ventana): las tres franjas parten de ella, así nada cambia hasta que se toque.
+      const g = {
+        from: (tournament.start_time ?? '09:00').slice(0, 5),
+        to: (tournament.end_time ?? '22:00').slice(0, 5),
+      };
+      setWindows(tournament.play_windows ?? { weekday: g, weekend: g, holiday: g });
+      setHolidays(tournament.holidays ?? []);
     }
   }, [open, tournament]);
+
+  const days = isoDaysBetween(tournament?.starts_on ?? null, tournament?.ends_on ?? null);
 
   const save = async (generate: boolean) => {
     if (!tournament) return;
@@ -2111,9 +2155,12 @@ const ScheduleConfigSheet: React.FC<{
     try {
       await updateTournamentSchedule(tournament.id, {
         courts: parseInt(courts, 10) || 1,
-        startTime: startAt ? dateToIsoTime(startAt).slice(0, 5) : '09:00',
+        startTime: windowsSpan(windows, days, holidays).from,
         slotMinutes: parseInt(minutes, 10) || 60,
         restMinutes: parseInt(rest, 10) || 0,
+        playWindows: windows,
+        holidays: holidays.filter((h) => days.includes(h)),
+        days,
       });
       onSaved(generate);
       onClose();
@@ -2132,7 +2179,7 @@ const ScheduleConfigSheet: React.FC<{
         <View style={{ gap: 10 }}>
           <Pressable
             onPress={() => save(true)}
-            disabled={saving}
+            disabled={saving || !playWindowsValid(windows)}
             style={({ pressed }) => [
               styles.saveBtn,
               saving && { opacity: 0.5 },
@@ -2169,8 +2216,15 @@ const ScheduleConfigSheet: React.FC<{
         />
       </View>
 
-      <Text style={styles.label}>HORA DE INICIO</Text>
-      <TimeField value={startAt} onChange={setStartAt} placeholder="09:00" />
+      <View style={{ marginTop: 14 }}>
+        <PlayWindowsEditor
+          windows={windows}
+          onWindows={setWindows}
+          days={days}
+          holidays={holidays}
+          onHolidays={setHolidays}
+        />
+      </View>
 
       <Text style={styles.label}>DURACIÓN POR PARTIDO (MIN)</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -2489,6 +2543,7 @@ const EditTournamentSheet: React.FC<{
   const [maxPairs, setMaxPairs] = useState('');
   const [fee, setFee] = useState('');
   const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
+  const [prizesByCat, setPrizesByCat] = useState<Record<string, PrizeEntry[]>>({});
   const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
   const [observations, setObservations] = useState('');
   // Condiciones de participación (vacío = las estándar de TACTIUM).
@@ -2516,6 +2571,7 @@ const EditTournamentSheet: React.FC<{
             ? [{ place: '1º', items: [{ type: 'otros', desc: tournament.prizes }] }]
             : []),
       );
+      setPrizesByCat(tournament.prizes_by_category ?? {});
       setInfoRows(
         tournament.info_rows ??
           (tournament.extra_info ? [{ label: 'Info', value: tournament.extra_info }] : []),
@@ -2580,6 +2636,9 @@ const EditTournamentSheet: React.FC<{
         maxPairs: maxPairs ? parseInt(maxPairs, 10) : null,
         entryFee: fee ? parseFloat(fee) : null,
         prizesJson,
+        prizesByCategory: Object.fromEntries(
+          Object.entries(prizesByCat).filter(([k]) => (tournament.categories ?? []).includes(k)),
+        ),
         infoRows,
         observations,
         terms,
@@ -2827,6 +2886,9 @@ const EditTournamentSheet: React.FC<{
         <PrizeInfoEditor
           prizes={prizesJson}
           onPrizes={setPrizesJson}
+          categories={tournament?.categories ?? []}
+          prizesByCategory={prizesByCat}
+          onPrizesByCategory={setPrizesByCat}
           infoRows={infoRows}
           onInfoRows={setInfoRows}
           observations={observations}

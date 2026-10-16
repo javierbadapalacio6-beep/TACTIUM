@@ -8,7 +8,7 @@ import { AmbientBackdrop, IconBack } from '@components/ui';
 import { useAuthStore } from '@store/authStore';
 import { useTeamStore } from '@store/teamStore';
 import { savePendingInviteCode } from '@core/services/pendingInvite';
-import { JoinTeamPreview } from '@features/onboarding/components/JoinTeamPreview';
+import { InvitationPreview } from '@features/onboarding/components/InvitationPreview';
 
 import type { RootStackScreenProps } from '@navigation/types';
 
@@ -84,7 +84,7 @@ export const JoinTeamScreen = ({
         <Text style={styles.code}>Código {complete ? code : '—'}</Text>
 
         {complete ? (
-          <JoinTeamPreview
+          <InvitationPreview
             code={code}
             onLoginRequired={goToLogin}
             onJoined={() => {

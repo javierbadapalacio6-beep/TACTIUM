@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  KeyboardAvoidingView,
   ActivityIndicator,
   Share,
 } from 'react-native';
@@ -509,6 +510,7 @@ export const MyStatsScreen = () => {
 
   return (
     <View style={styles.root}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -596,6 +598,7 @@ export const MyStatsScreen = () => {
           cuenta (o reclamas con un código).
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <BottomSheet open={seasonSheet} onClose={() => setSeasonSheet(false)}>
         <Text style={styles.eyebrow}>TEMPORADA</Text>

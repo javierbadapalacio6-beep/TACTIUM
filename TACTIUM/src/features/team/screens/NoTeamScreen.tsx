@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColors, type Palette } from '@core/theme';
@@ -16,12 +16,16 @@ export const NoTeamScreen = () => {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.eyebrow}>EQUIPO</Text>
       </View>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 64 + 12 + 32 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <NoTeamState />
-      </ScrollView>
+      {/* El campo del código está a media pantalla: con el teclado, la lista sube para que no lo tape. */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: insets.bottom + 64 + 12 + 32 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <NoTeamState />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };

@@ -20,27 +20,32 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-07',
+  id: '2026-10-16c',
   items: [
     {
-      icon: '●',
-      title: 'Marcador en vivo',
-      text: 'Los compañeros que miran llevan el tanteo juego a juego y el equipo lo sigue al momento. Con enlace para quien no tenga la app.',
+      icon: '🔒',
+      title: 'Cambiar la contraseña',
+      text: 'En Ajustes › Cuenta ya puedes ponerte una contraseña nueva, y el botón «¿Olvidaste?» funciona en Android.',
+    },
+    {
+      icon: '🔔',
+      title: 'Recordar a los capitanes',
+      text: 'En la agenda del club, un toque avisa a los capitanes de que suban la hora a la Federación.',
+    },
+    {
+      icon: '🎁',
+      title: '14 días de prueba al reclamar tu equipo',
+      text: 'Si entras como capitán de un equipo invitado por un club, tienes todas las funciones 14 días. Después, hace falta el plan para que el equipo responda a la convocatoria.',
+    },
+    {
+      icon: '＋',
+      title: 'Capitán y jugador a la vez',
+      text: 'Si ya estás en un equipo como jugador, un código de capitán te hace capitán sin perder tu ficha.',
     },
     {
       icon: '◷',
-      title: 'Encuesta de hora',
-      text: 'Propón varias horas para la jornada, el equipo vota y fijas la que más gente puede.',
-    },
-    {
-      icon: '!',
-      title: 'Temporadas sin sustos',
-      text: 'Si la Federación aún no ha publicado el calendario nuevo, te lo decimos en vez de volcar la temporada pasada.',
-    },
-    {
-      icon: '✦',
-      title: 'Entrada nueva',
-      text: 'La animación completa al abrir la app, cada vez.',
+      title: 'Tandas en los horarios',
+      text: 'Al poner la hora de un partido de local, marca también las tandas (propios e invitados). Cada equipo puede tener su tanda habitual.',
     },
   ],
 };

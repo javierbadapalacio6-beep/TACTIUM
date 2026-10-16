@@ -26,6 +26,7 @@
       : f.estado === "publicada" ? ["estado--ok", "Salió sola", "Publicada por la nube"]
       : f.estado === "avisada" ? ["estado--ok", "Aviso enviado", ""]
       : f.tipo === "aviso" ? ["estado--nube", `Aviso ${hm(f.programada_para)}`, "Te llegará un aviso para subirla a mano"]
+      : (f.tipo === "reel" && (f.prueba === "MANUAL" || f.prueba === "SS_PERFORMANCE")) ? ["estado--nube", `Prueba ${hm(f.programada_para)}`, f.prueba === "MANUAL" ? "Reel de prueba: solo lo ven quienes no te siguen; lo pasas a seguidores tú" : "Reel de prueba: Instagram lo pasa a seguidores solo si rinde"]
       : ["estado--nube", `Auto ${hm(f.programada_para)}`, "Se publica sola a esa hora"];
     return html`<span class=${"estado " + clase} title=${titulo}><${Icon} name="cloud" size=${12} />${texto}</span>`;
   }

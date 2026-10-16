@@ -223,10 +223,23 @@ export const TeamScreen = () => {
     if (!team?.id || refrescando) return;
     setRefrescando(true);
     try {
-      await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
+      const r = await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
       setInscripcion(await cargarInscripcion());
+      // Antes se tragaba el resultado: si la Federación no respondía, el botón
+      // «no hacía nada» y no había forma de saber si había fallado o no había
+      // cambios.
+      if (!r.found) {
+        toast.error('No encontramos tu equipo', 'La Federación no lo tiene inscrito todavía.');
+      } else if (r.players == null) {
+        toast.info('Acabas de actualizar', 'Espera un minuto antes de volver a pedirlo.');
+      } else {
+        toast.success('Plantilla actualizada', `${r.players} jugadores en la Federación.`);
+      }
     } catch {
-      /* el texto ya dice de cuándo es la foto */
+      toast.error(
+        'No se pudo actualizar',
+        'La Federación no ha respondido. Se actualiza sola dos veces por semana.',
+      );
     } finally {
       setRefrescando(false);
     }
@@ -700,37 +713,43 @@ export const TeamScreen = () => {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.rowNameRow}>
-              <Text style={styles.rowName} numberOfLines={1}>
+              {/* flexShrink: un nombre largo se corta con «…» en vez de empujar a CAP y pisar los puntos. */}
+              <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={1}>
                 {displayName(p)}
               </Text>
               {isCap ? (
-                <View style={styles.capBadge}>
+                <View style={[styles.capBadge, { flexShrink: 0 }]}>
                   <Text style={styles.capBadgeText}>CAP</Text>
                 </View>
               ) : null}
             </View>
-            <Text style={styles.rowMeta} numberOfLines={1}>
-              {p.position}
-              {!p.user_id && canManage ? ' · sin cuenta' : ''}
-            </Text>
-          </View>
-          {!p.available ? (
-            <View style={styles.bajaBadge}>
-              <Text style={styles.bajaBadgeText}>BAJA</Text>
+            {/* «Invitar» vive en la línea de debajo del nombre, no en la columna de puntos: así todas las filas
+                miden lo mismo (antes las que tenían botón eran más altas y el nombre se cortaba). */}
+            <View style={styles.rowMetaRow}>
+              <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+                {p.position}
+                {!p.user_id && canManage ? ' · sin cuenta' : ''}
+              </Text>
+              {!p.available ? (
+                <View style={[styles.bajaBadge, { flexShrink: 0 }]}>
+                  <Text style={styles.bajaBadgeText}>BAJA</Text>
+                </View>
+              ) : null}
+              {p.available && !p.user_id && canManage ? (
+                <Pressable
+                  onPress={openInvite}
+                  hitSlop={{ top: 10, bottom: 10, left: 8, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Invitar a ${displayName(p)}`}
+                  style={({ pressed }) => pressed && { opacity: 0.6 }}
+                >
+                  <Text style={styles.rowInviteText}>Invitar ›</Text>
+                </Pressable>
+              ) : null}
             </View>
-          ) : !p.user_id && canManage ? (
-            <Pressable
-              onPress={openInvite}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`Invitar a ${displayName(p)}`}
-              style={({ pressed }) => [styles.rowInvite, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.rowInviteText}>Invitar</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.ptsText}>{p.pts}</Text>
-          )}
+          </View>
+          {/* Los puntos salen SIEMPRE (también de quien aún no tiene cuenta), en columna fija. */}
+          <Text style={styles.ptsText}>{p.pts}</Text>
         </Pressable>
       </StaggerRow>
     );
@@ -2574,7 +2593,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.accent40,
   },
   rowInviteText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-  ptsText: { fontFamily: Fonts.mono, color: c.text, fontSize: 14, fontWeight: '700' },
+  rowMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  ptsText: {
+    fontFamily: Fonts.mono,
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 44,
+    textAlign: 'right',
+  },
+  rowRight: { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',

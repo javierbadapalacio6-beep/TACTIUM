@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 
 import { useColors, type Palette } from '@core/theme';
@@ -16,6 +16,7 @@ const ITEM_TYPES: { key: PrizeItemType; label: string }[] = [
   { key: 'otros', label: 'Otros' },
 ];
 
+const GENERAL = '__general__';
 const PLACE_SUGGEST = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º'];
 
 /**
@@ -27,13 +28,37 @@ const PLACE_SUGGEST = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º'];
 export const PrizeInfoEditor: React.FC<{
   prizes: PrizeEntry[];
   onPrizes: (next: PrizeEntry[]) => void;
+  /** Categorías del torneo: con ellas se puede poner un premio distinto para cada una. */
+  categories?: string[];
+  prizesByCategory?: Record<string, PrizeEntry[]>;
+  onPrizesByCategory?: (next: Record<string, PrizeEntry[]>) => void;
   infoRows: InfoRow[];
   onInfoRows: (next: InfoRow[]) => void;
   observations: string;
   onObservations: (next: string) => void;
-}> = ({ prizes, onPrizes, infoRows, onInfoRows, observations, onObservations }) => {
+}> = ({
+  prizes: generalPrizes,
+  onPrizes: setGeneralPrizes,
+  categories = [],
+  prizesByCategory = {},
+  onPrizesByCategory,
+  infoRows,
+  onInfoRows,
+  observations,
+  onObservations,
+}) => {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+
+  // Ámbito que se edita: los premios GENERALES o los de una categoría concreta.
+  const canByCategory = categories.length > 0 && !!onPrizesByCategory;
+  const [scope, setScope] = useState<string>(GENERAL);
+  const activeScope = canByCategory && categories.includes(scope) ? scope : GENERAL;
+  const prizes = activeScope === GENERAL ? generalPrizes : prizesByCategory[activeScope] ?? [];
+  const onPrizes = (next: PrizeEntry[]) => {
+    if (activeScope === GENERAL) setGeneralPrizes(next);
+    else onPrizesByCategory?.({ ...prizesByCategory, [activeScope]: next });
+  };
 
   // ── Premios ──────────────────────────────────────────────────────────────
   const addPlace = () => {
@@ -85,6 +110,29 @@ export const PrizeInfoEditor: React.FC<{
     <View>
       {/* PREMIOS */}
       <Text style={s.label}>🏆 PREMIOS</Text>
+      {canByCategory ? (
+        <>
+          <View style={s.scopeRow}>
+            {[GENERAL, ...categories].map((k) => {
+              const sel = k === activeScope;
+              const has = k === GENERAL ? generalPrizes.length > 0 : (prizesByCategory[k]?.length ?? 0) > 0;
+              return (
+                <Pressable key={k} onPress={() => setScope(k)} style={[s.scopeChip, sel && s.scopeChipSel]}>
+                  <Text style={[s.scopeChipText, sel && s.scopeChipTextSel]}>
+                    {k === GENERAL ? 'General' : k}
+                    {has ? ' ●' : ''}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={s.hint}>
+            {activeScope === GENERAL
+              ? 'General: se enseña a las categorías que no tengan premios propios.'
+              : `Premios solo de ${activeScope}. Si los dejas vacíos, se usan los generales.`}
+          </Text>
+        </>
+      ) : null}
       {prizes.length === 0 ? (
         <Text style={s.hint}>Añade una posición (1º, 2º…) y sus premios.</Text>
       ) : null}
@@ -249,6 +297,18 @@ const makeStyles = (c: Palette) =>
     removeX: { color: c.error, fontSize: 12.5, fontWeight: '700' },
     itemRow: { gap: 8 },
     typeChips: { flexDirection: 'row', gap: 6 },
+    scopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
+    scopeChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 9999,
+      borderWidth: 1,
+      borderColor: c.hairStrong,
+      backgroundColor: c.background,
+    },
+    scopeChipSel: { backgroundColor: c.accent, borderColor: c.accent },
+    scopeChipText: { color: c.text, fontSize: 13, fontWeight: '700' },
+    scopeChipTextSel: { color: c.textInverse },
     typeChip: {
       paddingHorizontal: 12,
       paddingVertical: 6,

@@ -36,6 +36,7 @@ import {
   type Tournament,
   type TournamentRegistration,
   type TournamentMatch,
+  describePlayWindows,
 } from '@core/services/tournaments';
 import type { RootStackScreenProps } from '@navigation/types';
 
@@ -484,7 +485,11 @@ export const TournamentFollowScreen = ({
                 <Text style={own.factLabel}>CUÁNDO</Text>
                 <Text style={own.factValue}>
                   {longDay(t.starts_on) ?? 'Por confirmar'}
-                  {t.start_time ? ` desde las ${t.start_time.slice(0, 5)}` : ''}
+                  {t.play_windows
+                    ? ` · ${describePlayWindows(t)}`
+                    : t.start_time
+                      ? ` desde las ${t.start_time.slice(0, 5)}`
+                      : ''}
                   {t.ends_on && t.ends_on !== t.starts_on ? ` · hasta ${longDay(t.ends_on)}` : ''}
                 </Text>
               </View>

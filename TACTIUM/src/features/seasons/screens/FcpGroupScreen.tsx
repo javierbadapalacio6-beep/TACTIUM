@@ -344,7 +344,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
         {tab !== 'cuadro' && !loading && !soloInscripcion ? (
           <View style={styles.metaRow}>
             {rows.length > 0 ? <MetaChip label={`${rows.length} EQUIPOS`} /> : null}
-            {jornadaTotal > 0 ? <MetaChip label={`J·${jornadaActual}/${jornadaTotal}`} /> : null}
+            {jornadaTotal > 0 ? <MetaChip label={`J·${Math.max(1, jornadaActual)}/${jornadaTotal}`} /> : null}
             <MetaChip label={finalizada ? 'FINALIZADA' : 'EN CURSO'} tone={finalizada ? 'mint' : 'neutral'} />
           </View>
         ) : null}

@@ -36,6 +36,7 @@ import { EASE } from "@/components/entry/motion-bits";
 import { ScanModal } from "@/components/team/ScanModal";
 import type { ScannedMatchday } from "@/lib/parse-image";
 import { IconCalendar, IconChevronRight, IconInfo, IconLock, IconPlus } from "@/components/Icon";
+import { fmtRango } from "@/lib/fcp-range";
 import { FcpBracketPanel, FcpStandingsTable } from "@/components/federation/Federation";
 import {
   fetchTeamPlayoffGroup,
@@ -203,6 +204,7 @@ export function SeasonDetail({ id }: { id: string }) {
             match_date: m.match_date ?? null,
             match_time: m.match_time ?? null,
             is_home: m.is_home,
+            fcp_date_range: m.match_date ? null : m.date_range ?? null,
           });
         }
         if (!fcp) await renumberSeasonMatchdays(id);
@@ -637,7 +639,10 @@ function MatchdayRow({ j, isNext }: { j: DbMatchday; isNext?: boolean }) {
       </span>
       <span style={{ fontSize: 14, fontWeight: 700 }}>vs {j.opponent}</span>
       <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-        {[j.isHome ? "Casa" : "Fuera", meta || "Fecha por confirmar"].join(" · ")}
+        {[
+          j.isHome ? "Casa" : "Fuera",
+          meta || (j.dateRange ? `${fmtRango(j.dateRange)} · por confirmar` : "Fecha por confirmar"),
+        ].join(" · ")}
       </span>
       <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         {score ? (

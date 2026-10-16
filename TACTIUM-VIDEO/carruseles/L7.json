@@ -1,0 +1,53 @@
+{
+  "id": "L7",
+  "titulo": "Cuenta atrás: la liga empieza el 23",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/red-pista.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "La liga empieza el *23 de octubre*",
+      "sub": "Checklist del capitán 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Quedan 4 días",
+      "valor": "323",
+      "sub": "equipos en 41 grupos. **El tuyo ya está en tactium.io**, con sus rivales."
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Jornadas de liga",
+      "valor": "14",
+      "sub": "del **23 de octubre al 7 de marzo**. La primera, el fin de semana del 23 al 25."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "1 · Tu plantilla",
+      "titulo": "Comprueba que *están todos*",
+      "sub": "Cada jugador con sus **puntos FCP** a la vista."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "2 · Tus rivales",
+      "titulo": "Mira el nivel de *tu grupo*",
+      "sub": "Plantillas y puntos de cada equipo, **antes de la jornada 1**."
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "3 · La disponibilidad",
+      "titulo": "Un enlace al grupo. *Voy, Duda o No*",
+      "sub": "Cada jugador responde **sin instalar nada**. Tú ves el recuento."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "Que la jornada 1 *no te pille tarde*",
+      "sub": "Tu equipo, tus rivales y la disponibilidad, en un solo sitio.",
+      "cta": "Enlace en la bio",
+      "bandera": "cantabria"
+    }
+  ]
+}

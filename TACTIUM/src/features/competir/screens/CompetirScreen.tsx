@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Linking, KeyboardAvoidingView } from 'react-native';
 import {
   SafeAreaInsetsContext,
   useSafeAreaInsets,
@@ -164,7 +164,8 @@ const Segment: React.FC<
       }
       if (role === 'solo') {
         return (
-          <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+          <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
             <NoTeamState text="La liga es cosa de equipos: temporadas, jornadas y alineaciones. Únete al tuyo con la invitación de tu capitán o crea uno." />
             {/* Mientras, la Federación (el suelto también la tiene). */}
             <ManageTournamentsCard
@@ -173,6 +174,7 @@ const Segment: React.FC<
               onPress={() => nav.navigate('Federacion')}
             />
           </ScrollView>
+          </KeyboardAvoidingView>
         );
       }
       return <SeasonsScreen navigation={nav} route={rt} />;
@@ -241,7 +243,7 @@ const ManageTournamentsCard: React.FC<{
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.manageTitle}>{title}</Text>
-        <Text style={styles.manageText} numberOfLines={1}>
+        <Text style={styles.manageText} numberOfLines={2}>
           {text}
         </Text>
       </View>

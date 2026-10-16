@@ -160,11 +160,26 @@ export function fmtDay(iso: string | null | undefined, withDow = true): string {
   return withDow ? `${DOW[d.getDay()]} ${base}` : base;
 }
 
-/** «Sáb 10 oct · 17:00 · En casa». */
-export function fmtMatchLine(m: Pick<Matchday, 'match_date' | 'match_time' | 'is_home'>): string {
+/**
+ * «23 - 25 Oct» (rango de fechas de la Federación) → «23-25 oct»; «30 Oct - 1 Nov» → «30 oct-1 nov».
+ * Mientras el club local no fija día y hora, la jornada se conoce por su fin de semana.
+ */
+export function fmtRango(r: string | null | undefined): string {
+  const s = (r ?? '').trim();
+  if (!s) return '';
+  return s
+    .replace(/\s*-\s*/g, '-')
+    .replace(/[A-Za-zÁÉÍÓÚáéíóú]+/g, (w) => w.toLowerCase());
+}
+
+/** «Sáb 10 oct · 17:00 · En casa»; sin fecha exacta, «23-25 oct · Por confirmar · En casa». */
+export function fmtMatchLine(
+  m: Pick<Matchday, 'match_date' | 'match_time' | 'is_home'> & { fcp_date_range?: string | null },
+): string {
+  const rango = !m.match_date ? fmtRango(m.fcp_date_range) : '';
   return [
-    fmtDay(m.match_date),
-    m.match_time ? m.match_time.slice(0, 5) : '',
+    fmtDay(m.match_date) || rango,
+    m.match_time ? m.match_time.slice(0, 5) : rango ? 'Por confirmar' : '',
     m.is_home ? 'En casa' : 'Fuera',
   ]
     .filter(Boolean)

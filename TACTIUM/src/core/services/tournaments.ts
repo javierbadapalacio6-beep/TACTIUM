@@ -132,7 +132,8 @@ export interface InfoRow {
 }
 
 // Reglas de elegibilidad por categoría (nivel/puntos). Cada categoría tiene un
-// tope de PUNTOS (suma de la pareja ≤) y/o un mínimo de NIVEL de liga (suma ≥).
+// tope de PUNTOS (suma de la pareja ≤) y/o un NIVEL MÁXIMO de juego: nadie mejor que X. Como nivel = nº de
+// categoría (2ª → 2, 5ª → 5; cuanto más alto el número, más flojo el nivel), se guarda como suma ≥ X.
 // `mode` decide qué se valida. Categoría ausente o `null` = LIBRE (sin límite).
 export type CategoryRuleMode = 'points' | 'nivel' | 'both';
 export interface CategoryThreshold {
@@ -187,9 +188,116 @@ export function checkCategoryEligibility(
     if (pairNivel == null)
       return `Indica el nivel (liga o circuito) de cada jugador para la categoría ${category}.`;
     if (pairNivel < t.nivel)
-      return `Necesitáis nivel ≥ ${t.nivel} en ${category} (sumáis ${pairNivel}).`;
+      return `Superáis el nivel máximo de ${category}: la suma de categorías tiene que ser ${t.nivel} o más (sumáis ${pairNivel}).`;
   }
   return null;
+}
+
+// ─── Franjas de juego por tipo de día ───────────────────────────────────
+// Un torneo fija su ventana de juego ENTRE SEMANA, en FIN DE SEMANA y en FESTIVOS. Antes había una sola
+// (start_time/end_time, con 09:00–22:00 por defecto), así que el horario y la rejilla de inscripción ofrecían horas
+// en las que no se juega. `start_time`/`end_time` siguen guardando el rango global para los clientes antiguos.
+export interface PlayWindow {
+  from: string; // 'HH:MM'
+  to: string; // 'HH:MM'
+}
+export type DayKind = 'weekday' | 'weekend' | 'holiday';
+export type PlayWindows = Record<DayKind, PlayWindow>;
+
+export const DAY_KIND_LABEL: Record<DayKind, string> = {
+  weekday: 'Entre semana',
+  weekend: 'Fin de semana',
+  holiday: 'Festivos',
+};
+
+/** Valores de partida al crear un torneo: tardes entre semana y casi todo el día en sábado/domingo/festivo. */
+export const DEFAULT_PLAY_WINDOWS: PlayWindows = {
+  weekday: { from: '17:00', to: '23:00' },
+  weekend: { from: '10:00', to: '20:00' },
+  holiday: { from: '10:00', to: '20:00' },
+};
+
+const hhmmToMin = (s: string): number => {
+  const [h, m] = (s || '').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const minToHhmm = (n: number): string =>
+  `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+/** Tipo de un día (ISO 'YYYY-MM-DD'): festivo si el club lo marcó; si no, sábado/domingo = fin de semana. */
+export function dayKindOf(iso: string, holidays?: string[] | null): DayKind {
+  if (holidays?.includes(iso)) return 'holiday';
+  const [y, m, d] = iso.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 0 || dow === 6 ? 'weekend' : 'weekday';
+}
+
+/** Ventana de juego de un día. Sin franjas por tipo de día (torneos antiguos): la ventana global de siempre. */
+export function windowForDay(
+  t: {
+    play_windows?: PlayWindows | null;
+    holidays?: string[] | null;
+    start_time?: string | null;
+    end_time?: string | null;
+  },
+  iso: string,
+): PlayWindow {
+  const w = t.play_windows?.[dayKindOf(iso, t.holidays)];
+  if (w?.from && w?.to && hhmmToMin(w.to) > hhmmToMin(w.from)) return w;
+  return { from: (t.start_time || '09:00').slice(0, 5), to: (t.end_time || '22:00').slice(0, 5) };
+}
+
+/** Rango global (primer inicio, último final) de las ventanas que usan esos días; sin días, de las tres. */
+export function windowsSpan(w: PlayWindows, days: string[] = [], holidays: string[] = []): PlayWindow {
+  const kinds: DayKind[] = days.length
+    ? Array.from(new Set(days.map((d) => dayKindOf(d, holidays))))
+    : ['weekday', 'weekend', 'holiday'];
+  const list = kinds.map((k) => w[k]).filter((x) => x?.from && x?.to);
+  if (!list.length) return { from: '09:00', to: '22:00' };
+  return {
+    from: minToHhmm(Math.min(...list.map((x) => hhmmToMin(x.from)))),
+    to: minToHhmm(Math.max(...list.map((x) => hhmmToMin(x.to)))),
+  };
+}
+
+/** Resumen corto de las franjas: «L–V 17:00–23:00 · S–D 10:00–20:00». Sin franjas por tipo de día: «desde 09:00». */
+export function describePlayWindows(t: {
+  play_windows?: PlayWindows | null;
+  holidays?: string[] | null;
+  start_time?: string | null;
+  starts_on?: string | null;
+  ends_on?: string | null;
+}): string {
+  if (!t.play_windows) return t.start_time ? `desde ${t.start_time.slice(0, 5)}` : '';
+  const days = isoDaysBetween(t.starts_on ?? null, t.ends_on ?? null);
+  const kinds: DayKind[] = days.length
+    ? (['weekday', 'weekend', 'holiday'] as DayKind[]).filter((k) =>
+        days.some((d) => dayKindOf(d, t.holidays) === k),
+      )
+    : ['weekday', 'weekend'];
+  const short: Record<DayKind, string> = { weekday: 'L–V', weekend: 'S–D', holiday: 'festivos' };
+  return kinds.map((k) => `${short[k]} ${t.play_windows![k].from}–${t.play_windows![k].to}`).join(' · ');
+}
+
+/** Días ISO entre dos fechas ISO (ambas incluidas; máximo 60). */
+export function isoDaysBetween(start: string | null, end: string | null): string[] {
+  if (!start) return [];
+  const parse = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const out: string[] = [];
+  const d = parse(start);
+  const last = end ? parse(end) : parse(start);
+  let guard = 0;
+  while (d.getTime() <= last.getTime() && guard < 60) {
+    out.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    );
+    d.setDate(d.getDate() + 1);
+    guard++;
+  }
+  return out;
 }
 
 export interface Tournament {
@@ -204,6 +312,8 @@ export interface Tournament {
   prizes: string | null;
   extra_info: string | null;
   prizes_json: PrizeEntry[] | null;
+  // Premios por categoría ({ '3ª': [...] }). `prizes_json` es el general, para las que no tengan el suyo.
+  prizes_by_category?: Record<string, PrizeEntry[]> | null;
   info_rows: InfoRow[] | null;
   observations: string | null;
   // Condiciones de participación del club (null = las estándar de TACTIUM).
@@ -217,6 +327,9 @@ export interface Tournament {
   courts: number;
   start_time: string;
   end_time: string;
+  // Franjas por tipo de día (null = torneo antiguo: vale start_time/end_time para todos los días).
+  play_windows?: PlayWindows | null;
+  holidays?: string[] | null;
   slot_minutes: number;
   rest_minutes: number;
   max_removable_hours: number | null;
@@ -313,6 +426,19 @@ function cleanPrizes(list?: PrizeEntry[] | null): PrizeEntry[] | null {
   return out.length ? out : null;
 }
 
+// Premios por categoría: limpia cada lista y descarta las categorías sin premios.
+function cleanPrizesByCategory(
+  map?: Record<string, PrizeEntry[]> | null,
+): Record<string, PrizeEntry[]> | null {
+  if (!map) return null;
+  const out: Record<string, PrizeEntry[]> = {};
+  for (const [cat, list] of Object.entries(map)) {
+    const clean = cleanPrizes(list);
+    if (clean && cat.trim()) out[cat] = clean;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // Normaliza las reglas de categoría: descarta topes vacíos y categorías LIBRE
 // (sin ningún límite). Devuelve null si al final no queda ninguna regla.
 function cleanCategoryRules(rules?: CategoryRules | null): CategoryRules | null {
@@ -376,6 +502,7 @@ export async function createTournament(input: {
   prizes?: string | null;
   extraInfo?: string | null;
   prizesJson?: PrizeEntry[] | null;
+  prizesByCategory?: Record<string, PrizeEntry[]> | null;
   infoRows?: InfoRow[] | null;
   observations?: string | null;
   coverUrl?: string | null;
@@ -387,6 +514,9 @@ export async function createTournament(input: {
   paymentDeadlineDays?: number | null;
   categoryRules?: CategoryRules | null;
   endTime?: string | null;
+  // Franjas de juego por tipo de día y festivos marcados. Si vienen, mandan sobre endTime.
+  playWindows?: PlayWindows | null;
+  holidays?: string[];
   maxRemovableHours?: number | null;
   // Cobro por torneo: si el torneo hay que pagarlo, nace en 'draft' (retenido,
   // sin inscripción) y el webhook de Stripe lo pasa a 'open' al confirmarse.
@@ -409,7 +539,24 @@ export async function createTournament(input: {
       ? { payment_deadline_days: input.paymentDeadlineDays }
       : {}),
     category_rules: cleanCategoryRules(input.categoryRules),
-    ...(input.endTime ? { end_time: input.endTime } : {}),
+    ...(input.playWindows
+      ? (() => {
+          const hol = (input.holidays ?? []).filter(Boolean);
+          const span = windowsSpan(
+            input.playWindows,
+            isoDaysBetween(input.startsOn ?? null, input.endsOn ?? null),
+            hol,
+          );
+          return {
+            play_windows: input.playWindows,
+            holidays: hol,
+            start_time: span.from,
+            end_time: span.to,
+          };
+        })()
+      : input.endTime
+        ? { end_time: input.endTime }
+        : {}),
     max_removable_hours: input.maxRemovableHours ?? null,
     max_pairs: input.maxPairs ?? null,
     min_pairs: input.minPairs ?? null,
@@ -417,6 +564,7 @@ export async function createTournament(input: {
     prizes: input.prizes?.trim() || null,
     extra_info: input.extraInfo?.trim() || null,
     prizes_json: cleanPrizes(input.prizesJson),
+    prizes_by_category: cleanPrizesByCategory(input.prizesByCategory),
     info_rows: cleanInfoRows(input.infoRows),
     observations: input.observations?.trim() || null,
     cover_url: input.coverUrl ?? null,
@@ -470,6 +618,7 @@ export async function updateTournament(
     prizes?: string | null;
     extraInfo?: string | null;
     prizesJson?: PrizeEntry[] | null;
+    prizesByCategory?: Record<string, PrizeEntry[]> | null;
     infoRows?: InfoRow[] | null;
     observations?: string | null;
     coverUrl?: string | null;
@@ -494,6 +643,8 @@ export async function updateTournament(
   if (fields.prizes !== undefined) payload.prizes = fields.prizes?.trim() || null;
   if (fields.extraInfo !== undefined) payload.extra_info = fields.extraInfo?.trim() || null;
   if (fields.prizesJson !== undefined) payload.prizes_json = cleanPrizes(fields.prizesJson);
+  if (fields.prizesByCategory !== undefined)
+    payload.prizes_by_category = cleanPrizesByCategory(fields.prizesByCategory);
   if (fields.infoRows !== undefined) payload.info_rows = cleanInfoRows(fields.infoRows);
   if (fields.observations !== undefined) payload.observations = fields.observations?.trim() || null;
   if (fields.coverUrl !== undefined) payload.cover_url = fields.coverUrl;
@@ -1746,6 +1897,11 @@ export async function updateTournamentSchedule(
     slotMinutes: number;
     restMinutes?: number;
     endTime?: string;
+    // Franjas por tipo de día: mandan sobre startTime/endTime (que se guardan como rango global).
+    playWindows?: PlayWindows;
+    holidays?: string[];
+    // Días del torneo, para calcular el rango global de las ventanas que realmente se usan.
+    days?: string[];
   },
 ): Promise<void> {
   const payload: Record<string, unknown> = {
@@ -1754,6 +1910,14 @@ export async function updateTournamentSchedule(
     slot_minutes: Math.max(15, cfg.slotMinutes),
   };
   if (cfg.endTime) payload.end_time = cfg.endTime;
+  if (cfg.playWindows) {
+    const hol = (cfg.holidays ?? []).filter(Boolean);
+    const span = windowsSpan(cfg.playWindows, cfg.days ?? [], hol);
+    payload.play_windows = cfg.playWindows;
+    payload.holidays = hol;
+    payload.start_time = span.from;
+    payload.end_time = span.to;
+  }
   if (cfg.restMinutes !== undefined) payload.rest_minutes = Math.max(0, cfg.restMinutes);
   const { error } = await from()('tournaments').update(payload).eq('id', tournamentId);
   if (error) throw new Error(error.message);
@@ -1996,7 +2160,12 @@ export async function autoScheduleTournament(
   if (!tournament.starts_on)
     throw new Error('Pon una fecha al torneo antes de generar el horario.');
 
-  const [sh, sm] = tournament.start_time.split(':').map(Number);
+  const allDays = tournamentDays(tournament);
+  // Rango global de las ventanas de los días del torneo; cada día luego se recorta a SU ventana.
+  const span = tournament.play_windows
+    ? windowsSpan(tournament.play_windows, allDays, tournament.holidays ?? [])
+    : { from: tournament.start_time, to: tournament.end_time ?? '23:00' };
+  const [sh, sm] = span.from.split(':').map(Number);
   const startMin = (sh || 9) * 60 + (sm || 0);
   const step = Math.max(15, tournament.slot_minutes);
   const rest = Math.max(0, tournament.rest_minutes ?? 0);
@@ -2004,8 +2173,7 @@ export async function autoScheduleTournament(
   const courts = Math.max(1, tournament.courts);
   const regById = new Map(regs.map((r) => [r.id, r]));
 
-  const allDays = tournamentDays(tournament);
-  const [eh, em] = (tournament.end_time ?? '23:00').split(':').map(Number);
+  const [eh, em] = span.to.split(':').map(Number);
   const endMin = Math.max(startMin + step, (eh || 23) * 60 + (em || 0));
   const slotCount = Math.min(48, Math.max(1, Math.floor((endMin - startMin) / step) + 1));
   const times = Array.from({ length: slotCount }, (_, i) => startMin + i * step);
@@ -2027,6 +2195,12 @@ export async function autoScheduleTournament(
   }
   const isoOf = (dt: Date) =>
     `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
+  // ¿Cabe un partido que empieza a `min` dentro de la ventana de juego de ESE día?
+  const inDayWindow = (iso: string, min: number): boolean => {
+    const w = windowForDay(tournament, iso);
+    return min >= hhmmToMin(w.from) && min + step <= hhmmToMin(w.to);
+  };
 
   const known = matches.filter(
     (m) => m.status !== 'bye' && !!m.home_reg && !!m.away_reg,
@@ -2074,7 +2248,10 @@ export async function autoScheduleTournament(
   const availCountDay = (m: TournamentMatch, iso: string): number => {
     const st = dayState.get(iso);
     if (!st) return 0;
-    return times.reduce((n, t) => (availableAt(m, st.weekday, t) ? n + 1 : n), 0);
+    return times.reduce(
+      (n, t) => (inDayWindow(iso, t) && availableAt(m, st.weekday, t) ? n + 1 : n),
+      0,
+    );
   };
 
   const updates: { id: string; scheduled_at: string | null; court: string | null }[] = [];
@@ -2090,6 +2267,7 @@ export async function autoScheduleTournament(
       const min = times[ti];
       if (ids.some((id) => (st.regTimes.get(id) ?? []).some((b) => Math.abs(b - min) < minSep)))
         continue;
+      if (!inDayWindow(iso, min)) continue;
       if (!availableAt(m, st.weekday, min)) continue;
       for (let court = 1; court <= courts; court++) {
         if (st.courtBusy.has(`${ti}:${court}`)) continue;
@@ -2302,6 +2480,8 @@ export interface TournamentLookup {
   start_time: string;
   end_time: string;
   max_removable_hours: number | null;
+  play_windows?: PlayWindows | null;
+  holidays?: string[] | null;
   // Condiciones de participación YA resueltas por el servidor (las del club o
   // las estándar). Es el texto exacto que se guarda al aceptarlas.
   terms: string;
@@ -2352,6 +2532,18 @@ export async function myTournaments(): Promise<ExploreTournament[]> {
   }));
 }
 
+/** Torneos que organizo: los que creé yo o los de un club que gestiono (RPC `my_created_tournaments`,
+ *  mismas columnas que `my_tournaments`). */
+export async function myCreatedTournaments(): Promise<ExploreTournament[]> {
+  const { data, error } = await rpcCall('my_created_tournaments', {});
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ExploreTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
+  }));
+}
+
 /** Busca un torneo por código (para mostrar nombre + categorías al apuntarse). */
 export async function lookupTournament(
   code: string,
@@ -2384,6 +2576,9 @@ export async function signupByCode(input: {
   leagueSum?: number | null;
   // Casilla de condiciones. El servidor la exige: sin ella no hay inscripción.
   termsAccepted: boolean;
+  // «No federado» declarado por jugador: el servidor lo comprueba con la Federación.
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }): Promise<string> {
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
@@ -2403,9 +2598,25 @@ export async function signupByCode(input: {
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
     p_terms_accepted: input.termsAccepted,
+    p1_not_fed: input.p1NotFed ?? null,
+    p2_not_fed: input.p2NotFed ?? null,
   });
   if (error) throw new Error(error.message);
   return data as string;
+}
+
+export interface FederatedCheck {
+  name: string;
+  federated: boolean;
+  fcp_name: string | null;
+}
+
+/** ¿Figuran estos nombres en la Federación (plantillas de liga o rankings de liga y circuito)? Sirve para no dejar
+ *  marcar como «no federado» a quien sí lo es. Con menos de 2 palabras no se puede comprobar (federated=false). */
+export async function checkNotFederated(names: string[]): Promise<FederatedCheck[]> {
+  const { data, error } = await rpcCall('check_not_federated', { p_names: names });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as FederatedCheck[];
 }
 
 /** Condiciones estándar de TACTIUM (viven en el servidor: son las que se

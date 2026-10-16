@@ -3407,11 +3407,11 @@ select.tw-cell-input {
 .tw-sched-head,
 .tw-sched-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.6fr) 150px minmax(140px, 1fr) 120px;
+  grid-template-columns: minmax(160px, 1.6fr) 150px minmax(140px, 1fr) 96px 120px;
   gap: 14px;
   align-items: center;
   padding: 10px 18px;
-  min-width: 640px;
+  min-width: 760px;
 }
 .tw-sched-head {
   border-bottom: 1px solid var(--line-strong);

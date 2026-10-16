@@ -20,6 +20,9 @@ export type NotificationType =
   | 'time_poll_open'
   | 'time_poll_reminder'
   | 'time_poll_fixed'
+  // «Subido a la Federación» y recordatorios del lunes. data: {type, matchdayId, teamId} o {type, clubId}.
+  | 'fcp_upload_done'
+  | 'fcp_upload_reminder'
   | 'new_follower'
   | 'tournament_bracket'
   | 'tournament_schedule'

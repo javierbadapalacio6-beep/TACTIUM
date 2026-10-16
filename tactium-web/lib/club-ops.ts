@@ -134,6 +134,74 @@ export async function fetchUnconfirmedVenues(matchdayIds: string[]): Promise<Set
   return out;
 }
 
+/** «Subido a la Federación»: estado de un partido. `applies` = es de local, está por jugar y es de la Cántabra. */
+export async function fetchFcpUpload(
+  matchdayId: string,
+): Promise<{ applies: boolean; uploadedAt: Date | null }> {
+  const { data } = await supabaseBrowser()
+    .from("matchdays")
+    .select("is_home, status, fcp_uploaded_at, seasons(teams(federation))")
+    .eq("id", matchdayId)
+    .maybeSingle();
+  const row = data as unknown as {
+    is_home: boolean;
+    status: string;
+    fcp_uploaded_at: string | null;
+    seasons?: { teams?: { federation?: string | null } | { federation?: string | null }[] | null } | { teams?: unknown }[] | null;
+  } | null;
+  if (!row) return { applies: false, uploadedAt: null };
+  const s = Array.isArray(row.seasons) ? row.seasons[0] : row.seasons;
+  const tm = (s as { teams?: { federation?: string | null } | { federation?: string | null }[] | null } | null)?.teams;
+  const fed = (Array.isArray(tm) ? tm[0]?.federation : tm?.federation) ?? null;
+  return {
+    applies: row.is_home && row.status === "upcoming" && fed === "FCantP",
+    uploadedAt: row.fcp_uploaded_at ? new Date(row.fcp_uploaded_at) : null,
+  };
+}
+
+/** Qué partidos de una lista ya están subidos a la Federación. */
+export async function fetchFcpUploadedIds(matchdayIds: string[]): Promise<Set<string>> {
+  if (matchdayIds.length === 0) return new Set();
+  const { data } = await supabaseBrowser().from("matchdays").select("id, fcp_uploaded_at").in("id", matchdayIds);
+  const out = new Set<string>();
+  for (const r of (data ?? []) as { id: string; fcp_uploaded_at: string | null }[]) if (r.fcp_uploaded_at) out.add(r.id);
+  return out;
+}
+
+/** Marca (o desmarca) partidos de local como subidos. Avisa a la otra parte al marcar. */
+/** El club recuerda a los capitanes que suban la hora a la Federación (solo partidos de local sin subir; un
+ *  partido no se recuerda más de una vez cada 3 h). RPC `remind_fcp_upload`. */
+export async function remindFcpUpload(
+  matchdayIds: string[],
+): Promise<{ partidos: number; ya_recordados: number; avisos: number }> {
+  const { data, error } = await supabaseBrowser().rpc("remind_fcp_upload", { p_matchday_ids: matchdayIds });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as { partidos?: number; ya_recordados?: number; avisos?: number };
+  return { partidos: Number(r.partidos ?? 0), ya_recordados: Number(r.ya_recordados ?? 0), avisos: Number(r.avisos ?? 0) };
+}
+
+export async function setFcpUploaded(matchdayIds: string[], uploaded = true): Promise<number> {
+  const { data, error } = await supabaseBrowser().rpc("set_fcp_uploaded", {
+    p_matchday_ids: matchdayIds,
+    p_uploaded: uploaded,
+  });
+  if (error) throw new Error(error.message);
+  return Number(data ?? 0);
+}
+
+/** Fin de semana de la Federación («23 - 25 Oct») de cada jornada, por matchday. */
+export async function fetchDateRanges(matchdayIds: string[]): Promise<Record<string, string>> {
+  if (matchdayIds.length === 0) return {};
+  const { data } = await supabaseBrowser()
+    .from("matchdays")
+    .select("id, fcp_date_range")
+    .in("id", matchdayIds);
+  const out: Record<string, string> = {};
+  for (const r of (data ?? []) as { id: string; fcp_date_range: string | null }[])
+    if (r.fcp_date_range) out[r.id] = r.fcp_date_range;
+  return out;
+}
+
 /* ── La semana de todos los equipos (misma idea que fetchClubOverview de la app) ── */
 export interface WeekMatchday {
   id: string;
@@ -541,4 +609,53 @@ export function fetchInscripcionGrupo(fila: {
   idEquipo?: number | null;
 }): Promise<FcpRival[]> {
   return fetchFcpGroupRivals(supabaseBrowser(), fila);
+}
+
+/* ── Tandas (partidos que se juegan a la misma hora) ─────────────── */
+
+export interface TeamTandasInfo {
+  team_id: string;
+  gender: string | null;
+  preferred_tandas: string | null;
+}
+
+/** Género y tanda habitual de varios equipos (propios e invitados del club). Nunca lanza. */
+export async function fetchTeamTandasInfo(teamIds: string[]): Promise<Record<string, TeamTandasInfo>> {
+  if (teamIds.length === 0) return {};
+  const { data, error } = await supabaseBrowser().rpc("get_team_tandas_info", { p_team_ids: teamIds });
+  if (error) return {};
+  const out: Record<string, TeamTandasInfo> = {};
+  for (const r of (data ?? []) as TeamTandasInfo[]) out[r.team_id] = r;
+  return out;
+}
+
+/** Tandas ya puestas en cada partido. */
+export async function fetchMatchdayTandas(matchdayIds: string[]): Promise<Record<string, string>> {
+  if (matchdayIds.length === 0) return {};
+  const { data } = await supabaseBrowser().from("matchdays").select("id, tandas").in("id", matchdayIds);
+  const out: Record<string, string> = {};
+  for (const r of (data ?? []) as { id: string; tandas: string | null }[]) if (r.tandas) out[r.id] = r.tandas;
+  return out;
+}
+
+/**
+ * Tandas de un partido de local. Equipo propio → update directo (la RLS deja al gestor); invitado → RPC de puerta
+ * estrecha del club sede, igual que día, hora y pista.
+ */
+export async function setHomeMatchTandas(input: {
+  matchdayId: string;
+  isGuest: boolean;
+  tandas: string | null;
+}): Promise<void> {
+  const sb = supabaseBrowser();
+  if (input.isGuest) {
+    const { error } = await sb.rpc("set_venue_matchday_tandas", {
+      p_matchday_id: input.matchdayId,
+      p_tandas: input.tandas,
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const { error } = await sb.from("matchdays").update({ tandas: input.tandas }).eq("id", input.matchdayId);
+  if (error) throw new Error(error.message);
 }

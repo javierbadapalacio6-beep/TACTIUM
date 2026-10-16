@@ -70,6 +70,7 @@ export const AvailabilityScreen = ({
     jornadaNumber: matchday?.jornada_number,
     matchDate: matchday?.match_date,
     matchTime: matchday?.match_time,
+    matchRange: (matchday as { fcp_date_range?: string | null } | null | undefined)?.fcp_date_range,
     isHome: matchday?.is_home,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,
