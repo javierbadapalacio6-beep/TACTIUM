@@ -464,10 +464,12 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 </div>
                 <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-muted)" }}>
                   {formatDate(m.date)}
-                  {formatTime(m.time) ? ` · ${formatTime(m.time)}` : ""}
-                  {m.location ? ` · ${m.location}` : ""}
-                  {m.tandas ? ` · tandas ${m.tandas}` : ""}
                 </div>
+                {m.location || formatTime(m.time) ? (
+                  <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>
+                    {[m.location, formatTime(m.time)].filter(Boolean).join(" · ")}
+                  </div>
+                ) : null}
               </div>
 
               {/* Disponibles, dentro de la tarjeta que manda: es el dato que
@@ -481,9 +483,14 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               </div>
             </div>
 
-            {lineupLabel && (
+            {/* Tandas · alineación · los que van, en una línea. */}
+            {(m.tandas || lineupLabel) && (
               <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <span className="delta">{lineupLabel}</span>
+                {m.tandas ? <span className="delta">Tandas {m.tandas}</span> : null}
+                {lineupLabel ? <span className="delta">{lineupLabel}</span> : null}
+                <span className="delta">
+                  {availableCount}/{active.length} van
+                </span>
               </div>
             )}
 

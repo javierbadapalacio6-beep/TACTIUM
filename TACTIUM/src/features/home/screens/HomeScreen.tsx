@@ -436,7 +436,6 @@ export const HomeScreen = ({
                   : fmtRango((nextMatchday as { fcp_date_range?: string | null }).fcp_date_range)
                     ? ` · ${fmtRango((nextMatchday as { fcp_date_range?: string | null }).fcp_date_range)}`
                     : ''}
-                {nextMatchday.match_time ? ` · ${nextMatchday.match_time.slice(0, 5)}` : ''}
               </Text>
               <View style={heroStyles.heroOpen}>
                 <IconArrowRight size={13} color={darkColors.textInverse} />
@@ -453,24 +452,29 @@ export const HomeScreen = ({
               {nextMatchday.opponent}
             </Text>
 
-            <View style={heroStyles.heroMetaRow}>
-              {nextMatchday.location?.trim() || nextMatchday.tandas ? (
+            {/* Línea 1: sede y, seguida, la hora. */}
+            {nextMatchday.location?.trim() || nextMatchday.match_time ? (
+              <View style={heroStyles.heroMetaRow}>
                 <View style={[heroStyles.heroMeta, { flexShrink: 1 }]}>
                   <IconPin size={11} color={darkColors.textMuted} />
                   <Text style={heroStyles.heroMetaText} numberOfLines={1}>
-                    {[nextMatchday.location?.trim(), nextMatchday.tandas ? `tandas ${nextMatchday.tandas}` : null]
+                    {[nextMatchday.location?.trim(), nextMatchday.match_time?.slice(0, 5)]
                       .filter(Boolean)
                       .join(' · ')}
                   </Text>
                 </View>
-              ) : null}
-              <View style={heroStyles.heroMeta}>
-                <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
-                  {avail}/{players.length} van
-                </Text>
               </View>
-              <View style={heroStyles.heroMeta}>
-                <Text style={heroStyles.heroMetaText}>
+            ) : null}
+
+            {/* Línea 2, en este orden: tandas · alineación · los que van. */}
+            <View style={[heroStyles.heroMetaRow, { flexWrap: 'nowrap' }]}>
+              {nextMatchday.tandas ? (
+                <View style={heroStyles.heroMeta}>
+                  <Text style={heroStyles.heroMetaText}>Tandas {nextMatchday.tandas}</Text>
+                </View>
+              ) : null}
+              <View style={[heroStyles.heroMeta, { flexShrink: 1 }]}>
+                <Text style={heroStyles.heroMetaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                   {nextMatchday.status === 'in_progress'
                     ? 'En juego'
                     : matchdayState(nextMatchday) === 'pending-acta'
@@ -482,6 +486,11 @@ export const HomeScreen = ({
                             ? 'Alineación lista'
                             : 'Alineación sin publicar'
                           : `Alineación ${lineupFilled}/${matchesPerRound}`}
+                </Text>
+              </View>
+              <View style={heroStyles.heroMeta}>
+                <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
+                  {avail}/{players.length} van
                 </Text>
               </View>
             </View>
