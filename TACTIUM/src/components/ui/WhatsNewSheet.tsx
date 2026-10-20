@@ -20,32 +20,22 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-16c',
+  id: '2026-10-20',
   items: [
     {
-      icon: '🔒',
-      title: 'Cambiar la contraseña',
-      text: 'En Ajustes › Cuenta ya puedes ponerte una contraseña nueva, y el botón «¿Olvidaste?» funciona en Android.',
-    },
-    {
-      icon: '🔔',
-      title: 'Recordar a los capitanes',
-      text: 'En la agenda del club, un toque avisa a los capitanes de que suban la hora a la Federación.',
-    },
-    {
-      icon: '🎁',
-      title: '14 días de prueba al reclamar tu equipo',
-      text: 'Si entras como capitán de un equipo invitado por un club, tienes todas las funciones 14 días. Después, hace falta el plan para que el equipo responda a la convocatoria.',
-    },
-    {
-      icon: '＋',
-      title: 'Capitán y jugador a la vez',
-      text: 'Si ya estás en un equipo como jugador, un código de capitán te hace capitán sin perder tu ficha.',
+      icon: '📣',
+      title: 'La alineación, solo cuando se publica',
+      text: 'Los jugadores ven la alineación únicamente cuando el capitán pulsa Publicar y avisa. Mientras la prepara, es un borrador.',
     },
     {
       icon: '◷',
-      title: 'Tandas en los horarios',
-      text: 'Al poner la hora de un partido de local, marca también las tandas (propios e invitados). Cada equipo puede tener su tanda habitual.',
+      title: 'Sede y tandas en cada jornada',
+      text: 'Verás la sede y las tandas (3-2, 4-1, 1-2-2…) con su hora en todas las pestañas de la jornada.',
+    },
+    {
+      icon: '✎',
+      title: 'Edita sede y tandas a mano',
+      text: 'Si la Federación no las trae bien, el capitán las corrige tocando la tarjeta de la jornada.',
     },
   ],
 };
