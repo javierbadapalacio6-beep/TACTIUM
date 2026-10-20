@@ -23,6 +23,8 @@ export type NotificationType =
   // «Subido a la Federación» y recordatorios del lunes. data: {type, matchdayId, teamId} o {type, clubId}.
   | 'fcp_upload_done'
   | 'fcp_upload_reminder'
+  // Partido de visitante: la Federación publicó (o cambió) la hora. data: {type, matchdayId, teamId}.
+  | 'away_schedule_published'
   | 'new_follower'
   | 'tournament_bracket'
   | 'tournament_schedule'

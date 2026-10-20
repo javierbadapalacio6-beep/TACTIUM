@@ -40,7 +40,7 @@ export const JornadaSedeTandas: React.FC<{
           </View>
         ) : (
           <Text style={[styles.hint, { color: canEdit ? c.warning : c.textFaint }]}>
-            {canEdit ? 'Tandas · poner' : 'Sin tandas'}
+            {!time ? 'Con el horario' : canEdit ? 'Tandas · poner' : 'Sin tandas'}
           </Text>
         )}
       </View>

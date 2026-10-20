@@ -1593,6 +1593,7 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
     // «Subido a la Federación» y recordatorios del lunes: a la jornada, o a Horarios si es el aviso del club.
     case "fcp_upload_done":
     case "fcp_upload_reminder":
+    case "away_schedule_published":
       if (!jornada && g("clubId", "club_id")) return "/club/horarios";
       return jornada ? `/jornada/${jornada}` : null;
     case "kudos": {
