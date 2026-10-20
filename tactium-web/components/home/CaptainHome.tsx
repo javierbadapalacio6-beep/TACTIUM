@@ -580,7 +580,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
             {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
                 el recuento (TimePollPanel). */}
-            {!started && m.status === "upcoming" && (
+            {!started && m.status === "upcoming" && m.isHome && (
               <TimePollPanel variant="home" matchdayId={m.id} canManage={isCaptain} />
             )}
 

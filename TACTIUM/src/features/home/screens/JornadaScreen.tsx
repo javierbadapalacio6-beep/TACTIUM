@@ -1063,8 +1063,9 @@ const JornadaDetail = ({
           hidden={split ? ['alineacion'] : undefined}
         />
 
-        {/* === ENCUESTA DE HORA === (lógica en features/timePoll) */}
-        {tab === 'previa' && !closed ? (
+        {/* === ENCUESTA DE HORA === (lógica en features/timePoll). Solo de local: en los partidos de
+            visitante la hora la fija el club rival y no se propone. */}
+        {tab === 'previa' && !closed && matchday.is_home ? (
           <TimePollCard matchdayId={matchday.id} canManage={isCaptain} onChanged={load} />
         ) : null}
 

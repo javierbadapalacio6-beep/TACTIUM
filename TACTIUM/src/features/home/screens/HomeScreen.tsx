@@ -509,7 +509,7 @@ export const HomeScreen = ({
 
             {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
                 el recuento (features/timePoll). */}
-            {nextMatchday.status === 'upcoming' ? (
+            {nextMatchday.status === 'upcoming' && nextMatchday.is_home ? (
               <TimePollCard
                 variant="home"
                 palette={darkColors}

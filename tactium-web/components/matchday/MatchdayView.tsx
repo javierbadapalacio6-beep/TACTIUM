@@ -1390,8 +1390,8 @@ export function MatchdayView({ id }: { id: string }) {
       </div>
 
       <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
-      {/* Encuesta de hora (lógica en TimePollPanel). */}
-      {curTab === "previa" && !closed && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+      {/* Encuesta de hora (lógica en TimePollPanel). Solo de local: de visitante la hora la fija el club rival. */}
+      {curTab === "previa" && !closed && m.isHome && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
       {curTab === "previa" && !closed && <FederationUploadCard matchdayId={m.id} canManage={isCaptain} />}
 
       {curTab === "previa" && (
