@@ -466,6 +466,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                   {formatDate(m.date)}
                   {formatTime(m.time) ? ` · ${formatTime(m.time)}` : ""}
                   {m.location ? ` · ${m.location}` : ""}
+                  {m.tandas ? ` · tandas ${m.tandas}` : ""}
                 </div>
               </div>
 

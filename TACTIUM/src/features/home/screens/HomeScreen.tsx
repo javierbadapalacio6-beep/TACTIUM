@@ -454,11 +454,13 @@ export const HomeScreen = ({
             </Text>
 
             <View style={heroStyles.heroMetaRow}>
-              {nextMatchday.location?.trim() ? (
+              {nextMatchday.location?.trim() || nextMatchday.tandas ? (
                 <View style={[heroStyles.heroMeta, { flexShrink: 1 }]}>
                   <IconPin size={11} color={darkColors.textMuted} />
                   <Text style={heroStyles.heroMetaText} numberOfLines={1}>
-                    {nextMatchday.location.trim()}
+                    {[nextMatchday.location?.trim(), nextMatchday.tandas ? `tandas ${nextMatchday.tandas}` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Text>
                 </View>
               ) : null}
