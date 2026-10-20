@@ -62,3 +62,18 @@ export function describeTandas(value: string, gender?: string | null, start?: st
     return `${when} · ${group.length === 1 ? "pareja" : "parejas"} ${joinPairs(group)}`;
   });
 }
+
+/** Versión corta para una línea: «10:30 (5, 4, 1) · 11:30 (2, 3)». La hora de cada tanda es ORIENTATIVA (inicio + 1 h por tanda). */
+export function describeTandasShort(value: string, gender?: string | null, start?: string | null): string {
+  if (!isValidTandas(value, pairsFor(gender))) return "";
+  const order = entryOrder(gender);
+  let i = 0;
+  return value
+    .split("-")
+    .map((n, idx) => {
+      const group = order.slice(i, i + Number(n));
+      i += Number(n);
+      return `${start ? addHours(start, idx) : `${idx + 1}.ª`} (${group.join(", ")})`;
+    })
+    .join(" · ");
+}

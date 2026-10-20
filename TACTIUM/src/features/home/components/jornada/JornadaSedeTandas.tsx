@@ -5,7 +5,7 @@ import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconPin } from '@components/ui';
-import { describeTandas, isValidTandas, pairsFor } from '@core/utils/tandas';
+import { describeTandasShort, isValidTandas, pairsFor } from '@core/utils/tandas';
 
 /**
  * Sede y tandas de la jornada, visibles en todas las pestañas (antes solo salían en la Previa y,
@@ -23,38 +23,33 @@ export const JornadaSedeTandas: React.FC<{
 }> = ({ venue, tandas, gender, time, canEdit, onEdit }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const lines = tandas && isValidTandas(tandas, pairsFor(gender)) ? describeTandas(tandas, gender, time) : [];
+  const valid = !!tandas && isValidTandas(tandas, pairsFor(gender));
+  const short = valid ? describeTandasShort(tandas!, gender, time) : '';
 
+  // Dos líneas y sin etiquetas: lugar + reparto, y debajo las horas (orientativas) de cada tanda.
   const body = (
     <View style={styles.card}>
-      <View style={styles.row}>
-        <Text style={styles.label}>SEDE</Text>
-        <View style={styles.valueWrap}>
-          <IconPin size={12} color={c.textMuted} />
-          <Text style={styles.value} numberOfLines={2}>
-            {venue}
-          </Text>
-        </View>
-      </View>
-      <View style={[styles.row, { alignItems: 'flex-start', borderBottomWidth: 0 }]}>
-        <Text style={[styles.label, { marginTop: 4 }]}>TANDAS</Text>
+      <View style={styles.top}>
+        <IconPin size={13} color={c.textMuted} />
+        <Text style={styles.venue} numberOfLines={1}>
+          {venue}
+        </Text>
         {tandas ? (
-          <View style={styles.tandasBox}>
-            <View style={styles.pill}>
-              <Text style={styles.pillText}>{tandas}</Text>
-            </View>
-            {lines.map((l) => (
-              <Text key={l} style={styles.tandaLine}>
-                {l}
-              </Text>
-            ))}
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>{tandas}</Text>
           </View>
         ) : (
-          <Text style={[styles.value, { color: canEdit ? c.warning : c.textFaint }]}>
-            {canEdit ? 'Sin definir · toca para ponerlas' : 'Sin definir'}
+          <Text style={[styles.hint, { color: canEdit ? c.warning : c.textFaint }]}>
+            {canEdit ? 'Tandas · poner' : 'Sin tandas'}
           </Text>
         )}
       </View>
+      {short ? (
+        <Text style={styles.sub} numberOfLines={2}>
+          {time ? 'Horas orientativas · ' : 'Orden · '}
+          {short}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -103,35 +98,27 @@ export const TandasChips: React.FC<{
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
     card: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      gap: 4,
       backgroundColor: c.bgCard,
       borderRadius: Radius.lg,
       borderWidth: 1,
       borderColor: c.hair,
     },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: c.hair,
-    },
-    label: { fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 2, color: c.textFaint },
-    valueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-    value: { color: c.text, fontSize: 13, fontWeight: '500', textAlign: 'right', flexShrink: 1 },
-    tandasBox: { flexShrink: 1, alignItems: 'flex-end', gap: 4 },
+    top: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    venue: { flex: 1, color: c.text, fontSize: 14, fontWeight: '600' },
+    hint: { fontSize: 12.5, fontWeight: '500' },
     pill: {
-      paddingHorizontal: 10,
-      paddingVertical: 3,
+      paddingHorizontal: 9,
+      paddingVertical: 2,
       borderRadius: 999,
       backgroundColor: c.accent10,
       borderWidth: 1,
       borderColor: c.accent,
     },
-    pillText: { fontFamily: Fonts.mono, fontSize: 13, fontWeight: '700', color: c.accent, letterSpacing: 0.5 },
-    tandaLine: { color: c.textMuted, fontSize: 12.5, textAlign: 'right' },
+    pillText: { fontFamily: Fonts.mono, fontSize: 12.5, fontWeight: '700', color: c.accent, letterSpacing: 0.4 },
+    sub: { color: c.textMuted, fontSize: 12, paddingLeft: 21 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     chip: {
       paddingHorizontal: 14,

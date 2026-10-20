@@ -21,7 +21,7 @@ import {
 import { removeMatchPhoto, updateMatchdaySchedule, uploadMatchPhoto } from "@/lib/matchday-ops";
 import { useSession } from "@/lib/session";
 import { useMatchdayTeam } from "@/lib/use-matchday-team";
-import { describeTandas, isValidTandas, pairsFor, tandasChoices } from "@/lib/tandas";
+import { describeTandasShort, tandasChoices } from "@/lib/tandas";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
@@ -906,10 +906,15 @@ export function MatchdayView({ id }: { id: string }) {
             {m.tandas ? (
               <>
                 <span className="mono" style={{ fontWeight: 700 }}>{m.tandas}</span>
-                {isValidTandas(m.tandas, pairsFor(teamGender)) &&
-                  describeTandas(m.tandas, teamGender, m.time?.slice(0, 5) ?? null).map((l) => (
-                    <div key={l} style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{l}</div>
-                  ))}
+                {(() => {
+                  const short = describeTandasShort(m.tandas, teamGender, m.time?.slice(0, 5) ?? null);
+                  return short ? (
+                    <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                      {m.time ? "Horas orientativas · " : "Orden · "}
+                      {short}
+                    </div>
+                  ) : null;
+                })()}
               </>
             ) : (
               <span style={{ color: canEditSchedule ? "var(--warning)" : "var(--text-faint)" }}>
