@@ -77,3 +77,24 @@ export function describeTandasShort(value: string, gender?: string | null, start
     })
     .join(" · ");
 }
+
+/**
+ * Cuándo entra la pareja de una pista según las tandas (normativa VII.3: entrada 5-4-1-2-3 / 4-3-1-2, de hora en hora).
+ * «≈10:30» si hay hora de inicio (orientativa: los retrasos de los partidos anteriores la mueven), «1.ª tanda» si no.
+ */
+export function tandaWhenForCourt(
+  value: string | null | undefined,
+  gender: string | null | undefined,
+  court: number,
+  start?: string | null,
+): string | null {
+  if (!value || !isValidTandas(value, pairsFor(gender))) return null;
+  const order = entryOrder(gender);
+  let i = 0;
+  const parts = value.split("-").map(Number);
+  for (let idx = 0; idx < parts.length; idx++) {
+    if (order.slice(i, i + parts[idx]).includes(court)) return start ? `≈${addHours(start, idx)}` : `${idx + 1}.ª tanda`;
+    i += parts[idx];
+  }
+  return null;
+}

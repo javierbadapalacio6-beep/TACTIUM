@@ -20,7 +20,7 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-20',
+  id: '2026-10-20b',
   items: [
     {
       icon: '📣',
@@ -29,13 +29,18 @@ const NOVEDADES = {
     },
     {
       icon: '◷',
-      title: 'Sede y tandas en cada jornada',
-      text: 'Verás la sede y las tandas (3-2, 4-1, 1-2-2…) con su hora en todas las pestañas de la jornada.',
+      title: 'Horario siempre al día con la Federación',
+      text: 'Fecha, hora, sede y tandas se copian solas desde la Federación en cuanto las publica. Las tandas salen con la hora orientativa de cada pareja.',
+    },
+    {
+      icon: '🔔',
+      title: 'Aviso de la hora fuera de casa',
+      text: 'Cuando la Federación publica o cambia la hora de un partido de visitante, te llega un aviso.',
     },
     {
       icon: '✎',
       title: 'Edita sede y tandas a mano',
-      text: 'Si la Federación no las trae bien, el capitán las corrige tocando la tarjeta de la jornada.',
+      text: 'Si algo no cuadra, el capitán lo corrige tocando la tarjeta de la jornada.',
     },
   ],
 };

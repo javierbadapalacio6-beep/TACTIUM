@@ -64,7 +64,7 @@ import {
 } from '../components/jornada/JornadaPhaseTabs';
 import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
 import { JornadaSedeTandas, TandasChips } from '../components/jornada/JornadaSedeTandas';
-import { tandasChoices } from '@core/utils/tandas';
+import { tandasChoices, tandaWhenForCourt } from '@core/utils/tandas';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
@@ -899,6 +899,7 @@ const JornadaDetail = ({
                     key={court}
                     court={court}
                     isTop={court === 1}
+                    tandaWhen={tandaWhenForCourt(matchday.tandas, team?.gender, court, time || null)}
                     ready={lineupReady}
                     playerA={pair?.player_a_name ?? null}
                     playerB={pair?.player_b_name ?? null}
@@ -1634,6 +1635,7 @@ const fmtPts = (n: number) =>
 const PairResultRow: React.FC<{
   court: number;
   isTop: boolean;
+  tandaWhen?: string | null;
   ready: boolean;
   playerA: string | null;
   playerB: string | null;
@@ -1646,6 +1648,7 @@ const PairResultRow: React.FC<{
 }> = ({
   court,
   isTop,
+  tandaWhen,
   ready,
   playerA,
   playerB,
@@ -1744,6 +1747,7 @@ const PairResultRow: React.FC<{
                 <Text style={styles.topTagText}>TOP</Text>
               </View>
             ) : null}
+            {tandaWhen ? <Text style={styles.pairMetaFaint}>{tandaWhen}</Text> : null}
             {effPts != null ? (
               <Text style={styles.pairPts}>{acta ? fmtPts(effPts) : effPts} pts</Text>
             ) : !ready && !acta && !closed ? (

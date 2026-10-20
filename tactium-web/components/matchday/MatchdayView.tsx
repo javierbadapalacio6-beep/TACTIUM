@@ -21,7 +21,7 @@ import {
 import { removeMatchPhoto, updateMatchdaySchedule, uploadMatchPhoto } from "@/lib/matchday-ops";
 import { useSession } from "@/lib/session";
 import { useMatchdayTeam } from "@/lib/use-matchday-team";
-import { describeTandasShort, tandasChoices } from "@/lib/tandas";
+import { describeTandasShort, tandaWhenForCourt, tandasChoices } from "@/lib/tandas";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
@@ -960,6 +960,12 @@ export function MatchdayView({ id }: { id: string }) {
                   {shortName(a)} · {shortName(b)}
                 </span>
               </span>
+              {(() => {
+                const when = tandaWhenForCourt(m.tandas, teamGender, r.court, m.time?.slice(0, 5) ?? null);
+                return when ? (
+                  <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{when}</span>
+                ) : null;
+              })()}
               <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
                 {a.pts + b.pts}
               </span>
