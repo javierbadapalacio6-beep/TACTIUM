@@ -1163,27 +1163,59 @@ export interface MatchdayBundle {
   lineup: DbLineupRow[];
   results: DbResultRow[];
   availability: Record<string, boolean>;
+  /** El capitán ya pulsó Publicar. Sin publicar, la alineación es un borrador que solo ve la capitanía/club. */
+  lineupPublished: boolean;
+}
+
+/**
+ * ¿Está publicada la alineación de la jornada? Best-effort: si la columna aún no existe (migración
+ * sin aplicar) o falla la lectura, se considera publicada para no esconder lo que ya se veía.
+ */
+export async function fetchLineupPublished(matchdayId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseBrowser()
+      .from("matchdays")
+      .select("lineup_published_at")
+      .eq("id", matchdayId)
+      .maybeSingle();
+    if (error || !data) return true;
+    return (data as { lineup_published_at: string | null }).lineup_published_at !== null;
+  } catch {
+    return true;
+  }
+}
+
+/** Marca la alineación como publicada (el capitán pulsó Publicar). */
+export async function markLineupPublished(matchdayId: string): Promise<void> {
+  const { error } = await supabaseBrowser()
+    .from("matchdays")
+    .update({ lineup_published_at: new Date().toISOString() })
+    .eq("id", matchdayId);
+  if (error && !/lineup_published_at/.test(error.message)) throw new Error(error.message);
 }
 
 export async function fetchMatchdayBundle(
   matchdayId: string,
-  teamId: string
+  teamId: string,
+  /** Capitanía y club ven el borrador; el jugador solo la alineación publicada. */
+  canSeeDraft = true
 ): Promise<MatchdayBundle | null> {
   const matchday = await fetchMatchday(matchdayId);
   if (!matchday) return null;
 
-  const [players, variants, results, availability] = await Promise.all([
+  const [players, variants, results, availability, lineupPublished] = await Promise.all([
     fetchPlayers(teamId),
     fetchVariants(matchdayId),
     fetchResults(matchdayId),
     fetchAvailability(matchdayId),
+    fetchLineupPublished(matchdayId),
   ]);
 
   // La alineación se pide después: depende de cuál sea la variante activa.
   const active = variants.find((v) => v.isActive) ?? variants[0];
-  const lineup = await fetchLineup(matchdayId, active?.id);
+  const lineup = canSeeDraft || lineupPublished ? await fetchLineup(matchdayId, active?.id) : [];
 
-  return { matchday, players, variants, lineup, results, availability };
+  return { matchday, players, variants, lineup, results, availability, lineupPublished };
 }
 
 /* ── Club ──────────────────────────────────────────────────────── */

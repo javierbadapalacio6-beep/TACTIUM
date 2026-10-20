@@ -26,6 +26,7 @@ import {
   fetchAvailabilityDetail,
   fetchLineup,
   fetchMatchdayBundle,
+  markLineupPublished,
   fetchTeamPairStats,
   renameLineupVariant,
   respondAvailability,
@@ -450,8 +451,8 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
-    () => fetchMatchdayBundle(id, teamId!),
-    [id, teamId, reloadKey],
+    () => fetchMatchdayBundle(id, teamId!, isCaptain || role === "club"),
+    [id, teamId, reloadKey, isCaptain, role],
     !!teamId,
   );
   // Convocatoria de ESTA jornada (Voy · Duda · No). null = no se pudo leer.
@@ -835,7 +836,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   }
 
   function openPublish() {
-    setNotify(dirty || !variant?.isActive);
+    setNotify(dirty || !variant?.isActive || !data?.lineupPublished);
     setPublishOpen(true);
   }
 
@@ -850,6 +851,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     const res = await guardedWrite("publicar la alineación", async () => {
       await saveLineupVariant(id, variantId, courts);
       if (!wasActive) await setActiveLineupVariant(variantId);
+      await markLineupPublished(id);
     });
     setPublishing(false);
     setPublishOpen(false);
@@ -948,7 +950,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   if (!isCaptain) {
     const isClub = role === "club";
     const active = variants.find((v) => v.isActive) ?? null;
-    const published = !!active && courts.some((p) => p[0] || p[1]);
+    const published = !!data?.lineupPublished && !!active && courts.some((p) => p[0] || p[1]);
     const myCourt = myPlayer ? courts.findIndex((p) => p[0] === myPlayer.id || p[1] === myPlayer.id) : -1;
     const partnerId = myCourt >= 0 ? (courts[myCourt][0] === myPlayer!.id ? courts[myCourt][1] : courts[myCourt][0]) : null;
     const partner = playerById(partnerId);

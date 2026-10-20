@@ -114,7 +114,27 @@ export async function forceCloseMatchday(
   return data;
 }
 
-export type MatchOutcome = Database['public']['Enums']['match_outcome'];
+/**
+ * ¿La alineación está publicada (el capitán pulsó Publicar)? Los jugadores solo ven la alineación
+ * publicada; el borrador es del capitán. Antes de aplicar la migración la columna no existe
+ * (`undefined`): se trata como publicada para no esconder lo que ya se veía.
+ */
+export function isLineupPublished(md: object | null | undefined): boolean {
+  if (!md) return false;
+  const at = (md as { lineup_published_at?: string | null }).lineup_published_at;
+  return at === undefined ? true : at !== null;
+}
+
+/** Marca la alineación como publicada. Best-effort: si la columna aún no existe no rompe la publicación. */
+export async function markLineupPublished(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('matchdays')
+    .update({ lineup_published_at: new Date().toISOString() } as never)
+    .eq('id', id);
+  if (error) console.warn('markLineupPublished', error.message);
+}
+
+export type MatchOutcome =Database['public']['Enums']['match_outcome'];
 
 export async function updateMatchday(
   id: string,

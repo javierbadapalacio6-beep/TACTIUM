@@ -63,6 +63,8 @@ import {
   type JornadaTab,
 } from '../components/jornada/JornadaPhaseTabs';
 import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
+import { JornadaSedeTandas, TandasChips } from '../components/jornada/JornadaSedeTandas';
+import { tandasChoices } from '@core/utils/tandas';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
@@ -314,7 +316,8 @@ const JornadaDetail = ({
           SeasonsApi.fetchSeasonById(md.season_id),
           fetchActaForMatchday(md.id),
         ]);
-        setPairs(lineup);
+        // Borrador: solo lo ve el capitán. Los jugadores ven la alineación cuando se publica.
+        setPairs(isCaptain || MatchdaysApi.isLineupPublished(md) ? lineup : []);
         setResults(res);
         setSeason(s);
         setActa(a);
@@ -330,7 +333,7 @@ const JornadaDetail = ({
       didLoadRef.current = true;
       setLoading(false);
     }
-  }, [team, targetMatchdayId]);
+  }, [team, targetMatchdayId, isCaptain]);
 
   useFocusEffect(
     useCallback(() => {
@@ -352,6 +355,8 @@ const JornadaDetail = ({
     const filled = pairs.filter((p) => p.player_a_id && p.player_b_id).length;
     return filled === courts;
   }, [pairs, courts, matchday]);
+  // Borrador del capitán: completa pero sin publicar. Para jugadores `pairs` llega vacío hasta publicar.
+  const lineupDraft = lineupReady && isCaptain && !MatchdaysApi.isLineupPublished(matchday);
 
   const isHome = matchday?.is_home ?? true;
 
@@ -831,10 +836,10 @@ const JornadaDetail = ({
                 style={[
                   styles.statusPill,
                   {
-                    backgroundColor: lineupReady || closed
+                    backgroundColor: (lineupReady && !lineupDraft) || closed
                       ? c.accent15
                       : 'rgba(242,201,76,0.15)',
-                    borderColor: lineupReady || closed
+                    borderColor: (lineupReady && !lineupDraft) || closed
                       ? c.accent40
                       : 'rgba(242,201,76,0.40)',
                   },
@@ -844,17 +849,17 @@ const JornadaDetail = ({
                   style={[
                     styles.statusPillDot,
                     {
-                      backgroundColor: lineupReady || closed ? c.accent : c.warning,
+                      backgroundColor: (lineupReady && !lineupDraft) || closed ? c.accent : c.warning,
                     },
                   ]}
                 />
                 <Text
                   style={[
                     styles.statusPillText,
-                    { color: lineupReady || closed ? c.accent : c.warning },
+                    { color: (lineupReady && !lineupDraft) || closed ? c.accent : c.warning },
                   ]}
                 >
-                  {closed ? 'DISPUTADA' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
+                  {closed ? 'DISPUTADA' : lineupDraft ? 'SIN PUBLICAR' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
                 </Text>
               </View>
             </View>
@@ -1034,6 +1039,16 @@ const JornadaDetail = ({
           footer={season?.name ?? null}
         />
 
+        {/* === SEDE Y TANDAS === en todas las pestañas; el capitán las edita tocando */}
+        <JornadaSedeTandas
+          venue={venueLabel}
+          tandas={matchday.tandas}
+          gender={team?.gender}
+          time={time || null}
+          canEdit={isCaptain && !closed && !seasonClosed}
+          onEdit={() => setEditing(true)}
+        />
+
         {/* === PESTAÑAS POR FASE === */}
         <JornadaPhaseTabs
           value={tab}
@@ -1060,8 +1075,6 @@ const JornadaDetail = ({
                 <JornadaPrevia
                   matchdayId={matchday.id}
                   lastCrossing={fcp.lastCrossing}
-                  venue={venueLabel}
-                  tandas={matchday.tandas}
                   onOpenAvailability={() =>
                     navigation.navigate('Availability', { matchdayId: matchday.id })
                   }
@@ -1073,8 +1086,6 @@ const JornadaDetail = ({
             <JornadaPrevia
               matchdayId={matchday.id}
               lastCrossing={fcp.lastCrossing}
-              venue={venueLabel}
-              tandas={matchday.tandas}
               onOpenAvailability={() =>
                 navigation.navigate('Availability', { matchdayId: matchday.id })
               }
@@ -1394,6 +1405,7 @@ const JornadaDetail = ({
         open={editing}
         onClose={() => setEditing(false)}
         matchday={matchday}
+        gender={team?.gender}
         onSaved={(updated) => {
           setMatchday(updated);
           setEditing(false);
@@ -1797,8 +1809,9 @@ const EditMatchdaySheet: React.FC<{
   open: boolean;
   onClose: () => void;
   matchday: MatchdaysApi.Matchday;
+  gender?: string | null;
   onSaved: (m: MatchdaysApi.Matchday) => void;
-}> = ({ open, onClose, matchday, onSaved }) => {
+}> = ({ open, onClose, matchday, gender, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [opponent, setOpponent] = useState(matchday.opponent);
@@ -1810,6 +1823,7 @@ const EditMatchdaySheet: React.FC<{
   );
   const [isHome, setIsHome] = useState(matchday.is_home);
   const [location, setLocation] = useState(matchday.location ?? '');
+  const [tandas, setTandas] = useState<string | null>(matchday.tandas ?? null);
   const [submitting, setSubmitting] = useState(false);
 
   React.useEffect(() => {
@@ -1819,6 +1833,7 @@ const EditMatchdaySheet: React.FC<{
       setMatchTime(isoTimeToDate(matchday.match_time));
       setIsHome(matchday.is_home);
       setLocation(matchday.location ?? '');
+      setTandas(matchday.tandas ?? null);
     }
   }, [open, matchday]);
 
@@ -1832,6 +1847,7 @@ const EditMatchdaySheet: React.FC<{
         match_time: matchTime ? dateToIsoTime(matchTime) : null,
         is_home: isHome,
         location: location.trim() || null,
+        tandas,
       });
       onSaved(updated);
     } catch (e: any) {
@@ -1953,6 +1969,9 @@ const EditMatchdaySheet: React.FC<{
           style={styles.sheetInput}
         />
       </View>
+
+      <Text style={styles.sheetLabel}>TANDAS</Text>
+      <TandasChips value={tandas} options={tandasChoices(gender)} onChange={setTandas} />
     </BottomSheet>
   );
 };

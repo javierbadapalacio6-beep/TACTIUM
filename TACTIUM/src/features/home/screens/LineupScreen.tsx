@@ -798,7 +798,7 @@ export const LineupScreen = ({
   // ── Publicar ───────────────────────────────────────────────────
   const openPublish = () => {
     const changedActive = !!currentVariantId && currentVariantId !== activeVariantId;
-    setNotify(dirtyRef.current || changedActive || !activeVariantId);
+    setNotify(dirtyRef.current || changedActive || !activeVariantId || !MatchdaysApi.isLineupPublished(matchday));
     setPublishDone(false);
     setPublishOpen(true);
   };
@@ -822,6 +822,15 @@ export const LineupScreen = ({
         if (changedActive) await LineupVariantsApi.setActiveVariant(currentVariantId!);
       } catch {
         // best-effort: la variante sigue guardada aunque falle el flag
+      }
+      // Publicar de verdad: hasta aquí la alineación era un borrador que solo ve el capitán.
+      if (matchdayId) {
+        await MatchdaysApi.markLineupPublished(matchdayId);
+        try {
+          setMatchday(await MatchdaysApi.fetchMatchday(matchdayId));
+        } catch {
+          // el realtime lo refresca igualmente
+        }
       }
       if (notify && matchdayId) void notifyPush('lineup_published', matchdayId);
       dirtyRef.current = false;
@@ -945,7 +954,8 @@ export const LineupScreen = ({
 
   // ── Jugador: lectura con «Tu pareja» ─────────────────────────────
   if (!isCaptain && !isClub) {
-    const published = !!activeVariantId && slots.some((s) => filledLen(s) > 0);
+    const published =
+      MatchdaysApi.isLineupPublished(matchday) && !!activeVariantId && slots.some((s) => filledLen(s) > 0);
     const mySlot = myPlayerId
       ? slots.find((s) => s.playerAId === myPlayerId || s.playerBId === myPlayerId) ?? null
       : null;
@@ -1048,7 +1058,7 @@ export const LineupScreen = ({
             teamName={team?.name ?? ''}
             title={stripTitle}
             sub={
-              activeVariantId && slots.some((s) => filledLen(s) > 0)
+              MatchdaysApi.isLineupPublished(matchday) && activeVariantId && slots.some((s) => filledLen(s) > 0)
                 ? `${team?.name ?? ''} · publicada${publishedAt ? ` el ${publishedAt}` : ''}`
                 : `${team?.name ?? ''} · sin publicar`
             }

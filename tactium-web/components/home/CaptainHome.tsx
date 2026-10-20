@@ -10,6 +10,7 @@ import {
   fetchAvailabilityDetail,
   fetchLastReminder,
   fetchLineup,
+  fetchLineupPublished,
   fetchMatchdays,
   fetchMaybeDeadline,
   fetchPlayers,
@@ -174,9 +175,12 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         fetchMaybeDeadline(next.id),
         // La alineación «publicada» es la variante activa, igual que en la app.
         fetchVariants(next.id)
-          .then((vs) => {
+          .then(async (vs) => {
             const active = vs.find((v) => v.isActive);
-            return active ? fetchLineup(next.id, active.id) : [];
+            if (!active) return [];
+            // Borrador sin publicar: solo lo ve la capitanía.
+            const visible = isCaptain || (await fetchLineupPublished(next.id));
+            return visible ? fetchLineup(next.id, active.id) : [];
           })
           .catch(() => [] as DbLineupRow[]),
         isCaptain ? fetchLastReminder(next.id) : Promise.resolve(null),

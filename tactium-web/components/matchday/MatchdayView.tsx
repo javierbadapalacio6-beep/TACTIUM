@@ -12,6 +12,7 @@ import {
   fetchMatchdayBundle,
   fetchMatchdayFcpContext,
   fetchSeasons,
+  fetchTeam,
   type DbMatchday,
   type DbPlayer,
   type FcpStanding,
@@ -20,6 +21,7 @@ import {
 import { removeMatchPhoto, updateMatchdaySchedule, uploadMatchPhoto } from "@/lib/matchday-ops";
 import { useSession } from "@/lib/session";
 import { useMatchdayTeam } from "@/lib/use-matchday-team";
+import { describeTandas, isValidTandas, pairsFor, tandasChoices } from "@/lib/tandas";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
@@ -395,8 +397,8 @@ export function MatchdayView({ id }: { id: string }) {
   const pathname = usePathname();
 
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
-    () => fetchMatchdayBundle(id, teamId!),
-    [id, teamId],
+    () => fetchMatchdayBundle(id, teamId!, isCaptain),
+    [id, teamId, isCaptain],
     !!teamId
   );
 
@@ -446,6 +448,11 @@ export function MatchdayView({ id }: { id: string }) {
   const [schedDate, setSchedDate] = useState("");
   const [schedTime, setSchedTime] = useState("");
   const [schedSaving, setSchedSaving] = useState(false);
+  const [schedPlace, setSchedPlace] = useState("");
+  const [schedTandas, setSchedTandas] = useState<string | null>(null);
+  // Género del equipo: decide cuántas parejas y qué tandas valen.
+  const teamInfo = useAsync(() => fetchTeam(teamId!).catch(() => null), [teamId], !!teamId);
+  const teamGender = teamInfo.data?.gender ?? null;
 
   // La pestaña va en la URL (`?tab=`): se puede enlazar, recargar y volver
   // atrás sin perderla. Sin parámetro, la que toque según el momento.
@@ -712,6 +719,8 @@ export function MatchdayView({ id }: { id: string }) {
   function openSchedule() {
     setSchedDate(m.date ?? "");
     setSchedTime(m.time ? m.time.slice(0, 5) : "");
+    setSchedPlace(m.location ?? "");
+    setSchedTandas(m.tandas ?? null);
     setEditSchedule(true);
   }
 
@@ -720,8 +729,9 @@ export function MatchdayView({ id }: { id: string }) {
     setSchedSaving(true);
     const date = schedDate || null;
     const time = schedTime || null;
-    const res = await guardedWrite("cambiar la fecha de la jornada", () =>
-      updateMatchdaySchedule(m.id, { date, time })
+    const location = schedPlace.trim() || null;
+    const res = await guardedWrite("cambiar los datos de la jornada", () =>
+      updateMatchdaySchedule(m.id, { date, time, location, tandas: schedTandas })
     );
     setSchedSaving(false);
     setEditSchedule(false);
@@ -729,8 +739,8 @@ export function MatchdayView({ id }: { id: string }) {
       setToast(res.reason);
       return;
     }
-    setPatch((p) => ({ ...p, date, time: time ? `${time}:00` : null }));
-    setToast("Fecha actualizada");
+    setPatch((p) => ({ ...p, date, time: time ? `${time}:00` : null, location, tandas: schedTandas }));
+    setToast("Jornada actualizada");
   }
 
   /* ── Compartir resultado ───────────────────────────────────────── */
@@ -874,7 +884,7 @@ export function MatchdayView({ id }: { id: string }) {
       <CardHead title="Sede">
         {canEditSchedule && (
           <button type="button" className="link-action" onClick={openSchedule}>
-            Cambiar fecha
+            Editar
           </button>
         )}
       </CardHead>
@@ -891,12 +901,22 @@ export function MatchdayView({ id }: { id: string }) {
             {m.isHome ? <IconHome size={14} /> : <IconPlane size={14} />}
             {m.isHome ? "En nuestras pistas" : "Fuera de casa"}
           </dd>
-          {m.tandas ? (
-            <>
-              <dt>Tandas</dt>
-              <dd className="mono">{m.tandas}</dd>
-            </>
-          ) : null}
+          <dt>Tandas</dt>
+          <dd>
+            {m.tandas ? (
+              <>
+                <span className="mono" style={{ fontWeight: 700 }}>{m.tandas}</span>
+                {isValidTandas(m.tandas, pairsFor(teamGender)) &&
+                  describeTandas(m.tandas, teamGender, m.time?.slice(0, 5) ?? null).map((l) => (
+                    <div key={l} style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{l}</div>
+                  ))}
+              </>
+            ) : (
+              <span style={{ color: canEditSchedule ? "var(--warning)" : "var(--text-faint)" }}>
+                {canEditSchedule ? "Sin definir · edítalas" : "Sin definir"}
+              </span>
+            )}
+          </dd>
         </dl>
       </div>
     </Card>
@@ -1512,8 +1532,8 @@ export function MatchdayView({ id }: { id: string }) {
         onClose={() => !schedSaving && setEditSchedule(false)}
         labelledBy="fecha-jornada-titulo"
         width={440}
-        title="Fecha y hora de la jornada"
-        lede="Déjalas en blanco si aún están por confirmar."
+        title="Datos de la jornada"
+        lede="Fecha, hora, lugar y tandas. Déjalos en blanco si aún están por confirmar."
         footer={
           <>
             <Btn onClick={() => setEditSchedule(false)} disabled={schedSaving}>
@@ -1542,6 +1562,29 @@ export function MatchdayView({ id }: { id: string }) {
               onChange={(e) => setSchedTime(e.target.value)}
             />
           </Field>
+          <Field label="Lugar" htmlFor="jornada-lugar">
+            <Input
+              id="jornada-lugar"
+              value={schedPlace}
+              onChange={(e) => setSchedPlace(e.target.value)}
+              placeholder="Pádel Club Norte"
+            />
+          </Field>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Tandas</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[null, ...tandasChoices(teamGender)].map((tv) => (
+              <Btn
+                key={tv ?? "none"}
+                variant={schedTandas === tv ? "accent" : "ghost"}
+                aria-pressed={schedTandas === tv}
+                onClick={() => setSchedTandas(tv)}
+              >
+                {tv ?? "Sin tanda"}
+              </Btn>
+            ))}
+          </div>
         </div>
         {!WRITES_ENABLED ? (
           <Note tone="warning" style={{ marginTop: 12 }}>

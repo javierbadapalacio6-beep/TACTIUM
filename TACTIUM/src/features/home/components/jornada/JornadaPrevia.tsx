@@ -15,7 +15,7 @@ import type { FcpLastCrossing } from '@core/services/fcpSeason';
 export const JornadaPrevia: React.FC<{
   matchdayId: string;
   lastCrossing: FcpLastCrossing | null;
-  venue: string;
+  venue?: string;
   tandas?: string | null;
   onOpenAvailability: () => void;
 }> = ({ matchdayId, lastCrossing, venue, tandas, onOpenAvailability }) => {
@@ -100,12 +100,14 @@ export const JornadaPrevia: React.FC<{
           ) : null}
         </View>
       </Pressable>
-      <Row label="Sede" last={!tandas}>
-        <Text style={styles.value} numberOfLines={2}>
-          {venue}
-        </Text>
-      </Row>
-      {tandas ? (
+      {venue ? (
+        <Row label="Sede" last={!tandas}>
+          <Text style={styles.value} numberOfLines={2}>
+            {venue}
+          </Text>
+        </Row>
+      ) : null}
+      {venue && tandas ? (
         <Row label="Tandas" last>
           <Text style={[styles.value, styles.mono]}>{tandas}</Text>
         </Row>

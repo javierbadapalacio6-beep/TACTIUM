@@ -76,8 +76,8 @@ export function ResultsView({ id }: { id: string }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
-    () => fetchMatchdayBundle(id, teamId!),
-    [id, teamId, reloadKey],
+    () => fetchMatchdayBundle(id, teamId!, role === "capitan" || role === "club"),
+    [id, teamId, reloadKey, role],
     !!teamId,
   );
 
