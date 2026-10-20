@@ -20,7 +20,7 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-20c',
+  id: '2026-10-20d',
   items: [
     {
       icon: '📣',
@@ -43,9 +43,9 @@ const NOVEDADES = {
       text: 'Añadir y editar jornadas no necesita plan. Lo del plan es traer el calendario de golpe: escanearlo o importarlo de la Federación.',
     },
     {
-      icon: '✎',
-      title: 'Edita sede y tandas a mano',
-      text: 'Si algo no cuadra, el capitán lo corrige tocando la tarjeta de la jornada.',
+      icon: '📤',
+      title: 'Compartir con sede y tandas',
+      text: 'La alineación y la foto del partido llevan ahora la sede y las tandas, y también salen en la tarjeta de Inicio. Si algo no cuadra, el capitán lo corrige tocando la tarjeta de la jornada.',
     },
   ],
 };
