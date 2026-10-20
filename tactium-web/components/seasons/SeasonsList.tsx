@@ -552,7 +552,7 @@ function Scoreboard({
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Chip>Activa · {PHASE_EYEBROW[season.phase]}</Chip>
-          <h2 style={{ margin: "10px 0 2px", fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          <h2 style={{ margin: "8px 0 2px", fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" }}>
             {season.name}
           </h2>
           <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>
@@ -564,7 +564,7 @@ function Scoreboard({
         </BtnLink>
       </div>
 
-      <StatRow style={{ marginTop: 16 }}>
+      <StatRow className="stat-row--strip" style={{ marginTop: 12 }}>
         {me ? (
           <Stat
             label={zone ? zone.label : "Puesto"}
@@ -578,7 +578,7 @@ function Scoreboard({
           />
         ) : null}
         <Stat label="Jornadas" value={`${played}/${total || "—"}`} />
-        <Stat label="Balance" value={`${wins}-${draws}-${losses}`} sub="Ganadas · empatadas · perdidas" />
+        <Stat label="Balance (G-E-P)" value={`${wins}-${draws}-${losses}`} />
       </StatRow>
 
       {standing?.previous && me && (
@@ -599,8 +599,8 @@ function Scoreboard({
             display: "flex",
             alignItems: "center",
             gap: 12,
-            marginTop: 16,
-            paddingTop: 14,
+            marginTop: 12,
+            paddingTop: 10,
             borderTop: "1px solid var(--line)",
             flexWrap: "wrap",
           }}
@@ -650,7 +650,7 @@ function Scoreboard({
             alignItems: "center",
             justifyContent: "space-between",
             gap: 12,
-            marginTop: 14,
+            marginTop: 10,
             flexWrap: "wrap",
           }}
         >

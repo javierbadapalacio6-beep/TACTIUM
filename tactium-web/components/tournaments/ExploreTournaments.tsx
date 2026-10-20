@@ -120,7 +120,7 @@ export function ExploreTournaments({ embedded = false }: { embedded?: boolean } 
 
       <div className="tw-tourney-grid">
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-          <div className="tw-toolbar">
+          <div className="tw-toolbar" style={{ marginBottom: 0, gap: 8 }}>
             <InputWrap icon={<IconSearch size={15} />}>
               <input
                 type="search"
@@ -130,8 +130,6 @@ export function ExploreTournaments({ embedded = false }: { embedded?: boolean } 
                 aria-label="Buscar torneo"
               />
             </InputWrap>
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {(
               [
                 ["Todos", status === "all" && genders.size === 0, () => { setStatus("all"); setGenders(new Set()); }],
@@ -164,7 +162,7 @@ export function ExploreTournaments({ embedded = false }: { embedded?: boolean } 
               <EmptyState icon={<IconTrophy size={22} />} title="No se pudieron cargar los torneos" body={error} />
             </Card>
           ) : rows.length === 0 ? (
-            <Card>
+            <Card flush={!filtering}>
               {filtering ? (
                 <EmptyState
                   icon={<IconTrophy size={22} />}
@@ -173,16 +171,27 @@ export function ExploreTournaments({ embedded = false }: { embedded?: boolean } 
                 />
               ) : (
                 // Sin torneos vivos: la página se dirige a quien organiza.
-                <EmptyState
-                  icon={<IconTrophy size={22} />}
-                  title="Ahora mismo no hay torneos abiertos"
-                  body={`Si organizas uno, móntalo aquí: inscripción por categorías, cuadros, horario por pistas y resultados en directo. Hasta ${TOURNAMENT_FREE_PAIRS} parejas es gratis.`}
-                  action={
-                    <BtnLink href="/torneos/organizar" variant="accent">
+                <div className="tw-empty-court">
+                  <div className="tw-empty-court-row">
+                    <IconTile>
+                      <IconTrophy size={18} />
+                    </IconTile>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700 }}>Ahora mismo no hay torneos abiertos</div>
+                      <div style={{ marginTop: 3, fontSize: 13, color: "var(--text-muted)" }}>
+                        Si organizas uno, móntalo aquí. Hasta {TOURNAMENT_FREE_PAIRS} parejas es gratis.
+                      </div>
+                    </div>
+                    <BtnLink href="/torneos/organizar" variant="accent" size="sm">
                       Organizar un torneo
                     </BtnLink>
-                  }
-                />
+                  </div>
+                  <ul className="tw-empty-steps">
+                    <li><b>Inscripción</b><span>por categorías, con pago por pareja</span></li>
+                    <li><b>Cuadro y horario</b><span>por pistas, sin hojas de cálculo</span></li>
+                    <li><b>En directo</b><span>resultados al momento para todos</span></li>
+                  </ul>
+                </div>
               )}
             </Card>
           ) : (

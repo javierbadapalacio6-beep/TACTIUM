@@ -698,11 +698,11 @@ export function FederationExplore({
               Clasificaciones, jornadas y jugadores federados.
             </p>
           </div>
+          <span className="tw-fcp-hero-meta">
+            <IconCalendar size={14} />
+            {countLabel}
+          </span>
         </div>
-        <span className="tw-fcp-hero-meta">
-          <IconCalendar size={14} />
-          {countLabel}
-        </span>
       </header>
 
       {/* Primero lo tuyo (solo con sesión; sin ella la página queda igual). */}

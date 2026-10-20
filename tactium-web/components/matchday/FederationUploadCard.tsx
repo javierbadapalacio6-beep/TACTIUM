@@ -41,7 +41,7 @@ export function FederationUploadCard({ matchdayId, canManage }: { matchdayId: st
   }
 
   return (
-    <Card>
+    <Card style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <span
           aria-hidden="true"
