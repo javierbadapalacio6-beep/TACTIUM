@@ -27,6 +27,7 @@ import type * as MatchdaysApi from '@core/services/matchdays';
 import type * as SeasonsApi from '@core/services/seasons';
 import type * as LineupsApi from '@core/services/lineups';
 import { DOWNLOAD_URL } from '@core/config/referral';
+import { tandaWhenForCourt, describeTandasShort } from '@core/utils/tandas';
 
 // Tarjeta de alineación pensada para COMPARTIR como imagen por WhatsApp:
 // marca TACTIUM + QR de descarga. Cada alineación compartida es un anuncio
@@ -47,6 +48,8 @@ interface Props {
   /** Fecha corta ya formateada (evita duplicar helpers de pantalla). */
   shortDate: string;
   time?: string;
+  /** Género del equipo: decide el orden de entrada de las tandas. */
+  gender?: string | null;
 }
 
 export const LineupShareCard: React.FC<Props> = ({
@@ -56,10 +59,12 @@ export const LineupShareCard: React.FC<Props> = ({
   pairs,
   shortDate,
   time,
+  gender,
 }) => {
   const sorted = [...pairs].sort(
     (a, b) => (a.court_number ?? 0) - (b.court_number ?? 0),
   );
+  const tandasShort = matchday.tandas ? describeTandasShort(matchday.tandas, gender, time || null) : '';
 
   return (
     <View style={styles.card}>
@@ -76,17 +81,24 @@ export const LineupShareCard: React.FC<Props> = ({
       </View>
 
       {/* Enfrentamiento */}
-      <Text style={styles.teamName} numberOfLines={1}>
-        {teamName}
-      </Text>
-      <Text style={styles.vsLine} numberOfLines={1}>
+      <Text style={styles.teamName}>{teamName}</Text>
+      <Text style={styles.vsLine}>
         {matchday.is_home ? 'Local' : 'Visitante'} · vs. {matchday.opponent}
       </Text>
-      <Text style={styles.metaLine} numberOfLines={1}>
+      <Text style={styles.metaLine}>
         {shortDate}
         {time ? ` · ${time}` : ''}
         {season ? ` · ${season.name}` : ''}
       </Text>
+      {matchday.location?.trim() ? (
+        <Text style={styles.sedeLine}>Sede · {matchday.location.trim()}</Text>
+      ) : null}
+      {tandasShort ? (
+        <Text style={styles.metaLine}>
+          Tandas {matchday.tandas} · {tandasShort}
+          {time ? ' (horas orientativas)' : ''}
+        </Text>
+      ) : null}
 
       {/* Parejas */}
       <View style={styles.pairs}>
@@ -95,12 +107,19 @@ export const LineupShareCard: React.FC<Props> = ({
             <View style={styles.courtChip}>
               <Text style={styles.courtChipText}>P{p.court_number}</Text>
             </View>
-            <Text style={styles.pairNames} numberOfLines={1}>
+            <Text style={styles.pairNames}>
               {p.player_a_name ?? '—'} / {p.player_b_name ?? '—'}
             </Text>
-            {p.pair_points != null ? (
-              <Text style={styles.pairPts}>{p.pair_points} pts</Text>
-            ) : null}
+            <View style={{ alignItems: 'flex-end' }}>
+              {tandaWhenForCourt(matchday.tandas, gender, p.court_number ?? 0, time || null) ? (
+                <Text style={styles.pairPts}>
+                  {tandaWhenForCourt(matchday.tandas, gender, p.court_number ?? 0, time || null)}
+                </Text>
+              ) : null}
+              {p.pair_points != null ? (
+                <Text style={styles.pairPts}>{p.pair_points} pts</Text>
+              ) : null}
+            </View>
           </View>
         ))}
       </View>
@@ -179,6 +198,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     letterSpacing: 0.4,
+  },
+  sedeLine: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
   },
   pairs: {
     marginTop: 14,

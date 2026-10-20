@@ -126,7 +126,6 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
                   styles.scoreName,
                   highlight === 'home' && styles.scoreNameUs,
                 ]}
-                numberOfLines={1}
               >
                 {homeName}
               </Text>
@@ -145,7 +144,6 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
                   styles.scoreName,
                   highlight === 'away' && styles.scoreNameUs,
                 ]}
-                numberOfLines={1}
               >
                 {awayName}
               </Text>
@@ -160,17 +158,17 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
             </View>
           </View>
         ) : (
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={styles.title}>
             {title}
           </Text>
         )}
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle}>
             {subtitle}
           </Text>
         ) : null}
         {detail ? (
-          <Text style={styles.detail} numberOfLines={1}>
+          <Text style={styles.detail}>
             {detail}
           </Text>
         ) : null}

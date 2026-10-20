@@ -745,7 +745,7 @@ export function MatchdayView({ id }: { id: string }) {
 
   /* ── Compartir resultado ───────────────────────────────────────── */
   const shareOutcome = closed ? closedOutcome : outcome;
-  const shareSubtitle = [`Jornada ${m.round}`, m.date ? formatDate(m.date) : null]
+  const shareSubtitle = [`Jornada ${m.round}`, m.date ? formatDate(m.date) : null, m.location?.trim() || null]
     .filter(Boolean)
     .join(" · ");
   const courtScore = (r: CourtRow): string => {
@@ -762,6 +762,13 @@ export function MatchdayView({ id }: { id: string }) {
     scoreThem,
     outcome: shareOutcome,
     subtitle: shareSubtitle,
+    extra: m.tandas
+      ? `Tandas ${m.tandas}${
+          describeTandasShort(m.tandas, teamGender, m.time?.slice(0, 5) ?? null)
+            ? ` · ${describeTandasShort(m.tandas, teamGender, m.time?.slice(0, 5) ?? null)}`
+            : ""
+        }`
+      : null,
     season: season?.name ?? null,
     photoUrl: m.photoUrl,
     courts: rows.map((r) => {

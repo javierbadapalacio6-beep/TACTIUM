@@ -64,7 +64,7 @@ import {
 } from '../components/jornada/JornadaPhaseTabs';
 import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
 import { JornadaSedeTandas, TandasChips } from '../components/jornada/JornadaSedeTandas';
-import { tandasChoices, tandaWhenForCourt } from '@core/utils/tandas';
+import { tandasChoices, tandaWhenForCourt, describeTandasShort } from '@core/utils/tandas';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
@@ -706,8 +706,14 @@ const JornadaDetail = ({
   const photoTitle = `${teamName} ${score.won}–${score.lost} ${matchday.opponent}`;
   // Breve para que NO se corte en la tarjeta: "Jornada 14 · sáb 12 jul"
   // (sin el nombre largo de la liga; la marca ya va en la tarjeta).
-  const photoSubtitle = `${jornadaLabel}${dateObj ? ` · ${formatShortDay(dateObj)}` : ''}`;
-  const photoDetail = outcomeLabel;
+  const photoSubtitle = [
+    jornadaLabel,
+    dateObj ? formatShortDay(dateObj) : null,
+    matchday.location?.trim() || null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const photoDetail = [outcomeLabel, matchday.tandas ? `Tandas ${matchday.tandas}` : null].filter(Boolean).join(' · ');
   const photoShareText = [
     `🎾 *TACTIUM · ${jornadaLabel}*`,
     `${teamName} ${score.won} – ${score.lost} ${matchday.opponent} (${outcomeLabel})`,
@@ -1426,6 +1432,7 @@ const JornadaDetail = ({
         season={season}
         pairs={pairs}
         teamName={team?.name ?? '—'}
+        gender={team?.gender}
       />
 
       <BottomSheet
@@ -1989,7 +1996,8 @@ const ShareLineupSheet: React.FC<{
   season: SeasonsApi.Season | null;
   pairs: LineupsApi.LineupPair[];
   teamName: string;
-}> = ({ open, onClose, matchday, season, pairs, teamName }) => {
+  gender?: string | null;
+}> = ({ open, onClose, matchday, season, pairs, teamName, gender }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const dateObj = isoDateToDate(matchday.match_date);
@@ -2004,16 +2012,20 @@ const ShareLineupSheet: React.FC<{
     `${shortDate}${time ? ` · ${time}` : ''}${
       season ? ` · ${season.name}` : ''
     }`,
+    ...(matchday.location?.trim() ? [`Sede: ${matchday.location.trim()}`] : []),
+    ...(matchday.tandas
+      ? [`Tandas ${matchday.tandas}${time ? ' (horas orientativas)' : ''}: ${describeTandasShort(matchday.tandas, gender, time || null)}`]
+      : []),
     ``,
     `*Alineación*`,
     ...pairs
       .sort((a, b) => (a.court_number ?? 0) - (b.court_number ?? 0))
-      .map(
-        (p) =>
-          `P${p.court_number} — ${p.player_a_name ?? '—'} / ${
-            p.player_b_name ?? '—'
-          }${p.pair_points != null ? `  (${p.pair_points} pts)` : ''}`,
-      ),
+      .map((p) => {
+        const when = tandaWhenForCourt(matchday.tandas, gender, p.court_number ?? 0, time || null);
+        return `P${p.court_number} — ${p.player_a_name ?? '—'} / ${
+          p.player_b_name ?? '—'
+        }${p.pair_points != null ? `  (${p.pair_points} pts)` : ''}${when ? `  ${when}` : ''}`;
+      }),
     ``,
     `Recuerda confirmar disponibilidad 🟢`,
   ].join('\n');
@@ -2080,6 +2092,7 @@ const ShareLineupSheet: React.FC<{
             pairs={pairs}
             shortDate={shortDate}
             time={time}
+            gender={gender}
           />
         </View>
       </View>
