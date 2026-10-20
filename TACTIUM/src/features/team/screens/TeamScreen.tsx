@@ -1448,6 +1448,7 @@ export const TeamScreen = () => {
           open={groupOpen}
           teamId={team.id}
           teamName={team.name}
+          gateTeam={{ id: team.id, club_id: team.club_id, covered: team.covered, name: team.name }}
           onClose={() => setGroupOpen(false)}
         />
       ) : null}

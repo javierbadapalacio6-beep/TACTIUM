@@ -160,11 +160,12 @@ export const SeasonDetailScreen = ({
   const [editing, setEditing] = useState<MatchdaysApi.Matchday | null>(null);
   const [closingSeason, setClosingSeason] = useState(false);
 
-  // Reverse trial: crear jornada / escanear son acciones premium. El gate
+  // Reverse trial: escanear el calendario es premium (como importarlo de la
+  // Federación). Añadir o editar una jornada a mano es gratis. El gate
   // comprueba la sub EN EL MOMENTO de la acción → bloquea tanto al usuario
   // nuevo como al que canceló/caducó teniendo ya la temporada creada.
   const gate = usePremiumGate();
-  const openAddMatchday = gate(() => setAdding(true), 'matchday_create');
+  const openAddMatchday = () => setAdding(true);
   const openScan = gate(() => setScanning(true), 'calendar_scan');
 
   // autoOpen desde atajo/botón ＋: abre el escáner o «nueva jornada» PASANDO
@@ -464,7 +465,7 @@ export const SeasonDetailScreen = ({
   );
 
   const editHandler = (m: MatchdaysApi.Matchday) =>
-    canEditSeason ? gate(() => setEditing(m), 'matchday_edit') : undefined;
+    canEditSeason ? () => setEditing(m) : undefined;
 
   // Pestañas: Jornadas primero (lo que más se consulta); Clasificación y
   // Cuadro solo en ligas de la Federación.

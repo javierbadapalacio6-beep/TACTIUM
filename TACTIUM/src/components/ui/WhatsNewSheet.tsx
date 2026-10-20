@@ -20,7 +20,7 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-20b',
+  id: '2026-10-20c',
   items: [
     {
       icon: '📣',
@@ -36,6 +36,11 @@ const NOVEDADES = {
       icon: '🔔',
       title: 'Aviso de la hora fuera de casa',
       text: 'Cuando la Federación publica o cambia la hora de un partido de visitante, te llega un aviso.',
+    },
+    {
+      icon: '＋',
+      title: 'Crear la temporada a mano es gratis',
+      text: 'Añadir y editar jornadas no necesita plan. Lo del plan es traer el calendario de golpe: escanearlo o importarlo de la Federación.',
     },
     {
       icon: '✎',

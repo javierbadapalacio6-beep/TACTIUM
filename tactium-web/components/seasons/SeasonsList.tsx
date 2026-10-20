@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -16,7 +17,9 @@ import {
   type DbSeason,
 } from "@/lib/queries";
 import { fetchLeagueStatsBundle, computePlayerLeagueStats } from "@/lib/player-stats";
+import { proHref } from "@/lib/nav";
 import { useSession } from "@/lib/session";
+import { fetchProForTeam } from "@/lib/team-captains";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import {
@@ -90,6 +93,7 @@ const PHASE_LABEL: Record<DbSeason["phase"], string> = {
  */
 export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
   const { activeTeam, role, user } = useSession();
+  const router = useRouter();
   const teamId = activeTeam?.id ?? null;
   // Solo capitán/club crean temporadas; el jugador las consulta (Competir › Liga).
   const canManage = role === "capitan" || role === "club";
@@ -189,6 +193,14 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
       const n = await previousSeasonImportNotice(teamId, standing.data);
       setBusy(false);
       setNotice(n);
+      return;
+    }
+    // Traer el calendario de la Federación es premium, como en la app
+    // (`calendar_import`). Mismo criterio que escanear: mi plan o el plan
+    // Capitán que cubre este equipo.
+    if (!(await fetchProForTeam(activeTeam?.clubId ? null : teamId))) {
+      setBusy(false);
+      router.push(proHref("calendar_import"));
       return;
     }
     const res = await guardedWrite("traer la temporada de la Federación", () =>

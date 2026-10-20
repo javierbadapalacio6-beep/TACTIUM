@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -12,6 +13,7 @@ import {
   type DbMatchday,
   type DbSeason,
 } from "@/lib/queries";
+import { proHref } from "@/lib/nav";
 import { fetchProForTeam } from "@/lib/team-captains";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -74,6 +76,7 @@ type Tab = "jornadas" | "clasif" | "cuadro";
  */
 export function SeasonDetail({ id }: { id: string }) {
   const { user, activeTeam, role } = useSession();
+  const router = useRouter();
   const teamId = activeTeam?.id ?? null;
   // Solo el capitán (o el club) gestiona; el jugador consulta.
   const canManage = role === "capitan" || role === "club";
@@ -227,6 +230,13 @@ export function SeasonDetail({ id }: { id: string }) {
       const n = await previousSeasonImportNotice(teamId, standing.data);
       setBusy(false);
       setNotice(n);
+      return;
+    }
+    // Traer el calendario de la Federación es premium, como en la app
+    // (`calendar_import`). Mismo criterio que escanear.
+    if (!(await fetchProForTeam(activeTeam?.clubId ? null : teamId))) {
+      setBusy(false);
+      router.push(proHref("calendar_import"));
       return;
     }
     const res = await guardedWrite("traer el calendario de la Federación", () =>

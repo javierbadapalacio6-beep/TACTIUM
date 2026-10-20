@@ -99,9 +99,10 @@ export const SeasonsScreen = ({
   // (que es semánticamente distinto).
   const [loadError, setLoadError] = useState(false);
 
-  // Los tres caminos pasan por el mismo paywall que el alta de siempre.
-  const startCreating = gate(() => setCreating({}), 'season_create');
-  const startScan = gate(() => setCreating({ then: 'scan' }), 'season_create');
+  // Crear la temporada a mano es gratis. Lo premium es traer el calendario en
+  // bloque: escanearlo o importarlo de la Federación (igual que en la web).
+  const startCreating = () => setCreating({});
+  const startScan = gate(() => setCreating({ then: 'scan' }), 'calendar_scan');
 
   const didLoadRef = useRef(false);
   const reload = React.useCallback(async () => {
@@ -195,7 +196,7 @@ export const SeasonsScreen = ({
     } finally {
       setImporting(false);
     }
-  }, 'season_create');
+  }, 'calendar_import');
 
   const activeBlock = active ? (
               <>

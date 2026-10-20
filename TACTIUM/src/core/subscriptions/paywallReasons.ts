@@ -22,10 +22,8 @@ export type PaywallReason =
   | 'time_poll'
   | 'roster_import'
   | 'club_roster_import'
+  | 'calendar_import'
   | 'results_edit'
-  | 'matchday_create'
-  | 'matchday_edit'
-  | 'season_create'
   | 'club_manage_team'
   | 'trial_expiring';
 
@@ -99,20 +97,12 @@ const REASONS: Record<Exclude<PaywallReason, 'trial_expiring'>, PaywallReasonCop
     title: 'Apuntar resultados es Pro',
     subtitle: 'Set a set, y quedan en el acta para todo el equipo',
   },
-  matchday_create: {
+  // Importar el calendario de la Federación: el otro camino «en bloque» (el
+  // primero es escanearlo). Añadir o editar jornadas a mano es gratis.
+  calendar_import: {
     icon: 'calendar',
-    title: 'Crear jornadas es Pro',
-    subtitle: 'Rival, fecha y pista, y el equipo lo ve en la agenda',
-  },
-  matchday_edit: {
-    icon: 'calendar',
-    title: 'Editar jornadas es Pro',
-    subtitle: 'Cambia fecha, rival o pista y el equipo lo ve al momento',
-  },
-  season_create: {
-    icon: 'calendar',
-    title: 'Crear la temporada es Pro',
-    subtitle: 'Calendario, plantilla y jornadas en un solo sitio',
+    title: 'Traer el calendario de la Federación es Pro',
+    subtitle: 'Todas las jornadas de tu grupo, sin teclear ninguna',
   },
   club_manage_team: {
     icon: 'team',
