@@ -188,11 +188,14 @@ export const HomeScreen = ({
               const activeVariant =
                 await LineupVariantsApi.fetchActiveVariant(md.id);
               if (cancelled) return;
-              // Borrador sin publicar: solo lo ve el capitán; a los jugadores no les consta «lista».
-              const visible =
-                MatchdaysApi.isLineupPublished(md) || selectIsCaptain(useTeamStore.getState());
-              if (activeVariant && visible) {
-                const lineup = await LineupsApi.fetchLineup(activeVariant.id);
+              // Capitán: lo que está editando. Jugador: solo la copia publicada (nada de borradores).
+              const isCap = selectIsCaptain(useTeamStore.getState());
+              const snap = isCap ? null : await LineupsApi.fetchPublishedLineup(md.id);
+              if (cancelled) return;
+              const visible = isCap || snap !== null || MatchdaysApi.isLineupPublished(md);
+              if ((activeVariant && visible) || snap !== null) {
+                const lineup =
+                  snap ?? (await LineupsApi.fetchLineup(activeVariant!.id));
                 if (cancelled) return;
                 const filled = lineup.filter(
                   (p) => p.player_a_id && p.player_b_id,

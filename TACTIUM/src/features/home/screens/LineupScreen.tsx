@@ -253,6 +253,18 @@ export const LineupScreen = ({
     [courts],
   );
 
+  // El jugador solo lee la copia PUBLICADA; el capitán y el club, la variante viva.
+  const loadRows = useCallback(
+    async (variantId: string) => {
+      if (!isCaptain && !isClub) {
+        const snap = await LineupsApi.fetchPublishedLineup(matchdayId);
+        if (snap !== null) return snap;
+      }
+      return LineupsApi.fetchLineup(variantId);
+    },
+    [isCaptain, isClub, matchdayId],
+  );
+
   // Cargar la alineación cada vez que cambia la variante seleccionada.
   useEffect(() => {
     if (!currentVariantId) {
@@ -263,7 +275,7 @@ export const LineupScreen = ({
     let cancelled = false;
     (async () => {
       try {
-        const lineup = await LineupsApi.fetchLineup(currentVariantId);
+        const lineup = await loadRows(currentVariantId);
         if (cancelled) return;
         const arr = applyLineupRows(lineup);
         // Sembramos el «último persistido» con el estado de BD.
@@ -277,7 +289,7 @@ export const LineupScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [currentVariantId, courts, applyLineupRows]);
+  }, [currentVariantId, courts, applyLineupRows, loadRows]);
 
   const closed = matchday?.status === 'finished';
   const seasonClosed = season ? !season.active : false;
@@ -307,7 +319,7 @@ export const LineupScreen = ({
         const target =
           currentVariantId ?? vars.find((v) => v.is_active)?.id ?? vars[0]?.id ?? null;
         if (target) {
-          const lineup = await LineupsApi.fetchLineup(target);
+          const lineup = await loadRows(target);
           applyLineupRows(lineup);
         }
         void loadAvailability();

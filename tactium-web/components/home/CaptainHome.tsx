@@ -11,6 +11,7 @@ import {
   fetchLastReminder,
   fetchLineup,
   fetchLineupPublished,
+  fetchPublishedLineup,
   fetchMatchdays,
   fetchMaybeDeadline,
   fetchPlayers,
@@ -179,8 +180,10 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
             const active = vs.find((v) => v.isActive);
             if (!active) return [];
             // Borrador sin publicar: solo lo ve la capitanía.
-            const visible = isCaptain || (await fetchLineupPublished(next.id));
-            return visible ? fetchLineup(next.id, active.id) : [];
+            if (isCaptain) return fetchLineup(next.id, active.id);
+            const snap = await fetchPublishedLineup(next.id);
+            if (snap !== null) return snap;
+            return (await fetchLineupPublished(next.id)) ? fetchLineup(next.id, active.id) : [];
           })
           .catch(() => [] as DbLineupRow[]),
         isCaptain ? fetchLastReminder(next.id) : Promise.resolve(null),

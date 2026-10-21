@@ -138,7 +138,15 @@ export const ResultsScreen = ({ navigation, route }: HomeStackScreenProps<'Resul
       const [md, results, lineup] = await Promise.all([
         MatchdaysApi.fetchMatchday(matchdayId),
         MatchResultsApi.fetchResults(matchdayId),
-        activeVariant ? LineupsApi.fetchLineup(activeVariant.id) : Promise.resolve([]),
+        // Capitán: lo vivo. Jugador: solo la alineación publicada.
+        isCaptain
+          ? activeVariant
+            ? LineupsApi.fetchLineup(activeVariant.id)
+            : Promise.resolve([])
+          : LineupsApi.fetchPublishedLineup(matchdayId).then(
+              async (snap) =>
+                snap ?? (activeVariant ? LineupsApi.fetchLineup(activeVariant.id) : []),
+            ),
       ]);
       setMatchday(md);
       setPairs(lineup);
@@ -166,7 +174,7 @@ export const ResultsScreen = ({ navigation, route }: HomeStackScreenProps<'Resul
       console.warn('Results fetch', e);
       setLoadError(true);
     }
-  }, [matchdayId, courts]);
+  }, [matchdayId, courts, isCaptain]);
 
   useEffect(() => {
     let cancelled = false;

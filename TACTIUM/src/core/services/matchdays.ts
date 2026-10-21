@@ -125,8 +125,14 @@ export function isLineupPublished(md: object | null | undefined): boolean {
   return at === undefined ? true : at !== null;
 }
 
-/** Marca la alineación como publicada. Best-effort: si la columna aún no existe no rompe la publicación. */
+/**
+ * Publica la alineación: congela las parejas de la variante oficial (RPC `publish_lineup`) y marca la jornada
+ * como publicada. Si la RPC aún no existe, cae a solo marcar la columna.
+ */
 export async function markLineupPublished(id: string): Promise<void> {
+  const rpc = await supabase.rpc('publish_lineup' as never, { p_matchday_id: id } as never);
+  if (!rpc.error) return;
+  console.warn('publish_lineup', rpc.error.message);
   const { error } = await supabase
     .from('matchdays')
     .update({ lineup_published_at: new Date().toISOString() } as never)

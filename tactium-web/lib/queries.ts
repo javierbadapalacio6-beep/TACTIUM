@@ -1185,8 +1185,31 @@ export async function fetchLineupPublished(matchdayId: string): Promise<boolean>
   }
 }
 
-/** Marca la alineación como publicada (el capitán pulsó Publicar). */
+/**
+ * La alineación PUBLICADA: la copia que se congeló al pulsar Publicar (vista `published_lineup_pairs`). Es lo único
+ * que ve un jugador; lo que el capitán prueba en el editor no le llega hasta que publique otra vez.
+ * null = la copia no está disponible (migración sin aplicar): quien llama usa el camino antiguo.
+ */
+export async function fetchPublishedLineup(matchdayId: string): Promise<DbLineupRow[] | null> {
+  try {
+    const { data, error } = await supabaseBrowser()
+      .from("published_lineup_pairs")
+      .select("court_number, player_a_id, player_b_id")
+      .eq("matchday_id", matchdayId)
+      .order("court_number", { ascending: true });
+    if (error) return null;
+    return ((data ?? []) as { court_number: number; player_a_id: string | null; player_b_id: string | null }[]).map(
+      (l) => ({ court: l.court_number, playerA: l.player_a_id, playerB: l.player_b_id, variantId: null }),
+    ) as unknown as DbLineupRow[];
+  } catch {
+    return null;
+  }
+}
+
+/** Publica la alineación: congela las parejas (RPC `publish_lineup`) y marca la jornada. */
 export async function markLineupPublished(matchdayId: string): Promise<void> {
+  const rpc = await supabaseBrowser().rpc("publish_lineup", { p_matchday_id: matchdayId });
+  if (!rpc.error) return;
   const { error } = await supabaseBrowser()
     .from("matchdays")
     .update({ lineup_published_at: new Date().toISOString() })
@@ -1213,7 +1236,10 @@ export async function fetchMatchdayBundle(
 
   // La alineación se pide después: depende de cuál sea la variante activa.
   const active = variants.find((v) => v.isActive) ?? variants[0];
-  const lineup = canSeeDraft || lineupPublished ? await fetchLineup(matchdayId, active?.id) : [];
+  const lineup = canSeeDraft
+    ? await fetchLineup(matchdayId, active?.id)
+    : ((await fetchPublishedLineup(matchdayId)) ??
+      (lineupPublished ? await fetchLineup(matchdayId, active?.id) : []));
 
   return { matchday, players, variants, lineup, results, availability, lineupPublished };
 }

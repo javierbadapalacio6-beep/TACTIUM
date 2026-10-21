@@ -19,6 +19,21 @@ export async function fetchLineup(variantId: string): Promise<LineupPair[]> {
 }
 
 /**
+ * La alineación PUBLICADA de una jornada: la copia que se congeló al pulsar Publicar. Es lo único que ven los
+ * jugadores (lo que el capitán esté probando en el editor no les llega hasta que publique otra vez).
+ * Devuelve null si la copia no está disponible (migración sin aplicar): quien llama usa el camino antiguo.
+ */
+export async function fetchPublishedLineup(matchdayId: string): Promise<LineupPair[] | null> {
+  const { data, error } = await supabase
+    .from('published_lineup_pairs' as never)
+    .select('*')
+    .eq('matchday_id', matchdayId)
+    .order('court_number', { ascending: true });
+  if (error) return null;
+  return (data ?? []) as unknown as LineupPair[];
+}
+
+/**
  * Upsert de una pareja en (variant_id, court_number). El matchday_id se
  * sigue persistiendo por compatibilidad con código que filtra por
  * matchday + para mantener la integridad referencial.

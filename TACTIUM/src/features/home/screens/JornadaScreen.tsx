@@ -308,16 +308,23 @@ const JornadaDetail = ({
       if (md) {
         // JornadaScreen siempre lee de la variante activa (la "oficial").
         const activeVariant = await LineupVariantsApi.fetchActiveVariant(md.id);
+        // Capitán: lo que está editando. Jugador: solo la copia publicada.
         const [lineup, res, s, a] = await Promise.all([
-          activeVariant
-            ? LineupsApi.fetchLineup(activeVariant.id)
-            : Promise.resolve([]),
+          !isCaptain
+            ? LineupsApi.fetchPublishedLineup(md.id).then(async (snap) =>
+                snap ??
+                (activeVariant && MatchdaysApi.isLineupPublished(md)
+                  ? LineupsApi.fetchLineup(activeVariant.id)
+                  : []),
+              )
+            : activeVariant
+              ? LineupsApi.fetchLineup(activeVariant.id)
+              : Promise.resolve([]),
           MatchResultsApi.fetchResults(md.id),
           SeasonsApi.fetchSeasonById(md.season_id),
           fetchActaForMatchday(md.id),
         ]);
-        // Borrador: solo lo ve el capitán. Los jugadores ven la alineación cuando se publica.
-        setPairs(isCaptain || MatchdaysApi.isLineupPublished(md) ? lineup : []);
+        setPairs(lineup);
         setResults(res);
         setSeason(s);
         setActa(a);
