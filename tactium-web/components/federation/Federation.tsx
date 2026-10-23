@@ -1816,6 +1816,21 @@ function FcpGroupSchedule({
                           </span>
                         </div>
                       ))}
+                      {p.fecha || p.hora || p.tandas || p.sede ? (
+                        <div
+                          className="truncate"
+                          style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}
+                        >
+                          {[
+                            fmtFcpDate(p.fecha),
+                            p.hora ? p.hora.slice(0, 5) : null,
+                            p.tandas ? `Tandas ${p.tandas}` : null,
+                            p.sede,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ display: "grid", gap: 6, textAlign: "center" }}>
                       <span

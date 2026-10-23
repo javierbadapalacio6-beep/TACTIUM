@@ -653,6 +653,21 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                         </View>
                       ) : null}
                     </View>
+                    {/* Cuándo y dónde: día, hora, tandas y sede que la Federación ya publica. */}
+                    {p.fecha || p.hora || p.tandas || p.sede ? (
+                      <View style={styles.matchWhen}>
+                        <Text style={styles.matchWhenText} numberOfLines={1}>
+                          {[
+                            fmtLongDate(p.fecha),
+                            p.hora ? p.hora.slice(0, 5) : null,
+                            p.tandas ? `Tandas ${p.tandas}` : null,
+                            p.sede,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Text>
+                      </View>
+                    ) : null}
                     {acta.length > 0 && abierta ? (
                       <View style={styles.matchBottom}>
                         {acta.map((g) => {
@@ -881,6 +896,13 @@ const makeStyles = (c: Palette) =>
     teamWin: { color: c.text },
     teamLose: { color: c.textMuted },
     mScore: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '700', color: c.text },
+    matchWhen: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderTopColor: c.hair,
+    },
+    matchWhenText: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 0.4, color: c.textMuted },
     matchBottom: {
       flexDirection: 'row',
       alignItems: 'center',

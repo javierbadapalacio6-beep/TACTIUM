@@ -36,6 +36,10 @@ export interface FcpMatch {
   jornada: number | null;
   fecha: string | null;
   hora: string | null;
+  /** Tandas de la Federación («2-2»). */
+  tandas?: string | null;
+  /** Sede, sacada del texto de la Federación («24 Oct 11:00 Tandas:2-2  Move and go Santander»). */
+  sede?: string | null;
   local: string;
   visitante: string;
   resultado: string | null;
@@ -43,6 +47,12 @@ export interface FcpMatch {
   estado: string | null;
   ronda: string | null;
   cuadro: string | null;
+}
+
+/** La sede es lo que sigue a «Tandas:x-y» en el texto de la Federación. */
+function sedeDeRango(rango: string | null): string | null {
+  const m = (rango ?? "").match(/Tandas:\s*\S+\s+(.+)$/i);
+  return m?.[1]?.trim() || null;
 }
 
 export interface FcpRosterPlayer {
@@ -236,7 +246,7 @@ export async function fetchFcpMatches(
   const { data, error } = await sb
     .from("fcp_partidos")
     .select(
-      "id_partido, jornada, fecha, hora, equipo_local, equipo_visit, resultado, ganador, estado, ronda, cuadro"
+      "id_partido, jornada, fecha, hora, orden_tandas, fecha_rango, equipo_local, equipo_visit, resultado, ganador, estado, ronda, cuadro"
     )
     .eq("id_grupo", idGrupo)
     .order("jornada", { ascending: true })
@@ -247,6 +257,8 @@ export async function fetchFcpMatches(
     jornada: p.jornada,
     fecha: p.fecha,
     hora: p.hora,
+    tandas: p.orden_tandas,
+    sede: sedeDeRango(p.fecha_rango),
     local: p.equipo_local ?? "—",
     visitante: p.equipo_visit ?? "—",
     resultado: p.resultado,

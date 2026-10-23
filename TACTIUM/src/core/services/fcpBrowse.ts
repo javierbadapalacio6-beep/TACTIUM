@@ -232,12 +232,22 @@ export interface FcpBrowseMatch {
   ganador: string | null;
   fecha: string | null;
   hora: string | null;
+  /** Tandas de la Federación («2-2»). */
+  tandas: string | null;
+  /** Sede, sacada del texto de la Federación («24 Oct 11:00 Tandas:2-2  Move and go Santander»). */
+  sede: string | null;
+}
+
+/** La sede es lo que sigue a «Tandas:x-y» en el texto de la Federación. */
+function sedeDeRango(rango: string | null): string | null {
+  const m = (rango ?? '').match(/Tandas:\s*\S+\s+(.+)$/i);
+  return m?.[1]?.trim() || null;
 }
 
 /** Jornadas (calendario) de un grupo. */
 export async function fetchGroupSchedule(idGrupo: string): Promise<FcpBrowseMatch[]> {
   const { data } = await rawFrom('fcp_partidos')
-    .select('id_partido, jornada, equipo_local, equipo_visit, resultado, ganador, fecha, hora')
+    .select('id_partido, jornada, equipo_local, equipo_visit, resultado, ganador, fecha, hora, orden_tandas, fecha_rango')
     .eq('id_grupo', idGrupo)
     .order('jornada', { ascending: true });
   return ((data ?? []) as {
@@ -249,7 +259,11 @@ export async function fetchGroupSchedule(idGrupo: string): Promise<FcpBrowseMatc
     ganador: string | null;
     fecha: string | null;
     hora: string | null;
+    orden_tandas: string | null;
+    fecha_rango: string | null;
   }[]).map((r) => ({
+    tandas: r.orden_tandas,
+    sede: sedeDeRango(r.fecha_rango),
     idPartido: r.id_partido,
     jornada: r.jornada,
     local: r.equipo_local ?? '',
