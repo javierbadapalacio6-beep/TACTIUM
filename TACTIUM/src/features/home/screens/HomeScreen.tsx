@@ -48,7 +48,7 @@ import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { FeedPreview } from '@features/social/components/FeedPreview';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
-import { matchdayState } from '@core/utils/matchday';
+import { matchdayState, isMatchStarted } from '@core/utils/matchday';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import { RsvpCard } from '@features/availability/components/RsvpCard';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
@@ -308,7 +308,7 @@ export const HomeScreen = ({
   const wide = mode === 'tabletLandscape';
 
   const lineupCta =
-    nextMatchday && canEdit ? (
+    nextMatchday && canEdit && !isMatchStarted(nextMatchday) ? (
       <Pressable
         onPress={() =>
           navigation.navigate('Lineup', { matchdayId: nextMatchday.id })
@@ -491,14 +491,17 @@ export const HomeScreen = ({
                           : `Alineación ${lineupFilled}/${matchesPerRound}`}
                 </Text>
               </View>
-              <View style={heroStyles.heroMeta}>
-                <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
-                  {avail}/{players.length} van
-                </Text>
-              </View>
+              {isMatchStarted(nextMatchday) ? null : (
+                <View style={heroStyles.heroMeta}>
+                  <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
+                    {avail}/{players.length} van
+                  </Text>
+                </View>
+              )}
             </View>
 
-            {nextMatchday.status === 'upcoming' && myPlayerId ? (
+            {/* La convocatoria solo vale ANTES del partido: empezado, no se vota. */}
+            {nextMatchday.status === 'upcoming' && !isMatchStarted(nextMatchday) && myPlayerId ? (
               <RsvpCard
                 embedded
                 palette={darkColors}
@@ -512,7 +515,7 @@ export const HomeScreen = ({
 
             {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
                 el recuento (features/timePoll). */}
-            {nextMatchday.status === 'upcoming' && nextMatchday.is_home ? (
+            {nextMatchday.status === 'upcoming' && !isMatchStarted(nextMatchday) && nextMatchday.is_home ? (
               <TimePollCard
                 variant="home"
                 palette={darkColors}
@@ -589,7 +592,7 @@ export const HomeScreen = ({
           </View>
         )}
 
-        {canEdit && nextMatchday && nextMatchday.status === 'upcoming' && players.length > 0 ? (
+        {canEdit && nextMatchday && nextMatchday.status === 'upcoming' && !isMatchStarted(nextMatchday) && players.length > 0 ? (
           <ConvocatoriaCard
             counts={availCounts}
             needed={matchesPerRound * 2}

@@ -16,6 +16,24 @@ export function isMatchStarted(
   return now.getTime() >= datetime.getTime();
 }
 
+/** Un encuentro dura como mucho esto (cinco parejas, a veces se alarga). Pasado el plazo, ya no está «en juego». */
+export const MATCH_WINDOW_MS = 5 * 60 * 60 * 1000;
+
+/**
+ * El partido ya ha terminado por tiempo: han pasado `MATCH_WINDOW_MS` desde su
+ * hora. Sin hora fijada se da por terminado al acabar el día.
+ */
+export function isMatchOver(
+  md: { match_date: string | null; match_time: string | null },
+  now: Date = new Date(),
+): boolean {
+  if (!md.match_date) return false;
+  const start = new Date(`${md.match_date}T${md.match_time ?? '00:00:00'}`).getTime();
+  if (Number.isNaN(start)) return false;
+  const end = md.match_time ? start + MATCH_WINDOW_MS : start + 24 * 60 * 60 * 1000;
+  return now.getTime() >= end;
+}
+
 /**
  * Solo se pueden editar resultados si el partido ha empezado y el acta
  * no ha sido cerrada todavía.

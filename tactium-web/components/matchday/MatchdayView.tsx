@@ -50,6 +50,7 @@ import {
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
 import { fmtRango } from "@/lib/fcp-range";
 import { TimePollPanel } from "@/components/matchday/TimePollPanel";
+import { isMatchStarted, isMatchOver } from "@/lib/match-time";
 import { FederationUploadCard } from "@/components/matchday/FederationUploadCard";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
 import {
@@ -157,13 +158,6 @@ function countdown(
   const d = Math.floor(totalH / 24);
   const h = totalH % 24;
   return { big: d === 0 ? `${h} h` : `${d} d / ${h} h`, small: "Para el partido" };
-}
-
-/** ¿Ha llegado la hora del partido? (sin hora, cuenta desde las 00:00). */
-function isMatchStarted(date: string | null, time: string | null, now: number): boolean {
-  if (!date) return false;
-  const t = new Date(`${date}T${time ?? "00:00:00"}`);
-  return !Number.isNaN(t.getTime()) && now >= t.getTime();
 }
 
 const initialsOf = (name: string) =>
@@ -590,6 +584,8 @@ export function MatchdayView({ id }: { id: string }) {
   const allIn = rows.length > 0 && filled === rows.length;
   const pairsSet = rows.filter((r) => r.pair[0] && r.pair[1]).length;
   const started = m.status === "in_progress" || isMatchStarted(m.date, m.time, now);
+  // Pasado el plazo del encuentro (5 h) sin acta cerrada: no está «en juego», falta el acta.
+  const over = !closed && isMatchOver(m.date, m.time, now);
   // Marcador grande solo con algo que contar: acta cerrada o empezado con
   // alguna pista resuelta. Empezado sin pistas → «En juego».
   const hasResult = closed || (started && filled > 0);
@@ -1230,7 +1226,7 @@ export function MatchdayView({ id }: { id: string }) {
                 Alineación
               </BtnLink>
             </>
-          ) : teamCaptain && !closed ? (
+          ) : teamCaptain && !closed && !started ? (
             <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent" icon={<IconUsers size={15} />}>
               Editar alineación
             </BtnLink>
@@ -1341,9 +1337,9 @@ export function MatchdayView({ id }: { id: string }) {
             ) : started ? (
               <>
                 <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1, color: "var(--warning)" }}>
-                  En juego
+                  {over ? "Falta el acta" : "En juego"}
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin resultados aún</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{over ? "Partido jugado · sin resultados" : "Sin resultados aún"}</span>
               </>
             ) : (
               <>
@@ -1359,7 +1355,7 @@ export function MatchdayView({ id }: { id: string }) {
               </>
             )}
             <Chip tone={closed ? tone.chip : started ? "warning" : "mute"}>
-              {closed ? tone.l : started ? "En juego" : "Pendiente"}
+              {closed ? tone.l : started ? (over ? "Falta el acta" : "En juego") : "Pendiente"}
             </Chip>
           </div>
 
@@ -1391,7 +1387,7 @@ export function MatchdayView({ id }: { id: string }) {
 
       <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
       {/* Encuesta de hora (lógica en TimePollPanel). Solo de local: de visitante la hora la fija el club rival. */}
-      {curTab === "previa" && !closed && m.isHome && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+      {curTab === "previa" && !closed && !started && m.isHome && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
       {curTab === "previa" && !closed && <FederationUploadCard matchdayId={m.id} canManage={isCaptain} />}
       {(curTab === "previa" || curTab === "alineacion") && !closed && (
         <FederationUploadCard matchdayId={m.id} canManage={isCaptain} kind="lineup" />

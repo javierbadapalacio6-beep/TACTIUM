@@ -42,6 +42,7 @@ import { fetchPairStats } from '@core/services/pairStats';
 import { notifyPush } from '@core/push';
 import { shortName } from '@core/utils/playerName';
 import { formatShortDay } from '@core/utils/format';
+import { isMatchStarted } from '@core/utils/matchday';
 
 import {
   benchGroupOf,
@@ -293,7 +294,9 @@ export const LineupScreen = ({
 
   const closed = matchday?.status === 'finished';
   const seasonClosed = season ? !season.active : false;
-  const canEdit = !closed && !seasonClosed && isCaptain;
+  // Empezado el partido, la alineación es la que se jugó: ni se cambia ni se vuelve a publicar.
+  const matchStarted = matchday ? isMatchStarted(matchday) : false;
+  const canEdit = !closed && !seasonClosed && !matchStarted && isCaptain;
 
   const currentVariant = variants.find((v) => v.id === currentVariantId) ?? null;
   const activeVariant = variants.find((v) => v.is_active) ?? null;
@@ -1027,7 +1030,7 @@ export const LineupScreen = ({
           {!published ? (
             <NoLineupYet
               myStatus={myStatus}
-              canRespond={!!myPlayerId && !closed}
+              canRespond={!!myPlayerId && !closed && !matchStarted}
               busy={rsvpBusy}
               onRespond={respond}
             />
@@ -1184,7 +1187,9 @@ export const LineupScreen = ({
           <InfoBanner>
             {closed
               ? 'Acta cerrada · la alineación es de solo lectura.'
-              : 'Temporada archivada · la alineación es de solo lectura.'}
+              : matchStarted
+                ? 'El partido ya ha empezado · esta es la alineación que se jugó y no se puede cambiar.'
+                : 'Temporada archivada · la alineación es de solo lectura.'}
           </InfoBanner>
         ) : null}
 

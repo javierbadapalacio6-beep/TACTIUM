@@ -33,7 +33,7 @@ export interface StateLike {
 }
 
 /** Pasadas estas horas desde la hora del partido ya no es «en directo» aunque nadie cierre el acta. */
-export const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+export const LIVE_WINDOW_MS = 5 * 60 * 60 * 1000;
 
 export interface LiveCtx {
   /** Ha llegado la hora del partido (o ya hay un directo apuntado). */

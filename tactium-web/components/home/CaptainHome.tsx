@@ -41,6 +41,7 @@ import { OtherTeamsStrip } from "@/components/home/OtherTeamsStrip";
 import { Crest } from "@/components/Crest";
 import { TrialCard } from "@/components/subscription/TrialCard";
 import { LiveHomeCard } from "@/components/matchday/LiveHomeCard";
+import { isMatchStarted } from "@/lib/match-time";
 import { fetchLiveState, isLiveNow } from "@/lib/live";
 import {
   IconCalendar,
@@ -260,7 +261,8 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const losses = played.filter((m) => m.outcome === "loss").length;
   const m = upcoming[0] ?? null;
   const dUntil = m ? daysUntil(m.date) : null;
-  const started = !!m && (m.status === "in_progress" || (dUntil !== null && dUntil < 0));
+  // Con hora: empezado desde esa hora (no desde el día siguiente). Sin hora: desde las 00:00.
+  const started = !!m && (m.status === "in_progress" || isMatchStarted(m.date, m.time, Date.now()));
 
   // Alineación oficial de la próxima jornada (como el hero de la app).
   const courts = data?.courts ?? 3;
@@ -270,7 +272,9 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
     ? null
     : m.status === "in_progress"
       ? "En juego"
-      : lineupFilled === 0
+      : started
+        ? "Falta el acta"
+        : lineupFilled === 0
         ? "Sin alineación"
         : lineupFilled >= courts
           ? "Alineación lista"
@@ -444,7 +448,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               {/* Si la fecha ya pasó no es «la próxima»: está sin cerrar, y
                   decir las dos cosas a la vez se lee como un error. */}
               <span className="bcard-title">
-                {dUntil !== null && dUntil < 0 ? "Jornada sin cerrar" : "Próxima jornada"}
+                {started && m.status !== "in_progress" ? "Jornada pendiente" : "Próxima jornada"}
               </span>
               <span className="delta">{whenLabel(dUntil)}</span>
             </div>
@@ -491,9 +495,11 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {m.tandas ? <span className="delta">Tandas {m.tandas}</span> : null}
                 {lineupLabel ? <span className="delta">{lineupLabel}</span> : null}
-                <span className="delta">
-                  {availableCount}/{active.length} van
-                </span>
+                {started ? null : (
+                  <span className="delta">
+                    {availableCount}/{active.length} van
+                  </span>
+                )}
               </div>
             )}
 

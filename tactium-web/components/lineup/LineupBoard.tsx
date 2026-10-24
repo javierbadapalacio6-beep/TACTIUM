@@ -62,6 +62,7 @@ import {
   Toggle,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import { isMatchStarted } from "@/lib/match-time";
 import {
   IconAlert,
   IconCalendar,
@@ -90,7 +91,7 @@ import {
 
 type Slot = { court: number; idx: 0 | 1 };
 type Pair = [string | null, string | null];
-type Lock = "none" | "notCaptain" | "closed" | "archived";
+type Lock = "none" | "notCaptain" | "closed" | "archived" | "started";
 type Group = "yes" | "maybe" | "pending" | "no";
 
 const BENCH_ID = "bench";
@@ -639,7 +640,14 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   // Solo el capitán edita. El club ve la de cualquiera de sus equipos en
   // lectura (como en la app: el club_admin no edita).
   const derivedLock: Lock =
-    lock ?? (!isCaptain ? "notCaptain" : data?.matchday.status === "finished" ? "closed" : "none");
+    lock ??
+    (!isCaptain
+      ? "notCaptain"
+      : data?.matchday.status === "finished"
+        ? "closed"
+        : data && isMatchStarted(data.matchday.date, data.matchday.time, Date.now())
+          ? "started" // empezado el partido, la alineación es la que se jugó
+          : "none");
   const readOnly = derivedLock !== "none";
 
   const placed = useMemo(() => new Set(courts.flat().filter(Boolean) as string[]), [courts]);
@@ -988,7 +996,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
                 body="El capitán la publica cuando cierre la convocatoria. Te llegará un aviso."
               />
             </Card>
-            {!isClub && myPlayer && m.status !== "finished" && (
+            {!isClub && myPlayer && m.status !== "finished" && !isMatchStarted(m.date, m.time, Date.now()) && (
               <Card style={{ marginTop: 16 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Tu respuesta</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8 }}>
@@ -1196,7 +1204,11 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
 
       {readOnly && (
         <Note icon={<IconLock size={15} />} style={{ marginBottom: 14 }}>
-          {derivedLock === "archived" ? "Temporada archivada: la alineación es de solo lectura." : "Acta cerrada: la alineación es de solo lectura."}
+          {derivedLock === "archived"
+            ? "Temporada archivada: la alineación es de solo lectura."
+            : derivedLock === "started"
+              ? "El partido ya ha empezado: esta es la alineación que se jugó y no se puede cambiar."
+              : "Acta cerrada: la alineación es de solo lectura."}
         </Note>
       )}
 

@@ -77,7 +77,7 @@ import {
   formatLongDay,
   formatShortDay,
 } from '@core/utils/format';
-import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
+import { isMatchStarted, isMatchOver, formatSetScore } from '@core/utils/matchday';
 
 import { JornadaSeasonList } from '../components/jornada/JornadaSeasonList';
 import { SplitView, useIsSplit } from '@components/layout';
@@ -89,6 +89,7 @@ type Status =
   | 'pending'
   | 'scheduled'
   | 'in-progress'
+  | 'acta-pending'
   | 'won'
   | 'lost'
   | 'tied'
@@ -116,6 +117,12 @@ const makeStatusConfig = (
   'in-progress': {
     label: 'En curso',
     sub: (n, courts) => `${n}/${courts} partidos resueltos`,
+    tint: c.warning,
+  },
+  // El partido ya acabó por tiempo y faltan resultados: ni «en curso» ni marcador provisional.
+  'acta-pending': {
+    label: 'Falta el acta',
+    sub: (n, courts) => (n > 0 ? `${n}/${courts} resultados metidos` : 'Partido jugado · sin resultados'),
     tint: c.warning,
   },
   won: {
@@ -454,6 +461,7 @@ const JornadaDetail = ({
     () => (matchday ? isMatchStarted(matchday) : false),
     [matchday],
   );
+  const matchOver = useMemo(() => (matchday ? isMatchOver(matchday) : false), [matchday]);
 
   // Eje rol × estado para el CTA inferior (ver el bloque CTA). canEditLineup
   // gobierna si el capitán entra a Lineup en modo editable; sin alineación,
@@ -533,12 +541,14 @@ const JornadaDetail = ({
     // Antes de la hora del partido siempre es 'scheduled' aunque
     // existieran resultados (defensa: no deberían poder grabarse).
     if (!matchStarted) return 'scheduled';
+    // Pasado el plazo del encuentro (5 h) sin acta completa: no está «en curso», falta el acta.
+    if (matchOver && score.played < courts) return 'acta-pending';
     if (score.played === 0) return 'scheduled';
     if (score.played < courts) return 'in-progress';
     if (score.won > score.lost) return 'won';
     if (score.lost > score.won) return 'lost';
     return 'tied';
-  }, [closed, matchday, lineupReady, matchStarted, score, courts]);
+  }, [closed, matchday, lineupReady, matchStarted, matchOver, score, courts]);
 
   // Contexto federativo (puesto, racha, último cruce). Vacío sin vínculo FCP.
   const fcp = useJornadaFcp(team?.id, matchday?.opponent, matchday?.match_date);
@@ -1072,7 +1082,7 @@ const JornadaDetail = ({
 
         {/* === ENCUESTA DE HORA === (lógica en features/timePoll). Solo de local: en los partidos de
             visitante la hora la fija el club rival y no se propone. */}
-        {tab === 'previa' && !closed && matchday.is_home ? (
+        {tab === 'previa' && !closed && !matchStarted && matchday.is_home ? (
           <TimePollCard matchdayId={matchday.id} canManage={isCaptain} onChanged={load} />
         ) : null}
 
