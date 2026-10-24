@@ -1186,38 +1186,12 @@ const JornadaDetail = ({
               </Text>
             ) : null}
 
-            {/* Cerrar acta — solo captain. Players no ven el botón. */}
-            {!closed && isCaptain ? (
-              <>
-                <Pressable
-                  onPress={gate(closeMatch, 'matchday_close')}
-                  disabled={!canClose || closing}
-                  style={({ pressed }) => [
-                    styles.closeCta,
-                    (!canClose || closing) && { opacity: 0.4 },
-                    pressed && canClose && !closing && { opacity: 0.85 },
-                  ]}
-                >
-                  {closing ? (
-                    <ActivityIndicator color={c.error} />
-                  ) : (
-                    <>
-                      <IconCheck size={16} color={c.error} />
-                      <Text style={styles.closeCtaLabel}>Cerrar acta</Text>
-                    </>
-                  )}
-                </Pressable>
-                {!matchStarted ? (
-                  <Text style={styles.closeHint}>
-                    El acta podrá cerrarse cuando empiece el partido.
-                  </Text>
-                ) : closeIsManual ? (
-                  <Text style={styles.closeHint}>
-                    Faltan resultados. Al cerrar tendrás que indicar el resultado
-                    final manualmente (V/E/D).
-                  </Text>
-                ) : null}
-              </>
+            {/* «Cerrar acta» vive solo en la barra inferior, junto a «Meter resultados»: aquí solo el aviso. */}
+            {!closed && isCaptain && matchStarted && closeIsManual ? (
+              <Text style={styles.closeHint}>
+                Faltan resultados. Al cerrar tendrás que indicar el resultado
+                final manualmente (V/E/D).
+              </Text>
             ) : null}
 
           </>

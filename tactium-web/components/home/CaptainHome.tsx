@@ -263,6 +263,13 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const dUntil = m ? daysUntil(m.date) : null;
   // Con hora: empezado desde esa hora (no desde el día siguiente). Sin hora: desde las 00:00.
   const started = !!m && (m.status === "in_progress" || isMatchStarted(m.date, m.time, Date.now()));
+  // Si la jornada del hero ya se jugó y solo falta su acta, la siguiente se enseña debajo.
+  const following =
+    m && started
+      ? upcoming
+          .filter((x) => x.id !== m.id && x.status === "upcoming" && x.round > m.round && !isMatchStarted(x.date, x.time, Date.now()))
+          .sort((a, b) => a.round - b.round)[0] ?? null
+      : null;
 
   // Alineación oficial de la próxima jornada (como el hero de la app).
   const courts = data?.courts ?? 3;
@@ -849,6 +856,24 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
             </>
           )}
         </div>
+
+        {following && (
+          <div className="bcard col-12">
+            <div className="bcard-head">
+              <span className="tile-round tile-round-accent">
+                <IconCalendar size={17} />
+              </span>
+              <span className="bcard-title">Próxima jornada</span>
+              <span className="delta">J{String(following.round).padStart(2, "0")}</span>
+            </div>
+            <Link href={`/jornada/${following.id}`} style={{ display: "block", marginTop: 6, color: "inherit", textDecoration: "none" }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>vs {following.opponent}</div>
+              <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>
+                {[formatDate(following.date), formatTime(following.time), following.location].filter(Boolean).join(" · ")}
+              </div>
+            </Link>
+          </div>
+        )}
 
         {/* ══ Convocatoria (capitán) ═══════════════════════════════
             Como ConvocatoriaCard de la app: los cuatro estados, lo que

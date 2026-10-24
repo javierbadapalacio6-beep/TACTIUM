@@ -49,6 +49,7 @@ import { FeedPreview } from '@features/social/components/FeedPreview';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
 import { matchdayState, isMatchStarted } from '@core/utils/matchday';
+import { FollowingMatchdayCard } from '../components/FollowingMatchdayCard';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import { RsvpCard } from '@features/availability/components/RsvpCard';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
@@ -86,6 +87,8 @@ export const HomeScreen = ({
 
   const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
   const [nextMatchday, setNextMatchday] = useState<MatchdaysApi.Matchday | null>(null);
+  // La jornada siguiente cuando la «próxima» ya se jugó y solo falta su acta.
+  const [followingMatchday, setFollowingMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   // Jornada que se está jugando AHORA (con marcador en vivo). Si la hay, se
   // enseña arriba como «En directo» y la tarjeta de próxima jornada pasa a la
   // siguiente: antes salía la misma jornada dos veces.
@@ -117,6 +120,7 @@ export const HomeScreen = ({
     if (prevTeamIdRef.current !== null && prevTeamIdRef.current !== currentId) {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       setNextMatchday(null);
+      setFollowingMatchday(null);
       setLiveMatchday(null);
       setSeasonMatchdayCount(0);
       setLineupFilled(0);
@@ -178,6 +182,17 @@ export const HomeScreen = ({
                     .sort((a, b) => a.jornada_number - b.jornada_number)[0] ?? null;
               }
             }
+            // Si la jornada del hero ya empezó (solo falta el acta), la siguiente se enseña debajo.
+            let following: MatchdaysApi.Matchday | null = null;
+            if (md && md.status !== 'finished' && isMatchStarted(md)) {
+              const all = await MatchdaysApi.fetchMatchdays(season.id).catch(() => []);
+              if (cancelled) return;
+              following =
+                all
+                  .filter((m) => m.id !== md!.id && m.status === 'upcoming' && m.jornada_number > md!.jornada_number && !isMatchStarted(m))
+                  .sort((a, b) => a.jornada_number - b.jornada_number)[0] ?? null;
+            }
+            setFollowingMatchday(following);
             setLiveMatchday(live);
             setNextMatchday(md);
             setSeasonMatchdayCount(mdCount);
@@ -212,6 +227,7 @@ export const HomeScreen = ({
             }
           } else {
             setNextMatchday(null);
+            setFollowingMatchday(null);
             setLiveMatchday(null);
             setSeasonMatchdayCount(0);
             setLineupFilled(0);
@@ -603,6 +619,13 @@ export const HomeScreen = ({
             onShareLink={() => void remind.shareLink()}
             sharingLink={remind.sharingLink}
             onOpen={() => navigation.navigate('Availability', { matchdayId: nextMatchday.id })}
+          />
+        ) : null}
+
+        {followingMatchday ? (
+          <FollowingMatchdayCard
+            matchday={followingMatchday}
+            onOpen={() => navigation.navigate('Jornada', { matchdayId: followingMatchday.id })}
           />
         ) : null}
 

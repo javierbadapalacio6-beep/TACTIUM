@@ -1088,11 +1088,6 @@ export function MatchdayView({ id }: { id: string }) {
               </span>
             ) : (
               <>
-                {isCaptain && (
-                  <Btn variant="accent" onClick={() => setConfirmClose(true)} icon={<IconCheck size={15} />}>
-                    Cerrar acta
-                  </Btn>
-                )}
                 {!allIn && (
                   <span style={{ fontSize: 12.5, color: "var(--warning)", display: "flex", alignItems: "center", gap: 6 }}>
                     <IconAlert size={14} />
