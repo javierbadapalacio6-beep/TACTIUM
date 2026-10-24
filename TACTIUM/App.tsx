@@ -61,6 +61,7 @@ import {
   ToastHost,
   OfflineBanner,
   UpdateBanner,
+  ForceUpdateGate,
   WhatsNewSheet,
   ResponsiveFrame,
 } from './src/components/ui';
@@ -291,6 +292,8 @@ export default function App() {
           </ResponsiveFrame>
         </NavigationContainer>
       </SafeAreaProvider>
+      {/* Actualización obligatoria: tapa toda la app si el build es menor que el mínimo de app_config. */}
+      <ForceUpdateGate />
       {/* Splash animado por encima de todo. Se desmonta solo al terminar
           su fade-out. Va fuera del SafeAreaProvider para cubrir notch y
           home indicator a sangre completa. */}
