@@ -150,26 +150,33 @@ export interface FcpBrowseStanding {
 /** Clasificación de un grupo (PJ/PG derivados de fcp_partidos). */
 export async function fetchGroupStandings(
   idGrupo: string,
-): Promise<{ nombre: string | null; genero: string | null; rows: FcpBrowseStanding[] }> {
+): Promise<{ nombre: string | null; genero: string | null; rows: FcpBrowseStanding[]; provisional: boolean }> {
   const { data } = await rawFrom('fcp_clasificacion')
     .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
     .eq('id_grupo', idGrupo)
     .order('posicion', { ascending: true });
 
   const { data: partidos } = await rawFrom('fcp_partidos')
-    .select('equipo_local, equipo_visit, ganador, estado, jornada')
+    .select('equipo_local, equipo_visit, ganador, estado, jornada, resultado, tipo')
     .eq('id_grupo', idGrupo)
     .order('jornada', { ascending: true });
+  // Sets de cada pareja (actas): con ellos se calcula la clasificación provisional.
+  const { data: actasRows } = await rawFrom('fcp_actas')
+    .select('equipo_local, equipo_visit, sets_local, sets_visit')
+    .eq('id_grupo', idGrupo);
+  const resolve = makeTeamResolver(((data ?? []) as { equipo: string }[]).map((x) => x.equipo));
   const stats = new Map<string, { pj: number; pg: number }>();
   // Resultados por equipo en orden cronológico → racha (últimos 5).
   const streak = new Map<string, ('V' | 'D')[]>();
-  for (const p of (partidos ?? []) as {
+  for (const p of remapTeams((partidos ?? []) as {
     equipo_local: string | null;
     equipo_visit: string | null;
     ganador: string | null;
     estado: string | null;
     jornada: number | null;
-  }[]) {
+    resultado: string | null;
+    tipo: string | null;
+  }[], resolve)) {
     if (p.estado !== 'jugado') continue;
     const sides: [string | null, boolean][] = [
       [p.equipo_local, true],
@@ -215,12 +222,142 @@ export async function fetchGroupStandings(
     };
   });
 
+  // ── Clasificación PROVISIONAL ─────────────────────────────────────────────
+  // La de la Federación tarda en actualizarse. Mientras vaya por detrás de lo ya jugado, se calcula con
+  // los resultados y las actas (2 puntos por victoria, 1 por empate) y se marca como provisional: en
+  // cuanto la Federación la suba, manda la suya.
+  const calc = provisionalCalc(
+    rows.map((x) => x.equipo),
+    remapTeams((partidos ?? []) as PartidoCalc[], resolve),
+    remapTeams((actasRows ?? []) as ActaCalc[], resolve),
+  );
+  const offTotal = rows.reduce((n, x) => n + (x.puntos ?? 0), 0);
+  const calcTotal = [...calc.values()].reduce((n, x) => n + x.puntos, 0);
+  let provisional = false;
+  if (calcTotal > offTotal) {
+    provisional = true;
+    for (const x of rows) {
+      const c = calc.get(x.equipo);
+      x.puntos = c?.puntos ?? 0;
+      x.setsFavor = c?.sf ?? 0;
+      x.setsContra = c?.sc ?? 0;
+    }
+    const dp = (e: string) => {
+      const c = calc.get(e);
+      return (c?.pf ?? 0) - (c?.pc ?? 0);
+    };
+    rows.sort(
+      (a, b) =>
+        (b.puntos ?? 0) - (a.puntos ?? 0) ||
+        dp(b.equipo) - dp(a.equipo) ||
+        (b.setsFavor ?? 0) - (b.setsContra ?? 0) - ((a.setsFavor ?? 0) - (a.setsContra ?? 0)) ||
+        a.equipo.localeCompare(b.equipo),
+    );
+    rows.forEach((x, i) => {
+      x.posicion = i + 1;
+    });
+  }
+
   const { data: g } = await rawFrom('fcp_grupos')
     .select('nombre, genero')
     .eq('id_grupo', idGrupo)
     .maybeSingle();
   const gi = g as { nombre: string | null; genero: string | null } | null;
-  return { nombre: gi?.nombre ?? null, genero: gi?.genero ?? null, rows };
+  return { nombre: gi?.nombre ?? null, genero: gi?.genero ?? null, rows, provisional };
+}
+
+
+/** Clave de comparación de un nombre de equipo: mayúsculas, sin tildes ni signos. */
+function teamNameKey(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * En los partidos el equipo lleva el patrocinador («G6 C-HIJAS DE ANA») y en la clasificación no («G6 C»).
+ * Devuelve una función que lleva el nombre del partido al de la clasificación: mismo nombre, o el de la
+ * clasificación como inicio del otro (palabra entera). Gana el nombre más largo que encaje.
+ */
+function makeTeamResolver(equipos: string[]) {
+  const keys = equipos.map((e) => ({ e, k: teamNameKey(e) })).sort((a, b) => b.k.length - a.k.length);
+  const cache = new Map<string, string>();
+  return (name: string | null): string | null => {
+    if (!name) return name;
+    const hit = cache.get(name);
+    if (hit !== undefined) return hit;
+    const k = teamNameKey(name);
+    const found = keys.find((x) => k === x.k || k.startsWith(x.k + ' '));
+    const out = found ? found.e : name;
+    cache.set(name, out);
+    return out;
+  };
+}
+
+function remapTeams<T extends { equipo_local: string | null; equipo_visit: string | null }>(
+  arr: T[],
+  resolve: (n: string | null) => string | null,
+): T[] {
+  return arr.map((p) => ({ ...p, equipo_local: resolve(p.equipo_local), equipo_visit: resolve(p.equipo_visit) }));
+}
+
+type PartidoCalc = {
+  equipo_local: string | null;
+  equipo_visit: string | null;
+  estado: string | null;
+  resultado: string | null;
+  tipo: string | null;
+};
+type ActaCalc = {
+  equipo_local: string | null;
+  equipo_visit: string | null;
+  sets_local: number | null;
+  sets_visit: number | null;
+};
+
+/** Resultado «a/b» o «a-b» → [a, b]. */
+export function parseMarcador(resultado: string | null | undefined): [number, number] | null {
+  const m = (resultado ?? '').match(/^\s*(\d+)\s*[/\-]\s*(\d+)\s*$/);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/** Puntos / partidos / sets de cada equipo a partir de lo jugado (fase regular). */
+function provisionalCalc(equipos: string[], partidos: PartidoCalc[], actas: ActaCalc[]) {
+  const m = new Map<string, { puntos: number; pf: number; pc: number; sf: number; sc: number }>();
+  for (const e of equipos) m.set(e, { puntos: 0, pf: 0, pc: 0, sf: 0, sc: 0 });
+  for (const p of partidos) {
+    if (p.estado !== 'jugado' || (p.tipo && /play/i.test(p.tipo))) continue;
+    const sc = parseMarcador(p.resultado);
+    const l = p.equipo_local ? m.get(p.equipo_local) : undefined;
+    const v = p.equipo_visit ? m.get(p.equipo_visit) : undefined;
+    if (!sc || !l || !v) continue;
+    l.pf += sc[0];
+    l.pc += sc[1];
+    v.pf += sc[1];
+    v.pc += sc[0];
+    if (sc[0] > sc[1]) l.puntos += 2;
+    else if (sc[1] > sc[0]) v.puntos += 2;
+    else {
+      l.puntos += 1;
+      v.puntos += 1;
+    }
+  }
+  for (const a of actas) {
+    const l = a.equipo_local ? m.get(a.equipo_local) : undefined;
+    const v = a.equipo_visit ? m.get(a.equipo_visit) : undefined;
+    if (l) {
+      l.sf += a.sets_local ?? 0;
+      l.sc += a.sets_visit ?? 0;
+    }
+    if (v) {
+      v.sf += a.sets_visit ?? 0;
+      v.sc += a.sets_local ?? 0;
+    }
+  }
+  return m;
 }
 
 export interface FcpBrowseMatch {

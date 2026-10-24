@@ -1457,7 +1457,14 @@ export function FcpGroupView({
                 />
               </Card>
             ) : (
+              <>
+              {rows[0]?.provisional ? (
+                <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--text-muted)" }}>
+                  Clasificación provisional: calculada con los resultados y las actas. La de la Federación la sustituirá en cuanto la actualice.
+                </p>
+              ) : null}
               <FcpStandingsTable slug={slug} rows={rows} zones={zones} myFcpId={myFcpId} />
+              </>
             )}
             {zones && rows.length > 0 && <ZoneLegend zones={zones} />}
           </section>
@@ -1645,7 +1652,7 @@ function ZoneLegend({ zones }: { zones: FcpZone[] }) {
 /* ── Jornadas del grupo: agrupadas por jornada, con parciales inline ── */
 function splitScore(resultado: string | null): [string, string] | null {
   if (!resultado) return null;
-  const m = resultado.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/);
+  const m = resultado.match(/^\s*(\d+)\s*[/-]\s*(\d+)\s*$/);
   return m ? [m[1], m[2]] : null;
 }
 

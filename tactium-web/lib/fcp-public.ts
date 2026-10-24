@@ -29,6 +29,8 @@ export interface FcpStanding {
   enf: number;
   /** Racha reciente (hasta 5, del más antiguo al más nuevo). Derivada. */
   form: ("V" | "D")[];
+  /** La de la Federación va por detrás de lo jugado: puntos y sets calculados con resultados y actas. */
+  provisional?: boolean;
 }
 
 export interface FcpMatch {
@@ -200,13 +202,51 @@ export async function fetchFcpGroupHeader(
   };
 }
 
+
+/** Clave de comparación de un nombre de equipo: mayúsculas, sin tildes ni signos. */
+function teamNameKey(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * En los partidos el equipo lleva el patrocinador («G6 C-HIJAS DE ANA») y en la clasificación no («G6 C»).
+ * Devuelve una función que lleva el nombre del partido al de la clasificación: mismo nombre, o el de la
+ * clasificación como inicio del otro (palabra entera). Gana el nombre más largo que encaje.
+ */
+function makeTeamResolver(equipos: string[]) {
+  const keys = equipos.map((e) => ({ e, k: teamNameKey(e) })).sort((a, b) => b.k.length - a.k.length);
+  const cache = new Map<string, string>();
+  return (name: string | null): string | null => {
+    if (!name) return name;
+    const hit = cache.get(name);
+    if (hit !== undefined) return hit;
+    const k = teamNameKey(name);
+    const found = keys.find((x) => k === x.k || k.startsWith(x.k + ' '));
+    const out = found ? found.e : name;
+    cache.set(name, out);
+    return out;
+  };
+}
+
+function remapTeams<T extends { equipo_local: string | null; equipo_visit: string | null }>(
+  arr: T[],
+  resolve: (n: string | null) => string | null,
+): T[] {
+  return arr.map((p) => ({ ...p, equipo_local: resolve(p.equipo_local), equipo_visit: resolve(p.equipo_visit) }));
+}
+
 export async function fetchFcpStandings(
   sb: SupabaseClient,
   idGrupo: string
 ): Promise<FcpStanding[]> {
   // PJ/PG/racha se DERIVAN de fcp_partidos: las columnas de fcp_clasificacion
   // vienen en 0 (el scrape de la matriz no las rellena).
-  const [{ data, error }, { data: partidos, error: pe }] = await Promise.all([
+  const [{ data, error }, { data: partidos, error: pe }, { data: actasRows }] = await Promise.all([
     sb
       .from("fcp_clasificacion")
       .select("posicion, id_equipo, equipo, puntos, sets_favor, sets_contra, enf")
@@ -214,14 +254,48 @@ export async function fetchFcpStandings(
       .order("posicion", { ascending: true }),
     sb
       .from("fcp_partidos")
-      .select("equipo_local, equipo_visit, ganador, estado, jornada")
+      .select("equipo_local, equipo_visit, ganador, estado, jornada, resultado, tipo")
       .eq("id_grupo", idGrupo)
       .order("jornada", { ascending: true }),
+    sb
+      .from("fcp_actas")
+      .select("equipo_local, equipo_visit, sets_local, sets_visit")
+      .eq("id_grupo", idGrupo),
   ]);
   if (error) throw error;
   if (pe) throw pe;
-  const stats = deriveTeamStats((partidos ?? []) as FcpPartidoLite[]);
-  return (data ?? []).map((r) => {
+  const resolve = makeTeamResolver((data ?? []).map((x) => x.equipo as string));
+  const stats = deriveTeamStats(remapTeams((partidos ?? []) as FcpPartidoLite[], resolve));
+
+  // Clasificación PROVISIONAL: la de la Federación tarda en actualizarse. Mientras vaya por detrás de lo
+  // ya jugado, se calcula con los resultados y las actas (2 puntos por victoria, 1 por empate) y se marca;
+  // en cuanto la Federación suba la suya, manda la suya.
+  const calc = new Map<string, { puntos: number; pf: number; pc: number; sf: number; sc: number }>();
+  for (const r of data ?? []) calc.set(r.equipo, { puntos: 0, pf: 0, pc: 0, sf: 0, sc: 0 });
+  for (const p of remapTeams((partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null; estado: string | null; resultado: string | null; tipo: string | null }[], resolve)) {
+    if (p.estado !== "jugado" || (p.tipo && /play/i.test(p.tipo))) continue;
+    const m = (p.resultado ?? "").match(/^\s*(\d+)\s*[/-]\s*(\d+)\s*$/);
+    const l = p.equipo_local ? calc.get(p.equipo_local) : undefined;
+    const v = p.equipo_visit ? calc.get(p.equipo_visit) : undefined;
+    if (!m || !l || !v) continue;
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    l.pf += a; l.pc += b; v.pf += b; v.pc += a;
+    if (a > b) l.puntos += 2;
+    else if (b > a) v.puntos += 2;
+    else { l.puntos += 1; v.puntos += 1; }
+  }
+  for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; sets_local: number | null; sets_visit: number | null }[], resolve)) {
+    const l = a.equipo_local ? calc.get(a.equipo_local) : undefined;
+    const v = a.equipo_visit ? calc.get(a.equipo_visit) : undefined;
+    if (l) { l.sf += a.sets_local ?? 0; l.sc += a.sets_visit ?? 0; }
+    if (v) { v.sf += a.sets_visit ?? 0; v.sc += a.sets_local ?? 0; }
+  }
+  const offTotal = (data ?? []).reduce((n, r) => n + (r.puntos ?? 0), 0);
+  const calcTotal = [...calc.values()].reduce((n, c) => n + c.puntos, 0);
+  const provisional = calcTotal > offTotal;
+
+  const rows: FcpStanding[] = (data ?? []).map((r) => {
     const s = stats.get(r.equipo) ?? { pj: 0, pg: 0, form: [] as ("V" | "D")[] };
     return {
       posicion: r.posicion ?? 0,
@@ -236,6 +310,23 @@ export async function fetchFcpStandings(
       form: s.form.slice(-5),
     };
   });
+  if (!provisional) return rows;
+  const pd = (e: string) => (calc.get(e)?.pf ?? 0) - (calc.get(e)?.pc ?? 0);
+  const out = rows.map((x) => {
+    const c = calc.get(x.equipo);
+    return { ...x, puntos: c?.puntos ?? 0, setsFavor: c?.sf ?? 0, setsContra: c?.sc ?? 0, provisional: true };
+  });
+  out.sort(
+    (a, b) =>
+      b.puntos - a.puntos ||
+      pd(b.equipo) - pd(a.equipo) ||
+      b.setsFavor - b.setsContra - (a.setsFavor - a.setsContra) ||
+      a.equipo.localeCompare(b.equipo)
+  );
+  out.forEach((x, i) => {
+    x.posicion = i + 1;
+  });
+  return out;
 }
 
 export async function fetchFcpMatches(
@@ -325,7 +416,7 @@ export function findLastFcpMeeting(
   );
   const m = hits[0];
   const weLocal = fcpTeamKey(m.local) === a;
-  const sc = (m.resultado ?? "").match(/^\s*(\d+)\s*-\s*(\d+)/);
+  const sc = (m.resultado ?? "").match(/^\s*(\d+)\s*[/-]\s*(\d+)/);
   const l = sc ? Number(sc[1]) : null;
   const v = sc ? Number(sc[2]) : null;
   const won =

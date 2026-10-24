@@ -128,7 +128,7 @@ function fmtLongDate(d: string | null, long = false): string {
 // Marcador por equipo desde "4/0".
 function splitScore(resultado: string | null): [string, string] | null {
   if (!resultado) return null;
-  const m = resultado.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/);
+  const m = resultado.match(/^\s*(\d+)\s*[/\-]\s*(\d+)\s*$/);
   if (!m) return null;
   return [m[1], m[2]];
 }
@@ -154,6 +154,8 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
   // cuadro de playoff el id_equipo cambia, así que se resalta por nombre.
   const [myFcpName, setMyFcpName] = useState<string | null>(null);
   const [rows, setRows] = useState<FcpBrowseStanding[]>([]);
+  // La Federación aún no ha actualizado su clasificación: la mostrada se calcula con lo jugado.
+  const [provisional, setProvisional] = useState(false);
   const [schedule, setSchedule] = useState<FcpBrowseMatch[]>([]);
   const [tab, setTab] = useState<Tab>(esPlayoff ? 'cuadro' : 'clasif');
   /** Partidos con el acta desplegada. Cerrada por defecto: una jornada son
@@ -179,6 +181,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
         setGrupo(st.nombre ?? nombre ?? null);
         setGenero(st.genero);
         setRows(st.rows);
+        setProvisional(st.provisional);
         setSchedule(sc);
         setInscritos(ins);
       })
@@ -460,6 +463,12 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                   <Text style={[styles.th, { width: 34, textAlign: 'right', color: c.textMuted }]}>PTS</Text>
                 </View>
               )}
+
+              {provisional ? (
+                <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 10 }}>
+                  Clasificación provisional: calculada con los resultados y las actas. La de la Federación la sustituirá en cuanto la actualice.
+                </Text>
+              ) : null}
 
               <View style={{ gap: 6, marginTop: 10 }}>
                 {rows.map((t, i) => {
