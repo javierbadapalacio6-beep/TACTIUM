@@ -20,32 +20,27 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-20d',
+  id: '2026-10-24',
   items: [
     {
-      icon: '📣',
-      title: 'La alineación, solo cuando se publica',
-      text: 'Los jugadores ven la alineación únicamente cuando el capitán pulsa Publicar y avisa. Mientras la prepara, es un borrador.',
+      icon: '🔴',
+      title: 'El directo arranca a la hora del partido',
+      text: 'Ya no hace falta pulsar Marcar resultado: el directo se activa solo cuando toca, y lo que metas en el acta lo actualiza.',
     },
     {
-      icon: '◷',
-      title: 'Horario siempre al día con la Federación',
-      text: 'Fecha, hora, sede y tandas se copian solas desde la Federación en cuanto las publica. Las tandas salen con la hora orientativa de cada pareja.',
-    },
-    {
-      icon: '🔔',
-      title: 'Aviso de la hora fuera de casa',
-      text: 'Cuando la Federación publica o cambia la hora de un partido de visitante, te llega un aviso.',
-    },
-    {
-      icon: '＋',
-      title: 'Crear la temporada a mano es gratis',
-      text: 'Añadir y editar jornadas no necesita plan. Lo del plan es traer el calendario de golpe: escanearlo o importarlo de la Federación.',
+      icon: '🏛',
+      title: 'La Federación manda',
+      text: 'En cuanto publica un resultado o un acta, se copian solos a TACTIUM y sustituyen lo apuntado a mano.',
     },
     {
       icon: '📤',
-      title: 'Compartir con sede y tandas',
-      text: 'La alineación y la foto del partido llevan ahora la sede y las tandas, y también salen en la tarjeta de Inicio. Si algo no cuadra, el capitán lo corrige tocando la tarjeta de la jornada.',
+      title: 'Alineación subida a la Federación',
+      text: 'Marca cuando la hayas subido. Si no, te avisamos 24 h, 3 h y 1 h antes del partido.',
+    },
+    {
+      icon: '🔔',
+      title: 'Notificaciones en Android',
+      text: 'Ahora te pide el permiso y el interruptor de Ajustes te lleva a los ajustes del móvil si está bloqueado.',
     },
   ],
 };
