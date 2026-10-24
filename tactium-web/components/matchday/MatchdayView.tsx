@@ -1217,9 +1217,6 @@ export function MatchdayView({ id }: { id: string }) {
               <Btn icon={<IconCheck size={15} />} onClick={() => setConfirmClose(true)}>
                 Cerrar acta
               </Btn>
-              <BtnLink href={`/jornada/${m.id}/alineacion`} variant="quiet" icon={<IconUsers size={15} />}>
-                Alineación
-              </BtnLink>
             </>
           ) : teamCaptain && !closed && !started ? (
             <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent" icon={<IconUsers size={15} />}>
@@ -1230,15 +1227,8 @@ export function MatchdayView({ id }: { id: string }) {
               <BtnLink href={`/jornada/${m.id}/resultados`} variant="accent" icon={<IconFlag size={15} />}>
                 Meter mi resultado
               </BtnLink>
-              <BtnLink href={`/jornada/${m.id}/alineacion`} variant="ghost" icon={<IconUsers size={15} />}>
-                Ver alineación
-              </BtnLink>
             </>
-          ) : (
-            <BtnLink href={`/jornada/${m.id}/alineacion`} variant="ghost" icon={<IconUsers size={15} />}>
-              Ver alineación
-            </BtnLink>
-          )}
+          ) : null}
           {canDelete && (
             <div ref={menuRef} style={{ position: "relative" }}>
               <Btn

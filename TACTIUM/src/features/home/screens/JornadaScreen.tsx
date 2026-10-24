@@ -1323,9 +1323,11 @@ const JornadaDetail = ({
            · capitán antes de empezar      → «Editar / Crear alineación»;
            · capitán con la jornada en juego → «Meter resultados» y «Cerrar acta»;
            · jugador con la jornada en juego → «Meter mi resultado»;
-           · el resto (jugador antes, club, acta cerrada) → «Ver alineación»
-             si existe; si no, «Volver» (una pantalla read-only vacía no
-             aporta nada). */}
+           · el resto (jugador antes, club, acta cerrada) → sin barra: la
+             alineación está en su pestaña. */}
+      {(isCaptain && !closed && matchStarted) ||
+      (canEditLineup && !matchStarted) ||
+      (isPlayer && !closed && matchStarted && lineupReady) ? (
       <View
         style={[
           styles.ctaWrap,
@@ -1376,34 +1378,10 @@ const JornadaDetail = ({
               <IconCheck size={18} color="#000" />
               <Text style={styles.ctaLabel}>Meter mi resultado</Text>
             </Pressable>
-            <Pressable
-              onPress={goLineup}
-              style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.ctaSecondaryLabel}>Ver alineación</Text>
-            </Pressable>
           </>
-        ) : (
-          <Pressable
-            onPress={
-              lineupReady
-                ? goLineup
-                : () => {
-                    if (navigation.canGoBack()) navigation.goBack();
-                    else navigation.navigate('HomeRoot');
-                  }
-            }
-            style={({ pressed }) => [styles.cta, styles.ctaFlex, pressed && { opacity: 0.85 }]}
-          >
-            {lineupReady ? (
-              <IconCourt size={20} color="#000" />
-            ) : (
-              <IconCheck size={18} color="#000" />
-            )}
-            <Text style={styles.ctaLabel}>{lineupReady ? 'Ver alineación' : 'Volver'}</Text>
-          </Pressable>
-        )}
+        ) : null}
       </View>
+      ) : null}
 
       <EditMatchdaySheet
         open={editing}
