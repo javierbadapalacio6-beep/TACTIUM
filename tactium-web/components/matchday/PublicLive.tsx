@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { courtOutcome, fetchPublicLive, liveTotals, type PublicLive as PublicLiveData } from "@/lib/live";
+import {
+  courtOutcome,
+  courtSets,
+  fetchPublicLive,
+  liveCtx,
+  liveTotals,
+  type PublicLive as PublicLiveData,
+} from "@/lib/live";
 import { BtnLink, Card, Chip } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
 import { IconCalendar, IconShare } from "@/components/Icon";
@@ -94,28 +101,11 @@ export function PublicLive({ token }: { token: string }) {
     );
   }
 
-  const courts = data.courts.map((c) => {
-    // Lo que manda: el directo; si una pista se apuntó a mano (sin directo),
-    // sus sets del acta.
-    const sets = c.forfeit ? [] : c.live?.sets ?? c.result_sets;
-    const fromActa = !c.live && !c.forfeit && c.result_sets.length > 0;
-    let outcome = courtOutcome(c);
-    if (fromActa) {
-      const u = c.result_sets.filter((s) => s.us > s.them).length;
-      const t = c.result_sets.filter((s) => s.them > s.us).length;
-      outcome = u >= 2 ? "won" : t >= 2 ? "lost" : "none";
-    }
-    return { c, sets, outcome };
-  });
-  const totals = liveTotals(
-    courts.map(({ c, outcome }) =>
-      outcome === "won"
-        ? { forfeit: true, forfeit_us: false, live: null }
-        : outcome === "lost"
-          ? { forfeit: true, forfeit_us: true, live: null }
-          : c
-    )
-  );
+  // «En directo» desde la hora del partido (sin que nadie pulse «Marcar») y
+  // con el acta mandando: un resultado metido a mano cierra la pista.
+  const ctx = liveCtx(data, now);
+  const courts = data.courts.map((c) => ({ c, sets: courtSets(c), outcome: courtOutcome(c, ctx) }));
+  const totals = liveTotals(data, now);
   const anyLive = courts.some((x) => x.outcome === "live");
   const done = finishedMd || (!anyLive && totals.won + totals.lost > 0);
   const scoreUs = finishedMd && data.score_for != null ? data.score_for : totals.won;
@@ -221,7 +211,7 @@ export function PublicLive({ token }: { token: string }) {
                 outcome={outcome}
                 forfeit={c.forfeit}
                 sets={sets}
-                currentIdx={c.live && c.live.status === "live" && !finishedMd ? c.live.sets.length - 1 : -1}
+                currentIdx={outcome === "live" && c.live?.status === "live" ? sets.length - 1 : -1}
               />
             </div>
           ))}

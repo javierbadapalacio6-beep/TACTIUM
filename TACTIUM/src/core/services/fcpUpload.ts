@@ -70,3 +70,34 @@ export async function setFcpUploaded(matchdayIds: string[], uploaded = true): Pr
   if (error) throw new Error(error.message);
   return Number(data ?? 0);
 }
+
+// ── Alineación subida a la Federación (migración 20261024b) ──────────────────
+// Se sube antes del partido (local y visitante); el capitán la marca aquí y dejan de llegarle los avisos
+// (24 h, 3 h y 1 h antes). Columnas `matchdays.lineup_fcp_uploaded_at/_by` y RPC `set_lineup_fcp_uploaded`.
+
+/** Estado de la alineación de un partido. */
+export async function fetchLineupUpload(matchdayId: string): Promise<FcpUploadState> {
+  const raw = supabase.from.bind(supabase) as unknown as (t: string) => any;
+  const { data } = await raw('matchdays')
+    .select('lineup_fcp_uploaded_at, lineup_fcp_uploaded_by')
+    .eq('id', matchdayId)
+    .maybeSingle();
+  return {
+    uploadedAt: data?.lineup_fcp_uploaded_at ? new Date(data.lineup_fcp_uploaded_at) : null,
+    uploadedBy: data?.lineup_fcp_uploaded_by ?? null,
+  };
+}
+
+/** Marca (o desmarca) la alineación como subida. Solo el capitán. Avisa al club al marcar. */
+export async function setLineupUploaded(matchdayId: string, uploaded = true): Promise<boolean> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc('set_lineup_fcp_uploaded', {
+    p_matchday_id: matchdayId,
+    p_uploaded: uploaded,
+  });
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}

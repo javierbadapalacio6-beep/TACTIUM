@@ -5,7 +5,7 @@ import { useColors, withAlpha, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { NeonDot } from '@components/ui';
-import { useLiveMatchday } from '@core/hooks/useLiveMatchday';
+import { useLiveMatchday, useNow } from '@core/hooks/useLiveMatchday';
 import { isLiveNow, liveTotals } from '@core/services/live';
 
 /**
@@ -23,8 +23,9 @@ export const LiveHomeCard: React.FC<{
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { state } = useLiveMatchday(matchdayId, !!matchdayId);
-  if (!matchdayId || !isLiveNow(state)) return null;
-  const t = liveTotals(state);
+  const now = useNow();
+  if (!matchdayId || !isLiveNow(state, now)) return null;
+  const t = liveTotals(state, now);
 
   return (
     <Pressable

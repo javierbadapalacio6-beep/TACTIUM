@@ -4,7 +4,13 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { IconCheck, IconClock } from '@components/ui/Icon';
 import { useColors, type Palette } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
-import { fetchFcpUpload, setFcpUploaded, type FcpUploadState } from '@core/services/fcpUpload';
+import {
+  fetchFcpUpload,
+  fetchLineupUpload,
+  setFcpUploaded,
+  setLineupUploaded,
+  type FcpUploadState,
+} from '@core/services/fcpUpload';
 import { toast } from '@store/toastStore';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -16,22 +22,25 @@ const whenLabel = (d: Date) =>
  * lunes a las 20:00. Aquí se marca: queda anotado, deja de salir en los recordatorios del lunes y se avisa al club.
  * Solo para partidos de local de la Federación Cántabra por jugar.
  */
-export const FederationUploadCard: React.FC<{ matchdayId: string; canManage: boolean }> = ({
-  matchdayId,
-  canManage,
-}) => {
+export const FederationUploadCard: React.FC<{
+  matchdayId: string;
+  canManage: boolean;
+  /** 'schedule' = la hora (partidos de local); 'lineup' = la alineación (todos, antes del partido). */
+  kind?: 'schedule' | 'lineup';
+}> = ({ matchdayId, canManage, kind = 'schedule' }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [state, setState] = useState<FcpUploadState | null>(null);
   const [busy, setBusy] = useState(false);
+  const lineup = kind === 'lineup';
 
   const load = useCallback(async () => {
     try {
-      setState(await fetchFcpUpload(matchdayId));
+      setState(await (lineup ? fetchLineupUpload(matchdayId) : fetchFcpUpload(matchdayId)));
     } catch {
       setState(null);
     }
-  }, [matchdayId]);
+  }, [matchdayId, lineup]);
   useEffect(() => {
     load();
   }, [load]);
@@ -45,9 +54,16 @@ export const FederationUploadCard: React.FC<{ matchdayId: string; canManage: boo
     if (busy) return;
     setBusy(true);
     try {
-      await setFcpUploaded([matchdayId], !done);
+      if (lineup) await setLineupUploaded(matchdayId, !done);
+      else await setFcpUploaded([matchdayId], !done);
       await load();
-      if (!done) toast.success('Marcado como subido', 'Hemos avisado al club y a los capitanes.');
+      if (!done)
+        toast.success(
+          lineup ? 'Alineación marcada como subida' : 'Marcado como subido',
+          lineup
+            ? 'Dejaremos de recordártelo y hemos avisado al club.'
+            : 'Hemos avisado al club y a los capitanes.',
+        );
     } catch (e) {
       toast.error('No se pudo guardar', (e as Error)?.message);
     } finally {
@@ -62,11 +78,21 @@ export const FederationUploadCard: React.FC<{ matchdayId: string; canManage: boo
           {done ? <IconCheck size={13} color={c.textInverse} /> : <IconClock size={14} color={c.accent} />}
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.title}>{done ? 'Subido a la Federación' : '¿Ya está en la Federación?'}</Text>
+          <Text style={styles.title}>
+            {lineup
+              ? done
+                ? 'Alineación subida a la Federación'
+                : '¿Ya subiste la alineación?'
+              : done
+                ? 'Subido a la Federación'
+                : '¿Ya está en la Federación?'}
+          </Text>
           <Text style={styles.sub}>
             {done
               ? `Marcado el ${whenLabel(state.uploadedAt!)}.`
-              : 'La hora de los partidos de local se sube a la web de la Federación antes del lunes a las 20:00. Cuando la subas, márcalo y avisamos al club.'}
+              : lineup
+                ? 'La alineación se sube a la web de la Federación antes del partido. Te avisaremos 24 h, 3 h y 1 h antes hasta que la marques como subida.'
+                : 'La hora de los partidos de local se sube a la web de la Federación antes del lunes a las 20:00. Cuando la subas, márcalo y avisamos al club.'}
           </Text>
         </View>
       </View>

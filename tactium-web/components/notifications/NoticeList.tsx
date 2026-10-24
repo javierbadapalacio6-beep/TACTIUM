@@ -493,6 +493,8 @@ function linkAction(n: Notice): [string, string] | null {
       return n.href ? [n.href === "/club/horarios" ? "Ver horario" : "Ver jornada", n.href] : null;
     case "fcp_upload_done":
     case "fcp_upload_reminder":
+    case "lineup_upload_done":
+    case "lineup_upload_reminder":
     case "away_schedule_published":
       return n.href ? [n.href === "/club/horarios" ? "Ver horarios" : "Ver jornada", n.href] : null;
     case "tournament_bracket":

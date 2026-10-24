@@ -1081,6 +1081,11 @@ const JornadaDetail = ({
           <FederationUploadCard matchdayId={matchday.id} canManage={isCaptain} />
         ) : null}
 
+        {/* === ALINEACIÓN SUBIDA A LA FEDERACIÓN === local y visitante: hay que subirla antes del partido */}
+        {(tab === 'previa' || tab === 'alineacion') && !closed && team?.federation === 'FCantP' ? (
+          <FederationUploadCard matchdayId={matchday.id} canManage={isCaptain} kind="lineup" />
+        ) : null}
+
         {/* === PREVIA === */}
         {tab === 'previa' ? (
           split ? (

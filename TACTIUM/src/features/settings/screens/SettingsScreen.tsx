@@ -38,6 +38,11 @@ import {
 } from '@components/ui';
 import { SegmentedControl } from '@components/ui/SegmentedControl';
 import { useAuthStore } from '@store/authStore';
+import {
+  getPushPermission,
+  openSystemNotificationSettings,
+  registerForPushNotifications,
+} from '@core/push';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
@@ -175,6 +180,8 @@ export const SettingsScreen = () => {
   // Interruptor de avisos (profiles.notifications_enabled). El backend YA lo
   // respeta: send-push y el cron de recordatorios filtran por él.
   const [notifEnabled, setNotifEnabled] = useState(true);
+  // Permiso del sistema: sin él el interruptor no puede estar «activo» de verdad.
+  const [osPerm, setOsPerm] = useState<'granted' | 'denied' | 'undetermined'>('granted');
   // La versión con la OTA se ve con 5 toques (para soporte).
   const [showOta, setShowOta] = useState(false);
   const taps = useRef(0);
@@ -191,6 +198,7 @@ export const SettingsScreen = () => {
     } catch {
       /* se queda con lo que había */
     }
+    setOsPerm(await getPushPermission().catch(() => 'granted' as const));
   }, []);
 
   useFocusEffect(
@@ -211,15 +219,50 @@ export const SettingsScreen = () => {
   );
   const teamPro = useTeamPro(team, isPlayer);
 
-  // Optimista + persistencia; revierte si falla.
-  const handleToggleNotifications = useCallback((next: boolean) => {
-    setNotifEnabled(next);
-    lightTap();
-    ProfileApi.setNotificationsEnabled(next).catch(() => {
-      setNotifEnabled(!next);
-      toast.error('No se pudo guardar', 'Inténtalo de nuevo.');
-    });
-  }, []);
+  // Optimista + persistencia; revierte si falla. Al ACTIVAR comprueba también el
+  // permiso del sistema (en Android hay que concederlo): si aún no se ha
+  // preguntado lo pide; si está bloqueado manda a los ajustes del móvil. Antes
+  // el interruptor solo cambiaba un flag y parecía un botón muerto.
+  const handleToggleNotifications = useCallback(
+    async (next: boolean) => {
+      lightTap();
+      if (next) {
+        const uid = useAuthStore.getState().user?.id;
+        let perm = await getPushPermission();
+        if (perm === 'undetermined' && uid) {
+          await registerForPushNotifications(uid).catch(() => ({ granted: false }));
+          perm = await getPushPermission();
+        } else if (perm === 'granted' && uid) {
+          void registerForPushNotifications(uid).catch(() => {});
+        }
+        setOsPerm(perm);
+        if (perm !== 'granted') {
+          Alert.alert(
+            'Avisos bloqueados en tu móvil',
+            'Para recibirlos, actívalos en los ajustes del sistema: Notificaciones › Permitir.',
+            [
+              { text: 'Ahora no', style: 'cancel' },
+              { text: 'Abrir ajustes', onPress: openSystemNotificationSettings },
+            ],
+          );
+          return;
+        }
+      }
+      setNotifEnabled(next);
+      ProfileApi.setNotificationsEnabled(next)
+        .then(() =>
+          toast.success(
+            next ? 'Avisos activados' : 'Avisos desactivados',
+            next ? 'Te avisaremos de convocatorias, alineación y recordatorios.' : 'No recibirás avisos del equipo.',
+          ),
+        )
+        .catch(() => {
+          setNotifEnabled(!next);
+          toast.error('No se pudo guardar', 'Inténtalo de nuevo.');
+        });
+    },
+    [],
+  );
 
   const handleUnlink = () => {
     if (!myPlayerId || unlinking) return;
@@ -485,11 +528,15 @@ export const SettingsScreen = () => {
           <Row
             icon={<IconBell size={14} color={c.textMuted} />}
             title="Avisos del equipo"
-            sub="Convocatoria, alineación y recordatorios"
+            sub={
+              osPerm !== 'granted'
+                ? 'Desactivados en tu móvil: toca el interruptor para activarlos'
+                : 'Convocatoria, alineación y recordatorios'
+            }
             right={
               <Toggle
                 size="sm"
-                value={notifEnabled}
+                value={notifEnabled && osPerm === 'granted'}
                 onChange={handleToggleNotifications}
                 accessibilityLabel="Activar o desactivar los avisos del equipo"
               />

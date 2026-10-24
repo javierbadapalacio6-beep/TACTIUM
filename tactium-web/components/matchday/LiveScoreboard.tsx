@@ -6,8 +6,10 @@ import { fetchTeamPro } from "@/lib/account-queries";
 import {
   activeScorer,
   courtOutcome,
+  courtSets,
   createShareToken,
   isLiveNow,
+  liveCtx,
   liveShareText,
   liveTotals,
   liveUrl,
@@ -70,8 +72,9 @@ export function LiveScoreboard({
   const hasAnyLive = !!state?.courts.some((c) => c.live);
   if (!state || (!started && !hasAnyLive)) return null;
 
-  const live = isLiveNow(state);
-  const totals = liveTotals(state.courts);
+  const ctx = liveCtx(state, now);
+  const live = isLiveNow(state, now, courts);
+  const totals = liveTotals(state, now);
   const canScore = state.can_score && !closed;
   const byCourt = new Map(state.courts.map((c) => [c.court_number, c]));
   const n = Math.max(courts, ...state.courts.map((c) => c.court_number), 1);
@@ -110,7 +113,7 @@ export function LiveScoreboard({
         title={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             {live ? <span className="tw-live-dot" aria-hidden /> : null}
-            {live ? "En directo" : closed || hasAnyLive ? "Terminado" : "Marcador en directo"}
+            {live ? "En directo" : "Terminado"}
           </span>
         }
         sub={
@@ -140,6 +143,8 @@ export function LiveScoreboard({
       {Array.from({ length: n }, (_, i) => i + 1).map((k) => {
         const c = byCourt.get(k);
         const lv = c?.live ?? null;
+        const outcome = courtOutcome(c, ctx);
+        const sets = courtSets(c);
         const scorer = activeScorer(lv, user?.id ?? null, now);
         const pair = [c?.player_a?.name, c?.player_b?.name].filter(Boolean).join(" / ") || "Sin pareja";
         const disabled = !canScore || !!c?.forfeit;
@@ -163,10 +168,10 @@ export function LiveScoreboard({
             n={k}
             pair={pair}
             rival={opponent}
-            outcome={courtOutcome(c)}
+            outcome={outcome}
             forfeit={!!c?.forfeit}
-            sets={c?.forfeit ? [] : lv?.sets ?? []}
-            currentIdx={lv && lv.status === "live" ? lv.sets.length - 1 : -1}
+            sets={sets}
+            currentIdx={outcome === "live" && lv?.status === "live" ? sets.length - 1 : -1}
             action={action && locked ? `${action} · Pro` : action}
             actionTone={scorer ? "warning" : "accent"}
             href={href}

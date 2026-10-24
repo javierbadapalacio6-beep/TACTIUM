@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { isLiveNow, liveTotals, useLiveMatchday } from "@/lib/live";
+import { isLiveNow, liveTotals, useLiveMatchday, useNow } from "@/lib/live";
 
 /**
  * Inicio: la jornada que se está jugando AHORA, con el marcador global en
@@ -21,8 +21,9 @@ export function LiveHomeCard({
   jornada: number | null;
 }) {
   const { state } = useLiveMatchday(matchdayId);
-  if (!isLiveNow(state)) return null;
-  const t = liveTotals(state!.courts);
+  const now = useNow();
+  if (!isLiveNow(state, now)) return null;
+  const t = liveTotals(state, now);
   return (
     <Link
       href={`/jornada/${matchdayId}?tab=resultado`}

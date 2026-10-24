@@ -159,6 +159,43 @@ export async function fetchFcpUpload(
   };
 }
 
+/**
+ * Alineación subida a la Federación: estado de un partido. `applies` = por jugar y de la Cántabra (local y
+ * visitante: hay que subirla antes del partido). Migración 20261024b.
+ */
+export async function fetchLineupUpload(
+  matchdayId: string,
+): Promise<{ applies: boolean; uploadedAt: Date | null }> {
+  const { data } = await supabaseBrowser()
+    .from("matchdays")
+    .select("status, lineup_fcp_uploaded_at, seasons(teams(federation))")
+    .eq("id", matchdayId)
+    .maybeSingle();
+  const row = data as unknown as {
+    status: string;
+    lineup_fcp_uploaded_at: string | null;
+    seasons?: { teams?: { federation?: string | null } | { federation?: string | null }[] | null } | { teams?: unknown }[] | null;
+  } | null;
+  if (!row) return { applies: false, uploadedAt: null };
+  const s = Array.isArray(row.seasons) ? row.seasons[0] : row.seasons;
+  const tm = (s as { teams?: { federation?: string | null } | { federation?: string | null }[] | null } | null)?.teams;
+  const fed = (Array.isArray(tm) ? tm[0]?.federation : tm?.federation) ?? null;
+  return {
+    applies: row.status === "upcoming" && fed === "FCantP",
+    uploadedAt: row.lineup_fcp_uploaded_at ? new Date(row.lineup_fcp_uploaded_at) : null,
+  };
+}
+
+/** Marca (o desmarca) la alineación como subida. Solo el capitán; avisa al club al marcar. */
+export async function setLineupUploaded(matchdayId: string, uploaded = true): Promise<boolean> {
+  const { data, error } = await supabaseBrowser().rpc("set_lineup_fcp_uploaded", {
+    p_matchday_id: matchdayId,
+    p_uploaded: uploaded,
+  });
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
 /** Qué partidos de una lista ya están subidos a la Federación. */
 export async function fetchFcpUploadedIds(matchdayIds: string[]): Promise<Set<string>> {
   if (matchdayIds.length === 0) return new Set();

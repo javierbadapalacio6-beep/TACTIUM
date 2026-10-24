@@ -62,6 +62,8 @@ export function targetOf(n: AppNotification): NavTarget | null {
     // «Subido a la Federación» / recordatorios del lunes: a la jornada, o a Horarios si es el aviso del club.
     case 'fcp_upload_done':
     case 'fcp_upload_reminder':
+    case 'lineup_upload_done':
+    case 'lineup_upload_reminder':
     case 'away_schedule_published':
       if (!md && n.data?.clubId) return { kind: 'clubSchedule' };
       return md ? { kind: 'home', screen: 'Jornada', matchdayId: md } : null;
@@ -199,6 +201,8 @@ export function ctaLabel(type: string): string | null {
       return 'Ver jornada';
     case 'fcp_upload_done':
     case 'fcp_upload_reminder':
+    case 'lineup_upload_done':
+    case 'lineup_upload_reminder':
     case 'away_schedule_published':
       return 'Ver jornada';
     case 'tournament_bracket':
