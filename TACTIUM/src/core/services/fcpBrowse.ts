@@ -147,6 +147,42 @@ export interface FcpBrowseStanding {
   form: ('V' | 'D')[];
 }
 
+type OverlayPartido = {
+  id_partido: string;
+  estado: string | null;
+  resultado: string | null;
+  ganador: string | null;
+};
+
+/**
+ * Lo que la Federación aún no ha subido pero TACTIUM ya sabe (acta cerrada por el capitán): se rellena el
+ * partido con nuestro marcador para poder deducir la clasificación. Solo se ve lo de tus equipos (RLS) y
+ * solo donde la Federación no tiene resultado: en cuanto lo sube, manda el suyo.
+ */
+async function overlayOwnResults(partidos: OverlayPartido[] | null): Promise<void> {
+  const pend = (partidos ?? []).filter((p) => p.estado !== 'jugado' && !p.resultado);
+  if (pend.length === 0) return;
+  const { data } = await rawFrom('matchdays')
+    .select('fcp_id_partido, is_home, score_for, score_against')
+    .in('fcp_id_partido', pend.map((p) => p.id_partido))
+    .eq('status', 'finished');
+  for (const m of (data ?? []) as {
+    fcp_id_partido: string;
+    is_home: boolean;
+    score_for: number | null;
+    score_against: number | null;
+  }[]) {
+    if (m.score_for == null || m.score_against == null) continue;
+    const p = pend.find((x) => x.id_partido === m.fcp_id_partido);
+    if (!p) continue;
+    const l = m.is_home ? m.score_for : m.score_against;
+    const v = m.is_home ? m.score_against : m.score_for;
+    p.estado = 'jugado';
+    p.resultado = `${l}-${v}`;
+    p.ganador = l > v ? 'local' : v > l ? 'visitante' : null;
+  }
+}
+
 /** Clasificación de un grupo (PJ/PG derivados de fcp_partidos). */
 export async function fetchGroupStandings(
   idGrupo: string,
@@ -157,9 +193,10 @@ export async function fetchGroupStandings(
     .order('posicion', { ascending: true });
 
   const { data: partidos } = await rawFrom('fcp_partidos')
-    .select('equipo_local, equipo_visit, ganador, estado, jornada, resultado, tipo')
+    .select('id_partido, equipo_local, equipo_visit, ganador, estado, jornada, resultado, tipo')
     .eq('id_grupo', idGrupo)
     .order('jornada', { ascending: true });
+  await overlayOwnResults(partidos as OverlayPartido[] | null);
   // Sets de cada pareja (actas): con ellos se calcula la clasificación provisional.
   const { data: actasRows } = await rawFrom('fcp_actas')
     .select('equipo_local, equipo_visit, sets_local, sets_visit')
