@@ -101,6 +101,7 @@ const makeStyles = (c: Palette) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
       gap: 4,
+      marginTop: 10,
       backgroundColor: c.bgCard,
       borderRadius: Radius.lg,
       borderWidth: 1,
