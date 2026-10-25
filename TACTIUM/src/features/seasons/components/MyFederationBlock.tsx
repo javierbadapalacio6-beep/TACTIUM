@@ -131,7 +131,16 @@ const MyTeamCard: React.FC<{
         if (!alive) return;
         const mine = rows
           .filter(
-            (r) => (r.isMeLocal || r.isMeVisit) && r.estado !== 'jugado' && !r.resultado,
+            (r) =>
+              (r.isMeLocal || r.isMeVisit) &&
+              r.estado !== 'jugado' &&
+              !r.resultado &&
+              // La Federación tarda en subir el resultado: un partido que ya ha empezado no es «próximo».
+              !(
+                r.fecha &&
+                new Date(`${r.fecha.slice(0, 10)}T${(r.hora ?? '00:00').slice(0, 5)}:00`).getTime() <=
+                  Date.now()
+              ),
           )
           .sort((a, b) => (a.jornada ?? 999) - (b.jornada ?? 999));
         setNext(mine[0] ?? null);

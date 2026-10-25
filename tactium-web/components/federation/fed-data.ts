@@ -192,6 +192,11 @@ export async function fetchTeamStanding(
             (m) =>
               m.estado !== "jugado" &&
               !m.resultado &&
+              // La Federación tarda en subir el resultado: un partido que ya ha empezado no es «próximo».
+              !(
+                m.fecha &&
+                new Date(`${m.fecha.slice(0, 10)}T${(m.hora ?? "00:00").slice(0, 5)}:00`).getTime() <= Date.now()
+              ) &&
               (fcpSameTeam(m.local, me.equipo) || fcpSameTeam(m.visitante, me.equipo)),
           )
           .sort((a, b) => (a.jornada ?? 999) - (b.jornada ?? 999))[0] ?? null)
