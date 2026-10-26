@@ -44,6 +44,7 @@ import { useLayout } from '@components/ui/ResponsiveFrame';
 import { ContentColumn } from '@components/layout';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import * as SeasonsApi from '@core/services/seasons';
+import { TeamFcpStats } from '@features/seasons/components/TeamFcpStats';
 import * as MatchdaysApi from '@core/services/matchdays';
 import {
   FederationSheet,
@@ -106,7 +107,7 @@ const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 /** Liga Cántabra: 5 parejas por encuentro = 10 jugadores. */
 const MATCHDAY_PLAYERS = 10;
 
-type Tab = 'plantilla' | 'parejas';
+type Tab = 'plantilla' | 'parejas' | 'stats';
 type NoticeKind = 'season' | 'signing' | 'inscripcion';
 
 /** Apellido para las parejas: «Luis Gómez» → «Gómez»; con alias, el alias. */
@@ -1078,6 +1079,7 @@ export const TeamScreen = () => {
               options={[
                 { value: 'plantilla', label: `Plantilla · ${players.length}` },
                 { value: 'parejas', label: 'Parejas' },
+                { value: 'stats', label: 'Stats' },
               ]}
               colors={{
                 track: c.bgCard,
@@ -1202,6 +1204,10 @@ export const TeamScreen = () => {
                 )
               )}
             </View>
+          </CrossFade>
+        ) : tab === 'stats' ? (
+          <CrossFade id="stats">
+            <TeamFcpStats />
           </CrossFade>
         ) : (
           <CrossFade id="parejas">

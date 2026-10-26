@@ -69,6 +69,7 @@ import { EditTeamModal } from "@/components/team/EditTeamModal";
 import { ScanModal } from "@/components/team/ScanModal";
 import { bulkUpsertPlayers } from "@/lib/parse-image";
 import { PairStats } from "@/components/team/PairStats";
+import { TeamFcpStats } from "@/components/team/TeamFcpStats";
 import { ACCOUNT_DOT, PlayerCard } from "@/components/team/PlayerCard";
 import { Crest } from "@/components/Crest";
 import { InvitePanel } from "@/components/invite/InvitePanel";
@@ -76,7 +77,7 @@ import { EASE } from "@/components/entry/motion-bits";
 import { proHref } from "@/lib/nav";
 
 type SortKey = "name" | "pts" | "pos";
-type Tab = "plantilla" | "parejas";
+type Tab = "plantilla" | "parejas" | "stats";
 type Filter = "todos" | "disponibles" | "bajas";
 
 const POSITIONS: Position[] = ["Drive", "Revés", "Ambos"];
@@ -841,6 +842,7 @@ export function Roster() {
             options={[
               { value: "plantilla", label: `Plantilla · ${PLAYERS.length}` },
               { value: "parejas", label: "Parejas" },
+              { value: "stats", label: "Stats" },
             ]}
           />
           {tab === "plantilla" && (
@@ -891,6 +893,8 @@ export function Roster() {
         >
           {tab === "parejas" ? (
             <PairStats embedded myPlayerId={myPlayerId} />
+          ) : tab === "stats" && teamId ? (
+            <TeamFcpStats teamId={teamId} />
           ) : !teamId ? (
             <Card>
               <EmptyState

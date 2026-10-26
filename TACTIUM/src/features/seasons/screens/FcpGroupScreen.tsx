@@ -310,8 +310,8 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
           : 'Cuadro';
 
   const tabItems: [Tab, string][] = esPlayoff
-    ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas'], ['stats', 'Stats']]
-    : [['clasif', 'Clasificación'], ['jornadas', 'Jornadas'], ['stats', 'Stats']];
+    ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas']]
+    : [['clasif', 'Clasificación'], ['jornadas', 'Jornadas']];
 
   // Zonas de play off / descenso: la FCP no publica los cupos, salen de la
   // normativa (core/data/fcpZones.ts). Solo en la fase de grupos; sin datos,
@@ -458,7 +458,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                 </View>
               ) : null}
 
-              <View style={{ marginTop: 12 }}>
+              <View style={{ marginTop: 12, marginBottom: 14 }}>
                 <Segmented
                   size="sm"
                   items={[['resumen', 'Resumen'], ['completa', 'Completa']]}
