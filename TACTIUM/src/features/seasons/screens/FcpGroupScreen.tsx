@@ -499,7 +499,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
               ) : (
               <View style={{ gap: 6, marginTop: 10 }}>
                 {rows.map((t, i) => {
-                  const dif = (t.setsFavor ?? 0) - (t.setsContra ?? 0);
+                  const dif = t.stats.sf - t.stats.sc;
                   const zone = zoneOf(t.posicion);
                   const prevZone = i > 0 ? zoneOf(rows[i - 1].posicion) : null;
                   // Línea discontinua al cambiar de zona.
@@ -537,8 +537,8 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                             <Text style={[styles.stPts, { width: 34 }]}>{t.puntos ?? 0}</Text>
                           </View>
                           <Text style={styles.stSub} numberOfLines={1}>
-                            {t.pj} PJ · {t.pg} PG · DIF {dif >= 0 ? `+${dif}` : dif} · SETS{' '}
-                            {t.setsFavor ?? 0}/{t.setsContra ?? 0}
+                            {t.stats.enf} ENF · {t.stats.pj} PJ · {t.stats.pg} PG · DIF {dif >= 0 ? `+${dif}` : dif} · SETS{' '}
+                            {t.stats.sf}/{t.stats.sc}
                           </Text>
                         </>
                       ) : (
@@ -546,8 +546,8 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                       <View style={styles.stTop}>
                         <Text style={[styles.stPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
                         <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={1}>{t.equipo}</Text>
-                        <Text style={[styles.stNum, { width: 26, color: c.textMuted }]}>{t.pj}</Text>
-                        <Text style={[styles.stNum, { width: 26, color: c.text }]}>{t.pg}</Text>
+                        <Text style={[styles.stNum, { width: 26, color: c.textMuted }]}>{t.stats.pj}</Text>
+                        <Text style={[styles.stNum, { width: 26, color: c.text }]}>{t.stats.pg}</Text>
                         <Text style={[styles.stNum, { width: 40, textAlign: 'right', color: c.textFaint }]}>
                           {dif >= 0 ? `+${dif}` : dif}
                         </Text>
@@ -559,7 +559,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                           <FormChips form={t.form} />
                           <View style={{ flex: 1 }} />
                           <Text style={styles.stSets}>
-                            {t.setsFavor ?? 0} / {t.setsContra ?? 0}
+                            {t.stats.sf} / {t.stats.sc}
                           </Text>
                         </View>
                       ) : null}

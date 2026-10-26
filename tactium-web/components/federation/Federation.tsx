@@ -1610,7 +1610,8 @@ export function FcpStandingsTable({
                 )}
               </div>
               {rows.map((t, i) => {
-                const dif = t.setsFavor - t.setsContra;
+                const fl = t.full ?? { pj: t.pj, pg: t.pg, sf: t.setsFavor, sc: t.setsContra, jf: 0, jc: 0 };
+                const dif = fl.sf - fl.sc;
                 const mine = isMine(t.idEquipo);
                 const zone = zoneOf(t.posicion);
                 // Línea discontinua donde cambia de zona.
@@ -1648,21 +1649,21 @@ export function FcpStandingsTable({
                         ) : null}
                       </span>
                       <span className="tw-st-sub">
-                        PJ <span className="mono">{t.pj}</span> · PG{" "}
-                        <span className="mono">{t.pg}</span> · Dif{" "}
+                        PJ <span className="mono">{fl.pj}</span> · PG{" "}
+                        <span className="mono">{fl.pg}</span> · Dif{" "}
                         <span className="mono">{dif >= 0 ? `+${dif}` : dif}</span> · Sets{" "}
                         <span className="mono">
-                          {t.setsFavor}-{t.setsContra}
+                          {fl.sf}-{fl.sc}
                         </span>
                       </span>
                     </span>
-                    <span className="mono tw-st-x">{t.pj}</span>
-                    <span className="mono tw-st-x">{t.pg}</span>
+                    <span className="mono tw-st-x">{fl.pj}</span>
+                    <span className="mono tw-st-x">{fl.pg}</span>
                     <span className="mono tw-st-x" style={{ color: "var(--text-muted)" }}>
                       {dif >= 0 ? `+${dif}` : dif}
                     </span>
-                    <span className="mono tw-st-x">{t.setsFavor}</span>
-                    <span className="mono tw-st-x">{t.setsContra}</span>
+                    <span className="mono tw-st-x">{fl.sf}</span>
+                    <span className="mono tw-st-x">{fl.sc}</span>
                     <span className="mono" style={{ fontWeight: 700, color: "var(--accent)" }}>
                       {t.puntos}
                     </span>

@@ -361,8 +361,10 @@ export async function fetchFcpStandings(
     const a = Number(m[1]);
     const b = Number(m[2]);
     l.pf += a; l.pc += b; v.pf += b; v.pc += a;
-    if (a > b) l.puntos += 2;
-    else if (b > a) v.puntos += 2;
+    // Puntos de la Federación (comprobado en la liga 2026/27): con 5 parejas, victoria = 1; con 4 parejas, victoria = 2 y empate = 1.
+    const win = (a + b) % 2 === 1 ? 1 : 2;
+    if (a > b) l.puntos += win;
+    else if (b > a) v.puntos += win;
     else { l.puntos += 1; v.puntos += 1; }
   }
   for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; sets_local: number | null; sets_visit: number | null }[], resolve)) {
@@ -410,7 +412,13 @@ export async function fetchFcpStandings(
     };
   });
   if (!provisional) return rows;
-  const pd = (e: string) => (calc.get(e)?.pf ?? 0) - (calc.get(e)?.pc ?? 0);
+  // Desempate como la Federación: puntos, average de sets y average de juegos (suma de los parciales).
+  const gd = new Map<string, number>();
+  for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; parciales: string | null }[], resolve)) {
+    const [jl, jv] = juegosDe(a.parciales);
+    if (a.equipo_local) gd.set(a.equipo_local, (gd.get(a.equipo_local) ?? 0) + jl - jv);
+    if (a.equipo_visit) gd.set(a.equipo_visit, (gd.get(a.equipo_visit) ?? 0) + jv - jl);
+  }
   const out = rows.map((x) => {
     const c = calc.get(x.equipo);
     return { ...x, puntos: c?.puntos ?? 0, setsFavor: c?.sf ?? 0, setsContra: c?.sc ?? 0, provisional: true };
@@ -418,8 +426,8 @@ export async function fetchFcpStandings(
   out.sort(
     (a, b) =>
       b.puntos - a.puntos ||
-      pd(b.equipo) - pd(a.equipo) ||
       b.setsFavor - b.setsContra - (a.setsFavor - a.setsContra) ||
+      (gd.get(b.equipo) ?? 0) - (gd.get(a.equipo) ?? 0) ||
       a.equipo.localeCompare(b.equipo)
   );
   out.forEach((x, i) => {

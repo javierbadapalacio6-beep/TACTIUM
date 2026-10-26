@@ -326,15 +326,18 @@ export async function fetchGroupStandings(
       x.setsFavor = c?.sf ?? 0;
       x.setsContra = c?.sc ?? 0;
     }
-    const dp = (e: string) => {
-      const c = calc.get(e);
-      return (c?.pf ?? 0) - (c?.pc ?? 0);
-    };
+    // Desempate como la Federación: puntos, average de sets y average de juegos (suma de los parciales).
+    const gd = new Map<string, number>();
+    for (const a of remapTeams((actasRows ?? []) as (ActaCalc & { parciales: string | null })[], resolve)) {
+      const [jl, jv] = juegosDe(a.parciales);
+      if (a.equipo_local) gd.set(a.equipo_local, (gd.get(a.equipo_local) ?? 0) + jl - jv);
+      if (a.equipo_visit) gd.set(a.equipo_visit, (gd.get(a.equipo_visit) ?? 0) + jv - jl);
+    }
     rows.sort(
       (a, b) =>
         (b.puntos ?? 0) - (a.puntos ?? 0) ||
-        dp(b.equipo) - dp(a.equipo) ||
         (b.setsFavor ?? 0) - (b.setsContra ?? 0) - ((a.setsFavor ?? 0) - (a.setsContra ?? 0)) ||
+        (gd.get(b.equipo) ?? 0) - (gd.get(a.equipo) ?? 0) ||
         a.equipo.localeCompare(b.equipo),
     );
     rows.forEach((x, i) => {
@@ -442,8 +445,10 @@ function provisionalCalc(equipos: string[], partidos: PartidoCalc[], actas: Acta
     l.pc += sc[1];
     v.pf += sc[1];
     v.pc += sc[0];
-    if (sc[0] > sc[1]) l.puntos += 2;
-    else if (sc[1] > sc[0]) v.puntos += 2;
+    // Puntos de la Federación (comprobado en la liga 2026/27): con 5 parejas, victoria = 1; con 4 parejas, victoria = 2 y empate = 1.
+    const win = (sc[0] + sc[1]) % 2 === 1 ? 1 : 2;
+    if (sc[0] > sc[1]) l.puntos += win;
+    else if (sc[1] > sc[0]) v.puntos += win;
     else {
       l.puntos += 1;
       v.puntos += 1;
