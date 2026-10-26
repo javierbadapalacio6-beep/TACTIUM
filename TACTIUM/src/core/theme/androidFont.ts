@@ -1,32 +1,48 @@
-import { useFonts } from 'expo-font';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
 import { Platform } from 'react-native';
 
 /**
  * Fuente de la app en ANDROID. iPhone usa San Francisco y Android, por defecto, Roboto (o la del fabricante: MiSans,
  * One UI…), más ancha y con otras métricas: los mismos estilos salen más apretados, con más «…» y con otro peso.
  * Con Inter en Android el texto se parece al de iPhone en ancho y claridad. En Android cada peso es una fuente
- * distinta, así que se cargan los cuatro que usa la app y `familyFor` traduce `fontWeight` → familia.
- * Las fuentes se cargan en tiempo de ejecución (no hace falta build para cambiarlas).
+ * distinta, así que se cargan los cuatro que usa la app y `interFamilyFor` traduce `fontWeight` → familia.
+ *
+ * Las fuentes se cargan en tiempo de ejecución, así que llegan por OTA. `expo-font` y las fuentes se piden con
+ * `require` protegido: si un binario no trajera el módulo nativo, la app sigue con la fuente del sistema en vez de
+ * caerse al arrancar (misma precaución que view-shot y expo-sharing).
  */
 export const USE_INTER = Platform.OS === 'android';
 
-let ready = false;
-export const interReady = () => ready;
+type UseFonts = (map: Record<string, unknown>) => [boolean, Error | null];
+let useFontsImpl: UseFonts | null = null;
+let fontMap: Record<string, unknown> | null = null;
+if (USE_INTER) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    useFontsImpl = (require('expo-font') as { useFonts: UseFonts }).useFonts;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const inter = require('@expo-google-fonts/inter') as Record<string, unknown>;
+    fontMap = {
+      Inter_400Regular: inter.Inter_400Regular,
+      Inter_500Medium: inter.Inter_500Medium,
+      Inter_600SemiBold: inter.Inter_600SemiBold,
+      Inter_700Bold: inter.Inter_700Bold,
+    };
+  } catch {
+    useFontsImpl = null;
+    fontMap = null;
+  }
+}
 
-/** Carga Inter. En iOS no hace nada y devuelve true. */
+let ready = false;
+
+/** Carga Inter. En iOS (o si el módulo no está) no hace nada y devuelve true. */
 export function useInterFont(): boolean {
-  const [loaded, error] = useFonts(
-    USE_INTER ? { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } : {},
-  );
-  const ok = !USE_INTER || loaded || !!error;
-  if (USE_INTER && loaded) ready = true;
-  return ok;
+  // La decisión es la misma en cada render (depende solo del módulo), así que no cambia el orden de los hooks.
+  if (!USE_INTER || !useFontsImpl || !fontMap) return true;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const [loaded, error] = useFontsImpl(fontMap);
+  if (loaded) ready = true;
+  return loaded || !!error;
 }
 
 /** Familia de Inter para un peso. null si no toca cambiarla (mono u otra fuente propia). */
