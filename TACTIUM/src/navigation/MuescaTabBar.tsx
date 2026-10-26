@@ -6,7 +6,7 @@
  * La pestaña central (Crear) es una acción, no una sección: abre la hoja CREAR de siempre.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -220,7 +220,15 @@ export const MuescaTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
   const BubbleIcon = ICONS[shownRoute.name] ?? IconHome;
   const activeLabel = String(descriptors[state.routes[active].key]?.options.tabBarLabel ?? '');
   // Cristal: el fondo es translúcido y el BlurView de debajo difumina lo que pasa por detrás.
-  const barFill = isDark ? 'rgba(27,29,33,0.52)' : 'rgba(255,255,255,0.56)';
+  // En Android el difuminado no se aplica igual y el contenido se leería a través de la barra: ahí, fondo sólido.
+  const glass = Platform.OS === 'ios';
+  const barFill = glass
+    ? isDark
+      ? 'rgba(27,29,33,0.52)'
+      : 'rgba(255,255,255,0.56)'
+    : isDark
+      ? 'rgba(27,29,33,0.985)'
+      : 'rgba(255,255,255,0.985)';
 
   return (
     <View
@@ -230,8 +238,13 @@ export const MuescaTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
       <GestureDetector gesture={pan}>
         <View style={{ width: W, height: GEO.alto }}>
           {/* Cristal difuminado bajo la barra */}
-          <View style={[s.glass, { width: W }]} pointerEvents="none">
-            <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View
+            style={[s.glass, { width: W }, !glass && { backgroundColor: c.bgCard, elevation: 10 }]}
+            pointerEvents="none"
+          >
+            {glass ? (
+              <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+            ) : null}
           </View>
           {/* La barra con su muesca */}
           <Svg width={W} height={GEO.alto} style={s.svg}>

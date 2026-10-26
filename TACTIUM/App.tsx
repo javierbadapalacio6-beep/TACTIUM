@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -24,13 +24,36 @@ registerTimePollCategories();
 // TextInput (si RN cambiara su forma interna, simplemente no se aplica). Un `maxFontSizeMultiplier` explícito
 // en un componente sigue mandando.
 const FONT_SCALE_CAP = 1.25;
+
+// Android pinta el texto más «apretado» y más pesado que iOS con los mismos estilos: añade un relleno vertical
+// propio a cada línea (`includeFontPadding`), los pesos 800/900 salen en negrita falsa muy gruesa y el
+// interletraje negativo pensado para San Francisco hace que las letras se toquen. Se corrige aquí, una vez, para
+// toda la app: sin relleno extra, pesos máximo 700 y interletraje no menor de −0,2. Solo en Android.
+const ANDROID_TEXT_FIX = Platform.OS === 'android';
+const androidTextStyle = (style: unknown): unknown => {
+  const f = StyleSheet.flatten(style as never) as { fontWeight?: string | number; letterSpacing?: number } | undefined;
+  const fix: Record<string, unknown> = { includeFontPadding: false };
+  const w = String(f?.fontWeight ?? '');
+  if (w === '800' || w === '900') fix.fontWeight = '700';
+  if (typeof f?.letterSpacing === 'number' && f.letterSpacing < -0.2) fix.letterSpacing = -0.2;
+  return [style, fix];
+};
+
 for (const Comp of [Text, TextInput] as unknown as Array<{
   render?: (props: Record<string, unknown>, ref: unknown) => unknown;
   __fontCap?: boolean;
 }>) {
   const orig = Comp?.render;
   if (typeof orig === 'function' && !Comp.__fontCap) {
-    Comp.render = (props, ref) => orig({ maxFontSizeMultiplier: FONT_SCALE_CAP, ...props }, ref);
+    Comp.render = (props, ref) =>
+      orig(
+        {
+          maxFontSizeMultiplier: FONT_SCALE_CAP,
+          ...props,
+          ...(ANDROID_TEXT_FIX ? { style: androidTextStyle(props.style) } : null),
+        },
+        ref,
+      );
     Comp.__fontCap = true;
   }
 }
