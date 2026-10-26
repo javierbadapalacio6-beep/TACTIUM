@@ -252,11 +252,11 @@ export const AvailabilityScreen = ({
                       ]}
                     >
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.rowName} numberOfLines={1}>
+                        <Text style={styles.rowName} numberOfLines={2}>
                           {p.name}
                           {isMine ? <Text style={styles.rowYou}>  TÚ</Text> : null}
                         </Text>
-                        <Text style={styles.rowMeta} numberOfLines={1}>
+                        <Text style={styles.rowMeta} numberOfLines={2}>
                           {meta || `${p.position} · ${p.pts} pts`}
                         </Text>
                       </View>

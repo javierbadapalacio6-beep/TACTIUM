@@ -320,10 +320,10 @@ export const CreateTeamsForClubScreen = ({
                 </Text>
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.rowName} numberOfLines={1}>
+                <Text style={styles.rowName} numberOfLines={2}>
                   {t.name}
                 </Text>
-                <Text style={styles.rowMeta} numberOfLines={1}>
+                <Text style={styles.rowMeta} numberOfLines={2}>
                   {[t.gender, t.category, t.group_name && `Grupo ${t.group_name}`]
                     .filter(Boolean)
                     .join(' · ') || 'Sin configurar'}

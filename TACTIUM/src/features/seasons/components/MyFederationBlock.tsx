@@ -172,10 +172,10 @@ const MyTeamCard: React.FC<{
           <Text style={s.tileText}>{initials(name)}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.mineName} numberOfLines={1}>
+          <Text style={s.mineName} numberOfLines={2}>
             {name}
           </Text>
-          <Text style={s.mineMeta} numberOfLines={1}>
+          <Text style={s.mineMeta} numberOfLines={2}>
             {['TU EQUIPO', group?.toUpperCase(), data.previous ? data.temporada : null]
               .filter(Boolean)
               .join(' · ')}
@@ -212,10 +212,10 @@ const MyTeamCard: React.FC<{
         <View style={s.nextBox}>
           <IconCalendar size={15} color={c.textMuted} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.nextMeta} numberOfLines={1}>
+            <Text style={s.nextMeta} numberOfLines={2}>
               {nextMeta}
             </Text>
-            <Text style={s.nextTeams} numberOfLines={1}>
+            <Text style={s.nextTeams} numberOfLines={2}>
               {next.equipo_local} – {next.equipo_visit}
             </Text>
           </View>
@@ -299,10 +299,10 @@ const ClubTeams: React.FC<{ onTeam: (idEquipo: number, name: string) => void }> 
                 <Text style={s.clubTileText}>{name.trim().slice(-1).toUpperCase()}</Text>
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.clubName} numberOfLines={1}>
+                <Text style={s.clubName} numberOfLines={2}>
                   {name}
                 </Text>
-                <Text style={s.clubMeta} numberOfLines={1}>
+                <Text style={s.clubMeta} numberOfLines={2}>
                   {shortGroupName(st.grupo) ?? 'En inscripción'}
                 </Text>
               </View>
@@ -340,10 +340,10 @@ const FollowChip: React.FC<{ fav: Favorite; onPress: () => void }> = ({ fav, onP
         <Text style={s.followTileText}>{initials(fav.label)}</Text>
       </View>
       <View style={{ maxWidth: 130 }}>
-        <Text style={s.followName} numberOfLines={1}>
+        <Text style={s.followName} numberOfLines={2}>
           {fav.label}
         </Text>
-        <Text style={s.followMeta} numberOfLines={1}>
+        <Text style={s.followMeta} numberOfLines={2}>
           {fav.meta || (fav.kind === 'team' ? 'Equipo' : 'Jugador')}
         </Text>
       </View>

@@ -616,10 +616,10 @@ export const ClubDashboardScreen = ({
                 >
                   <Text style={styles.todoNum}>{t.count}</Text>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.todoTitle} numberOfLines={1}>
+                    <Text style={styles.todoTitle} numberOfLines={2}>
                       {t.title}
                     </Text>
-                    <Text style={styles.todoSub} numberOfLines={1}>
+                    <Text style={styles.todoSub} numberOfLines={2}>
                       {t.sub}
                     </Text>
                   </View>
@@ -680,10 +680,10 @@ export const ClubDashboardScreen = ({
               style={({ pressed }) => [styles.inscripRow, pressed && { opacity: 0.7 }]}
             >
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.inscripTeam} numberOfLines={1}>
+                <Text style={styles.inscripTeam} numberOfLines={2}>
                   {r.equipo}
                 </Text>
-                <Text style={styles.inscripMeta} numberOfLines={1}>
+                <Text style={styles.inscripMeta} numberOfLines={2}>
                   {[
                     r.genero === 'F' ? 'Femenino' : 'Masculino',
                     r.categoria
@@ -711,7 +711,7 @@ export const ClubDashboardScreen = ({
             <View style={styles.gone}>
               <Text style={styles.goneHead}>NO APARECEN INSCRITOS</Text>
               {inscripciones.desaparecen.map((t) => (
-                <Text key={t.teamId} style={styles.goneRow} numberOfLines={1}>
+                <Text key={t.teamId} style={styles.goneRow} numberOfLines={2}>
                   {t.name}
                   {t.categoria ? <Text style={styles.goneCat}> · {t.categoria}</Text> : null}
                 </Text>
@@ -906,7 +906,7 @@ export const ClubDashboardScreen = ({
           <TactiumMark size={34} gradient />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.eyebrow}>CLUB · ADMIN</Text>
-            <Text style={styles.brandName} numberOfLines={1}>
+            <Text style={styles.brandName} numberOfLines={2}>
               {club.name}
             </Text>
           </View>
@@ -1052,7 +1052,7 @@ export const ClubDashboardScreen = ({
                 filaAbierta.jugadores.map((j, i) => (
                   <View key={j.idJugador} style={styles.rosterRow}>
                     <Text style={styles.rosterNum}>{i + 1}</Text>
-                    <Text style={styles.rosterName} numberOfLines={1}>
+                    <Text style={styles.rosterName} numberOfLines={2}>
                       {j.nombre}
                     </Text>
                     <Text style={styles.rosterPts}>{fmtPts(j.puntos)}</Text>
@@ -1077,7 +1077,7 @@ export const ClubDashboardScreen = ({
                     rivales.rows.map((r, i) => (
                       <View key={r.idEquipo} style={styles.rosterRow}>
                         <Text style={styles.rosterNum}>{i + 1}</Text>
-                        <Text style={styles.rosterName} numberOfLines={1}>
+                        <Text style={styles.rosterName} numberOfLines={2}>
                           {r.equipo}
                         </Text>
                         {r.sedeCorta ? (
@@ -1154,10 +1154,10 @@ const SetupChecklist: React.FC<{
             {s.done ? <IconCheck size={12} color={c.textInverse} /> : null}
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.todoTitle, s.done && { color: c.textMuted }]} numberOfLines={1}>
+            <Text style={[styles.todoTitle, s.done && { color: c.textMuted }]} numberOfLines={2}>
               {s.title}
             </Text>
-            <Text style={styles.todoSub} numberOfLines={1}>
+            <Text style={styles.todoSub} numberOfLines={2}>
               {s.sub}
             </Text>
           </View>
@@ -1293,7 +1293,7 @@ const LastResultRow: React.FC<{ overview: ClubTeamOverview; onPress: () => void 
           </Text>{' '}
           {right}
         </Text>
-        <Text style={styles.todoSub} numberOfLines={1}>
+        <Text style={styles.todoSub} numberOfLines={2}>
           J{md.jornada_number}
           {overview.team.category ? ` · ${overview.team.category}` : ''}
           {overview.team.group_name ? ` · Grupo ${overview.team.group_name}` : ''}
@@ -1334,10 +1334,10 @@ const TeamRow: React.FC<{
         </Text>
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.teamName} numberOfLines={1}>
+        <Text style={styles.teamName} numberOfLines={2}>
           {team.name}
         </Text>
-        <Text style={[styles.teamMeta, uncovered && { color: c.warning }]} numberOfLines={1}>
+        <Text style={[styles.teamMeta, uncovered && { color: c.warning }]} numberOfLines={2}>
           {uncovered ? `Sin cubrir · ${players}` : `${meta} · ${players}`}
         </Text>
       </View>
@@ -1376,10 +1376,10 @@ const ManageRow: React.FC<{
     >
       <View style={styles.manageIcon}>{icon}</View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.teamName} numberOfLines={1}>
+        <Text style={styles.teamName} numberOfLines={2}>
           {title}
         </Text>
-        <Text style={styles.teamMeta} numberOfLines={1}>
+        <Text style={styles.teamMeta} numberOfLines={2}>
           {sub}
         </Text>
       </View>

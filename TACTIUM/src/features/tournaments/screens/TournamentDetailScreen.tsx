@@ -402,7 +402,7 @@ const MatchTeam: React.FC<{
   return (
     <View style={styles.teamRow}>
       <AvatarPair info={info} styles={styles} c={c} />
-      <Text style={[styles.teamName, win && styles.teamNameWin]} numberOfLines={1}>
+      <Text style={[styles.teamName, win && styles.teamNameWin]} numberOfLines={2}>
         {info.name}
         {info.partner ? ` / ${info.partner}` : ''}
         {info.seed ? <Text style={styles.seedSup}> ({info.seed})</Text> : null}
@@ -732,12 +732,12 @@ export const PlayersView: React.FC<{
                 )}
                 <AvatarPair info={ri} size={30} styles={styles} c={c} />
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.playerName} numberOfLines={1}>
+                  <Text style={styles.playerName} numberOfLines={2}>
                     {r.p1_name}
                     {!social && r.p2_name ? ` / ${r.p2_name}` : ''}
                   </Text>
                   {meta ? (
-                    <Text style={styles.playerMeta} numberOfLines={1}>
+                    <Text style={styles.playerMeta} numberOfLines={2}>
                       {meta}
                     </Text>
                   ) : null}
@@ -2294,7 +2294,7 @@ const PlayerInfoSheet: React.FC<{
       <View style={styles.playerRow}>
         <TAvatar name={name} url={avatar} size={38} styles={styles} c={c} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.playerName} numberOfLines={1}>{name}</Text>
+          <Text style={styles.playerName} numberOfLines={2}>{name}</Text>
           <Text style={styles.playerMeta}>
             {[phone || 'Sin teléfono', email || null].filter(Boolean).join(' · ')}
           </Text>
@@ -3467,7 +3467,7 @@ export const TournamentDetailScreen = ({
                 {t?.name ?? ''}
               </Text>
               {dateRange || t?.location ? (
-                <Text style={styles.heroMeta} numberOfLines={1}>
+                <Text style={styles.heroMeta} numberOfLines={2}>
                   {[dateRange, t?.location].filter(Boolean).join(' · ')}
                 </Text>
               ) : null}
@@ -4109,7 +4109,7 @@ export const BracketView: React.FC<{
                   <Text style={styles.pathRound} numberOfLines={1}>
                     {chipRoundLabel(m.round, totalRounds).toUpperCase()}
                   </Text>
-                  <Text style={styles.pathRival} numberOfLines={1}>
+                  <Text style={styles.pathRival} numberOfLines={2}>
                     vs {rival}
                   </Text>
                   {finished ? (

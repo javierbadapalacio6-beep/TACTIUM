@@ -376,7 +376,7 @@ export const FederationSheet: React.FC<{
               f.jugadores.map((j, i) => (
                 <View key={j.idJugador} style={s.rosterRow}>
                   <Text style={s.rosterNum}>{i + 1}</Text>
-                  <Text style={s.rosterName} numberOfLines={1}>
+                  <Text style={s.rosterName} numberOfLines={2}>
                     {j.nombre}
                   </Text>
                   <Text style={s.rosterPts}>{j.puntos}</Text>
@@ -424,7 +424,7 @@ export const FederationSheet: React.FC<{
               rivalesListos.map((r, i) => (
                 <View key={r.idEquipo} style={s.rosterRow}>
                   <Text style={s.rosterNum}>{i + 1}</Text>
-                  <Text style={s.rosterName} numberOfLines={1}>
+                  <Text style={s.rosterName} numberOfLines={2}>
                     {r.equipo}
                   </Text>
                   {r.sedeCorta ? (

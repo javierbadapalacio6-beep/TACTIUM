@@ -1076,7 +1076,7 @@ const MatchdayRow: React.FC<{
             ) : (
               <IconPlane size={12} color={c.textFaint} />
             )}
-            <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+            <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={2}>
               {[
                 m.is_home ? 'Casa' : 'Fuera',
                 fmtDay(m.match_date, isNext),

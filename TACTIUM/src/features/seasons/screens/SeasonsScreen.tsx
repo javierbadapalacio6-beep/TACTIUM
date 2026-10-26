@@ -495,10 +495,10 @@ const ActiveSeasonScoreboard: React.FC<{
             </Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.nextRival} numberOfLines={1}>
+            <Text style={styles.nextRival} numberOfLines={2}>
               vs {next.opponent}
             </Text>
-            <Text style={styles.nextMeta} numberOfLines={1}>
+            <Text style={styles.nextMeta} numberOfLines={2}>
               {fmtMatchLine(next)}
             </Text>
           </View>
@@ -604,7 +604,7 @@ const MySeasonCard: React.FC<{ seasonId: string; playerId: string }> = ({ season
           <Text style={styles.mineCellLabel}>GANADOS</Text>
         </View>
         <View style={[styles.mineCell, { flex: 1.4 }]}>
-          <Text style={styles.mineName} numberOfLines={1}>
+          <Text style={styles.mineName} numberOfLines={2}>
             {surname}
           </Text>
           <Text style={styles.mineCellLabel}>TU PAREJA</Text>

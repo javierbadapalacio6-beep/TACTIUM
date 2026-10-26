@@ -257,7 +257,7 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
             <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
               <Text style={styles.heroName} numberOfLines={2}>{data.equipo || name || 'Equipo'}</Text>
               {data.grupo ? (
-                <Text style={styles.heroMeta} numberOfLines={1}>
+                <Text style={styles.heroMeta} numberOfLines={2}>
                   {(preseason ? data.grupo : shortGroupName(data.grupo) ?? data.grupo).toUpperCase()}
                 </Text>
               ) : null}
@@ -429,10 +429,10 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
                           </Text>
                         </View>
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.nextRival} numberOfLines={1}>
+                          <Text style={styles.nextRival} numberOfLines={2}>
                             vs {next.rival}
                           </Text>
-                          <Text style={styles.nextMeta} numberOfLines={1}>
+                          <Text style={styles.nextMeta} numberOfLines={2}>
                             {[fmtDay(next.fecha), next.hora?.slice(0, 5), next.home ? 'En casa' : 'Fuera']
                               .filter(Boolean)
                               .join(' · ')}
@@ -517,7 +517,7 @@ const ResultRow: React.FC<{ styles: S; c: Palette; m: TeamMatch; onPress: () => 
     <Pressable onPress={onPress} style={({ pressed }) => [styles.resultRow, pressed && { opacity: 0.85 }]}>
       <Text style={styles.resultJ}>J{String(m.jornada ?? 0).padStart(2, '0')}</Text>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.resultRival} numberOfLines={1}>
+        <Text style={styles.resultRival} numberOfLines={2}>
           {m.rival}
         </Text>
         <Text style={styles.resultMeta}>{m.home ? 'Casa' : 'Fuera'}</Text>
@@ -564,7 +564,7 @@ const MatchActa: React.FC<{ styles: S; c: Palette; m: TeamMatch; initiallyOpen?:
           <Text style={styles.actaHeadEyebrow} numberOfLines={1}>
             {`JORNADA ${m.jornada ?? '—'}${m.fecha ? ` · ${fmtDay(m.fecha, false).toUpperCase()}` : ''}`}
           </Text>
-          <Text style={styles.actaHeadRival} numberOfLines={1}>
+          <Text style={styles.actaHeadRival} numberOfLines={2}>
             {m.home ? 'vs' : 'en'} {m.rival}
           </Text>
         </View>
@@ -656,8 +656,8 @@ const PlayerRow: React.FC<{
       <Text style={styles.avatarText}>{initials(p.name)}</Text>
     </View>
     <View style={{ flex: 1, minWidth: 0 }}>
-      <Text style={styles.playerName} numberOfLines={1}>{p.name}</Text>
-      {p.categoria ? <Text style={styles.playerMeta} numberOfLines={1}>{p.categoria.toUpperCase()}</Text> : null}
+      <Text style={styles.playerName} numberOfLines={2}>{p.name}</Text>
+      {p.categoria ? <Text style={styles.playerMeta} numberOfLines={2}>{p.categoria.toUpperCase()}</Text> : null}
     </View>
     <View style={{ alignItems: 'flex-end', gap: 2 }}>
       <Text style={styles.playerPts}>{fmtN(p.puntos)}</Text>

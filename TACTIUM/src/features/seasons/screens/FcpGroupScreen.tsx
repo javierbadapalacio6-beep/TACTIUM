@@ -555,7 +555,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                       <>
                       <View style={styles.stTop}>
                         <Text style={[styles.stPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
-                        <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={1}>{t.equipo}</Text>
+                        <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={2}>{t.equipo}</Text>
                         <Text style={[styles.stNum, { width: 26, color: c.textMuted }]}>{t.stats.pj}</Text>
                         <Text style={[styles.stNum, { width: 26, color: c.text }]}>{t.stats.pg}</Text>
                         <Text style={[styles.stNum, { width: 40, textAlign: 'right', color: c.textFaint }]}>
@@ -667,13 +667,13 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                       <View style={{ flex: 1, minWidth: 0, gap: 9 }}>
                         <View style={styles.teamLine}>
                           <View style={[styles.tDot, { backgroundColor: localWon ? c.accent : c.hairStrong }]} />
-                          <Text style={[styles.teamName, localWon ? styles.teamWin : styles.teamLose]} numberOfLines={1}>
+                          <Text style={[styles.teamName, localWon ? styles.teamWin : styles.teamLose]} numberOfLines={2}>
                             {p.local || '—'}
                           </Text>
                         </View>
                         <View style={styles.teamLine}>
                           <View style={[styles.tDot, { backgroundColor: visitWon ? c.accent : c.hairStrong }]} />
-                          <Text style={[styles.teamName, visitWon ? styles.teamWin : styles.teamLose]} numberOfLines={1}>
+                          <Text style={[styles.teamName, visitWon ? styles.teamWin : styles.teamLose]} numberOfLines={2}>
                             {p.visit || '—'}
                           </Text>
                         </View>

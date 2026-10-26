@@ -209,11 +209,11 @@ export const FcpSeasonUpdateSheet: React.FC<{
                     style={({ pressed }) => [styles.teamRow, pressed && { opacity: 0.85 }]}
                   >
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.teamName} numberOfLines={1}>{t.equipo}</Text>
+                      <Text style={styles.teamName} numberOfLines={2}>{t.equipo}</Text>
                       {/* La temporada, delante: el mismo equipo aparece dos
                           veces (la liga que acaba y la que viene) y sin el año
                           no hay forma de saber cuál estás eligiendo. */}
-                      <Text style={styles.teamMeta} numberOfLines={1}>
+                      <Text style={styles.teamMeta} numberOfLines={2}>
                         {t.temporada ? `${t.temporada} · ` : ''}
                         {t.gender === 'femenino' ? 'Femenino' : 'Masculino'}
                         {t.category ? ` · ${t.category}` : ''}
@@ -345,7 +345,7 @@ const DiffBlock: React.FC<{
                 {it.name.slice(0, 1).toUpperCase()}
               </Text>
             </View>
-            <Text style={styles.playerName} numberOfLines={1}>
+            <Text style={styles.playerName} numberOfLines={2}>
               {it.name}
             </Text>
             {it.right ? (

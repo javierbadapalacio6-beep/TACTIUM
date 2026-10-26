@@ -652,10 +652,10 @@ export const HomeScreen = ({
               </Text>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.myMatchTitle} numberOfLines={1}>
+              <Text style={styles.myMatchTitle} numberOfLines={2}>
                 Juegas con {myPartnerName ?? '—'}
               </Text>
-              <Text style={styles.myMatchMeta} numberOfLines={1}>
+              <Text style={styles.myMatchMeta} numberOfLines={2}>
                 vs. {nextMatchday.opponent}
                 {nextMatchday.match_time
                   ? ` · ${nextMatchday.match_time.slice(0, 5)}`

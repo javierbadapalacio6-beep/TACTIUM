@@ -160,7 +160,7 @@ export const FederacionStatsCard: React.FC<Props> = ({ userId, userName }) => {
         <>
           <View style={styles.teamRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.team} numberOfLines={1}>{year.equipo ?? '—'}</Text>
+              <Text style={styles.team} numberOfLines={2}>{year.equipo ?? '—'}</Text>
               <Text style={styles.meta} numberOfLines={1}>
                 {[year.categoria, `Temporada ${year.anio}`].filter(Boolean).join(' · ')}
               </Text>

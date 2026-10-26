@@ -308,7 +308,7 @@ export const ClubTeamPreviewScreen = ({
                       <View key={p.id} style={styles.rosterRow}>
                         <Text style={styles.rosterNum}>{i + 1}</Text>
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.rosterName} numberOfLines={1}>
+                          <Text style={styles.rosterName} numberOfLines={2}>
                             {p.name}
                           </Text>
                           {p.position ? <Text style={styles.rosterPos}>{p.position}</Text> : null}

@@ -220,7 +220,7 @@ const CourtRow: React.FC<{
         >
           {pair}
         </Text>
-        <Text style={[styles.rowName, styles.rowRival]} numberOfLines={1}>
+        <Text style={[styles.rowName, styles.rowRival]} numberOfLines={2}>
           {opponent}
         </Text>
         {action ? (

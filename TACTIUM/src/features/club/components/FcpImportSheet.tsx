@@ -267,8 +267,8 @@ export const FcpImportSheet: React.FC<{
                       {on ? <Text style={styles.checkMark}>✓</Text> : null}
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.teamName} numberOfLines={1}>{t.equipo}</Text>
-                      <Text style={styles.teamMeta} numberOfLines={1}>
+                      <Text style={styles.teamName} numberOfLines={2}>{t.equipo}</Text>
+                      <Text style={styles.teamMeta} numberOfLines={2}>
                         {t.gender === 'femenino' ? 'Femenino' : 'Masculino'}
                         {t.category ? ` · ${t.category}` : ''}
                         {t.grupo ? ` · ${t.grupo}` : ''}
@@ -370,7 +370,7 @@ export const FcpImportSheet: React.FC<{
                     style={({ pressed }) => [styles.clubRow, pressed && { opacity: 0.85 }]}
                   >
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.clubName} numberOfLines={1}>{g.club}</Text>
+                      <Text style={styles.clubName} numberOfLines={2}>{g.club}</Text>
                       <Text style={styles.teamMeta}>
                         {g.teams.length} {g.teams.length === 1 ? 'equipo' : 'equipos'}
                       </Text>

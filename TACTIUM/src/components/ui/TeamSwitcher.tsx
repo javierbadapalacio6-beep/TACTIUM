@@ -62,7 +62,7 @@ export const TeamSwitcher: React.FC<{
         <Text style={styles.label}>{roleLabel}</Text>
         <View style={styles.nameRow}>
           <Text style={[styles.genderSymbol, { color: g.color }]}>{g.symbol}</Text>
-          <Text style={styles.teamName} numberOfLines={1}>
+          <Text style={styles.teamName} numberOfLines={2}>
             {subtitle ? `${team.name} · ${subtitle}` : team.name}
           </Text>
         </View>
@@ -84,7 +84,7 @@ export const TeamSwitcher: React.FC<{
           <Text style={styles.label}>EQUIPO ACTIVO</Text>
           <View style={styles.nameRow}>
             <Text style={[styles.genderSymbol, { color: g.color }]}>{g.symbol}</Text>
-            <Text style={styles.teamName} numberOfLines={1}>
+            <Text style={styles.teamName} numberOfLines={2}>
               {team.name}
             </Text>
           </View>

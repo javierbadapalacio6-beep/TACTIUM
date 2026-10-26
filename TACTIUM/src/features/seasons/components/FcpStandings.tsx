@@ -165,7 +165,7 @@ export const FcpStandings: React.FC<{
                   </Text>
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={[styles.rowName, t.isMe && { color: c.accent }]} numberOfLines={1}>
+                  <Text style={[styles.rowName, t.isMe && { color: c.accent }]} numberOfLines={2}>
                     {t.equipo}
                   </Text>
                   <View style={styles.metaLine}>
@@ -202,7 +202,7 @@ export const FcpStandings: React.FC<{
                   ) : (
                     (rosters[t.id_equipo ?? -1] ?? []).map((p, i) => (
                       <View key={i} style={styles.rosterRow}>
-                        <Text style={styles.rosterName} numberOfLines={1}>{p.name}</Text>
+                        <Text style={styles.rosterName} numberOfLines={2}>{p.name}</Text>
                         <Text style={styles.rosterPts}>{p.puntos} pts</Text>
                       </View>
                     ))

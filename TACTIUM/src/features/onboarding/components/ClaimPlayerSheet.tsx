@@ -166,10 +166,10 @@ export const ClaimPlayerSheet: React.FC<{
                   </Text>
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.rowName} numberOfLines={1}>
+                  <Text style={styles.rowName} numberOfLines={2}>
                     {p.name}
                   </Text>
-                  <Text style={styles.rowMeta} numberOfLines={1}>
+                  <Text style={styles.rowMeta} numberOfLines={2}>
                     {meta}
                   </Text>
                 </View>

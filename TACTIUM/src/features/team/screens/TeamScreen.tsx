@@ -745,7 +745,7 @@ export const TeamScreen = () => {
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.rowNameRow}>
               {/* flexShrink: un nombre largo se corta con «…» en vez de empujar a CAP y pisar los puntos. */}
-              <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={1}>
+              <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={2}>
                 {displayName(p)}
               </Text>
               {isCap ? (
@@ -757,7 +757,7 @@ export const TeamScreen = () => {
             {/* «Invitar» vive en la línea de debajo del nombre, no en la columna de puntos: así todas las filas
                 miden lo mismo (antes las que tenían botón eran más altas y el nombre se cortaba). */}
             <View style={styles.rowMetaRow}>
-              <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+              <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={2}>
                 {p.position}
                 {!p.user_id && canManage ? ' · sin cuenta' : ''}
               </Text>
@@ -872,7 +872,7 @@ export const TeamScreen = () => {
             </View>
             {p.user_id ? <View style={styles.dot} /> : null}
           </View>
-          <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={1}>
+          <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={2}>
             {displayName(p)}
           </Text>
           {isCap ? (
@@ -881,7 +881,7 @@ export const TeamScreen = () => {
             </View>
           ) : null}
         </View>
-        <Text style={[styles.tCellPos, styles.rowMeta]} numberOfLines={1}>
+        <Text style={[styles.tCellPos, styles.rowMeta]} numberOfLines={2}>
           {p.position}
         </Text>
         <Text style={[styles.tCellPts, styles.ptsText, { textAlign: 'right' }]}>{p.pts}</Text>
@@ -941,7 +941,7 @@ export const TeamScreen = () => {
                 {multi ? <Text style={styles.titleChev}>▾</Text> : null}
               </View>
               {metaLine ? (
-                <Text style={styles.teamMeta} numberOfLines={1}>
+                <Text style={styles.teamMeta} numberOfLines={2}>
                   {metaLine}
                 </Text>
               ) : null}
@@ -991,10 +991,10 @@ export const TeamScreen = () => {
             >
               <View style={styles.noticeDot} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.noticeTitle} numberOfLines={1}>
+                <Text style={styles.noticeTitle} numberOfLines={2}>
                   {notice.title}
                 </Text>
-                <Text style={styles.noticeSub} numberOfLines={1}>
+                <Text style={styles.noticeSub} numberOfLines={2}>
                   {notice.sub}
                 </Text>
               </View>
@@ -1033,7 +1033,7 @@ export const TeamScreen = () => {
                   {inscripcion.fila.confirmado ? 'CONFIRMADA' : 'SIN CONFIRMAR'}
                 </Text>
               </View>
-              <Text style={styles.inscTitle} numberOfLines={1}>
+              <Text style={styles.inscTitle} numberOfLines={2}>
                 {inscripcion.fila.categoriaActual &&
                 inscripcion.fila.categoria &&
                 inscripcion.fila.categoriaActual !== inscripcion.fila.categoria
@@ -1043,7 +1043,7 @@ export const TeamScreen = () => {
                     : 'Categoría aún sin publicar'}
                 {inscripcion.fila.subgrupo ? `, grupo ${inscripcion.fila.subgrupo}` : ''}
               </Text>
-              <Text style={styles.inscSub} numberOfLines={1}>
+              <Text style={styles.inscSub} numberOfLines={2}>
                 {[
                   inscripcion.fila.sedeCorta || inscripcion.fila.sede
                     ? `Sede: ${inscripcion.fila.sedeCorta || inscripcion.fila.sede}`
@@ -1083,7 +1083,7 @@ export const TeamScreen = () => {
                   )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.rowName} numberOfLines={1}>
+                  <Text style={styles.rowName} numberOfLines={2}>
                     {displayName(me)}
                   </Text>
                   <Text style={styles.rowMeta}>
@@ -1288,7 +1288,7 @@ export const TeamScreen = () => {
                       >
                         <Text style={styles.rankText}>{i + 1}</Text>
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.rowName} numberOfLines={1}>
+                          <Text style={styles.rowName} numberOfLines={2}>
                             {label}
                           </Text>
                           <Text style={styles.rowMeta}>

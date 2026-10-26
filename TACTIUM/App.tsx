@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -31,11 +31,19 @@ const FONT_SCALE_CAP = 1.25;
 // toda la app: sin relleno extra, pesos máximo 700 y interletraje no menor de −0,2. Solo en Android.
 const ANDROID_TEXT_FIX = Platform.OS === 'android';
 const androidTextStyle = (style: unknown): unknown => {
-  const f = StyleSheet.flatten(style as never) as { fontWeight?: string | number; letterSpacing?: number } | undefined;
+  const f = StyleSheet.flatten(style as never) as
+    | { fontWeight?: string | number; letterSpacing?: number; fontFamily?: string }
+    | undefined;
   const fix: Record<string, unknown> = { includeFontPadding: false };
   const w = String(f?.fontWeight ?? '');
   if (w === '800' || w === '900') fix.fontWeight = '700';
   if (typeof f?.letterSpacing === 'number' && f.letterSpacing < -0.2) fix.letterSpacing = -0.2;
+  // Inter en lugar de la fuente del sistema: cada peso es su propia familia (y sin negrita falsa encima).
+  const inter = interFamilyFor(f?.fontFamily, f?.fontWeight);
+  if (inter) {
+    fix.fontFamily = inter;
+    fix.fontWeight = 'normal';
+  }
   return [style, fix];
 };
 
@@ -55,6 +63,21 @@ for (const Comp of [Text, TextInput] as unknown as Array<{
         ref,
       );
     Comp.__fontCap = true;
+  }
+}
+
+import { useInterFont, interFamilyFor } from './src/core/theme/androidFont';
+// Zonas táctiles en Android: Material pide 48 dp y aquí hay muchos botones de 32–44. Sin cambiar el diseño, cada
+// Pressable sin `hitSlop` propio gana unos puntos de zona táctil alrededor (los que ya lo traen no se tocan).
+if (Platform.OS === 'android') {
+  const P = Pressable as unknown as {
+    type?: { render?: (props: Record<string, unknown>, ref: unknown) => unknown; __hit?: boolean };
+  };
+  const origPress = P.type?.render;
+  if (typeof origPress === 'function' && !P.type?.__hit) {
+    P.type!.render = (props, ref) =>
+      origPress({ hitSlop: { top: 6, bottom: 6, left: 4, right: 4 }, ...props }, ref);
+    P.type!.__hit = true;
   }
 }
 
@@ -110,6 +133,7 @@ export default function App() {
   // Overlay del splash animado: visible hasta que su animación de salida
   // termina. La app se monta debajo desde el principio (hidrata mientras).
   const [splashVisible, setSplashVisible] = useState(true);
+  const fontsReady = useInterFont();
   const isHydrating = useAuthStore((s) => s.isHydrating);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const userId = useAuthStore((s) => s.user?.id ?? null);
@@ -289,7 +313,7 @@ export default function App() {
               centra toda la app en una columna de ancho máximo sobre el
               fondo de marca para que los layouts no se estiren. */}
           <ResponsiveFrame>
-            {isHydrating ? (
+            {isHydrating || !fontsReady ? (
               <View style={[styles.loader, { backgroundColor: c.background }]}>
                 <ActivityIndicator color={c.accent} size="large" />
               </View>
@@ -322,7 +346,7 @@ export default function App() {
           home indicator a sangre completa. */}
       {splashVisible ? (
         <AnimatedSplash
-          ready={!isHydrating}
+          ready={!isHydrating && fontsReady}
           onFinish={() => setSplashVisible(false)}
         />
       ) : null}

@@ -551,10 +551,10 @@ export const ClubScheduleScreen = ({
         style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
       >
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.rowTeam} numberOfLines={1}>
+          <Text style={styles.rowTeam} numberOfLines={2}>
             {m.team_name}
           </Text>
-          <Text style={styles.teamMeta} numberOfLines={1}>
+          <Text style={styles.teamMeta} numberOfLines={2}>
             {[
               m.is_guest ? 'Invitado' : null,
               metaByTeam[m.team_id] || null,
@@ -575,16 +575,16 @@ export const ClubScheduleScreen = ({
           <View style={styles.rowTimeWrap}>
             <Text style={styles.rowTime}>{hhmm(m.match_time)}</Text>
             {m.location ? (
-              <Text style={styles.rowCourt} numberOfLines={1}>
+              <Text style={styles.rowCourt} numberOfLines={2}>
                 {m.location}
               </Text>
             ) : null}
             {tandasByMatch[m.matchday_id] ? (
-              <Text style={styles.rowCourt} numberOfLines={1}>
+              <Text style={styles.rowCourt} numberOfLines={2}>
                 Tandas {tandasByMatch[m.matchday_id]}
               </Text>
             ) : (
-              <Text style={[styles.rowCourt, { color: c.warning }]} numberOfLines={1}>
+              <Text style={[styles.rowCourt, { color: c.warning }]} numberOfLines={2}>
                 Sin tandas
               </Text>
             )}
@@ -845,10 +845,10 @@ export const ClubScheduleScreen = ({
                           style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
                         >
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.rowTeam} numberOfLines={1}>
+                            <Text style={styles.rowTeam} numberOfLines={2}>
                               {t.name}
                             </Text>
-                            <Text style={styles.teamMeta} numberOfLines={1}>
+                            <Text style={styles.teamMeta} numberOfLines={2}>
                               {metaByTeam[t.id]}
                             </Text>
                           </View>
@@ -898,10 +898,10 @@ export const ClubScheduleScreen = ({
                             accessibilityLabel={`Franjas de ${t.name}`}
                             style={({ pressed }) => [{ flex: 1, minWidth: 0 }, pressed && { opacity: 0.85 }]}
                           >
-                            <Text style={styles.rowTeam} numberOfLines={1}>
+                            <Text style={styles.rowTeam} numberOfLines={2}>
                               {t.name}
                             </Text>
-                            <Text style={styles.teamMeta} numberOfLines={1}>
+                            <Text style={styles.teamMeta} numberOfLines={2}>
                               {[
                                 metaByTeam[t.id] || null,
                                 t.claimed ? 'capitán ya dentro' : 'no gasta plaza del plan',
@@ -987,10 +987,10 @@ export const ClubScheduleScreen = ({
               style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
             >
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.rowTeam} numberOfLines={1}>
+                <Text style={styles.rowTeam} numberOfLines={2}>
                   {m.team_name}
                 </Text>
-                <Text style={styles.teamMeta} numberOfLines={1}>
+                <Text style={styles.teamMeta} numberOfLines={2}>
                   {[
                     m.is_guest ? 'Invitado' : null,
                     metaByTeam[m.team_id] || null,
@@ -1541,13 +1541,13 @@ const ScheduleGrid: React.FC<{
                               pressed && { opacity: 0.8 },
                             ]}
                           >
-                            <Text style={styles.gridMatchTeam} numberOfLines={1}>
+                            <Text style={styles.gridMatchTeam} numberOfLines={2}>
                               {m.team_name}
                               {m.opponent ? (
                                 <Text style={styles.gridMatchVs}> vs {m.opponent}</Text>
                               ) : null}
                             </Text>
-                            <Text style={styles.gridMatchMeta} numberOfLines={1}>
+                            <Text style={styles.gridMatchMeta} numberOfLines={2}>
                               {clash
                                 ? 'Choque: misma pista y hora'
                                 : [

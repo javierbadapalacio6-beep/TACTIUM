@@ -163,7 +163,7 @@ const Row: React.FC<{
     <Pressable onPress={onPress} style={({ pressed }) => [s.row, pressed && { opacity: 0.85 }]}>
       <Thumb t={t} live={bucket === 'live'} badge={digest?.badge} s={s} c={c} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={s.rowName} numberOfLines={1}>
+        <Text style={s.rowName} numberOfLines={2}>
           {t.name}
         </Text>
         <Text style={s.rowMeta} numberOfLines={2}>

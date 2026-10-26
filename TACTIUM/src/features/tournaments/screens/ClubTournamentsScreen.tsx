@@ -340,7 +340,7 @@ export const ClubTournamentsScreen = ({
             <Text style={styles.eyebrow}>
               {club?.tournaments_only ? 'ORGANIZADOR' : 'CLUB · TORNEOS'}
             </Text>
-            <Text style={styles.brandName} numberOfLines={1}>
+            <Text style={styles.brandName} numberOfLines={2}>
               {club?.name ?? 'Club'}
             </Text>
           </View>
