@@ -1,6 +1,7 @@
 "use client";
 
 import { TutorialModal, useTutorial } from "@/components/Tutorial";
+import { CoachTour, useCoach } from "@/components/CoachTour";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -85,6 +86,7 @@ export function SeasonDetail({ id }: { id: string }) {
   const [newOpen, setNewOpen] = useState(false);
   // Primera vez: un mini tutorial y, al cerrarlo, se abre «Nueva jornada».
   const newTut = useTutorial("create-matchday");
+  const seasonCoach = useCoach("season-import", null, canManage, 1500);
   const openNew = () => newTut.show(() => setNewOpen(true));
   const [closeOpen, setCloseOpen] = useState(false);
   const [showPending, setShowPending] = useState(false);
@@ -350,6 +352,22 @@ export function SeasonDetail({ id }: { id: string }) {
               {dbSeason.active ? "Activa" : "Archivada"}
             </Chip>
             {canEdit && (
+              <span data-coach="add" style={{ display: "inline-flex" }}>
+              <CoachTour
+                coach={seasonCoach}
+                steps={[
+                  {
+                    target: '[data-coach="add"]',
+                    title: "Meter las jornadas",
+                    text: "Pulsa «Añadir» para llenar la temporada. Lo más rápido es volcarla de golpe:",
+                    chips: [
+                      "Escanear el calendario: haz foto o sube el PDF de la Federación y TACTIUM lo lee y crea todas las jornadas",
+                      "Nueva jornada: una a una, con rival, casa o fuera, fecha y hora",
+                      ...(isFcp ? ["Traer de la Federación: calendario y resultados del grupo"] : []),
+                    ],
+                  },
+                ]}
+              />
               <Menu
                 label="Añadir"
                 accent
@@ -371,6 +389,7 @@ export function SeasonDetail({ id }: { id: string }) {
                     : []),
                 ]}
               />
+              </span>
             )}
             {canEdit && (
               <Menu

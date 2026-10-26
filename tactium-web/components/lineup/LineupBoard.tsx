@@ -1,6 +1,6 @@
 "use client";
 
-import { TutorialModal, useAutoTutorial } from "@/components/Tutorial";
+import { CoachTour, useCoach, type CoachStep } from "@/components/CoachTour";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -442,6 +442,30 @@ function ReadSlot({ p, name, me }: { p: DbPlayer | null; name: string | null; me
   );
 }
 
+const LINEUP_STEPS: CoachStep[] = [
+  {
+    target: '[data-coach="generate"]',
+    title: "Empieza por aquí",
+    text: "Rellena las pistas con los jugadores que han dicho Voy, ordenados por puntos. Es un punto de partida: después lo ajustas a mano.",
+  },
+  {
+    target: ".tw-courts",
+    title: "Las pistas",
+    text: "Cada pista es una pareja, de la más fuerte (P1) a la más floja. Arrastra a un jugador a otro hueco, o tócalo y toca el hueco, para intercambiarlos.",
+  },
+  {
+    target: ".tw-bench",
+    title: "El banquillo",
+    text: "Tus jugadores, agrupados por su respuesta: Voy, Duda, Pendiente y No.",
+    chips: ["Arrastra un jugador a un hueco de la pista", "O haz clic en el jugador y después en el hueco"],
+  },
+  {
+    target: '[data-coach="publish"]',
+    title: "Publicar",
+    text: "Cuando las pistas estén completas, publícala: avisa al equipo. Los cambios se guardan, así que puedes dejarla a medias y volver.",
+  },
+];
+
 export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const { role, user } = useSession();
   // El equipo (y la capitanía) es el de la jornada, no el activo: el club abre
@@ -450,7 +474,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const teamId = owner.teamId;
   const isCaptain = role === "capitan" && owner.isTeamCaptain;
   const reduce = useReducedMotion();
-  const lineupTut = useAutoTutorial("lineup", null, isCaptain, 900);
+  const coach = useCoach("lineup", null, isCaptain, 1600);
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
@@ -1094,7 +1118,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   /* ── Editor del capitán ────────────────────────────────────────── */
   return (
     <div className="tw-lineup-wrap">
-      <TutorialModal id="lineup" visible={lineupTut.visible} onClose={lineupTut.close} />
+      <CoachTour coach={coach} steps={LINEUP_STEPS} />
       <div className="tw-lineup-head">
         <div style={{ minWidth: 0, flex: "1 1 320px" }}>
           <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 6 }}>
@@ -1110,12 +1134,16 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
               Sin guardar
             </Chip>
           )}
-          <Btn variant="ghost" disabled={readOnly || !variantId} onClick={() => setGenOpen(true)} icon={<IconZap size={15} />}>
-            Generar
-          </Btn>
-          <Btn variant="accent" disabled={readOnly || !complete} onClick={openPublish} icon={<IconCheck size={15} />}>
-            {complete ? "Publicar" : `Faltan ${courts.length - filledCourts}`}
-          </Btn>
+          <span data-coach="generate" style={{ display: "inline-flex" }}>
+            <Btn variant="ghost" disabled={readOnly || !variantId} onClick={() => setGenOpen(true)} icon={<IconZap size={15} />}>
+              Generar
+            </Btn>
+          </span>
+          <span data-coach="publish" style={{ display: "inline-flex" }}>
+            <Btn variant="accent" disabled={readOnly || !complete} onClick={openPublish} icon={<IconCheck size={15} />}>
+              {complete ? "Publicar" : `Faltan ${courts.length - filledCourts}`}
+            </Btn>
+          </span>
         </div>
 
         {variants.length > 0 && (
