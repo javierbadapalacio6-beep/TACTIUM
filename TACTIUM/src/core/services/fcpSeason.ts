@@ -542,7 +542,12 @@ export async function importFcpSeason(
     p_fcp_id_equipo: fcpIdEquipo,
     p_season_name: seasonName ?? 'Liga Cántabra',
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const err = new Error(error.message) as Error & { premium?: boolean };
+    // El RPC exige plan cuando el equipo ya tiene temporada (migración 20261019).
+    if ((error as { hint?: string }).hint === 'premium_required') err.premium = true;
+    throw err;
+  }
   const r = (data ?? {}) as {
     season_id?: string;
     created?: number;
@@ -565,6 +570,15 @@ export async function importFcpSeason(
  */
 export function isAlreadyInHistoryError(message: string | null | undefined): boolean {
   return (message ?? '').includes('ya está en tu histórico');
+}
+
+/**
+ * Traer o actualizar la temporada de la Federación es del plan: el RPC responde
+ * P0001 con hint `premium_required` si el equipo ya tiene temporada y no hay
+ * plan. Quien lo reciba abre el paywall en vez de enseñar el error en bruto.
+ */
+export function isPremiumRequiredError(e: unknown): boolean {
+  return (e as { premium?: boolean } | null)?.premium === true;
 }
 
 /** Temporada («2026/2027») de la INSCRIPCIÓN a la que apunta un id, o null. */

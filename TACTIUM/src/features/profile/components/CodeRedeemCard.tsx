@@ -19,7 +19,7 @@ import {
   claimCasualParticipant,
   type ClaimableParticipant,
 } from '@core/services/casualMatches';
-import { JoinTeamPreview } from '@features/onboarding/components/JoinTeamPreview';
+import { InvitationPreview } from '@features/onboarding/components/InvitationPreview';
 
 /** Vibración ligera. Si el módulo nativo no está (dev client viejo), nada. */
 export function lightTap() {
@@ -214,7 +214,7 @@ export const CodeRedeemCard: React.FC<{
         <Text style={s.sheetTitle}>Únete a tu equipo</Text>
         {teamCode ? (
           <View style={{ marginTop: 12 }}>
-            <JoinTeamPreview
+            <InvitationPreview
               key={teamCode}
               code={teamCode}
               onJoined={() => {

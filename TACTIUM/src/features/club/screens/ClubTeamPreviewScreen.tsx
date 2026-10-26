@@ -308,7 +308,7 @@ export const ClubTeamPreviewScreen = ({
                       <View key={p.id} style={styles.rosterRow}>
                         <Text style={styles.rosterNum}>{i + 1}</Text>
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.rosterName} numberOfLines={1}>
+                          <Text style={styles.rosterName} numberOfLines={2}>
                             {p.name}
                           </Text>
                           {p.position ? <Text style={styles.rosterPos}>{p.position}</Text> : null}
@@ -419,6 +419,7 @@ export const ClubTeamPreviewScreen = ({
           open={groupOpen}
           teamId={team.id}
           teamName={team.name}
+          gateTeam={{ id: team.id, club_id: team.club_id, covered: team.covered, name: team.name }}
           onClose={() => setGroupOpen(false)}
         />
       ) : null}

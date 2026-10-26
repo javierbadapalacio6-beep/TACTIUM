@@ -359,6 +359,11 @@ export function ScanModal(props: Props) {
                         }
                       />
                     </div>
+                    {m.date_range && !m.match_date && (
+                      <div className="mono" style={{ paddingLeft: 34, fontSize: 12, opacity: 0.7 }}>
+                        Fin de semana: {m.date_range} · pon el día cuando el club lo fije
+                      </div>
+                    )}
                     <div
                       style={{
                         display: "grid",

@@ -89,6 +89,8 @@ interface Props {
   awayScore?: number | string;
   /** Resalta en verde la fila de "nuestro" equipo. */
   highlight?: 'home' | 'away';
+  /** Logo del club (opcional), junto a la marca TACTIUM. */
+  clubLogoUri?: string | null;
 }
 
 export const PhotoShareCard = React.forwardRef<View, Props>(
@@ -103,6 +105,7 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
       awayName,
       awayScore,
       highlight,
+      clubLogoUri,
     },
     ref,
   ) => (
@@ -117,6 +120,7 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
         <View style={styles.brandRow}>
           <TactiumMark size={22} gradient />
           <Text style={styles.brandName}>TACTIUM</Text>
+          {clubLogoUri ? <Image source={{ uri: clubLogoUri }} style={styles.clubLogo} /> : null}
         </View>
         {homeName != null && awayName != null ? (
           <View style={styles.scoreboard}>
@@ -126,7 +130,6 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
                   styles.scoreName,
                   highlight === 'home' && styles.scoreNameUs,
                 ]}
-                numberOfLines={1}
               >
                 {homeName}
               </Text>
@@ -145,7 +148,6 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
                   styles.scoreName,
                   highlight === 'away' && styles.scoreNameUs,
                 ]}
-                numberOfLines={1}
               >
                 {awayName}
               </Text>
@@ -160,17 +162,17 @@ export const PhotoShareCard = React.forwardRef<View, Props>(
             </View>
           </View>
         ) : (
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={styles.title}>
             {title}
           </Text>
         )}
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle}>
             {subtitle}
           </Text>
         ) : null}
         {detail ? (
-          <Text style={styles.detail} numberOfLines={1}>
+          <Text style={styles.detail}>
             {detail}
           </Text>
         ) : null}
@@ -320,6 +322,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
   },
+  clubLogo: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFFFFF', marginLeft: 'auto' },
   title: {
     color: '#FFFFFF',
     fontSize: 22,

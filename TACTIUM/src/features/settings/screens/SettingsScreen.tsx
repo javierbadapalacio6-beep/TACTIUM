@@ -1,3 +1,5 @@
+import { resetTutorials } from '@components/ui/TutorialSheet';
+import { resetCoachTours } from '@components/ui/CoachTour';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -34,9 +36,15 @@ import {
   IconBell,
   IconTicket,
   Toggle,
+  Input,
 } from '@components/ui';
 import { SegmentedControl } from '@components/ui/SegmentedControl';
 import { useAuthStore } from '@store/authStore';
+import {
+  getPushPermission,
+  openSystemNotificationSettings,
+  registerForPushNotifications,
+} from '@core/push';
 import { useTeamStore, computeAvailableRoles, type ActiveRole } from '@store/teamStore';
 import { useClubStore } from '@store/clubStore';
 import { useSubscriptionStore } from '@store/subscriptionStore';
@@ -46,6 +54,7 @@ import { PLAN_BY_TIER, isLiveSub } from '@core/subscriptions/plans';
 import { displayNameOf } from '@core/utils/format';
 import * as PlayersApi from '@core/services/players';
 import * as ProfileApi from '@core/services/profile';
+import * as AuthApi from '@core/services/auth';
 import { RedeemInvitationSheet } from '@features/onboarding/components/RedeemInvitationSheet';
 import { ClaimPlayerSheet } from '@features/onboarding/components/ClaimPlayerSheet';
 import { InvitePlayersSheet } from '@features/team/components/InvitePlayersSheet';
@@ -133,12 +142,48 @@ export const SettingsScreen = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Cambiar contraseña (solo cuentas con email y contraseña: Google y Apple no tienen).
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwCur, setPwCur] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwNew2, setPwNew2] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const canChangePw = !!user?.email && (user.identities ?? []).some((i) => i.provider === 'email');
+  const submitPw = async () => {
+    if (pwBusy || !user?.email) return;
+    if (pwNew.length < 6) {
+      toast.error('Contraseña muy corta', 'Mínimo 6 caracteres.');
+      return;
+    }
+    if (pwNew !== pwNew2) {
+      toast.error('No coinciden', 'Repite la misma contraseña nueva.');
+      return;
+    }
+    if (pwNew === pwCur) {
+      toast.error('Es la misma', 'Elige una contraseña distinta de la actual.');
+      return;
+    }
+    setPwBusy(true);
+    const { error } = await AuthApi.changePassword(user.email, pwCur, pwNew);
+    setPwBusy(false);
+    if (error) {
+      toast.error('No se pudo cambiar', error);
+      return;
+    }
+    setPwOpen(false);
+    setPwCur('');
+    setPwNew('');
+    setPwNew2('');
+    toast.success('Contraseña cambiada', 'Ya puedes entrar con la nueva.');
+  };
   const [unlinking, setUnlinking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [profile, setProfile] = useState<ProfileApi.Profile | null>(null);
   // Interruptor de avisos (profiles.notifications_enabled). El backend YA lo
   // respeta: send-push y el cron de recordatorios filtran por él.
   const [notifEnabled, setNotifEnabled] = useState(true);
+  // Permiso del sistema: sin él el interruptor no puede estar «activo» de verdad.
+  const [osPerm, setOsPerm] = useState<'granted' | 'denied' | 'undetermined'>('granted');
   // La versión con la OTA se ve con 5 toques (para soporte).
   const [showOta, setShowOta] = useState(false);
   const taps = useRef(0);
@@ -155,6 +200,7 @@ export const SettingsScreen = () => {
     } catch {
       /* se queda con lo que había */
     }
+    setOsPerm(await getPushPermission().catch(() => 'granted' as const));
   }, []);
 
   useFocusEffect(
@@ -175,15 +221,50 @@ export const SettingsScreen = () => {
   );
   const teamPro = useTeamPro(team, isPlayer);
 
-  // Optimista + persistencia; revierte si falla.
-  const handleToggleNotifications = useCallback((next: boolean) => {
-    setNotifEnabled(next);
-    lightTap();
-    ProfileApi.setNotificationsEnabled(next).catch(() => {
-      setNotifEnabled(!next);
-      toast.error('No se pudo guardar', 'Inténtalo de nuevo.');
-    });
-  }, []);
+  // Optimista + persistencia; revierte si falla. Al ACTIVAR comprueba también el
+  // permiso del sistema (en Android hay que concederlo): si aún no se ha
+  // preguntado lo pide; si está bloqueado manda a los ajustes del móvil. Antes
+  // el interruptor solo cambiaba un flag y parecía un botón muerto.
+  const handleToggleNotifications = useCallback(
+    async (next: boolean) => {
+      lightTap();
+      if (next) {
+        const uid = useAuthStore.getState().user?.id;
+        let perm = await getPushPermission();
+        if (perm === 'undetermined' && uid) {
+          await registerForPushNotifications(uid).catch(() => ({ granted: false }));
+          perm = await getPushPermission();
+        } else if (perm === 'granted' && uid) {
+          void registerForPushNotifications(uid).catch(() => {});
+        }
+        setOsPerm(perm);
+        if (perm !== 'granted') {
+          Alert.alert(
+            'Avisos bloqueados en tu móvil',
+            'Para recibirlos, actívalos en los ajustes del sistema: Notificaciones › Permitir.',
+            [
+              { text: 'Ahora no', style: 'cancel' },
+              { text: 'Abrir ajustes', onPress: openSystemNotificationSettings },
+            ],
+          );
+          return;
+        }
+      }
+      setNotifEnabled(next);
+      ProfileApi.setNotificationsEnabled(next)
+        .then(() =>
+          toast.success(
+            next ? 'Avisos activados' : 'Avisos desactivados',
+            next ? 'Te avisaremos de convocatorias, alineación y recordatorios.' : 'No recibirás avisos del equipo.',
+          ),
+        )
+        .catch(() => {
+          setNotifEnabled(!next);
+          toast.error('No se pudo guardar', 'Inténtalo de nuevo.');
+        });
+    },
+    [],
+  );
 
   const handleUnlink = () => {
     if (!myPlayerId || unlinking) return;
@@ -449,11 +530,15 @@ export const SettingsScreen = () => {
           <Row
             icon={<IconBell size={14} color={c.textMuted} />}
             title="Avisos del equipo"
-            sub="Convocatoria, alineación y recordatorios"
+            sub={
+              osPerm !== 'granted'
+                ? 'Desactivados en tu móvil: toca el interruptor para activarlos'
+                : 'Convocatoria, alineación y recordatorios'
+            }
             right={
               <Toggle
                 size="sm"
-                value={notifEnabled}
+                value={notifEnabled && osPerm === 'granted'}
                 onChange={handleToggleNotifications}
                 accessibilityLabel="Activar o desactivar los avisos del equipo"
               />
@@ -484,6 +569,24 @@ export const SettingsScreen = () => {
             icon={<IconFile size={14} color={c.textMuted} />}
             title="Mis datos"
             onPress={() => navigation.navigate('MyData')}
+          />
+          {canChangePw ? (
+            <Row
+              icon={<IconUser size={14} color={c.textMuted} />}
+              title="Cambiar contraseña"
+              onPress={() => setPwOpen(true)}
+            />
+          ) : null}
+          <Row
+            icon={<IconFile size={14} color={c.textMuted} />}
+            title="Ver los tutoriales otra vez"
+            sub="Equipo, plantilla, jornadas y alineaciones"
+            onPress={() =>
+              Promise.all([resetTutorials(), resetCoachTours()]).then(() =>
+                Alert.alert('Listo', 'Los tutoriales volverán a salir la próxima vez que entres en cada sitio.'),
+              )
+            }
+            chevron={false}
           />
           <Row
             icon={<IconMail size={14} color={c.textMuted} />}
@@ -553,6 +656,62 @@ export const SettingsScreen = () => {
       )}
 
       {/* Ayuda y contacto */}
+      <BottomSheet
+        open={pwOpen}
+        onClose={() => (pwBusy ? undefined : setPwOpen(false))}
+        footer={
+          <Pressable
+            onPress={submitPw}
+            disabled={pwBusy || !pwCur || !pwNew || !pwNew2}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              (pwBusy || !pwCur || !pwNew || !pwNew2) && { opacity: 0.5 },
+              pressed && !pwBusy && { opacity: 0.88 },
+            ]}
+          >
+            {pwBusy ? (
+              <ActivityIndicator size="small" color={c.textInverse} />
+            ) : (
+              <Text style={styles.primaryBtnLabel}>Cambiar contraseña</Text>
+            )}
+          </Pressable>
+        }
+      >
+        <Text style={styles.sheetEyebrow}>CUENTA</Text>
+        <Text style={styles.sheetTitle}>Cambiar contraseña</Text>
+        <Text style={[styles.sheetLede, { marginBottom: 12 }]}>
+          Escribe la actual para confirmar que eres tú, y después la nueva (mínimo 6 caracteres).
+        </Text>
+        <Input
+          label="Contraseña actual"
+          value={pwCur}
+          onChangeText={setPwCur}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="current-password"
+        />
+        <Input
+          label="Contraseña nueva"
+          value={pwNew}
+          onChangeText={setPwNew}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+        />
+        <Input
+          label="Repite la contraseña nueva"
+          value={pwNew2}
+          onChangeText={setPwNew2}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+        />
+      </BottomSheet>
+
       <BottomSheet open={helpOpen} onClose={() => setHelpOpen(false)}>
         <Text style={styles.sheetEyebrow}>AYUDA Y CONTACTO</Text>
         {helpRows}
@@ -753,7 +912,10 @@ const PlanCard: React.FC<{
 
   const plan = activeSub ? PLAN_BY_TIER[activeSub.plan_tier] : null;
   const isClubAdmin = activeRole === 'club_admin';
-  const isClubAdminInCaptainMode = canBeClubAdmin && activeRole === 'captain';
+  // Solo se propone cambiar a «Club» si la tarjeta enseña la suscripción DEL CLUB. Si enseña la tuya de capitán
+  // (lo normal en vista capitán), «Gestionar plan» abre «Mi suscripción» y no hay nada que cambiar.
+  const isClubAdminInCaptainMode =
+    canBeClubAdmin && activeRole === 'captain' && activeSub?.subject_type === 'club';
 
   const handlePress = () => {
     if (isClubAdminInCaptainMode) {
@@ -1000,6 +1162,14 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
     },
     dangerBtnLabel: { color: '#2a0905', fontSize: 15, fontWeight: '700' },
+    primaryBtn: {
+      height: 50,
+      borderRadius: Radius.lg,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryBtnLabel: { color: c.textInverse, fontSize: 15, fontWeight: '700' },
     ghostBtn: {
       height: 48,
       borderRadius: Radius.lg,

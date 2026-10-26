@@ -6,7 +6,14 @@ import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { IconX } from '@components/ui';
 import { toast } from '@store/toastStore';
-import { setTeamPreferredSlots, setVenueTeamSlots } from '@core/services/clubSchedule';
+import {
+  setTeamPreferredSlots,
+  setVenueTeamSlots,
+  setTeamPreferredTandas,
+  setVenueTeamTandas,
+  getTeamTandasInfo,
+} from '@core/services/clubSchedule';
+import { tandasChoices, describeTandas } from '@core/utils/tandas';
 
 // Franjas favoritas de local de un equipo. Compartido entre la hoja de editar
 // equipo (pestaña Equipo, capitán) y los horarios del club (gestor). La RLS de
@@ -55,13 +62,37 @@ export const PreferredSlotsEditor: React.FC<{
   const [adding, setAdding] = useState(false);
   const [addDow, setAddDow] = useState(6); // sábado por defecto
   const [managing, setManaging] = useState(false);
+  // Tanda habitual (cuántos partidos a cada hora). Se lee aparte: no viaja con las franjas.
+  const [tGender, setTGender] = useState<string | null>(null);
+  const [tandas, setTandas] = useState<string | null>(null);
 
   // Reset al cambiar de equipo.
   useEffect(() => {
     setSlots(initialSlots);
     setAdding(false);
     setManaging(false);
+    let alive = true;
+    getTeamTandasInfo([teamId]).then((m) => {
+      if (!alive) return;
+      setTGender(m[teamId]?.gender ?? null);
+      setTandas(m[teamId]?.preferred_tandas ?? null);
+    });
+    return () => {
+      alive = false;
+    };
   }, [teamId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const persistTandas = async (next: string | null) => {
+    const prev = tandas;
+    setTandas(next);
+    try {
+      if (guest) await setVenueTeamTandas(teamId, next);
+      else await setTeamPreferredTandas(teamId, next);
+    } catch (e: any) {
+      setTandas(prev);
+      toast.error('No se pudo guardar las tandas', e?.message ?? '');
+    }
+  };
 
   const persist = async (next: string[]) => {
     const uniq = Array.from(new Set(next)).sort();
@@ -155,6 +186,38 @@ export const PreferredSlotsEditor: React.FC<{
         >
           <Text style={styles.addBtnText}>+ Añadir franja favorita</Text>
         </Pressable>
+      )}
+
+      <Text style={[styles.sectionLabel, { marginTop: 22, marginBottom: 8 }]}>TANDAS HABITUALES</Text>
+      <View style={styles.chipsWrap}>
+        {tandasChoices(tGender).map((tv) => {
+          const sel = tandas === tv;
+          return (
+            <Pressable
+              key={tv}
+              onPress={() => persistTandas(sel ? null : tv)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: sel }}
+              style={[styles.chip, sel && { backgroundColor: c.accent, borderColor: c.accent }]}
+            >
+              <Text style={[styles.chipText, sel && { color: c.textInverse }]}>{tv}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {tandas ? (
+        <View style={{ marginTop: 8, gap: 2 }}>
+          {describeTandas(tandas, tGender, null).map((l) => (
+            <Text key={l} style={styles.hint}>
+              {l}
+            </Text>
+          ))}
+        </View>
+      ) : (
+        <Text style={[styles.hint, { marginTop: 8 }]}>
+          Cuántos partidos se juegan a cada hora, a partir de la hora de inicio: «3-2» son tres a la hora de inicio y
+          dos a la siguiente. Al poner la hora de un partido de local sale ya marcada.
+        </Text>
       )}
     </>
   );

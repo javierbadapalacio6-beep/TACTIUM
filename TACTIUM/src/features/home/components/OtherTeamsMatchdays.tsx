@@ -113,10 +113,10 @@ export const OtherTeamsMatchdays: React.FC<{ bleed?: number }> = ({ bleed = 22 }
               <Text style={styles.kicker} numberOfLines={1}>
                 PRÓXIMA JORNADA
               </Text>
-              <Text style={styles.team} numberOfLines={1}>
+              <Text style={styles.team} numberOfLines={2}>
                 {teamName}
               </Text>
-              <Text style={styles.rival} numberOfLines={1}>
+              <Text style={styles.rival} numberOfLines={2}>
                 <Text style={styles.vs}>vs </Text>
                 {md.opponent}
               </Text>

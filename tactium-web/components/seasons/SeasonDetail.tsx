@@ -1,6 +1,9 @@
 "use client";
 
+import { TutorialModal, useTutorial } from "@/components/Tutorial";
+import { CoachTour, useCoach } from "@/components/CoachTour";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -12,6 +15,7 @@ import {
   type DbMatchday,
   type DbSeason,
 } from "@/lib/queries";
+import { proHref } from "@/lib/nav";
 import { fetchProForTeam } from "@/lib/team-captains";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -36,6 +40,7 @@ import { EASE } from "@/components/entry/motion-bits";
 import { ScanModal } from "@/components/team/ScanModal";
 import type { ScannedMatchday } from "@/lib/parse-image";
 import { IconCalendar, IconChevronRight, IconInfo, IconLock, IconPlus } from "@/components/Icon";
+import { fmtRango } from "@/lib/fcp-range";
 import { FcpBracketPanel, FcpStandingsTable } from "@/components/federation/Federation";
 import {
   fetchTeamPlayoffGroup,
@@ -73,11 +78,16 @@ type Tab = "jornadas" | "clasif" | "cuadro";
  */
 export function SeasonDetail({ id }: { id: string }) {
   const { user, activeTeam, role } = useSession();
+  const router = useRouter();
   const teamId = activeTeam?.id ?? null;
   // Solo el capitán (o el club) gestiona; el jugador consulta.
   const canManage = role === "capitan" || role === "club";
   const [tab, setTab] = useState<Tab>("jornadas");
   const [newOpen, setNewOpen] = useState(false);
+  // Primera vez: un mini tutorial y, al cerrarlo, se abre «Nueva jornada».
+  const newTut = useTutorial("create-matchday");
+  const seasonCoach = useCoach("season-import", null, canManage, 1500);
+  const openNew = () => newTut.show(() => setNewOpen(true));
   const [closeOpen, setCloseOpen] = useState(false);
   const [showPending, setShowPending] = useState(false);
   // Formulario de nueva jornada.
@@ -203,6 +213,7 @@ export function SeasonDetail({ id }: { id: string }) {
             match_date: m.match_date ?? null,
             match_time: m.match_time ?? null,
             is_home: m.is_home,
+            fcp_date_range: m.match_date ? null : m.date_range ?? null,
           });
         }
         if (!fcp) await renumberSeasonMatchdays(id);
@@ -225,6 +236,13 @@ export function SeasonDetail({ id }: { id: string }) {
       const n = await previousSeasonImportNotice(teamId, standing.data);
       setBusy(false);
       setNotice(n);
+      return;
+    }
+    // Traer el calendario de la Federación es premium, como en la app
+    // (`calendar_import`). Mismo criterio que escanear.
+    if (!(await fetchProForTeam(activeTeam?.clubId ? null : teamId))) {
+      setBusy(false);
+      router.push(proHref("calendar_import"));
       return;
     }
     const res = await guardedWrite("traer el calendario de la Federación", () =>
@@ -334,11 +352,27 @@ export function SeasonDetail({ id }: { id: string }) {
               {dbSeason.active ? "Activa" : "Archivada"}
             </Chip>
             {canEdit && (
+              <span data-coach="add" style={{ display: "inline-flex" }}>
+              <CoachTour
+                coach={seasonCoach}
+                steps={[
+                  {
+                    target: '[data-coach="add"]',
+                    title: "Meter las jornadas",
+                    text: "Pulsa «Añadir» para llenar la temporada. Lo más rápido es volcarla de golpe:",
+                    chips: [
+                      "Escanear el calendario: haz foto o sube el PDF de la Federación y TACTIUM lo lee y crea todas las jornadas",
+                      "Nueva jornada: una a una, con rival, casa o fuera, fecha y hora",
+                      ...(isFcp ? ["Traer de la Federación: calendario y resultados del grupo"] : []),
+                    ],
+                  },
+                ]}
+              />
               <Menu
                 label="Añadir"
                 accent
                 items={[
-                  { label: "Nueva jornada", sub: "Rival, casa o fuera, fecha y hora", onClick: () => setNewOpen(true) },
+                  { label: "Nueva jornada", sub: "Rival, casa o fuera, fecha y hora", onClick: openNew },
                   {
                     label: "Escanear el calendario",
                     sub: "Foto o PDF del calendario del grupo",
@@ -355,6 +389,7 @@ export function SeasonDetail({ id }: { id: string }) {
                     : []),
                 ]}
               />
+              </span>
             )}
             {canEdit && (
               <Menu
@@ -416,7 +451,7 @@ export function SeasonDetail({ id }: { id: string }) {
               action={
                 canEdit ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                    <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={14} />}>
+                    <Btn variant="accent" onClick={openNew} icon={<IconPlus size={14} />}>
                       Añadir jornada
                     </Btn>
                     <Btn onClick={() => setScanOpen(true)}>Escanear el calendario</Btn>
@@ -508,6 +543,7 @@ export function SeasonDetail({ id }: { id: string }) {
         ) : null)}
 
       {/* ── Crear jornada ────────────────────────────────────────── */}
+      <TutorialModal id="create-matchday" visible={newTut.visible} onClose={newTut.close} />
       <Modal
         open={newOpen}
         onClose={() => setNewOpen(false)}
@@ -637,7 +673,10 @@ function MatchdayRow({ j, isNext }: { j: DbMatchday; isNext?: boolean }) {
       </span>
       <span style={{ fontSize: 14, fontWeight: 700 }}>vs {j.opponent}</span>
       <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-        {[j.isHome ? "Casa" : "Fuera", meta || "Fecha por confirmar"].join(" · ")}
+        {[
+          j.isHome ? "Casa" : "Fuera",
+          meta || (j.dateRange ? `${fmtRango(j.dateRange)} · por confirmar` : "Fecha por confirmar"),
+        ].join(" · ")}
       </span>
       <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         {score ? (

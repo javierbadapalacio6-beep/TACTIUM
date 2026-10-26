@@ -114,7 +114,33 @@ export async function forceCloseMatchday(
   return data;
 }
 
-export type MatchOutcome = Database['public']['Enums']['match_outcome'];
+/**
+ * ¿La alineación está publicada (el capitán pulsó Publicar)? Los jugadores solo ven la alineación
+ * publicada; el borrador es del capitán. Antes de aplicar la migración la columna no existe
+ * (`undefined`): se trata como publicada para no esconder lo que ya se veía.
+ */
+export function isLineupPublished(md: object | null | undefined): boolean {
+  if (!md) return false;
+  const at = (md as { lineup_published_at?: string | null }).lineup_published_at;
+  return at === undefined ? true : at !== null;
+}
+
+/**
+ * Publica la alineación: congela las parejas de la variante oficial (RPC `publish_lineup`) y marca la jornada
+ * como publicada. Si la RPC aún no existe, cae a solo marcar la columna.
+ */
+export async function markLineupPublished(id: string): Promise<void> {
+  const rpc = await supabase.rpc('publish_lineup' as never, { p_matchday_id: id } as never);
+  if (!rpc.error) return;
+  console.warn('publish_lineup', rpc.error.message);
+  const { error } = await supabase
+    .from('matchdays')
+    .update({ lineup_published_at: new Date().toISOString() } as never)
+    .eq('id', id);
+  if (error) console.warn('markLineupPublished', error.message);
+}
+
+export type MatchOutcome =Database['public']['Enums']['match_outcome'];
 
 export async function updateMatchday(
   id: string,
@@ -184,9 +210,11 @@ export async function createMatchday(
     // Distribución de las parejas en tandas horarias dentro de la jornada.
     // Formato "N-N-N". Opcional.
     tandas?: string | null;
+    // Fin de semana de la Federación («23 - 25 Oct») mientras no hay día exacto.
+    fcp_date_range?: string | null;
   },
 ): Promise<Matchday> {
-  const payload: MatchdayInsert = {
+  const payload = {
     season_id: seasonId,
     jornada_number: input.jornada_number,
     opponent: input.opponent,
@@ -195,7 +223,8 @@ export async function createMatchday(
     is_home: input.is_home ?? true,
     location: input.location ?? null,
     tandas: input.tandas ?? null,
-  };
+    fcp_date_range: input.fcp_date_range ?? null,
+  } as MatchdayInsert;
   const { data, error } = await supabase
     .from('matchdays')
     .insert(payload)

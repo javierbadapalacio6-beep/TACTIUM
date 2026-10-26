@@ -109,15 +109,21 @@ export async function removeMatchPhoto(teamId: string, matchdayId: string): Prom
   if (error) throw error;
 }
 
-/** Cambia fecha y hora de una jornada (`match_date` «AAAA-MM-DD»,
- *  `match_time` «HH:MM»). null = por confirmar. */
+/** Cambia fecha, hora, lugar y tandas de una jornada (`match_date` «AAAA-MM-DD»,
+ *  `match_time` «HH:MM», `tandas` «N-N-N»). null = por confirmar. `location` y `tandas`
+ *  solo se tocan si vienen en el parche. */
 export async function updateMatchdaySchedule(
   matchdayId: string,
-  patch: { date: string | null; time: string | null },
+  patch: { date: string | null; time: string | null; location?: string | null; tandas?: string | null },
 ): Promise<void> {
   const { error } = await supabaseBrowser()
     .from("matchdays")
-    .update({ match_date: patch.date, match_time: patch.time })
+    .update({
+      match_date: patch.date,
+      match_time: patch.time,
+      ...(patch.location !== undefined ? { location: patch.location } : {}),
+      ...(patch.tandas !== undefined ? { tandas: patch.tandas } : {}),
+    })
     .eq("id", matchdayId);
   if (error) throw error;
 }

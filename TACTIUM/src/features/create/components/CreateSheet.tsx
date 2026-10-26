@@ -193,7 +193,8 @@ export const CreateSheet: React.FC<{ open: boolean; onClose: () => void }> = ({
         icon: <IconCalendar size={20} color={c.accent} />,
         title: 'Nueva jornada',
         sub: 'Añade un partido a la temporada activa.',
-        run: after(gate(() => openSeason('add'), 'matchday_create')),
+        // Añadir una jornada a mano es gratis: lo premium es traerlas en bloque (escanear / importar).
+        run: after(() => openSeason('add')),
       },
       {
         key: 'scan',

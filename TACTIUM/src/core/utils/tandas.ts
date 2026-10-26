@@ -73,3 +73,77 @@ export function isValidTandas(value: string, total: number): boolean {
   const sum = parts.reduce((a, b) => a + b, 0);
   return sum === total;
 }
+
+// ─── Liga Cántabra (normativa VII.3 y XI.3.1) ────────────────────────────────
+// Masculino: 5 parejas, como mucho 3 tandas, entrada 5-4-1-2-3. Femenino: 4 parejas, como mucho 2 tandas, entrada
+// 4-3-1-2. «3-2» = las tres primeras parejas (en orden de entrada) a la hora de inicio y las otras dos una hora después.
+
+/** Parejas por enfrentamiento según el género del equipo. */
+export const pairsFor = (gender?: string | null): number => (gender === 'femenino' ? 4 : 5);
+/** Máximo de tandas por enfrentamiento. */
+export const maxTandasFor = (gender?: string | null): number => (gender === 'femenino' ? 2 : 3);
+const ENTRY_ORDER = (gender?: string | null): number[] => (gender === 'femenino' ? [4, 3, 1, 2] : [5, 4, 1, 2, 3]);
+
+/** Tandas posibles para un equipo (de «todos a la vez» a más repartidas). */
+export function tandasChoices(gender?: string | null): string[] {
+  return tandasOptions(pairsFor(gender)).filter((v) => v.split('-').length <= maxTandasFor(gender));
+}
+
+const joinPairs = (nums: number[]): string =>
+  nums.length <= 1 ? nums.join('') : `${nums.slice(0, -1).join(', ')} y ${nums[nums.length - 1]}`;
+const addHours = (hhmm: string, h: number): string => {
+  const [hh, mm] = hhmm.split(':').map(Number);
+  return `${String((hh + h) % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+};
+
+/** Una línea por tanda: «17:30 · parejas 5, 4 y 1». Sin hora de inicio: «1.ª tanda · parejas …». */
+export function describeTandas(value: string, gender?: string | null, start?: string | null): string[] {
+  if (!isValidTandas(value, pairsFor(gender))) return [];
+  const order = ENTRY_ORDER(gender);
+  let i = 0;
+  return value.split('-').map((n, idx) => {
+    const group = order.slice(i, i + Number(n));
+    i += Number(n);
+    const when = start ? addHours(start, idx) : `${idx + 1}.ª tanda`;
+    return `${when} · ${group.length === 1 ? 'pareja' : 'parejas'} ${joinPairs(group)}`;
+  });
+}
+
+/**
+ * Versión corta de `describeTandas` para una sola línea: «10:30 (5, 4, 1) · 11:30 (2, 3)». La hora de
+ * cada tanda es ORIENTATIVA (hora de inicio + 1 h por tanda): la normativa fija el reparto, no la hora exacta.
+ */
+export function describeTandasShort(value: string, gender?: string | null, start?: string | null): string {
+  if (!isValidTandas(value, pairsFor(gender))) return '';
+  const order = ENTRY_ORDER(gender);
+  let i = 0;
+  return value
+    .split('-')
+    .map((n, idx) => {
+      const group = order.slice(i, i + Number(n));
+      i += Number(n);
+      return `${start ? addHours(start, idx) : `${idx + 1}.ª`} (${group.join(', ')})`;
+    })
+    .join(' · ');
+}
+
+/**
+ * Cuándo entra la pareja de una pista según las tandas (normativa VII.3: entrada 5-4-1-2-3 / 4-3-1-2, de hora en hora).
+ * «≈10:30» si hay hora de inicio (orientativa: los retrasos de los partidos anteriores la mueven), «1.ª tanda» si no.
+ */
+export function tandaWhenForCourt(
+  value: string | null | undefined,
+  gender: string | null | undefined,
+  court: number,
+  start?: string | null,
+): string | null {
+  if (!value || !isValidTandas(value, pairsFor(gender))) return null;
+  const order = ENTRY_ORDER(gender);
+  let i = 0;
+  const parts = value.split('-').map(Number);
+  for (let idx = 0; idx < parts.length; idx++) {
+    if (order.slice(i, i + parts[idx]).includes(court)) return start ? `≈${addHours(start, idx)}` : `${idx + 1}.ª tanda`;
+    i += parts[idx];
+  }
+  return null;
+}

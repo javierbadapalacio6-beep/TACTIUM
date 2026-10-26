@@ -6,6 +6,7 @@ import { Apariencia } from "@/components/settings/Apariencia";
 import { Notificaciones } from "@/components/settings/Notificaciones";
 import { MisDatos, TuPerfil } from "@/components/settings/MisDatos";
 import { ZonaPeligro } from "@/components/settings/ZonaPeligro";
+import { CambiarContrasena } from "@/components/settings/CambiarContrasena";
 import {
   EquipoActual,
   Invitaciones,
@@ -120,6 +121,9 @@ export function SeccionCuenta() {
     <div style={stack}>
       <div id="mis-datos" style={{ scrollMarginTop: 80 }}>
         <MisDatos />
+      </div>
+      <div id="contrasena" style={{ scrollMarginTop: 80 }}>
+        <CambiarContrasena />
       </div>
       <ZonaPeligro />
     </div>

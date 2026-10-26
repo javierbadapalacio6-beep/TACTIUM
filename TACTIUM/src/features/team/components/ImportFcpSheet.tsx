@@ -205,7 +205,7 @@ export const ImportFcpSheet: React.FC<Props> = ({ open, onClose, onImport }) => 
                 style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
               >
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.rowName} numberOfLines={1}>
+                  <Text style={styles.rowName} numberOfLines={2}>
                     {t.nombre}
                   </Text>
                   {t.grupo ? (

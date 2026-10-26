@@ -1,0 +1,128 @@
+{
+  "id": "L3",
+  "titulo": "Los grupos de la muerte 2026/27",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/red-pista.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Hemos medido los 41 grupos. *Estos son los más duros.*",
+      "tam": "sm"
+    },
+    {
+      "tipo": "texto",
+      "eyebrow": "Cómo lo medimos",
+      "titulo": "Los puntos FCP de los **10 mejores** de cada plantilla.",
+      "sub": "Son las 5 parejas que salen a jugar. La media de sus equipos da la fuerza de cada grupo."
+    },
+    {
+      "tipo": "barras",
+      "eyebrow": "Masculino",
+      "titulo": "El grupo más duro de *cada categoría*",
+      "sub": "Cuánto supera a la media de su categoría.",
+      "filas": [
+        {
+          "etiqueta": "1ª",
+          "sub": "Grupo C",
+          "valor": 0.03991522011982851,
+          "texto": "+4 %"
+        },
+        {
+          "etiqueta": "2ª",
+          "sub": "Grupo C",
+          "valor": 0.03843565128059789,
+          "texto": "+4 %"
+        },
+        {
+          "etiqueta": "3ª",
+          "sub": "Grupo D",
+          "valor": 0.1435521705134517,
+          "texto": "+14 %"
+        },
+        {
+          "etiqueta": "4ª",
+          "sub": "Grupo D",
+          "valor": 0.13783853305405502,
+          "texto": "+14 %"
+        },
+        {
+          "etiqueta": "5ª",
+          "sub": "Grupo A",
+          "valor": 0.23933396167137921,
+          "texto": "+24 %"
+        },
+        {
+          "etiqueta": "6ª",
+          "sub": "Grupo B",
+          "valor": 0.31627980420022106,
+          "texto": "+32 %"
+        },
+        {
+          "etiqueta": "7ª",
+          "sub": "Grupo A",
+          "valor": 0.027992277992278103,
+          "texto": "+3 %"
+        }
+      ]
+    },
+    {
+      "tipo": "barras",
+      "eyebrow": "Femenino",
+      "titulo": "El grupo más duro de *cada categoría*",
+      "sub": "Cuánto supera a la media de su categoría.",
+      "filas": [
+        {
+          "etiqueta": "1ª",
+          "sub": "Grupo B",
+          "valor": 0.020109424254501906,
+          "texto": "+2 %"
+        },
+        {
+          "etiqueta": "2ª",
+          "sub": "Grupo C",
+          "valor": 0.059926100100772484,
+          "texto": "+6 %"
+        },
+        {
+          "etiqueta": "3ª",
+          "sub": "Grupo A",
+          "valor": 0.07953319981512874,
+          "texto": "+8 %"
+        },
+        {
+          "etiqueta": "4ª",
+          "sub": "Grupo A",
+          "valor": 0.17124692370795724,
+          "texto": "+17 %"
+        },
+        {
+          "etiqueta": "5ª",
+          "sub": "Grupo A",
+          "valor": 0.1536444677503932,
+          "texto": "+15 %"
+        }
+      ]
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "El grupo de la muerte · 6ª Masculina",
+      "valor": "+32%",
+      "sub": "El **grupo B** de 6ª masculina es el que más se separa de su categoría. Ahí no hay jornada fácil."
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "La plantilla más fuerte de la liga",
+      "valor": "7.605",
+      "sub": "puntos de media en los 10 mejores de **CENTRAL PADEL A** (1ª masculina)."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "Mira el nivel de *tu grupo*",
+      "sub": "Cada rival, con su plantilla y sus puntos, en tactium.io. **Antes de la jornada 1.**",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

@@ -3177,7 +3177,13 @@ select.tw-cell-input {
   flex-wrap: wrap;
   padding: 4px 0 14px;
   margin-bottom: 12px;
-  background: var(--bg);
+  /* Cristal y no `var(--bg)` opaco: el fondo de la página lleva un halo verde en
+     diagonal y una caja sólida encima dejaba un rectángulo negro con un pico
+     detrás del título. Con el halo se ve a través y el contenido que pasa
+     por debajo queda desenfocado. */
+  background: color-mix(in srgb, var(--bg) 38%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
   border-bottom: 1px solid var(--line);
 }
 .tw-variants {
@@ -3407,11 +3413,11 @@ select.tw-cell-input {
 .tw-sched-head,
 .tw-sched-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.6fr) 150px minmax(140px, 1fr) 120px;
+  grid-template-columns: minmax(160px, 1.6fr) 150px minmax(140px, 1fr) 96px 120px;
   gap: 14px;
   align-items: center;
   padding: 10px 18px;
-  min-width: 640px;
+  min-width: 760px;
 }
 .tw-sched-head {
   border-bottom: 1px solid var(--line-strong);
@@ -4546,10 +4552,10 @@ select.tw-cell-input {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  margin-bottom: 14px;
-  min-height: 186px;
-  padding: 24px 28px 28px;
-  border-radius: 22px;
+  margin-bottom: 12px;
+  min-height: 0;
+  padding: 16px 24px;
+  border-radius: 20px;
   border: 1px solid var(--glass-line);
   background:
     radial-gradient(72% 130% at 86% -26%, var(--hero-glow), transparent 60%),
@@ -4584,21 +4590,21 @@ select.tw-cell-input {
 }
 .tw-fcp-hero-title {
   margin: 0;
-  font-size: clamp(26px, 3vw, 38px);
+  font-size: clamp(22px, 2.4vw, 30px);
   font-weight: 700;
   letter-spacing: -0.032em;
   line-height: 1.05;
 }
 .tw-fcp-hero-sub {
-  margin: 8px 0 0;
-  font-size: 14px;
+  margin: 4px 0 0;
+  font-size: 13.5px;
   color: var(--text-muted);
 }
 .tw-fcp-hero-meta {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-top: 14px;
+  margin-left: auto;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--accent);
@@ -5426,3 +5432,157 @@ a.tw-live-row:hover {
 .tw-fcp-dir-list a:hover {
   color: var(--accent);
 }
+
+/* ── Competir · bloques más densos ─────────────────────────────────
+   «Tu grupo» de la Federación en una sola fila (identidad · próxima ·
+   puesto · botones), franja de métricas de la temporada y el vacío de
+   Torneos con la pista dibujada y los tres pasos, en lugar de una tarjeta
+   enorme con una frase. Referencias: paneles de métricas en franja
+   (Sweatpals, Square) y rejillas con filtros en línea (Meetup). */
+.tw-mine-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+}
+.tw-mine-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.tw-mine-next {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 2 1 280px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--bg-card-2);
+}
+.tw-mine-next-spacer {
+  flex: 2 1 0;
+}
+.tw-mine-pos {
+  flex: none;
+  text-align: right;
+}
+.tw-mine-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .tw-mine-next-spacer {
+    display: none;
+  }
+  .tw-mine-pos {
+    margin-left: auto;
+  }
+}
+
+.stat-row--strip {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-card-2) 55%, transparent);
+}
+.stat-row--strip .stat {
+  flex: 1 1 0;
+  padding: 10px 16px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.stat-row--strip .stat:first-child {
+  border-left: 0;
+}
+.stat-row--strip .stat::after {
+  display: none;
+}
+.stat-row--strip .stat-label {
+  font-size: 12px;
+}
+.stat-row--strip .stat-value {
+  margin-top: 4px;
+  font-size: 22px;
+}
+.stat-row--strip .stat-value small {
+  font-size: 12.5px;
+}
+@media (max-width: 520px) {
+  .stat-row--strip .stat {
+    padding: 10px 12px;
+  }
+  .stat-row--strip .stat-value {
+    font-size: 19px;
+  }
+}
+
+.tw-empty-court {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 18px 20px 20px;
+  border-radius: inherit;
+  background: radial-gradient(60% 140% at 92% -30%, var(--hero-glow), transparent 62%);
+}
+.tw-empty-court::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--hero-line) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, var(--hero-line) 0 1px, transparent 1px 36px);
+  -webkit-mask-image: linear-gradient(100deg, transparent 30%, #000 100%);
+  mask-image: linear-gradient(100deg, transparent 30%, #000 100%);
+  opacity: 0.7;
+}
+.tw-empty-court-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+}
+.tw-empty-steps {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.tw-empty-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card-2) 80%, transparent);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.tw-empty-steps li b {
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+/* Guías sobre la pantalla: el texto de cada paso entra con un fundido suave. */
+@keyframes tw-coach-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.tw-coach-in { animation: tw-coach-in .3s cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) { .tw-coach-in { animation: none; } }

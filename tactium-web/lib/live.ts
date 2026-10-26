@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { guardedWrite, type WriteResult } from "@/lib/writes";
+import type { LiveSet } from "@/lib/live-core";
+
+export * from "@/lib/live-core";
 
 /**
  * Marcador en vivo de una jornada (migración `20261006c_live_scoring`).
@@ -14,11 +17,6 @@ import { guardedWrite, type WriteResult } from "@/lib/writes";
  * tiene un bloqueo suave de 2 min (relevo con `force`). Cada toque lleva un
  * uuid (idempotente) y el nº de juegos que se veía (ordenado).
  */
-
-export interface LiveSet {
-  us: number;
-  them: number;
-}
 
 export interface LiveCourtState {
   id: string;
@@ -43,12 +41,17 @@ export interface LiveCourt {
   player_b: { id: string; name: string | null } | null;
   forfeit: boolean;
   forfeit_us: boolean;
+  /** Sets del acta (resultado a mano o volcado del directo). */
+  result_sets?: LiveSet[];
   live: LiveCourtState | null;
 }
 
 export interface LiveMatchdayState {
   matchday_id: string;
   matchday_status: string;
+  /** Fecha y hora del partido: el directo se activa solo a esa hora. */
+  match_date?: string | null;
+  match_time?: string | null;
   is_admin: boolean;
   can_score: boolean;
   share_token: string | null;
@@ -154,56 +157,7 @@ export function activeScorer(live: LiveCourtState | null, myUserId: string | nul
   return live.scorer_name ?? "Un compañero";
 }
 
-export function setsWon(live: { sets: LiveSet[]; status: string; winner: string | null } | null) {
-  if (!live) return { us: 0, them: 0 };
-  const closed = live.status === "finished" || live.winner ? live.sets : live.sets.slice(0, -1);
-  let us = 0;
-  let them = 0;
-  for (const s of closed) {
-    if (s.us > s.them) us++;
-    else if (s.them > s.us) them++;
-  }
-  return { us, them };
-}
-
-export type CourtOutcome = "won" | "lost" | "live" | "none";
-
-export function courtOutcome(c: {
-  forfeit: boolean;
-  forfeit_us: boolean;
-  live: { sets: LiveSet[]; status: string; winner: string | null } | null;
-} | undefined): CourtOutcome {
-  if (!c) return "none";
-  if (c.forfeit) return c.forfeit_us ? "lost" : "won";
-  if (!c.live) return "none";
-  if (c.live.status === "finished") {
-    let w = c.live.winner;
-    if (!w) {
-      const s = setsWon(c.live);
-      w = s.us > s.them ? "us" : s.them > s.us ? "them" : null;
-    }
-    return w === "us" ? "won" : w === "them" ? "lost" : "none";
-  }
-  return "live";
-}
-
-export function liveTotals(courts: Parameters<typeof courtOutcome>[0][]) {
-  let won = 0;
-  let lost = 0;
-  let live = 0;
-  for (const c of courts) {
-    const o = courtOutcome(c);
-    if (o === "won") won++;
-    else if (o === "lost") lost++;
-    else if (o === "live") live++;
-  }
-  return { won, lost, live };
-}
-
-export function isLiveNow(state: LiveMatchdayState | null): boolean {
-  if (!state || state.matchday_status === "finished") return false;
-  return state.courts.some((c) => c.live?.status === "live" && !c.forfeit);
-}
+/* setsWon, courtOutcome, courtSets, liveTotals, isLiveNow, liveCtx…: en `live-core.ts` (re-exportadas arriba). */
 
 export function applyGameLocal(live: LiveCourtState, side: "us" | "them"): LiveCourtState {
   if (live.status === "finished") return live;

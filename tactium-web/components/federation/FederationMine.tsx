@@ -73,29 +73,46 @@ export function FederationMine({
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
       {isTeam && st && st.fcpId != null ? (
         <Card style={{ borderColor: "var(--accent-40)" }} aria-label="Tu grupo">
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <Avatar initials={initials(st.me?.equipo ?? activeTeam?.name ?? "?")} size={40} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Tu grupo</div>
-              <div style={{ fontSize: 15, fontWeight: 700 }} className="truncate">
-                {st.me?.equipo ?? activeTeam?.name}
-              </div>
-              <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                {[shortGroupName(st.grupo), st.previous ? st.temporada : null]
-                  .filter(Boolean)
-                  .join(" · ") || "En inscripción"}
+          <div className="tw-mine-row">
+            <div className="tw-mine-id">
+              <Avatar initials={initials(st.me?.equipo ?? activeTeam?.name ?? "?")} size={40} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Tu grupo</div>
+                <div style={{ fontSize: 15, fontWeight: 700 }} className="truncate">
+                  {st.me?.equipo ?? activeTeam?.name}
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                  {[shortGroupName(st.grupo), st.previous ? st.temporada : null]
+                    .filter(Boolean)
+                    .join(" · ") || "En inscripción"}
+                </div>
               </div>
             </div>
+
+            {!st.previous && !st.finished && st.nextMatch ? (
+              <div className="tw-mine-next">
+                <IconCalendar size={15} style={{ flex: "none", color: "var(--text-muted)" }} />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--text-muted)" }}>
+                    Próxima
+                    {st.nextMatch.jornada != null ? ` · jornada ${st.nextMatch.jornada}` : ""}
+                    {st.nextMatch.fecha ? ` · ${fmtFcpDate(st.nextMatch.fecha)}` : ""}
+                    {st.nextMatch.hora ? ` · ${st.nextMatch.hora.slice(0, 5)}` : ""}
+                  </span>
+                  <span style={{ display: "block", fontWeight: 600, fontSize: 13.5 }}>
+                    {st.nextMatch.local} – {st.nextMatch.visitante}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <span className="tw-mine-next-spacer" />
+            )}
+
             {st.me ? (
-              <span style={{ textAlign: "right" }}>
+              <span className="tw-mine-pos">
                 <span
                   className="mono"
-                  style={{
-                    display: "block",
-                    fontSize: 24,
-                    fontWeight: 700,
-                    color: st.zone?.color ?? "var(--accent)",
-                  }}
+                  style={{ display: "block", fontSize: 24, fontWeight: 700, lineHeight: 1, color: st.zone?.color ?? "var(--accent)" }}
                   title={st.zone?.label}
                 >
                   {st.me.posicion}º
@@ -107,6 +124,26 @@ export function FederationMine({
             ) : (
               <Chip tone="mute">Sin sorteo</Chip>
             )}
+
+            <div className="tw-mine-actions">
+              {st.idGrupo ? (
+                <BtnLink
+                  href={`${base}/grupo/${encodeURIComponent(st.idGrupo)}`}
+                  size="sm"
+                  variant="accent"
+                  onClick={(e) => {
+                    if (!onOpenGroup || e.metaKey || e.ctrlKey || e.shiftKey) return;
+                    e.preventDefault();
+                    onOpenGroup(st.idGrupo!);
+                  }}
+                >
+                  Ver clasificación
+                </BtnLink>
+              ) : null}
+              <BtnLink href={`${base}/equipo/${st.me?.idEquipo ?? st.fcpId}`} size="sm">
+                Ficha del equipo
+              </BtnLink>
+            </div>
           </div>
 
           {st.previous ? (
@@ -122,53 +159,7 @@ export function FederationMine({
             <Note icon={<IconInfo size={15} />} style={{ marginTop: 12 }}>
               Temporada{st.temporada ? ` ${st.temporada}` : ""} terminada · clasificación final
             </Note>
-          ) : st.nextMatch ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginTop: 12,
-                padding: "10px 12px",
-                borderRadius: "var(--r-md)",
-                background: "var(--bg-card-2)",
-                fontSize: 13.5,
-              }}
-            >
-              <IconCalendar size={15} style={{ flex: "none", color: "var(--text-muted)" }} />
-              <span style={{ minWidth: 0 }}>
-                <span style={{ color: "var(--text-muted)" }}>
-                  Próxima
-                  {st.nextMatch.jornada != null ? ` · jornada ${st.nextMatch.jornada}` : ""}
-                  {st.nextMatch.fecha ? ` · ${fmtFcpDate(st.nextMatch.fecha)}` : ""}
-                  {st.nextMatch.hora ? ` · ${st.nextMatch.hora.slice(0, 5)}` : ""}
-                </span>
-                <span className="truncate" style={{ display: "block", fontWeight: 600 }}>
-                  {st.nextMatch.local} – {st.nextMatch.visitante}
-                </span>
-              </span>
-            </div>
           ) : null}
-
-          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            {st.idGrupo ? (
-              <BtnLink
-                href={`${base}/grupo/${encodeURIComponent(st.idGrupo)}`}
-                size="sm"
-                variant="accent"
-                onClick={(e) => {
-                  if (!onOpenGroup || e.metaKey || e.ctrlKey || e.shiftKey) return;
-                  e.preventDefault();
-                  onOpenGroup(st.idGrupo!);
-                }}
-              >
-                Ver clasificación
-              </BtnLink>
-            ) : null}
-            <BtnLink href={`${base}/equipo/${st.me?.idEquipo ?? st.fcpId}`} size="sm">
-              Ficha del equipo
-            </BtnLink>
-          </div>
         </Card>
       ) : role === "club" && (club.data ?? []).length > 0 ? (
         <>

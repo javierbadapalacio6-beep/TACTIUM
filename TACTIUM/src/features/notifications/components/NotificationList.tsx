@@ -76,6 +76,11 @@ const iconFor = (type: string, color: string) => {
     case 'time_poll_open':
     case 'time_poll_reminder':
     case 'time_poll_fixed':
+    case 'fcp_upload_done':
+    case 'fcp_upload_reminder':
+    case 'lineup_upload_done':
+    case 'lineup_upload_reminder':
+    case 'away_schedule_published':
       return <IconClock size={16} color={color} />;
     default:
       return <IconBell size={16} color={color} />;

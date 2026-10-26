@@ -1,3 +1,4 @@
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -42,6 +43,7 @@ import { fetchPairStats } from '@core/services/pairStats';
 import { notifyPush } from '@core/push';
 import { shortName } from '@core/utils/playerName';
 import { formatShortDay } from '@core/utils/format';
+import { isMatchStarted } from '@core/utils/matchday';
 
 import {
   benchGroupOf,
@@ -75,6 +77,7 @@ import {
 import { notifySuccess, notifyWarning, tapLight } from '../components/match/haptics';
 
 import type { HomeStackScreenProps } from '@navigation/types';
+import { fmtRango } from '@features/seasons/components/ligaParts';
 
 /**
  * Alineación (rediseño bloque «Partido», 2026-10).
@@ -89,6 +92,32 @@ import type { HomeStackScreenProps } from '@navigation/types';
  * El motor no cambia: orden por puntos, variantes, realtime, gates premium
  * (`lineup_edit` / `lineup_confirm`) y generador.
  */
+const lineupSteps = (tablet: boolean): CoachStep[] => [
+  {
+    target: 'generate',
+    title: 'Empieza por aquí',
+    text: 'Rellena las pistas con los jugadores que han dicho Voy, ordenados por puntos. Es un punto de partida: después lo ajustas a mano.',
+  },
+  {
+    target: 'courts',
+    title: 'Las pistas',
+    text: 'Cada pista es una pareja, de la más fuerte (P1) a la más floja. Toca un jugador colocado para seleccionarlo y toca otro hueco para intercambiarlos.',
+  },
+  {
+    target: 'bench',
+    title: 'El banquillo',
+    text: 'Tus jugadores, agrupados por su respuesta: Voy, Duda, Pendiente y No.',
+    chips: tablet
+      ? ['Arrastra un jugador a un hueco de la pista', 'O toca el jugador y después el hueco']
+      : ['Toca un jugador del banquillo', 'Toca el hueco de la pista donde lo quieres'],
+  },
+  {
+    target: 'publish',
+    title: 'Publicar',
+    text: 'Cuando las pistas estén completas, publícala: avisa al equipo. Cada cambio se guarda solo, así que puedes dejarla a medias y volver.',
+  },
+];
+
 export const LineupScreen = ({
   navigation,
   route,
@@ -104,6 +133,7 @@ export const LineupScreen = ({
   const isCaptain = useTeamStore(selectIsCaptain);
   const isClub = useTeamStore(selectIsClubAdmin);
   const gate = usePremiumGate();
+  const coach = useCoach('lineup', undefined, isCaptain, 1600);
   // Tablet: rail compacto (las pistas y el banquillo necesitan el ancho).
   // Horizontal: banquillo en columna fija a la derecha. Vertical: anclado
   // abajo en columnas por grupo. Móvil: la bandeja de siempre.
@@ -252,6 +282,18 @@ export const LineupScreen = ({
     [courts],
   );
 
+  // El jugador solo lee la copia PUBLICADA; el capitán y el club, la variante viva.
+  const loadRows = useCallback(
+    async (variantId: string) => {
+      if (!isCaptain && !isClub) {
+        const snap = await LineupsApi.fetchPublishedLineup(matchdayId);
+        if (snap !== null) return snap;
+      }
+      return LineupsApi.fetchLineup(variantId);
+    },
+    [isCaptain, isClub, matchdayId],
+  );
+
   // Cargar la alineación cada vez que cambia la variante seleccionada.
   useEffect(() => {
     if (!currentVariantId) {
@@ -262,7 +304,7 @@ export const LineupScreen = ({
     let cancelled = false;
     (async () => {
       try {
-        const lineup = await LineupsApi.fetchLineup(currentVariantId);
+        const lineup = await loadRows(currentVariantId);
         if (cancelled) return;
         const arr = applyLineupRows(lineup);
         // Sembramos el «último persistido» con el estado de BD.
@@ -276,11 +318,13 @@ export const LineupScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [currentVariantId, courts, applyLineupRows]);
+  }, [currentVariantId, courts, applyLineupRows, loadRows]);
 
   const closed = matchday?.status === 'finished';
   const seasonClosed = season ? !season.active : false;
-  const canEdit = !closed && !seasonClosed && isCaptain;
+  // Empezado el partido, la alineación es la que se jugó: ni se cambia ni se vuelve a publicar.
+  const matchStarted = matchday ? isMatchStarted(matchday) : false;
+  const canEdit = !closed && !seasonClosed && !matchStarted && isCaptain;
 
   const currentVariant = variants.find((v) => v.id === currentVariantId) ?? null;
   const activeVariant = variants.find((v) => v.is_active) ?? null;
@@ -306,7 +350,7 @@ export const LineupScreen = ({
         const target =
           currentVariantId ?? vars.find((v) => v.is_active)?.id ?? vars[0]?.id ?? null;
         if (target) {
-          const lineup = await LineupsApi.fetchLineup(target);
+          const lineup = await loadRows(target);
           applyLineupRows(lineup);
         }
         void loadAvailability();
@@ -797,7 +841,7 @@ export const LineupScreen = ({
   // ── Publicar ───────────────────────────────────────────────────
   const openPublish = () => {
     const changedActive = !!currentVariantId && currentVariantId !== activeVariantId;
-    setNotify(dirtyRef.current || changedActive || !activeVariantId);
+    setNotify(dirtyRef.current || changedActive || !activeVariantId || !MatchdaysApi.isLineupPublished(matchday));
     setPublishDone(false);
     setPublishOpen(true);
   };
@@ -821,6 +865,15 @@ export const LineupScreen = ({
         if (changedActive) await LineupVariantsApi.setActiveVariant(currentVariantId!);
       } catch {
         // best-effort: la variante sigue guardada aunque falle el flag
+      }
+      // Publicar de verdad: hasta aquí la alineación era un borrador que solo ve el capitán.
+      if (matchdayId) {
+        await MatchdaysApi.markLineupPublished(matchdayId);
+        try {
+          setMatchday(await MatchdaysApi.fetchMatchday(matchdayId));
+        } catch {
+          // el realtime lo refresca igualmente
+        }
       }
       if (notify && matchdayId) void notifyPush('lineup_published', matchdayId);
       dirtyRef.current = false;
@@ -864,7 +917,9 @@ export const LineupScreen = ({
 
   const dateLabel = matchday.match_date
     ? formatShortDay(new Date(`${matchday.match_date}T12:00:00`))
-    : 'Fecha por confirmar';
+    : fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range)
+      ? `${fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range)} · por confirmar`
+      : 'Fecha por confirmar';
   const stripSub = [
     dateLabel,
     matchday.match_time ? matchday.match_time.slice(0, 5) : null,
@@ -942,7 +997,8 @@ export const LineupScreen = ({
 
   // ── Jugador: lectura con «Tu pareja» ─────────────────────────────
   if (!isCaptain && !isClub) {
-    const published = !!activeVariantId && slots.some((s) => filledLen(s) > 0);
+    const published =
+      MatchdaysApi.isLineupPublished(matchday) && !!activeVariantId && slots.some((s) => filledLen(s) > 0);
     const mySlot = myPlayerId
       ? slots.find((s) => s.playerAId === myPlayerId || s.playerBId === myPlayerId) ?? null
       : null;
@@ -1002,7 +1058,7 @@ export const LineupScreen = ({
           {!published ? (
             <NoLineupYet
               myStatus={myStatus}
-              canRespond={!!myPlayerId && !closed}
+              canRespond={!!myPlayerId && !closed && !matchStarted}
               busy={rsvpBusy}
               onRespond={respond}
             />
@@ -1045,7 +1101,7 @@ export const LineupScreen = ({
             teamName={team?.name ?? ''}
             title={stripTitle}
             sub={
-              activeVariantId && slots.some((s) => filledLen(s) > 0)
+              MatchdaysApi.isLineupPublished(matchday) && activeVariantId && slots.some((s) => filledLen(s) > 0)
                 ? `${team?.name ?? ''} · publicada${publishedAt ? ` el ${publishedAt}` : ''}`
                 : `${team?.name ?? ''} · sin publicar`
             }
@@ -1159,12 +1215,16 @@ export const LineupScreen = ({
           <InfoBanner>
             {closed
               ? 'Acta cerrada · la alineación es de solo lectura.'
-              : 'Temporada archivada · la alineación es de solo lectura.'}
+              : matchStarted
+                ? 'El partido ya ha empezado · esta es la alineación que se jugó y no se puede cambiar.'
+                : 'Temporada archivada · la alineación es de solo lectura.'}
           </InfoBanner>
         ) : null}
 
         {canEdit ? (
           <Pressable
+            ref={coach.ref('generate')}
+            collapsable={false}
             onPress={(e) => {
               e.stopPropagation();
               if (currentVariantId) setGenOpen(true);
@@ -1180,13 +1240,17 @@ export const LineupScreen = ({
           </Pressable>
         ) : null}
 
-        {courtList({ editable: canEdit })}
+        <View ref={coach.ref('courts')} collapsable={false}>
+          {courtList({ editable: canEdit })}
+        </View>
       </Pressable>
     </ScrollView>
   );
 
   const publishButton = (
     <Pressable
+      ref={coach.ref('publish')}
+      collapsable={false}
       disabled={missing > 0}
       onPress={openPublish}
       accessibilityRole="button"
@@ -1301,15 +1365,17 @@ export const LineupScreen = ({
               isAnimating={(id) => swapAnimIds.has(id)}
             />
           ) : (
-            <LineupBench
-              jornada={matchday.jornada_number}
-              groups={benchGroups}
-              sel={sel}
-              disabled={!canEdit}
-              bottomInset={0}
-              onTap={onBenchTap}
-              isAnimating={(id) => swapAnimIds.has(id)}
-            />
+            <View ref={coach.ref('bench')} collapsable={false}>
+              <LineupBench
+                jornada={matchday.jornada_number}
+                groups={benchGroups}
+                sel={sel}
+                disabled={!canEdit}
+                bottomInset={0}
+                onTap={onBenchTap}
+                isAnimating={(id) => swapAnimIds.has(id)}
+              />
+            </View>
           )}
           <View style={[styles.ctaWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             {publishButton}
@@ -1361,6 +1427,7 @@ export const LineupScreen = ({
 
   return (
     <Pressable onPress={() => setSel(null)} style={styles.root} android_disableSound>
+      <CoachTour coach={coach} steps={lineupSteps(isTablet)} />
       {isTablet ? (
         <LineupDragLayer enabled={canEdit} onDrop={onBenchDrop}>
           {wide ? wideBody : phoneBody}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   INVITE_APP_STORE_URL,
@@ -11,6 +11,7 @@ import {
 import { useSession } from "@/lib/session";
 import { Btn, Card, Note } from "@/components/ui";
 import { Skeleton } from "@/components/states";
+import { previewClubInvitation, redeemClubInvitation, type ClubInvitationPreview } from "@/lib/club-managers";
 import { IconCheck, IconSmartphone } from "@/components/Icon";
 import {
   InvalidInvite,
@@ -27,6 +28,32 @@ export function InviteLanding({ code: rawCode }: { code: string }) {
   const state = useInvitePreview(code, 1, 0);
   const { user, teams } = useSession();
   const [joining, setJoining] = useState(false);
+  // Código de GESTOR de club: si no es de equipo, se prueba como de club.
+  const [club, setClub] = useState<Extract<ClubInvitationPreview, { valid: true }> | null>(null);
+  const [clubBusy, setClubBusy] = useState(false);
+  const [clubErr, setClubErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (state.status !== "ready" || state.preview.valid || state.preview.reason !== "not_found") return;
+    let alive = true;
+    previewClubInvitation(code)
+      .then((p) => alive && p.valid && setClub(p))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [state, code]);
+
+  async function aceptarClub() {
+    setClubBusy(true);
+    setClubErr(null);
+    try {
+      await redeemClubInvitation(code);
+      window.location.href = "/club";
+    } catch (e) {
+      setClubErr(e instanceof Error ? e.message : "No se pudo aceptar");
+      setClubBusy(false);
+    }
+  }
 
   function goLogin() {
     const next = `/i/${encodeURIComponent(code)}`;
@@ -53,6 +80,24 @@ export function InviteLanding({ code: rawCode }: { code: string }) {
     );
   } else if (state.status === "error") {
     body = <Note tone="error">No se pudo cargar la invitación: {state.message}</Note>;
+  } else if (!state.preview.valid && club) {
+    body = (
+      <div style={{ display: "grid", gap: 16, textAlign: "center" }}>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: 2, fontWeight: 700, color: "var(--accent)" }}>
+          INVITACIÓN DE GESTOR
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{club.club.name}</div>
+        <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14 }}>
+          {club.invited_by ? `${club.invited_by} te invita` : "Te invitan"} a gestionar el club contigo
+          {club.teams_count > 0 ? ` (${club.teams_count} equipos)` : ""}: horarios de local, torneos y todo lo que puede
+          hacer el dueño, salvo borrar el club.
+        </p>
+        <Btn size="lg" block disabled={clubBusy} onClick={() => (user ? void aceptarClub() : goLogin())}>
+          {user ? (clubBusy ? "Aceptando…" : "Aceptar y gestionar el club") : "Entrar para aceptar"}
+        </Btn>
+        {clubErr && <Note tone="error">{clubErr}</Note>}
+      </div>
+    );
   } else if (!state.preview.valid) {
     body = <InvalidInvite reason={state.preview.reason} />;
   } else {

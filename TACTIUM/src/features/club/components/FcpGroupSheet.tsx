@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
 import { BottomSheet, IconChevron } from '@components/ui';
+import { useTeamGate, type GateTeam } from '@core/hooks/usePremiumGate';
+import { useAuthStore } from '@store/authStore';
+import { useSubscriptionStore } from '@store/subscriptionStore';
+import { useTeamStore } from '@store/teamStore';
 import { toast, useToastStore } from '@store/toastStore';
+import type { RootStackParamList } from '@navigation/types';
 import {
   getFcpIdEquipo,
   fetchFcpGroupStandings,
@@ -14,6 +21,7 @@ import {
   fetchFcpActa,
   importFcpSeason,
   isAlreadyInHistoryError,
+  isPremiumRequiredError,
   seasonForFcpGroup,
   type FcpStandingRow,
   type FcpScheduleRow,
@@ -23,21 +31,43 @@ import {
 
 type Tab = 'clasif' | 'jornadas';
 
+/** Lo que tarda en cerrarse la hoja (es un Modal) antes de abrir otra pantalla encima. */
+const AFTER_CLOSE_MS = 380;
+
 /**
  * "Mi grupo" (Federación): vuelca la temporada (calendario + resultados) y
  * muestra en dos pestañas la CLASIFICACIÓN del grupo (con ficha read-only de
  * cada rival) y las JORNADAS del grupo. Ver Nivel 1 del plan. El detalle de
  * parejas + parciales por set (acta) llegará en la Entrega 2.
+ *
+ * Traer o actualizar la temporada es premium (`calendar_import`), salvo el
+ * primer volcado de un equipo sin temporada, que el servidor deja pasar.
  */
 export const FcpGroupSheet: React.FC<{
   open: boolean;
   teamId: string;
   teamName?: string | null;
+  /** Equipo para el gate de plan (club y cobertura). Sin él se trata como equipo independiente. */
+  gateTeam?: GateTeam | null;
   onClose: () => void;
   onImported?: () => void;
-}> = ({ open, teamId, onClose, onImported }) => {
+}> = ({ open, teamId, gateTeam, onClose, onImported }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  // ¿Tiene plan para este equipo? Misma cuenta que `useIsPremium`, pero sobre el equipo de la hoja.
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const role = useTeamStore((s) => s.activeRole);
+  const isPremiumFn = useSubscriptionStore((s) => s.isPremium);
+  useSubscriptionStore((s) => s.subscriptions); // reactivo: se repinta al volver del paywall
+  const teamGate = useTeamGate();
+  const gt: GateTeam = gateTeam ?? { id: teamId, club_id: null };
+  const hasPlan = isPremiumFn(userId, role === 'club_admin' ? 'admin' : role, {
+    id: gt.id,
+    club_id: gt.club_id,
+    covered: gt.covered,
+  }).allowed;
 
   const [tab, setTab] = useState<Tab>('clasif');
   const [loading, setLoading] = useState(false);
@@ -164,10 +194,33 @@ export const FcpGroupSheet: React.FC<{
         useToastStore.getState().show('info', 'Aún no hay temporada nueva', e.message, 8000);
         return;
       }
+      // El servidor pide plan (el equipo ya tenía temporada): paywall, no error en bruto.
+      // Directo a `Paywall`, sin pasar por el gate, para no entrar en bucle si la app cree que hay plan.
+      if (isPremiumRequiredError(e)) {
+        closeThen(() => navigation.navigate('Paywall', { intent: 'calendar_import' }));
+        return;
+      }
       toast.error('No se pudo volcar la temporada', e?.message ?? '');
     } finally {
       setImporting(false);
     }
+  };
+
+  /** Cierra la hoja (es un Modal) y, tras la animación, ejecuta `fn`: así el paywall no queda detrás. */
+  const closeThen = (fn: () => void) => {
+    onClose();
+    setTimeout(fn, AFTER_CLOSE_MS);
+  };
+
+  // Actualizar una temporada ya volcada es siempre del plan: se bloquea aquí mismo.
+  // El primer volcado de un equipo sin temporada lo decide el servidor (gratis).
+  const gatedImport = teamGate(gt, doImport, 'calendar_import');
+  const onImportPress = () => {
+    if (existing && !hasPlan) {
+      closeThen(gatedImport);
+      return;
+    }
+    void doImport();
   };
 
   // Jornadas agrupadas por número de jornada.
@@ -225,7 +278,7 @@ export const FcpGroupSheet: React.FC<{
               histórico) ni una terminada que ya tenemos. */}
           {!previous && !(finished && existing) ? (
             <Pressable
-              onPress={doImport}
+              onPress={onImportPress}
               disabled={importing}
               style={({ pressed }) => [styles.importBtn, pressed && { opacity: 0.9 }]}
             >
@@ -275,7 +328,7 @@ export const FcpGroupSheet: React.FC<{
           {tab === 'clasif' ? (
             <>
               <Text style={styles.hint}>Toca un rival para ver su plantilla</Text>
-              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+              <View>
                 <View style={{ gap: 6 }}>
                   {rows.map((t) => {
                     const sd = (t.sets_favor ?? 0) - (t.sets_contra ?? 0);
@@ -288,7 +341,7 @@ export const FcpGroupSheet: React.FC<{
                         >
                           <Text style={[styles.pos, t.isMe && { color: c.accent }]}>{t.posicion ?? '–'}</Text>
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={[styles.rowName, t.isMe && { color: c.accent }]} numberOfLines={1}>
+                            <Text style={[styles.rowName, t.isMe && { color: c.accent }]} numberOfLines={2}>
                               {t.equipo}
                             </Text>
                             <Text style={styles.rowMeta}>
@@ -306,7 +359,7 @@ export const FcpGroupSheet: React.FC<{
                             ) : (
                               (rosters[t.id_equipo ?? -1] ?? []).map((p, i) => (
                                 <View key={i} style={styles.rosterRow}>
-                                  <Text style={styles.rosterName} numberOfLines={1}>{p.name}</Text>
+                                  <Text style={styles.rosterName} numberOfLines={2}>{p.name}</Text>
                                   <Text style={styles.rosterPts}>{p.puntos} pts</Text>
                                 </View>
                               ))
@@ -317,12 +370,12 @@ export const FcpGroupSheet: React.FC<{
                     );
                   })}
                 </View>
-              </ScrollView>
+              </View>
             </>
           ) : (
             <>
               <Text style={styles.hint}>Calendario del grupo · tus partidos resaltados</Text>
-              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              <View>
                 <View style={{ gap: 14 }}>
                   {jornadas.length === 0 ? (
                     <Text style={styles.empty}>Aún no hay jornadas registradas para este grupo.</Text>
@@ -435,7 +488,7 @@ export const FcpGroupSheet: React.FC<{
                     ))
                   )}
                 </View>
-              </ScrollView>
+              </View>
             </>
           )}
         </>

@@ -1,5 +1,6 @@
 "use client";
 
+import { TutorialModal, useAutoTutorial } from "@/components/Tutorial";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,6 +11,8 @@ import {
   fetchAvailabilityDetail,
   fetchLastReminder,
   fetchLineup,
+  fetchLineupPublished,
+  fetchPublishedLineup,
   fetchMatchdays,
   fetchMaybeDeadline,
   fetchPlayers,
@@ -39,6 +42,7 @@ import { OtherTeamsStrip } from "@/components/home/OtherTeamsStrip";
 import { Crest } from "@/components/Crest";
 import { TrialCard } from "@/components/subscription/TrialCard";
 import { LiveHomeCard } from "@/components/matchday/LiveHomeCard";
+import { isMatchStarted } from "@/lib/match-time";
 import { fetchLiveState, isLiveNow } from "@/lib/live";
 import {
   IconCalendar,
@@ -139,6 +143,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const { activeTeam, user } = useSession();
   const router = useRouter();
   const teamId = activeTeam?.id ?? null;
+  const welcome = useAutoTutorial("team-welcome", teamId, !!teamId, 1800);
   const [lastReminder, setLastReminder] = useState<Date | null>(null);
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -174,9 +179,14 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
         fetchMaybeDeadline(next.id),
         // La alineación «publicada» es la variante activa, igual que en la app.
         fetchVariants(next.id)
-          .then((vs) => {
+          .then(async (vs) => {
             const active = vs.find((v) => v.isActive);
-            return active ? fetchLineup(next.id, active.id) : [];
+            if (!active) return [];
+            // Borrador sin publicar: solo lo ve la capitanía.
+            if (isCaptain) return fetchLineup(next.id, active.id);
+            const snap = await fetchPublishedLineup(next.id);
+            if (snap !== null) return snap;
+            return (await fetchLineupPublished(next.id)) ? fetchLineup(next.id, active.id) : [];
           })
           .catch(() => [] as DbLineupRow[]),
         isCaptain ? fetchLastReminder(next.id) : Promise.resolve(null),
@@ -253,7 +263,15 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const losses = played.filter((m) => m.outcome === "loss").length;
   const m = upcoming[0] ?? null;
   const dUntil = m ? daysUntil(m.date) : null;
-  const started = !!m && (m.status === "in_progress" || (dUntil !== null && dUntil < 0));
+  // Con hora: empezado desde esa hora (no desde el día siguiente). Sin hora: desde las 00:00.
+  const started = !!m && (m.status === "in_progress" || isMatchStarted(m.date, m.time, Date.now()));
+  // Si la jornada del hero ya se jugó y solo falta su acta, la siguiente se enseña debajo.
+  const following =
+    m && started
+      ? upcoming
+          .filter((x) => x.id !== m.id && x.status === "upcoming" && x.round > m.round && !isMatchStarted(x.date, x.time, Date.now()))
+          .sort((a, b) => a.round - b.round)[0] ?? null
+      : null;
 
   // Alineación oficial de la próxima jornada (como el hero de la app).
   const courts = data?.courts ?? 3;
@@ -263,7 +281,9 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
     ? null
     : m.status === "in_progress"
       ? "En juego"
-      : lineupFilled === 0
+      : started
+        ? "Falta el acta"
+        : lineupFilled === 0
         ? "Sin alineación"
         : lineupFilled >= courts
           ? "Alineación lista"
@@ -413,6 +433,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
   return (
     <div className="tw-page">
+      <TutorialModal id="team-welcome" visible={welcome.visible} onClose={welcome.close} />
       {greeting}
       <OtherTeamsStrip />
       {trial}
@@ -437,7 +458,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               {/* Si la fecha ya pasó no es «la próxima»: está sin cerrar, y
                   decir las dos cosas a la vez se lee como un error. */}
               <span className="bcard-title">
-                {dUntil !== null && dUntil < 0 ? "Jornada sin cerrar" : "Próxima jornada"}
+                {started && m.status !== "in_progress" ? "Jornada pendiente" : "Próxima jornada"}
               </span>
               <span className="delta">{whenLabel(dUntil)}</span>
             </div>
@@ -460,9 +481,12 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
                 </div>
                 <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-muted)" }}>
                   {formatDate(m.date)}
-                  {formatTime(m.time) ? ` · ${formatTime(m.time)}` : ""}
-                  {m.location ? ` · ${m.location}` : ""}
                 </div>
+                {m.location || formatTime(m.time) ? (
+                  <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>
+                    {[m.location, formatTime(m.time)].filter(Boolean).join(" · ")}
+                  </div>
+                ) : null}
               </div>
 
               {/* Disponibles, dentro de la tarjeta que manda: es el dato que
@@ -476,9 +500,16 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
               </div>
             </div>
 
-            {lineupLabel && (
+            {/* Tandas · alineación · los que van, en una línea. */}
+            {(m.tandas || lineupLabel) && (
               <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <span className="delta">{lineupLabel}</span>
+                {m.tandas ? <span className="delta">Tandas {m.tandas}</span> : null}
+                {lineupLabel ? <span className="delta">{lineupLabel}</span> : null}
+                {started ? null : (
+                  <span className="delta">
+                    {availableCount}/{active.length} van
+                  </span>
+                )}
               </div>
             )}
 
@@ -568,7 +599,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
             {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
                 el recuento (TimePollPanel). */}
-            {!started && m.status === "upcoming" && (
+            {!started && m.status === "upcoming" && m.isHome && (
               <TimePollPanel variant="home" matchdayId={m.id} canManage={isCaptain} />
             )}
 
@@ -828,6 +859,24 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
             </>
           )}
         </div>
+
+        {following && (
+          <div className="bcard col-12">
+            <div className="bcard-head">
+              <span className="tile-round tile-round-accent">
+                <IconCalendar size={17} />
+              </span>
+              <span className="bcard-title">Próxima jornada</span>
+              <span className="delta">J{String(following.round).padStart(2, "0")}</span>
+            </div>
+            <Link href={`/jornada/${following.id}`} style={{ display: "block", marginTop: 6, color: "inherit", textDecoration: "none" }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>vs {following.opponent}</div>
+              <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-muted)" }}>
+                {[formatDate(following.date), formatTime(following.time), following.location].filter(Boolean).join(" · ")}
+              </div>
+            </Link>
+          </div>
+        )}
 
         {/* ══ Convocatoria (capitán) ═══════════════════════════════
             Como ConvocatoriaCard de la app: los cuatro estados, lo que

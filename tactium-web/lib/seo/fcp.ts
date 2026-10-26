@@ -164,12 +164,21 @@ export function groupMetadata(idGrupo: string, data: FcpGroupBundle | null): Met
   const parts: string[] = [];
   if (rows.length > 0) {
     const { actual, total } = groupProgress(data?.matches ?? []);
-    parts.push(
-      `Clasificación y resultados de ${nombre} (${FCP_LEAGUE_NAME}${temporada ? ` ${temporada}` : ""}): ${rows.length} equipos${total > 0 ? `, jornada ${actual} de ${total}` : ""}.`
-    );
-    const top = rows.slice(0, 3).map((r) => r.equipo).join(", ");
-    parts.push(`Encabezan ${top}.`);
-    parts.push("Calendario, actas y plantillas de cada equipo.");
+    if (actual === 0) {
+      // Antes de la primera jornada la clasificación va a cero y en orden alfabético: no hay
+      // «encabezan» ni «jornada 0». Lo que sí hay es el calendario y las plantillas.
+      parts.push(
+        `Calendario y cruces de ${nombre} (${FCP_LEAGUE_NAME}${temporada ? ` ${temporada}` : ""}): ${rows.length} equipos${total > 0 ? `, ${total} jornadas` : ""}.`
+      );
+      parts.push("Rivales, plantillas y puntos de cada equipo.");
+    } else {
+      parts.push(
+        `Clasificación y resultados de ${nombre} (${FCP_LEAGUE_NAME}${temporada ? ` ${temporada}` : ""}): ${rows.length} equipos${total > 0 ? `, jornada ${actual} de ${total}` : ""}.`
+      );
+      const top = rows.slice(0, 3).map((r) => r.equipo).join(", ");
+      parts.push(`Encabezan ${top}.`);
+      parts.push("Calendario, actas y plantillas de cada equipo.");
+    }
   } else {
     parts.push(
       `Clasificación, calendario y resultados de ${nombre} de la ${FCP_LEAGUE_NAME}, actualizados cada jornada.`

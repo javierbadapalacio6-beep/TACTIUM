@@ -1,3 +1,5 @@
+import { TutorialSheet, useTutorial } from '@components/ui/TutorialSheet';
+import { CoachTour, useCoach } from '@components/ui/CoachTour';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Animated, {
   useAnimatedStyle,
@@ -160,11 +162,15 @@ export const SeasonDetailScreen = ({
   const [editing, setEditing] = useState<MatchdaysApi.Matchday | null>(null);
   const [closingSeason, setClosingSeason] = useState(false);
 
-  // Reverse trial: crear jornada / escanear son acciones premium. El gate
+  // Reverse trial: escanear el calendario es premium (como importarlo de la
+  // Federación). Añadir o editar una jornada a mano es gratis. El gate
   // comprueba la sub EN EL MOMENTO de la acción → bloquea tanto al usuario
   // nuevo como al que canceló/caducó teniendo ya la temporada creada.
   const gate = usePremiumGate();
-  const openAddMatchday = gate(() => setAdding(true), 'matchday_create');
+  // Primera vez: un mini tutorial y, al cerrarlo, se abre «Nueva jornada».
+  const addTut = useTutorial('create-matchday');
+  const seasonCoach = useCoach('season-import', undefined, isCaptain && season?.active === true, 1500);
+  const openAddMatchday = () => addTut.show(() => setAdding(true));
   const openScan = gate(() => setScanning(true), 'calendar_scan');
 
   // autoOpen desde atajo/botón ＋: abre el escáner o «nueva jornada» PASANDO
@@ -203,6 +209,7 @@ export const SeasonDetailScreen = ({
           match_date: m.match_date,
           match_time: m.match_time,
           is_home: m.is_home,
+          fcp_date_range: m.match_date ? null : m.date_range ?? null,
         });
       }
       // Reordenar por fecha (como el alta manual). En ligas FCP NO: el número
@@ -463,7 +470,7 @@ export const SeasonDetailScreen = ({
   );
 
   const editHandler = (m: MatchdaysApi.Matchday) =>
-    canEditSeason ? gate(() => setEditing(m), 'matchday_edit') : undefined;
+    canEditSeason ? () => setEditing(m) : undefined;
 
   // Pestañas: Jornadas primero (lo que más se consulta); Clasificación y
   // Cuadro solo en ligas de la Federación.
@@ -663,6 +670,21 @@ export const SeasonDetailScreen = ({
 
   return (
     <View style={styles.root}>
+      <CoachTour
+        coach={seasonCoach}
+        steps={[
+          {
+            target: 'add',
+            title: 'Meter las jornadas',
+            text: 'Toca ＋ para llenar la temporada. Lo más rápido es volcarla de golpe:',
+            chips: [
+              'Escanear el calendario: haz foto al PDF de la Federación y TACTIUM lo lee y crea todas las jornadas',
+              'Nueva jornada: una a una, con rival, casa o fuera, fecha y hora',
+              ...(isFcp ? ['Traer las actas: alineaciones y resultados de lo ya jugado'] : []),
+            ],
+          },
+        ]}
+      />
       {/* ── Nav bar ── */}
       <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
         <Pressable
@@ -678,6 +700,8 @@ export const SeasonDetailScreen = ({
         {canEditSeason ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable
+              ref={seasonCoach.ref('add')}
+              collapsable={false}
               onPress={() => setAddMenu(true)}
               hitSlop={8}
               accessibilityRole="button"
@@ -843,6 +867,7 @@ export const SeasonDetailScreen = ({
       </BottomSheet>
 
       {/* ── Sheets ── */}
+      <TutorialSheet id="create-matchday" visible={addTut.visible} onClose={addTut.close} />
       <AddMatchdaySheet
         open={adding}
         onClose={() => setAdding(false)}
@@ -1051,7 +1076,7 @@ const MatchdayRow: React.FC<{
             ) : (
               <IconPlane size={12} color={c.textFaint} />
             )}
-            <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+            <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={2}>
               {[
                 m.is_home ? 'Casa' : 'Fuera',
                 fmtDay(m.match_date, isNext),

@@ -10,7 +10,6 @@ import { FederacionScreen } from '@features/seasons/screens/FederacionScreen';
 import { FcpGroupScreen } from '@features/seasons/screens/FcpGroupScreen';
 import { FcpTeamScreen } from '@features/seasons/screens/FcpTeamScreen';
 import { FcpPlayerScreen } from '@features/seasons/screens/FcpPlayerScreen';
-import { useAuthStore } from '@store/authStore';
 
 import type { AuthStackParamList, CompetirStackScreenProps } from './types';
 
@@ -41,7 +40,6 @@ const PublicFcpPlayer = (props: object) => (
 );
 
 export const AuthStack = () => {
-  const hasSeenWelcome = useAuthStore((s) => s.hasSeenWelcome);
   const c = useColors();
   const screenOptions = useMemo(
     () => ({
@@ -53,9 +51,11 @@ export const AuthStack = () => {
   );
   return (
     <Stack.Navigator
-      // Tras el carrusel de bienvenida se aterriza en la HOME PÚBLICA, no en
-      // el login: mirar no debería costar una cuenta.
-      initialRouteName={hasSeenWelcome ? 'PublicHome' : 'Welcome'}
+      // SIEMPRE se abre en la HOME PÚBLICA (torneos y federación), también la
+      // primera vez: mirar no debería costar una cuenta ni un paso más. La
+      // bienvenida con Apple/Google/email es la segunda pantalla, a la que se
+      // llega desde «Iniciar sesión» o «Crear cuenta».
+      initialRouteName="PublicHome"
       screenOptions={screenOptions}
     >
       <Stack.Screen name="Welcome" component={WelcomeScreen} />

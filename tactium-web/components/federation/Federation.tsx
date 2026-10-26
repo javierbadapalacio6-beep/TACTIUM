@@ -30,6 +30,8 @@ import {
   fetchFcpRanking,
   fetchFcpStandings,
   fetchFcpTeamProfile,
+  fetchFcpTeamSeasons,
+  type FcpTeamSeason,
   fetchTeamFcpId,
   fetchFcpTeamNameById,
   fcpSameTeam,
@@ -696,11 +698,11 @@ export function FederationExplore({
               Clasificaciones, jornadas y jugadores federados.
             </p>
           </div>
+          <span className="tw-fcp-hero-meta">
+            <IconCalendar size={14} />
+            {countLabel}
+          </span>
         </div>
-        <span className="tw-fcp-hero-meta">
-          <IconCalendar size={14} />
-          {countLabel}
-        </span>
       </header>
 
       {/* Primero lo tuyo (solo con sesión; sin ella la página queda igual). */}
@@ -841,7 +843,7 @@ export function FederationExplore({
                   ? { label: "Finalizada", tone: "mute" as const }
                   : estado === "en_curso"
                     ? {
-                        label: `Jornada ${meta!.jornadaActual} de ${meta!.jornadaTotal}`,
+                        label: `Jornada ${Math.max(1, meta!.jornadaActual)} de ${meta!.jornadaTotal}`,
                         tone: "accent" as const,
                       }
                     : selectedLeague?.upcoming
@@ -1371,7 +1373,7 @@ export function FcpGroupView({
   const groupMeta = [
     header.data?.temporada ?? null,
     rows.length > 0 ? `${rows.length} equipos` : null,
-    jornadaTotal > 0 ? `Jornada ${jornadaActual} de ${jornadaTotal}` : null,
+    jornadaTotal > 0 ? `Jornada ${Math.max(1, jornadaActual)} de ${jornadaTotal}` : null,
   ].filter(Boolean);
 
   return (
@@ -1455,7 +1457,14 @@ export function FcpGroupView({
                 />
               </Card>
             ) : (
+              <>
+              {rows[0]?.provisional ? (
+                <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--text-muted)" }}>
+                  Clasificación provisional: calculada con los resultados y las actas. La de la Federación la sustituirá en cuanto la actualice.
+                </p>
+              ) : null}
               <FcpStandingsTable slug={slug} rows={rows} zones={zones} myFcpId={myFcpId} />
+              </>
             )}
             {zones && rows.length > 0 && <ZoneLegend zones={zones} />}
           </section>
@@ -1474,6 +1483,8 @@ export function FcpGroupView({
           </section>
         </div>
       )}
+
+
     </div>
   );
 }
@@ -1494,10 +1505,101 @@ export function FcpStandingsTable({
   myFcpId: number | null;
 }) {
   const pane = useFcpPane();
+  const [vista, setVista] = useState<"resumen" | "completa">("resumen");
   const isMine = (idEquipo: number) => myFcpId != null && Number(idEquipo) === myFcpId;
   const zoneOf = (pos: number): FcpZone | null =>
     zones?.find((zn) => pos >= zn.from && pos <= zn.to) ?? null;
+  const sg = (n: number) => (n > 0 ? `+${n}` : String(n));
+  const toggle = (
+    <div role="tablist" aria-label="Vista de la clasificación" style={{ display: "flex", gap: 6, margin: "0 0 10px" }}>
+      {([["resumen", "Resumen"], ["completa", "Completa"]] as const).map(([k, label]) => (
+        <button
+          key={k}
+          type="button"
+          role="tab"
+          aria-selected={vista === k}
+          onClick={() => setVista(k)}
+          className={vista === k ? "tw-chip tw-chip-on" : "tw-chip"}
+          style={{ cursor: "pointer", padding: "6px 12px", borderRadius: 999, border: "1px solid var(--line-strong)", background: vista === k ? "var(--accent-10)" : "transparent", color: vista === k ? "var(--accent)" : "var(--text-muted)", fontWeight: 700, fontSize: 13 }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  if (vista === "completa") {
+    const heads = ["ENF", "PTS", "PJ", "PG", "SF", "SC", "AVG S", "JF", "JC", "AVG J"];
+    return (
+      <>
+        {toggle}
+        <Card flush>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+              <thead>
+                <tr style={{ color: "var(--text-muted)", textAlign: "center" }}>
+                  <th style={{ ...stickyTh, textAlign: "left", minWidth: 190 }}>Pos · Equipo</th>
+                  {heads.map((h) => (
+                    <th key={h} style={{ padding: "10px 10px", fontSize: 11.5, letterSpacing: 0.4, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((t) => {
+                  const f = t.full ?? { pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 };
+                  const mine = isMine(t.idEquipo);
+                  const zone = zoneOf(t.posicion);
+                  const cells = [t.enf, t.puntos, f.pj, f.pg, f.sf, f.sc, sg(f.sf - f.sc), f.jf, f.jc, sg(f.jf - f.jc)];
+                  return (
+                    <tr key={t.idEquipo} style={{ background: mine ? "var(--accent-10)" : undefined, borderTop: "1px solid var(--line)" }}>
+                      <td style={{ ...stickyTd, boxShadow: zone ? `inset 3px 0 0 ${zone.color}` : undefined }}>
+                        <Link href={`/federacion/${slug}/equipo/${t.idEquipo}`} onClick={pane("equipo", t.idEquipo)} style={{ color: "inherit", display: "flex", gap: 10, alignItems: "baseline" }}>
+                          <span className="mono" style={{ color: "var(--text-muted)", width: 18 }}>{t.posicion}</span>
+                          <span style={{ fontWeight: 700, color: mine ? "var(--accent)" : undefined }}>{t.equipo}</span>
+                        </Link>
+                      </td>
+                      {cells.map((v, i) => (
+                        <td key={i} className="mono" style={{ textAlign: "center", padding: "10px 10px", fontWeight: i === 1 ? 700 : 500, color: i === 1 ? "var(--accent)" : "var(--text-muted)" }}>{v}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        {(() => {
+          const played = rows.filter((t) => (t.full?.pj ?? 0) > 0);
+          if (played.length === 0) return null;
+          const best = (score: (t: FcpStanding) => number) => played.reduce((a, b) => (score(b) > score(a) ? b : a));
+          const f = (t: FcpStanding) => t.full!;
+          const at = best((t) => f(t).jf / f(t).pj);
+          const de = best((t) => -f(t).jc / f(t).pj);
+          const ef = best((t) => f(t).pg / f(t).pj);
+          const av = best((t) => f(t).jf - f(t).jc);
+          const items = [
+            ["Mejor ataque", at.equipo, `${(f(at).jf / f(at).pj).toFixed(1)} juegos/partido`],
+            ["Mejor defensa", de.equipo, `${(f(de).jc / f(de).pj).toFixed(1)} juegos en contra/partido`],
+            ["Más efectivo", ef.equipo, `${Math.round((f(ef).pg / f(ef).pj) * 100)}% de partidos ganados`],
+            ["Mayor average de juegos", av.equipo, sg(f(av).jf - f(av).jc)],
+          ];
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 12 }}>
+              {items.map(([l, team, v]) => (
+                <Card key={l}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: "var(--text-muted)" }}>{l.toUpperCase()}</div>
+                  <div style={{ fontWeight: 700, marginTop: 4 }}>{team}</div>
+                  <div style={{ color: "var(--accent)", fontWeight: 600, fontSize: 13 }}>{v}</div>
+                </Card>
+              ))}
+            </div>
+          );
+        })()}
+      </>
+    );
+  }
   return (
+    <>
+    {toggle}
               <Card flush>
             <div className="tw-roster-scroll">
               <div className="tw-fcp-head tw-fcp-stand">
@@ -1510,7 +1612,8 @@ export function FcpStandingsTable({
                 )}
               </div>
               {rows.map((t, i) => {
-                const dif = t.setsFavor - t.setsContra;
+                const fl = t.full ?? { pj: t.pj, pg: t.pg, sf: t.setsFavor, sc: t.setsContra, jf: 0, jc: 0 };
+                const dif = fl.sf - fl.sc;
                 const mine = isMine(t.idEquipo);
                 const zone = zoneOf(t.posicion);
                 // Línea discontinua donde cambia de zona.
@@ -1548,21 +1651,21 @@ export function FcpStandingsTable({
                         ) : null}
                       </span>
                       <span className="tw-st-sub">
-                        PJ <span className="mono">{t.pj}</span> · PG{" "}
-                        <span className="mono">{t.pg}</span> · Dif{" "}
+                        PJ <span className="mono">{fl.pj}</span> · PG{" "}
+                        <span className="mono">{fl.pg}</span> · Dif{" "}
                         <span className="mono">{dif >= 0 ? `+${dif}` : dif}</span> · Sets{" "}
                         <span className="mono">
-                          {t.setsFavor}-{t.setsContra}
+                          {fl.sf}-{fl.sc}
                         </span>
                       </span>
                     </span>
-                    <span className="mono tw-st-x">{t.pj}</span>
-                    <span className="mono tw-st-x">{t.pg}</span>
+                    <span className="mono tw-st-x">{fl.pj}</span>
+                    <span className="mono tw-st-x">{fl.pg}</span>
                     <span className="mono tw-st-x" style={{ color: "var(--text-muted)" }}>
                       {dif >= 0 ? `+${dif}` : dif}
                     </span>
-                    <span className="mono tw-st-x">{t.setsFavor}</span>
-                    <span className="mono tw-st-x">{t.setsContra}</span>
+                    <span className="mono tw-st-x">{fl.sf}</span>
+                    <span className="mono tw-st-x">{fl.sc}</span>
                     <span className="mono" style={{ fontWeight: 700, color: "var(--accent)" }}>
                       {t.puntos}
                     </span>
@@ -1580,8 +1683,12 @@ export function FcpStandingsTable({
               })}
                 </div>
               </Card>
+    </>
   );
 }
+
+const stickyTh: React.CSSProperties = { position: "sticky", left: 0, background: "var(--surface)", padding: "10px 12px", fontSize: 11.5, letterSpacing: 0.4, zIndex: 1 };
+const stickyTd: React.CSSProperties = { position: "sticky", left: 0, background: "var(--surface)", padding: "10px 12px", zIndex: 1 };
 
 /* ── Zonas de la clasificación (normativa de la liga) ── */
 function ZoneSwatch({ color }: { color: string }) {
@@ -1643,7 +1750,7 @@ function ZoneLegend({ zones }: { zones: FcpZone[] }) {
 /* ── Jornadas del grupo: agrupadas por jornada, con parciales inline ── */
 function splitScore(resultado: string | null): [string, string] | null {
   if (!resultado) return null;
-  const m = resultado.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/);
+  const m = resultado.match(/^\s*(\d+)\s*[/-]\s*(\d+)\s*$/);
   return m ? [m[1], m[2]] : null;
 }
 
@@ -1814,6 +1921,21 @@ function FcpGroupSchedule({
                           </span>
                         </div>
                       ))}
+                      {p.fecha || p.hora || p.tandas || p.sede ? (
+                        <div
+                          className="truncate"
+                          style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}
+                        >
+                          {[
+                            fmtFcpDate(p.fecha),
+                            p.hora ? p.hora.slice(0, 5) : null,
+                            p.tandas ? `Tandas ${p.tandas}` : null,
+                            p.sede,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ display: "grid", gap: 6, textAlign: "center" }}>
                       <span
@@ -2461,15 +2583,42 @@ export function FcpTeamView({
   const [sort, setSort] = useState<"puntos" | "nombre">("puntos");
   // Resumen · Partidos · Plantilla (como la ficha de equipo de la app).
   const [teamTab, setTeamTab] = useState<"resumen" | "partidos" | "plantilla">("resumen");
+  // Temporadas del equipo (su id federado cambia cada año). En el explorador (embedded), donde se
+  // abre un equipo seguido con el id de cuando se siguió, se ve la MÁS NUEVA por defecto; en la
+  // página de un id concreto (SEO) se queda en ese id y las demás temporadas van en el selector.
+  const [seasons, setSeasons] = useState<FcpTeamSeason[]>([]);
+  const [activeId, setActiveId] = useState<number>(idEquipo);
+  useEffect(() => {
+    setActiveId(idEquipo);
+    setSeasons([]);
+    if (!Number.isFinite(idEquipo)) return;
+    let alive = true;
+    fetchFcpTeamSeasons(idEquipo)
+      .then((s) => {
+        if (!alive) return;
+        setSeasons(s);
+        if (embedded && s.length) setActiveId(s[0].idEquipo);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [idEquipo, embedded]);
   const { data, loading, error } = useAsync(
-    () => fetchFcpTeamProfile(idEquipo),
-    [idEquipo, user?.id],
-    Number.isFinite(idEquipo),
+    () => fetchFcpTeamProfile(activeId),
+    [activeId, user?.id],
+    Number.isFinite(activeId),
     initial
   );
   // Próximo y últimos: las jornadas del grupo filtradas por este equipo.
   const groupMatches = useAsync(
     () => fetchFcpMatches(data!.idGrupo!),
+    [data?.idGrupo],
+    !!data?.idGrupo && !data?.preseason
+  );
+  // Clasificación OFICIAL del grupo del equipo, sin salir de la ficha.
+  const groupTable = useAsync(
+    () => fetchFcpStandings(data!.idGrupo!),
     [data?.idGrupo],
     !!data?.idGrupo && !data?.preseason
   );
@@ -2569,6 +2718,17 @@ export function FcpTeamView({
           ) : undefined
         }
       />
+
+      {seasons.length > 1 ? (
+        <div className="tw-toolbar">
+          <Segmented
+            label="Temporada del equipo"
+            value={String(activeId)}
+            onChange={(v) => setActiveId(Number(v))}
+            options={seasons.slice(0, 3).map((s) => ({ value: String(s.idEquipo), label: s.temporada }))}
+          />
+        </div>
+      ) : null}
 
       {/* Temporada en inscripción: sin sorteo no hay clasificación ni
           partidos. Pintar la fila de cifras a cero sería mentir —parecería un
@@ -2675,6 +2835,29 @@ export function FcpTeamView({
             <FormPips form={data.form} box={18} />
           </div>
         </Card>
+      ) : null}
+
+      {groupTable.data && groupTable.data.length > 0 ? (
+        <div style={{ marginBottom: 16 }}>
+          <SectionHead title="Clasificación" style={{ margin: "0 0 10px" }} />
+          <FcpStandingsTable
+            slug={slug}
+            rows={groupTable.data}
+            zones={null}
+            myFcpId={data.idEquipo}
+          />
+          {data.idGrupo ? (
+            <p style={{ margin: "10px 0 0", fontSize: 13 }}>
+              <Link
+                href={`/federacion/${slug}/grupo/${encodeURIComponent(data.idGrupo)}`}
+                onClick={pane("grupo", data.idGrupo)}
+                style={{ color: "var(--accent)", fontWeight: 700 }}
+              >
+                Ver el grupo entero ›
+              </Link>
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {nextTM ? (

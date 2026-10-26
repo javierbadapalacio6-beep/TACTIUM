@@ -3,8 +3,9 @@ import { View, Text, Pressable, TextInput } from 'react-native';
 
 import type { Palette } from '@core/theme';
 import { resolveFcpPlayer, type FcpPlayerMatch } from '@core/services/fcpSearch';
+import { checkNotFederated } from '@core/services/tournaments';
 import type { SignupStyles } from './signupStyles';
-import type { PlayerDraft, PlayerErrors } from './playerDraft';
+import { isFullName, type PlayerDraft, type PlayerErrors } from './playerDraft';
 
 // Busca al jugador en la Federación al escribir su nombre (con pausa de 350 ms
 // y descartando respuestas viejas).
@@ -123,6 +124,53 @@ export const PlayerBlock: React.FC<{
 
   const candidates = matches.filter((m) => !draft.fcpDismissed.includes(m.idJugador));
   const showChooser = !draft.noFed && !draft.fcp && matches.length > 1 && candidates.length > 0;
+
+  // «No juega federado» con comprobación: si el nombre figura en la Federación no se deja marcar (y si ya estaba
+  // marcado y se cambia el nombre por el de un federado, se desmarca). El servidor lo vuelve a comprobar.
+  const [fedWarn, setFedWarn] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const federatedMsg = (fcpName: string | null, name: string) =>
+    `${fcpName ?? name} figura como federado en la Federación Cántabra: no se puede marcar como no federado. Elige su ficha y usamos sus puntos y su nivel.`;
+  const tryNotFed = async () => {
+    const q = draft.name.trim();
+    if (!isFullName(q)) {
+      setFedWarn('Escribe primero su nombre y apellidos: lo comprobamos con la Federación.');
+      return;
+    }
+    setChecking(true);
+    setFedWarn(null);
+    try {
+      const r = await checkNotFederated([q]);
+      if (r[0]?.federated) {
+        setFedWarn(federatedMsg(r[0].fcp_name, q));
+        return;
+      }
+      onChange({ noFed: true });
+    } catch {
+      // Sin conexión: se deja seguir; el servidor lo comprueba al inscribir.
+      onChange({ noFed: true });
+    } finally {
+      setChecking(false);
+    }
+  };
+  useEffect(() => {
+    if (!draft.noFed) return;
+    const q = draft.name.trim();
+    if (!isFullName(q)) return;
+    const t = setTimeout(async () => {
+      try {
+        const r = await checkNotFederated([q]);
+        if (r[0]?.federated) {
+          onChangeRef.current({ noFed: false });
+          setFedWarn(federatedMsg(r[0].fcp_name, q));
+        }
+      } catch {
+        /* el servidor lo comprueba al inscribir */
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.name, draft.noFed]);
 
   const err = (k: keyof PlayerErrors) =>
     errors[k] ? <Text style={styles.fieldError}>{errors[k]}</Text> : null;
@@ -245,15 +293,16 @@ export const PlayerBlock: React.FC<{
               Nivel = tu categoría (2ª → 2, 4ª → 4). Cuenta la mejor entre liga y circuito.
             </Text>
           ) : null}
-          <Pressable
-            onPress={() => onChange({ noFed: true })}
-            hitSlop={6}
-            style={styles.linkRow}
-          >
+          <Pressable onPress={tryNotFed} disabled={checking} hitSlop={6} style={styles.linkRow}>
             <Text style={styles.linkText}>
-              {me ? 'No juego federado (cuenta 0 puntos)' : 'No juega federado (cuenta 0 puntos)'}
+              {checking
+                ? 'Comprobando con la Federación…'
+                : me
+                  ? 'No juego federado (cuenta 0 puntos)'
+                  : 'No juega federado (cuenta 0 puntos)'}
             </Text>
           </Pressable>
+          {fedWarn ? <Text style={styles.fieldError}>{fedWarn}</Text> : null}
         </>
       )}
 

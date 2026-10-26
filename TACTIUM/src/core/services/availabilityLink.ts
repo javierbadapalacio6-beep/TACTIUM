@@ -1,4 +1,5 @@
 import { supabase } from '@core/supabase/client';
+import { describeTandasShort } from '@core/utils/tandas';
 
 /**
  * Enlace público de disponibilidad (tactium.io/d/TOKEN): el capitán lo pega en
@@ -45,6 +46,11 @@ export function longDate(d: string | null | undefined): string | null {
   return `${DIAS[date.getDay()]} ${date.getDate()} de ${MESES[date.getMonth()]}`;
 }
 
+/** «23 - 25 Oct» (rango de la Federación) → «23-25 oct». */
+function rangoCorto(r: string | null | undefined): string {
+  return (r ?? '').trim().replace(/\s*-\s*/g, '-').replace(/[A-Za-zÁÉÍÓÚáéíóú]+/g, (w) => w.toLowerCase());
+}
+
 export function availabilityShareText(o: {
   opponent: string;
   jornada: number | null;
@@ -52,14 +58,31 @@ export function availabilityShareText(o: {
   time: string | null;
   isHome: boolean | null;
   token: string;
+  /** Fin de semana de la Federación («23 - 25 Oct») mientras no hay fecha exacta. */
+  range?: string | null;
+  /** Reparto de parejas por tandas («3-2») y género del equipo, para pintar «Tandas: …». */
+  tandas?: string | null;
+  gender?: string | null;
+  /** Sede del partido: en los de fuera sale junto a «Fuera». */
+  location?: string | null;
 }): string {
   const fecha = longDate(o.date);
   const hora = o.time ? o.time.slice(0, 5) : null;
+  const tandas = o.tandas ? describeTandasShort(o.tandas, o.gender, hora) : '';
   const lines: (string | null)[] = [
     `🎾 ¿Puedes jugar${o.jornada != null ? ` la jornada ${o.jornada}` : ' la próxima jornada'}?`,
     `🆚 ${o.opponent}`,
-    fecha ? `📅 ${fecha}${hora ? ` · ${hora}` : ''}` : null,
-    o.isHome == null ? null : o.isHome ? '🏠 En casa' : '🚗 Fuera',
+    fecha
+      ? `📅 ${fecha}${hora ? ` · ${hora}` : ''}`
+      : o.range
+        ? `📅 ${rangoCorto(o.range)} (día y hora por confirmar)`
+        : null,
+    o.isHome == null
+      ? null
+      : o.isHome
+        ? '🏠 En casa'
+        : `🚗 Fuera${o.location?.trim() ? ` · ${o.location.trim()}` : ''}`,
+    tandas ? `⏱ Tandas: ${tandas}` : null,
     '',
     'Dime si vas con un toque, sin app 👇',
     availabilityUrl(o.token),

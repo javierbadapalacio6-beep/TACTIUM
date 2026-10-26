@@ -28,6 +28,8 @@ export interface ShareCardInput {
   outcome: "win" | "lose" | "draw";
   /** «Jornada 7 · sábado 12 de octubre». */
   subtitle: string;
+  /** Segunda línea bajo el antetítulo (p. ej. «Tandas 3-2 · …»). Opcional. */
+  extra?: string | null;
   /** Nombre de la temporada (opcional, va arriba a la derecha). */
   season?: string | null;
   courts: ShareCourt[];
@@ -81,12 +83,17 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
-/** Recorta un texto con «…» hasta que quepa en `max` px. */
+/** Encoge la fuente actual hasta que el texto quepa en `max` px (nunca lo corta con «…»). */
 function fit(ctx: CanvasRenderingContext2D, text: string, max: number): string {
-  if (ctx.measureText(text).width <= max) return text;
-  let t = text;
-  while (t.length > 1 && ctx.measureText(t + "…").width > max) t = t.slice(0, -1);
-  return t.trimEnd() + "…";
+  const m = /(d+(?:.d+)?)px/.exec(ctx.font);
+  if (!m) return text;
+  const base = Number(m[1]);
+  let size = base;
+  while (size > base * 0.45 && ctx.measureText(text).width > max) {
+    size -= 1;
+    ctx.font = ctx.font.replace(/d+(?:.d+)?px/, `${size}px`);
+  }
+  return text;
 }
 
 function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
@@ -256,7 +263,14 @@ function paint(
   ctx.textAlign = "left";
   ctx.font = `500 30px ${f.sans}`;
   ctx.fillStyle = "rgba(255,255,255,0.78)";
-  ctx.fillText(fit(ctx, input.subtitle, W - PAD * 2), PAD, y + 20);
+  if (input.extra) {
+    ctx.fillText(fit(ctx, input.subtitle, W - PAD * 2), PAD, y - 20);
+    ctx.font = `500 26px ${f.sans}`;
+    ctx.fillStyle = "rgba(255,255,255,0.62)";
+    ctx.fillText(fit(ctx, input.extra, W - PAD * 2), PAD, y + 20);
+  } else {
+    ctx.fillText(fit(ctx, input.subtitle, W - PAD * 2), PAD, y + 20);
+  }
 }
 
 function toBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {

@@ -42,6 +42,10 @@ const MOTIVOS: Record<string, { title: string; sub: string }> = {
     title: "Escanear el calendario es Pro",
     sub: "Una foto y tienes toda la temporada en la agenda",
   },
+  calendar_import: {
+    title: "Traer el calendario de la Federación es Pro",
+    sub: "Todas las jornadas de tu grupo, sin teclear ninguna",
+  },
   availability_remind: {
     title: "Recordar a los pendientes es Pro",
     sub: "Un toque y les llega el aviso, sin perseguir a nadie",

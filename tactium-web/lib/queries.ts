@@ -5,6 +5,7 @@ import { guardedWrite, type WriteResult } from "./writes";
 import type { Position } from "./team-data";
 import { FCP_FEDERATION_CODE } from "./federations";
 import { fetchClubInscripciones, fetchInscripcionGrupo } from "./club-ops";
+import { isoDaysBetween, windowsSpan, type PlayWindows } from "./tournament-windows";
 import type { FcpSeasonEstado } from "./fcp-season-diff";
 import {
   fcpDisplayName,
@@ -659,6 +660,8 @@ export interface DbMatchday {
   /** Parejas por turno horario, «N-N-N» (p. ej. «1-2»). null si la liga no
    *  usa tandas. Opcional para no obligar a quien construye jornadas a mano. */
   tandas?: string | null;
+  /** Fin de semana que da la Federación («23 - 25 Oct») mientras el club no fija día y hora. */
+  dateRange?: string | null;
 }
 
 function mapMatchday(m: Record<string, unknown>): DbMatchday {
@@ -677,11 +680,12 @@ function mapMatchday(m: Record<string, unknown>): DbMatchday {
     scoreAgainst: (m.score_against as number) ?? null,
     photoUrl: (m.photo_url as string) ?? null,
     tandas: (m.tandas as string) ?? null,
+    dateRange: (m.fcp_date_range as string) ?? null,
   };
 }
 
 const MATCHDAY_COLS =
-  "id, season_id, jornada_number, match_date, match_time, opponent, is_home, status, outcome, location, score_for, score_against, photo_url, tandas";
+  "id, season_id, jornada_number, match_date, match_time, opponent, is_home, status, outcome, location, score_for, score_against, photo_url, tandas, fcp_date_range";
 
 export async function fetchMatchdays(seasonId: string): Promise<DbMatchday[]> {
   const { data, error } = await supabaseBrowser()
@@ -715,6 +719,8 @@ export async function createMatchday(
     match_time?: string | null;
     is_home?: boolean;
     location?: string | null;
+    /** Fin de semana de la Federación («23 - 25 Oct») mientras no hay día exacto. */
+    fcp_date_range?: string | null;
   },
 ): Promise<void> {
   const { error } = await supabaseBrowser().from("matchdays").insert({
@@ -725,6 +731,7 @@ export async function createMatchday(
     match_time: input.match_time ?? null,
     is_home: input.is_home ?? true,
     location: input.location ?? null,
+    fcp_date_range: input.fcp_date_range ?? null,
   });
   if (error) throw error;
 }
@@ -1156,27 +1163,85 @@ export interface MatchdayBundle {
   lineup: DbLineupRow[];
   results: DbResultRow[];
   availability: Record<string, boolean>;
+  /** El capitán ya pulsó Publicar. Sin publicar, la alineación es un borrador que solo ve la capitanía/club. */
+  lineupPublished: boolean;
+}
+
+/**
+ * ¿Está publicada la alineación de la jornada? Best-effort: si la columna aún no existe (migración
+ * sin aplicar) o falla la lectura, se considera publicada para no esconder lo que ya se veía.
+ */
+export async function fetchLineupPublished(matchdayId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseBrowser()
+      .from("matchdays")
+      .select("lineup_published_at")
+      .eq("id", matchdayId)
+      .maybeSingle();
+    if (error || !data) return true;
+    return (data as { lineup_published_at: string | null }).lineup_published_at !== null;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * La alineación PUBLICADA: la copia que se congeló al pulsar Publicar (vista `published_lineup_pairs`). Es lo único
+ * que ve un jugador; lo que el capitán prueba en el editor no le llega hasta que publique otra vez.
+ * null = la copia no está disponible (migración sin aplicar): quien llama usa el camino antiguo.
+ */
+export async function fetchPublishedLineup(matchdayId: string): Promise<DbLineupRow[] | null> {
+  try {
+    const { data, error } = await supabaseBrowser()
+      .from("published_lineup_pairs")
+      .select("court_number, player_a_id, player_b_id")
+      .eq("matchday_id", matchdayId)
+      .order("court_number", { ascending: true });
+    if (error) return null;
+    return ((data ?? []) as { court_number: number; player_a_id: string | null; player_b_id: string | null }[]).map(
+      (l) => ({ court: l.court_number, playerA: l.player_a_id, playerB: l.player_b_id, variantId: null }),
+    ) as unknown as DbLineupRow[];
+  } catch {
+    return null;
+  }
+}
+
+/** Publica la alineación: congela las parejas (RPC `publish_lineup`) y marca la jornada. */
+export async function markLineupPublished(matchdayId: string): Promise<void> {
+  const rpc = await supabaseBrowser().rpc("publish_lineup", { p_matchday_id: matchdayId });
+  if (!rpc.error) return;
+  const { error } = await supabaseBrowser()
+    .from("matchdays")
+    .update({ lineup_published_at: new Date().toISOString() })
+    .eq("id", matchdayId);
+  if (error && !/lineup_published_at/.test(error.message)) throw new Error(error.message);
 }
 
 export async function fetchMatchdayBundle(
   matchdayId: string,
-  teamId: string
+  teamId: string,
+  /** Capitanía y club ven el borrador; el jugador solo la alineación publicada. */
+  canSeeDraft = true
 ): Promise<MatchdayBundle | null> {
   const matchday = await fetchMatchday(matchdayId);
   if (!matchday) return null;
 
-  const [players, variants, results, availability] = await Promise.all([
+  const [players, variants, results, availability, lineupPublished] = await Promise.all([
     fetchPlayers(teamId),
     fetchVariants(matchdayId),
     fetchResults(matchdayId),
     fetchAvailability(matchdayId),
+    fetchLineupPublished(matchdayId),
   ]);
 
   // La alineación se pide después: depende de cuál sea la variante activa.
   const active = variants.find((v) => v.isActive) ?? variants[0];
-  const lineup = await fetchLineup(matchdayId, active?.id);
+  const lineup = canSeeDraft
+    ? await fetchLineup(matchdayId, active?.id)
+    : ((await fetchPublishedLineup(matchdayId)) ??
+      (lineupPublished ? await fetchLineup(matchdayId, active?.id) : []));
 
-  return { matchday, players, variants, lineup, results, availability };
+  return { matchday, players, variants, lineup, results, availability, lineupPublished };
 }
 
 /* ── Club ──────────────────────────────────────────────────────── */
@@ -1421,14 +1486,17 @@ export async function setHomeMatchSlot(input: {
   matchDate: string | null;
   matchTime: string | null;
   location: string | null;
+  /** Tandas («3-2»): van con la hora, en la misma llamada, sea propio o invitado. */
+  tandas?: string | null;
 }): Promise<void> {
   const sb = supabaseBrowser();
   if (input.isGuest) {
-    const { error } = await sb.rpc("set_venue_matchday_slot", {
+    const { error } = await sb.rpc("set_venue_matchday_schedule", {
       p_matchday_id: input.matchdayId,
       p_match_date: input.matchDate,
       p_match_time: input.matchTime,
       p_location: input.location,
+      p_tandas: input.tandas ?? null,
     });
     if (error) throw error;
     return;
@@ -1440,6 +1508,7 @@ export async function setHomeMatchSlot(input: {
       ...(input.matchDate ? { match_date: input.matchDate } : {}),
       match_time: input.matchTime,
       location: input.location,
+      ...(input.tandas ? { tandas: input.tandas } : {}),
       home_unconfirmed: false,
     })
     .eq("id", input.matchdayId);
@@ -1546,6 +1615,14 @@ function notifHref(type: string, data: Record<string, unknown> | null): string |
       return jornada ? `/jornada/${jornada}` : null;
     case "time_poll_fixed":
       if (data?.for_club) return "/club/horarios";
+      return jornada ? `/jornada/${jornada}` : null;
+    // «Subido a la Federación» y recordatorios del lunes: a la jornada, o a Horarios si es el aviso del club.
+    case "fcp_upload_done":
+    case "fcp_upload_reminder":
+    case "lineup_upload_done":
+    case "lineup_upload_reminder":
+    case "away_schedule_published":
+      if (!jornada && g("clubId", "club_id")) return "/club/horarios";
       return jornada ? `/jornada/${jornada}` : null;
     case "kudos": {
       // data = {type, actor_id, target_kind: 'casual'|'league', target_id}
@@ -1846,7 +1923,7 @@ export async function fetchTournament(id: string) {
   const { data: direct } = await sb
     .from("tournaments")
     .select(
-      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, club_id, courts, start_time, end_time, slot_minutes, rest_minutes",
+      "id, name, format, status, starts_on, ends_on, location, signup_code, max_pairs, entry_fee, fee_currency, gender, genders, category, categories, match_format, phase_formats, billing_status, club_id, courts, start_time, end_time, play_windows, holidays, slot_minutes, rest_minutes",
     )
     .eq("id", id)
     .maybeSingle();
@@ -1860,6 +1937,9 @@ export async function fetchTournament(id: string) {
 export interface TournamentSignupWindow {
   start_time: string | null;
   end_time: string | null;
+  /** Franjas por tipo de día y festivos (null = torneo antiguo: vale start_time/end_time siempre). */
+  play_windows: PlayWindows | null;
+  holidays: string[];
   max_removable_hours: number | null;
   entry_fee: number | null;
   entry_fee_2: number | null;
@@ -1883,6 +1963,8 @@ export async function fetchTournamentSignupWindow(
   return {
     start_time: row.start_time ?? null,
     end_time: row.end_time ?? null,
+    play_windows: (row.play_windows as PlayWindows | null | undefined) ?? null,
+    holidays: row.holidays ?? [],
     max_removable_hours: row.max_removable_hours ?? null,
     entry_fee: row.entry_fee ?? null,
     entry_fee_2: row.entry_fee_2 ?? null,
@@ -1921,6 +2003,9 @@ export async function createTournament(input: {
   // inscripción). "HH:MM". Igual que en la app.
   startTime?: string | null;
   endTime?: string | null;
+  /** Franjas de juego por tipo de día y festivos marcados: mandan sobre startTime/endTime. */
+  playWindows?: PlayWindows | null;
+  holidays?: string[];
   maxRemovableHours?: number | null;
   /** Condiciones de participación que el inscrito tiene que aceptar. */
   terms?: string | null;
@@ -1954,8 +2039,16 @@ export async function createTournament(input: {
         : {}),
       ...(input.startsOn ? { starts_on: input.startsOn } : {}),
       ...(input.endsOn ? { ends_on: input.endsOn } : {}),
-      ...(input.startTime ? { start_time: input.startTime } : {}),
-      ...(input.endTime ? { end_time: input.endTime } : {}),
+      ...(input.playWindows
+        ? (() => {
+            const hol = (input.holidays ?? []).filter(Boolean);
+            const span = windowsSpan(input.playWindows, isoDaysBetween(input.startsOn, input.endsOn), hol);
+            return { play_windows: input.playWindows, holidays: hol, start_time: span.from, end_time: span.to };
+          })()
+        : {
+            ...(input.startTime ? { start_time: input.startTime } : {}),
+            ...(input.endTime ? { end_time: input.endTime } : {}),
+          }),
       ...(input.maxRemovableHours != null
         ? { max_removable_hours: input.maxRemovableHours }
         : {}),
@@ -2103,6 +2196,9 @@ export async function tournamentSignup(input: {
   availability?: string[];
   // Casilla de condiciones: el servidor la exige.
   termsAccepted: boolean;
+  // «No federado» declarado por jugador: el servidor lo comprueba con la Federación.
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }): Promise<string> {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup", {
     p_code: input.code.trim().toUpperCase(),
@@ -2118,9 +2214,21 @@ export async function tournamentSignup(input: {
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
     p_terms_accepted: input.termsAccepted,
+    p1_not_fed: input.p1NotFed ?? null,
+    p2_not_fed: input.p2NotFed ?? null,
   });
   if (error) throw error;
   return data as string;
+}
+
+/** ¿Figuran estos nombres en la Federación (plantillas de liga o rankings de liga y circuito)? Sirve para no dejar
+ *  marcar como «no federado» a quien sí lo es. Con menos de 2 palabras no se puede comprobar (federated=false). */
+export async function checkNotFederated(
+  names: string[],
+): Promise<{ name: string; federated: boolean; fcp_name: string | null }[]> {
+  const { data, error } = await supabaseBrowser().rpc("check_not_federated", { p_names: names });
+  if (error) throw error;
+  return (data ?? []) as { name: string; federated: boolean; fcp_name: string | null }[];
 }
 
 /** Inscripción "pagar EN EL CLUB": inscribe como pendiente de pago en el club
@@ -2139,6 +2247,8 @@ export async function tournamentSignupOffline(input: {
   availability?: string[];
   // Casilla de condiciones: el servidor la exige.
   termsAccepted: boolean;
+  p1NotFed?: boolean;
+  p2NotFed?: boolean;
 }): Promise<string> {
   const { data, error } = await supabaseBrowser().rpc("tournament_signup_offline", {
     p_code: input.code.trim().toUpperCase(),
@@ -2154,6 +2264,8 @@ export async function tournamentSignupOffline(input: {
     p_seed_points: input.seedPoints ?? null,
     p_league_sum: input.leagueSum ?? null,
     p_terms_accepted: input.termsAccepted,
+    p1_not_fed: input.p1NotFed ?? null,
+    p2_not_fed: input.p2NotFed ?? null,
   });
   if (error) throw error;
   return data as string;
@@ -2181,6 +2293,18 @@ export interface MyTournament {
  *  (SECURITY DEFINER, usa auth.uid()); requiere sesión. Espejo de la app. */
 export async function fetchMyTournaments(): Promise<MyTournament[]> {
   const { data, error } = await supabaseBrowser().rpc("my_tournaments", {});
+  if (error) throw error;
+  return ((data ?? []) as MyTournament[]).map((r) => ({
+    ...r,
+    players: Number(r.players ?? 0),
+    entry_fee: r.entry_fee == null ? null : Number(r.entry_fee),
+  }));
+}
+
+/** Torneos que organizo: los que creé yo o los de un club que gestiono. RPC `my_created_tournaments`
+ *  (mismas columnas que `my_tournaments`); requiere sesión. Espejo de la app. */
+export async function fetchMyCreatedTournaments(): Promise<MyTournament[]> {
+  const { data, error } = await supabaseBrowser().rpc("my_created_tournaments", {});
   if (error) throw error;
   return ((data ?? []) as MyTournament[]).map((r) => ({
     ...r,
@@ -3295,6 +3419,90 @@ export async function fetchFcpTeamProfile(
   idEquipo: number
 ): Promise<FcpTeamProfile | null> {
   return fetchFcpTeamProfileWith(supabaseBrowser(), idEquipo);
+}
+
+/** Una temporada del MISMO equipo (el id federado cambia cada año: se cruza por plantilla). */
+export interface FcpTeamSeason {
+  idEquipo: number;
+  idLiga: number;
+  /** Etiqueta corta: «2026/27». */
+  temporada: string;
+}
+
+/** «2026/2027» → «2026/27»; «2026» (la liga que acaba en 2026) → «2025/26». */
+function etiquetaTemporada(t: string | null, nombre: string | null): string {
+  const s = (t ?? "").trim();
+  let m = s.match(/^(\d{4})\s*[/-]\s*(\d{4})$/);
+  if (m) return `${m[1]}/${m[2].slice(2)}`;
+  m = s.match(/^(\d{4})$/);
+  if (m) return `${Number(m[1]) - 1}/${m[1].slice(2)}`;
+  return s || nombre || "—";
+}
+
+/**
+ * Las temporadas en las que juega este equipo, de la más nueva a la más vieja (espejo de la app).
+ * El id de equipo de la Federación cambia cada temporada, así que el mismo equipo se reconoce por
+ * su plantilla: en cada liga, el equipo que comparte al menos el 40 % de los jugadores (y 3).
+ * Sin otra temporada devuelve [] y la ficha se queda como estaba.
+ */
+export async function fetchFcpTeamSeasons(idEquipo: number): Promise<FcpTeamSeason[]> {
+  const sb = supabaseBrowser();
+  const { data: base } = await sb
+    .from("fcp_jugadores")
+    .select("nombre, id_liga")
+    .eq("id_equipo", idEquipo)
+    .limit(200);
+  const mine = (base ?? []) as { nombre: string | null; id_liga: number | null }[];
+  const names = [...new Set(mine.map((r) => r.nombre).filter((n): n is string => !!n))];
+  const ownLiga = mine[0]?.id_liga ?? null;
+  if (names.length < 4 || ownLiga == null) return [];
+
+  const { data: rows } = await sb
+    .from("fcp_jugadores")
+    .select("id_equipo, id_liga, nombre")
+    .in("nombre", names)
+    .limit(5000);
+  const overlap = new Map<string, { idEquipo: number; idLiga: number; n: number }>();
+  for (const r of (rows ?? []) as { id_equipo: number; id_liga: number; nombre: string }[]) {
+    const k = `${r.id_liga}:${r.id_equipo}`;
+    const cur = overlap.get(k) ?? { idEquipo: r.id_equipo, idLiga: r.id_liga, n: 0 };
+    cur.n += 1;
+    overlap.set(k, cur);
+  }
+  const min = Math.max(3, Math.ceil(names.length * 0.4));
+  const bestPorLiga = new Map<number, { idEquipo: number; idLiga: number; n: number }>();
+  for (const o of overlap.values()) {
+    if (o.idLiga === ownLiga) {
+      // En su propia liga manda el propio equipo.
+      if (o.idEquipo === idEquipo) bestPorLiga.set(o.idLiga, o);
+      continue;
+    }
+    if (o.n < min) continue;
+    const prev = bestPorLiga.get(o.idLiga);
+    if (!prev || o.n > prev.n) bestPorLiga.set(o.idLiga, o);
+  }
+  if (bestPorLiga.size < 2) return [];
+
+  const { data: ligas } = await sb
+    .from("fcp_ligas")
+    .select("id_liga, temporada, nombre")
+    .in("id_liga", [...bestPorLiga.keys()]);
+  const info = new Map(
+    ((ligas ?? []) as { id_liga: number; temporada: string | null; nombre: string | null }[]).map(
+      (l) => [l.id_liga, l]
+    )
+  );
+  return [...bestPorLiga.values()]
+    .filter((o) => !/escolar/i.test(info.get(o.idLiga)?.nombre ?? ""))
+    .sort((a, b) => b.idLiga - a.idLiga)
+    .map((o) => ({
+      idEquipo: o.idEquipo,
+      idLiga: o.idLiga,
+      temporada: etiquetaTemporada(
+        info.get(o.idLiga)?.temporada ?? null,
+        info.get(o.idLiga)?.nombre ?? null
+      ),
+    }));
 }
 
 /** Puesto del jugador dentro de su plantilla por puntos (Nº X en el equipo). */

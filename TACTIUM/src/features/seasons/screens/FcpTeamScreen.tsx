@@ -10,8 +10,18 @@ import { StatCell, FormChips, ListHeader, Segmented } from '../components/fcpUi'
 import { useFavoritesStore } from '@store/favoritesStore';
 import { useTeamStore } from '@store/teamStore';
 import { toggleFavorite } from '@core/services/favorites';
-import { fetchFcpTeamProfile, type FcpTeamProfile } from '@core/services/fcpProfiles';
-import { fetchGroupSchedule, type FcpBrowseMatch } from '@core/services/fcpBrowse';
+import {
+  fetchFcpTeamProfile,
+  fetchFcpTeamSeasons,
+  type FcpTeamProfile,
+  type FcpTeamSeason,
+} from '@core/services/fcpProfiles';
+import {
+  fetchGroupSchedule,
+  fetchGroupStandings,
+  type FcpBrowseMatch,
+  type FcpBrowseStanding,
+} from '@core/services/fcpBrowse';
 import { fetchFcpActa, normFcpName, type FcpActaPartido } from '@core/services/fcpSeason';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { groupZones, zoneIn, zoneColor } from '@core/data/fcpZones';
@@ -87,28 +97,61 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
     myTeam?.id,
     myTeam?.federation === FCP_FEDERATION_CODE,
   );
-  const isMine = mine.me?.id_equipo === idEquipo || mine.idEquipo === idEquipo;
+  // La temporada que se ve: por defecto la MÁS NUEVA del equipo. Un equipo seguido guarda el id de
+  // cuando se siguió (la temporada pasada) y abría esa ficha: grupo y datos del año anterior.
+  const [seasons, setSeasons] = useState<FcpTeamSeason[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const isMine =
+    mine.me?.id_equipo === idEquipo ||
+    mine.idEquipo === idEquipo ||
+    (activeId != null && (mine.me?.id_equipo === activeId || mine.idEquipo === activeId));
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FcpTeamProfile | null>(null);
   const [matches, setMatches] = useState<TeamMatch[]>([]);
+  // Clasificación OFICIAL del grupo del equipo (la de la Federación), para verla sin salir de la ficha.
+  const [standings, setStandings] = useState<FcpBrowseStanding[]>([]);
   const [sort, setSort] = useState<Sort>('puntos');
   const [tab, setTab] = useState<Tab>('resumen');
 
   useEffect(() => {
     let alive = true;
+    setActiveId(null);
     setLoading(true);
-    fetchFcpTeamProfile(idEquipo)
+    fetchFcpTeamSeasons(idEquipo)
+      .catch(() => [] as FcpTeamSeason[])
+      .then((s) => {
+        if (!alive) return;
+        setSeasons(s);
+        setActiveId(s.length ? s[0].idEquipo : idEquipo);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [idEquipo]);
+
+  useEffect(() => {
+    if (activeId == null) return;
+    let alive = true;
+    setLoading(true);
+    fetchFcpTeamProfile(activeId)
       .then(async (d) => {
         if (!alive) return;
         setData(d);
         // Próximo y últimos: las jornadas del grupo (las de FcpGroup),
         // filtradas por este equipo. Consulta de cliente, sin servidor nuevo.
         if (d?.idGrupo) {
-          const rows = await fetchGroupSchedule(d.idGrupo).catch(() => [] as FcpBrowseMatch[]);
-          if (alive) setMatches(toTeamMatches(rows, d.equipo));
+          const [rows, st] = await Promise.all([
+            fetchGroupSchedule(d.idGrupo).catch(() => [] as FcpBrowseMatch[]),
+            fetchGroupStandings(d.idGrupo).catch(() => null),
+          ]);
+          if (alive) {
+            setMatches(toTeamMatches(rows, d.equipo));
+            setStandings(st?.rows ?? []);
+          }
         } else if (alive) {
           setMatches([]);
+          setStandings([]);
         }
       })
       .catch(() => alive && setData(null))
@@ -116,7 +159,7 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
     return () => {
       alive = false;
     };
-  }, [idEquipo]);
+  }, [activeId]);
 
   const sd = data ? data.setsFavor - data.setsContra : 0;
 
@@ -194,6 +237,18 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
+          {/* Temporadas del equipo: la más nueva por defecto, las anteriores a un toque */}
+          {seasons.length > 1 && activeId != null ? (
+            <View style={{ marginBottom: 14 }}>
+              <Segmented<string>
+                size="sm"
+                items={seasons.slice(0, 3).map((s): [string, string] => [String(s.idEquipo), s.temporada])}
+                value={String(activeId)}
+                onChange={(v) => setActiveId(Number(v))}
+              />
+            </View>
+          ) : null}
+
           {/* Hero */}
           <View style={styles.hero}>
             <View style={styles.heroTile}>
@@ -202,7 +257,7 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
             <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
               <Text style={styles.heroName} numberOfLines={2}>{data.equipo || name || 'Equipo'}</Text>
               {data.grupo ? (
-                <Text style={styles.heroMeta} numberOfLines={1}>
+                <Text style={styles.heroMeta} numberOfLines={2}>
                   {(preseason ? data.grupo : shortGroupName(data.grupo) ?? data.grupo).toUpperCase()}
                 </Text>
               ) : null}
@@ -321,8 +376,51 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
                     ))}
                   </View>
 
+                  {standings.length > 0 && data.idGrupo ? (
+                    <View style={{ marginTop: 22 }}>
+                      <ListHeader
+                        title="CLASIFICACIÓN"
+                        action="VER GRUPO ›"
+                        onAction={() =>
+                          navigation.navigate('FcpGroup', { idGrupo: data.idGrupo!, nombre: data.grupo ?? undefined })
+                        }
+                      />
+                      <View style={styles.miniHead}>
+                        <Text style={[styles.miniTh, { width: 22 }]}>#</Text>
+                        <Text style={[styles.miniTh, { flex: 1 }]}>EQUIPO</Text>
+                        <Text style={[styles.miniTh, { width: 34, textAlign: 'center' }]}>ENF</Text>
+                        <Text style={[styles.miniTh, { width: 34, textAlign: 'right' }]}>PTS</Text>
+                      </View>
+                      <View style={{ gap: 4 }}>
+                        {standings.map((t) => {
+                          const me = t.idEquipo === data.idEquipo || t.equipo === data.equipo;
+                          return (
+                            <Pressable
+                              key={`${t.idEquipo}-${t.equipo}`}
+                              disabled={me || t.idEquipo == null}
+                              onPress={() =>
+                                t.idEquipo != null &&
+                                navigation.push('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
+                              }
+                              style={({ pressed }) => [
+                                styles.miniRow,
+                                me && { borderColor: c.accent, backgroundColor: c.accent10 },
+                                pressed && { opacity: 0.85 },
+                              ]}
+                            >
+                              <Text style={[styles.miniPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
+                              <Text style={[styles.miniTeam, { flex: 1 }, me && { color: c.accent }]}>{t.equipo}</Text>
+                              <Text style={[styles.miniNum, { width: 34, textAlign: 'center' }]}>{t.stats.enf}</Text>
+                              <Text style={[styles.miniPts, { width: 34, textAlign: 'right' }]}>{t.puntos ?? 0}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
+
                   {next ? (
-                    <View style={styles.nextCard}>
+                    <View style={[styles.nextCard, { marginTop: 22 }]}>
                       <Text style={styles.cardEyebrow}>PRÓXIMO</Text>
                       <View style={styles.nextRow}>
                         <View style={styles.jBadge}>
@@ -331,10 +429,10 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
                           </Text>
                         </View>
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.nextRival} numberOfLines={1}>
+                          <Text style={styles.nextRival} numberOfLines={2}>
                             vs {next.rival}
                           </Text>
-                          <Text style={styles.nextMeta} numberOfLines={1}>
+                          <Text style={styles.nextMeta} numberOfLines={2}>
                             {[fmtDay(next.fecha), next.hora?.slice(0, 5), next.home ? 'En casa' : 'Fuera']
                               .filter(Boolean)
                               .join(' · ')}
@@ -419,7 +517,7 @@ const ResultRow: React.FC<{ styles: S; c: Palette; m: TeamMatch; onPress: () => 
     <Pressable onPress={onPress} style={({ pressed }) => [styles.resultRow, pressed && { opacity: 0.85 }]}>
       <Text style={styles.resultJ}>J{String(m.jornada ?? 0).padStart(2, '0')}</Text>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.resultRival} numberOfLines={1}>
+        <Text style={styles.resultRival} numberOfLines={2}>
           {m.rival}
         </Text>
         <Text style={styles.resultMeta}>{m.home ? 'Casa' : 'Fuera'}</Text>
@@ -466,7 +564,7 @@ const MatchActa: React.FC<{ styles: S; c: Palette; m: TeamMatch; initiallyOpen?:
           <Text style={styles.actaHeadEyebrow} numberOfLines={1}>
             {`JORNADA ${m.jornada ?? '—'}${m.fecha ? ` · ${fmtDay(m.fecha, false).toUpperCase()}` : ''}`}
           </Text>
-          <Text style={styles.actaHeadRival} numberOfLines={1}>
+          <Text style={styles.actaHeadRival} numberOfLines={2}>
             {m.home ? 'vs' : 'en'} {m.rival}
           </Text>
         </View>
@@ -558,8 +656,8 @@ const PlayerRow: React.FC<{
       <Text style={styles.avatarText}>{initials(p.name)}</Text>
     </View>
     <View style={{ flex: 1, minWidth: 0 }}>
-      <Text style={styles.playerName} numberOfLines={1}>{p.name}</Text>
-      {p.categoria ? <Text style={styles.playerMeta} numberOfLines={1}>{p.categoria.toUpperCase()}</Text> : null}
+      <Text style={styles.playerName} numberOfLines={2}>{p.name}</Text>
+      {p.categoria ? <Text style={styles.playerMeta} numberOfLines={2}>{p.categoria.toUpperCase()}</Text> : null}
     </View>
     <View style={{ alignItems: 'flex-end', gap: 2 }}>
       <Text style={styles.playerPts}>{fmtN(p.puntos)}</Text>
@@ -672,6 +770,22 @@ const makeStyles = (c: Palette) =>
     openLigaText: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
 
     // Resumen
+    miniHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginTop: 10, marginBottom: 4 },
+    miniTh: { color: c.textMuted, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.6 },
+    miniRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.bgCard,
+    },
+    miniPos: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
+    miniTeam: { color: c.text, fontSize: 13.5, fontWeight: '700', lineHeight: 18, paddingRight: 8 },
+    miniNum: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+    miniPts: { color: c.text, fontSize: 15, fontWeight: '800' },
     statBlock: {
       flexDirection: 'row',
       alignItems: 'center',

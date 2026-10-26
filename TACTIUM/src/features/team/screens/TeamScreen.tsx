@@ -44,6 +44,8 @@ import { useLayout } from '@components/ui/ResponsiveFrame';
 import { ContentColumn } from '@components/layout';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import * as SeasonsApi from '@core/services/seasons';
+import { TeamFcpStats } from '@features/seasons/components/TeamFcpStats';
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import * as MatchdaysApi from '@core/services/matchdays';
 import {
   FederationSheet,
@@ -106,7 +108,7 @@ const SIDES: Side[] = ['Drive', 'Revés', 'Ambos'];
 /** Liga Cántabra: 5 parejas por encuentro = 10 jugadores. */
 const MATCHDAY_PLAYERS = 10;
 
-type Tab = 'plantilla' | 'parejas';
+type Tab = 'plantilla' | 'parejas' | 'stats';
 type NoticeKind = 'season' | 'signing' | 'inscripcion';
 
 /** Apellido para las parejas: «Luis Gómez» → «Gómez»; con alias, el alias. */
@@ -128,6 +130,34 @@ function surname(p: { name: string; alias?: string | null }): string {
  *    la ficha de cualquiera, en solo lectura.
  *  · «Parejas»: quién gana con quién (team_pair_stats), por victorias.
  */
+const ROSTER_STEPS: CoachStep[] = [
+  {
+    target: 'invite',
+    title: 'Invitar al equipo',
+    text: 'Manda el enlace o el código al grupo de WhatsApp. Cada jugador entra con su cuenta y se une a su ficha: no tienes que dar de alta a nadie a mano.',
+  },
+  {
+    target: 'roster',
+    title: 'Cómo llenar la plantilla',
+    text: 'En «Plantilla ▾» tienes tres caminos. El más rápido es la Federación.',
+    chips: [
+      'Traer de la Federación: tus jugadores con sus puntos oficiales',
+      'Escanear el ranking: haz una foto a la lista de puntos y TACTIUM la lee y crea los jugadores por ti',
+      'Añadir a mano: nombre, posición y puntos',
+    ],
+  },
+  {
+    target: 'notice',
+    title: 'Fichajes y temporada nueva',
+    text: 'Cuando la Federación abre la ventana de fichajes o publica la temporada, aparece un aviso aquí. Púlsalo y revisamos tu plantilla: los jugadores nuevos de tu equipo se añaden solos, con sus puntos.',
+  },
+  {
+    target: 'tabs',
+    title: 'Plantilla, Parejas y Stats',
+    text: 'Parejas: quién gana con quién, por victorias. Stats: tu equipo frente al resto del grupo, con tus mejores parejas y jugadores.',
+  },
+];
+
 export const TeamScreen = () => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -147,6 +177,7 @@ export const TeamScreen = () => {
   // porque la RLS de `team_invitations` solo deja leer el código al admin del
   // equipo.)
   const canManage = useTeamStore(selectIsCaptain);
+  const rosterCoach = useCoach('roster', team?.id, canManage && !!team?.id, 1800);
   const loadForUser = useTeamStore((s) => s.loadForUser);
   const isFcpTeam = team?.federation === FCP_FEDERATION_CODE;
   const rootNav =
@@ -223,10 +254,23 @@ export const TeamScreen = () => {
     if (!team?.id || refrescando) return;
     setRefrescando(true);
     try {
-      await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
+      const r = await refreshInscripcionRoster(team.id, inscripcion?.fila.idEquipo);
       setInscripcion(await cargarInscripcion());
+      // Antes se tragaba el resultado: si la Federación no respondía, el botón
+      // «no hacía nada» y no había forma de saber si había fallado o no había
+      // cambios.
+      if (!r.found) {
+        toast.error('No encontramos tu equipo', 'La Federación no lo tiene inscrito todavía.');
+      } else if (r.players == null) {
+        toast.info('Acabas de actualizar', 'Espera un minuto antes de volver a pedirlo.');
+      } else {
+        toast.success('Plantilla actualizada', `${r.players} jugadores en la Federación.`);
+      }
     } catch {
-      /* el texto ya dice de cuándo es la foto */
+      toast.error(
+        'No se pudo actualizar',
+        'La Federación no ha respondido. Se actualiza sola dos veces por semana.',
+      );
     } finally {
       setRefrescando(false);
     }
@@ -700,37 +744,43 @@ export const TeamScreen = () => {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.rowNameRow}>
-              <Text style={styles.rowName} numberOfLines={1}>
+              {/* flexShrink: un nombre largo se corta con «…» en vez de empujar a CAP y pisar los puntos. */}
+              <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={2}>
                 {displayName(p)}
               </Text>
               {isCap ? (
-                <View style={styles.capBadge}>
+                <View style={[styles.capBadge, { flexShrink: 0 }]}>
                   <Text style={styles.capBadgeText}>CAP</Text>
                 </View>
               ) : null}
             </View>
-            <Text style={styles.rowMeta} numberOfLines={1}>
-              {p.position}
-              {!p.user_id && canManage ? ' · sin cuenta' : ''}
-            </Text>
-          </View>
-          {!p.available ? (
-            <View style={styles.bajaBadge}>
-              <Text style={styles.bajaBadgeText}>BAJA</Text>
+            {/* «Invitar» vive en la línea de debajo del nombre, no en la columna de puntos: así todas las filas
+                miden lo mismo (antes las que tenían botón eran más altas y el nombre se cortaba). */}
+            <View style={styles.rowMetaRow}>
+              <Text style={[styles.rowMeta, { marginTop: 0, flexShrink: 1 }]} numberOfLines={2}>
+                {p.position}
+                {!p.user_id && canManage ? ' · sin cuenta' : ''}
+              </Text>
+              {!p.available ? (
+                <View style={[styles.bajaBadge, { flexShrink: 0 }]}>
+                  <Text style={styles.bajaBadgeText}>BAJA</Text>
+                </View>
+              ) : null}
+              {p.available && !p.user_id && canManage ? (
+                <Pressable
+                  onPress={openInvite}
+                  hitSlop={{ top: 10, bottom: 10, left: 8, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Invitar a ${displayName(p)}`}
+                  style={({ pressed }) => pressed && { opacity: 0.6 }}
+                >
+                  <Text style={styles.rowInviteText}>Invitar ›</Text>
+                </Pressable>
+              ) : null}
             </View>
-          ) : !p.user_id && canManage ? (
-            <Pressable
-              onPress={openInvite}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`Invitar a ${displayName(p)}`}
-              style={({ pressed }) => [styles.rowInvite, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.rowInviteText}>Invitar</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.ptsText}>{p.pts}</Text>
-          )}
+          </View>
+          {/* Los puntos salen SIEMPRE (también de quien aún no tiene cuenta), en columna fija. */}
+          <Text style={styles.ptsText}>{p.pts}</Text>
         </Pressable>
       </StaggerRow>
     );
@@ -822,7 +872,7 @@ export const TeamScreen = () => {
             </View>
             {p.user_id ? <View style={styles.dot} /> : null}
           </View>
-          <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={1}>
+          <Text style={[styles.rowName, { flexShrink: 1 }]} numberOfLines={2}>
             {displayName(p)}
           </Text>
           {isCap ? (
@@ -831,7 +881,7 @@ export const TeamScreen = () => {
             </View>
           ) : null}
         </View>
-        <Text style={[styles.tCellPos, styles.rowMeta]} numberOfLines={1}>
+        <Text style={[styles.tCellPos, styles.rowMeta]} numberOfLines={2}>
           {p.position}
         </Text>
         <Text style={[styles.tCellPts, styles.ptsText, { textAlign: 'right' }]}>{p.pts}</Text>
@@ -861,6 +911,7 @@ export const TeamScreen = () => {
 
   return (
     <View style={styles.root}>
+      <CoachTour coach={rosterCoach} steps={ROSTER_STEPS} />
       <View style={wide ? styles.tBody : styles.tBodyPhone}>
       <ScrollView
         ref={scrollRef}
@@ -890,7 +941,7 @@ export const TeamScreen = () => {
                 {multi ? <Text style={styles.titleChev}>▾</Text> : null}
               </View>
               {metaLine ? (
-                <Text style={styles.teamMeta} numberOfLines={1}>
+                <Text style={styles.teamMeta} numberOfLines={2}>
                   {metaLine}
                 </Text>
               ) : null}
@@ -901,6 +952,8 @@ export const TeamScreen = () => {
         {canManage ? (
           <View style={styles.btnRow}>
             <Pressable
+              ref={rosterCoach.ref('invite')}
+              collapsable={false}
               onPress={openInvite}
               accessibilityRole="button"
               style={({ pressed }) => [styles.btn, styles.btnAccent, pressed && { opacity: 0.85 }]}
@@ -909,6 +962,8 @@ export const TeamScreen = () => {
               <Text style={styles.btnAccentText}>Invitar</Text>
             </Pressable>
             <Pressable
+              ref={rosterCoach.ref('roster')}
+              collapsable={false}
               onPress={() => setMenuOpen(true)}
               accessibilityRole="button"
               accessibilityLabel="Plantilla: importar, añadir y editar el equipo"
@@ -928,7 +983,7 @@ export const TeamScreen = () => {
         </View>
 
         {notice ? (
-          <View style={styles.notice}>
+          <View style={styles.notice} ref={rosterCoach.ref('notice')} collapsable={false}>
             <Pressable
               onPress={() => setFedOpen(true)}
               accessibilityRole="button"
@@ -936,10 +991,10 @@ export const TeamScreen = () => {
             >
               <View style={styles.noticeDot} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.noticeTitle} numberOfLines={1}>
+                <Text style={styles.noticeTitle} numberOfLines={2}>
                   {notice.title}
                 </Text>
-                <Text style={styles.noticeSub} numberOfLines={1}>
+                <Text style={styles.noticeSub} numberOfLines={2}>
                   {notice.sub}
                 </Text>
               </View>
@@ -978,7 +1033,7 @@ export const TeamScreen = () => {
                   {inscripcion.fila.confirmado ? 'CONFIRMADA' : 'SIN CONFIRMAR'}
                 </Text>
               </View>
-              <Text style={styles.inscTitle} numberOfLines={1}>
+              <Text style={styles.inscTitle} numberOfLines={2}>
                 {inscripcion.fila.categoriaActual &&
                 inscripcion.fila.categoria &&
                 inscripcion.fila.categoriaActual !== inscripcion.fila.categoria
@@ -988,7 +1043,7 @@ export const TeamScreen = () => {
                     : 'Categoría aún sin publicar'}
                 {inscripcion.fila.subgrupo ? `, grupo ${inscripcion.fila.subgrupo}` : ''}
               </Text>
-              <Text style={styles.inscSub} numberOfLines={1}>
+              <Text style={styles.inscSub} numberOfLines={2}>
                 {[
                   inscripcion.fila.sedeCorta || inscripcion.fila.sede
                     ? `Sede: ${inscripcion.fila.sedeCorta || inscripcion.fila.sede}`
@@ -1028,7 +1083,7 @@ export const TeamScreen = () => {
                   )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.rowName} numberOfLines={1}>
+                  <Text style={styles.rowName} numberOfLines={2}>
                     {displayName(me)}
                   </Text>
                   <Text style={styles.rowMeta}>
@@ -1052,13 +1107,14 @@ export const TeamScreen = () => {
 
         {/* ── Plantilla / Parejas ──────────────────────────────────── */}
         {players.length > 0 ? (
-          <View style={{ marginTop: 18 }}>
+          <View style={{ marginTop: 18 }} ref={rosterCoach.ref('tabs')} collapsable={false}>
             <SlidingSegment<Tab>
               value={tab}
               onChange={setTab}
               options={[
                 { value: 'plantilla', label: `Plantilla · ${players.length}` },
                 { value: 'parejas', label: 'Parejas' },
+                { value: 'stats', label: 'Stats' },
               ]}
               colors={{
                 track: c.bgCard,
@@ -1184,6 +1240,10 @@ export const TeamScreen = () => {
               )}
             </View>
           </CrossFade>
+        ) : tab === 'stats' ? (
+          <CrossFade id="stats">
+            <TeamFcpStats />
+          </CrossFade>
         ) : (
           <CrossFade id="parejas">
             <Text style={styles.pairsLede}>
@@ -1228,7 +1288,7 @@ export const TeamScreen = () => {
                       >
                         <Text style={styles.rankText}>{i + 1}</Text>
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.rowName} numberOfLines={1}>
+                          <Text style={styles.rowName} numberOfLines={2}>
                             {label}
                           </Text>
                           <Text style={styles.rowMeta}>
@@ -1429,6 +1489,7 @@ export const TeamScreen = () => {
           open={groupOpen}
           teamId={team.id}
           teamName={team.name}
+          gateTeam={{ id: team.id, club_id: team.club_id, covered: team.covered, name: team.name }}
           onClose={() => setGroupOpen(false)}
         />
       ) : null}
@@ -2574,7 +2635,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.accent40,
   },
   rowInviteText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-  ptsText: { fontFamily: Fonts.mono, color: c.text, fontSize: 14, fontWeight: '700' },
+  rowMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  ptsText: {
+    fontFamily: Fonts.mono,
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 44,
+    textAlign: 'right',
+  },
+  rowRight: { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',

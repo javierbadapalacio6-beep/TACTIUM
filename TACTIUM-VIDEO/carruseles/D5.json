@@ -1,0 +1,6 @@
+{ "id": "D5", "formato": "story", "slides": [
+  { "tipo": "portada", "foto": "gen/story-palas.png", "eyebrow": "Torneos", "titulo": "Tu torneo, *sin papeles*", "tam": "sm", "sub": "Cuadros, horarios e inscripciones en un sitio." },
+  { "tipo": "pantalla", "alto": 1120, "src": "web/torneos-lista.png", "eyebrow": "Inscripción", "titulo": "Los jugadores se apuntan *desde el móvil*", "sub": "Con pago online, directo al club." },
+  { "tipo": "pantalla", "alto": 1120, "src": "web/torneo-cuadro.png", "eyebrow": "Cuadro", "titulo": "Cuadro y horarios *al momento*", "sub": "Resultados en directo con un enlace." },
+  { "tipo": "cierre", "titulo": "¿Organizas un torneo?", "sub": "TACTIUM es la herramienta: el torneo lo pones tú.", "cta": "tactium.io/torneos/organizar" }
+] }

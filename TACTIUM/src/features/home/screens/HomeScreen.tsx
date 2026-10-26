@@ -41,14 +41,16 @@ import { ContentColumn } from '@components/layout';
 import { fmtPts } from '@features/home/components/lineup/lineupLogic';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { TactiumMark } from '@components/brand/TactiumMark';
-import { useTeamStore } from '@store/teamStore';
+import { useTeamStore, selectIsCaptain } from '@store/teamStore';
+import { TutorialSheet, useAutoTutorial } from '@components/ui/TutorialSheet';
 import { useAuthStore } from '@store/authStore';
 import { buildCaptainInviteMessage } from '@core/config/referral';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { FeedPreview } from '@features/social/components/FeedPreview';
 import { NotificationBell } from '@features/notifications/components/NotificationBell';
 import { TrialHomeCard } from '@features/subscription/components/TrialHomeCard';
-import { matchdayState } from '@core/utils/matchday';
+import { matchdayState, isMatchStarted } from '@core/utils/matchday';
+import { FollowingMatchdayCard } from '../components/FollowingMatchdayCard';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import { RsvpCard } from '@features/availability/components/RsvpCard';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
@@ -62,10 +64,13 @@ import { LiveHomeCard } from '@features/home/components/live/LiveHomeCard';
 import { fetchLiveState, isLiveNow } from '@core/services/live';
 
 import type { HomeStackScreenProps, RootStackParamList } from '@navigation/types';
+import { fmtRango } from '@features/seasons/components/ligaParts';
 
 export const HomeScreen = ({
   navigation,
 }: HomeStackScreenProps<'HomeRoot'>) => {
+  const welcomeTeamId = useTeamStore((s) => s.team?.id);
+  const welcome = useAutoTutorial('team-welcome', welcomeTeamId, !!welcomeTeamId, 1800);
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const c = useColors();
@@ -85,6 +90,8 @@ export const HomeScreen = ({
 
   const [activeSeason, setActiveSeason] = useState<SeasonsApi.Season | null>(null);
   const [nextMatchday, setNextMatchday] = useState<MatchdaysApi.Matchday | null>(null);
+  // La jornada siguiente cuando la «próxima» ya se jugó y solo falta su acta.
+  const [followingMatchday, setFollowingMatchday] = useState<MatchdaysApi.Matchday | null>(null);
   // Jornada que se está jugando AHORA (con marcador en vivo). Si la hay, se
   // enseña arriba como «En directo» y la tarjeta de próxima jornada pasa a la
   // siguiente: antes salía la misma jornada dos veces.
@@ -116,6 +123,7 @@ export const HomeScreen = ({
     if (prevTeamIdRef.current !== null && prevTeamIdRef.current !== currentId) {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       setNextMatchday(null);
+      setFollowingMatchday(null);
       setLiveMatchday(null);
       setSeasonMatchdayCount(0);
       setLineupFilled(0);
@@ -177,6 +185,17 @@ export const HomeScreen = ({
                     .sort((a, b) => a.jornada_number - b.jornada_number)[0] ?? null;
               }
             }
+            // Si la jornada del hero ya empezó (solo falta el acta), la siguiente se enseña debajo.
+            let following: MatchdaysApi.Matchday | null = null;
+            if (md && md.status !== 'finished' && isMatchStarted(md)) {
+              const all = await MatchdaysApi.fetchMatchdays(season.id).catch(() => []);
+              if (cancelled) return;
+              following =
+                all
+                  .filter((m) => m.id !== md!.id && m.status === 'upcoming' && m.jornada_number > md!.jornada_number && !isMatchStarted(m))
+                  .sort((a, b) => a.jornada_number - b.jornada_number)[0] ?? null;
+            }
+            setFollowingMatchday(following);
             setLiveMatchday(live);
             setNextMatchday(md);
             setSeasonMatchdayCount(mdCount);
@@ -187,8 +206,14 @@ export const HomeScreen = ({
               const activeVariant =
                 await LineupVariantsApi.fetchActiveVariant(md.id);
               if (cancelled) return;
-              if (activeVariant) {
-                const lineup = await LineupsApi.fetchLineup(activeVariant.id);
+              // Capitán: lo que está editando. Jugador: solo la copia publicada (nada de borradores).
+              const isCap = selectIsCaptain(useTeamStore.getState());
+              const snap = isCap ? null : await LineupsApi.fetchPublishedLineup(md.id);
+              if (cancelled) return;
+              const visible = isCap || snap !== null || MatchdaysApi.isLineupPublished(md);
+              if ((activeVariant && visible) || snap !== null) {
+                const lineup =
+                  snap ?? (await LineupsApi.fetchLineup(activeVariant!.id));
                 if (cancelled) return;
                 const filled = lineup.filter(
                   (p) => p.player_a_id && p.player_b_id,
@@ -205,6 +230,7 @@ export const HomeScreen = ({
             }
           } else {
             setNextMatchday(null);
+            setFollowingMatchday(null);
             setLiveMatchday(null);
             setSeasonMatchdayCount(0);
             setLineupFilled(0);
@@ -257,7 +283,11 @@ export const HomeScreen = ({
     jornadaNumber: nextMatchday?.jornada_number,
     matchDate: nextMatchday?.match_date,
     matchTime: nextMatchday?.match_time,
+    matchRange: (nextMatchday as { fcp_date_range?: string | null } | null | undefined)?.fcp_date_range,
     isHome: nextMatchday?.is_home,
+    tandas: nextMatchday?.tandas,
+    location: nextMatchday?.location,
+    gender: team?.gender,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,
   });
@@ -300,7 +330,7 @@ export const HomeScreen = ({
   const wide = mode === 'tabletLandscape';
 
   const lineupCta =
-    nextMatchday && canEdit ? (
+    nextMatchday && canEdit && !isMatchStarted(nextMatchday) ? (
       <Pressable
         onPress={() =>
           navigation.navigate('Lineup', { matchdayId: nextMatchday.id })
@@ -321,6 +351,7 @@ export const HomeScreen = ({
 
   return (
     <View style={styles.root}>
+      <TutorialSheet id="team-welcome" visible={welcome.visible} onClose={welcome.close} />
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.topbarSide}>
           <TactiumMark size={34} gradient />
@@ -426,8 +457,11 @@ export const HomeScreen = ({
               <NeonDot size={6} />
               <Text style={heroStyles.heroLiveText} numberOfLines={1}>
                 J{String(nextMatchday.jornada_number).padStart(2, '0')}
-                {nextMatchday.match_date ? ` · ${formatMatchDate(nextMatchday.match_date)}` : ''}
-                {nextMatchday.match_time ? ` · ${nextMatchday.match_time.slice(0, 5)}` : ''}
+                {nextMatchday.match_date
+                  ? ` · ${formatMatchDate(nextMatchday.match_date)}`
+                  : fmtRango((nextMatchday as { fcp_date_range?: string | null }).fcp_date_range)
+                    ? ` · ${fmtRango((nextMatchday as { fcp_date_range?: string | null }).fcp_date_range)}`
+                    : ''}
               </Text>
               <View style={heroStyles.heroOpen}>
                 <IconArrowRight size={13} color={darkColors.textInverse} />
@@ -444,22 +478,29 @@ export const HomeScreen = ({
               {nextMatchday.opponent}
             </Text>
 
-            <View style={heroStyles.heroMetaRow}>
-              {nextMatchday.location?.trim() ? (
+            {/* Línea 1: sede y, seguida, la hora. */}
+            {nextMatchday.location?.trim() || nextMatchday.match_time ? (
+              <View style={heroStyles.heroMetaRow}>
                 <View style={[heroStyles.heroMeta, { flexShrink: 1 }]}>
                   <IconPin size={11} color={darkColors.textMuted} />
                   <Text style={heroStyles.heroMetaText} numberOfLines={1}>
-                    {nextMatchday.location.trim()}
+                    {[nextMatchday.location?.trim(), nextMatchday.match_time?.slice(0, 5)]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Text>
                 </View>
-              ) : null}
-              <View style={heroStyles.heroMeta}>
-                <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
-                  {avail}/{players.length} van
-                </Text>
               </View>
-              <View style={heroStyles.heroMeta}>
-                <Text style={heroStyles.heroMetaText}>
+            ) : null}
+
+            {/* Línea 2, en este orden: tandas · alineación · los que van. */}
+            <View style={[heroStyles.heroMetaRow, { flexWrap: 'nowrap' }]}>
+              {nextMatchday.tandas ? (
+                <View style={heroStyles.heroMeta}>
+                  <Text style={heroStyles.heroMetaText}>Tandas {nextMatchday.tandas}</Text>
+                </View>
+              ) : null}
+              <View style={[heroStyles.heroMeta, { flexShrink: 1 }]}>
+                <Text style={heroStyles.heroMetaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                   {nextMatchday.status === 'in_progress'
                     ? 'En juego'
                     : matchdayState(nextMatchday) === 'pending-acta'
@@ -467,13 +508,23 @@ export const HomeScreen = ({
                       : lineupFilled === 0
                         ? 'Sin alineación'
                         : lineupFilled >= matchesPerRound
-                          ? 'Alineación lista'
+                          ? MatchdaysApi.isLineupPublished(nextMatchday)
+                            ? 'Alineación lista'
+                            : 'Alineación sin publicar'
                           : `Alineación ${lineupFilled}/${matchesPerRound}`}
                 </Text>
               </View>
+              {isMatchStarted(nextMatchday) ? null : (
+                <View style={heroStyles.heroMeta}>
+                  <Text style={[heroStyles.heroMetaText, { color: darkColors.accent }]}>
+                    {avail}/{players.length} van
+                  </Text>
+                </View>
+              )}
             </View>
 
-            {nextMatchday.status === 'upcoming' && myPlayerId ? (
+            {/* La convocatoria solo vale ANTES del partido: empezado, no se vota. */}
+            {nextMatchday.status === 'upcoming' && !isMatchStarted(nextMatchday) && myPlayerId ? (
               <RsvpCard
                 embedded
                 palette={darkColors}
@@ -487,7 +538,7 @@ export const HomeScreen = ({
 
             {/* Encuesta de hora abierta: el jugador vota aquí, el capitán ve
                 el recuento (features/timePoll). */}
-            {nextMatchday.status === 'upcoming' ? (
+            {nextMatchday.status === 'upcoming' && !isMatchStarted(nextMatchday) && nextMatchday.is_home ? (
               <TimePollCard
                 variant="home"
                 palette={darkColors}
@@ -564,7 +615,7 @@ export const HomeScreen = ({
           </View>
         )}
 
-        {canEdit && nextMatchday && nextMatchday.status === 'upcoming' && players.length > 0 ? (
+        {canEdit && nextMatchday && nextMatchday.status === 'upcoming' && !isMatchStarted(nextMatchday) && players.length > 0 ? (
           <ConvocatoriaCard
             counts={availCounts}
             needed={matchesPerRound * 2}
@@ -575,6 +626,13 @@ export const HomeScreen = ({
             onShareLink={() => void remind.shareLink()}
             sharingLink={remind.sharingLink}
             onOpen={() => navigation.navigate('Availability', { matchdayId: nextMatchday.id })}
+          />
+        ) : null}
+
+        {followingMatchday ? (
+          <FollowingMatchdayCard
+            matchday={followingMatchday}
+            onOpen={() => navigation.navigate('Jornada', { matchdayId: followingMatchday.id })}
           />
         ) : null}
 
@@ -594,10 +652,10 @@ export const HomeScreen = ({
               </Text>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.myMatchTitle} numberOfLines={1}>
+              <Text style={styles.myMatchTitle} numberOfLines={2}>
                 Juegas con {myPartnerName ?? '—'}
               </Text>
-              <Text style={styles.myMatchMeta} numberOfLines={1}>
+              <Text style={styles.myMatchMeta} numberOfLines={2}>
                 vs. {nextMatchday.opponent}
                 {nextMatchday.match_time
                   ? ` · ${nextMatchday.match_time.slice(0, 5)}`

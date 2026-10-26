@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -224,6 +224,7 @@ export const SoloHomeScreen = () => {
         <NotificationBell />
       </View>
 
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 64 + 12 + 32 }]}
         showsVerticalScrollIndicator={false}
@@ -287,6 +288,7 @@ export const SoloHomeScreen = () => {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };

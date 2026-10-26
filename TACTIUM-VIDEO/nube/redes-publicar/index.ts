@@ -134,6 +134,24 @@ function modoPrueba(cfg: Cfg, f: Fila): "MANUAL" | "SS_PERFORMANCE" | "AVISO" | 
   return g;
 }
 
+/**
+ * Aviso de Telegram cuando una pieza ya está publicada. Si es un reel de prueba lo dice con todas las letras (13-10-2026:
+ * J1R salió como prueba SS_PERFORMANCE y el aviso decía solo «Publicado en Instagram», así que no se notó) y recuerda qué
+ * pasa con él: MANUAL no sale en el perfil hasta que lo gradúes tú; SS_PERFORMANCE lo gradúa Instagram si rinde. Lo
+ * demás sale como siempre, con «(normal)» en los reels para que se distinga.
+ */
+function textoPublicado(cfg: Cfg, f: Fila, enlace: string | null): string {
+  const modo = f.tipo === "reel" ? modoPrueba(cfg, f) : null;
+  const url = enlace ? ` ${enlace}` : "";
+  if (modo === "MANUAL") {
+    return `🧪 REEL DE PRUEBA publicado (MANUAL): ${f.pieza} · ${f.titulo}.${url}\nSolo lo ven quienes NO te siguen y NO sale en tu perfil. Lo gradúas tú en la app cuando quieras.`;
+  }
+  if (modo === "SS_PERFORMANCE") {
+    return `🧪 REEL DE PRUEBA publicado (SS_PERFORMANCE): ${f.pieza} · ${f.titulo}.${url}\nSolo lo ven quienes NO te siguen y NO sale en tu perfil. Instagram lo gradúa solo a tus seguidores si rinde bien: si ya lo has subido a mano, bórralo de la pestaña de pruebas para no duplicarlo.`;
+  }
+  return `Publicado en Instagram${f.tipo === "reel" ? " (normal, ya sale en tu perfil)" : ""}: ${f.pieza} · ${f.titulo} (${NOMBRE[f.tipo]}).${url}`;
+}
+
 /** Recuerda qué reels se mandaron como prueba (para el recordatorio de las 24 h). */
 async function marcarPrueba(cfg: Cfg, pieza: string) {
   const l = new Set((cfg.reels_prueba_publicados || "").split(",").filter(Boolean));
@@ -287,7 +305,7 @@ async function procesar(cfg: Cfg, f: Fila, forzar: boolean) {
     estado: "publicada", ig_media_id: pub.id, ig_enlace: enlace, publicada_at: new Date().toISOString(),
     error: null, bloqueado_hasta: null,
   });
-  await avisar(cfg, f.pieza, `Publicado en Instagram: ${f.pieza} · ${f.titulo} (${NOMBRE[f.tipo]}).${enlace ? ` ${enlace}` : ""}`, await siguiente(f.pieza));
+  await avisar(cfg, f.pieza, textoPublicado(cfg, f, enlace), await siguiente(f.pieza));
   return "publicada";
 }
 

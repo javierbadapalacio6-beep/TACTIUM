@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   TextInput,
+  KeyboardAvoidingView,
   Alert,
   ActivityIndicator,
   Share,
@@ -541,6 +542,7 @@ export const AmistosoScreen = () => {
   // ── Formulario ───────────────────────────────────────────────────
   return (
     <View style={styles.root}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: 24 }]}
         keyboardShouldPersistTaps="handled"
@@ -657,6 +659,7 @@ export const AmistosoScreen = () => {
           {team ? 'Cuenta como amistoso · no afecta a ninguna liga' : 'Se guarda con su marcador y suma en tus estadísticas'}
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={[styles.foot, { paddingBottom: insets.bottom + 64 + 12 + 8 }]}>
         <Pressable

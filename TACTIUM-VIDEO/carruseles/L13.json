@@ -1,0 +1,187 @@
+{
+  "id": "L13",
+  "titulo": "Jornada 1: los cruces de 6ª y 7ª masculina",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/red-pista.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Jornada 1. *6ª y 7ª masculina.*",
+      "sub": "23, 24 y 25 de octubre. El local, primero 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "6ª Masculina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "+PADEL SANTANDER F",
+            "vs MOVE & GO D"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "CIRCULO DE RECREO B",
+            "vs SMASH PADEL I"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "MONTEVERDE I",
+            "vs G6 S"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "ZINK PADEL I",
+            "vs ESCALANTE PADEL CLUB B"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "BATHCO ATP D",
+            "vs RACKET SPORT J"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "CASTRO URDIALES D",
+            "vs A.D.R.M. D"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "OLIMPICO DE GAMA D",
+            "vs SMASH PADEL H"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "PESCADORES DE SOMO B",
+            "vs G6 T"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "6ª Masculina · Grupos C y D",
+      "grupos": [
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "G6 U",
+            "vs MARISMA DUIN B"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "MONTEVERDE J",
+            "vs SAN LAZARO-PONTEJOS B"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "RACKET SPORT K",
+            "vs C.D. SALAS C"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "ZINK PADEL H",
+            "vs T3 PADEL B"
+          ]
+        },
+        {
+          "etiqueta": "D · 1",
+          "equipos": [
+            "EL TEMPLO E",
+            "vs REINOSA PADEL CLUB C"
+          ]
+        },
+        {
+          "etiqueta": "D · 2",
+          "equipos": [
+            "G6 R",
+            "vs VELARDE C.P."
+          ]
+        },
+        {
+          "etiqueta": "D · 3",
+          "equipos": [
+            "PADEL X5 D",
+            "vs RACKET SPORT I"
+          ]
+        },
+        {
+          "etiqueta": "D · 4",
+          "equipos": [
+            "PENAGOS B",
+            "vs LA MARINA F"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "7ª Masculina · Grupo B",
+      "grupos": [
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "MERUELO C",
+            "vs G6 W"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "PADEL X5 E",
+            "vs PENAGOS C"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "VILLAESCUSA E",
+            "vs E.D.M. PADEL CARTES"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "ZINK PADEL K",
+            "vs T3 PADEL C"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Y *tu jornada 1?*",
+      "sub": "Los cruces de tu grupo, con las plantillas y los puntos de cada rival, en tactium.io.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

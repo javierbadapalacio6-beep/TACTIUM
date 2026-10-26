@@ -10,8 +10,8 @@ import type { SignupStyles } from './signupStyles';
 export function shortReason(msg: string): string {
   const pts = msg.match(/máximo de (\d+) puntos.*sumáis (\d+)/);
   if (pts) return `Máximo ${pts[1]} pts · sumáis ${pts[2]}`;
-  const niv = msg.match(/nivel ≥ (\d+).*sumáis (\d+)/);
-  if (niv) return `Nivel mínimo ${niv[1]} · sumáis ${niv[2]}`;
+  const niv = msg.match(/tiene que ser (\d+) o más.*sumáis (\d+)/);
+  if (niv) return `Nivel máx. ${niv[1]}+ · sumáis ${niv[2]}`;
   if (/Indica los puntos/.test(msg)) return 'Faltan los puntos';
   if (/Indica el nivel/.test(msg)) return 'Falta el nivel (liga o circuito)';
   return msg;

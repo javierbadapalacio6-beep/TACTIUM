@@ -104,6 +104,24 @@ function categoryOf(grupo: string | null): string | null {
   return m ? `${m[1]}ª` : null;
 }
 
+/**
+ * Relee en la Federación la plantilla de UN equipo antes de volcarla.
+ *
+ * `fcp_jugadores` solo se refresca por tandas del agente: un jugador dado de alta en la FCP después
+ * de la última tanda no salía al volcar la plantilla (caso real: 13-10-2026, un fichaje de MEDIO
+ * CUDEYO A). La función `fcp-refresh-roster` lee su ficha pública al momento. No bloquea: si falla,
+ * se vuelca lo que hubiera.
+ */
+async function refreshFcpRoster(teamId: string, idEquipo: number): Promise<void> {
+  try {
+    await supabase.functions.invoke('fcp-refresh-roster', {
+      body: { team_id: teamId, fcp_id_equipo: idEquipo },
+    });
+  } catch {
+    /* no bloqueante */
+  }
+}
+
 /** Busca clubes/equipos federativos por nombre (typeahead), agrupados por club.
  * Solo la temporada ACTUAL (mayor id_liga con datos) y su LIGA REGULAR: así el
  * mismo equipo no aparece repetido por cada año ni por sus fases de playoff. */
@@ -410,6 +428,7 @@ export async function importFcpTeams(
     // metiendo los datos de jugadores de otro club en esta cuenta.
     let added: unknown = 0;
     if (!guest) {
+      await refreshFcpRoster(teamId, t.id_equipo);
       const res = await rawRpc('import_fcp_roster', {
         p_team_id: teamId,
         p_fcp_id_equipo: t.id_equipo,
@@ -443,6 +462,7 @@ export async function resyncFcpRoster(teamId: string): Promise<number> {
   if (error) throw new Error(error.message);
   const link = ((links ?? []) as { fcp_id_equipo: number }[])[0];
   if (!link) throw new Error('Este equipo no está vinculado a la Federación.');
+  await refreshFcpRoster(teamId, (link as { fcp_id_equipo: number }).fcp_id_equipo);
   const { data: added, error: e2 } = await rawRpc('import_fcp_roster', {
     p_team_id: teamId,
     p_fcp_id_equipo: (link as { fcp_id_equipo: number }).fcp_id_equipo,

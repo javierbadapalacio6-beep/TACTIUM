@@ -20,6 +20,14 @@ export type NotificationType =
   | 'time_poll_open'
   | 'time_poll_reminder'
   | 'time_poll_fixed'
+  // «Subido a la Federación» y recordatorios del lunes. data: {type, matchdayId, teamId} o {type, clubId}.
+  | 'fcp_upload_done'
+  | 'fcp_upload_reminder'
+  // Alineación subida a la Federación (aviso al club) y recordatorios 24 h/3 h/1 h antes. data: {type, matchdayId, teamId}.
+  | 'lineup_upload_done'
+  | 'lineup_upload_reminder'
+  // Partido de visitante: la Federación publicó (o cambió) la hora. data: {type, matchdayId, teamId}.
+  | 'away_schedule_published'
   | 'new_follower'
   | 'tournament_bracket'
   | 'tournament_schedule'

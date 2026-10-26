@@ -409,6 +409,7 @@ export async function importFcpTeams(
     // añade los nuevos.
     let players = 0;
     if (!guest) {
+      await refreshFcpRoster(teamId, t.id_equipo);
       const { data: added, error } = await sb.rpc("import_fcp_roster", {
         p_team_id: teamId,
         p_fcp_id_equipo: t.id_equipo,
@@ -438,6 +439,24 @@ export async function importFcpTeams(
 }
 
 /**
+ * Relee en la Federación la plantilla de UN equipo antes de volcarla.
+ *
+ * `fcp_jugadores` solo se refresca por tandas del agente: un jugador dado de alta en la FCP después
+ * de la última tanda no salía al volcar la plantilla (caso real: 13-10-2026, un fichaje de MEDIO
+ * CUDEYO A). La función `fcp-refresh-roster` lee su ficha pública al momento. No bloquea: si falla,
+ * se vuelca lo que hubiera.
+ */
+async function refreshFcpRoster(teamId: string, idEquipo: number): Promise<void> {
+  try {
+    await supabaseBrowser().functions.invoke("fcp-refresh-roster", {
+      body: { team_id: teamId, fcp_id_equipo: idEquipo },
+    });
+  } catch {
+    /* no bloqueante */
+  }
+}
+
+/**
  * Vuelca la plantilla federativa en un equipo QUE YA EXISTE.
  *
  * Distinto de `importFcpTeams`, que CREA equipos: esto es para el capitán que ya tiene su
@@ -461,6 +480,7 @@ export async function importFcpRosterIntoTeam(
   // «duplicate key value violates unique constraint "fcp_team_links_team_unique"».
   await linkTeamToFcp(teamId, team.id_equipo);
 
+  await refreshFcpRoster(teamId, team.id_equipo);
   const { data, error } = await sb.rpc("import_fcp_roster", {
     p_team_id: teamId,
     p_fcp_id_equipo: team.id_equipo,

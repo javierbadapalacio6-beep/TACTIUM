@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -16,7 +17,9 @@ import {
   type DbSeason,
 } from "@/lib/queries";
 import { fetchLeagueStatsBundle, computePlayerLeagueStats } from "@/lib/player-stats";
+import { proHref } from "@/lib/nav";
 import { useSession } from "@/lib/session";
+import { fetchProForTeam } from "@/lib/team-captains";
 import { useAsync } from "@/lib/use-async";
 import { guardedWrite } from "@/lib/writes";
 import {
@@ -90,6 +93,7 @@ const PHASE_LABEL: Record<DbSeason["phase"], string> = {
  */
 export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
   const { activeTeam, role, user } = useSession();
+  const router = useRouter();
   const teamId = activeTeam?.id ?? null;
   // Solo capitán/club crean temporadas; el jugador las consulta (Competir › Liga).
   const canManage = role === "capitan" || role === "club";
@@ -189,6 +193,14 @@ export function SeasonsList({ embedded = false }: { embedded?: boolean } = {}) {
       const n = await previousSeasonImportNotice(teamId, standing.data);
       setBusy(false);
       setNotice(n);
+      return;
+    }
+    // Traer el calendario de la Federación es premium, como en la app
+    // (`calendar_import`). Mismo criterio que escanear: mi plan o el plan
+    // Capitán que cubre este equipo.
+    if (!(await fetchProForTeam(activeTeam?.clubId ? null : teamId))) {
+      setBusy(false);
+      router.push(proHref("calendar_import"));
       return;
     }
     const res = await guardedWrite("traer la temporada de la Federación", () =>
@@ -540,7 +552,7 @@ function Scoreboard({
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Chip>Activa · {PHASE_EYEBROW[season.phase]}</Chip>
-          <h2 style={{ margin: "10px 0 2px", fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          <h2 style={{ margin: "8px 0 2px", fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" }}>
             {season.name}
           </h2>
           <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>
@@ -552,7 +564,7 @@ function Scoreboard({
         </BtnLink>
       </div>
 
-      <StatRow style={{ marginTop: 16 }}>
+      <StatRow className="stat-row--strip" style={{ marginTop: 12 }}>
         {me ? (
           <Stat
             label={zone ? zone.label : "Puesto"}
@@ -566,7 +578,7 @@ function Scoreboard({
           />
         ) : null}
         <Stat label="Jornadas" value={`${played}/${total || "—"}`} />
-        <Stat label="Balance" value={`${wins}-${draws}-${losses}`} sub="Ganadas · empatadas · perdidas" />
+        <Stat label="Balance (G-E-P)" value={`${wins}-${draws}-${losses}`} />
       </StatRow>
 
       {standing?.previous && me && (
@@ -587,8 +599,8 @@ function Scoreboard({
             display: "flex",
             alignItems: "center",
             gap: 12,
-            marginTop: 16,
-            paddingTop: 14,
+            marginTop: 12,
+            paddingTop: 10,
             borderTop: "1px solid var(--line)",
             flexWrap: "wrap",
           }}
@@ -638,7 +650,7 @@ function Scoreboard({
             alignItems: "center",
             justifyContent: "space-between",
             gap: 12,
-            marginTop: 14,
+            marginTop: 10,
             flexWrap: "wrap",
           }}
         >

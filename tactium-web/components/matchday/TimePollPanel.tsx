@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   canProposeTimes,
+  addTimePollOption,
+  removeTimePollOption,
   cancelTimePoll,
   createTimePoll,
   fetchTimePollContext,
@@ -21,6 +23,8 @@ import {
   type TimePollContext,
 } from "@/lib/time-polls";
 import { fetchAvailabilityDetail, type AvailRow } from "@/lib/queries";
+import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
+import { PollWhoModal } from "./PollWhoModal";
 import { guardedWrite } from "@/lib/writes";
 import { proHref } from "@/lib/nav";
 import { useAsync } from "@/lib/use-async";
@@ -28,6 +32,7 @@ import { useSession } from "@/lib/session";
 import { Avatar, Btn, Card, CardHead, Field, Input, Modal, Note, Textarea, Toggle } from "@/components/ui";
 import { Toast } from "@/components/states";
 import { IconCheck, IconClock, IconPlus, IconX } from "@/components/Icon";
+import { fcpRangeStart } from "@/lib/fcp-range";
 
 /*
  * Encuesta de hora de la jornada (web). Espejo de la app
@@ -83,6 +88,8 @@ export function TimePollPanel({
     !!user,
   );
   const reload = () => setNonce((n) => n + 1);
+  // En vivo: votos, horas y respuestas de los demás sin recargar la página.
+  useAvailabilityRealtime(matchdayId, reload, "poll", !!user);
 
   const [myVoteLocal, setMyVoteLocal] = useState<string[] | null | undefined>(undefined);
   const [toast, setToast] = useState<string | null>(null);
@@ -91,12 +98,20 @@ export function TimePollPanel({
   const [remindedAt, setRemindedAt] = useState<Date | null>(null);
   const [fixAsk, setFixAsk] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ optionId: string; current: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [whoOpen, setWhoOpen] = useState(false);
+  // Horas con la lista de nombres desplegada (se pulsa el recuento de la fila).
+  const [namesOpen, setNamesOpen] = useState<Record<string, boolean>>({});
+  const [addDate, setAddDate] = useState("");
+  const [addTime, setAddTime] = useState("10:30");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => setMyVoteLocal(undefined), [ctx.data]);
 
   const data = ctx.data?.[0] ?? null;
   const availability = ctx.data?.[1] ?? {};
-  if (ctx.loading || !data) return null;
+  // Solo la primera carga oculta el panel: una recarga en vivo mantiene lo que ya se ve.
+  if (!data) return null;
 
   const { poll, matchday, team, players, myPlayerId } = data;
   const isOpen = poll?.status === "open";
@@ -152,7 +167,7 @@ export function TimePollPanel({
           open={proposeOpen}
           onClose={() => setProposeOpen(false)}
           title={title}
-          matchDate={matchday.match_date}
+          matchDate={matchday.match_date ?? fcpRangeStart(matchday.fcp_date_range)}
           matchTime={matchday.match_time}
           slots={team?.preferred_home_slots ?? []}
           onSubmit={async (input) => {
@@ -268,6 +283,26 @@ export function TimePollPanel({
     if (!res.ok) return setToast(res.reason);
     reload();
   }
+
+  // Editar las horas de una encuesta en marcha sin perder el resto de votos.
+  async function removeOpt(o: { id: string; date: string; time: string }) {
+    if (!window.confirm(`¿Quitar ${optionLabel(o)}? Se borra esa hora de los votos; el resto se mantiene.`)) return;
+    const res = await guardedWrite("quitar la hora", () => removeTimePollOption(p.id, o.id));
+    if (!res.ok) return setToast(res.reason);
+    reload();
+  }
+  async function addOpt() {
+    setAdding(true);
+    const res = await guardedWrite("añadir la hora", () => addTimePollOption(p.id, addDate, addTime));
+    setAdding(false);
+    if (!res.ok) return setToast(res.reason);
+    setAddOpen(false);
+    setToast("Hora añadida. Hemos avisado a quien ya había votado.");
+    reload();
+  }
+  const addKey = `${addDate} ${addTime}`;
+  const addDupe = p.options.some((o) => `${o.date} ${o.time.slice(0, 5)}` === addKey);
+  const addPast = !!addDate && addDate < isoDay(new Date());
 
   const meta =
     `${tally.voted.length} de ${ids.length} han votado` +
@@ -417,7 +452,33 @@ export function TimePollPanel({
                       {isTop ? " · la más votada" : ""}
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center" }} title={who.map((id) => byId.get(id)?.name).join(", ")}>
+                  <div
+                    role={who.length > 0 ? "button" : undefined}
+                    tabIndex={who.length > 0 ? 0 : undefined}
+                    aria-label={namesOpen[o.id] ? "Ocultar quién puede" : "Ver quién puede"}
+                    aria-expanded={who.length > 0 ? !!namesOpen[o.id] : undefined}
+                    onClick={
+                      who.length > 0
+                        ? (e) => {
+                            e.stopPropagation();
+                            setNamesOpen((m) => ({ ...m, [o.id]: !m[o.id] }));
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      who.length > 0
+                        ? (e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setNamesOpen((m) => ({ ...m, [o.id]: !m[o.id] }));
+                            }
+                          }
+                        : undefined
+                    }
+                    style={{ display: "flex", alignItems: "center", cursor: who.length > 0 ? "pointer" : "default" }}
+                    title={who.map((id) => byId.get(id)?.name).join(", ")}
+                  >
                     {who.slice(0, 5).map((id, i) => {
                       const pl = byId.get(id);
                       return (
@@ -449,10 +510,62 @@ export function TimePollPanel({
                       Fijar
                     </Btn>
                   )}
+                  {canManage && p.options.length > 2 && (
+                    <Btn
+                      variant="quiet"
+                      size="sm"
+                      aria-label={`Quitar ${optionLabel(o)}`}
+                      disabled={!!busy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeOpt(o);
+                      }}
+                      icon={<IconX size={15} />}
+                    />
+                  )}
                 </div>
+                {namesOpen[o.id] && who.length > 0 && (
+                  <div style={{ position: "relative", padding: "0 12px 10px", fontSize: 12.5, lineHeight: 1.4, color: "var(--text-muted)" }}>
+                    {who
+                      .map((id) => {
+                        const n = byId.get(id)?.name ?? "";
+                        const st = availability[id]?.status;
+                        return st === "maybe" ? `${n} (duda)` : st === "no" ? `${n} (no puede ese día)` : n;
+                      })
+                      .join(", ")}
+                  </div>
+                )}
               </div>
             );
           })}
+
+          {canManage && p.options.length < 4 && (
+            <Btn
+              variant="ghost"
+              size="sm"
+              icon={<IconPlus size={15} />}
+              onClick={() => {
+                setAddDate(fcpRangeStart(matchday.fcp_date_range) ?? matchday.match_date ?? isoDay(new Date()));
+                setAddTime("10:30");
+                setAddOpen(true);
+              }}
+            >
+              Añadir hora
+            </Btn>
+          )}
+
+          <Btn variant="quiet" size="sm" onClick={() => setWhoOpen(true)} style={{ alignSelf: "flex-start", color: "var(--accent)" }}>
+            Ver quién ha votado
+          </Btn>
+          <PollWhoModal
+            open={whoOpen}
+            onClose={() => setWhoOpen(false)}
+            poll={p}
+            votes={votes}
+            players={players}
+            availability={availability}
+            topIds={tally.topIds}
+          />
 
           {canVote && (
             <Btn
@@ -492,6 +605,36 @@ export function TimePollPanel({
           )}
         </div>
       </Card>
+
+      <Modal
+        open={addOpen}
+        onClose={() => !adding && setAddOpen(false)}
+        labelledBy="anadir-hora-titulo"
+        width={420}
+        title="Añadir una hora"
+        lede="Se suma a las que ya hay. Los votos se mantienen y avisamos a quien ya ha votado."
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setAddOpen(false)} disabled={adding}>
+              Cancelar
+            </Btn>
+            <Btn variant="accent" disabled={adding || !addDate || !addTime || addDupe || addPast} onClick={addOpt}>
+              {adding ? "Añadiendo…" : "Añadir a la encuesta"}
+            </Btn>
+          </>
+        }
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
+          <Field label={`Día${addDate ? ` · ${optionDayLabel(addDate)}` : ""}`}>
+            <Input type="date" value={addDate} min={isoDay(new Date())} onChange={(e) => setAddDate(e.target.value)} />
+          </Field>
+          <Field label="Hora">
+            <Input type="time" value={addTime} step={900} onChange={(e) => setAddTime(e.target.value.slice(0, 5))} />
+          </Field>
+        </div>
+        {addDupe && <div style={{ fontSize: 12.5, color: "var(--error)", marginTop: 8 }}>Esa hora ya está en la encuesta.</div>}
+        {addPast && <div style={{ fontSize: 12.5, color: "var(--error)", marginTop: 8 }}>Ese día ya pasó.</div>}
+      </Modal>
 
       <Modal
         open={!!fixOpt}

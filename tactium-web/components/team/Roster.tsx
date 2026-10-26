@@ -69,6 +69,8 @@ import { EditTeamModal } from "@/components/team/EditTeamModal";
 import { ScanModal } from "@/components/team/ScanModal";
 import { bulkUpsertPlayers } from "@/lib/parse-image";
 import { PairStats } from "@/components/team/PairStats";
+import { TeamFcpStats } from "@/components/team/TeamFcpStats";
+import { CoachTour, useCoach, type CoachStep } from "@/components/CoachTour";
 import { ACCOUNT_DOT, PlayerCard } from "@/components/team/PlayerCard";
 import { Crest } from "@/components/Crest";
 import { InvitePanel } from "@/components/invite/InvitePanel";
@@ -76,7 +78,25 @@ import { EASE } from "@/components/entry/motion-bits";
 import { proHref } from "@/lib/nav";
 
 type SortKey = "name" | "pts" | "pos";
-type Tab = "plantilla" | "parejas";
+type Tab = "plantilla" | "parejas" | "stats";
+
+const ROSTER_STEPS: CoachStep[] = [
+  {
+    target: '[data-coach="invite"]',
+    title: "Invitar al equipo",
+    text: "Manda el enlace o el código al grupo de WhatsApp. Cada jugador entra con su cuenta y se une a su ficha: no tienes que dar de alta a nadie a mano.",
+  },
+  {
+    target: '[data-coach="roster"]',
+    title: "Cómo llenar la plantilla",
+    text: "En «Plantilla» tienes tres caminos. El más rápido es la Federación.",
+    chips: [
+      "Traer de la Federación: tus jugadores con sus puntos oficiales. Si entran fichajes nuevos, vuelve a traerla",
+      "Escanear el ranking: haz una foto a la lista de puntos y TACTIUM la lee y crea los jugadores por ti",
+      "Añadir a mano: nombre, posición y puntos",
+    ],
+  },
+];
 type Filter = "todos" | "disponibles" | "bajas";
 
 const POSITIONS: Position[] = ["Drive", "Revés", "Ambos"];
@@ -303,6 +323,7 @@ export function Roster() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("pts");
   const [asc, setAsc] = useState(false);
+  const rosterCoach = useCoach("roster", teamId, canManage && !!teamId, 1800);
   const [tab, setTab] = useState<Tab>("plantilla");
   const [filter, setFilter] = useState<Filter>("todos");
   const [editing, setEditing] = useState<DbPlayer | null>(null);
@@ -552,10 +573,13 @@ export function Roster() {
         actions={
           teamId && canManage ? (
             <>
-              <Btn variant="accent" onClick={() => setInviteOpen(true)} icon={<IconUserPlus size={15} />}>
-                Invitar
-              </Btn>
-              <span style={{ position: "relative" }}>
+              <CoachTour coach={rosterCoach} steps={ROSTER_STEPS} />
+              <span data-coach="invite" style={{ display: "inline-flex" }}>
+                <Btn variant="accent" onClick={() => setInviteOpen(true)} icon={<IconUserPlus size={15} />}>
+                  Invitar
+                </Btn>
+              </span>
+              <span data-coach="roster" style={{ position: "relative" }}>
                 <Btn
                   onClick={() => setMenuOpen((v) => !v)}
                   aria-haspopup="menu"
@@ -841,6 +865,7 @@ export function Roster() {
             options={[
               { value: "plantilla", label: `Plantilla · ${PLAYERS.length}` },
               { value: "parejas", label: "Parejas" },
+              { value: "stats", label: "Stats" },
             ]}
           />
           {tab === "plantilla" && (
@@ -891,6 +916,8 @@ export function Roster() {
         >
           {tab === "parejas" ? (
             <PairStats embedded myPlayerId={myPlayerId} />
+          ) : tab === "stats" && teamId ? (
+            <TeamFcpStats teamId={teamId} />
           ) : !teamId ? (
             <Card>
               <EmptyState

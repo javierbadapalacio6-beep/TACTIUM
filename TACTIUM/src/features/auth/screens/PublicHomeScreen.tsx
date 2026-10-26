@@ -178,10 +178,10 @@ export const PublicHomeScreen = ({
     };
   }, [term]);
 
-  const goLogin = () => navigation.navigate('Login');
-  // «Crear cuenta» de la barra fija: abre el login con la pestaña de alta ya
-  // elegida (Apple/Google siguen ahí; el email se abre en «Crear cuenta»).
-  const goSignup = () => navigation.navigate('Login', { tab: 'signup' });
+  // «Iniciar sesión» y «Crear cuenta» llevan a la bienvenida (segunda
+  // pantalla): Apple, Google o email, y desde ahí se puede volver a explorar.
+  const goLogin = () => navigation.navigate('Welcome');
+  const goSignup = () => navigation.navigate('Welcome');
   // Alto de la barra fija (sin el safe area): el contenido se separa lo
   // mismo para que la tarjeta Pro del final no quede tapada.
   const SIGNUP_BAR_H = 68;

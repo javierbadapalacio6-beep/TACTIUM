@@ -449,7 +449,7 @@ const FcpPlayerBody = ({ navigation, route }: CompetirStackScreenProps<'FcpPlaye
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
               <Text style={styles.heroName} numberOfLines={2}>{profile?.name || name || 'Jugador'}</Text>
-              <Text style={styles.heroMeta} numberOfLines={1}>
+              <Text style={styles.heroMeta} numberOfLines={2}>
                 {[selYear?.equipo || profile?.equipo, selYear?.categoria || profile?.categoria]
                   .filter(Boolean)
                   .join(' · ')

@@ -56,6 +56,9 @@ import {
 } from '@components/share/PhotoShareCard';
 import { DOWNLOAD_URL } from '@core/config/referral';
 import { LineupShareCard } from '../components/LineupShareCard';
+import { fetchTeamShareLogo } from '@core/services/teamLogo';
+import { PairPhotosSection } from '../components/jornada/PairPhotosSection';
+import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { JornadaScoreHeader } from '../components/jornada/JornadaScoreHeader';
 import {
   JornadaPhaseTabs,
@@ -63,9 +66,12 @@ import {
   type JornadaTab,
 } from '../components/jornada/JornadaPhaseTabs';
 import { JornadaPrevia } from '../components/jornada/JornadaPrevia';
+import { JornadaSedeTandas, TandasChips } from '../components/jornada/JornadaSedeTandas';
+import { tandasChoices, tandaWhenForCourt, describeTandasShort } from '@core/utils/tandas';
 import { JornadaMoreSheet } from '../components/jornada/JornadaMoreSheet';
 import { useJornadaFcp } from '../components/jornada/useJornadaFcp';
 import { TimePollCard } from '@features/timePoll/components/TimePollCard';
+import { FederationUploadCard } from '@features/home/components/jornada/FederationUploadCard';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
 import { LiveScoreboard } from '../components/live/LiveScoreboard';
 import { useMatchdayRealtime } from '@core/hooks/useMatchdayRealtime';
@@ -74,17 +80,19 @@ import {
   formatLongDay,
   formatShortDay,
 } from '@core/utils/format';
-import { isMatchStarted, formatSetScore } from '@core/utils/matchday';
+import { isMatchStarted, isMatchOver, formatSetScore } from '@core/utils/matchday';
 
 import { JornadaSeasonList } from '../components/jornada/JornadaSeasonList';
 import { SplitView, useIsSplit } from '@components/layout';
 
 import type { HomeStackScreenProps } from '@navigation/types';
+import { fmtRango } from '@features/seasons/components/ligaParts';
 
 type Status =
   | 'pending'
   | 'scheduled'
   | 'in-progress'
+  | 'acta-pending'
   | 'won'
   | 'lost'
   | 'tied'
@@ -112,6 +120,12 @@ const makeStatusConfig = (
   'in-progress': {
     label: 'En curso',
     sub: (n, courts) => `${n}/${courts} partidos resueltos`,
+    tint: c.warning,
+  },
+  // El partido ya acabó por tiempo y faltan resultados: ni «en curso» ni marcador provisional.
+  'acta-pending': {
+    label: 'Falta el acta',
+    sub: (n, courts) => (n > 0 ? `${n}/${courts} resultados metidos` : 'Partido jugado · sin resultados'),
     tint: c.warning,
   },
   won: {
@@ -280,6 +294,20 @@ const JornadaDetail = ({
   const [matchPhotoUri, setMatchPhotoUri] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const matchPhotoCardRef = React.useRef<View>(null);
+  // Logo del club (o del equipo) para las tarjetas de compartir.
+  const activeClub = useClubStore(selectActiveClub) as { logo_url?: string | null } | null;
+  const [rpcLogo, setRpcLogo] = useState<string | null>(null);
+  const logoTeamId = team?.id ?? null;
+  useEffect(() => {
+    if (!logoTeamId) return;
+    let alive = true;
+    fetchTeamShareLogo(logoTeamId).then((l) => alive && setRpcLogo(l));
+    return () => {
+      alive = false;
+    };
+  }, [logoTeamId]);
+  const shareLogo =
+    rpcLogo ?? (team as { logo_url?: string | null } | null)?.logo_url ?? activeClub?.logo_url ?? null;
   // Pestaña elegida a mano. Null = la que toca por la fase de la jornada.
   const [tabPicked, setTabPicked] = useState<JornadaTab | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -304,10 +332,18 @@ const JornadaDetail = ({
       if (md) {
         // JornadaScreen siempre lee de la variante activa (la "oficial").
         const activeVariant = await LineupVariantsApi.fetchActiveVariant(md.id);
+        // Capitán: lo que está editando. Jugador: solo la copia publicada.
         const [lineup, res, s, a] = await Promise.all([
-          activeVariant
-            ? LineupsApi.fetchLineup(activeVariant.id)
-            : Promise.resolve([]),
+          !isCaptain
+            ? LineupsApi.fetchPublishedLineup(md.id).then(async (snap) =>
+                snap ??
+                (activeVariant && MatchdaysApi.isLineupPublished(md)
+                  ? LineupsApi.fetchLineup(activeVariant.id)
+                  : []),
+              )
+            : activeVariant
+              ? LineupsApi.fetchLineup(activeVariant.id)
+              : Promise.resolve([]),
           MatchResultsApi.fetchResults(md.id),
           SeasonsApi.fetchSeasonById(md.season_id),
           fetchActaForMatchday(md.id),
@@ -328,7 +364,7 @@ const JornadaDetail = ({
       didLoadRef.current = true;
       setLoading(false);
     }
-  }, [team, targetMatchdayId]);
+  }, [team, targetMatchdayId, isCaptain]);
 
   useFocusEffect(
     useCallback(() => {
@@ -350,6 +386,8 @@ const JornadaDetail = ({
     const filled = pairs.filter((p) => p.player_a_id && p.player_b_id).length;
     return filled === courts;
   }, [pairs, courts, matchday]);
+  // Borrador del capitán: completa pero sin publicar. Para jugadores `pairs` llega vacío hasta publicar.
+  const lineupDraft = lineupReady && isCaptain && !MatchdaysApi.isLineupPublished(matchday);
 
   const isHome = matchday?.is_home ?? true;
 
@@ -440,6 +478,7 @@ const JornadaDetail = ({
     () => (matchday ? isMatchStarted(matchday) : false),
     [matchday],
   );
+  const matchOver = useMemo(() => (matchday ? isMatchOver(matchday) : false), [matchday]);
 
   // Eje rol × estado para el CTA inferior (ver el bloque CTA). canEditLineup
   // gobierna si el capitán entra a Lineup en modo editable; sin alineación,
@@ -519,12 +558,14 @@ const JornadaDetail = ({
     // Antes de la hora del partido siempre es 'scheduled' aunque
     // existieran resultados (defensa: no deberían poder grabarse).
     if (!matchStarted) return 'scheduled';
+    // Pasado el plazo del encuentro (5 h) sin acta completa: no está «en curso», falta el acta.
+    if (matchOver && score.played < courts) return 'acta-pending';
     if (score.played === 0) return 'scheduled';
     if (score.played < courts) return 'in-progress';
     if (score.won > score.lost) return 'won';
     if (score.lost > score.won) return 'lost';
     return 'tied';
-  }, [closed, matchday, lineupReady, matchStarted, score, courts]);
+  }, [closed, matchday, lineupReady, matchStarted, matchOver, score, courts]);
 
   // Contexto federativo (puesto, racha, último cruce). Vacío sin vínculo FCP.
   const fcp = useJornadaFcp(team?.id, matchday?.opponent, matchday?.match_date);
@@ -699,8 +740,14 @@ const JornadaDetail = ({
   const photoTitle = `${teamName} ${score.won}–${score.lost} ${matchday.opponent}`;
   // Breve para que NO se corte en la tarjeta: "Jornada 14 · sáb 12 jul"
   // (sin el nombre largo de la liga; la marca ya va en la tarjeta).
-  const photoSubtitle = `${jornadaLabel}${dateObj ? ` · ${formatShortDay(dateObj)}` : ''}`;
-  const photoDetail = outcomeLabel;
+  const photoSubtitle = [
+    jornadaLabel,
+    dateObj ? formatShortDay(dateObj) : null,
+    matchday.location?.trim() || null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const photoDetail = [outcomeLabel, matchday.tandas ? `Tandas ${matchday.tandas}` : null].filter(Boolean).join(' · ');
   const photoShareText = [
     `🎾 *TACTIUM · ${jornadaLabel}*`,
     `${teamName} ${score.won} – ${score.lost} ${matchday.opponent} (${outcomeLabel})`,
@@ -829,10 +876,10 @@ const JornadaDetail = ({
                 style={[
                   styles.statusPill,
                   {
-                    backgroundColor: lineupReady || closed
+                    backgroundColor: (lineupReady && !lineupDraft) || closed
                       ? c.accent15
                       : 'rgba(242,201,76,0.15)',
-                    borderColor: lineupReady || closed
+                    borderColor: (lineupReady && !lineupDraft) || closed
                       ? c.accent40
                       : 'rgba(242,201,76,0.40)',
                   },
@@ -842,17 +889,17 @@ const JornadaDetail = ({
                   style={[
                     styles.statusPillDot,
                     {
-                      backgroundColor: lineupReady || closed ? c.accent : c.warning,
+                      backgroundColor: (lineupReady && !lineupDraft) || closed ? c.accent : c.warning,
                     },
                   ]}
                 />
                 <Text
                   style={[
                     styles.statusPillText,
-                    { color: lineupReady || closed ? c.accent : c.warning },
+                    { color: (lineupReady && !lineupDraft) || closed ? c.accent : c.warning },
                   ]}
                 >
-                  {closed ? 'DISPUTADA' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
+                  {closed ? 'DISPUTADA' : lineupDraft ? 'SIN PUBLICAR' : lineupReady ? 'VALIDADA' : 'PENDIENTE'}
                 </Text>
               </View>
             </View>
@@ -892,6 +939,7 @@ const JornadaDetail = ({
                     key={court}
                     court={court}
                     isTop={court === 1}
+                    tandaWhen={tandaWhenForCourt(matchday.tandas, team?.gender, court, time || null)}
                     ready={lineupReady}
                     playerA={pair?.player_a_name ?? null}
                     playerB={pair?.player_b_name ?? null}
@@ -1016,6 +1064,7 @@ const JornadaDetail = ({
         <JornadaScoreHeader
           jornadaNumber={matchday.jornada_number}
           date={dateObj}
+          rangeLabel={fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range)}
           time={time}
           isHome={isHome}
           teamName={teamName}
@@ -1031,6 +1080,16 @@ const JornadaDetail = ({
           footer={season?.name ?? null}
         />
 
+        {/* === SEDE Y TANDAS === en todas las pestañas; el capitán las edita tocando */}
+        <JornadaSedeTandas
+          venue={venueLabel}
+          tandas={matchday.tandas}
+          gender={team?.gender}
+          time={time || null}
+          canEdit={isCaptain && !closed && !seasonClosed}
+          onEdit={() => setEditing(true)}
+        />
+
         {/* === PESTAÑAS POR FASE === */}
         <JornadaPhaseTabs
           value={tab}
@@ -1038,9 +1097,20 @@ const JornadaDetail = ({
           hidden={split ? ['alineacion'] : undefined}
         />
 
-        {/* === ENCUESTA DE HORA === (lógica en features/timePoll) */}
-        {tab === 'previa' && !closed ? (
+        {/* === ENCUESTA DE HORA === (lógica en features/timePoll). Solo de local: en los partidos de
+            visitante la hora la fija el club rival y no se propone. */}
+        {tab === 'previa' && !closed && !matchStarted && matchday.is_home ? (
           <TimePollCard matchdayId={matchday.id} canManage={isCaptain} onChanged={load} />
+        ) : null}
+
+        {/* === SUBIDO A LA FEDERACIÓN === partidos de local de la Cántabra por jugar */}
+        {tab === 'previa' && !closed && matchday.is_home && team?.federation === 'FCantP' ? (
+          <FederationUploadCard matchdayId={matchday.id} canManage={isCaptain} />
+        ) : null}
+
+        {/* === ALINEACIÓN SUBIDA A LA FEDERACIÓN === local y visitante: hay que subirla antes del partido */}
+        {(tab === 'previa' || tab === 'alineacion') && !closed && team?.federation === 'FCantP' ? (
+          <FederationUploadCard matchdayId={matchday.id} canManage={isCaptain} kind="lineup" />
         ) : null}
 
         {/* === PREVIA === */}
@@ -1052,8 +1122,6 @@ const JornadaDetail = ({
                 <JornadaPrevia
                   matchdayId={matchday.id}
                   lastCrossing={fcp.lastCrossing}
-                  venue={venueLabel}
-                  tandas={matchday.tandas}
                   onOpenAvailability={() =>
                     navigation.navigate('Availability', { matchdayId: matchday.id })
                   }
@@ -1065,8 +1133,6 @@ const JornadaDetail = ({
             <JornadaPrevia
               matchdayId={matchday.id}
               lastCrossing={fcp.lastCrossing}
-              venue={venueLabel}
-              tandas={matchday.tandas}
               onOpenAvailability={() =>
                 navigation.navigate('Availability', { matchdayId: matchday.id })
               }
@@ -1137,38 +1203,12 @@ const JornadaDetail = ({
               </Text>
             ) : null}
 
-            {/* Cerrar acta — solo captain. Players no ven el botón. */}
-            {!closed && isCaptain ? (
-              <>
-                <Pressable
-                  onPress={gate(closeMatch, 'matchday_close')}
-                  disabled={!canClose || closing}
-                  style={({ pressed }) => [
-                    styles.closeCta,
-                    (!canClose || closing) && { opacity: 0.4 },
-                    pressed && canClose && !closing && { opacity: 0.85 },
-                  ]}
-                >
-                  {closing ? (
-                    <ActivityIndicator color={c.error} />
-                  ) : (
-                    <>
-                      <IconCheck size={16} color={c.error} />
-                      <Text style={styles.closeCtaLabel}>Cerrar acta</Text>
-                    </>
-                  )}
-                </Pressable>
-                {!matchStarted ? (
-                  <Text style={styles.closeHint}>
-                    El acta podrá cerrarse cuando empiece el partido.
-                  </Text>
-                ) : closeIsManual ? (
-                  <Text style={styles.closeHint}>
-                    Faltan resultados. Al cerrar tendrás que indicar el resultado
-                    final manualmente (V/E/D).
-                  </Text>
-                ) : null}
-              </>
+            {/* «Cerrar acta» vive solo en la barra inferior, junto a «Meter resultados»: aquí solo el aviso. */}
+            {!closed && isCaptain && matchStarted && closeIsManual ? (
+              <Text style={styles.closeHint}>
+                Faltan resultados. Al cerrar tendrás que indicar el resultado
+                final manualmente (V/E/D).
+              </Text>
             ) : null}
 
           </>
@@ -1197,6 +1237,7 @@ const JornadaDetail = ({
                         awayName={matchday.opponent}
                         awayScore={score.lost}
                         highlight="home"
+                        clubLogoUri={shareLogo}
                         subtitle={photoSubtitle}
                         detail={photoDetail}
                       />
@@ -1268,6 +1309,28 @@ const JornadaDetail = ({
                   </Text>
                 )}
 
+                {/* Fotos por pareja (una por pista), para compartirlas una a una. */}
+                <PairPhotosSection
+                  matchdayId={matchday.id}
+                  teamId={team?.id ?? null}
+                  canEdit={isCaptain}
+                  items={Array.from({ length: courts }).map((_, i) => {
+                    const court = i + 1;
+                    const pair = pairs.find((p) => p.court_number === court);
+                    const out = matchOutcome(results, court, isHome);
+                    return {
+                      court,
+                      playerA: pair?.player_a_name ?? null,
+                      playerB: pair?.player_b_name ?? null,
+                      summary: out.summary,
+                      won: out.state === 'won' ? true : out.state === 'lost' ? false : null,
+                    };
+                  })}
+                  matchLine={`${teamName} ${score.won}–${score.lost} ${matchday.opponent}`}
+                  subtitle={photoSubtitle}
+                  clubLogoUri={shareLogo}
+                />
+
                 {/* Un único botón global: comparte el RESULTADO (texto) por la hoja
                     nativa (WhatsApp, Telegram, etc. — cada uno elige su app). */}
                 <Pressable
@@ -1300,9 +1363,11 @@ const JornadaDetail = ({
            · capitán antes de empezar      → «Editar / Crear alineación»;
            · capitán con la jornada en juego → «Meter resultados» y «Cerrar acta»;
            · jugador con la jornada en juego → «Meter mi resultado»;
-           · el resto (jugador antes, club, acta cerrada) → «Ver alineación»
-             si existe; si no, «Volver» (una pantalla read-only vacía no
-             aporta nada). */}
+           · el resto (jugador antes, club, acta cerrada) → sin barra: la
+             alineación está en su pestaña. */}
+      {(isCaptain && !closed && matchStarted) ||
+      (canEditLineup && !matchStarted) ||
+      (isPlayer && !closed && matchStarted && lineupReady) ? (
       <View
         style={[
           styles.ctaWrap,
@@ -1353,39 +1418,16 @@ const JornadaDetail = ({
               <IconCheck size={18} color="#000" />
               <Text style={styles.ctaLabel}>Meter mi resultado</Text>
             </Pressable>
-            <Pressable
-              onPress={goLineup}
-              style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.ctaSecondaryLabel}>Ver alineación</Text>
-            </Pressable>
           </>
-        ) : (
-          <Pressable
-            onPress={
-              lineupReady
-                ? goLineup
-                : () => {
-                    if (navigation.canGoBack()) navigation.goBack();
-                    else navigation.navigate('HomeRoot');
-                  }
-            }
-            style={({ pressed }) => [styles.cta, styles.ctaFlex, pressed && { opacity: 0.85 }]}
-          >
-            {lineupReady ? (
-              <IconCourt size={20} color="#000" />
-            ) : (
-              <IconCheck size={18} color="#000" />
-            )}
-            <Text style={styles.ctaLabel}>{lineupReady ? 'Ver alineación' : 'Volver'}</Text>
-          </Pressable>
-        )}
+        ) : null}
       </View>
+      ) : null}
 
       <EditMatchdaySheet
         open={editing}
         onClose={() => setEditing(false)}
         matchday={matchday}
+        gender={team?.gender}
         onSaved={(updated) => {
           setMatchday(updated);
           setEditing(false);
@@ -1405,6 +1447,7 @@ const JornadaDetail = ({
         season={season}
         pairs={pairs}
         teamName={team?.name ?? '—'}
+        gender={team?.gender}
       />
 
       <BottomSheet
@@ -1614,6 +1657,7 @@ const fmtPts = (n: number) =>
 const PairResultRow: React.FC<{
   court: number;
   isTop: boolean;
+  tandaWhen?: string | null;
   ready: boolean;
   playerA: string | null;
   playerB: string | null;
@@ -1626,6 +1670,7 @@ const PairResultRow: React.FC<{
 }> = ({
   court,
   isTop,
+  tandaWhen,
   ready,
   playerA,
   playerB,
@@ -1724,6 +1769,7 @@ const PairResultRow: React.FC<{
                 <Text style={styles.topTagText}>TOP</Text>
               </View>
             ) : null}
+            {tandaWhen ? <Text style={styles.pairMetaFaint}>{tandaWhen}</Text> : null}
             {effPts != null ? (
               <Text style={styles.pairPts}>{acta ? fmtPts(effPts) : effPts} pts</Text>
             ) : !ready && !acta && !closed ? (
@@ -1789,8 +1835,9 @@ const EditMatchdaySheet: React.FC<{
   open: boolean;
   onClose: () => void;
   matchday: MatchdaysApi.Matchday;
+  gender?: string | null;
   onSaved: (m: MatchdaysApi.Matchday) => void;
-}> = ({ open, onClose, matchday, onSaved }) => {
+}> = ({ open, onClose, matchday, gender, onSaved }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const [opponent, setOpponent] = useState(matchday.opponent);
@@ -1802,6 +1849,7 @@ const EditMatchdaySheet: React.FC<{
   );
   const [isHome, setIsHome] = useState(matchday.is_home);
   const [location, setLocation] = useState(matchday.location ?? '');
+  const [tandas, setTandas] = useState<string | null>(matchday.tandas ?? null);
   const [submitting, setSubmitting] = useState(false);
 
   React.useEffect(() => {
@@ -1811,6 +1859,7 @@ const EditMatchdaySheet: React.FC<{
       setMatchTime(isoTimeToDate(matchday.match_time));
       setIsHome(matchday.is_home);
       setLocation(matchday.location ?? '');
+      setTandas(matchday.tandas ?? null);
     }
   }, [open, matchday]);
 
@@ -1824,6 +1873,7 @@ const EditMatchdaySheet: React.FC<{
         match_time: matchTime ? dateToIsoTime(matchTime) : null,
         is_home: isHome,
         location: location.trim() || null,
+        tandas,
       });
       onSaved(updated);
     } catch (e: any) {
@@ -1945,6 +1995,9 @@ const EditMatchdaySheet: React.FC<{
           style={styles.sheetInput}
         />
       </View>
+
+      <Text style={styles.sheetLabel}>TANDAS</Text>
+      <TandasChips value={tandas} options={tandasChoices(gender)} onChange={setTandas} />
     </BottomSheet>
   );
 };
@@ -1958,11 +2011,14 @@ const ShareLineupSheet: React.FC<{
   season: SeasonsApi.Season | null;
   pairs: LineupsApi.LineupPair[];
   teamName: string;
-}> = ({ open, onClose, matchday, season, pairs, teamName }) => {
+  gender?: string | null;
+}> = ({ open, onClose, matchday, season, pairs, teamName, gender }) => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const dateObj = isoDateToDate(matchday.match_date);
-  const shortDate = dateObj ? formatShortDay(dateObj) : 'Fecha pendiente';
+  const shortDate = dateObj
+    ? formatShortDay(dateObj)
+    : fmtRango((matchday as { fcp_date_range?: string | null }).fcp_date_range) || 'Fecha pendiente';
   const time = matchday.match_time?.slice(0, 5) ?? '';
 
   const text = [
@@ -1971,16 +2027,20 @@ const ShareLineupSheet: React.FC<{
     `${shortDate}${time ? ` · ${time}` : ''}${
       season ? ` · ${season.name}` : ''
     }`,
+    ...(matchday.location?.trim() ? [`Sede: ${matchday.location.trim()}`] : []),
+    ...(matchday.tandas
+      ? [`Tandas ${matchday.tandas}${time ? ' (horas orientativas)' : ''}: ${describeTandasShort(matchday.tandas, gender, time || null)}`]
+      : []),
     ``,
     `*Alineación*`,
     ...pairs
       .sort((a, b) => (a.court_number ?? 0) - (b.court_number ?? 0))
-      .map(
-        (p) =>
-          `P${p.court_number} — ${p.player_a_name ?? '—'} / ${
-            p.player_b_name ?? '—'
-          }${p.pair_points != null ? `  (${p.pair_points} pts)` : ''}`,
-      ),
+      .map((p) => {
+        const when = tandaWhenForCourt(matchday.tandas, gender, p.court_number ?? 0, time || null);
+        return `P${p.court_number} — ${p.player_a_name ?? '—'} / ${
+          p.player_b_name ?? '—'
+        }${p.pair_points != null ? `  (${p.pair_points} pts)` : ''}${when ? `  ${when}` : ''}`;
+      }),
     ``,
     `Recuerda confirmar disponibilidad 🟢`,
   ].join('\n');
@@ -2047,6 +2107,7 @@ const ShareLineupSheet: React.FC<{
             pairs={pairs}
             shortDate={shortDate}
             time={time}
+            gender={gender}
           />
         </View>
       </View>

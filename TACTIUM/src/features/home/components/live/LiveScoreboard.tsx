@@ -11,12 +11,15 @@ import { useLiveMatchday, useNow } from '@core/hooks/useLiveMatchday';
 import {
   activeScorer,
   courtOutcome,
+  courtSets,
   createShareToken,
   isLiveNow,
+  liveCtx,
   liveErrorMessage,
   liveShareText,
   liveTotals,
   type LiveCourt,
+  type LiveCtx,
 } from '@core/services/live';
 
 /**
@@ -67,9 +70,10 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
   // Antes del partido y sin directo, no se pinta nada (la Previa manda).
   if (!state || (!matchStarted && !hasAnyLive)) return null;
 
-  const live = isLiveNow(state);
-  const totals = liveTotals(state);
-  const finished = closed || (hasAnyLive && !live);
+  const ctx = liveCtx(state, now);
+  const live = isLiveNow(state, now, courts);
+  const totals = liveTotals(state, now);
+  const finished = closed || !live;
   const canScore = state.can_score && !closed;
 
   const byCourt = new Map<number, LiveCourt>(state.courts.map((ct) => [ct.court_number, ct]));
@@ -141,6 +145,7 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
           court={byCourt.get(n)}
           opponent={opponent}
           scorer={activeScorer(byCourt.get(n)?.live ?? null, myUserId, now)}
+          ctx={ctx}
           canScore={canScore}
           onPress={() => onScoreCourt(n)}
           styles={styles}
@@ -162,17 +167,18 @@ const CourtRow: React.FC<{
   court: LiveCourt | undefined;
   opponent: string;
   scorer: string | null;
+  ctx: LiveCtx;
   canScore: boolean;
   onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
   c: Palette;
-}> = ({ n, court, opponent, scorer, canScore, onPress, styles, c }) => {
-  const outcome = courtOutcome(court);
+}> = ({ n, court, opponent, scorer, ctx, canScore, onPress, styles, c }) => {
+  const outcome = courtOutcome(court, ctx);
   const live = court?.live ?? null;
   const pair =
     [court?.player_a?.name, court?.player_b?.name].filter(Boolean).join(' / ') || 'Sin pareja';
-  const sets = court?.forfeit ? [] : live?.sets ?? [];
-  const lastIdx = live && live.status === 'live' ? sets.length - 1 : -1;
+  const sets = courtSets(court);
+  const lastIdx = outcome === 'live' && live?.status === 'live' ? sets.length - 1 : -1;
   const statusTxt = court?.forfeit
     ? 'W.O.'
     : outcome === 'live'
@@ -214,7 +220,7 @@ const CourtRow: React.FC<{
         >
           {pair}
         </Text>
-        <Text style={[styles.rowName, styles.rowRival]} numberOfLines={1}>
+        <Text style={[styles.rowName, styles.rowRival]} numberOfLines={2}>
           {opponent}
         </Text>
         {action ? (

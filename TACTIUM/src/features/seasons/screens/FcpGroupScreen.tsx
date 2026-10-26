@@ -16,6 +16,8 @@ import { Radius } from '@core/theme/spacing';
 import { IconBack, IconChevron } from '@components/ui';
 import { CommunityAvatar } from '../../social/components/social-ui';
 import { Segmented, MetaChip, FormChips } from '../components/fcpUi';
+import { FullStandingsTable } from '../components/FullStandingsTable';
+import { GroupStatsView } from '../components/GroupStatsView';
 import {
   fetchGroupStandings,
   fetchGroupSchedule,
@@ -36,7 +38,7 @@ import { useTeamStore } from '@store/teamStore';
 import { FcpBracketView } from '../components/FcpBracketView';
 import type { CompetirStackScreenProps } from '@navigation/types';
 
-type Tab = 'clasif' | 'jornadas' | 'cuadro';
+type Tab = 'clasif' | 'jornadas' | 'cuadro' | 'stats';
 
 /** La Federación publica los nombres EN MAYÚSCULAS. A pantalla completa
  *  gritan, así que se bajan a capital inicial. */
@@ -128,7 +130,7 @@ function fmtLongDate(d: string | null, long = false): string {
 // Marcador por equipo desde "4/0".
 function splitScore(resultado: string | null): [string, string] | null {
   if (!resultado) return null;
-  const m = resultado.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/);
+  const m = resultado.match(/^\s*(\d+)\s*[/\-]\s*(\d+)\s*$/);
   if (!m) return null;
   return [m[1], m[2]];
 }
@@ -154,6 +156,10 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
   // cuadro de playoff el id_equipo cambia, así que se resalta por nombre.
   const [myFcpName, setMyFcpName] = useState<string | null>(null);
   const [rows, setRows] = useState<FcpBrowseStanding[]>([]);
+  // La Federación aún no ha actualizado su clasificación: la mostrada se calcula con lo jugado.
+  const [provisional, setProvisional] = useState(false);
+  // Resumen (compacto) o Completa (todas las columnas de la Federación, con desplazamiento).
+  const [vista, setVista] = useState<'resumen' | 'completa'>('resumen');
   const [schedule, setSchedule] = useState<FcpBrowseMatch[]>([]);
   const [tab, setTab] = useState<Tab>(esPlayoff ? 'cuadro' : 'clasif');
   /** Partidos con el acta desplegada. Cerrada por defecto: una jornada son
@@ -179,6 +185,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
         setGrupo(st.nombre ?? nombre ?? null);
         setGenero(st.genero);
         setRows(st.rows);
+        setProvisional(st.provisional);
         setSchedule(sc);
         setInscritos(ins);
       })
@@ -298,7 +305,9 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
       ? 'Clasificación'
       : tab === 'jornadas'
         ? 'Jornadas'
-        : 'Cuadro';
+        : tab === 'stats'
+          ? 'Estadísticas'
+          : 'Cuadro';
 
   const tabItems: [Tab, string][] = esPlayoff
     ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas']]
@@ -344,7 +353,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
         {tab !== 'cuadro' && !loading && !soloInscripcion ? (
           <View style={styles.metaRow}>
             {rows.length > 0 ? <MetaChip label={`${rows.length} EQUIPOS`} /> : null}
-            {jornadaTotal > 0 ? <MetaChip label={`J·${jornadaActual}/${jornadaTotal}`} /> : null}
+            {jornadaTotal > 0 ? <MetaChip label={`J·${Math.max(1, jornadaActual)}/${jornadaTotal}`} /> : null}
             <MetaChip label={finalizada ? 'FINALIZADA' : 'EN CURSO'} tone={finalizada ? 'mint' : 'neutral'} />
           </View>
         ) : null}
@@ -409,6 +418,13 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
               </React.Fragment>
             ))}
           </View>
+        ) : tab === 'stats' ? (
+          <GroupStatsView
+            idGrupo={idGrupo}
+            equipos={rows.map((r) => r.equipo)}
+            myTeam={myRow?.equipo ?? myFcpName}
+            standings={rows.map((r) => ({ equipo: r.equipo, puntos: r.puntos ?? 0, enf: r.stats.enf }))}
+          />
         ) : tab === 'cuadro' ? (
           <View style={{ marginTop: 18 }}>
             <FcpBracketView idGrupo={idGrupo} highlightTeam={myRow?.equipo ?? myFcpName} />
@@ -442,8 +458,17 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                 </View>
               ) : null}
 
+              <View style={{ marginTop: 12, marginBottom: 14 }}>
+                <Segmented
+                  size="sm"
+                  items={[['resumen', 'Resumen'], ['completa', 'Completa']]}
+                  value={vista}
+                  onChange={setVista}
+                />
+              </View>
+
               {/* Cabecera de tabla */}
-              {narrow ? (
+              {vista === 'completa' ? null : narrow ? (
                 <View style={styles.thead}>
                   <Text style={[styles.th, { width: 22 }]}>#</Text>
                   <Text style={[styles.th, { flex: 1 }]}>EQUIPO</Text>
@@ -461,9 +486,30 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                 </View>
               )}
 
+              {provisional ? (
+                <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 10 }}>
+                  Clasificación provisional: calculada con los resultados y las actas. La de la Federación la sustituirá en cuanto la actualice.
+                </Text>
+              ) : null}
+
+              {vista === 'completa' ? (
+                <FullStandingsTable
+                  rows={rows}
+                  myFcpId={myFcpId}
+                  zoneColorOf={(p) => {
+                    const z = zoneOf(p);
+                    return z ? zoneColor(z.key, c) : null;
+                  }}
+                  onTeam={(t) =>
+                    t.idEquipo != null
+                      ? navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
+                      : undefined
+                  }
+                />
+              ) : (
               <View style={{ gap: 6, marginTop: 10 }}>
                 {rows.map((t, i) => {
-                  const dif = (t.setsFavor ?? 0) - (t.setsContra ?? 0);
+                  const dif = t.stats.sf - t.stats.sc;
                   const zone = zoneOf(t.posicion);
                   const prevZone = i > 0 ? zoneOf(rows[i - 1].posicion) : null;
                   // Línea discontinua al cambiar de zona.
@@ -501,17 +547,17 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                             <Text style={[styles.stPts, { width: 34 }]}>{t.puntos ?? 0}</Text>
                           </View>
                           <Text style={styles.stSub} numberOfLines={1}>
-                            {t.pj} PJ · {t.pg} PG · DIF {dif >= 0 ? `+${dif}` : dif} · SETS{' '}
-                            {t.setsFavor ?? 0}/{t.setsContra ?? 0}
+                            {t.stats.enf} ENF · {t.stats.pj} PJ · {t.stats.pg} PG · DIF {dif >= 0 ? `+${dif}` : dif} · SETS{' '}
+                            {t.stats.sf}/{t.stats.sc}
                           </Text>
                         </>
                       ) : (
                       <>
                       <View style={styles.stTop}>
                         <Text style={[styles.stPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
-                        <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={1}>{t.equipo}</Text>
-                        <Text style={[styles.stNum, { width: 26, color: c.textMuted }]}>{t.pj}</Text>
-                        <Text style={[styles.stNum, { width: 26, color: c.text }]}>{t.pg}</Text>
+                        <Text style={[styles.stTeam, { flex: 1 }, isMine && { color: c.accent }]} numberOfLines={2}>{t.equipo}</Text>
+                        <Text style={[styles.stNum, { width: 26, color: c.textMuted }]}>{t.stats.pj}</Text>
+                        <Text style={[styles.stNum, { width: 26, color: c.text }]}>{t.stats.pg}</Text>
                         <Text style={[styles.stNum, { width: 40, textAlign: 'right', color: c.textFaint }]}>
                           {dif >= 0 ? `+${dif}` : dif}
                         </Text>
@@ -523,7 +569,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                           <FormChips form={t.form} />
                           <View style={{ flex: 1 }} />
                           <Text style={styles.stSets}>
-                            {t.setsFavor ?? 0} / {t.setsContra ?? 0}
+                            {t.stats.sf} / {t.stats.sc}
                           </Text>
                         </View>
                       ) : null}
@@ -534,6 +580,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                   );
                 })}
               </View>
+              )}
 
               {zones ? (
                 <View style={styles.legend}>
@@ -620,13 +667,13 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                       <View style={{ flex: 1, minWidth: 0, gap: 9 }}>
                         <View style={styles.teamLine}>
                           <View style={[styles.tDot, { backgroundColor: localWon ? c.accent : c.hairStrong }]} />
-                          <Text style={[styles.teamName, localWon ? styles.teamWin : styles.teamLose]} numberOfLines={1}>
+                          <Text style={[styles.teamName, localWon ? styles.teamWin : styles.teamLose]} numberOfLines={2}>
                             {p.local || '—'}
                           </Text>
                         </View>
                         <View style={styles.teamLine}>
                           <View style={[styles.tDot, { backgroundColor: visitWon ? c.accent : c.hairStrong }]} />
-                          <Text style={[styles.teamName, visitWon ? styles.teamWin : styles.teamLose]} numberOfLines={1}>
+                          <Text style={[styles.teamName, visitWon ? styles.teamWin : styles.teamLose]} numberOfLines={2}>
                             {p.visit || '—'}
                           </Text>
                         </View>
@@ -653,6 +700,21 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                         </View>
                       ) : null}
                     </View>
+                    {/* Cuándo y dónde: día, hora, tandas y sede que la Federación ya publica. */}
+                    {p.fecha || p.hora || p.tandas || p.sede ? (
+                      <View style={styles.matchWhen}>
+                        <Text style={styles.matchWhenText} numberOfLines={1}>
+                          {[
+                            fmtLongDate(p.fecha),
+                            p.hora ? p.hora.slice(0, 5) : null,
+                            p.tandas ? `Tandas ${p.tandas}` : null,
+                            p.sede,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Text>
+                      </View>
+                    ) : null}
                     {acta.length > 0 && abierta ? (
                       <View style={styles.matchBottom}>
                         {acta.map((g) => {
@@ -881,6 +943,13 @@ const makeStyles = (c: Palette) =>
     teamWin: { color: c.text },
     teamLose: { color: c.textMuted },
     mScore: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: '700', color: c.text },
+    matchWhen: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderTopColor: c.hair,
+    },
+    matchWhenText: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 0.4, color: c.textMuted },
     matchBottom: {
       flexDirection: 'row',
       alignItems: 'center',

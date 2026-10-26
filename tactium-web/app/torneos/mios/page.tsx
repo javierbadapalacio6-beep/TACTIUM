@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { supabaseBrowser } from "@/lib/supabase/client";
 import {
+  fetchMyCreatedTournaments,
   fetchMyTournaments,
   fetchRegsPayments,
   fetchTournamentMatches,
@@ -54,6 +55,27 @@ const shortDate = (iso: string | null) => {
   const [y, m, d] = iso.split("-").map(Number);
   return y && m && d ? `${d} ${MESES[m - 1]}` : null;
 };
+
+/** Fila del organizador: estado + cuántos se han apuntado. */
+function createdLine(t: MyTournament): { line: string; tone: "accent" | "muted" } {
+  const b = bucketOf(t.status, t.starts_on);
+  const n = Number(t.players ?? 0);
+  const inscritos =
+    (t as { pair_based?: boolean | null }).pair_based === false
+      ? `${n} ${n === 1 ? "jugador inscrito" : "jugadores inscritos"}`
+      : `${n} ${n === 1 ? "pareja inscrita" : "parejas inscritas"}`;
+  const estado =
+    b === "live"
+      ? "En juego"
+      : t.status === "open" && b !== "finished"
+        ? "Inscripción abierta"
+        : b === "finished"
+          ? t.status === "canceled" || t.status === "cancelled"
+            ? "Cancelado"
+            : "Terminado"
+          : "Próximamente";
+  return { line: `${estado} · ${inscritos}`, tone: b === "live" || estado === "Inscripción abierta" ? "accent" : "muted" };
+}
 
 async function digestOf(t: MyTournament, uid: string): Promise<Digest | null> {
   const [mm, rr, pays] = await Promise.all([
@@ -113,6 +135,9 @@ export default function MisTorneosPage() {
   const [logged, setLogged] = useState(false);
 
   const [list, setList] = useState<MyTournament[] | null>(null);
+  // «Inscritos» (en los que juego) o «Creados por mí» (los que organizo).
+  const [ver, setVer] = useState<"inscritos" | "creados">("inscritos");
+  const [created, setCreated] = useState<MyTournament[] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const [uid, setUid] = useState<string | null>(null);
@@ -120,6 +145,9 @@ export default function MisTorneosPage() {
 
   const load = useCallback(async (userId: string) => {
     setLoadErr(null);
+    fetchMyCreatedTournaments()
+      .then(setCreated)
+      .catch(() => setCreated([]));
     try {
       const l = await fetchMyTournaments();
       setList(l);
@@ -142,6 +170,11 @@ export default function MisTorneosPage() {
       );
       setList([]);
     }
+  }, []);
+
+  useEffect(() => {
+    // /torneos/mios?ver=creados abre directamente «Creados por mí».
+    if (new URLSearchParams(window.location.search).get("ver") === "creados") setVer("creados");
   }, []);
 
   useEffect(() => {
@@ -229,16 +262,94 @@ export default function MisTorneosPage() {
         }
       />
 
+      {/* Inscritos (en los que juego) / Creados por mí (los que organizo). */}
+      <div className="tw-toolbar" role="tablist" aria-label="Mis torneos" style={{ marginBottom: 12 }}>
+        {(
+          [
+            ["inscritos", "Inscritos"],
+            ["creados", "Creados por mí"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={ver === k}
+            className={`tw-fcp-chip${ver === k ? " is-on" : ""}`}
+            onClick={() => setVer(k)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Un solo «Tengo un código»: el del torneo o el de tu pareja. */}
-      <Card flush style={{ marginBottom: 16 }}>
-        <CardHead title="Tengo un código" />
-        <div className="card-body">
-          <CodeBox loggedIn={!!uid} />
-        </div>
-      </Card>
+      {ver === "inscritos" ? (
+        <Card flush style={{ marginBottom: 16 }}>
+          <CardHead title="Tengo un código" />
+          <div className="card-body">
+            <CodeBox loggedIn={!!uid} />
+          </div>
+        </Card>
+      ) : null}
 
       {/* Lista de mis torneos */}
-      {list === null ? (
+      {ver === "creados" ? (
+        created === null ? (
+          <Card>
+            <EmptyState compact title="Cargando tus torneos…" />
+          </Card>
+        ) : created.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<IconTrophy size={22} />}
+              title="Aún no has creado ningún torneo"
+              body="Los torneos que montes tú, o que monte un club que gestionas, aparecerán aquí con sus inscritos."
+              action={
+                <BtnLink href="/torneos/organizar" variant="accent">
+                  Organizar un torneo
+                </BtnLink>
+              }
+            />
+          </Card>
+        ) : (
+          <div style={{ display: "grid", gap: 16 }}>
+            {(
+              [
+                ["En juego", created.filter((t) => bucketOf(t.status, t.starts_on) === "live")],
+                [
+                  "Inscripción abierta",
+                  created
+                    .filter((t) => t.status === "open" && !["live", "finished"].includes(bucketOf(t.status, t.starts_on)))
+                    .sort((a, b) => (a.starts_on ?? "zz").localeCompare(b.starts_on ?? "zz")),
+                ],
+                [
+                  "Próximamente",
+                  created
+                    .filter((t) => t.status !== "open" && bucketOf(t.status, t.starts_on) === "upcoming")
+                    .sort((a, b) => (a.starts_on ?? "zz").localeCompare(b.starts_on ?? "zz")),
+                ],
+                [
+                  "Terminados",
+                  created
+                    .filter((t) => bucketOf(t.status, t.starts_on) === "finished")
+                    .sort((a, b) => (b.starts_on ?? "").localeCompare(a.starts_on ?? "")),
+                ],
+              ] as [string, MyTournament[]][]
+            )
+              .filter(([, l]) => l.length > 0)
+              .map(([title, l]) => (
+                <Card key={title} flush>
+                  <CardHead title={title} count={l.length} />
+                  {l.map((t) => {
+                    const cl = createdLine(t);
+                    return <TournamentRow key={t.id} t={t as unknown as RowTournament} line={cl.line} tone={cl.tone} />;
+                  })}
+                </Card>
+              ))}
+          </div>
+        )
+      ) : list === null ? (
         <Card>
           <EmptyState compact title="Cargando tus torneos…" />
         </Card>

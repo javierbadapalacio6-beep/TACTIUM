@@ -9,6 +9,7 @@ import { deleteTeam, fetchTeam, updateTeam } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { TEAM_CATEGORIES, TEAM_GROUPS } from "@/lib/federations";
+import { describeTandas, tandasChoices } from "@/lib/tandas";
 
 const DOW = ["", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const TIMES: string[] = (() => {
@@ -69,19 +70,29 @@ export function EditTeamModal({
   const [slotsOpen, setSlotsOpen] = useState(false);
   const [addDow, setAddDow] = useState(6);
   const [addTime, setAddTime] = useState("10:00");
+  // Tanda habitual: cuántos partidos se juegan a cada hora. Sale ya marcada al poner la hora de un partido de local.
+  const [tandas, setTandas] = useState<string | null>(null);
+  const [tGender, setTGender] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
     supabaseBrowser()
       .from("teams")
-      .select("preferred_home_slots, venue_club_id")
+      .select("preferred_home_slots, venue_club_id, preferred_tandas, gender")
       .eq("id", teamId)
       .maybeSingle()
       .then(({ data }) => {
         if (!alive || !data) return;
-        const row = data as { preferred_home_slots: string[] | null; venue_club_id: string | null };
+        const row = data as {
+          preferred_home_slots: string[] | null;
+          venue_club_id: string | null;
+          preferred_tandas: string | null;
+          gender: string | null;
+        };
         setSlots(row.preferred_home_slots ?? []);
+        setTandas(row.preferred_tandas ?? null);
+        setTGender(row.gender ?? null);
         setVenue(!!row.venue_club_id);
       });
     return () => {
@@ -102,6 +113,19 @@ export function EditTeamModal({
     });
     if (!res.ok) {
       setSlots(prev);
+      setToast(res.reason);
+    }
+  }
+
+  async function saveTandas(next: string | null) {
+    const prev = tandas;
+    setTandas(next);
+    const res = await guardedWrite("guardar las tandas", async () => {
+      const { error } = await supabaseBrowser().from("teams").update({ preferred_tandas: next }).eq("id", teamId);
+      if (error) throw error;
+    });
+    if (!res.ok) {
+      setTandas(prev);
       setToast(res.reason);
     }
   }
@@ -366,6 +390,31 @@ export function EditTeamModal({
               Añadir franja
             </Btn>
           </div>
+
+          <span className="field-hint" style={{ marginTop: 6 }}>
+            Tandas habituales: cuántos partidos se juegan a cada hora, desde la de inicio. «3-2» son tres a la hora de
+            inicio y dos a la siguiente.
+          </span>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {tandasChoices(tGender).map((tv) => {
+              const sel = tandas === tv;
+              return (
+                <button
+                  key={tv}
+                  type="button"
+                  className={`chip${sel ? "" : " chip-mute"}`}
+                  aria-pressed={sel}
+                  onClick={() => void saveTandas(sel ? null : tv)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {tv}
+                </button>
+              );
+            })}
+          </div>
+          {tandas && (
+            <span className="field-hint">{describeTandas(tandas, tGender, null).join(" · ")}</span>
+          )}
         </div>
       )}
 

@@ -12,6 +12,7 @@ import {
   fetchMatchdayBundle,
   fetchMatchdayFcpContext,
   fetchSeasons,
+  fetchTeam,
   type DbMatchday,
   type DbPlayer,
   type FcpStanding,
@@ -20,9 +21,11 @@ import {
 import { removeMatchPhoto, updateMatchdaySchedule, uploadMatchPhoto } from "@/lib/matchday-ops";
 import { useSession } from "@/lib/session";
 import { useMatchdayTeam } from "@/lib/use-matchday-team";
+import { describeTandasShort, tandaWhenForCourt, tandasChoices } from "@/lib/tandas";
 import { renderShareCard, shareOrDownload, type ShareCardInput } from "@/lib/share-card";
 import { SITE_URL } from "@/lib/site";
 import { useAsync } from "@/lib/use-async";
+import { useAvailabilityRealtime } from "@/lib/use-availability-realtime";
 import { useDismiss } from "@/lib/use-dismiss";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import {
@@ -45,8 +48,13 @@ import {
   StatRow,
 } from "@/components/ui";
 import { EmptyState, Skeleton, SkeletonPage, Toast } from "@/components/states";
+import { fmtRango } from "@/lib/fcp-range";
 import { TimePollPanel } from "@/components/matchday/TimePollPanel";
+import { isMatchStarted, isMatchOver } from "@/lib/match-time";
+import { FederationUploadCard } from "@/components/matchday/FederationUploadCard";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
+import { PairPhotos } from "@/components/matchday/PairPhotos";
+import { fetchTeamShareLogo } from "@/lib/team-logo";
 import {
   IconAlert,
   IconCalendar,
@@ -135,8 +143,10 @@ function countdown(
   date: string | null,
   time: string | null,
   now: number,
+  range?: string | null,
 ): { big: string; small: string } {
-  if (!date) return { big: "—", small: "Fecha por confirmar" };
+  // Sin día exacto, el fin de semana que da la Federación («23-25 oct»).
+  if (!date) return range ? { big: fmtRango(range), small: "Día y hora por confirmar" } : { big: "—", small: "Fecha por confirmar" };
   const hhmm = time ? time.slice(0, 5) : null;
   const target = new Date(`${date}T${hhmm ?? "00:00"}:00`);
   if (Number.isNaN(target.getTime())) return { big: "—", small: "Fecha por confirmar" };
@@ -150,13 +160,6 @@ function countdown(
   const d = Math.floor(totalH / 24);
   const h = totalH % 24;
   return { big: d === 0 ? `${h} h` : `${d} d / ${h} h`, small: "Para el partido" };
-}
-
-/** ¿Ha llegado la hora del partido? (sin hora, cuenta desde las 00:00). */
-function isMatchStarted(date: string | null, time: string | null, now: number): boolean {
-  if (!date) return false;
-  const t = new Date(`${date}T${time ?? "00:00:00"}`);
-  return !Number.isNaN(t.getTime()) && now >= t.getTime();
 }
 
 const initialsOf = (name: string) =>
@@ -390,8 +393,8 @@ export function MatchdayView({ id }: { id: string }) {
   const pathname = usePathname();
 
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
-    () => fetchMatchdayBundle(id, teamId!),
-    [id, teamId],
+    () => fetchMatchdayBundle(id, teamId!, isCaptain),
+    [id, teamId, isCaptain],
     !!teamId
   );
 
@@ -412,11 +415,14 @@ export function MatchdayView({ id }: { id: string }) {
   const seasons = useAsync(() => fetchSeasons(teamId!).catch(() => []), [teamId], !!teamId);
 
   // Convocatoria: respuestas con estado (va / duda / no).
+  const [availNonce, setAvailNonce] = useState(0);
   const avail = useAsync(
     () => fetchAvailabilityDetail(id).catch(() => ({})),
-    [id],
+    [id, availNonce],
     !!teamId
   );
+  // En vivo: el recuento de la convocatoria se actualiza cuando alguien responde.
+  useAvailabilityRealtime(id, () => setAvailNonce((n) => n + 1), "availability", !!teamId);
 
   const [rows, setRows] = useState<CourtRow[]>([]);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -438,6 +444,12 @@ export function MatchdayView({ id }: { id: string }) {
   const [schedDate, setSchedDate] = useState("");
   const [schedTime, setSchedTime] = useState("");
   const [schedSaving, setSchedSaving] = useState(false);
+  const [schedPlace, setSchedPlace] = useState("");
+  const [schedTandas, setSchedTandas] = useState<string | null>(null);
+  // Género del equipo: decide cuántas parejas y qué tandas valen.
+  const teamInfo = useAsync(() => fetchTeam(teamId!).catch(() => null), [teamId], !!teamId);
+  const teamGender = teamInfo.data?.gender ?? null;
+  const shareLogo = useAsync(() => fetchTeamShareLogo(teamId!), [teamId], !!teamId);
 
   // La pestaña va en la URL (`?tab=`): se puede enlazar, recargar y volver
   // atrás sin perderla. Sin parámetro, la que toque según el momento.
@@ -575,6 +587,8 @@ export function MatchdayView({ id }: { id: string }) {
   const allIn = rows.length > 0 && filled === rows.length;
   const pairsSet = rows.filter((r) => r.pair[0] && r.pair[1]).length;
   const started = m.status === "in_progress" || isMatchStarted(m.date, m.time, now);
+  // Pasado el plazo del encuentro (5 h) sin acta cerrada: no está «en juego», falta el acta.
+  const over = !closed && isMatchOver(m.date, m.time, now);
   // Marcador grande solo con algo que contar: acta cerrada o empezado con
   // alguna pista resuelta. Empezado sin pistas → «En juego».
   const hasResult = closed || (started && filled > 0);
@@ -704,6 +718,8 @@ export function MatchdayView({ id }: { id: string }) {
   function openSchedule() {
     setSchedDate(m.date ?? "");
     setSchedTime(m.time ? m.time.slice(0, 5) : "");
+    setSchedPlace(m.location ?? "");
+    setSchedTandas(m.tandas ?? null);
     setEditSchedule(true);
   }
 
@@ -712,8 +728,9 @@ export function MatchdayView({ id }: { id: string }) {
     setSchedSaving(true);
     const date = schedDate || null;
     const time = schedTime || null;
-    const res = await guardedWrite("cambiar la fecha de la jornada", () =>
-      updateMatchdaySchedule(m.id, { date, time })
+    const location = schedPlace.trim() || null;
+    const res = await guardedWrite("cambiar los datos de la jornada", () =>
+      updateMatchdaySchedule(m.id, { date, time, location, tandas: schedTandas })
     );
     setSchedSaving(false);
     setEditSchedule(false);
@@ -721,13 +738,13 @@ export function MatchdayView({ id }: { id: string }) {
       setToast(res.reason);
       return;
     }
-    setPatch((p) => ({ ...p, date, time: time ? `${time}:00` : null }));
-    setToast("Fecha actualizada");
+    setPatch((p) => ({ ...p, date, time: time ? `${time}:00` : null, location, tandas: schedTandas }));
+    setToast("Jornada actualizada");
   }
 
   /* ── Compartir resultado ───────────────────────────────────────── */
   const shareOutcome = closed ? closedOutcome : outcome;
-  const shareSubtitle = [`Jornada ${m.round}`, m.date ? formatDate(m.date) : null]
+  const shareSubtitle = [`Jornada ${m.round}`, m.date ? formatDate(m.date) : null, m.location?.trim() || null]
     .filter(Boolean)
     .join(" · ");
   const courtScore = (r: CourtRow): string => {
@@ -744,6 +761,13 @@ export function MatchdayView({ id }: { id: string }) {
     scoreThem,
     outcome: shareOutcome,
     subtitle: shareSubtitle,
+    extra: m.tandas
+      ? `Tandas ${m.tandas}${
+          describeTandasShort(m.tandas, teamGender, m.time?.slice(0, 5) ?? null)
+            ? ` · ${describeTandasShort(m.tandas, teamGender, m.time?.slice(0, 5) ?? null)}`
+            : ""
+        }`
+      : null,
     season: season?.name ?? null,
     photoUrl: m.photoUrl,
     courts: rows.map((r) => {
@@ -866,14 +890,14 @@ export function MatchdayView({ id }: { id: string }) {
       <CardHead title="Sede">
         {canEditSchedule && (
           <button type="button" className="link-action" onClick={openSchedule}>
-            Cambiar fecha
+            Editar
           </button>
         )}
       </CardHead>
       <div className="card-body">
         <dl className="kv" style={{ margin: 0 }}>
           <dt>Fecha</dt>
-          <dd>{m.date ? formatDate(m.date) : "—"}</dd>
+          <dd>{m.date ? formatDate(m.date) : m.dateRange ? `${fmtRango(m.dateRange)} · por confirmar` : "—"}</dd>
           <dt>Hora</dt>
           <dd className="mono">{m.time?.slice(0, 5) ?? "—"}</dd>
           <dt>Lugar</dt>
@@ -883,12 +907,27 @@ export function MatchdayView({ id }: { id: string }) {
             {m.isHome ? <IconHome size={14} /> : <IconPlane size={14} />}
             {m.isHome ? "En nuestras pistas" : "Fuera de casa"}
           </dd>
-          {m.tandas ? (
-            <>
-              <dt>Tandas</dt>
-              <dd className="mono">{m.tandas}</dd>
-            </>
-          ) : null}
+          <dt>Tandas</dt>
+          <dd>
+            {m.tandas ? (
+              <>
+                <span className="mono" style={{ fontWeight: 700 }}>{m.tandas}</span>
+                {(() => {
+                  const short = describeTandasShort(m.tandas, teamGender, m.time?.slice(0, 5) ?? null);
+                  return short ? (
+                    <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                      {m.time ? "Horas orientativas · " : "Orden · "}
+                      {short}
+                    </div>
+                  ) : null;
+                })()}
+              </>
+            ) : (
+              <span style={{ color: canEditSchedule ? "var(--warning)" : "var(--text-faint)" }}>
+                {canEditSchedule ? "Sin definir · edítalas" : "Sin definir"}
+              </span>
+            )}
+          </dd>
         </dl>
       </div>
     </Card>
@@ -927,6 +966,12 @@ export function MatchdayView({ id }: { id: string }) {
                   {shortName(a)} · {shortName(b)}
                 </span>
               </span>
+              {(() => {
+                const when = tandaWhenForCourt(m.tandas, teamGender, r.court, m.time?.slice(0, 5) ?? null);
+                return when ? (
+                  <span className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{when}</span>
+                ) : null;
+              })()}
               <span className="mono" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
                 {a.pts + b.pts}
               </span>
@@ -1046,11 +1091,6 @@ export function MatchdayView({ id }: { id: string }) {
               </span>
             ) : (
               <>
-                {isCaptain && (
-                  <Btn variant="accent" onClick={() => setConfirmClose(true)} icon={<IconCheck size={15} />}>
-                    Cerrar acta
-                  </Btn>
-                )}
                 {!allIn && (
                   <span style={{ fontSize: 12.5, color: "var(--warning)", display: "flex", alignItems: "center", gap: 6 }}>
                     <IconAlert size={14} />
@@ -1180,11 +1220,8 @@ export function MatchdayView({ id }: { id: string }) {
               <Btn icon={<IconCheck size={15} />} onClick={() => setConfirmClose(true)}>
                 Cerrar acta
               </Btn>
-              <BtnLink href={`/jornada/${m.id}/alineacion`} variant="quiet" icon={<IconUsers size={15} />}>
-                Alineación
-              </BtnLink>
             </>
-          ) : teamCaptain && !closed ? (
+          ) : teamCaptain && !closed && !started ? (
             <BtnLink href={`/jornada/${m.id}/alineacion`} variant="accent" icon={<IconUsers size={15} />}>
               Editar alineación
             </BtnLink>
@@ -1193,15 +1230,8 @@ export function MatchdayView({ id }: { id: string }) {
               <BtnLink href={`/jornada/${m.id}/resultados`} variant="accent" icon={<IconFlag size={15} />}>
                 Meter mi resultado
               </BtnLink>
-              <BtnLink href={`/jornada/${m.id}/alineacion`} variant="ghost" icon={<IconUsers size={15} />}>
-                Ver alineación
-              </BtnLink>
             </>
-          ) : (
-            <BtnLink href={`/jornada/${m.id}/alineacion`} variant="ghost" icon={<IconUsers size={15} />}>
-              Ver alineación
-            </BtnLink>
-          )}
+          ) : null}
           {canDelete && (
             <div ref={menuRef} style={{ position: "relative" }}>
               <Btn
@@ -1295,9 +1325,9 @@ export function MatchdayView({ id }: { id: string }) {
             ) : started ? (
               <>
                 <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1, color: "var(--warning)" }}>
-                  En juego
+                  {over ? "Falta el acta" : "En juego"}
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin resultados aún</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{over ? "Partido jugado · sin resultados" : "Sin resultados aún"}</span>
               </>
             ) : (
               <>
@@ -1305,15 +1335,15 @@ export function MatchdayView({ id }: { id: string }) {
                   className="mono"
                   style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1, color: "var(--text)", textAlign: "center", whiteSpace: "nowrap" }}
                 >
-                  {countdown(m.date, m.time, now).big}
+                  {countdown(m.date, m.time, now, m.dateRange).big}
                 </span>
                 <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {countdown(m.date, m.time, now).small}
+                  {countdown(m.date, m.time, now, m.dateRange).small}
                 </span>
               </>
             )}
             <Chip tone={closed ? tone.chip : started ? "warning" : "mute"}>
-              {closed ? tone.l : started ? "En juego" : "Pendiente"}
+              {closed ? tone.l : started ? (over ? "Falta el acta" : "En juego") : "Pendiente"}
             </Chip>
           </div>
 
@@ -1344,8 +1374,12 @@ export function MatchdayView({ id }: { id: string }) {
       </div>
 
       <div {...tabPanelProps("jornada", curTab)} style={{ outline: "none" }}>
-      {/* Encuesta de hora (lógica en TimePollPanel). */}
-      {curTab === "previa" && !closed && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+      {/* Encuesta de hora (lógica en TimePollPanel). Solo de local: de visitante la hora la fija el club rival. */}
+      {curTab === "previa" && !closed && !started && m.isHome && <TimePollPanel matchdayId={m.id} canManage={isCaptain} />}
+      {curTab === "previa" && !closed && <FederationUploadCard matchdayId={m.id} canManage={isCaptain} />}
+      {(curTab === "previa" || curTab === "alineacion") && !closed && (
+        <FederationUploadCard matchdayId={m.id} canManage={isCaptain} kind="lineup" />
+      )}
 
       {curTab === "previa" && (
         <div style={twoCols}>
@@ -1403,6 +1437,7 @@ export function MatchdayView({ id }: { id: string }) {
 
       {curTab === "fotos" &&
         (closed ? (
+          <>
           <div style={twoCols}>
             {photoCard}
             <ShareResultCard
@@ -1412,6 +1447,28 @@ export function MatchdayView({ id }: { id: string }) {
               onToast={setToast}
             />
           </div>
+          <div style={{ marginTop: 16 }}>
+            <PairPhotos
+              matchdayId={m.id}
+              teamId={teamId ?? null}
+              canEdit={canEditPhoto}
+              items={rows.map((r) => {
+                const v = verdict(r);
+                return {
+                  court: r.court,
+                  playerA: r.pair[0]?.name ?? null,
+                  playerB: r.pair[1]?.name ?? null,
+                  summary: courtScore(r) === "—" ? "" : courtScore(r),
+                  won: v === "none" ? null : v === "win",
+                };
+              })}
+              matchLine={`${ourName} ${scoreUs}–${scoreThem} ${m.opponent}`}
+              subtitle={shareSubtitle}
+              clubLogoUrl={shareLogo.data ?? (teamInfo.data as { logo_url?: string | null } | null)?.logo_url ?? null}
+              onToast={setToast}
+            />
+          </div>
+          </>
         ) : (
           <Note icon={<IconCamera size={16} />}>
             La foto del partido se ve aquí cuando el acta está cerrada.
@@ -1503,8 +1560,8 @@ export function MatchdayView({ id }: { id: string }) {
         onClose={() => !schedSaving && setEditSchedule(false)}
         labelledBy="fecha-jornada-titulo"
         width={440}
-        title="Fecha y hora de la jornada"
-        lede="Déjalas en blanco si aún están por confirmar."
+        title="Datos de la jornada"
+        lede="Fecha, hora, lugar y tandas. Déjalos en blanco si aún están por confirmar."
         footer={
           <>
             <Btn onClick={() => setEditSchedule(false)} disabled={schedSaving}>
@@ -1533,6 +1590,29 @@ export function MatchdayView({ id }: { id: string }) {
               onChange={(e) => setSchedTime(e.target.value)}
             />
           </Field>
+          <Field label="Lugar" htmlFor="jornada-lugar">
+            <Input
+              id="jornada-lugar"
+              value={schedPlace}
+              onChange={(e) => setSchedPlace(e.target.value)}
+              placeholder="Pádel Club Norte"
+            />
+          </Field>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Tandas</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[null, ...tandasChoices(teamGender)].map((tv) => (
+              <Btn
+                key={tv ?? "none"}
+                variant={schedTandas === tv ? "accent" : "ghost"}
+                aria-pressed={schedTandas === tv}
+                onClick={() => setSchedTandas(tv)}
+              >
+                {tv ?? "Sin tanda"}
+              </Btn>
+            ))}
+          </div>
         </div>
         {!WRITES_ENABLED ? (
           <Note tone="warning" style={{ marginTop: 12 }}>

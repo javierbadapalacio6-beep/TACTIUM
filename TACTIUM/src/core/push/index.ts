@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -43,8 +43,17 @@ export async function getPushPermission(): Promise<
   'granted' | 'denied' | 'undetermined'
 > {
   if (!Device.isDevice) return 'denied';
-  const { status } = await Notifications.getPermissionsAsync();
+  const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+  // Android 13+: antes de la primera petición el sistema devuelve «denied»
+  // con canAskAgain=true (no «undetermined»). Es lo mismo: aún no se ha
+  // preguntado, así que hay que poder pedirlo.
+  if (status === 'denied' && canAskAgain && Platform.OS === 'android') return 'undetermined';
   return status as 'granted' | 'denied' | 'undetermined';
+}
+
+/** Abre los ajustes de TACTIUM en el sistema (para activar los avisos a mano). */
+export function openSystemNotificationSettings(): void {
+  Linking.openSettings().catch(() => {});
 }
 
 /**

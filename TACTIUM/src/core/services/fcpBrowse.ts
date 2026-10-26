@@ -145,63 +145,181 @@ export interface FcpBrowseStanding {
   pg: number;
   /** Racha reciente (hasta 5 resultados, del más antiguo al más nuevo). */
   form: ('V' | 'D')[];
+  /** Tabla completa de la Federación, calculada con las actas: enfrentamientos, partidos, sets y juegos. */
+  stats: GroupTeamStats;
 }
 
-/** Clasificación de un grupo (PJ/PG derivados de fcp_partidos). */
+export interface GroupTeamStats {
+  /** Enfrentamientos disputados (encuentros entre equipos). */
+  enf: number;
+  /** Partidos (parejas) disputados y ganados. */
+  pj: number;
+  pg: number;
+  sf: number;
+  sc: number;
+  jf: number;
+  jc: number;
+}
+
+const EMPTY_STATS: GroupTeamStats = { enf: 0, pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 };
+
+/** «6/4 - 3/6 - 10/8» → juegos de cada lado (suma de los parciales). */
+function juegosDe(parciales: string | null | undefined): [number, number] {
+  let a = 0;
+  let b = 0;
+  for (const m of (parciales ?? '').matchAll(/(d+)s*[/-:]s*(d+)/g)) {
+    a += Number(m[1]);
+    b += Number(m[2]);
+  }
+  return [a, b];
+}
+
+/**
+ * Un equipo que cambia de nombre (patrocinador) deja su fila vieja en la clasificación con el mismo id: sale
+ * duplicado y el grupo parece tener un equipo de más. Se queda la fila cuyo nombre aparece en los partidos.
+ */
+function dedupeClasif<T extends { equipo: string; id_equipo: number | null }>(
+  rows: T[],
+  partidos: { equipo_local: string | null; equipo_visit: string | null }[],
+): T[] {
+  const names = new Set<string>();
+  for (const p of partidos) {
+    if (p.equipo_local) names.add(p.equipo_local);
+    if (p.equipo_visit) names.add(p.equipo_visit);
+  }
+  return rows.filter(
+    (r) => r.id_equipo == null || names.size === 0 || names.has(r.equipo) || !rows.some((o) => o !== r && o.id_equipo === r.id_equipo && names.has(o.equipo)),
+  );
+}
+
+type OverlayPartido = {
+  id_partido: string;
+  estado: string | null;
+  resultado: string | null;
+  ganador: string | null;
+};
+
+/**
+ * Lo que la Federación aún no ha subido pero TACTIUM ya sabe (acta cerrada por el capitán): se rellena el
+ * partido con nuestro marcador para poder deducir la clasificación. Solo se ve lo de tus equipos (RLS) y
+ * solo donde la Federación no tiene resultado: en cuanto lo sube, manda el suyo.
+ */
+async function overlayOwnResults(partidos: OverlayPartido[] | null): Promise<void> {
+  const pend = (partidos ?? []).filter((p) => p.estado !== 'jugado' && !p.resultado);
+  if (pend.length === 0) return;
+  const { data } = await rawFrom('matchdays')
+    .select('fcp_id_partido, is_home, score_for, score_against')
+    .in('fcp_id_partido', pend.map((p) => p.id_partido))
+    .eq('status', 'finished');
+  for (const m of (data ?? []) as {
+    fcp_id_partido: string;
+    is_home: boolean;
+    score_for: number | null;
+    score_against: number | null;
+  }[]) {
+    if (m.score_for == null || m.score_against == null) continue;
+    const p = pend.find((x) => x.id_partido === m.fcp_id_partido);
+    if (!p) continue;
+    const l = m.is_home ? m.score_for : m.score_against;
+    const v = m.is_home ? m.score_against : m.score_for;
+    p.estado = 'jugado';
+    p.resultado = `${l}-${v}`;
+    p.ganador = l > v ? 'local' : v > l ? 'visitante' : null;
+  }
+}
+
+/**
+ * Clasificación de un grupo, IGUAL que la de la Federación (la oficial manda siempre): posición, puntos,
+ * enfrentamientos y sets son los suyos. PJ/PG y juegos salen de las actas, contando solo los enfrentamientos
+ * que la Federación ya tiene en su tabla (los primeros `enf` de cada equipo), para no adelantarnos a ella.
+ */
 export async function fetchGroupStandings(
   idGrupo: string,
-): Promise<{ nombre: string | null; genero: string | null; rows: FcpBrowseStanding[] }> {
-  const { data } = await rawFrom('fcp_clasificacion')
-    .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
+): Promise<{ nombre: string | null; genero: string | null; rows: FcpBrowseStanding[]; provisional: boolean }> {
+  const { data: rawClasif } = await rawFrom('fcp_clasificacion')
+    .select('posicion, equipo, id_equipo, puntos, enf, sets_favor, sets_contra')
     .eq('id_grupo', idGrupo)
     .order('posicion', { ascending: true });
 
   const { data: partidos } = await rawFrom('fcp_partidos')
-    .select('equipo_local, equipo_visit, ganador, estado, jornada')
+    .select('id_partido, equipo_local, equipo_visit, ganador, estado, jornada, resultado, tipo')
     .eq('id_grupo', idGrupo)
     .order('jornada', { ascending: true });
-  const stats = new Map<string, { pj: number; pg: number }>();
-  // Resultados por equipo en orden cronológico → racha (últimos 5).
-  const streak = new Map<string, ('V' | 'D')[]>();
-  for (const p of (partidos ?? []) as {
+  const { data: actasRows } = await rawFrom('fcp_actas')
+    .select('id_partido, equipo_local, equipo_visit, sets_local, sets_visit, parciales')
+    .eq('id_grupo', idGrupo);
+
+  type Clasif = {
+    posicion: number | null;
+    equipo: string;
+    id_equipo: number | null;
+    puntos: number | null;
+    enf: number | null;
+    sets_favor: number | null;
+    sets_contra: number | null;
+  };
+  const clasif = dedupeClasif(
+    (rawClasif ?? []) as Clasif[],
+    (partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null }[],
+  );
+  const resolve = makeTeamResolver(clasif.map((x) => x.equipo));
+  const enfOf = new Map(clasif.map((r) => [r.equipo, r.enf ?? 0]));
+  const jornadaDe = new Map(
+    ((partidos ?? []) as { id_partido: string; jornada: number | null }[]).map((p) => [p.id_partido, p.jornada ?? 0]),
+  );
+
+  // Jornadas que la Federación ya cuenta de cada equipo: las primeras `enf` con partido jugado.
+  const jugadas = new Map<string, number[]>();
+  const streakAll = new Map<string, ('V' | 'D')[]>();
+  for (const p of remapTeams((partidos ?? []) as {
     equipo_local: string | null;
     equipo_visit: string | null;
     ganador: string | null;
     estado: string | null;
     jornada: number | null;
-  }[]) {
+  }[], resolve)) {
     if (p.estado !== 'jugado') continue;
-    const sides: [string | null, boolean][] = [
-      [p.equipo_local, true],
-      [p.equipo_visit, false],
-    ];
-    for (const [name, isLocal] of sides) {
+    for (const [name, isLocal] of [[p.equipo_local, true], [p.equipo_visit, false]] as [string | null, boolean][]) {
       if (!name) continue;
-      const s = stats.get(name) ?? { pj: 0, pg: 0 };
-      s.pj += 1;
-      const won = (p.ganador === 'local' && isLocal) || (p.ganador === 'visitante' && !isLocal);
-      const decided = p.ganador === 'local' || p.ganador === 'visitante';
-      if (won) s.pg += 1;
-      stats.set(name, s);
-      if (decided) {
-        const f = streak.get(name) ?? [];
-        f.push(won ? 'V' : 'D');
-        streak.set(name, f);
+      (jugadas.get(name) ?? jugadas.set(name, []).get(name)!).push(p.jornada ?? 0);
+      if (p.ganador === 'local' || p.ganador === 'visitante') {
+        const won = (p.ganador === 'local') === isLocal;
+        (streakAll.get(name) ?? streakAll.set(name, []).get(name)!).push(won ? 'V' : 'D');
       }
     }
   }
+  const allowed = (team: string, j: number) => {
+    const n = enfOf.get(team) ?? 0;
+    return [...(jugadas.get(team) ?? [])].sort((a, b) => a - b).slice(0, n).includes(j);
+  };
 
-  const rows: FcpBrowseStanding[] = (
-    (data ?? []) as {
-      posicion: number | null;
-      equipo: string;
-      id_equipo: number | null;
-      puntos: number | null;
-      sets_favor: number | null;
-      sets_contra: number | null;
-    }[]
-  ).map((r) => {
-    const s = stats.get(r.equipo) ?? { pj: 0, pg: 0 };
+  const tstats = new Map<string, GroupTeamStats>();
+  const st = (e: string) => {
+    let v = tstats.get(e);
+    if (!v) tstats.set(e, (v = { ...EMPTY_STATS }));
+    return v;
+  };
+  for (const a of remapTeams((actasRows ?? []) as (ActaCalc & { id_partido: string; parciales: string | null })[], resolve)) {
+    if (!a.equipo_local || !a.equipo_visit || a.sets_local == null || a.sets_visit == null) continue;
+    const j = jornadaDe.get(a.id_partido) ?? 0;
+    const [jl, jv] = juegosDe(a.parciales);
+    if (allowed(a.equipo_local, j)) {
+      const l = st(a.equipo_local);
+      l.pj += 1;
+      if (a.sets_local > a.sets_visit) l.pg += 1;
+      l.sf += a.sets_local; l.sc += a.sets_visit; l.jf += jl; l.jc += jv;
+    }
+    if (allowed(a.equipo_visit, j)) {
+      const v = st(a.equipo_visit);
+      v.pj += 1;
+      if (a.sets_visit > a.sets_local) v.pg += 1;
+      v.sf += a.sets_visit; v.sc += a.sets_local; v.jf += jv; v.jc += jl;
+    }
+  }
+
+  const rows: FcpBrowseStanding[] = clasif.map((r) => {
+    const enf = r.enf ?? 0;
+    const t = { ...(tstats.get(r.equipo) ?? EMPTY_STATS), enf };
     return {
       posicion: r.posicion,
       equipo: r.equipo,
@@ -209,9 +327,10 @@ export async function fetchGroupStandings(
       puntos: r.puntos,
       setsFavor: r.sets_favor,
       setsContra: r.sets_contra,
-      pj: s.pj,
-      pg: s.pg,
-      form: (streak.get(r.equipo) ?? []).slice(-5),
+      pj: t.pj,
+      pg: t.pg,
+      form: (streakAll.get(r.equipo) ?? []).slice(0, enf).slice(-5),
+      stats: t,
     };
   });
 
@@ -220,7 +339,103 @@ export async function fetchGroupStandings(
     .eq('id_grupo', idGrupo)
     .maybeSingle();
   const gi = g as { nombre: string | null; genero: string | null } | null;
-  return { nombre: gi?.nombre ?? null, genero: gi?.genero ?? null, rows };
+  return { nombre: gi?.nombre ?? null, genero: gi?.genero ?? null, rows, provisional: false };
+}
+
+
+/** Clave de comparación de un nombre de equipo: mayúsculas, sin tildes ni signos. */
+function teamNameKey(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * En los partidos el equipo lleva el patrocinador («G6 C-HIJAS DE ANA») y en la clasificación no («G6 C»).
+ * Devuelve una función que lleva el nombre del partido al de la clasificación: mismo nombre, o el de la
+ * clasificación como inicio del otro (palabra entera). Gana el nombre más largo que encaje.
+ */
+export function makeTeamResolver(equipos: string[]) {
+  const keys = equipos.map((e) => ({ e, k: teamNameKey(e) })).sort((a, b) => b.k.length - a.k.length);
+  const cache = new Map<string, string>();
+  return (name: string | null): string | null => {
+    if (!name) return name;
+    const hit = cache.get(name);
+    if (hit !== undefined) return hit;
+    const k = teamNameKey(name);
+    const found = keys.find((x) => k === x.k || k.startsWith(x.k + ' '));
+    const out = found ? found.e : name;
+    cache.set(name, out);
+    return out;
+  };
+}
+
+function remapTeams<T extends { equipo_local: string | null; equipo_visit: string | null }>(
+  arr: T[],
+  resolve: (n: string | null) => string | null,
+): T[] {
+  return arr.map((p) => ({ ...p, equipo_local: resolve(p.equipo_local), equipo_visit: resolve(p.equipo_visit) }));
+}
+
+type PartidoCalc = {
+  equipo_local: string | null;
+  equipo_visit: string | null;
+  estado: string | null;
+  resultado: string | null;
+  tipo: string | null;
+};
+type ActaCalc = {
+  equipo_local: string | null;
+  equipo_visit: string | null;
+  sets_local: number | null;
+  sets_visit: number | null;
+};
+
+/** Resultado «a/b» o «a-b» → [a, b]. */
+export function parseMarcador(resultado: string | null | undefined): [number, number] | null {
+  const m = (resultado ?? '').match(/^\s*(\d+)\s*[/\-]\s*(\d+)\s*$/);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/** Puntos / partidos / sets de cada equipo a partir de lo jugado (fase regular). */
+function provisionalCalc(equipos: string[], partidos: PartidoCalc[], actas: ActaCalc[]) {
+  const m = new Map<string, { puntos: number; pf: number; pc: number; sf: number; sc: number }>();
+  for (const e of equipos) m.set(e, { puntos: 0, pf: 0, pc: 0, sf: 0, sc: 0 });
+  for (const p of partidos) {
+    if (p.estado !== 'jugado' || (p.tipo && /play/i.test(p.tipo))) continue;
+    const sc = parseMarcador(p.resultado);
+    const l = p.equipo_local ? m.get(p.equipo_local) : undefined;
+    const v = p.equipo_visit ? m.get(p.equipo_visit) : undefined;
+    if (!sc || !l || !v) continue;
+    l.pf += sc[0];
+    l.pc += sc[1];
+    v.pf += sc[1];
+    v.pc += sc[0];
+    // Puntos de la Federación (comprobado en la liga 2026/27): con 5 parejas, victoria = 1; con 4 parejas, victoria = 2 y empate = 1.
+    const win = (sc[0] + sc[1]) % 2 === 1 ? 1 : 2;
+    if (sc[0] > sc[1]) l.puntos += win;
+    else if (sc[1] > sc[0]) v.puntos += win;
+    else {
+      l.puntos += 1;
+      v.puntos += 1;
+    }
+  }
+  for (const a of actas) {
+    const l = a.equipo_local ? m.get(a.equipo_local) : undefined;
+    const v = a.equipo_visit ? m.get(a.equipo_visit) : undefined;
+    if (l) {
+      l.sf += a.sets_local ?? 0;
+      l.sc += a.sets_visit ?? 0;
+    }
+    if (v) {
+      v.sf += a.sets_visit ?? 0;
+      v.sc += a.sets_local ?? 0;
+    }
+  }
+  return m;
 }
 
 export interface FcpBrowseMatch {
@@ -232,12 +447,22 @@ export interface FcpBrowseMatch {
   ganador: string | null;
   fecha: string | null;
   hora: string | null;
+  /** Tandas de la Federación («2-2»). */
+  tandas: string | null;
+  /** Sede, sacada del texto de la Federación («24 Oct 11:00 Tandas:2-2  Move and go Santander»). */
+  sede: string | null;
+}
+
+/** La sede es lo que sigue a «Tandas:x-y» en el texto de la Federación. */
+function sedeDeRango(rango: string | null): string | null {
+  const m = (rango ?? '').match(/Tandas:\s*\S+\s+(.+)$/i);
+  return m?.[1]?.trim() || null;
 }
 
 /** Jornadas (calendario) de un grupo. */
 export async function fetchGroupSchedule(idGrupo: string): Promise<FcpBrowseMatch[]> {
   const { data } = await rawFrom('fcp_partidos')
-    .select('id_partido, jornada, equipo_local, equipo_visit, resultado, ganador, fecha, hora')
+    .select('id_partido, jornada, equipo_local, equipo_visit, resultado, ganador, fecha, hora, orden_tandas, fecha_rango')
     .eq('id_grupo', idGrupo)
     .order('jornada', { ascending: true });
   return ((data ?? []) as {
@@ -249,7 +474,11 @@ export async function fetchGroupSchedule(idGrupo: string): Promise<FcpBrowseMatc
     ganador: string | null;
     fecha: string | null;
     hora: string | null;
+    orden_tandas: string | null;
+    fecha_rango: string | null;
   }[]).map((r) => ({
+    tandas: r.orden_tandas,
+    sede: sedeDeRango(r.fecha_rango),
     idPartido: r.id_partido,
     jornada: r.jornada,
     local: r.equipo_local ?? '',

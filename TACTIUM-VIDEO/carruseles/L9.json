@@ -1,0 +1,187 @@
+{
+  "id": "L9",
+  "titulo": "Jornada 1: los cruces de 1ª",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/red-pista.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Jornada 1. *Los cruces de 1ª.*",
+      "sub": "23, 24 y 25 de octubre. El local, primero 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "1ª Masculina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "CENTRAL PADEL A",
+            "vs SMASH PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "LA MARINA B",
+            "vs ZINK PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "MEDIO CUDEYO A",
+            "vs CASTRO URDIALES A"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "RACKET SPORT B",
+            "vs PONTEJOS A"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "A.D.R.M. A",
+            "vs ZINK PADEL B"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "G6 A",
+            "vs LA MARINA A"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "MONTEVERDE B",
+            "vs VILLAESCUSA A"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "REINOSA PADEL CLUB A",
+            "vs ALDAY BOUCO A"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "1ª Masculina · Grupo C",
+      "grupos": [
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "CAMARGO A",
+            "vs RACKET SPORT A"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "G6 B",
+            "vs LA PLAYUCA ASTILLERO A"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "MONTEVERDE A",
+            "vs MIOÑO PADEL GYM A"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "PADEL X5 A",
+            "vs +PADEL SANTANDER A"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "1ª Femenina · Grupos A y B",
+      "grupos": [
+        {
+          "etiqueta": "A · 1",
+          "equipos": [
+            "CIRCULO DE RECREO A",
+            "vs MONTEVERDE A"
+          ]
+        },
+        {
+          "etiqueta": "A · 2",
+          "equipos": [
+            "G6 C",
+            "vs EL TEMPLO A"
+          ]
+        },
+        {
+          "etiqueta": "A · 3",
+          "equipos": [
+            "LA MARINA B",
+            "vs G6 B"
+          ]
+        },
+        {
+          "etiqueta": "A · 4",
+          "equipos": [
+            "SMASH SANTANDER A",
+            "vs PADEL X5 A"
+          ]
+        },
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "BATHCO ATP A",
+            "vs LA MARINA A"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "G6 A",
+            "vs RACKET SPORT A"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "MONTEVERDE B",
+            "vs CENTRAL PADEL A"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "SMASH SANTANDER B",
+            "vs MOVE & GO A"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Y *tu jornada 1?*",
+      "sub": "Los cruces de tu grupo, con las plantillas y los puntos de cada rival, en tactium.io.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

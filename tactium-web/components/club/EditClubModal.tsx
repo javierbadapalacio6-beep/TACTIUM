@@ -7,6 +7,9 @@ import { Toast } from "@/components/states";
 import { LogoField } from "@/components/LogoField";
 import { FederationSelect } from "@/components/entry/start";
 import { deleteClub, updateClub } from "@/lib/queries";
+import { ClubManagersField } from "@/components/club/ClubManagersField";
+import { useSession } from "@/lib/session";
+import type { ClubManager } from "@/lib/club-managers";
 import { READ_ONLY_MESSAGE, WRITES_ENABLED, guardedWrite } from "@/lib/writes";
 import { FEDERATIONS, type Federation } from "@/lib/federations";
 
@@ -33,6 +36,10 @@ export function EditClubModal({
   const fedOf = (code: string | null): Federation | null =>
     FEDERATIONS.find((f) => f.code === code) ?? null;
 
+  const { user } = useSession();
+  // Solo el dueño borra el club; hasta saber quién es, no se ofrece.
+  const [isOwner, setIsOwner] = useState(false);
+  const onManagers = (l: ClubManager[]) => setIsOwner(l.some((m) => m.is_owner && m.user_id === user?.id));
   const [name, setName] = useState(initialName);
   const [federation, setFederation] = useState<Federation | null>(
     fedOf(initialFederation),
@@ -140,9 +147,11 @@ export function EditClubModal({
           <FederationSelect value={federation} onChange={setFederation} />
         </Field>
 
-        {/* Zona de peligro */}
-        <div className="divider" style={{ margin: "4px 0" }} />
-        {!deleting ? (
+        <ClubManagersField clubId={clubId} clubName={initialName} myUserId={user?.id ?? null} onLoaded={onManagers} />
+
+        {/* Zona de peligro (solo el dueño) */}
+        {isOwner && <div className="divider" style={{ margin: "4px 0" }} />}
+        {!isOwner ? null : !deleting ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontSize: 14, fontWeight: 700 }}>Borrar club</div>

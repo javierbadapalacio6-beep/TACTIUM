@@ -207,7 +207,7 @@ export const ClubTeamsScreen = ({ navigation }: TeamStackScreenProps<'TeamRoot'>
       <View style={s.topbar}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.eyebrow}>EQUIPOS · {clubTeams.length}</Text>
-          <Text style={s.brandName} numberOfLines={1}>
+          <Text style={s.brandName} numberOfLines={2}>
             {club.name}
           </Text>
         </View>
@@ -309,10 +309,10 @@ export const ClubTeamsScreen = ({ navigation }: TeamStackScreenProps<'TeamRoot'>
                     <View style={s.cardTop}>
                       <TeamCrest name={o.team.name} logo={teamLogoOf(o.team)} size={42} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={s.teamName} numberOfLines={1}>
+                        <Text style={s.teamName} numberOfLines={2}>
                           {o.team.name}
                         </Text>
-                        <Text style={s.teamMeta} numberOfLines={1}>
+                        <Text style={s.teamMeta} numberOfLines={2}>
                           {meta}
                         </Text>
                       </View>

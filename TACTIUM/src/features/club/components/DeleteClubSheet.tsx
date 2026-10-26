@@ -8,7 +8,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -61,7 +60,7 @@ export const DeleteClubSheet = ({
       onRequestClose={handleCancel}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.fill}
       >
         <View style={styles.scrim}>

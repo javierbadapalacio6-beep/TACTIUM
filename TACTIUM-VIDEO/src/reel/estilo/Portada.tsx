@@ -27,6 +27,7 @@ export const PORTADAS: PortadaDef[] = [
   { id: "R2", fondo: { video: "plano/R2-capitan.mp4", s: 16.6 }, antetitulo: "Si eres capitán", titulo: ["*84 mensajes*", "sin leer"] },
   { id: "J1", fondo: { video: "broll/juego-02.mp4", s: 2.4 }, antetitulo: "Pádel federado", titulo: ["Lo que *no se ve*", "de un partido"] },
   { id: "J2", fondo: { video: "broll/juego-20.mp4", s: 2.9 }, antetitulo: "Pádel federado", titulo: ["El capitán", "*también juega*"], serif: true },
+  { id: "W1", fondo: { video: "web/grabaciones/busca-tu-equipo.mp4", s: 20.5 }, antetitulo: "Liga Cántabra 26/27", titulo: ["¿Contra quién", "*juegas este año?*"] },
 ];
 
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachTour, useCoach, type CoachStep } from "@/components/CoachTour";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -26,6 +27,7 @@ import {
   fetchAvailabilityDetail,
   fetchLineup,
   fetchMatchdayBundle,
+  markLineupPublished,
   fetchTeamPairStats,
   renameLineupVariant,
   respondAvailability,
@@ -61,6 +63,7 @@ import {
   Toggle,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
+import { isMatchStarted } from "@/lib/match-time";
 import {
   IconAlert,
   IconCalendar,
@@ -89,7 +92,7 @@ import {
 
 type Slot = { court: number; idx: 0 | 1 };
 type Pair = [string | null, string | null];
-type Lock = "none" | "notCaptain" | "closed" | "archived";
+type Lock = "none" | "notCaptain" | "closed" | "archived" | "started";
 type Group = "yes" | "maybe" | "pending" | "no";
 
 const BENCH_ID = "bench";
@@ -439,6 +442,30 @@ function ReadSlot({ p, name, me }: { p: DbPlayer | null; name: string | null; me
   );
 }
 
+const LINEUP_STEPS: CoachStep[] = [
+  {
+    target: '[data-coach="generate"]',
+    title: "Empieza por aquí",
+    text: "Rellena las pistas con los jugadores que han dicho Voy, ordenados por puntos. Es un punto de partida: después lo ajustas a mano.",
+  },
+  {
+    target: ".tw-courts",
+    title: "Las pistas",
+    text: "Cada pista es una pareja, de la más fuerte (P1) a la más floja. Arrastra a un jugador a otro hueco, o tócalo y toca el hueco, para intercambiarlos.",
+  },
+  {
+    target: ".tw-bench",
+    title: "El banquillo",
+    text: "Tus jugadores, agrupados por su respuesta: Voy, Duda, Pendiente y No.",
+    chips: ["Arrastra un jugador a un hueco de la pista", "O haz clic en el jugador y después en el hueco"],
+  },
+  {
+    target: '[data-coach="publish"]',
+    title: "Publicar",
+    text: "Cuando las pistas estén completas, publícala: avisa al equipo. Los cambios se guardan, así que puedes dejarla a medias y volver.",
+  },
+];
+
 export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const { role, user } = useSession();
   // El equipo (y la capitanía) es el de la jornada, no el activo: el club abre
@@ -447,11 +474,12 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const teamId = owner.teamId;
   const isCaptain = role === "capitan" && owner.isTeamCaptain;
   const reduce = useReducedMotion();
+  const coach = useCoach("lineup", null, isCaptain, 1600);
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
-    () => fetchMatchdayBundle(id, teamId!),
-    [id, teamId, reloadKey],
+    () => fetchMatchdayBundle(id, teamId!, isCaptain || role === "club"),
+    [id, teamId, reloadKey, isCaptain, role],
     !!teamId,
   );
   // Convocatoria de ESTA jornada (Voy · Duda · No). null = no se pudo leer.
@@ -638,7 +666,14 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   // Solo el capitán edita. El club ve la de cualquiera de sus equipos en
   // lectura (como en la app: el club_admin no edita).
   const derivedLock: Lock =
-    lock ?? (!isCaptain ? "notCaptain" : data?.matchday.status === "finished" ? "closed" : "none");
+    lock ??
+    (!isCaptain
+      ? "notCaptain"
+      : data?.matchday.status === "finished"
+        ? "closed"
+        : data && isMatchStarted(data.matchday.date, data.matchday.time, Date.now())
+          ? "started" // empezado el partido, la alineación es la que se jugó
+          : "none");
   const readOnly = derivedLock !== "none";
 
   const placed = useMemo(() => new Set(courts.flat().filter(Boolean) as string[]), [courts]);
@@ -835,7 +870,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   }
 
   function openPublish() {
-    setNotify(dirty || !variant?.isActive);
+    setNotify(dirty || !variant?.isActive || !data?.lineupPublished);
     setPublishOpen(true);
   }
 
@@ -850,6 +885,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
     const res = await guardedWrite("publicar la alineación", async () => {
       await saveLineupVariant(id, variantId, courts);
       if (!wasActive) await setActiveLineupVariant(variantId);
+      await markLineupPublished(id);
     });
     setPublishing(false);
     setPublishOpen(false);
@@ -948,7 +984,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   if (!isCaptain) {
     const isClub = role === "club";
     const active = variants.find((v) => v.isActive) ?? null;
-    const published = !!active && courts.some((p) => p[0] || p[1]);
+    const published = !!data?.lineupPublished && !!active && courts.some((p) => p[0] || p[1]);
     const myCourt = myPlayer ? courts.findIndex((p) => p[0] === myPlayer.id || p[1] === myPlayer.id) : -1;
     const partnerId = myCourt >= 0 ? (courts[myCourt][0] === myPlayer!.id ? courts[myCourt][1] : courts[myCourt][0]) : null;
     const partner = playerById(partnerId);
@@ -986,7 +1022,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
                 body="El capitán la publica cuando cierre la convocatoria. Te llegará un aviso."
               />
             </Card>
-            {!isClub && myPlayer && m.status !== "finished" && (
+            {!isClub && myPlayer && m.status !== "finished" && !isMatchStarted(m.date, m.time, Date.now()) && (
               <Card style={{ marginTop: 16 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Tu respuesta</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8 }}>
@@ -1082,6 +1118,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   /* ── Editor del capitán ────────────────────────────────────────── */
   return (
     <div className="tw-lineup-wrap">
+      <CoachTour coach={coach} steps={LINEUP_STEPS} />
       <div className="tw-lineup-head">
         <div style={{ minWidth: 0, flex: "1 1 320px" }}>
           <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 6 }}>
@@ -1097,12 +1134,16 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
               Sin guardar
             </Chip>
           )}
-          <Btn variant="ghost" disabled={readOnly || !variantId} onClick={() => setGenOpen(true)} icon={<IconZap size={15} />}>
-            Generar
-          </Btn>
-          <Btn variant="accent" disabled={readOnly || !complete} onClick={openPublish} icon={<IconCheck size={15} />}>
-            {complete ? "Publicar" : `Faltan ${courts.length - filledCourts}`}
-          </Btn>
+          <span data-coach="generate" style={{ display: "inline-flex" }}>
+            <Btn variant="ghost" disabled={readOnly || !variantId} onClick={() => setGenOpen(true)} icon={<IconZap size={15} />}>
+              Generar
+            </Btn>
+          </span>
+          <span data-coach="publish" style={{ display: "inline-flex" }}>
+            <Btn variant="accent" disabled={readOnly || !complete} onClick={openPublish} icon={<IconCheck size={15} />}>
+              {complete ? "Publicar" : `Faltan ${courts.length - filledCourts}`}
+            </Btn>
+          </span>
         </div>
 
         {variants.length > 0 && (
@@ -1194,7 +1235,11 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
 
       {readOnly && (
         <Note icon={<IconLock size={15} />} style={{ marginBottom: 14 }}>
-          {derivedLock === "archived" ? "Temporada archivada: la alineación es de solo lectura." : "Acta cerrada: la alineación es de solo lectura."}
+          {derivedLock === "archived"
+            ? "Temporada archivada: la alineación es de solo lectura."
+            : derivedLock === "started"
+              ? "El partido ya ha empezado: esta es la alineación que se jugó y no se puede cambiar."
+              : "Acta cerrada: la alineación es de solo lectura."}
         </Note>
       )}
 

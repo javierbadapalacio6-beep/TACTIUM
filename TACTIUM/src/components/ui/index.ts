@@ -58,6 +58,7 @@ export { ScanSheet } from './ScanSheet';
 export { ToastHost } from './Toast';
 export { OfflineBanner } from './OfflineBanner';
 export { UpdateBanner } from './UpdateBanner';
+export { ForceUpdateGate } from './ForceUpdateGate';
 export { PremiumGateButton } from './PremiumGateButton';
 export { TrialExpiringBanner } from './TrialExpiringBanner';
 export {

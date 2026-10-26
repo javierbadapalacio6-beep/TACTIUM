@@ -9,7 +9,18 @@ import {
   type DbClubHomeMatch,
 } from "@/lib/queries";
 import { guardedWrite } from "@/lib/writes";
-import { fetchUnconfirmedVenues } from "@/lib/club-ops";
+import {
+  fetchDateRanges,
+  fetchFcpUploadedIds,
+  fetchMatchdayTandas,
+  fetchTeamTandasInfo,
+  fetchUnconfirmedVenues,
+  remindFcpUpload,
+  setFcpUploaded,
+} from "@/lib/club-ops";
+import { describeTandas, tandasChoices } from "@/lib/tandas";
+import { clubScheduleShareText } from "@/lib/club-schedule-share";
+import { canNativeShare, whatsappShareUrl } from "@/lib/invite";
 import {
   importFcpTeams,
   searchFcpClubs,
@@ -31,7 +42,7 @@ import {
   Segmented,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconAlert, IconCheck, IconClock, IconPlus } from "@/components/Icon";
+import { IconAlert, IconCheck, IconClock, IconPlus, IconShare } from "@/components/Icon";
 
 /**
  * Horarios de local.
@@ -51,6 +62,8 @@ interface Slot {
   day: number;
   hour: string;
   court: string;
+  /** Tandas del partido («3-2»): cuántos se juegan a cada hora desde la de inicio. */
+  tandas?: string | null;
 }
 
 const WEEKDAY = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -135,13 +148,23 @@ const DEFAULT_HOURS = [
 ];
 
 /** Un partido de local, de un equipo propio o de uno invitado. */
-type Fixture = DbClubHomeMatch & { is_guest: boolean; unconfirmed?: boolean };
+type Fixture = DbClubHomeMatch & {
+  is_guest: boolean;
+  unconfirmed?: boolean;
+  range?: string | null;
+  uploaded?: boolean;
+  /** Tandas ya guardadas en el partido, género del equipo y su tanda habitual. */
+  tandas?: string | null;
+  gender?: string | null;
+  prefTandas?: string | null;
+};
 
 const sameCourt = (a: string, b: string) =>
   !!a.trim() && !!b.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/** Partidos de local de TODAS las jornadas, agrupados por jornada. */
 export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) {
-  const { clubId } = useSession();
+  const { clubId, clubs } = useSession();
   const [reloadKey, setReloadKey] = useState(0);
 
   // Propios e invitados en la misma lista. Las dos RPC devuelven la misma
@@ -160,17 +183,25 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
       const pending = await fetchUnconfirmedVenues(all.map((m) => m.matchday_id)).catch(
         () => new Set<string>(),
       );
-      return all.map((m) => ({ ...m, unconfirmed: pending.has(m.matchday_id) })) as Fixture[];
+      const ranges = await fetchDateRanges(all.map((m) => m.matchday_id)).catch(() => ({}) as Record<string, string>);
+      const ups = await fetchFcpUploadedIds(all.map((m) => m.matchday_id)).catch(() => new Set<string>());
+      const tandasBy = await fetchMatchdayTandas(all.map((m) => m.matchday_id));
+      const infoBy = await fetchTeamTandasInfo([...new Set(all.map((m) => m.team_id))]);
+      return all.map((m) => ({
+        ...m,
+        unconfirmed: pending.has(m.matchday_id),
+        range: ranges[m.matchday_id] ?? null,
+        uploaded: ups.has(m.matchday_id),
+        tandas: tandasBy[m.matchday_id] ?? null,
+        gender: infoBy[m.team_id]?.gender ?? null,
+        prefTandas: infoBy[m.team_id]?.preferred_tandas ?? null,
+      })) as Fixture[];
     },
     [clubId, reloadKey],
     !!clubId,
   );
   const fixtures: Fixture[] = useMemo(() => data ?? [], [data]);
 
-  // Franjas favoritas por JORNADA. Antes se indexaba por NOMBRE de equipo, y
-  // el nombre no identifica a nadie: «MEDIO CUDEYO A» existe masculino y
-  // femenino, y un mismo equipo juega varias jornadas en casa — todas
-  // compartían el mismo hueco y se pisaban entre ellas.
   const favByMatch = useMemo(() => {
     const m: Record<string, { day: number; hour: string }[]> = {};
     for (const f of fixtures) {
@@ -195,7 +226,7 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
         const day = dayOf(f.match_date);
         next[f.matchday_id] =
           f.match_time && day !== null
-            ? { day, hour: f.match_time.slice(0, 5), court: f.location ?? "" }
+            ? { day, hour: f.match_time.slice(0, 5), court: f.location ?? "", tandas: f.tandas ?? f.prefTandas ?? null }
             : null;
       }
       return next;
@@ -286,8 +317,95 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   const clashCount = Object.keys(clashWith).length;
 
   // Primero lo que falta (sin hora o sede por confirmar), después lo demás.
-  const missing = fixtures.filter((f) => !slots[f.matchday_id] || f.unconfirmed);
-  const ready = fixtures.filter((f) => slots[f.matchday_id] && !f.unconfirmed);
+  // Todas las jornadas, cada una con los partidos de local de todos los equipos
+  // (propios e invitados). Dentro de una jornada, primero lo que falta.
+  const [uploading, setUploading] = useState(false);
+  async function marcarSubidos(ids: string[]) {
+    if (uploading || ids.length === 0) return;
+    setUploading(true);
+    const res = await guardedWrite("marcar como subido a la Federación", () => setFcpUploaded(ids, true));
+    setUploading(false);
+    if (!res.ok) {
+      setToast(res.reason);
+      return;
+    }
+    setReloadKey((k) => k + 1);
+    setToast("Marcado como subido. Hemos avisado a los capitanes.");
+  }
+
+  // El club recuerda a los capitanes que suban la hora (los avisos automáticos solo salen los lunes).
+  async function recordarCapitanes(ids: string[]) {
+    if (uploading || ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Avisaremos ahora a los capitanes de ${ids.length} ${ids.length === 1 ? "partido" : "partidos"} de que suban la hora a la Federación antes del lunes a las 20:00.`,
+      )
+    )
+      return;
+    setUploading(true);
+    let r: { partidos: number; ya_recordados: number; avisos: number } | null = null;
+    const res = await guardedWrite("recordar a los capitanes", async () => {
+      r = await remindFcpUpload(ids);
+    });
+    setUploading(false);
+    if (!res.ok) {
+      setToast(res.reason);
+      return;
+    }
+    const out = r as { partidos: number; avisos: number } | null;
+    setToast(
+      !out || out.partidos === 0
+        ? "Ya se les avisó hace poco. Espera unas horas antes de volver a recordárselo."
+        : out.avisos > 0
+          ? `Avisados los capitanes de ${out.partidos} ${out.partidos === 1 ? "partido" : "partidos"}.`
+          : "Ningún capitán de esos partidos tiene la app con sesión iniciada.",
+    );
+  }
+
+  const lacks = (f: Fixture) => !slots[f.matchday_id] || !!f.unconfirmed;
+  // Una jornada cada vez (selector J1, J2…); por defecto la primera por jugar.
+  const [jornadaSel, setJornadaSel] = useState<number | null>(null);
+  const groups = useMemo(() => {
+    const map = new Map<number | null, Fixture[]>();
+    for (const f of fixtures) {
+      const k = f.jornada_number ?? null;
+      map.set(k, [...(map.get(k) ?? []), f]);
+    }
+    return [...map.entries()].sort((a, b) => (a[0] === null ? 1 : b[0] === null ? -1 : a[0] - b[0]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixtures]);
+  const jornadaNums = groups.map(([n]) => n).filter((n): n is number => n !== null);
+  const selJornada = jornadaSel != null && jornadaNums.includes(jornadaSel) ? jornadaSel : (jornadaNums[0] ?? null);
+  const visibleGroups = groups.filter(([n]) => n === selJornada || selJornada === null);
+
+  // Mensaje de WhatsApp con los horarios de local de la jornada (para equipos que aún no usan la app).
+  async function shareSchedule() {
+    const list = fixtures.filter((f) => selJornada === null || f.jornada_number === selJornada);
+    const text = clubScheduleShareText({
+      clubName: clubs.find((c) => c.id === clubId)?.name ?? null,
+      jornada: selJornada,
+      range: list.map((f) => f.range).find(Boolean) ?? null,
+      fixtures: list.map((f) => ({
+        team_name: f.team_name,
+        opponent: f.opponent,
+        match_date: f.match_date,
+        match_time: f.match_time,
+        location: f.location,
+        tandas: f.tandas,
+        gender: f.gender,
+        unconfirmed: f.unconfirmed,
+      })),
+    });
+    if (canNativeShare()) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+      }
+    }
+    window.open(whatsappShareUrl(text), "_blank", "noopener,noreferrer");
+  }
 
   /**
    * Guarda de verdad. Antes este botón solo enseñaba el aviso de éxito: el
@@ -312,6 +430,8 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
           matchDate: dateForSlot(f.match_date, s.day),
           matchTime: `${s.hour}:00`,
           location: s.court.trim() || null,
+          // Las tandas van con la hora, en la misma llamada: igual para propios e invitados.
+          tandas: s.tandas ?? null,
         }),
       );
       if (res.ok) ok += 1;
@@ -358,9 +478,16 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   }, [favByMatch, slots]);
 
   function assign(matchdayId: string, day: number, hour: string) {
+    const fx = fixtures.find((x) => x.matchday_id === matchdayId);
     setSlots((s) => ({
       ...s,
-      [matchdayId]: { day, hour, court: s[matchdayId]?.court ?? "" },
+      [matchdayId]: {
+        day,
+        hour,
+        court: s[matchdayId]?.court ?? "",
+        // Al poner la hora, las tandas salen ya marcadas: las que tenía el partido o la habitual del equipo.
+        tandas: s[matchdayId]?.tandas ?? fx?.tandas ?? fx?.prefTandas ?? null,
+      },
     }));
     setPicking(null);
   }
@@ -369,6 +496,13 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   function unassign(matchdayId: string) {
     setSlots((s) => ({ ...s, [matchdayId]: null }));
     setPicking(null);
+  }
+
+  function setTandas(matchdayId: string, tandas: string | null) {
+    setSlots((s) => ({
+      ...s,
+      [matchdayId]: s[matchdayId] ? { ...s[matchdayId]!, tandas } : null,
+    }));
   }
 
   function setCourt(matchdayId: string, court: string) {
@@ -484,11 +618,32 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
           style={{ borderColor: clash ? "var(--warning)" : undefined }}
         />
 
+        <select
+          className="tw-select"
+          value={s?.tandas ?? ""}
+          disabled={!s}
+          onChange={(e) => setTandas(f.matchday_id, e.target.value || null)}
+          aria-label={`Tandas de ${f.team_name}`}
+          title={
+            s?.tandas
+              ? describeTandas(s.tandas, f.gender, s.hour).join("\n")
+              : "Cuántos partidos se juegan a cada hora"
+          }
+          style={{ borderColor: s && !s.tandas ? "var(--warning)" : undefined }}
+        >
+          <option value="">{s ? "Sin tandas" : "—"}</option>
+          {tandasChoices(f.gender).map((tv) => (
+            <option key={tv} value={tv}>
+              {tv}
+            </option>
+          ))}
+        </select>
+
         <span>
           {clash ? (
             <Chip tone="warning">Pista ocupada</Chip>
           ) : s && !f.unconfirmed ? (
-            <Chip>Listo</Chip>
+            <Chip tone={f.uploaded ? "accent" : undefined}>{f.uploaded ? "En la Federación" : "Listo"}</Chip>
           ) : f.unconfirmed && s ? (
             <Chip tone="warning">Por confirmar</Chip>
           ) : (
@@ -528,28 +683,107 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
             <Chip tone={assigned === fixtures.length ? "accent" : "warning"}>
               {assigned} de {fixtures.length} asignados
             </Chip>
+            {fixtures.some((f) => f.match_date && f.match_time) ? (
+              <Btn variant="accent" onClick={() => void shareSchedule()} icon={<IconShare size={15} />}>
+                Compartir por WhatsApp
+              </Btn>
+            ) : null}
           </CardHead>
+
+          {jornadaNums.length > 1 && (
+            <div role="tablist" aria-label="Jornada" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "4px 18px 12px" }}>
+              {jornadaNums.map((n) => {
+                const on = n === selJornada;
+                const pend = fixtures.some((f) => f.jornada_number === n && lacks(f));
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => setJornadaSel(n)}
+                    className="mono"
+                    style={{
+                      flex: "none",
+                      minWidth: 48,
+                      padding: "7px 12px",
+                      borderRadius: 999,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: `1px solid ${on ? "var(--accent)" : "var(--line-strong)"}`,
+                      background: on ? "var(--accent)" : "transparent",
+                      color: on ? "var(--text-inverse)" : "var(--text)",
+                    }}
+                  >
+                    J{n}
+                    {pend && (
+                      <span aria-hidden="true" style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, marginLeft: 6, verticalAlign: "middle", background: on ? "var(--text-inverse)" : "var(--warning)" }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="tw-table-wrap">
             <div className="tw-sched-head">
               <span>Equipo</span>
               <span>Día y hora</span>
               <span>Pista o lugar</span>
+              <span>Tandas</span>
               <span>Estado</span>
             </div>
 
-            {missing.length > 0 && (
-              <div className="grid-head" style={{ padding: "10px 18px", color: "var(--warning)" }}>
-                Falta la hora · {missing.length}
-              </div>
-            )}
-            {missing.map(renderRow)}
-            {ready.length > 0 && missing.length > 0 && (
-              <div className="grid-head" style={{ padding: "10px 18px" }}>
-                Con hora · {ready.length}
-              </div>
-            )}
-            {ready.map(renderRow)}
+            {visibleGroups.map(([n, items]) => {
+              const sorted = [...items].sort(
+                (a, b) =>
+                  Number(lacks(b)) - Number(lacks(a)) ||
+                  (a.match_date ?? "").localeCompare(b.match_date ?? "") ||
+                  a.team_name.localeCompare(b.team_name, "es"),
+              );
+              const range = sorted.map((f) => f.range).find(Boolean);
+              const pend = sorted.filter(lacks).length;
+              return (
+                <Fragment key={n ?? "sin"}>
+                  <div className="grid-head" style={{ padding: "10px 18px" }}>
+                    {n === null ? "Sin jornada" : `Jornada ${n}`}
+                    {range ? ` · ${range}` : ""} · {sorted.length} {sorted.length === 1 ? "partido" : "partidos"}
+                    {pend > 0 && <span style={{ color: "var(--warning)" }}> · {pend} sin hora</span>}
+                  </div>
+                  <div style={{ padding: "0 18px 10px" }}>
+                    {sorted.some((f) => !f.uploaded) ? (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        disabled={uploading}
+                        onClick={() => void marcarSubidos(sorted.filter((f) => !f.uploaded).map((f) => f.matchday_id))}
+                      >
+                        Marcar {sorted.every((f) => !f.uploaded) ? "toda la jornada" : "los que faltan"} como subida a la Federación
+                      </Btn>
+                    ) : (
+                      <span style={{ color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>✓ Toda la jornada está subida a la Federación</span>
+                    )}
+                    {sorted.some((f) => !f.uploaded && f.status === "upcoming") ? (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        disabled={uploading}
+                        onClick={() =>
+                          void recordarCapitanes(
+                            sorted.filter((f) => !f.uploaded && f.status === "upcoming").map((f) => f.matchday_id),
+                          )
+                        }
+                        style={{ marginLeft: 8 }}
+                      >
+                        Recordar a los capitanes que suban la hora
+                      </Btn>
+                    ) : null}
+                  </div>
+                  {sorted.map(renderRow)}
+                </Fragment>
+              );
+            })}
           </div>
 
           {clashCount > 0 && (

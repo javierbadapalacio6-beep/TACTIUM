@@ -169,3 +169,60 @@ transiciones.mp3` (hay que trocearlo y repite lo que ya hay suelto).
 
 Efectos visuales en uso: ver `public/efectos/` (glitch 6 y 4, quemado vertical/horizontal,
 destello anamórfico 7), teñidos al verde de marca. Descartado el glitch 7 (lleva «NO REF»).
+
+---
+
+## Revisión a fondo (08-10-2026)
+
+Segunda pasada, esta vez **mirando los archivos** (ffprobe de los 125 vídeos + hojas de contacto de
+cada pack, guardadas en `referencias/packs/*.jpg`) y con otro objetivo: fondos de color y recursos
+para vídeos de estilo «lanzamiento» (ver `src/reel/estilo/Lanzamiento.tsx`). Cambia el veredicto de
+varias cosas del triaje anterior.
+
+### Lo nuevo y lo que corrige el triaje anterior
+
+| Pack | Qué es de verdad (medido) | Veredicto |
+|---|---|---|
+| **FONDOS ABSTRACTOS** (no estaba en el triaje) | 4 rejillas en perspectiva **verticales 1080×1920**, 15 s, 4 MB (azul hue 216°, oro 56°, rosa 350°, rojo 352°) con brillo en la parte baja; `Kold Topography` (líneas blancas sobre negro, 4,8 s); `Kold Halftone Grunge` y `Film Dust Roll` (grano, 5,3 s); `Bonus` (polvo); `Topographic Textures` (16:9, 60 s) | **Lo mejor del lote para cambiar el color del fondo.** Con `hue-rotate` cualquiera llega al verde de marca (o a un turquesa, lima…). Los promos de agosto parecen usar ya la rejilla verde y la topografía |
+| **TEXTURAS PAPEL** | Alfa real (ProRes 4444). `07`: bola → hoja que se queda. **`08`: bola → hoja que CUBRE la pantalla ~1,3 s → se arruga y se va.** `09`/`10`: papel arrugado | **`08` es una cortina de transición** (y la hoja sirve de tarjeta con texto impreso). Ya montado en `lanzamiento-L2` |
+| **FLECHAS** | Flechas discontinuas dibujándose, negras sobre croma verde. 17 clips, 5–7 s. Script de conversión listo (`convertir-flechas.sh`) pero **nunca se ejecutó** (no existe `public/flechas/`) | Pendiente. Ojo: señalar la pantalla va contra «sin anotaciones sobre las pantallas»; valen para apuntar al texto o a un botón fuera del móvil |
+| **FILM BURNS** | 15 verticales (0,5–2,8 s, naranja/rojo/amarillo sobre negro) + 9 horizontales; los dos largos (40 s) son «8mm con sonido» | Verticales en `screen` + `hue-rotate(-75°)` = destello verde de marca. Mejor como golpe de 0,5 s en un corte que como textura |
+| **GLITCH TRANSITIONS** | Ruido de TV con texto incrustado: `5` = «Low RF», `8` = «ERROR · SIGNAL», `7` = «NO REF» (descartado) | `8` encaja con el gancho de «caos» (el grupo de chat «sin señal») |
+| **ANAMORPHIC FLARES** | 3 en 4K (azul/naranja) + 4 en 1920×800 azules | Ya se usa el 7. Los de 4K sirven para un destello de cierre más grande |
+| **CINEMATIC OVERLAYS** | Rayas y motas muy tenues sobre negro | Casi invisibles: solo como capa de grano al 15–20 % |
+| **ART TRANSITIONS** | Cortinas de color con garabatos (cian, violeta, amarillo), 16:9, 3 s | Colores ajenos a la marca; habría que teñirlas. Prioridad baja |
+| **LETRAS ANIMADAS** | Letras A–Z a mano, blancas, 2 s, **completas desde el primer fotograma** (no se dibujan) | Descartadas: aportan menos de lo que parecía |
+| **BROLL CINEMÁTICO** | 4 clips de stock (chica en un campo, moto, desierto, atardecer), nada de pádel | Descartado |
+| **OBJETOS 3D** | Realistas y con textura: Lupa, Billetera (cuero), Archivos (archivador amarillo), Mancuerna, Cámara, Cofre, Diamante, 4 llaves doradas, etc. | Estilo fotorrealista, choca con el verde plano. Salvables como «ancla» de una idea: Lupa = «busca tu equipo», Diamante = plan Élite, Llave = invitar/acceso, Archivos = «papeles». Habría que montarlos en `sin-remotion` (Three.js) |
+
+### Lo que se construyó con esto
+
+- `scripts/preparar-packs.sh`: versiones ligeras (30 fps constantes, sin B-frames) en
+  `public/broll/packs/` (fuera de git, son de terceros). **Gotcha:** con los originales a 24 fps el
+  render en paralelo falla con «No frame found at position»; por eso se recodifican.
+- `src/reel/estilo/Recursos.tsx`: `FondoPack` (rejilla de color; `tono` en grados lo lleva al color
+  que se quiera), `Grano`, `Topo`, `Papel`. Reutilizables en cualquier reel.
+- `lanzamiento-L2` (variante «color»): gancho en rojo (el problema), una rejilla verde distinta por
+  verbo (marca 154°, turquesa 170°, lima 116°, esmeralda 160°, fresco 146°), bola de papel que cubre
+  la pantalla con «TODO EL EQUIPO en un solo sitio» impreso, y «Ya disponible» sobre rejilla verde.
+
+### Música: la mayoría no se puede publicar
+
+De las 115 pistas, casi todas son instrumentales de canciones comerciales (Drake, Kendrick, Metro
+Boomin, Hans Zimmer…): reclamación casi segura en Instagram. Las que se usan están en
+`public/musica/LICENCIAS.md` (Pixabay sin Content ID + las «sin copyright» que Javier decidió
+asumir). No añadir más sin comprobar la ficha.
+
+### Sigue sin servir
+
+Presets de Premiere/CapCut/DaVinci/After Effects (`.mogrt`, `.ffx`, `.drfx`), LUTs, fuentes (el
+sistema es Satoshi + Instrument Serif) y `BRUTOS PARA PRACTICAR`. Lo único aprovechable de los
+`.mogrt` son los **nombres** de efectos de texto (Blur Text, Focus Revelation, Bounce Left, Error
+Highlight…), que ya tenemos como `desenfoque` / `mascara` en `Cinetico.tsx`.
+
+### La raíz de la carpeta
+
+Además de `PACKS/` hay 10 promos de agosto (`tactium-promo-v2…v8`, `tactium-torneos-v1/v2`, 9:16),
+dos guiones (`GUION-VIDEO-ECOSISTEMA.md`: locución del vídeo «ecosistema» de ~3 min, pensado para el tribunal), 16 imágenes de
+referencia (fondos verdes, pistas de pádel) y el logo. Los promos son anteriores al sistema actual:
+usan en la escena «TU CLUB» unas pelotas que parecen de tenis, y el texto «DESCÁRGALA GRATIS»; no reutilizar tal cual.

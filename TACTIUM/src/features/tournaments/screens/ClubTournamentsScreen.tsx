@@ -1,3 +1,4 @@
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -61,8 +62,13 @@ import {
   type SeedingMode,
   type PrizeEntry,
   type InfoRow,
+  type PlayWindows,
+  DEFAULT_PLAY_WINDOWS,
+  isoDaysBetween,
+  windowsSpan,
 } from '@core/services/tournaments';
 import { PrizeInfoEditor } from '../components/PrizeInfoEditor';
+import { PlayWindowsEditor, playWindowsValid } from '../components/PlayWindowsEditor';
 import {
   TOURNAMENT_BILLING_ENABLED,
   computeTournamentBilling,
@@ -175,6 +181,24 @@ const REVIEW_STEP = CREATE_STEPS.length - 1;
 //
 // Cada torneo dice en qué fase está (Inscripción → Pago → Cuadros → En juego →
 // Final) y lleva UN botón con lo siguiente que toca.
+const CLUB_STEPS: CoachStep[] = [
+  {
+    title: 'Tu torneo, de principio a fin',
+    text: 'TACTIUM es la herramienta: tú organizas el torneo y se juega en tu club. Así funciona:',
+    chips: [
+      'Creas el torneo: formato, categorías y plazas',
+      'Compartes el código o el enlace: la gente se apunta sola',
+      'Cierras la inscripción y generas el cuadro con sorteo automático',
+      'Pones el horario y metes los resultados hasta el campeón',
+    ],
+  },
+  {
+    target: 'create',
+    title: 'Empieza por aquí',
+    text: 'Crea el torneo y elige el formato: eliminatoria, grupos, liga o americano. Después podrás ajustar categorías, precios y plazas.',
+  },
+];
+
 export const ClubTournamentsScreen = ({
   navigation,
   route,
@@ -184,6 +208,7 @@ export const ClubTournamentsScreen = ({
   const ls = useMemo(() => makeListStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
+  const coach = useCoach('torneos-club', undefined, true, 1500);
   // Navegación a nivel Root (activar equipos, facturación, explorar).
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -315,7 +340,7 @@ export const ClubTournamentsScreen = ({
             <Text style={styles.eyebrow}>
               {club?.tournaments_only ? 'ORGANIZADOR' : 'CLUB · TORNEOS'}
             </Text>
-            <Text style={styles.brandName} numberOfLines={1}>
+            <Text style={styles.brandName} numberOfLines={2}>
               {club?.name ?? 'Club'}
             </Text>
           </View>
@@ -408,6 +433,8 @@ export const ClubTournamentsScreen = ({
               ) : null}
 
               <Pressable
+                ref={coach.ref('create')}
+                collapsable={false}
                 onPress={() => setCreating(true)}
                 style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
               >
@@ -498,6 +525,7 @@ export const ClubTournamentsScreen = ({
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+      <CoachTour coach={coach} steps={CLUB_STEPS} />
       {body}
       {createSheet}
     </View>
@@ -966,6 +994,10 @@ const CreateTournamentSheet: React.FC<{
       return copy;
     });
   const [prizesJson, setPrizesJson] = useState<PrizeEntry[]>([]);
+  const [prizesByCat, setPrizesByCat] = useState<Record<string, PrizeEntry[]>>({});
+  // Franjas de juego por tipo de día (entre semana / fin de semana / festivos) y festivos marcados.
+  const [playWindows, setPlayWindows] = useState<PlayWindows>(DEFAULT_PLAY_WINDOWS);
+  const [holidays, setHolidays] = useState<string[]>([]);
   const [infoRows, setInfoRows] = useState<InfoRow[]>([]);
   const [observations, setObservations] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -998,6 +1030,9 @@ const CreateTournamentSheet: React.FC<{
     setPhasePlan({});
     setLocation('');
     setPrizesJson([]);
+    setPrizesByCat({});
+    setPlayWindows(DEFAULT_PLAY_WINDOWS);
+    setHolidays([]);
     setInfoRows([]);
     setObservations('');
     setCoverUri(null);
@@ -1107,8 +1142,17 @@ const CreateTournamentSheet: React.FC<{
         seedingMode,
         startsOn: startsOn ? dateToIsoDate(startsOn) : null,
         endsOn: endsOn ? dateToIsoDate(endsOn) : null,
+        playWindows,
+        // Solo los festivos que caen dentro de las fechas elegidas.
+        holidays: holidays.filter((h) =>
+          isoDaysBetween(startsOn ? dateToIsoDate(startsOn) : null, endsOn ? dateToIsoDate(endsOn) : null).includes(h),
+        ),
         location,
         prizesJson,
+        // Solo las categorías elegidas (si se quitó una después de ponerle premios, no se guarda).
+        prizesByCategory: Object.fromEntries(
+          Object.entries(prizesByCat).filter(([k]) => cats.includes(k)),
+        ),
         infoRows,
         observations,
         coverUrl,
@@ -1142,7 +1186,13 @@ const CreateTournamentSheet: React.FC<{
   // Validación mínima por paso para poder avanzar. Solo el nombre (paso 0) y al
   // menos un género (paso 2) son obligatorios; el resto es opcional.
   const canNext =
-    step === 0 ? name.trim().length > 0 : step === 2 ? genders.length > 0 : true;
+    step === 0
+      ? name.trim().length > 0
+      : step === 2
+        ? genders.length > 0
+        : step === 3
+          ? playWindowsValid(playWindows)
+          : true;
 
   return (
     <BottomSheet
@@ -1434,9 +1484,12 @@ const CreateTournamentSheet: React.FC<{
             <>
               <Text style={styles.label}>LÍMITES POR CATEGORÍA · OPCIONAL</Text>
               <Text style={styles.catHint}>
-                Restringe quién puede inscribirse. NIVEL = suma de la categoría de la
-                pareja (mín. ≥), y de cada jugador cuenta la MEJOR entre su categoría
-                de liga y la de circuito. PUNTOS = suma de puntos de liga (máx. ≤).
+                Restringe quién puede inscribirse. NIVEL MÁX. = el mejor nivel de juego
+                permitido, como suma de las categorías de la pareja (2ª → 2, 5ª → 5:
+                cuanto más alto el número, más flojo el nivel). Con 10 pueden jugar dos
+                de 5ª, o una 4ª y una 6ª, pero no dos de 4ª. De cada jugador cuenta la
+                MEJOR entre su categoría de liga y la de circuito. PUNTOS = suma de
+                puntos de liga (máx. ≤).
                 Deja un campo en
                 «Libre» para no limitarlo (p. ej. nivel libre pero con tope de puntos);
                 una categoría con los dos en «Libre» es totalmente abierta.
@@ -1506,7 +1559,7 @@ const CreateTournamentSheet: React.FC<{
                       <Text style={styles.ruleCat}>{cat}</Text>
                       {ruleMode === 'nivel' || ruleMode === 'both' ? (
                         <View style={styles.ruleInputWrap}>
-                          <Text style={styles.ruleInputLabel}>NIVEL ≥</Text>
+                          <Text style={styles.ruleInputLabel}>NIVEL MÁX.</Text>
                           <TextInput
                             value={th.nivel}
                             onChangeText={(v) => setT({ nivel: v.replace(/[^0-9]/g, '') })}
@@ -1608,6 +1661,16 @@ const CreateTournamentSheet: React.FC<{
               repartir cada fase por días.
             </Text>
           )}
+
+          <View style={{ marginTop: 18 }}>
+            <PlayWindowsEditor
+              windows={playWindows}
+              onWindows={setPlayWindows}
+              days={isoDaysBetween(startsOn ? dateToIsoDate(startsOn) : null, endsOn ? dateToIsoDate(endsOn) : null)}
+              holidays={holidays}
+              onHolidays={setHolidays}
+            />
+          </View>
         </>
       ) : null}
 
@@ -1755,6 +1818,9 @@ const CreateTournamentSheet: React.FC<{
           <PrizeInfoEditor
             prizes={prizesJson}
             onPrizes={setPrizesJson}
+            categories={cats}
+            prizesByCategory={prizesByCat}
+            onPrizesByCategory={setPrizesByCat}
             infoRows={infoRows}
             onInfoRows={setInfoRows}
             observations={observations}
@@ -1775,6 +1841,7 @@ const CreateTournamentSheet: React.FC<{
           catThresh={catThresh}
           startsOn={startsOn}
           endsOn={endsOn}
+          playWindows={playWindows}
           maxPairs={maxPairs}
           fee={fee}
           costRule={billingLabel}
@@ -2146,6 +2213,7 @@ const ReviewStep: React.FC<{
   catThresh: Record<string, { nivel: string; puntos: string }>;
   startsOn: Date | null;
   endsOn: Date | null;
+  playWindows: PlayWindows;
   maxPairs: string;
   fee: string;
   costRule: string | null;
@@ -2162,7 +2230,7 @@ const ReviewStep: React.FC<{
         .join(' · ');
   const limits = Object.entries(p.catThresh)
     .filter(([, v]) => v?.puntos || v?.nivel)
-    .map(([k, v]) => `${k.split('|').pop()}: ${v.puntos ? `puntos ≤ ${v.puntos}` : `nivel ≥ ${v.nivel}`}`);
+    .map(([k, v]) => `${k.split('|').pop()}: ${v.puntos ? `puntos ≤ ${v.puntos}` : `nivel máx. ${v.nivel}+`}`);
   const divisions = p.genders.length * Math.max(1, p.cats.length);
   const rows: { step: number; title: string; sub: string }[] = [
     { step: 0, title: p.name.trim() || 'Sin nombre', sub: p.location.trim() || 'Sin lugar' },
@@ -2181,7 +2249,7 @@ const ReviewStep: React.FC<{
         [fmtDate(p.startsOn), p.endsOn && p.startsOn && p.endsOn.getTime() !== p.startsOn.getTime() ? fmtDate(p.endsOn) : null]
           .filter(Boolean)
           .join(' – ') || 'Sin fechas',
-      sub: 'Los días de cada fase se pueden cambiar luego en Horario',
+      sub: `Entre semana ${p.playWindows.weekday.from}–${p.playWindows.weekday.to} · Fin de semana ${p.playWindows.weekend.from}–${p.playWindows.weekend.to}`,
     },
     {
       step: 4,

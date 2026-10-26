@@ -21,6 +21,7 @@ import { useAuthStore } from '@store/authStore';
 import {
   exploreTournaments,
   myTournaments,
+  myCreatedTournaments,
   tournamentBucket,
   formatFee,
   claimPartnerByCode,
@@ -47,8 +48,10 @@ import type { RootStackScreenProps } from '@navigation/types';
  * Competir › Torneos. Primero lo que está pasando:
  *   Explorar → «En juego ahora» · «Inscripción abierta» · «Próximamente» ·
  *              «Terminados» (plegados), con tarjetas de una línea.
- *   Mis torneos → por fecha, y cada fila dice lo tuyo (hora de tu partido,
+ *   Inscritos → por fecha, y cada fila dice lo tuyo (hora de tu partido,
  *              si falta pagar, hasta dónde llegaste).
+ *   Creados por mí → los que organizas (los tuyos o los de un club que gestionas);
+ *              al tocar uno se abre su gestión, no la vista de jugador.
  * Un solo «Tengo un código»: prueba primero como código de torneo y, si no
  * existe, como código de pareja. Son dos RPC que ya había.
  */
@@ -113,7 +116,9 @@ const Row: React.FC<{
   s: Styles;
   c: Palette;
   digest?: Digest | null;
-}> = ({ t, onPress, s, c, digest }) => {
+  /** Fila del organizador: dice cuántos se han apuntado, sea cual sea el estado. */
+  managed?: boolean;
+}> = ({ t, onPress, s, c, digest, managed }) => {
   const bucket = tournamentBucket(t.status, t.starts_on);
   const fee = t.entry_fee && t.entry_fee > 0 ? `${formatFee(t.entry_fee, t.fee_currency)}/pers.` : 'Gratis';
   const inscritos = t.pair_based
@@ -122,7 +127,19 @@ const Row: React.FC<{
   const meta = digest
     ? [shortDate(t.starts_on), digest.div, digest.partner ? `con ${digest.partner}` : null]
     : [t.club_name, t.location, shortDate(t.starts_on), t.status === 'open' ? fee : null];
-  const line = digest
+  const estado =
+    bucket === 'live'
+      ? 'En juego'
+      : t.status === 'open'
+        ? 'Inscripción abierta'
+        : bucket === 'finished'
+          ? t.status === 'canceled'
+            ? 'Cancelado'
+            : 'Terminado'
+          : 'Próximamente';
+  const line = managed
+    ? `${estado} · ${inscritos}`
+    : digest
     ? digest.line
     : bucket === 'live'
       ? 'En juego'
@@ -133,7 +150,11 @@ const Row: React.FC<{
             ? 'Cancelado'
             : 'Terminado'
           : 'Próximamente';
-  const tone = digest
+  const tone = managed
+    ? bucket === 'live' || t.status === 'open'
+      ? 'accent'
+      : 'muted'
+    : digest
     ? digest.tone
     : bucket === 'live' || t.status === 'open'
       ? 'accent'
@@ -142,10 +163,10 @@ const Row: React.FC<{
     <Pressable onPress={onPress} style={({ pressed }) => [s.row, pressed && { opacity: 0.85 }]}>
       <Thumb t={t} live={bucket === 'live'} badge={digest?.badge} s={s} c={c} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={s.rowName} numberOfLines={1}>
+        <Text style={s.rowName} numberOfLines={2}>
           {t.name}
         </Text>
-        <Text style={s.rowMeta} numberOfLines={1}>
+        <Text style={s.rowMeta} numberOfLines={2}>
           {meta.filter(Boolean).join(' · ') || 'Fecha por confirmar'}
         </Text>
         <Text
@@ -177,10 +198,11 @@ export const ExploreTournamentsScreen = ({
   const uid = useAuthStore((st) => st.user?.id ?? null);
   const now = useNow(60_000);
 
-  const [mode, setMode] = useState<'explore' | 'mine'>('explore');
+  const [mode, setMode] = useState<'explore' | 'mine' | 'created'>('explore');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<ExploreTournament[]>([]);
   const [mine, setMine] = useState<ExploreTournament[]>([]);
+  const [created, setCreated] = useState<ExploreTournament[]>([]);
   const [digests, setDigests] = useState<Record<string, Digest>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -285,6 +307,17 @@ export const ExploreTournamentsScreen = ({
     }
   }, [loadDigests]);
 
+  const loadCreated = useCallback(async () => {
+    try {
+      setCreated(await myCreatedTournaments());
+    } catch (e: any) {
+      toast.error('No se pudieron cargar', e?.message ?? '');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
   // Búsqueda con debounce (solo en modo explorar).
   useEffect(() => {
     if (mode !== 'explore') return;
@@ -292,14 +325,25 @@ export const ExploreTournamentsScreen = ({
     return () => clearTimeout(id);
   }, [search, mode, loadExplore]);
 
-  const switchMode = (m: 'explore' | 'mine') => {
+  const switchMode = (m: 'explore' | 'mine' | 'created') => {
     if (m === mode) return;
     setMode(m);
     setLoading(true);
     if (m === 'mine') {
       if (!uid) setLoading(false);
       else loadMine();
+    } else if (m === 'created') {
+      if (!uid) setLoading(false);
+      else loadCreated();
     } else loadExplore(search);
+  };
+
+  // Al tocar un torneo propio se abre su gestión (editar, inscripciones, cuadro, borrar…).
+  const openManaged = (t: ExploreTournament) => {
+    navigation.navigate('MainTabs', {
+      screen: 'Competir',
+      params: { screen: 'TournamentDetail', params: { tournamentId: t.id } },
+    });
   };
 
   const openTournament = (t: ExploreTournament) => {
@@ -336,7 +380,7 @@ export const ExploreTournamentsScreen = ({
       const tournamentId = await claimPartnerByCode(v);
       setCodeOpen(false);
       setCode('');
-      toast.success('¡Vinculado!', 'Ya tienes el torneo en Mis torneos.');
+      toast.success('¡Vinculado!', 'Ya tienes el torneo en Inscritos.');
       navigation.navigate('TournamentFollow', { tournamentId });
     } catch (e: any) {
       setCodeErr(e?.message ? `No encontramos ese código: ${e.message}` : 'No encontramos ese código. Revísalo.');
@@ -383,6 +427,17 @@ export const ExploreTournamentsScreen = ({
       { label: 'Jugados', data: played },
     ].filter((x) => x.data.length);
   }, [mine, digests, now]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Creados por mí: en juego · abiertos · próximos · terminados ──
+  const createdSections = useMemo(() => {
+    const bucket = (t: ExploreTournament) => tournamentBucket(t.status, t.starts_on);
+    return [
+      { label: 'En juego', data: created.filter((t) => bucket(t) === 'live') },
+      { label: 'Inscripción abierta', data: created.filter((t) => t.status === 'open' && bucket(t) !== 'live' && bucket(t) !== 'finished').sort(byDate) },
+      { label: 'Próximamente', data: created.filter((t) => t.status !== 'open' && bucket(t) === 'upcoming').sort(byDate) },
+      { label: 'Terminados', data: created.filter((t) => bucket(t) === 'finished').sort((a, b) => byDate(b, a)) },
+    ].filter((x) => x.data.length);
+  }, [created]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const group = (label: string, data: ExploreTournament[], isLive?: boolean) =>
     data.length ? (
@@ -434,10 +489,10 @@ export const ExploreTournamentsScreen = ({
         </View>
       )}
 
-      {/* Explorar / Mis torneos + un solo «Tengo un código». */}
+      {/* Explorar / Inscritos / Creados por mí + un solo «Tengo un código». */}
       <View style={s.topRow}>
         <View style={s.modeTabs}>
-          {(['explore', 'mine'] as const).map((m) => {
+          {(['explore', 'mine', 'created'] as const).map((m) => {
             const sel = mode === m;
             return (
               <Pressable
@@ -447,14 +502,23 @@ export const ExploreTournamentsScreen = ({
                 accessibilityState={{ selected: sel }}
                 style={s.modeTab}
               >
-                <Text style={[s.modeTabText, { color: sel ? c.text : c.textMuted, fontWeight: sel ? '800' : '600' }]}>
-                  {m === 'explore' ? 'Explorar' : 'Mis torneos'}
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                  style={[s.modeTabText, { color: sel ? c.text : c.textMuted, fontWeight: sel ? '800' : '600' }]}
+                >
+                  {m === 'explore' ? 'Explorar' : m === 'mine' ? 'Inscritos' : 'Creados por mí'}
                 </Text>
                 <View style={[s.modeTabBar, sel && { backgroundColor: c.accent }]} />
               </Pressable>
             );
           })}
         </View>
+      </View>
+
+      {/* Fuera de la fila de pestañas: con tres no cabía y se montaba encima de «Creados por mí». */}
+      {mode !== 'created' ? (
         <Pressable
           onPress={() => {
             setCodeErr(null);
@@ -465,7 +529,7 @@ export const ExploreTournamentsScreen = ({
           <IconTicket size={14} color={c.accent} />
           <Text style={s.codeBtnText}>Tengo un código</Text>
         </Pressable>
-      </View>
+      ) : null}
 
       {mode === 'explore' ? (
         <>
@@ -522,6 +586,9 @@ export const ExploreTournamentsScreen = ({
                 if (mode === 'mine') {
                   if (uid) loadMine();
                   else setRefreshing(false);
+                } else if (mode === 'created') {
+                  if (uid) loadCreated();
+                  else setRefreshing(false);
                 } else loadExplore(search);
               }}
               tintColor={c.accent}
@@ -564,7 +631,9 @@ export const ExploreTournamentsScreen = ({
               <IconTrophy size={26} color={c.textFaint} />
               <Text style={s.emptyTitle}>Entra para ver tus torneos</Text>
               <Text style={s.emptyText}>
-                Aquí verás los torneos en los que juegas, con tu hora y tu pista.
+                {mode === 'created'
+                  ? 'Aquí verás los torneos que organizas, con sus inscritos.'
+                  : 'Aquí verás los torneos en los que juegas, con tu hora y tu pista.'}
               </Text>
               <Pressable
                 onPress={() => (navigation as any).navigate('AuthFlow', { screen: 'Login' })}
@@ -573,6 +642,33 @@ export const ExploreTournamentsScreen = ({
                 <Text style={s.primaryBtnText}>Iniciar sesión</Text>
               </Pressable>
             </View>
+          ) : mode === 'created' ? (
+            createdSections.length === 0 ? (
+              <View style={s.emptyBox}>
+                <IconTrophy size={26} color={c.textFaint} />
+                <Text style={s.emptyTitle}>Aún no has creado ningún torneo</Text>
+                <Text style={s.emptyText}>
+                  Los torneos que montes tú, o que monte un club que gestionas, aparecerán aquí con sus inscritos.
+                </Text>
+              </View>
+            ) : (
+              createdSections.map((sec) => (
+                <View key={sec.label} style={{ marginTop: 18 }}>
+                  <View style={s.groupHead}>
+                    {sec.label === 'En juego' ? <LiveDot /> : null}
+                    <Text style={s.groupLabel}>{sec.label.toUpperCase()}</Text>
+                    <Text style={s.groupCount}>{sec.data.length}</Text>
+                  </View>
+                  <View style={s.groupCard}>
+                    {sec.data.map((t, i) => (
+                      <View key={t.id} style={i > 0 ? s.rowBorder : null}>
+                        <Row t={t} onPress={() => openManaged(t)} s={s} c={c} managed />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))
+            )
           ) : mineSections.length === 0 ? (
             <View style={s.emptyBox}>
               <IconTrophy size={26} color={c.textFaint} />
@@ -670,26 +766,28 @@ const makeStyles = (c: Palette) =>
     topRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
       paddingHorizontal: 20,
       marginBottom: 12,
     },
     modeTabs: {
       flex: 1,
       flexDirection: 'row',
-      gap: 18,
       borderBottomWidth: 1,
       borderColor: c.hairStrong,
     },
-    modeTab: { paddingTop: 8, paddingBottom: 9 },
+    // Tres pestañas a partes iguales: nunca se montan unas con otras.
+    modeTab: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 9 },
     modeTabText: { fontSize: 14.5, letterSpacing: -0.2 },
     modeTabBar: { position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, borderRadius: 1 },
     codeBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      alignSelf: 'flex-end',
+      marginRight: 20,
+      marginBottom: 12,
       paddingHorizontal: 12,
-      height: 36,
+      height: 34,
       borderRadius: 10,
       backgroundColor: c.accent10,
       borderWidth: 1,

@@ -120,7 +120,7 @@ export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
 
       {highlightTeam && myPath.length > 0 ? (
         <View style={styles.pathBox}>
-          <Text style={styles.pathTitle} numberOfLines={1}>
+          <Text style={styles.pathTitle} numberOfLines={2}>
             RECORRIDO DE {highlightTeam.toUpperCase()}
           </Text>
           {myPath.map(({ round, tie }) => {
@@ -143,7 +143,7 @@ export const FcpBracketView: React.FC<Props> = ({ idGrupo, highlightTeam }) => {
                 <Text style={styles.pathRound} numberOfLines={1}>
                   {round.label}
                 </Text>
-                <Text style={styles.pathRival} numberOfLines={1}>
+                <Text style={styles.pathRival} numberOfLines={2}>
                   {rival || 'Por determinar'}
                 </Text>
                 <Text

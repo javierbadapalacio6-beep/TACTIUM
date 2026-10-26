@@ -1,0 +1,7 @@
+{ "id": "D1", "formato": "story", "slides": [
+  { "tipo": "portada", "foto": "gen/story-pista.png", "eyebrow": "Cómo funciona", "titulo": "Convoca, alinea y *cierra la jornada*", "tam": "sm", "sub": "TACTIUM es la app de gestión de equipos de pádel federado." },
+  { "tipo": "pantalla", "alto": 1120, "src": "img/jornada-pendiente.jpg", "eyebrow": "1 · La jornada", "titulo": "Rival, sede, hora y *tus cinco parejas*", "sub": "Todo en un sitio, sin libreta." },
+  { "tipo": "pantalla", "alto": 1120, "src": "img/alineacion.jpg", "eyebrow": "2 · La alineación", "titulo": "Orden de fuerza, *sin hacer cuentas*", "sub": "Hasta 5 variantes por jornada. Tú eliges." },
+  { "tipo": "pantalla", "alto": 1120, "src": "img/jornada-resultados.png", "eyebrow": "3 · El resultado", "titulo": "El resultado, *listo para compartir*" },
+  { "tipo": "cierre", "titulo": "Pruébalo *14 días gratis*", "sub": "Sin tarjeta para empezar. Los jugadores no pagan.", "cta": "tactium.io" }
+] }

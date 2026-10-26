@@ -458,6 +458,7 @@ export function SuscripcionResumen() {
 /* ═══ SOPORTE ═════════════════════════════════════════════════════ */
 export function Soporte() {
   const { user } = useSession();
+  const [tutorialsReset, setTutorialsReset] = useState(false);
   const mailto = `mailto:hola@tactium.io?subject=Soporte%20TACTIUM&body=%0A%0A---%0ACuenta%3A%20${encodeURIComponent(
     user?.email ?? "",
   )}`;
@@ -477,6 +478,33 @@ export function Soporte() {
           hola@tactium.io
         </span>
       </a>
+      <button
+        type="button"
+        className="list-row"
+        style={{ color: "inherit", width: "100%", textAlign: "left", background: "none", border: 0, cursor: "pointer" }}
+        onClick={() => {
+          try {
+            Object.keys(window.localStorage)
+              .filter((k) => k.startsWith("tutorial:"))
+              .forEach((k) => window.localStorage.removeItem(k));
+          } catch {
+            /* sin almacenamiento */
+          }
+          setTutorialsReset(true);
+        }}
+      >
+        <span className="tile-icon tile-icon-mute">
+          <IconInfo size={16} />
+        </span>
+        <span className="list-row-main">
+          <span className="list-row-title">Ver los tutoriales otra vez</span>
+          <span className="list-row-sub">
+            {tutorialsReset
+              ? "Listo: volverán a salir la próxima vez que entres en cada sitio."
+              : "Equipo, crear jornadas y alineaciones."}
+          </span>
+        </span>
+      </button>
       <a href="/#faq" className="list-row" style={{ color: "inherit" }}>
         <span className="tile-icon tile-icon-mute">
           <IconInfo size={16} />

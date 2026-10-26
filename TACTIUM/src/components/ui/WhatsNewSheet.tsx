@@ -20,27 +20,22 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-07',
+  id: '2026-10-29',
   items: [
     {
-      icon: '●',
-      title: 'Marcador en vivo',
-      text: 'Los compañeros que miran llevan el tanteo juego a juego y el equipo lo sigue al momento. Con enlace para quien no tenga la app.',
+      icon: '📱',
+      title: 'Android más claro',
+      text: 'Nueva letra, nombres de equipos a dos líneas en vez de cortados con puntos suspensivos y botones más fáciles de pulsar.',
     },
     {
-      icon: '◷',
-      title: 'Encuesta de hora',
-      text: 'Propón varias horas para la jornada, el equipo vota y fijas la que más gente puede.',
+      icon: '💬',
+      title: 'Horarios de local por WhatsApp',
+      text: 'En Horarios, el club puede compartir de una vez los horarios de la jornada: día, hora, equipos, tandas y sede.',
     },
     {
-      icon: '!',
-      title: 'Temporadas sin sustos',
-      text: 'Si la Federación aún no ha publicado el calendario nuevo, te lo decimos en vez de volcar la temporada pasada.',
-    },
-    {
-      icon: '✦',
-      title: 'Entrada nueva',
-      text: 'La animación completa al abrir la app, cada vez.',
+      icon: '✅',
+      title: 'Horario subido, automático',
+      text: 'Cuando la Federación publica la hora de un partido de local, se marca como subido y avisamos al equipo, al club y a los jugadores.',
     },
   ],
 };

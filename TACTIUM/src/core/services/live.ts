@@ -38,12 +38,17 @@ export interface LiveCourt {
   player_b: { id: string; name: string | null } | null;
   forfeit: boolean;
   forfeit_us: boolean;
+  /** Sets del acta (resultado a mano o volcado del directo). Vacío en servidores antiguos. */
+  result_sets?: LiveSet[];
   live: LiveCourtState | null;
 }
 
 export interface LiveMatchdayState {
   matchday_id: string;
   matchday_status: string;
+  /** Fecha y hora del partido: el directo se activa solo a esa hora. */
+  match_date?: string | null;
+  match_time?: string | null;
   is_admin: boolean;
   can_score: boolean;
   share_token: string | null;
@@ -157,27 +162,88 @@ export function setsWon(live: LiveCourtState | null): { us: number; them: number
 
 export type CourtOutcome = 'won' | 'lost' | 'live' | 'none';
 
-export function courtOutcome(c: LiveCourt | undefined): CourtOutcome {
-  if (!c) return 'none';
+/** Pasadas estas horas desde la hora del partido ya no es «en directo» aunque nadie cierre el acta. */
+export const LIVE_WINDOW_MS = 5 * 60 * 60 * 1000;
+
+export interface LiveCtx {
+  /** Ha llegado la hora del partido (o ya hay un directo apuntado). */
+  started: boolean;
+  /** Acta sin cerrar y dentro de la ventana de juego. */
+  open: boolean;
+}
+
+/**
+ * El directo se activa SOLO a la hora del partido (sin tener que pulsar
+ * «Marcar»). Sin hora fijada, o con un servidor antiguo, solo cuenta el que
+ * alguien haya apuntado.
+ */
+export function liveCtx(state: LiveMatchdayState | null, now = Date.now()): LiveCtx {
+  if (!state || state.matchday_status === 'finished') return { started: false, open: false };
+  const t =
+    state.match_date && state.match_time
+      ? new Date(`${state.match_date}T${state.match_time}`).getTime()
+      : NaN;
+  if (Number.isNaN(t)) return { started: state.courts.some((c) => c.live), open: true };
+  return { started: now >= t, open: now < t + LIVE_WINDOW_MS };
+}
+
+/** Ganador según los sets del acta (2 sets ganados), o null si no está decidida. */
+export function resultWinner(sets: LiveSet[] | undefined): 'us' | 'them' | null {
+  let us = 0;
+  let them = 0;
+  for (const s of sets ?? []) {
+    if (s.us > s.them) us++;
+    else if (s.them > s.us) them++;
+  }
+  return us >= 2 ? 'us' : them >= 2 ? 'them' : null;
+}
+
+/** Pista cerrada: W.O., resultado decidido en el acta o directo terminado. */
+export function courtDecided(c: LiveCourt): boolean {
+  return c.forfeit || resultWinner(c.result_sets) !== null || c.live?.status === 'finished';
+}
+
+/**
+ * Estado de una pista. Manda el acta: si el resultado se metió a mano (o se
+ * corrigió) y está decidido, la pista está ganada/perdida aunque el directo
+ * se quedara en juego. Si no, el directo terminado; si no, «en juego» desde la
+ * hora del partido.
+ */
+export function courtOutcome(
+  c: LiveCourt | undefined,
+  ctx: LiveCtx = { started: false, open: true },
+): CourtOutcome {
+  if (!c) return ctx.open && ctx.started ? 'live' : 'none';
+  const inPlay: CourtOutcome = ctx.open && (ctx.started || !!c.live) ? 'live' : 'none';
   if (c.forfeit) return c.forfeit_us ? 'lost' : 'won';
-  if (!c.live) return 'none';
-  if (c.live.status === 'finished') {
+  const aw = resultWinner(c.result_sets);
+  if (aw) return aw === 'us' ? 'won' : 'lost';
+  if (c.live?.status === 'finished') {
     const w = c.live.winner ?? (() => {
       const s = setsWon(c.live);
       return s.us > s.them ? 'us' : s.them > s.us ? 'them' : null;
     })();
     return w === 'us' ? 'won' : w === 'them' ? 'lost' : 'none';
   }
-  return 'live';
+  return inPlay;
+}
+
+/** Sets a pintar de una pista: el acta si manda ella; si no, el directo en curso. */
+export function courtSets(c: LiveCourt | undefined): LiveSet[] {
+  if (!c || c.forfeit) return [];
+  const acta = c.result_sets ?? [];
+  if (acta.length && (resultWinner(acta) || !c.live || c.live.status === 'finished')) return acta;
+  return c.live?.sets ?? [];
 }
 
 /** Pistas ganadas / perdidas / en juego del encuentro. */
-export function liveTotals(state: LiveMatchdayState | null) {
+export function liveTotals(state: LiveMatchdayState | null, now = Date.now()) {
+  const ctx = liveCtx(state, now);
   let won = 0;
   let lost = 0;
   let live = 0;
   for (const c of state?.courts ?? []) {
-    const o = courtOutcome(c);
+    const o = courtOutcome(c, ctx);
     if (o === 'won') won++;
     else if (o === 'lost') lost++;
     else if (o === 'live') live++;
@@ -185,10 +251,24 @@ export function liveTotals(state: LiveMatchdayState | null) {
   return { won, lost, live };
 }
 
-/** ¿Pinta «EN DIRECTO»? Alguna pista en juego y el acta sin cerrar. */
-export function isLiveNow(state: LiveMatchdayState | null): boolean {
-  if (!state || state.matchday_status === 'finished') return false;
-  return state.courts.some((c) => c.live?.status === 'live' && !c.forfeit);
+/**
+ * ¿Pinta «EN DIRECTO»? Desde la hora del partido y hasta que todas las pistas
+ * estén cerradas (o se cierre el acta). Antes de la hora, solo si alguien ya
+ * está marcando. `expectedCourts` = pistas que exige la liga, por si alguna
+ * aún no tiene ni alineación.
+ */
+export function isLiveNow(
+  state: LiveMatchdayState | null,
+  now = Date.now(),
+  expectedCourts = 0,
+): boolean {
+  if (!state) return false;
+  const ctx = liveCtx(state, now);
+  if (!ctx.open) return false;
+  if (state.courts.some((c) => c.live?.status === 'live' && !courtDecided(c))) return true;
+  if (!ctx.started) return false;
+  const total = Math.max(expectedCourts, state.courts.length);
+  return total > 0 && state.courts.filter(courtDecided).length < total;
 }
 
 /** Mensaje humano de un error de las RPC del directo. */

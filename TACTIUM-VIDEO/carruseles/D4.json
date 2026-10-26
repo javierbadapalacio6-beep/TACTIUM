@@ -1,0 +1,5 @@
+{ "id": "D4", "formato": "story", "slides": [
+  { "tipo": "portada", "foto": "gen/tablon-club.png", "eyebrow": "Clubs", "titulo": "Todos los equipos de tu club, *en un panel*", "tam": "sm", "sub": "Capitanes, horarios de pista y torneos." },
+  { "tipo": "texto", "eyebrow": "Para clubs con varios equipos", "titulo": "Un solo sitio *para todo el club*", "ticks": ["Un panel para todos los equipos", "Capitanes y plantillas", "Horarios de pista", "Equipos invitados con su sede"] },
+  { "tipo": "cierre", "titulo": "¿Tu club juega la liga?", "sub": "Escríbenos y lo vemos juntos.", "cta": "hola@tactium.io" }
+] }

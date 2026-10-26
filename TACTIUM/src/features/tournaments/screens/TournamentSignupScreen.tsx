@@ -1,3 +1,4 @@
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -7,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   Linking,
   Share,
   AppState,
@@ -28,6 +28,8 @@ import {
   checkCategoryEligibility,
   resolveCategoryThreshold,
   hourlyFranjas,
+  windowForDay,
+  describePlayWindows,
   publicListRegistrations,
   type TournamentLookup,
   type TournamentRegistration,
@@ -60,6 +62,8 @@ const parseIsoDate = (iso: string): Date => {
 };
 
 interface TDay {
+  /** Fecha ISO del día (para su franja de juego: entre semana / fin de semana / festivo). */
+  iso: string;
   label: string; // "Vie 24"
   full: string; // "Viernes 24"
 }
@@ -102,6 +106,22 @@ const PAYMENT_LABEL: Record<string, string> = {
 // asistente también en torneos con cuota y NO envía la inscripción.
 const SIGNUP_PREVIEW = process.env.EXPO_PUBLIC_AVAILABILITY_MOCK === '1';
 
+const SIGNUP_STEPS: CoachStep[] = [
+  {
+    title: 'Apuntarte en 3 pasos',
+    text: 'Es rápido: no hace falta que tu pareja complete nada, lo rellenas tú.',
+    chips: [
+      '¿Quiénes jugáis? Tus datos y los de tu pareja',
+      '¿En qué categoría? Solo salen las que podéis jugar por puntos y nivel',
+      'Horario y pago: marcas cuándo NO podéis y confirmas',
+    ],
+  },
+  {
+    title: 'Las franjas en las que no podéis',
+    text: 'El organizador reparte los partidos respetando lo que marques, así que sé sincero: cuantas menos franjas bloquees, más fácil encaja el horario.',
+  },
+];
+
 export const TournamentSignupScreen = ({
   navigation,
   route,
@@ -114,6 +134,7 @@ export const TournamentSignupScreen = ({
 
   const [code, setCode] = useState(route.params?.code ?? '');
   const [found, setFound] = useState<TournamentLookup | null>(null);
+  const coach = useCoach('torneo-inscripcion', undefined, !!found, 900);
   const [looking, setLooking] = useState(false);
 
   // Asistente en 3 pasos. Volver atrás no borra nada: todo vive aquí arriba.
@@ -166,7 +187,11 @@ export const TournamentSignupScreen = ({
     while (d.getTime() <= end.getTime() && guard < 31) {
       const dow = d.getDay();
       const num = d.getDate();
-      out.push({ label: `${DOW_ABBR[dow]} ${num}`, full: `${DOW_NAME[dow]} ${num}` });
+      out.push({
+        iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(num).padStart(2, '0')}`,
+        label: `${DOW_ABBR[dow]} ${num}`,
+        full: `${DOW_NAME[dow]} ${num}`,
+      });
       d.setDate(d.getDate() + 1);
       guard++;
     }
@@ -175,10 +200,12 @@ export const TournamentSignupScreen = ({
 
   // Disponibilidad por FRANJAS DE 1H: el jugador marca las horas que NO puede,
   // hasta el tope que fije el club. Por defecto disponible en todas.
-  const slots = useMemo(
-    () => hourlyFranjas(found?.start_time, found?.end_time),
-    [found?.start_time, found?.end_time],
-  );
+  // Cada día ofrece SOLO las horas de su franja (entre semana, fin de semana o festivo); un torneo antiguo, con una
+  // sola ventana, las ofrece iguales todos los días.
+  const slotsFor = (iso: string) => {
+    const w = windowForDay(found ?? {}, iso);
+    return hourlyFranjas(w.from, w.to);
+  };
   const removeCap = found?.max_removable_hours ?? null;
   const keyOf = (dayLabel: string, from: number) => `${dayLabel}#${from}`;
   const toggleRemoved = (dayLabel: string, from: number) => {
@@ -207,10 +234,11 @@ export const TournamentSignupScreen = ({
     if (removed.size === 0 || tDays.length === 0) return [];
     const out: string[] = [];
     for (const day of tDays)
-      for (const s of slots)
+      for (const s of slotsFor(day.iso))
         if (removed.has(keyOf(day.label, s.from))) out.push(`${day.label} ${s.label}`);
     return out;
-  }, [removed, tDays, slots]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [removed, tDays, found]);
 
   const doLookup = async () => {
     if (code.trim().length < 4) {
@@ -277,7 +305,7 @@ export const TournamentSignupScreen = ({
     () => (found?.categories ?? []).filter((cat) => catReasons[cat] == null),
     [found, catReasons],
   );
-  // Requisito legible de cada categoría («Hasta 900 pts · nivel ≥ 8» / «Libre»).
+  // Requisito legible de cada categoría («Hasta 900 pts · nivel máx. 8+» / «Libre»).
   const catDetails = useMemo(() => {
     const map: Record<string, string | null> = {};
     for (const cat of found?.categories ?? []) {
@@ -291,7 +319,7 @@ export const TournamentSignupScreen = ({
           ? `hasta ${t.puntos} pts`
           : null,
         t?.nivel != null && (rules.mode === 'nivel' || rules.mode === 'both')
-          ? `nivel ≥ ${t.nivel}`
+          ? `nivel máx. ${t.nivel}+`
           : null,
       ].filter(Boolean) as string[];
       const txt = parts.join(' · ');
@@ -542,6 +570,7 @@ export const TournamentSignupScreen = ({
         partnerEmail: string,
         seed: number,
         league: number | null,
+        partnerNotFed: boolean,
       ) => {
         const regId = await signupByCode({
           code,
@@ -556,6 +585,8 @@ export const TournamentSignupScreen = ({
           leagueSum: league,
           availability,
           termsAccepted: termsOk,
+          p1NotFed: me.noFed,
+          p2NotFed: isPair && partnerNotFed,
         });
         if (!isPair) return null;
         const partnerCode = await getRegistrationPartnerCode(regId).catch(() => null);
@@ -576,10 +607,10 @@ export const TournamentSignupScreen = ({
       };
 
       const results: DoneItem[] = [];
-      const r1 = await signupOne(category, p2, mate.email, seedPoints, leagueSum);
+      const r1 = await signupOne(category, p2, mate.email, seedPoints, leagueSum, mate.noFed);
       if (r1) results.push(r1);
       if (category2) {
-        const r2 = await signupOne(category2, p2b, mate2.email, seedPointsB, leagueSumB);
+        const r2 = await signupOne(category2, p2b, mate2.email, seedPointsB, leagueSumB, mate2.noFed);
         if (r2) results.push(r2);
       }
 
@@ -724,7 +755,9 @@ export const TournamentSignupScreen = ({
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>HORARIO</Text>
           <Text style={styles.infoValue}>
-            {(found.start_time || '09:00').slice(0, 5)}–{(found.end_time || '22:00').slice(0, 5)}
+            {found.play_windows
+              ? describePlayWindows(found)
+              : `${(found.start_time || '09:00').slice(0, 5)}–${(found.end_time || '22:00').slice(0, 5)}`}
           </Text>
         </View>
         {found.genders.length ? (
@@ -1035,7 +1068,7 @@ export const TournamentSignupScreen = ({
             <View key={day.label} style={styles.franjaBlock}>
               <Text style={styles.franjaLabel}>{day.full}</Text>
               <View style={styles.hourGrid}>
-                {slots.map((s) => {
+                {slotsFor(day.iso).map((s) => {
                   const off = removed.has(keyOf(day.label, s.from));
                   return (
                     <Pressable
@@ -1123,9 +1156,10 @@ export const TournamentSignupScreen = ({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       style={styles.root}
     >
+      <CoachTour coach={coach} steps={SIGNUP_STEPS} />
       <StepHeader
         c={c}
         styles={styles}

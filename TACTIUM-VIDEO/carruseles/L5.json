@@ -1,0 +1,82 @@
+{
+  "id": "L5",
+  "titulo": "Los equipos que suben a 1ª en 2026/27",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/grada.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Estos equipos *dan el salto a 1ª*",
+      "sub": "Jugaban en 2ª en 2026. Ahora, en 1ª 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Suben a 1ª · Masculina",
+      "bandera": "cantabria",
+      "titulo": "De 2ª a 1ª Masculina",
+      "grupos": [
+        {
+          "etiqueta": "Suben",
+          "equipos": [
+            "MEDIO CUDEYO A",
+            "SMASH PADEL A",
+            "ALDAY BOUCO A",
+            "A.D.R.M. A",
+            "MONTEVERDE B"
+          ]
+        },
+        {
+          "etiqueta": "Y también",
+          "equipos": [
+            "REINOSA PADEL CLUB A",
+            "C.D. LA PLAYUCA ASTILLERO A",
+            "MIOÑO PADEL GYM A",
+            "PADEL X5 A"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Suben a 1ª · Femenina",
+      "bandera": "cantabria",
+      "titulo": "De 2ª a 1ª Femenina",
+      "grupos": [
+        {
+          "etiqueta": "Suben",
+          "equipos": [
+            "EL TEMPLO A",
+            "G6 C"
+          ]
+        },
+        {
+          "etiqueta": "Y también",
+          "equipos": [
+            "MOVE & GO A",
+            "SMASH SANTANDER B"
+          ]
+        }
+      ],
+      "dato": {
+        "eyebrow": "Fíjate",
+        "titulo": "Smash Santander B y Move & Go A *ganaron su grupo en 2ª*"
+      }
+    },
+    {
+      "tipo": "numero",
+      "eyebrow": "Suben a 1ª Masculina",
+      "valor": "9",
+      "sub": "equipos de 2ª juegan este año en la máxima categoría. **Tres de ellos ganaron su grupo** en 2ª."
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Tu equipo *ha subido?*",
+      "sub": "Mira la plantilla y los rivales de tu grupo en tactium.io. **Gratis.**",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}

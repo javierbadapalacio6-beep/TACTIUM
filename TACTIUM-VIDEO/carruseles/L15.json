@@ -1,0 +1,123 @@
+{
+  "id": "L15",
+  "titulo": "Jornada 1: los cruces de 4ª y 5ª femenina",
+  "slides": [
+    {
+      "tipo": "portada",
+      "foto": "gen/tablon-club.png",
+      "eyebrow": "Liga Cántabra 2026/27",
+      "bandera": "cantabria",
+      "titulo": "Jornada 1. *4ª y 5ª femenina.*",
+      "sub": "23, 24 y 25 de octubre. El local, primero 👉",
+      "tam": "sm"
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "4ª Femenina · Grupos B y C",
+      "grupos": [
+        {
+          "etiqueta": "B · 1",
+          "equipos": [
+            "+PADEL SANTANDER B",
+            "vs PADEL X5 B"
+          ]
+        },
+        {
+          "etiqueta": "B · 2",
+          "equipos": [
+            "CENTRAL PADEL F",
+            "vs LA MARINA F"
+          ]
+        },
+        {
+          "etiqueta": "B · 3",
+          "equipos": [
+            "G6 K",
+            "vs CASTRO URDIALES B"
+          ]
+        },
+        {
+          "etiqueta": "B · 4",
+          "equipos": [
+            "OLIMPICO DE GAMA C",
+            "vs CIRCULO DE RECREO C"
+          ]
+        },
+        {
+          "etiqueta": "C · 1",
+          "equipos": [
+            "ASTILLERO GUARNIZO",
+            "vs HOVELO A"
+          ]
+        },
+        {
+          "etiqueta": "C · 2",
+          "equipos": [
+            "EL TEMPLO D",
+            "vs CIRCULO DE RECREO D"
+          ]
+        },
+        {
+          "etiqueta": "C · 3",
+          "equipos": [
+            "G6 J",
+            "vs ALDAY BOUCO"
+          ]
+        },
+        {
+          "etiqueta": "C · 4",
+          "equipos": [
+            "PADEL CAYON",
+            "vs CENTRAL PADEL G"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupos",
+      "eyebrow": "Jornada 1 · 23-25 octubre",
+      "bandera": "cantabria",
+      "titulo": "4ª Femenina · Grupo D",
+      "grupos": [
+        {
+          "etiqueta": "D · 1",
+          "equipos": [
+            "MEDIO CUDEYO B",
+            "vs LA MARINA E"
+          ]
+        },
+        {
+          "etiqueta": "D · 2",
+          "equipos": [
+            "MONTEVERDE G",
+            "vs CENTRAL PADEL H"
+          ]
+        },
+        {
+          "etiqueta": "D · 3",
+          "equipos": [
+            "MOVE & GO C",
+            "vs T3 PADEL B"
+          ]
+        },
+        {
+          "etiqueta": "D · 4",
+          "equipos": [
+            "RACKET SPORT F",
+            "vs G6 H"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cierre",
+      "foto": "gen/pista-noche.png",
+      "titulo": "¿Y *tu jornada 1?*",
+      "sub": "Los cruces de tu grupo, con las plantillas y los puntos de cada rival, en tactium.io.",
+      "cta": "tactium.io · Federación",
+      "bandera": "cantabria"
+    }
+  ]
+}
