@@ -241,7 +241,7 @@ function teamNameKey(s: string): string {
  * Devuelve una función que lleva el nombre del partido al de la clasificación: mismo nombre, o el de la
  * clasificación como inicio del otro (palabra entera). Gana el nombre más largo que encaje.
  */
-function makeTeamResolver(equipos: string[]) {
+export function makeTeamResolver(equipos: string[]) {
   const keys = equipos.map((e) => ({ e, k: teamNameKey(e) })).sort((a, b) => b.k.length - a.k.length);
   const cache = new Map<string, string>();
   return (name: string | null): string | null => {

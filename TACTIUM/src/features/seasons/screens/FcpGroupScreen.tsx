@@ -17,6 +17,7 @@ import { IconBack, IconChevron } from '@components/ui';
 import { CommunityAvatar } from '../../social/components/social-ui';
 import { Segmented, MetaChip, FormChips } from '../components/fcpUi';
 import { FullStandingsTable } from '../components/FullStandingsTable';
+import { GroupStatsView } from '../components/GroupStatsView';
 import {
   fetchGroupStandings,
   fetchGroupSchedule,
@@ -37,7 +38,7 @@ import { useTeamStore } from '@store/teamStore';
 import { FcpBracketView } from '../components/FcpBracketView';
 import type { CompetirStackScreenProps } from '@navigation/types';
 
-type Tab = 'clasif' | 'jornadas' | 'cuadro';
+type Tab = 'clasif' | 'jornadas' | 'cuadro' | 'stats';
 
 /** La Federación publica los nombres EN MAYÚSCULAS. A pantalla completa
  *  gritan, así que se bajan a capital inicial. */
@@ -304,11 +305,13 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
       ? 'Clasificación'
       : tab === 'jornadas'
         ? 'Jornadas'
-        : 'Cuadro';
+        : tab === 'stats'
+          ? 'Estadísticas'
+          : 'Cuadro';
 
   const tabItems: [Tab, string][] = esPlayoff
-    ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas']]
-    : [['clasif', 'Clasificación'], ['jornadas', 'Jornadas']];
+    ? [['cuadro', 'Cuadro'], ['clasif', 'Clasificación'], ['jornadas', 'Jornadas'], ['stats', 'Stats']]
+    : [['clasif', 'Clasificación'], ['jornadas', 'Jornadas'], ['stats', 'Stats']];
 
   // Zonas de play off / descenso: la FCP no publica los cupos, salen de la
   // normativa (core/data/fcpZones.ts). Solo en la fase de grupos; sin datos,
@@ -415,6 +418,12 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
               </React.Fragment>
             ))}
           </View>
+        ) : tab === 'stats' ? (
+          <GroupStatsView
+            idGrupo={idGrupo}
+            equipos={rows.map((r) => r.equipo)}
+            myTeam={myRow?.equipo ?? myFcpName}
+          />
         ) : tab === 'cuadro' ? (
           <View style={{ marginTop: 18 }}>
             <FcpBracketView idGrupo={idGrupo} highlightTeam={myRow?.equipo ?? myFcpName} />

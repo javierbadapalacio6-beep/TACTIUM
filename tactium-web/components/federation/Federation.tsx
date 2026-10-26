@@ -58,6 +58,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { FederationMine } from "./FederationMine";
 import { useAsync } from "@/lib/use-async";
 import { useDismiss } from "@/lib/use-dismiss";
+import { FcpGroupStats } from "./GroupStats";
 import {
   Avatar,
   Btn,
@@ -1483,6 +1484,13 @@ export function FcpGroupView({
           </section>
         </div>
       )}
+
+      {tab !== "cuadro" && rows.length > 0 ? (
+        <section style={{ minWidth: 0, marginTop: 28 }}>
+          <SectionHead title="Estadísticas" style={{ margin: "0 0 10px" }} />
+          <FcpGroupStats idGrupo={id} equipos={rows.map((t) => t.equipo)} myTeam={myRow?.equipo ?? null} />
+        </section>
+      ) : null}
     </div>
   );
 }
