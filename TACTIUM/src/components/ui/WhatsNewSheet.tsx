@@ -20,22 +20,22 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-28',
+  id: '2026-10-29',
   items: [
     {
-      icon: '🧭',
-      title: 'Nueva barra de navegación',
-      text: 'La muesca viaja hasta la pestaña que tocas. También puedes arrastrar el dedo por la barra para cambiar de sección.',
+      icon: '📱',
+      title: 'Android más claro',
+      text: 'Nueva letra, nombres de equipos a dos líneas en vez de cortados con puntos suspensivos y botones más fáciles de pulsar.',
     },
     {
-      icon: '🏆',
-      title: 'Guías en los torneos',
-      text: 'Al crear un torneo, llevarlo como organizador o apuntarte, te explicamos cada paso la primera vez.',
+      icon: '💬',
+      title: 'Horarios de local por WhatsApp',
+      text: 'En Horarios, el club puede compartir de una vez los horarios de la jornada: día, hora, equipos, tandas y sede.',
     },
     {
-      icon: '✨',
-      title: 'Guías más suaves',
-      text: 'Las guías sobre la pantalla se deslizan de un botón al siguiente. Las repites desde Ajustes.',
+      icon: '✅',
+      title: 'Horario subido, automático',
+      text: 'Cuando la Federación publica la hora de un partido de local, se marca como subido y avisamos al equipo, al club y a los jugadores.',
     },
   ],
 };
