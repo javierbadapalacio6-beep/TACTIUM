@@ -240,6 +240,24 @@ function remapTeams<T extends { equipo_local: string | null; equipo_visit: strin
   return arr.map((p) => ({ ...p, equipo_local: resolve(p.equipo_local), equipo_visit: resolve(p.equipo_visit) }));
 }
 
+/**
+ * Un equipo que cambia de nombre (patrocinador) deja su fila vieja en la clasificación con el mismo id: sale
+ * duplicado y el grupo parece tener un equipo de más. Se queda la fila cuyo nombre aparece en los partidos.
+ */
+function dedupeClasif<T extends { equipo: string; id_equipo: number | null }>(
+  rows: T[],
+  partidos: { equipo_local: string | null; equipo_visit: string | null }[],
+): T[] {
+  const names = new Set<string>();
+  for (const p of partidos) {
+    if (p.equipo_local) names.add(p.equipo_local);
+    if (p.equipo_visit) names.add(p.equipo_visit);
+  }
+  return rows.filter(
+    (r) => r.id_equipo == null || names.size === 0 || names.has(r.equipo) || !rows.some((o) => o !== r && o.id_equipo === r.id_equipo && names.has(o.equipo)),
+  );
+}
+
 type OverlayPartido = {
   id_partido: string;
   estado: string | null;
@@ -283,7 +301,7 @@ export async function fetchFcpStandings(
 ): Promise<FcpStanding[]> {
   // PJ/PG/racha se DERIVAN de fcp_partidos: las columnas de fcp_clasificacion
   // vienen en 0 (el scrape de la matriz no las rellena).
-  const [{ data, error }, { data: partidos, error: pe }, { data: actasRows }] = await Promise.all([
+  const [{ data: rawClasif, error }, { data: partidos, error: pe }, { data: actasRows }] = await Promise.all([
     sb
       .from("fcp_clasificacion")
       .select("posicion, id_equipo, equipo, puntos, sets_favor, sets_contra, enf")
@@ -302,6 +320,7 @@ export async function fetchFcpStandings(
   if (error) throw error;
   if (pe) throw pe;
   await overlayOwnResults(sb, partidos as OverlayPartido[] | null);
+  const data = dedupeClasif(rawClasif ?? [], (partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null }[]);
   const resolve = makeTeamResolver((data ?? []).map((x) => x.equipo as string));
   const stats = deriveTeamStats(remapTeams((partidos ?? []) as FcpPartidoLite[], resolve));
 

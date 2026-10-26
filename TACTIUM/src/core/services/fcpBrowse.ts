@@ -147,6 +147,24 @@ export interface FcpBrowseStanding {
   form: ('V' | 'D')[];
 }
 
+/**
+ * Un equipo que cambia de nombre (patrocinador) deja su fila vieja en la clasificación con el mismo id: sale
+ * duplicado y el grupo parece tener un equipo de más. Se queda la fila cuyo nombre aparece en los partidos.
+ */
+function dedupeClasif<T extends { equipo: string; id_equipo: number | null }>(
+  rows: T[],
+  partidos: { equipo_local: string | null; equipo_visit: string | null }[],
+): T[] {
+  const names = new Set<string>();
+  for (const p of partidos) {
+    if (p.equipo_local) names.add(p.equipo_local);
+    if (p.equipo_visit) names.add(p.equipo_visit);
+  }
+  return rows.filter(
+    (r) => r.id_equipo == null || names.size === 0 || names.has(r.equipo) || !rows.some((o) => o !== r && o.id_equipo === r.id_equipo && names.has(o.equipo)),
+  );
+}
+
 type OverlayPartido = {
   id_partido: string;
   estado: string | null;
@@ -187,7 +205,7 @@ async function overlayOwnResults(partidos: OverlayPartido[] | null): Promise<voi
 export async function fetchGroupStandings(
   idGrupo: string,
 ): Promise<{ nombre: string | null; genero: string | null; rows: FcpBrowseStanding[]; provisional: boolean }> {
-  const { data } = await rawFrom('fcp_clasificacion')
+  const { data: rawClasif } = await rawFrom('fcp_clasificacion')
     .select('posicion, equipo, id_equipo, puntos, sets_favor, sets_contra')
     .eq('id_grupo', idGrupo)
     .order('posicion', { ascending: true });
@@ -197,6 +215,7 @@ export async function fetchGroupStandings(
     .eq('id_grupo', idGrupo)
     .order('jornada', { ascending: true });
   await overlayOwnResults(partidos as OverlayPartido[] | null);
+  const data = dedupeClasif((rawClasif ?? []) as { equipo: string; id_equipo: number | null }[], (partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null }[]);
   // Sets de cada pareja (actas): con ellos se calcula la clasificación provisional.
   const { data: actasRows } = await rawFrom('fcp_actas')
     .select('equipo_local, equipo_visit, sets_local, sets_visit')
