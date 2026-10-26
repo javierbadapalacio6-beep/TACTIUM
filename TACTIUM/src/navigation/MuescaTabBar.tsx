@@ -12,6 +12,7 @@ import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 import Svg, { Path } from 'react-native-svg';
 import Animated, {
   FadeInDown,
@@ -31,7 +32,9 @@ import { IconHome, IconTeam, IconTrophy, IconUser, IconPlus } from '@components/
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 /** La forma de la barra (px). `arriba`: dónde empieza su borde dentro de la caja de `alto`. */
-const GEO = { arriba: 28, alto: 100, hondo: 34, ancho: 33, esquina: 18, margen: 56 };
+const GEO = { arriba: 28, alto: 86, hondo: 34, ancho: 33, esquina: 18, margen: 46 };
+/** Margen lateral de la barra: más estrecha que la demo (390 px) para que no ocupe todo el ancho. */
+const LATERAL = 34;
 const MUESCA = { stiffness: 235, damping: 21.5, mass: 1 };
 const BURBUJA = { stiffness: 330, damping: 14.5, mass: 1 };
 
@@ -109,7 +112,7 @@ export const MuescaTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
   const isDark = useIsDark();
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
-  const W = screenW - 20;
+  const W = screenW - LATERAL * 2;
 
   const focusedTab = state.routes[state.index];
   const focusedName = getFocusedRouteNameFromRoute(focusedTab);
@@ -201,10 +204,6 @@ export const MuescaTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
     const ancho = GEO.ancho + lim(Math.abs(err) * 0.1, 0, 11);
     return { d: camino(cx.value, lean, ancho, W) };
   });
-  const shadowProps = useAnimatedProps(() => {
-    const err = target.value - cx.value;
-    return { d: camino(cx.value, lim(err * 0.14, -15, 15), GEO.ancho + lim(Math.abs(err) * 0.1, 0, 11), W) };
-  });
   const bubbleStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: cx.value - 23 },
@@ -220,26 +219,26 @@ export const MuescaTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
   const shownRoute = state.routes[shownIndex];
   const BubbleIcon = ICONS[shownRoute.name] ?? IconHome;
   const activeLabel = String(descriptors[state.routes[active].key]?.options.tabBarLabel ?? '');
-  const barFill = c.bgCard;
+  // Cristal: el fondo es translúcido y el BlurView de debajo difumina lo que pasa por detrás.
+  const barFill = isDark ? 'rgba(27,29,33,0.52)' : 'rgba(255,255,255,0.56)';
 
   return (
     <View
-      style={[s.wrap, { bottom: Math.max(insets.bottom, 12) - 6, width: W }]}
+      style={[s.wrap, { left: LATERAL, bottom: Math.max(insets.bottom, 12) + 8, width: W }]}
       pointerEvents="box-none"
     >
       <GestureDetector gesture={pan}>
         <View style={{ width: W, height: GEO.alto }}>
-          {/* Sombra y barra con su muesca */}
+          {/* Cristal difuminado bajo la barra */}
+          <View style={[s.glass, { width: W }]} pointerEvents="none">
+            <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          </View>
+          {/* La barra con su muesca */}
           <Svg width={W} height={GEO.alto} style={s.svg}>
-            <AnimatedPath
-              animatedProps={shadowProps}
-              fill={isDark ? 'rgba(0,0,0,0.35)' : 'rgba(20,21,24,0.10)'}
-              transform="translate(0 9)"
-            />
             <AnimatedPath
               animatedProps={pathProps}
               fill={barFill}
-              stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(20,21,24,0.07)'}
+              stroke={isDark ? 'rgba(255,255,255,0.14)' : 'rgba(20,21,24,0.10)'}
               strokeWidth={1}
             />
           </Svg>
@@ -269,7 +268,7 @@ export const MuescaTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
                 accessibilityHint={isCreate ? 'Abre las acciones rápidas para crear' : undefined}
                 accessibilityState={isCreate ? undefined : { selected: i === active }}
                 android_ripple={null}
-                style={[s.hit, { left: centers[i] - 29, top: GEO.arriba }]}
+                style={[s.hit, { left: centers[i] - 26, top: GEO.arriba }]}
               />
             );
           })}
@@ -334,10 +333,18 @@ const CreateButton: React.FC<{ center: number; onPress: () => void }> = ({ cente
 };
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', left: 10 },
+  wrap: { position: 'absolute' },
+  glass: {
+    position: 'absolute',
+    left: 0,
+    top: GEO.arriba,
+    height: GEO.alto - GEO.arriba,
+    borderRadius: GEO.esquina,
+    overflow: 'hidden',
+  },
   svg: { position: 'absolute', left: 0, top: 0, overflow: 'visible' },
-  ic: { position: 'absolute', top: 50, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-  hit: { position: 'absolute', width: 58, height: 72 },
+  ic: { position: 'absolute', top: 45, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
+  hit: { position: 'absolute', width: 52, height: 58 },
   bubble: {
     position: 'absolute',
     left: 0,
@@ -353,7 +360,7 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  label: { position: 'absolute', left: 0, top: 76, width: 120, alignItems: 'center' },
+  label: { position: 'absolute', left: 0, top: 64, width: 120, alignItems: 'center' },
   labelRow: { flexDirection: 'row' },
   labelText: { fontSize: 12.5, fontWeight: '600', letterSpacing: -0.1 },
   create: {
