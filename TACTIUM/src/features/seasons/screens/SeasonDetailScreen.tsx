@@ -1,3 +1,4 @@
+import { TutorialSheet, useTutorial } from '@components/ui/TutorialSheet';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Animated, {
   useAnimatedStyle,
@@ -165,7 +166,9 @@ export const SeasonDetailScreen = ({
   // comprueba la sub EN EL MOMENTO de la acción → bloquea tanto al usuario
   // nuevo como al que canceló/caducó teniendo ya la temporada creada.
   const gate = usePremiumGate();
-  const openAddMatchday = () => setAdding(true);
+  // Primera vez: un mini tutorial y, al cerrarlo, se abre «Nueva jornada».
+  const addTut = useTutorial('create-matchday');
+  const openAddMatchday = () => addTut.show(() => setAdding(true));
   const openScan = gate(() => setScanning(true), 'calendar_scan');
 
   // autoOpen desde atajo/botón ＋: abre el escáner o «nueva jornada» PASANDO
@@ -845,6 +848,7 @@ export const SeasonDetailScreen = ({
       </BottomSheet>
 
       {/* ── Sheets ── */}
+      <TutorialSheet id="create-matchday" visible={addTut.visible} onClose={addTut.close} />
       <AddMatchdaySheet
         open={adding}
         onClose={() => setAdding(false)}

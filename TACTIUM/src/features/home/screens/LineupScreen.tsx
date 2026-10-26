@@ -1,3 +1,4 @@
+import { TutorialSheet, useAutoTutorial } from '@components/ui/TutorialSheet';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -106,6 +107,7 @@ export const LineupScreen = ({
   const isCaptain = useTeamStore(selectIsCaptain);
   const isClub = useTeamStore(selectIsClubAdmin);
   const gate = usePremiumGate();
+  const lineupTut = useAutoTutorial('lineup', undefined, isCaptain, 900);
   // Tablet: rail compacto (las pistas y el banquillo necesitan el ancho).
   // Horizontal: banquillo en columna fija a la derecha. Vertical: anclado
   // abajo en columnas por grupo. Móvil: la bandeja de siempre.
@@ -1015,6 +1017,7 @@ export const LineupScreen = ({
 
     return (
       <View style={styles.root}>
+        <TutorialSheet id="lineup" visible={lineupTut.visible} onClose={lineupTut.close} />
         {header(
           published ? (
             <Pressable onPress={shareLineup} hitSlop={8} accessibilityRole="button">
@@ -1064,6 +1067,7 @@ export const LineupScreen = ({
       : null;
     return (
       <View style={styles.root}>
+        <TutorialSheet id="lineup" visible={lineupTut.visible} onClose={lineupTut.close} />
         {header()}
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }, isTablet && styles.tabletColumn]}

@@ -56,6 +56,8 @@ import {
 } from '@components/share/PhotoShareCard';
 import { DOWNLOAD_URL } from '@core/config/referral';
 import { LineupShareCard } from '../components/LineupShareCard';
+import { PairPhotosSection } from '../components/jornada/PairPhotosSection';
+import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { JornadaScoreHeader } from '../components/jornada/JornadaScoreHeader';
 import {
   JornadaPhaseTabs,
@@ -745,6 +747,10 @@ const JornadaDetail = ({
   // local. La persistida (photo_url) manda; la efímera es un fallback local
   // para compartir sin guardar.
   const displayPhoto = matchday.photo_url ?? matchPhotoUri;
+  // Logo del club (o del equipo) para las tarjetas de compartir.
+  const activeClub = useClubStore(selectActiveClub) as { logo_url?: string | null } | null;
+  const shareLogo =
+    (team as { logo_url?: string | null } | null)?.logo_url ?? activeClub?.logo_url ?? null;
 
   // Capitán: sube y persiste la portada para todo el equipo. Resto: efímera
   // solo para compartir (no se guarda).
@@ -1220,6 +1226,7 @@ const JornadaDetail = ({
                         awayName={matchday.opponent}
                         awayScore={score.lost}
                         highlight="home"
+                        clubLogoUri={shareLogo}
                         subtitle={photoSubtitle}
                         detail={photoDetail}
                       />
@@ -1290,6 +1297,28 @@ const JornadaDetail = ({
                     Aún no hay foto de este partido.
                   </Text>
                 )}
+
+                {/* Fotos por pareja (una por pista), para compartirlas una a una. */}
+                <PairPhotosSection
+                  matchdayId={matchday.id}
+                  teamId={team?.id ?? null}
+                  canEdit={isCaptain}
+                  items={Array.from({ length: courts }).map((_, i) => {
+                    const court = i + 1;
+                    const pair = pairs.find((p) => p.court_number === court);
+                    const out = matchOutcome(results, court, isHome);
+                    return {
+                      court,
+                      playerA: pair?.player_a_name ?? null,
+                      playerB: pair?.player_b_name ?? null,
+                      summary: out.summary,
+                      won: out.state === 'won' ? true : out.state === 'lost' ? false : null,
+                    };
+                  })}
+                  matchLine={`${teamName} ${score.won}–${score.lost} ${matchday.opponent}`}
+                  subtitle={photoSubtitle}
+                  clubLogoUri={shareLogo}
+                />
 
                 {/* Un único botón global: comparte el RESULTADO (texto) por la hoja
                     nativa (WhatsApp, Telegram, etc. — cada uno elige su app). */}

@@ -1,3 +1,4 @@
+import { resetTutorials } from '@components/ui/TutorialSheet';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -575,6 +576,17 @@ export const SettingsScreen = () => {
               onPress={() => setPwOpen(true)}
             />
           ) : null}
+          <Row
+            icon={<IconFile size={14} color={c.textMuted} />}
+            title="Ver los tutoriales otra vez"
+            sub="Equipo, crear jornadas y alineaciones"
+            onPress={() =>
+              resetTutorials().then(() =>
+                Alert.alert('Listo', 'Los tutoriales volverán a salir la próxima vez que entres en cada sitio.'),
+              )
+            }
+            chevron={false}
+          />
           <Row
             icon={<IconMail size={14} color={c.textMuted} />}
             title="Ayuda y contacto"

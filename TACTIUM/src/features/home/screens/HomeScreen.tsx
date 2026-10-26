@@ -42,6 +42,7 @@ import { fmtPts } from '@features/home/components/lineup/lineupLogic';
 import { TOURNAMENTS_ENABLED } from '@core/config/featureFlags';
 import { TactiumMark } from '@components/brand/TactiumMark';
 import { useTeamStore, selectIsCaptain } from '@store/teamStore';
+import { TutorialSheet, useAutoTutorial } from '@components/ui/TutorialSheet';
 import { useAuthStore } from '@store/authStore';
 import { buildCaptainInviteMessage } from '@core/config/referral';
 import { usePremiumGate } from '@core/hooks/usePremiumGate';
@@ -68,6 +69,8 @@ import { fmtRango } from '@features/seasons/components/ligaParts';
 export const HomeScreen = ({
   navigation,
 }: HomeStackScreenProps<'HomeRoot'>) => {
+  const welcomeTeamId = useTeamStore((s) => s.team?.id);
+  const welcome = useAutoTutorial('team-welcome', welcomeTeamId, !!welcomeTeamId, 1800);
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const c = useColors();
@@ -347,6 +350,7 @@ export const HomeScreen = ({
 
   return (
     <View style={styles.root}>
+      <TutorialSheet id="team-welcome" visible={welcome.visible} onClose={welcome.close} />
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.topbarSide}>
           <TactiumMark size={34} gradient />
