@@ -220,6 +220,8 @@ export function AvailabilityView({ id }: { id: string }) {
       time: matchday.time,
       isHome: matchday.isHome,
       range: matchday.dateRange,
+      tandas: matchday.tandas,
+      gender: team?.gender,
       token: res.data,
     });
     if (canNativeShare()) {

@@ -34,10 +34,12 @@ export function useRemindPending(params: {
   /** Fin de semana de la Federación mientras no hay fecha exacta. */
   matchRange?: string | null;
   isHome?: boolean | null;
+  tandas?: string | null;
+  gender?: string | null;
   lastReminder: Date | null;
   setLastReminder: (d: Date) => void;
 }) {
-  const { matchdayId, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, lastReminder, setLastReminder } = params;
+  const { matchdayId, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, tandas, gender, lastReminder, setLastReminder } = params;
   const gate = usePremiumGate();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [sending, setSending] = useState(false);
@@ -84,6 +86,8 @@ export function useRemindPending(params: {
           time: matchTime ?? null,
           range: matchRange ?? null,
           isHome: isHome ?? null,
+          tandas: tandas ?? null,
+          gender: gender ?? null,
           token,
         });
         if (renew) toast.success('Enlace cambiado', 'El anterior ya no funciona. Comparte el nuevo.');
@@ -98,7 +102,7 @@ export function useRemindPending(params: {
         setSharingLink(false);
       }
     },
-    [matchdayId, sharingLink, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome],
+    [matchdayId, sharingLink, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, tandas, gender],
   );
 
   const run = useCallback(async () => {

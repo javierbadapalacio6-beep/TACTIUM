@@ -5,6 +5,8 @@
  * TACTIUM/src/core/services/availabilityLink.ts (si cambia el texto, cambiar los dos).
  */
 
+import { describeTandasShort } from "./tandas";
+
 export function availabilityPath(token: string): string {
   return `/d/${token}`;
 }
@@ -32,9 +34,13 @@ export function availabilityShareText(o: {
   token: string;
   /** Fin de semana que da la Federación («23 - 25 Oct») mientras no hay fecha exacta. */
   range?: string | null;
+  /** Reparto de parejas por tandas («3-2») y género del equipo, para pintar «Tandas: …». */
+  tandas?: string | null;
+  gender?: string | null;
 }): string {
   const fecha = longDate(o.date);
   const hora = o.time ? o.time.slice(0, 5) : null;
+  const tandas = o.tandas ? describeTandasShort(o.tandas, o.gender, hora) : "";
   const lines = [
     `🎾 ¿Puedes jugar${o.jornada != null ? ` la jornada ${o.jornada}` : " la próxima jornada"}?`,
     `🆚 ${o.opponent}`,
@@ -44,6 +50,7 @@ export function availabilityShareText(o: {
         ? `📅 ${fmtRango(o.range)} (día y hora por confirmar)`
         : null,
     o.isHome == null ? null : o.isHome ? "🏠 En casa" : "🚗 Fuera",
+    tandas ? `⏱ Tandas: ${tandas}` : null,
     "",
     "Dime si vas con un toque, sin app 👇",
     availabilityUrl(o.token),
