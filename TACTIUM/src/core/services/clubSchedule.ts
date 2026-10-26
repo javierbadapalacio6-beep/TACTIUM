@@ -43,6 +43,11 @@ export async function fetchUnconfirmedVenues(
 /** Fin de semana de la Federación («23 - 25 Oct») de cada jornada. Va aparte por
  *  la misma razón que `fetchUnconfirmedVenues`: el RPC vive en producción y no
  *  devuelve la columna `matchdays.fcp_date_range`. */
+/** «30 Oct 20:00 Tandas:2-2-1 Smash Padel Club» → «30 Oct»: los partidos ya programados traían pegados la hora, las tandas y la sede. */
+export function cleanDateRange(r: string): string {
+  return r.split(/\s+\d{1,2}:\d{2}|tandas/i)[0].trim();
+}
+
 export async function fetchDateRanges(
   matchdayIds: string[],
 ): Promise<Record<string, string>> {
@@ -53,7 +58,7 @@ export async function fetchDateRanges(
     .in('id', matchdayIds);
   const out: Record<string, string> = {};
   for (const r of (data ?? []) as { id: string; fcp_date_range: string | null }[])
-    if (r.fcp_date_range) out[r.id] = r.fcp_date_range;
+    if (r.fcp_date_range) out[r.id] = cleanDateRange(r.fcp_date_range);
   return out;
 }
 

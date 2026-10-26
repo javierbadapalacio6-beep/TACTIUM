@@ -235,7 +235,7 @@ export async function fetchDateRanges(matchdayIds: string[]): Promise<Record<str
     .in("id", matchdayIds);
   const out: Record<string, string> = {};
   for (const r of (data ?? []) as { id: string; fcp_date_range: string | null }[])
-    if (r.fcp_date_range) out[r.id] = r.fcp_date_range;
+    if (r.fcp_date_range) out[r.id] = r.fcp_date_range.split(/\s+\d{1,2}:\d{2}|tandas/i)[0].trim();
   return out;
 }
 
