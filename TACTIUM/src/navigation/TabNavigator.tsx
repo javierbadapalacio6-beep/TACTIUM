@@ -31,6 +31,7 @@ import { ProfileStack } from './ProfileStack';
 import { CreateSheet } from '@features/create/components/CreateSheet';
 import { useNavRole } from './navRole';
 import { TabletRail } from './TabletRail';
+import { MuescaTabBar } from './MuescaTabBar';
 import { useLayout } from '@components/ui/ResponsiveFrame';
 
 import type { TabParamList } from './types';
@@ -295,7 +296,7 @@ export const TabNavigator = () => {
           isTablet ? (
             <TabletRail {...props} onCreate={() => setCreateOpen(true)} />
           ) : (
-            <FloatingTabBar {...props} />
+            <MuescaTabBar {...props} />
           )
         }
         screenOptions={{
