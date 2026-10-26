@@ -54,6 +54,7 @@ import { isMatchStarted, isMatchOver } from "@/lib/match-time";
 import { FederationUploadCard } from "@/components/matchday/FederationUploadCard";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
 import { PairPhotos } from "@/components/matchday/PairPhotos";
+import { fetchTeamShareLogo } from "@/lib/team-logo";
 import {
   IconAlert,
   IconCalendar,
@@ -448,6 +449,7 @@ export function MatchdayView({ id }: { id: string }) {
   // Género del equipo: decide cuántas parejas y qué tandas valen.
   const teamInfo = useAsync(() => fetchTeam(teamId!).catch(() => null), [teamId], !!teamId);
   const teamGender = teamInfo.data?.gender ?? null;
+  const shareLogo = useAsync(() => fetchTeamShareLogo(teamId!), [teamId], !!teamId);
 
   // La pestaña va en la URL (`?tab=`): se puede enlazar, recargar y volver
   // atrás sin perderla. Sin parámetro, la que toque según el momento.
@@ -1462,7 +1464,7 @@ export function MatchdayView({ id }: { id: string }) {
               })}
               matchLine={`${ourName} ${scoreUs}–${scoreThem} ${m.opponent}`}
               subtitle={shareSubtitle}
-              clubLogoUrl={(teamInfo.data as { logo_url?: string | null } | null)?.logo_url ?? null}
+              clubLogoUrl={shareLogo.data ?? (teamInfo.data as { logo_url?: string | null } | null)?.logo_url ?? null}
               onToast={setToast}
             />
           </div>

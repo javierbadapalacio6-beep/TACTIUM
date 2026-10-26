@@ -56,6 +56,7 @@ import {
 } from '@components/share/PhotoShareCard';
 import { DOWNLOAD_URL } from '@core/config/referral';
 import { LineupShareCard } from '../components/LineupShareCard';
+import { fetchTeamShareLogo } from '@core/services/teamLogo';
 import { PairPhotosSection } from '../components/jornada/PairPhotosSection';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
 import { JornadaScoreHeader } from '../components/jornada/JornadaScoreHeader';
@@ -293,6 +294,20 @@ const JornadaDetail = ({
   const [matchPhotoUri, setMatchPhotoUri] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const matchPhotoCardRef = React.useRef<View>(null);
+  // Logo del club (o del equipo) para las tarjetas de compartir.
+  const activeClub = useClubStore(selectActiveClub) as { logo_url?: string | null } | null;
+  const [rpcLogo, setRpcLogo] = useState<string | null>(null);
+  const logoTeamId = team?.id ?? null;
+  useEffect(() => {
+    if (!logoTeamId) return;
+    let alive = true;
+    fetchTeamShareLogo(logoTeamId).then((l) => alive && setRpcLogo(l));
+    return () => {
+      alive = false;
+    };
+  }, [logoTeamId]);
+  const shareLogo =
+    rpcLogo ?? (team as { logo_url?: string | null } | null)?.logo_url ?? activeClub?.logo_url ?? null;
   // Pestaña elegida a mano. Null = la que toca por la fase de la jornada.
   const [tabPicked, setTabPicked] = useState<JornadaTab | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -747,10 +762,6 @@ const JornadaDetail = ({
   // local. La persistida (photo_url) manda; la efímera es un fallback local
   // para compartir sin guardar.
   const displayPhoto = matchday.photo_url ?? matchPhotoUri;
-  // Logo del club (o del equipo) para las tarjetas de compartir.
-  const activeClub = useClubStore(selectActiveClub) as { logo_url?: string | null } | null;
-  const shareLogo =
-    (team as { logo_url?: string | null } | null)?.logo_url ?? activeClub?.logo_url ?? null;
 
   // Capitán: sube y persiste la portada para todo el equipo. Resto: efímera
   // solo para compartir (no se guarda).
