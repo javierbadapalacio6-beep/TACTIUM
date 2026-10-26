@@ -20,27 +20,27 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-26',
+  id: '2026-10-27',
   items: [
     {
-      icon: '📊',
-      title: 'Clasificación completa y estadísticas',
-      text: 'La tabla del grupo con todas las columnas de la Federación, y una pestaña Stats con mejores parejas, jugadores, rendimiento por pista y proyección.',
+      icon: '🧭',
+      title: 'Guías dentro de las pantallas',
+      text: 'La primera vez que haces una alineación, llenas la plantilla o metes jornadas, te señalamos cada botón y te explicamos cómo funciona. Las repites desde Ajustes.',
+    },
+    {
+      icon: '🏛',
+      title: 'Clasificación igual que la Federación',
+      text: 'La tabla de cada grupo es la oficial, con todas sus columnas, y la pestaña Stats de Equipo saca partido a las actas.',
+    },
+    {
+      icon: '🔎',
+      title: 'Ranking con fichas',
+      text: 'En el ranking de la Federación, toca un nombre y abres la ficha del jugador. «Ambos géneros» ya junta hombres y mujeres.',
     },
     {
       icon: '📸',
-      title: 'Fotos por pareja',
-      text: 'Sube una foto de cada pareja y compártela con su resultado, los nombres completos y el logo de tu club.',
-    },
-    {
-      icon: '🎓',
-      title: 'Tutoriales',
-      text: 'Pequeñas guías al entrar a un equipo, crear una jornada o hacer la alineación. Las repites desde Ajustes.',
-    },
-    {
-      icon: '🔔',
-      title: 'Voy / No en cuanto sale la hora',
-      text: 'Si juegas fuera, en cuanto la Federación publica la hora tus jugadores reciben el Voy, Duda o No al instante.',
+      title: 'Fotos por pareja con logo',
+      text: 'Las tarjetas para compartir llevan ahora el logo de tu club y los nombres completos de cada pareja.',
     },
   ],
 };
