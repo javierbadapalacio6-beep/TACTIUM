@@ -1,3 +1,4 @@
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -2932,6 +2933,34 @@ const EditTournamentSheet: React.FC<{
   );
 };
 
+const DETAIL_STEPS: CoachStep[] = [
+  {
+    title: 'Cómo llevar tu torneo',
+    text: 'Desde aquí haces todo el torneo, en este orden:',
+    chips: [
+      'Inscripción: los jugadores se apuntan con el código',
+      'Generas el cuadro: sorteo con cabezas de serie por puntos',
+      'Pones el horario por pista y hora',
+      'Metes los resultados y se ve el campeón',
+    ],
+  },
+  {
+    target: 'code',
+    title: 'Código de inscripción',
+    text: 'Pásalo al grupo o comparte el enlace: se apuntan desde la app o la web. A quien no tenga app lo añades tú a mano en la pestaña Jugadores.',
+  },
+  {
+    target: 'tabs',
+    title: 'Las pestañas',
+    text: 'Cuadro, Partidos (el horario por día y hora, cuando ya hay cuadro), Jugadores (las inscripciones) e Info (código y datos del torneo).',
+  },
+  {
+    target: 'generate',
+    title: 'Generar el cuadro',
+    text: 'Cuando estén todas las parejas (mínimo 2), genéralo. Con grupos, primero salen las liguillas y luego las eliminatorias. Antes de generar puedes seguir añadiendo o quitando parejas.',
+  },
+];
+
 export const TournamentDetailScreen = ({
   navigation,
   route,
@@ -2946,8 +2975,8 @@ export const TournamentDetailScreen = ({
   const styles = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const { tournamentId } = route.params;
-
   const [t, setT] = useState<Tournament | null>(null);
+  const coach = useCoach('torneo-detalle', undefined, !!t, 1500);
   const [regs, setRegs] = useState<TournamentRegistration[]>([]);
   const [matches, setMatches] = useState<TournamentMatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3381,6 +3410,7 @@ export const TournamentDetailScreen = ({
 
   return (
     <View style={styles.root}>
+      <CoachTour coach={coach} steps={DETAIL_STEPS} />
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={c.accent} />
@@ -3500,14 +3530,16 @@ export const TournamentDetailScreen = ({
           ) : null}
 
           {/* Pestañas de contenido: Cuadro · Horario · Jugadores · Info */}
-          <ContentTabs
-            tab={tab}
-            setTab={setTab}
-            mainLabel={mainTabLabel}
-            showSchedule={hasBracket}
-            styles={styles}
-            c={c}
-          />
+          <View ref={coach.ref('tabs')} collapsable={false}>
+            <ContentTabs
+              tab={tab}
+              setTab={setTab}
+              mainLabel={mainTabLabel}
+              showSchedule={hasBracket}
+              styles={styles}
+              c={c}
+            />
+          </View>
 
           {tab === 'schedule' && t ? (
             <ScheduleView
@@ -3552,7 +3584,7 @@ export const TournamentDetailScreen = ({
           ) : !hasBracket ? (
             <View style={{ paddingHorizontal: 22 }}>
               {t?.signup_code ? (
-                <View style={styles.codeCard}>
+                <View style={styles.codeCard} ref={coach.ref('code')} collapsable={false}>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.codeLabel}>CÓDIGO DE INSCRIPCIÓN</Text>
                     <Text style={styles.code}>{t.signup_code}</Text>
@@ -3589,6 +3621,8 @@ export const TournamentDetailScreen = ({
               </Text>
 
               <Pressable
+                ref={coach.ref('generate')}
+                collapsable={false}
                 onPress={onGenerate}
                 disabled={!enoughRegs || generating}
                 style={({ pressed }) => [

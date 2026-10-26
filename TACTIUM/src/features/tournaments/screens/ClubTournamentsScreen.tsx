@@ -1,3 +1,4 @@
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -180,6 +181,24 @@ const REVIEW_STEP = CREATE_STEPS.length - 1;
 //
 // Cada torneo dice en qué fase está (Inscripción → Pago → Cuadros → En juego →
 // Final) y lleva UN botón con lo siguiente que toca.
+const CLUB_STEPS: CoachStep[] = [
+  {
+    title: 'Tu torneo, de principio a fin',
+    text: 'TACTIUM es la herramienta: tú organizas el torneo y se juega en tu club. Así funciona:',
+    chips: [
+      'Creas el torneo: formato, categorías y plazas',
+      'Compartes el código o el enlace: la gente se apunta sola',
+      'Cierras la inscripción y generas el cuadro con sorteo automático',
+      'Pones el horario y metes los resultados hasta el campeón',
+    ],
+  },
+  {
+    target: 'create',
+    title: 'Empieza por aquí',
+    text: 'Crea el torneo y elige el formato: eliminatoria, grupos, liga o americano. Después podrás ajustar categorías, precios y plazas.',
+  },
+];
+
 export const ClubTournamentsScreen = ({
   navigation,
   route,
@@ -189,6 +208,7 @@ export const ClubTournamentsScreen = ({
   const ls = useMemo(() => makeListStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const club = useClubStore(selectActiveClub);
+  const coach = useCoach('torneos-club', undefined, true, 1500);
   // Navegación a nivel Root (activar equipos, facturación, explorar).
   const rootNav =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -413,6 +433,8 @@ export const ClubTournamentsScreen = ({
               ) : null}
 
               <Pressable
+                ref={coach.ref('create')}
+                collapsable={false}
                 onPress={() => setCreating(true)}
                 style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
               >
@@ -503,6 +525,7 @@ export const ClubTournamentsScreen = ({
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+      <CoachTour coach={coach} steps={CLUB_STEPS} />
       {body}
       {createSheet}
     </View>

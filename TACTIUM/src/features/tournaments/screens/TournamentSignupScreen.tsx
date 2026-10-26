@@ -1,3 +1,4 @@
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -105,6 +106,22 @@ const PAYMENT_LABEL: Record<string, string> = {
 // asistente también en torneos con cuota y NO envía la inscripción.
 const SIGNUP_PREVIEW = process.env.EXPO_PUBLIC_AVAILABILITY_MOCK === '1';
 
+const SIGNUP_STEPS: CoachStep[] = [
+  {
+    title: 'Apuntarte en 3 pasos',
+    text: 'Es rápido: no hace falta que tu pareja complete nada, lo rellenas tú.',
+    chips: [
+      '¿Quiénes jugáis? Tus datos y los de tu pareja',
+      '¿En qué categoría? Solo salen las que podéis jugar por puntos y nivel',
+      'Horario y pago: marcas cuándo NO podéis y confirmas',
+    ],
+  },
+  {
+    title: 'Las franjas en las que no podéis',
+    text: 'El organizador reparte los partidos respetando lo que marques, así que sé sincero: cuantas menos franjas bloquees, más fácil encaja el horario.',
+  },
+];
+
 export const TournamentSignupScreen = ({
   navigation,
   route,
@@ -117,6 +134,7 @@ export const TournamentSignupScreen = ({
 
   const [code, setCode] = useState(route.params?.code ?? '');
   const [found, setFound] = useState<TournamentLookup | null>(null);
+  const coach = useCoach('torneo-inscripcion', undefined, !!found, 900);
   const [looking, setLooking] = useState(false);
 
   // Asistente en 3 pasos. Volver atrás no borra nada: todo vive aquí arriba.
@@ -1141,6 +1159,7 @@ export const TournamentSignupScreen = ({
       behavior="padding"
       style={styles.root}
     >
+      <CoachTour coach={coach} steps={SIGNUP_STEPS} />
       <StepHeader
         c={c}
         styles={styles}
