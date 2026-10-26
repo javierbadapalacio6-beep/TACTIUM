@@ -318,12 +318,15 @@ async function overlayOwnResults(sb: SupabaseClient, partidos: OverlayPartido[] 
   }
 }
 
+/**
+ * Clasificación de un grupo, IGUAL que la de la Federación (la oficial manda siempre): posición, puntos,
+ * enfrentamientos y sets son los suyos. PJ/PG y juegos salen de las actas, contando solo los enfrentamientos
+ * que la Federación ya tiene en su tabla (los primeros `enf` de cada equipo), para no adelantarnos a ella.
+ */
 export async function fetchFcpStandings(
   sb: SupabaseClient,
   idGrupo: string
 ): Promise<FcpStanding[]> {
-  // PJ/PG/racha se DERIVAN de fcp_partidos: las columnas de fcp_clasificacion
-  // vienen en 0 (el scrape de la matriz no las rellena).
   const [{ data: rawClasif, error }, { data: partidos, error: pe }, { data: actasRows }] = await Promise.all([
     sb
       .from("fcp_clasificacion")
@@ -337,45 +340,36 @@ export async function fetchFcpStandings(
       .order("jornada", { ascending: true }),
     sb
       .from("fcp_actas")
-      .select("equipo_local, equipo_visit, sets_local, sets_visit, parciales")
+      .select("id_partido, equipo_local, equipo_visit, sets_local, sets_visit, parciales")
       .eq("id_grupo", idGrupo),
   ]);
   if (error) throw error;
   if (pe) throw pe;
-  await overlayOwnResults(sb, partidos as OverlayPartido[] | null);
   const data = dedupeClasif(rawClasif ?? [], (partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null }[]);
-  const resolve = makeTeamResolver((data ?? []).map((x) => x.equipo as string));
-  const stats = deriveTeamStats(remapTeams((partidos ?? []) as FcpPartidoLite[], resolve));
+  const resolve = makeTeamResolver(data.map((x) => x.equipo as string));
+  const enfOf = new Map(data.map((r) => [r.equipo as string, (r.enf as number | null) ?? 0]));
+  const jornadaDe = new Map(
+    ((partidos ?? []) as { id_partido: string; jornada: number | null }[]).map((p) => [p.id_partido, p.jornada ?? 0])
+  );
 
-  // Clasificación PROVISIONAL: la de la Federación tarda en actualizarse. Mientras vaya por detrás de lo
-  // ya jugado, se calcula con los resultados y las actas (2 puntos por victoria, 1 por empate) y se marca;
-  // en cuanto la Federación suba la suya, manda la suya.
-  const calc = new Map<string, { puntos: number; pf: number; pc: number; sf: number; sc: number }>();
-  for (const r of data ?? []) calc.set(r.equipo, { puntos: 0, pf: 0, pc: 0, sf: 0, sc: 0 });
-  for (const p of remapTeams((partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null; estado: string | null; resultado: string | null; tipo: string | null }[], resolve)) {
-    if (p.estado !== "jugado" || (p.tipo && /play/i.test(p.tipo))) continue;
-    const m = (p.resultado ?? "").match(/^\s*(\d+)\s*[/-]\s*(\d+)\s*$/);
-    const l = p.equipo_local ? calc.get(p.equipo_local) : undefined;
-    const v = p.equipo_visit ? calc.get(p.equipo_visit) : undefined;
-    if (!m || !l || !v) continue;
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    l.pf += a; l.pc += b; v.pf += b; v.pc += a;
-    // Puntos de la Federación (comprobado en la liga 2026/27): con 5 parejas, victoria = 1; con 4 parejas, victoria = 2 y empate = 1.
-    const win = (a + b) % 2 === 1 ? 1 : 2;
-    if (a > b) l.puntos += win;
-    else if (b > a) v.puntos += win;
-    else { l.puntos += 1; v.puntos += 1; }
+  // Jornadas que la Federación ya cuenta de cada equipo: las primeras `enf` con partido jugado.
+  const jugadas = new Map<string, number[]>();
+  const streakAll = new Map<string, ("V" | "D")[]>();
+  for (const p of remapTeams((partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null; ganador: string | null; estado: string | null; jornada: number | null }[], resolve)) {
+    if (p.estado !== "jugado") continue;
+    for (const [name, isLocal] of [[p.equipo_local, true], [p.equipo_visit, false]] as [string | null, boolean][]) {
+      if (!name) continue;
+      (jugadas.get(name) ?? jugadas.set(name, []).get(name)!).push(p.jornada ?? 0);
+      if (p.ganador === "local" || p.ganador === "visitante") {
+        const won = (p.ganador === "local") === isLocal;
+        (streakAll.get(name) ?? streakAll.set(name, []).get(name)!).push(won ? "V" : "D");
+      }
+    }
   }
-  for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; sets_local: number | null; sets_visit: number | null }[], resolve)) {
-    const l = a.equipo_local ? calc.get(a.equipo_local) : undefined;
-    const v = a.equipo_visit ? calc.get(a.equipo_visit) : undefined;
-    if (l) { l.sf += a.sets_local ?? 0; l.sc += a.sets_visit ?? 0; }
-    if (v) { v.sf += a.sets_visit ?? 0; v.sc += a.sets_local ?? 0; }
-  }
-  const offTotal = (data ?? []).reduce((n, r) => n + (r.puntos ?? 0), 0);
-  const calcTotal = [...calc.values()].reduce((n, c) => n + c.puntos, 0);
-  const provisional = calcTotal > offTotal;
+  const allowed = (team: string, j: number) => {
+    const n = enfOf.get(team) ?? 0;
+    return [...(jugadas.get(team) ?? [])].sort((a, b) => a - b).slice(0, n).includes(j);
+  };
 
   const full = new Map<string, FcpFullStats>();
   const fs_ = (e: string) => {
@@ -383,57 +377,41 @@ export async function fetchFcpStandings(
     if (!v) full.set(e, (v = { pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 }));
     return v;
   };
-  for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; sets_local: number | null; sets_visit: number | null; parciales: string | null }[], resolve)) {
+  for (const a of remapTeams((actasRows ?? []) as { id_partido: string; equipo_local: string | null; equipo_visit: string | null; sets_local: number | null; sets_visit: number | null; parciales: string | null }[], resolve)) {
     if (!a.equipo_local || !a.equipo_visit || a.sets_local == null || a.sets_visit == null) continue;
+    const j = jornadaDe.get(a.id_partido) ?? 0;
     const [jl, jv] = juegosDe(a.parciales);
-    const l = fs_(a.equipo_local);
-    const v = fs_(a.equipo_visit);
-    l.pj += 1; v.pj += 1;
-    if (a.sets_local > a.sets_visit) l.pg += 1;
-    else if (a.sets_visit > a.sets_local) v.pg += 1;
-    l.sf += a.sets_local; l.sc += a.sets_visit; l.jf += jl; l.jc += jv;
-    v.sf += a.sets_visit; v.sc += a.sets_local; v.jf += jv; v.jc += jl;
+    if (allowed(a.equipo_local, j)) {
+      const l = fs_(a.equipo_local);
+      l.pj += 1;
+      if (a.sets_local > a.sets_visit) l.pg += 1;
+      l.sf += a.sets_local; l.sc += a.sets_visit; l.jf += jl; l.jc += jv;
+    }
+    if (allowed(a.equipo_visit, j)) {
+      const v = fs_(a.equipo_visit);
+      v.pj += 1;
+      if (a.sets_visit > a.sets_local) v.pg += 1;
+      v.sf += a.sets_visit; v.sc += a.sets_local; v.jf += jv; v.jc += jl;
+    }
   }
 
-  const rows: FcpStanding[] = (data ?? []).map((r) => {
-    const s = stats.get(r.equipo) ?? { pj: 0, pg: 0, form: [] as ("V" | "D")[] };
+  return (data ?? []).map((r) => {
+    const enf = (r.enf as number | null) ?? 0;
+    const t = full.get(r.equipo as string) ?? { pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 };
     return {
       posicion: r.posicion ?? 0,
       idEquipo: r.id_equipo,
       equipo: r.equipo ?? "—",
       puntos: r.puntos ?? 0,
-      pj: s.pj,
-      pg: s.pg,
+      pj: t.pj,
+      pg: t.pg,
       setsFavor: r.sets_favor ?? 0,
       setsContra: r.sets_contra ?? 0,
-      enf: s.pj,
-      full: full.get(r.equipo) ?? { pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 },
-      form: s.form.slice(-5),
+      enf,
+      full: t,
+      form: (streakAll.get(r.equipo as string) ?? []).slice(0, enf).slice(-5),
     };
   });
-  if (!provisional) return rows;
-  // Desempate como la Federación: puntos, average de sets y average de juegos (suma de los parciales).
-  const gd = new Map<string, number>();
-  for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; parciales: string | null }[], resolve)) {
-    const [jl, jv] = juegosDe(a.parciales);
-    if (a.equipo_local) gd.set(a.equipo_local, (gd.get(a.equipo_local) ?? 0) + jl - jv);
-    if (a.equipo_visit) gd.set(a.equipo_visit, (gd.get(a.equipo_visit) ?? 0) + jv - jl);
-  }
-  const out = rows.map((x) => {
-    const c = calc.get(x.equipo);
-    return { ...x, puntos: c?.puntos ?? 0, setsFavor: c?.sf ?? 0, setsContra: c?.sc ?? 0, provisional: true };
-  });
-  out.sort(
-    (a, b) =>
-      b.puntos - a.puntos ||
-      b.setsFavor - b.setsContra - (a.setsFavor - a.setsContra) ||
-      (gd.get(b.equipo) ?? 0) - (gd.get(a.equipo) ?? 0) ||
-      a.equipo.localeCompare(b.equipo)
-  );
-  out.forEach((x, i) => {
-    x.posicion = i + 1;
-  });
-  return out;
 }
 
 export async function fetchFcpMatches(
