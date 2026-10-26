@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type Palette } from '@core/theme';
 import { Fonts } from '@core/theme/fonts';
 import { Radius } from '@core/theme/spacing';
-import { IconBack, IconAlert, IconPlus, BottomSheet, useLayout } from '@components/ui';
+import { IconBack, IconAlert, IconPlus, IconShare, BottomSheet, useLayout } from '@components/ui';
 import { SidePanel } from '@components/layout';
 import { SegmentedControl } from '@components/ui/SegmentedControl';
 import { useClubStore, selectActiveClub } from '@store/clubStore';
@@ -50,6 +50,7 @@ import {
 } from '@core/services/clubSchedule';
 import { updateMatchday } from '@core/services/matchdays';
 import { tandasChoices, describeTandas } from '@core/utils/tandas';
+import { clubScheduleShareText } from '@core/services/clubScheduleShare';
 import { fetchFcpUploadedIds, remindFcpUpload, setFcpUploaded } from '@core/services/fcpUpload';
 import { notifyPush } from '@core/push';
 import {
@@ -600,6 +601,52 @@ export const ClubScheduleScreen = ({
   );
 
   const lacksTime = (m: ClubHomeMatch) => !m.match_time || !!m.home_unconfirmed;
+
+  // Mensaje de WhatsApp con los horarios de local de la jornada: para los equipos que aún no usan la app.
+  const shareSchedule = async () => {
+    const range = visible.map((m) => ranges[m.matchday_id]).find(Boolean) ?? null;
+    const genderByTeam: Record<string, string | null | undefined> = {};
+    for (const [id, info] of Object.entries(tandasInfo)) genderByTeam[id] = info.gender;
+    const message = clubScheduleShareText({
+      clubName: club?.name ?? null,
+      jornada: selJornada,
+      range,
+      matches: visible,
+      tandasByMatch,
+      genderByTeam,
+    });
+    try {
+      await Share.share({ message });
+    } catch {
+      // cancelado
+    }
+  };
+  const shareBtn =
+    visible.some((m) => m.match_date && m.match_time) ? (
+      <Pressable
+        onPress={shareSchedule}
+        accessibilityRole="button"
+        accessibilityLabel="Compartir los horarios de la jornada por WhatsApp"
+        style={({ pressed }) => [
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            marginTop: 12,
+            paddingVertical: 12,
+            borderRadius: 14,
+            backgroundColor: c.accent10,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <IconShare size={16} color={c.accent} />
+        <Text style={{ color: c.accent, fontSize: 14, fontWeight: '700' }}>
+          Compartir horarios por WhatsApp
+        </Text>
+      </Pressable>
+    ) : null;
   const jornadaStrip =
     jornadaNums.length > 1 ? (
       <ScrollView
@@ -717,6 +764,7 @@ export const ClubScheduleScreen = ({
           >
             {jornadaStrip}
             {weekStrip}
+            {shareBtn}
             {missingAll.length > 0 ? (
               <View>
                 <Text style={[styles.groupDate, { color: c.warning, marginTop: 16 }]}>
@@ -763,6 +811,7 @@ export const ClubScheduleScreen = ({
               {jornadaStrip}
               {/* El selector de día solo sirve cuando la jornada ya tiene días puestos. */}
               {visible.some((m) => m.match_date) ? weekStrip : null}
+              {shareBtn}
 
               {matches.length === 0 ? (
                 <Text style={styles.emptyText}>

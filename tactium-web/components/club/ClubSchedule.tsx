@@ -19,6 +19,8 @@ import {
   setFcpUploaded,
 } from "@/lib/club-ops";
 import { describeTandas, tandasChoices } from "@/lib/tandas";
+import { clubScheduleShareText } from "@/lib/club-schedule-share";
+import { canNativeShare, whatsappShareUrl } from "@/lib/invite";
 import {
   importFcpTeams,
   searchFcpClubs,
@@ -40,7 +42,7 @@ import {
   Segmented,
 } from "@/components/ui";
 import { EmptyState, SkeletonPage, Toast } from "@/components/states";
-import { IconAlert, IconCheck, IconClock, IconPlus } from "@/components/Icon";
+import { IconAlert, IconCheck, IconClock, IconPlus, IconShare } from "@/components/Icon";
 
 /**
  * Horarios de local.
@@ -162,7 +164,7 @@ const sameCourt = (a: string, b: string) =>
 
 /** Partidos de local de TODAS las jornadas, agrupados por jornada. */
 export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) {
-  const { clubId } = useSession();
+  const { clubId, clubs } = useSession();
   const [reloadKey, setReloadKey] = useState(0);
 
   // Propios e invitados en la misma lista. Las dos RPC devuelven la misma
@@ -375,6 +377,35 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
   const jornadaNums = groups.map(([n]) => n).filter((n): n is number => n !== null);
   const selJornada = jornadaSel != null && jornadaNums.includes(jornadaSel) ? jornadaSel : (jornadaNums[0] ?? null);
   const visibleGroups = groups.filter(([n]) => n === selJornada || selJornada === null);
+
+  // Mensaje de WhatsApp con los horarios de local de la jornada (para equipos que aún no usan la app).
+  async function shareSchedule() {
+    const list = fixtures.filter((f) => selJornada === null || f.jornada_number === selJornada);
+    const text = clubScheduleShareText({
+      clubName: clubs.find((c) => c.id === clubId)?.name ?? null,
+      jornada: selJornada,
+      range: list.map((f) => f.range).find(Boolean) ?? null,
+      fixtures: list.map((f) => ({
+        team_name: f.team_name,
+        opponent: f.opponent,
+        match_date: f.match_date,
+        match_time: f.match_time,
+        location: f.location,
+        tandas: f.tandas,
+        gender: f.gender,
+        unconfirmed: f.unconfirmed,
+      })),
+    });
+    if (canNativeShare()) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+      }
+    }
+    window.open(whatsappShareUrl(text), "_blank", "noopener,noreferrer");
+  }
 
   /**
    * Guarda de verdad. Antes este botón solo enseñaba el aviso de éxito: el
@@ -652,6 +683,11 @@ export function ClubSchedule({ embedded = false }: { embedded?: boolean } = {}) 
             <Chip tone={assigned === fixtures.length ? "accent" : "warning"}>
               {assigned} de {fixtures.length} asignados
             </Chip>
+            {fixtures.some((f) => f.match_date && f.match_time) ? (
+              <Btn variant="accent" onClick={() => void shareSchedule()} icon={<IconShare size={15} />}>
+                Compartir por WhatsApp
+              </Btn>
+            ) : null}
           </CardHead>
 
           {jornadaNums.length > 1 && (
