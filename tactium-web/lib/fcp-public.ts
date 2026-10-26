@@ -27,10 +27,33 @@ export interface FcpStanding {
   setsFavor: number;
   setsContra: number;
   enf: number;
+  /** Tabla completa de la Federación calculada con las actas (partidos, sets y juegos). */
+  full?: FcpFullStats;
   /** Racha reciente (hasta 5, del más antiguo al más nuevo). Derivada. */
   form: ("V" | "D")[];
   /** La de la Federación va por detrás de lo jugado: puntos y sets calculados con resultados y actas. */
   provisional?: boolean;
+}
+
+export interface FcpFullStats {
+  /** Partidos (parejas) disputados y ganados. */
+  pj: number;
+  pg: number;
+  sf: number;
+  sc: number;
+  jf: number;
+  jc: number;
+}
+
+/** «6/4 - 3/6» → juegos de cada lado (suma de los parciales). */
+function juegosDe(parciales: string | null | undefined): [number, number] {
+  let a = 0;
+  let b = 0;
+  for (const m of (parciales ?? "").matchAll(/(d+)s*[/-:]s*(d+)/g)) {
+    a += Number(m[1]);
+    b += Number(m[2]);
+  }
+  return [a, b];
 }
 
 export interface FcpMatch {
@@ -314,7 +337,7 @@ export async function fetchFcpStandings(
       .order("jornada", { ascending: true }),
     sb
       .from("fcp_actas")
-      .select("equipo_local, equipo_visit, sets_local, sets_visit")
+      .select("equipo_local, equipo_visit, sets_local, sets_visit, parciales")
       .eq("id_grupo", idGrupo),
   ]);
   if (error) throw error;
@@ -352,6 +375,24 @@ export async function fetchFcpStandings(
   const calcTotal = [...calc.values()].reduce((n, c) => n + c.puntos, 0);
   const provisional = calcTotal > offTotal;
 
+  const full = new Map<string, FcpFullStats>();
+  const fs_ = (e: string) => {
+    let v = full.get(e);
+    if (!v) full.set(e, (v = { pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 }));
+    return v;
+  };
+  for (const a of remapTeams((actasRows ?? []) as { equipo_local: string | null; equipo_visit: string | null; sets_local: number | null; sets_visit: number | null; parciales: string | null }[], resolve)) {
+    if (!a.equipo_local || !a.equipo_visit || a.sets_local == null || a.sets_visit == null) continue;
+    const [jl, jv] = juegosDe(a.parciales);
+    const l = fs_(a.equipo_local);
+    const v = fs_(a.equipo_visit);
+    l.pj += 1; v.pj += 1;
+    if (a.sets_local > a.sets_visit) l.pg += 1;
+    else if (a.sets_visit > a.sets_local) v.pg += 1;
+    l.sf += a.sets_local; l.sc += a.sets_visit; l.jf += jl; l.jc += jv;
+    v.sf += a.sets_visit; v.sc += a.sets_local; v.jf += jv; v.jc += jl;
+  }
+
   const rows: FcpStanding[] = (data ?? []).map((r) => {
     const s = stats.get(r.equipo) ?? { pj: 0, pg: 0, form: [] as ("V" | "D")[] };
     return {
@@ -363,7 +404,8 @@ export async function fetchFcpStandings(
       pg: s.pg,
       setsFavor: r.sets_favor ?? 0,
       setsContra: r.sets_contra ?? 0,
-      enf: r.enf ?? 0,
+      enf: s.pj,
+      full: full.get(r.equipo) ?? { pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 },
       form: s.form.slice(-5),
     };
   });

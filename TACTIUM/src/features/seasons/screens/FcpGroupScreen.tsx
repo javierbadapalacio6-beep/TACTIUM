@@ -16,6 +16,7 @@ import { Radius } from '@core/theme/spacing';
 import { IconBack, IconChevron } from '@components/ui';
 import { CommunityAvatar } from '../../social/components/social-ui';
 import { Segmented, MetaChip, FormChips } from '../components/fcpUi';
+import { FullStandingsTable } from '../components/FullStandingsTable';
 import {
   fetchGroupStandings,
   fetchGroupSchedule,
@@ -156,6 +157,8 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
   const [rows, setRows] = useState<FcpBrowseStanding[]>([]);
   // La Federación aún no ha actualizado su clasificación: la mostrada se calcula con lo jugado.
   const [provisional, setProvisional] = useState(false);
+  // Resumen (compacto) o Completa (todas las columnas de la Federación, con desplazamiento).
+  const [vista, setVista] = useState<'resumen' | 'completa'>('resumen');
   const [schedule, setSchedule] = useState<FcpBrowseMatch[]>([]);
   const [tab, setTab] = useState<Tab>(esPlayoff ? 'cuadro' : 'clasif');
   /** Partidos con el acta desplegada. Cerrada por defecto: una jornada son
@@ -445,8 +448,17 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                 </View>
               ) : null}
 
+              <View style={{ marginTop: 12 }}>
+                <Segmented
+                  size="sm"
+                  items={[['resumen', 'Resumen'], ['completa', 'Completa']]}
+                  value={vista}
+                  onChange={setVista}
+                />
+              </View>
+
               {/* Cabecera de tabla */}
-              {narrow ? (
+              {vista === 'completa' ? null : narrow ? (
                 <View style={styles.thead}>
                   <Text style={[styles.th, { width: 22 }]}>#</Text>
                   <Text style={[styles.th, { flex: 1 }]}>EQUIPO</Text>
@@ -470,6 +482,21 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                 </Text>
               ) : null}
 
+              {vista === 'completa' ? (
+                <FullStandingsTable
+                  rows={rows}
+                  myFcpId={myFcpId}
+                  zoneColorOf={(p) => {
+                    const z = zoneOf(p);
+                    return z ? zoneColor(z.key, c) : null;
+                  }}
+                  onTeam={(t) =>
+                    t.idEquipo != null
+                      ? navigation.navigate('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
+                      : undefined
+                  }
+                />
+              ) : (
               <View style={{ gap: 6, marginTop: 10 }}>
                 {rows.map((t, i) => {
                   const dif = (t.setsFavor ?? 0) - (t.setsContra ?? 0);
@@ -543,6 +570,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
                   );
                 })}
               </View>
+              )}
 
               {zones ? (
                 <View style={styles.legend}>

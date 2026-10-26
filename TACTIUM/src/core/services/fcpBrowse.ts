@@ -145,6 +145,33 @@ export interface FcpBrowseStanding {
   pg: number;
   /** Racha reciente (hasta 5 resultados, del más antiguo al más nuevo). */
   form: ('V' | 'D')[];
+  /** Tabla completa de la Federación, calculada con las actas: enfrentamientos, partidos, sets y juegos. */
+  stats: GroupTeamStats;
+}
+
+export interface GroupTeamStats {
+  /** Enfrentamientos disputados (encuentros entre equipos). */
+  enf: number;
+  /** Partidos (parejas) disputados y ganados. */
+  pj: number;
+  pg: number;
+  sf: number;
+  sc: number;
+  jf: number;
+  jc: number;
+}
+
+const EMPTY_STATS: GroupTeamStats = { enf: 0, pj: 0, pg: 0, sf: 0, sc: 0, jf: 0, jc: 0 };
+
+/** «6/4 - 3/6 - 10/8» → juegos de cada lado (suma de los parciales). */
+function juegosDe(parciales: string | null | undefined): [number, number] {
+  let a = 0;
+  let b = 0;
+  for (const m of (parciales ?? '').matchAll(/(d+)s*[/-:]s*(d+)/g)) {
+    a += Number(m[1]);
+    b += Number(m[2]);
+  }
+  return [a, b];
 }
 
 /**
@@ -218,7 +245,7 @@ export async function fetchGroupStandings(
   const data = dedupeClasif((rawClasif ?? []) as { equipo: string; id_equipo: number | null }[], (partidos ?? []) as { equipo_local: string | null; equipo_visit: string | null }[]);
   // Sets de cada pareja (actas): con ellos se calcula la clasificación provisional.
   const { data: actasRows } = await rawFrom('fcp_actas')
-    .select('equipo_local, equipo_visit, sets_local, sets_visit')
+    .select('equipo_local, equipo_visit, sets_local, sets_visit, parciales')
     .eq('id_grupo', idGrupo);
   const resolve = makeTeamResolver(((data ?? []) as { equipo: string }[]).map((x) => x.equipo));
   const stats = new Map<string, { pj: number; pg: number }>();
@@ -275,6 +302,7 @@ export async function fetchGroupStandings(
       pj: s.pj,
       pg: s.pg,
       form: (streak.get(r.equipo) ?? []).slice(-5),
+      stats: EMPTY_STATS,
     };
   });
 
@@ -313,6 +341,26 @@ export async function fetchGroupStandings(
       x.posicion = i + 1;
     });
   }
+
+  // Tabla completa (como la Federación): enfrentamientos, partidos, sets y juegos, con las actas.
+  const tstats = new Map<string, GroupTeamStats>();
+  const st = (e: string) => {
+    let v = tstats.get(e);
+    if (!v) tstats.set(e, (v = { ...EMPTY_STATS }));
+    return v;
+  };
+  for (const a of remapTeams((actasRows ?? []) as (ActaCalc & { parciales: string | null })[], resolve)) {
+    if (!a.equipo_local || !a.equipo_visit || a.sets_local == null || a.sets_visit == null) continue;
+    const [jl, jv] = juegosDe(a.parciales);
+    const l = st(a.equipo_local);
+    const v = st(a.equipo_visit);
+    l.pj += 1; v.pj += 1;
+    if (a.sets_local > a.sets_visit) l.pg += 1;
+    else if (a.sets_visit > a.sets_local) v.pg += 1;
+    l.sf += a.sets_local; l.sc += a.sets_visit; l.jf += jl; l.jc += jv;
+    v.sf += a.sets_visit; v.sc += a.sets_local; v.jf += jv; v.jc += jl;
+  }
+  for (const x of rows) x.stats = { ...(tstats.get(x.equipo) ?? EMPTY_STATS), enf: x.pj };
 
   const { data: g } = await rawFrom('fcp_grupos')
     .select('nombre, genero')
