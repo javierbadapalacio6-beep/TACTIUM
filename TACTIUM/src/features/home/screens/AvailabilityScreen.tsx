@@ -73,6 +73,7 @@ export const AvailabilityScreen = ({
     matchRange: (matchday as { fcp_date_range?: string | null } | null | undefined)?.fcp_date_range,
     isHome: matchday?.is_home,
     tandas: matchday?.tandas,
+    location: matchday?.location,
     gender: team?.gender,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,

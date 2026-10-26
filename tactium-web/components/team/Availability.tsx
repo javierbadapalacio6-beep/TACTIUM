@@ -221,6 +221,7 @@ export function AvailabilityView({ id }: { id: string }) {
       isHome: matchday.isHome,
       range: matchday.dateRange,
       tandas: matchday.tandas,
+      location: matchday.location,
       gender: team?.gender,
       token: res.data,
     });

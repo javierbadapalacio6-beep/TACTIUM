@@ -286,6 +286,7 @@ export const HomeScreen = ({
     matchRange: (nextMatchday as { fcp_date_range?: string | null } | null | undefined)?.fcp_date_range,
     isHome: nextMatchday?.is_home,
     tandas: nextMatchday?.tandas,
+    location: nextMatchday?.location,
     gender: team?.gender,
     lastReminder: availability.lastReminder,
     setLastReminder: availability.setLastReminder,

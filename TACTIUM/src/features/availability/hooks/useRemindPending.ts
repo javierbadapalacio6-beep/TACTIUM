@@ -36,10 +36,11 @@ export function useRemindPending(params: {
   isHome?: boolean | null;
   tandas?: string | null;
   gender?: string | null;
+  location?: string | null;
   lastReminder: Date | null;
   setLastReminder: (d: Date) => void;
 }) {
-  const { matchdayId, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, tandas, gender, lastReminder, setLastReminder } = params;
+  const { matchdayId, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, tandas, gender, location, lastReminder, setLastReminder } = params;
   const gate = usePremiumGate();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [sending, setSending] = useState(false);
@@ -88,6 +89,7 @@ export function useRemindPending(params: {
           isHome: isHome ?? null,
           tandas: tandas ?? null,
           gender: gender ?? null,
+          location: location ?? null,
           token,
         });
         if (renew) toast.success('Enlace cambiado', 'El anterior ya no funciona. Comparte el nuevo.');
@@ -102,7 +104,7 @@ export function useRemindPending(params: {
         setSharingLink(false);
       }
     },
-    [matchdayId, sharingLink, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, tandas, gender],
+    [matchdayId, sharingLink, opponent, jornadaNumber, matchDate, matchTime, matchRange, isHome, tandas, gender, location],
   );
 
   const run = useCallback(async () => {

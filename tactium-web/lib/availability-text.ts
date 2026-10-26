@@ -37,6 +37,8 @@ export function availabilityShareText(o: {
   /** Reparto de parejas por tandas («3-2») y género del equipo, para pintar «Tandas: …». */
   tandas?: string | null;
   gender?: string | null;
+  /** Sede del partido: en los de fuera sale junto a «Fuera». */
+  location?: string | null;
 }): string {
   const fecha = longDate(o.date);
   const hora = o.time ? o.time.slice(0, 5) : null;
@@ -49,7 +51,11 @@ export function availabilityShareText(o: {
       : o.range
         ? `📅 ${fmtRango(o.range)} (día y hora por confirmar)`
         : null,
-    o.isHome == null ? null : o.isHome ? "🏠 En casa" : "🚗 Fuera",
+    o.isHome == null
+      ? null
+      : o.isHome
+        ? "🏠 En casa"
+        : `🚗 Fuera${o.location?.trim() ? ` · ${o.location.trim()}` : ""}`,
     tandas ? `⏱ Tandas: ${tandas}` : null,
     "",
     "Dime si vas con un toque, sin app 👇",
