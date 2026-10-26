@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -328,7 +328,7 @@ export const FcpGroupSheet: React.FC<{
           {tab === 'clasif' ? (
             <>
               <Text style={styles.hint}>Toca un rival para ver su plantilla</Text>
-              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+              <View>
                 <View style={{ gap: 6 }}>
                   {rows.map((t) => {
                     const sd = (t.sets_favor ?? 0) - (t.sets_contra ?? 0);
@@ -370,12 +370,12 @@ export const FcpGroupSheet: React.FC<{
                     );
                   })}
                 </View>
-              </ScrollView>
+              </View>
             </>
           ) : (
             <>
               <Text style={styles.hint}>Calendario del grupo · tus partidos resaltados</Text>
-              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              <View>
                 <View style={{ gap: 14 }}>
                   {jornadas.length === 0 ? (
                     <Text style={styles.empty}>Aún no hay jornadas registradas para este grupo.</Text>
@@ -488,7 +488,7 @@ export const FcpGroupSheet: React.FC<{
                     ))
                   )}
                 </View>
-              </ScrollView>
+              </View>
             </>
           )}
         </>
