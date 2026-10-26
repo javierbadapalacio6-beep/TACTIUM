@@ -75,6 +75,8 @@ export interface PairStat extends Record2 {
   b: string;
   /** Pistas en las que ha jugado (1 = la más fuerte). */
   courts: number[];
+  /** Su registro en cada pista. */
+  byCourt: Record<number, Record2>;
 }
 export interface PlayerStat extends Record2 {
   team: string;
@@ -132,9 +134,12 @@ export function computeGroupStats(actas: ActaRow[], equipos: string[]): GroupSta
       const sorted = [...names].sort();
       const key = `${team}|${sorted[0]}|${sorted[1]}`;
       let p = pairs.get(key);
-      if (!p) pairs.set(key, (p = { ...zero(), team, a: sorted[0], b: sorted[1], courts: [] }));
+      if (!p) pairs.set(key, (p = { ...zero(), team, a: sorted[0], b: sorted[1], courts: [], byCourt: {} }));
       add(p, won, sf, sc, jf, jc);
-      if (court != null && !p.courts.includes(court)) p.courts.push(court);
+      if (court != null) {
+        if (!p.courts.includes(court)) p.courts.push(court);
+        add((p.byCourt[court] ??= zero()), won, sf, sc, jf, jc);
+      }
     }
     for (const n of names) {
       const key = `${team}|${n}`;
@@ -179,4 +184,108 @@ export function computeGroupStats(actas: ActaRow[], equipos: string[]): GroupSta
     splitByTeam,
     total,
   };
+}
+
+// ─── Resultados por jornada, proyección y sugerencia de alineación ──────────────────────────────
+
+export interface ResultRow {
+  jornada: number | null;
+  equipo_local: string | null;
+  equipo_visit: string | null;
+  resultado: string | null;
+  estado: string | null;
+}
+
+export async function fetchGroupResults(idGrupo: string): Promise<ResultRow[]> {
+  const { data } = await rawFrom('fcp_partidos')
+    .select('jornada, equipo_local, equipo_visit, resultado, estado')
+    .eq('id_grupo', idGrupo)
+    .order('jornada', { ascending: true });
+  return (data ?? []) as ResultRow[];
+}
+
+export interface FormEntry {
+  jornada: number | null;
+  rival: string;
+  home: boolean;
+  us: number;
+  them: number;
+  won: boolean;
+}
+
+/** Resultados ya jugados de un equipo, de más antiguo a más nuevo (tendencia). */
+export function teamResults(rows: ResultRow[], team: string, equipos: string[]): FormEntry[] {
+  const resolve = makeTeamResolver(equipos);
+  const out: FormEntry[] = [];
+  for (const r of rows) {
+    const m = (r.resultado ?? '').match(/^s*(d+)s*[/-]s*(d+)s*$/);
+    if (r.estado !== 'jugado' || !m) continue;
+    const l = resolve(r.equipo_local);
+    const v = resolve(r.equipo_visit);
+    if (l !== team && v !== team) continue;
+    const home = l === team;
+    const us = Number(home ? m[1] : m[2]);
+    const them = Number(home ? m[2] : m[1]);
+    out.push({ jornada: r.jornada, rival: (home ? v : l) ?? '—', home, us, them, won: us > them });
+  }
+  return out;
+}
+
+export interface Projection {
+  equipo: string;
+  puntos: number;
+  /** Puntos esperados al acabar, al ritmo actual. */
+  proj: number;
+}
+
+/**
+ * Proyección al ritmo actual: puntos por enfrentamiento × los que quedan. Un equipo sin enfrentamientos
+ * toma la media del grupo. Orientativa: con pocas jornadas es muy sensible.
+ */
+export function projectTable(
+  rows: { equipo: string; puntos: number; enf: number }[],
+  totalEnf: number,
+): Projection[] {
+  const played = rows.filter((r) => r.enf > 0);
+  const avg = played.length ? played.reduce((n, r) => n + r.puntos / r.enf, 0) / played.length : 0;
+  return rows
+    .map((r) => {
+      const rate = r.enf > 0 ? r.puntos / r.enf : avg;
+      return { equipo: r.equipo, puntos: r.puntos, proj: r.puntos + rate * Math.max(totalEnf - r.enf, 0) };
+    })
+    .sort((a, b) => b.proj - a.proj || b.puntos - a.puntos);
+}
+
+export interface Suggestion {
+  court: number;
+  pair: PairStat | null;
+  /** Su registro en ESA pista. */
+  rec: Record2 | null;
+}
+
+/**
+ * Sugerencia de parejas con el historial del equipo: en cada pista, la pareja con mejor porcentaje en esa
+ * pista, sin repetir jugadores. Solo orienta: no toca la alineación.
+ */
+export function suggestLineup(stats: GroupStats, team: string): Suggestion[] {
+  const mine = stats.pairs.filter((p) => p.team === team);
+  const courts = [...(stats.courtsByTeam.get(team) ?? [])].map((c) => c.court);
+  const used = new Set<string>();
+  const out: Suggestion[] = [];
+  for (const court of courts) {
+    const cands = mine
+      .filter((p) => p.byCourt[court] && !used.has(p.a) && !used.has(p.b))
+      .sort(
+        (x, y) =>
+          y.byCourt[court].pg / y.byCourt[court].pj - x.byCourt[court].pg / x.byCourt[court].pj ||
+          y.byCourt[court].pj - x.byCourt[court].pj,
+      );
+    const best = cands[0] ?? null;
+    if (best) {
+      used.add(best.a);
+      used.add(best.b);
+    }
+    out.push({ court, pair: best, rec: best ? best.byCourt[court] : null });
+  }
+  return out;
 }

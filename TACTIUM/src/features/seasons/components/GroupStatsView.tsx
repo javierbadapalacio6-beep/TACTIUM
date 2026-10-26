@@ -11,9 +11,14 @@ import { Radius } from '@core/theme/spacing';
 import {
   computeGroupStats,
   fetchGroupActas,
+  fetchGroupResults,
   niceName,
+  projectTable,
+  suggestLineup,
+  teamResults,
   type GroupStats,
   type Record2,
+  type ResultRow,
 } from '@core/services/groupStats';
 
 const pct = (r: Record2) => (r.pj > 0 ? Math.round((r.pg / r.pj) * 100) : 0);
@@ -24,10 +29,13 @@ export const GroupStatsView: React.FC<{
   equipos: string[];
   /** Nombre de TU equipo en la clasificación (para «Tu equipo»). */
   myTeam: string | null;
-}> = ({ idGrupo, equipos, myTeam }) => {
+  /** Puntos y enfrentamientos de cada equipo (para la proyección). */
+  standings: { equipo: string; puntos: number; enf: number }[];
+}> = ({ idGrupo, equipos, myTeam, standings }) => {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
   const [stats, setStats] = useState<GroupStats | null>(null);
+  const [results, setResults] = useState<ResultRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [allPairs, setAllPairs] = useState(false);
   const [allPlayers, setAllPlayers] = useState(false);
@@ -36,6 +44,9 @@ export const GroupStatsView: React.FC<{
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    fetchGroupResults(idGrupo)
+      .then((r) => alive && setResults(r))
+      .catch(() => {});
     fetchGroupActas(idGrupo)
       .then((a) => alive && setStats(computeGroupStats(a, equipos)))
       .catch(() => alive && setStats(null))
@@ -59,6 +70,13 @@ export const GroupStatsView: React.FC<{
   const split = myTeam ? stats.splitByTeam.get(myTeam) : undefined;
   const pairs = allPairs ? stats.pairs : stats.pairs.slice(0, 5);
   const players = allPlayers ? stats.players : stats.players.slice(0, 5);
+  const form = myTeam ? teamResults(results, myTeam, equipos) : [];
+  const totalEnf = (equipos.length - 1) * 2;
+  const projection = projectTable(standings, totalEnf);
+  const myEnf = standings.find((r) => r.equipo === myTeam)?.enf ?? 0;
+  const myPairs = myTeam ? stats.pairs.filter((p) => p.team === myTeam) : [];
+  const myPlayers = myTeam ? stats.players.filter((p) => p.team === myTeam) : [];
+  const suggestion = myTeam ? suggestLineup(stats, myTeam).filter((x) => x.pair) : [];
 
   return (
     <View style={{ marginTop: 18, gap: 14 }}>
@@ -97,6 +115,108 @@ export const GroupStatsView: React.FC<{
               <Tile s={s} label="Fuera" r={split.away} />
             </View>
           ) : null}
+        </View>
+      ) : null}
+
+      {myTeam && form.length > 0 ? (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Tendencia</Text>
+          <Text style={s.sub}>Tus enfrentamientos jugados</Text>
+          {form.map((f) => (
+            <View key={`${f.jornada}${f.rival}`} style={s.row}>
+              <View style={[s.chip, { backgroundColor: f.won ? c.accent10 : 'rgba(220,60,60,0.12)' }]}>
+                <Text style={[s.chipText, { color: f.won ? c.accent : c.error }]}>{f.won ? 'V' : 'D'}</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.name}>{f.rival}</Text>
+                <Text style={s.team}>
+                  Jornada {f.jornada ?? '–'} · {f.home ? 'en casa' : 'fuera'}
+                </Text>
+              </View>
+              <Text style={s.big}>
+                {f.us}-{f.them}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Proyección</Text>
+        {myEnf >= 2 ? (
+          <>
+            <Text style={s.sub}>Puntos al acabar la liga si cada equipo mantiene su ritmo (orientativa)</Text>
+            {projection.map((p, i) => (
+              <View key={p.equipo} style={s.row}>
+                <Text style={s.rank}>{i + 1}</Text>
+                <Text style={[s.name, { flex: 1 }, p.equipo === myTeam && { color: c.accent }]}>{p.equipo}</Text>
+                <Text style={s.big}>{p.proj.toFixed(1).replace('.', ',')}</Text>
+              </View>
+            ))}
+          </>
+        ) : (
+          <Text style={s.sub}>Disponible desde que tu equipo juegue su segundo enfrentamiento: con uno solo, el ritmo no dice nada.</Text>
+        )}
+      </View>
+
+      {myTeam && myPairs.length > 0 ? (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Tus parejas</Text>
+          <Text style={s.sub}>Con quién has jugado y cómo os ha ido</Text>
+          {myPairs.map((p) => (
+            <View key={`${p.a}${p.b}`} style={s.row}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.name}>{niceName(p.a)}</Text>
+                <Text style={s.name}>{niceName(p.b)}</Text>
+                <Text style={s.team}>{p.courts.length ? `P${[...p.courts].sort().join(', P')}` : ''}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={s.big}>
+                  {p.pg}-{p.pj - p.pg}
+                </Text>
+                <Text style={s.small}>
+                  {sg(p.sf - p.sc)} sets · {sg(p.jf - p.jc)} juegos
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {myTeam && myPlayers.length > 0 ? (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Tus jugadores</Text>
+          <Text style={s.sub}>Partidos ganados y juegos de cada uno</Text>
+          {myPlayers.map((p) => (
+            <View key={p.name} style={s.row}>
+              <Text style={[s.name, { flex: 1 }]}>{niceName(p.name)}</Text>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={s.big}>
+                  {p.pg}-{p.pj - p.pg}
+                </Text>
+                <Text style={s.small}>{sg(p.jf - p.jc)} juegos</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {suggestion.length > 0 ? (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Sugerencia de parejas</Text>
+          <Text style={s.sub}>La mejor pareja de cada pista según tu historial, sin repetir jugadores. Solo orienta: no cambia tu alineación.</Text>
+          {suggestion.map((x) => (
+            <View key={x.court} style={s.row}>
+              <Text style={s.rank}>P{x.court}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.name}>{niceName(x.pair!.a)}</Text>
+                <Text style={s.name}>{niceName(x.pair!.b)}</Text>
+              </View>
+              <Text style={s.big}>
+                {x.rec!.pg}-{x.rec!.pj - x.rec!.pg}
+              </Text>
+            </View>
+          ))}
         </View>
       ) : null}
 
@@ -220,5 +340,7 @@ const makeStyles = (c: Palette) =>
     },
     tileLabel: { color: c.textMuted, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.6 },
     tileBig: { color: c.text, fontSize: 22, fontWeight: '800' },
+    chip: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    chipText: { fontSize: 13, fontWeight: '800' },
     note: { color: c.textFaint, fontSize: 11.5, textAlign: 'center', lineHeight: 16 },
   });

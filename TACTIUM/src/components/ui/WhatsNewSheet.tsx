@@ -20,27 +20,27 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-24',
+  id: '2026-10-26',
   items: [
     {
-      icon: '🔴',
-      title: 'El directo arranca a la hora del partido',
-      text: 'Ya no hace falta pulsar Marcar resultado: el directo se activa solo cuando toca, y lo que metas en el acta lo actualiza.',
+      icon: '📊',
+      title: 'Clasificación completa y estadísticas',
+      text: 'La tabla del grupo con todas las columnas de la Federación, y una pestaña Stats con mejores parejas, jugadores, rendimiento por pista y proyección.',
     },
     {
-      icon: '🏛',
-      title: 'La Federación manda',
-      text: 'En cuanto publica un resultado o un acta, se copian solos a TACTIUM y sustituyen lo apuntado a mano.',
+      icon: '📸',
+      title: 'Fotos por pareja',
+      text: 'Sube una foto de cada pareja y compártela con su resultado, los nombres completos y el logo de tu club.',
     },
     {
-      icon: '📤',
-      title: 'Alineación subida a la Federación',
-      text: 'Marca cuando la hayas subido. Si no, te avisamos 24 h, 3 h y 1 h antes del partido.',
+      icon: '🎓',
+      title: 'Tutoriales',
+      text: 'Pequeñas guías al entrar a un equipo, crear una jornada o hacer la alineación. Las repites desde Ajustes.',
     },
     {
       icon: '🔔',
-      title: 'Notificaciones en Android',
-      text: 'Ahora te pide el permiso y el interruptor de Ajustes te lleva a los ajustes del móvil si está bloqueado.',
+      title: 'Voy / No en cuanto sale la hora',
+      text: 'Si juegas fuera, en cuanto la Federación publica la hora tus jugadores reciben el Voy, Duda o No al instante.',
     },
   ],
 };

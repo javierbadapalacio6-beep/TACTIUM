@@ -13,7 +13,11 @@ import { useAsync } from "@/lib/use-async";
 import {
   computeGroupStats,
   fetchGroupActas,
+  fetchGroupResults,
   niceName,
+  projectTable,
+  suggestLineup,
+  teamResults,
   type Record2,
 } from "@/lib/group-stats";
 
@@ -32,13 +36,17 @@ export function FcpGroupStats({
   idGrupo,
   equipos,
   myTeam,
+  standings,
 }: {
   idGrupo: string;
   equipos: string[];
   myTeam: string | null;
+  /** Puntos y enfrentamientos de cada equipo (para la proyección). */
+  standings: { equipo: string; puntos: number; enf: number }[];
 }) {
   const key = equipos.join("|");
   const actas = useAsync(() => fetchGroupActas(idGrupo), [idGrupo]);
+  const results = useAsync(() => fetchGroupResults(idGrupo), [idGrupo]);
   const stats = useMemo(
     () => (actas.data ? computeGroupStats(actas.data, equipos) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,6 +71,12 @@ export function FcpGroupStats({
   const split = myTeam ? stats.splitByTeam.get(myTeam) : undefined;
   const pairs = allPairs ? stats.pairs : stats.pairs.slice(0, 5);
   const players = allPlayers ? stats.players : stats.players.slice(0, 5);
+  const form = myTeam ? teamResults(results.data ?? [], myTeam, equipos) : [];
+  const projection = projectTable(standings, (equipos.length - 1) * 2);
+  const myEnf = standings.find((r) => r.equipo === myTeam)?.enf ?? 0;
+  const myPairs = myTeam ? stats.pairs.filter((p) => p.team === myTeam) : [];
+  const myPlayers = myTeam ? stats.players.filter((p) => p.team === myTeam) : [];
+  const suggestion = myTeam ? suggestLineup(stats, myTeam).filter((x) => x.pair) : [];
 
   const rowStyle = { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--line)" } as const;
   const moreBtn = { cursor: "pointer", width: "100%", marginTop: 8, padding: "10px 0", borderRadius: 12, border: 0, background: "var(--accent-10)", color: "var(--accent)", fontWeight: 700 } as const;
@@ -117,6 +131,94 @@ export function FcpGroupStats({
               ))}
             </div>
           ) : null}
+        </Card>
+      ) : null}
+
+      {myTeam && form.length > 0 ? (
+        <Card>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Tendencia</h3>
+          <p style={{ margin: "4px 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>Tus enfrentamientos jugados</p>
+          {form.map((f) => (
+            <div key={`${f.jornada}${f.rival}`} style={rowStyle}>
+              <span style={{ width: 28, height: 28, borderRadius: 14, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 13, background: f.won ? "var(--accent-10)" : "rgba(220,60,60,0.12)", color: f.won ? "var(--accent)" : "#d33" }}>{f.won ? "V" : "D"}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700 }}>{f.rival}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Jornada {f.jornada ?? "–"} · {f.home ? "en casa" : "fuera"}</div>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "var(--accent)" }}>{f.us}-{f.them}</div>
+            </div>
+          ))}
+        </Card>
+      ) : null}
+
+      <Card>
+        <h3 style={{ margin: 0, fontSize: 16 }}>Proyección</h3>
+        {myEnf >= 2 ? (
+          <>
+            <p style={{ margin: "4px 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>Puntos al acabar la liga si cada equipo mantiene su ritmo (orientativa)</p>
+            {projection.map((p, i) => (
+              <div key={p.equipo} style={rowStyle}>
+                <span className="mono" style={{ width: 18, color: "var(--text-muted)" }}>{i + 1}</span>
+                <div style={{ flex: 1, fontWeight: 700, color: p.equipo === myTeam ? "var(--accent)" : undefined }}>{p.equipo}</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--accent)" }}>{p.proj.toFixed(1).replace(".", ",")}</div>
+              </div>
+            ))}
+          </>
+        ) : (
+          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--text-muted)" }}>Disponible desde que tu equipo juegue su segundo enfrentamiento: con uno solo, el ritmo no dice nada.</p>
+        )}
+      </Card>
+
+      {myTeam && myPairs.length > 0 ? (
+        <Card>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Tus parejas</h3>
+          <p style={{ margin: "4px 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>Con quién has jugado y cómo os ha ido</p>
+          {myPairs.map((p) => (
+            <div key={`${p.a}${p.b}`} style={rowStyle}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700 }}>{niceName(p.a)}</div>
+                <div style={{ fontWeight: 700 }}>{niceName(p.b)}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.courts.length ? `P${[...p.courts].sort().join(", P")}` : ""}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--accent)" }}>{p.pg}-{p.pj - p.pg}</div>
+                <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{sg(p.sf - p.sc)} sets · {sg(p.jf - p.jc)} juegos</div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      ) : null}
+
+      {myTeam && myPlayers.length > 0 ? (
+        <Card>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Tus jugadores</h3>
+          <p style={{ margin: "4px 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>Partidos ganados y juegos de cada uno</p>
+          {myPlayers.map((p) => (
+            <div key={p.name} style={rowStyle}>
+              <div style={{ flex: 1, fontWeight: 700 }}>{niceName(p.name)}</div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--accent)" }}>{p.pg}-{p.pj - p.pg}</div>
+                <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{sg(p.jf - p.jc)} juegos</div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      ) : null}
+
+      {suggestion.length > 0 ? (
+        <Card>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Sugerencia de parejas</h3>
+          <p style={{ margin: "4px 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>La mejor pareja de cada pista según tu historial, sin repetir jugadores. Solo orienta: no cambia tu alineación.</p>
+          {suggestion.map((x) => (
+            <div key={x.court} style={rowStyle}>
+              <span className="mono" style={{ width: 26, color: "var(--text-muted)" }}>P{x.court}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700 }}>{niceName(x.pair!.a)}</div>
+                <div style={{ fontWeight: 700 }}>{niceName(x.pair!.b)}</div>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "var(--accent)" }}>{x.rec!.pg}-{x.rec!.pj - x.rec!.pg}</div>
+            </div>
+          ))}
         </Card>
       ) : null}
 

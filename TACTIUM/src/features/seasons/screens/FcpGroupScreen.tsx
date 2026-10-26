@@ -423,6 +423,7 @@ export const FcpGroupScreen = ({ navigation, route }: CompetirStackScreenProps<'
             idGrupo={idGrupo}
             equipos={rows.map((r) => r.equipo)}
             myTeam={myRow?.equipo ?? myFcpName}
+            standings={rows.map((r) => ({ equipo: r.equipo, puntos: r.puntos ?? 0, enf: r.stats.enf }))}
           />
         ) : tab === 'cuadro' ? (
           <View style={{ marginTop: 18 }}>

@@ -1488,7 +1488,7 @@ export function FcpGroupView({
       {tab !== "cuadro" && rows.length > 0 ? (
         <section style={{ minWidth: 0, marginTop: 28 }}>
           <SectionHead title="Estadísticas" style={{ margin: "0 0 10px" }} />
-          <FcpGroupStats idGrupo={id} equipos={rows.map((t) => t.equipo)} myTeam={myRow?.equipo ?? null} />
+          <FcpGroupStats idGrupo={id} equipos={rows.map((t) => t.equipo)} myTeam={myRow?.equipo ?? null} standings={rows.map((t) => ({ equipo: t.equipo, puntos: t.puntos, enf: t.enf }))} />
         </section>
       ) : null}
     </div>
