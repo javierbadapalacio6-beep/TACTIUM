@@ -53,6 +53,7 @@ import { TimePollPanel } from "@/components/matchday/TimePollPanel";
 import { isMatchStarted, isMatchOver } from "@/lib/match-time";
 import { FederationUploadCard } from "@/components/matchday/FederationUploadCard";
 import { LiveScoreboard } from "@/components/matchday/LiveScoreboard";
+import { PairPhotos } from "@/components/matchday/PairPhotos";
 import {
   IconAlert,
   IconCalendar,
@@ -1434,6 +1435,7 @@ export function MatchdayView({ id }: { id: string }) {
 
       {curTab === "fotos" &&
         (closed ? (
+          <>
           <div style={twoCols}>
             {photoCard}
             <ShareResultCard
@@ -1443,6 +1445,28 @@ export function MatchdayView({ id }: { id: string }) {
               onToast={setToast}
             />
           </div>
+          <div style={{ marginTop: 16 }}>
+            <PairPhotos
+              matchdayId={m.id}
+              teamId={teamId ?? null}
+              canEdit={canEditPhoto}
+              items={rows.map((r) => {
+                const v = verdict(r);
+                return {
+                  court: r.court,
+                  playerA: r.pair[0]?.name ?? null,
+                  playerB: r.pair[1]?.name ?? null,
+                  summary: courtScore(r) === "—" ? "" : courtScore(r),
+                  won: v === "none" ? null : v === "win",
+                };
+              })}
+              matchLine={`${ourName} ${scoreUs}–${scoreThem} ${m.opponent}`}
+              subtitle={shareSubtitle}
+              clubLogoUrl={(teamInfo.data as { logo_url?: string | null } | null)?.logo_url ?? null}
+              onToast={setToast}
+            />
+          </div>
+          </>
         ) : (
           <Note icon={<IconCamera size={16} />}>
             La foto del partido se ve aquí cuando el acta está cerrada.

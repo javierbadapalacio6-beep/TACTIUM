@@ -1,5 +1,6 @@
 "use client";
 
+import { TutorialModal, useTutorial } from "@/components/Tutorial";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -82,6 +83,9 @@ export function SeasonDetail({ id }: { id: string }) {
   const canManage = role === "capitan" || role === "club";
   const [tab, setTab] = useState<Tab>("jornadas");
   const [newOpen, setNewOpen] = useState(false);
+  // Primera vez: un mini tutorial y, al cerrarlo, se abre «Nueva jornada».
+  const newTut = useTutorial("create-matchday");
+  const openNew = () => newTut.show(() => setNewOpen(true));
   const [closeOpen, setCloseOpen] = useState(false);
   const [showPending, setShowPending] = useState(false);
   // Formulario de nueva jornada.
@@ -350,7 +354,7 @@ export function SeasonDetail({ id }: { id: string }) {
                 label="Añadir"
                 accent
                 items={[
-                  { label: "Nueva jornada", sub: "Rival, casa o fuera, fecha y hora", onClick: () => setNewOpen(true) },
+                  { label: "Nueva jornada", sub: "Rival, casa o fuera, fecha y hora", onClick: openNew },
                   {
                     label: "Escanear el calendario",
                     sub: "Foto o PDF del calendario del grupo",
@@ -428,7 +432,7 @@ export function SeasonDetail({ id }: { id: string }) {
               action={
                 canEdit ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                    <Btn variant="accent" onClick={() => setNewOpen(true)} icon={<IconPlus size={14} />}>
+                    <Btn variant="accent" onClick={openNew} icon={<IconPlus size={14} />}>
                       Añadir jornada
                     </Btn>
                     <Btn onClick={() => setScanOpen(true)}>Escanear el calendario</Btn>
@@ -520,6 +524,7 @@ export function SeasonDetail({ id }: { id: string }) {
         ) : null)}
 
       {/* ── Crear jornada ────────────────────────────────────────── */}
+      <TutorialModal id="create-matchday" visible={newTut.visible} onClose={newTut.close} />
       <Modal
         open={newOpen}
         onClose={() => setNewOpen(false)}

@@ -1,5 +1,6 @@
 "use client";
 
+import { TutorialModal, useAutoTutorial } from "@/components/Tutorial";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -142,6 +143,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
   const { activeTeam, user } = useSession();
   const router = useRouter();
   const teamId = activeTeam?.id ?? null;
+  const welcome = useAutoTutorial("team-welcome", teamId, !!teamId, 1800);
   const [lastReminder, setLastReminder] = useState<Date | null>(null);
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -431,6 +433,7 @@ export function CaptainHome({ isCaptain }: { isCaptain: boolean }) {
 
   return (
     <div className="tw-page">
+      <TutorialModal id="team-welcome" visible={welcome.visible} onClose={welcome.close} />
       {greeting}
       <OtherTeamsStrip />
       {trial}

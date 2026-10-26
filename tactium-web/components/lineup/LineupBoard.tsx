@@ -1,5 +1,6 @@
 "use client";
 
+import { TutorialModal, useAutoTutorial } from "@/components/Tutorial";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -449,6 +450,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   const teamId = owner.teamId;
   const isCaptain = role === "capitan" && owner.isTeamCaptain;
   const reduce = useReducedMotion();
+  const lineupTut = useAutoTutorial("lineup", null, isCaptain, 900);
 
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<MatchdayBundle | null>(
@@ -1092,6 +1094,7 @@ export function LineupBoard({ id, lock }: { id: string; lock?: Lock }) {
   /* ── Editor del capitán ────────────────────────────────────────── */
   return (
     <div className="tw-lineup-wrap">
+      <TutorialModal id="lineup" visible={lineupTut.visible} onClose={lineupTut.close} />
       <div className="tw-lineup-head">
         <div style={{ minWidth: 0, flex: "1 1 320px" }}>
           <Link href={`/jornada/${m.id}`} className="tw-back" style={{ marginBottom: 6 }}>
