@@ -133,7 +133,7 @@ export function CoachTour({
             border: "2px solid var(--accent)",
             boxShadow: "0 0 0 9999px rgba(4,10,8,0.72)",
             pointerEvents: "none",
-            transition: "all .2s ease",
+            transition: "all .38s cubic-bezier(.22,1,.36,1)",
           }}
         />
       ) : null}
@@ -151,6 +151,7 @@ export function CoachTour({
           boxShadow: "0 18px 50px rgba(0,0,0,.35)",
           display: "grid",
           gap: 6,
+          transition: "left .38s cubic-bezier(.22,1,.36,1), top .38s cubic-bezier(.22,1,.36,1)",
         }}
       >
         {hole ? (
@@ -183,6 +184,7 @@ export function CoachTour({
             </button>
           ) : null}
         </div>
+        <div key={i} className="tw-coach-in" style={{ display: "grid", gap: 6 }}>
         <h3 style={{ margin: 0, fontSize: 17 }}>{step.title}</h3>
         <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14, lineHeight: 1.45 }}>{step.text}</p>
         {step.chips ? (
@@ -197,6 +199,7 @@ export function CoachTour({
             ))}
           </div>
         ) : null}
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
           <div style={{ display: "flex", gap: 5 }}>
             {steps.map((_, n) => (

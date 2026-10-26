@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { useColors, type Palette } from '@core/theme';
 import { Radius } from '@core/theme/spacing';
@@ -94,6 +102,10 @@ export async function resetCoachTours(): Promise<void> {
 }
 
 const PAD = 6;
+// El velo es un recuadro enorme con un borde gigante: lo de dentro (el hueco) queda transparente y se anima
+// de un elemento al siguiente, con las esquinas redondeadas.
+const BIG = 2400;
+const MOVE = { duration: 340, easing: Easing.out(Easing.cubic) };
 
 export const CoachTour: React.FC<{ coach: Coach; steps: CoachStep[] }> = ({ coach, steps }) => {
   const c = useColors();
@@ -101,25 +113,45 @@ export const CoachTour: React.FC<{ coach: Coach; steps: CoachStep[] }> = ({ coac
   const { width: W, height: H } = useWindowDimensions();
   const [i, setI] = useState(0);
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [measured, setMeasured] = useState(false);
   const step = steps[i];
 
+  // Posición animada del hueco, del globo y de la flecha.
+  const hx = useSharedValue(0);
+  const hy = useSharedValue(0);
+  const hw = useSharedValue(0);
+  const hh = useSharedValue(0);
+  const ringO = useSharedValue(0);
+  const bTop = useSharedValue(0);
+  const caretX = useSharedValue(0);
+  const caretUp = useSharedValue(0);
+  const placed = useRef(false);
+
   useEffect(() => {
-    if (coach.visible) setI(0);
+    if (coach.visible) {
+      setI(0);
+      placed.current = false;
+    }
   }, [coach.visible]);
 
   useEffect(() => {
     if (!coach.visible || !step) return;
     let alive = true;
-    setBox(null);
-    if (!step.target) return;
+    setMeasured(false);
+    if (!step.target) {
+      setBox(null);
+      setMeasured(true);
+      return;
+    }
     // Pequeña espera: que la pantalla termine de pintarse antes de medir.
     const t = setTimeout(() => {
       coach.measure(step.target!).then((b) => {
         if (!alive) return;
         // Fuera de pantalla: se explica sin señalar.
         setBox(b && b.y >= 0 && b.y + b.h <= H + 4 && b.x + b.w <= W + 4 ? b : null);
+        setMeasured(true);
       });
-    }, 250);
+    }, placed.current ? 0 : 250);
     return () => {
       alive = false;
       clearTimeout(t);
@@ -127,86 +159,102 @@ export const CoachTour: React.FC<{ coach: Coach; steps: CoachStep[] }> = ({ coac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coach.visible, i, step?.target, H, W]);
 
+  // Cuando se sabe dónde está el elemento, se mueve todo hasta allí (la primera vez, sin animar).
+  useEffect(() => {
+    if (!coach.visible || !step || !measured) return;
+    const hole = box
+      ? {
+          x: Math.max(box.x - PAD, 0),
+          y: Math.max(box.y - PAD, 0),
+          w: Math.min(box.w + PAD * 2, W),
+          h: box.h + PAD * 2,
+        }
+      : null;
+    const bubbleH = step.chips ? 280 : 210;
+    const below = hole ? hole.y + hole.h + 12 + bubbleH <= H : false;
+    const top = hole
+      ? below
+        ? hole.y + hole.h + 12
+        : Math.max(hole.y - 12 - bubbleH, 40)
+      : H / 2 - bubbleH / 2;
+    const target = hole ?? { x: W / 2, y: H / 2, w: 0, h: 0 };
+    const caret = hole ? Math.min(Math.max(hole.x + hole.w / 2 - 16 - 8, 20), W - 32 - 36) : 20;
+    const go = (sv: { value: number }, v: number) => {
+      sv.value = placed.current ? withTiming(v, MOVE) : v;
+    };
+    go(hx, target.x);
+    go(hy, target.y);
+    go(hw, target.w);
+    go(hh, target.h);
+    go(ringO, hole ? 1 : 0);
+    go(bTop, top);
+    go(caretX, caret);
+    go(caretUp, hole ? (below ? 1 : -1) : 0);
+    placed.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coach.visible, measured, box, i, W, H]);
+
+  const dimStyle = useAnimatedStyle(() => ({
+    left: hx.value - BIG,
+    top: hy.value - BIG,
+    width: hw.value + BIG * 2,
+    height: hh.value + BIG * 2,
+  }));
+  const ringStyle = useAnimatedStyle(() => ({
+    left: hx.value,
+    top: hy.value,
+    width: hw.value,
+    height: hh.value,
+    opacity: ringO.value,
+  }));
+  const bubbleStyle = useAnimatedStyle(() => ({ top: bTop.value }));
+  const caretUpStyle = useAnimatedStyle(() => ({ left: caretX.value, opacity: caretUp.value > 0 ? 1 : 0 }));
+  const caretDownStyle = useAnimatedStyle(() => ({ left: caretX.value, opacity: caretUp.value < 0 ? 1 : 0 }));
+
   if (!coach.visible || !step) return null;
   const last = i === steps.length - 1;
-
-  const hole = box
-    ? {
-        x: Math.max(box.x - PAD, 0),
-        y: Math.max(box.y - PAD, 0),
-        w: Math.min(box.w + PAD * 2, W),
-        h: box.h + PAD * 2,
-      }
-    : null;
-  // El globo va debajo del elemento si cabe; si no, encima. Si el elemento es muy alto, abajo del todo.
-  const bubbleH = step.chips ? 280 : 210;
-  const below = hole ? hole.y + hole.h + 12 + bubbleH <= H : false;
-  const bubbleTop = hole
-    ? below
-      ? hole.y + hole.h + 12
-      : Math.max(hole.y - 12 - bubbleH, 40)
-    : undefined;
 
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={coach.finish}>
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {hole ? (
-          <>
-            {/* Velo con hueco: cuatro rectángulos alrededor del elemento */}
-            <View style={[s.dim, { left: 0, top: 0, width: W, height: hole.y }]} />
-            <View style={[s.dim, { left: 0, top: hole.y + hole.h, width: W, height: H - hole.y - hole.h }]} />
-            <View style={[s.dim, { left: 0, top: hole.y, width: hole.x, height: hole.h }]} />
-            <View style={[s.dim, { left: hole.x + hole.w, top: hole.y, width: W - hole.x - hole.w, height: hole.h }]} />
-            <View
-              pointerEvents="none"
-              style={[s.ring, { left: hole.x, top: hole.y, width: hole.w, height: hole.h }]}
-            />
-          </>
-        ) : (
-          <View style={[s.dim, StyleSheet.absoluteFillObject]} />
-        )}
+        <Animated.View pointerEvents="none" style={[s.dim, dimStyle]} />
+        <Animated.View pointerEvents="none" style={[s.ring, ringStyle]} />
+        {/* Toques fuera del globo: no pasan a la pantalla de debajo */}
+        <View style={StyleSheet.absoluteFill} />
 
-        <View
-          style={[
-            s.bubble,
-            hole ? { top: bubbleTop } : { top: H / 2 - bubbleH / 2 },
-          ]}
-        >
+        <Animated.View style={[s.bubble, bubbleStyle]}>
           {/* Flecha hacia el elemento (patrón de monday.com / Mesh en Mobbin) */}
-          {hole ? (
-            <View
-              pointerEvents="none"
-              style={[
-                s.caret,
-                below ? { top: -7 } : { bottom: -7 },
-                { left: Math.min(Math.max(hole.x + hole.w / 2 - 16 - 8, 20), W - 32 - 36) },
-              ]}
-            />
-          ) : null}
-          <View style={s.head}>
-            <Text style={s.counter}>
-              {i + 1}/{steps.length}
-            </Text>
-            {!last ? (
-              <Pressable onPress={coach.finish} hitSlop={10} accessibilityLabel="Saltar la guía" style={s.skipPill}>
-                <Text style={s.skip}>SALTAR</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <Text style={s.title}>{step.title}</Text>
-          <Text style={s.text}>{step.text}</Text>
-          {step.chips ? (
-            <View style={{ gap: 6, marginTop: 4 }}>
-              {step.chips.map((ch, n) => (
-                <View key={ch} style={s.chip}>
-                  <View style={s.chipNum}>
-                    <Text style={s.chipNumText}>{n + 1}</Text>
-                  </View>
-                  <Text style={s.chipText}>{ch}</Text>
-                </View>
-              ))}
+          <Animated.View pointerEvents="none" style={[s.caret, { top: -7 }, caretUpStyle]} />
+          <Animated.View
+            pointerEvents="none"
+            style={[s.caret, s.caretDown, { bottom: -7 }, caretDownStyle]}
+          />
+          <Animated.View key={i} entering={FadeIn.duration(260)} style={{ gap: 6 }}>
+            <View style={s.head}>
+              <Text style={s.counter}>
+                {i + 1}/{steps.length}
+              </Text>
+              {!last ? (
+                <Pressable onPress={coach.finish} hitSlop={10} accessibilityLabel="Saltar la guía" style={s.skipPill}>
+                  <Text style={s.skip}>SALTAR</Text>
+                </Pressable>
+              ) : null}
             </View>
-          ) : null}
+            <Text style={s.title}>{step.title}</Text>
+            <Text style={s.text}>{step.text}</Text>
+            {step.chips ? (
+              <View style={{ gap: 6, marginTop: 4 }}>
+                {step.chips.map((ch, n) => (
+                  <Animated.View key={ch} entering={FadeInDown.delay(120 + n * 90).duration(260)} style={s.chip}>
+                    <View style={s.chipNum}>
+                      <Text style={s.chipNumText}>{n + 1}</Text>
+                    </View>
+                    <Text style={s.chipText}>{ch}</Text>
+                  </Animated.View>
+                ))}
+              </View>
+            ) : null}
+          </Animated.View>
           <View style={s.row}>
             <View style={s.dots}>
               {steps.map((_, n) => (
@@ -221,7 +269,7 @@ export const CoachTour: React.FC<{ coach: Coach; steps: CoachStep[] }> = ({ coac
               <Text style={s.nextText}>{last ? 'Entendido' : 'Siguiente'}</Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -229,7 +277,12 @@ export const CoachTour: React.FC<{ coach: Coach; steps: CoachStep[] }> = ({ coac
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    dim: { position: 'absolute', backgroundColor: 'rgba(4,10,8,0.72)' },
+    dim: {
+      position: 'absolute',
+      borderWidth: BIG,
+      borderRadius: BIG + 14,
+      borderColor: 'rgba(4,10,8,0.72)',
+    },
     ring: {
       position: 'absolute',
       borderRadius: 14,
@@ -261,6 +314,7 @@ const makeStyles = (c: Palette) =>
       borderTopWidth: 1,
       transform: [{ rotate: '45deg' }],
     },
+    caretDown: { transform: [{ rotate: '225deg' }] },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8, borderRadius: 10, backgroundColor: c.accent10 },
     chipNum: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
     chipNumText: { color: '#04110B', fontSize: 11.5, fontWeight: '800' },
