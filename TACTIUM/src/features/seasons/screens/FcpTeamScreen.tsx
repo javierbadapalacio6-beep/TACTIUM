@@ -16,7 +16,12 @@ import {
   type FcpTeamProfile,
   type FcpTeamSeason,
 } from '@core/services/fcpProfiles';
-import { fetchGroupSchedule, type FcpBrowseMatch } from '@core/services/fcpBrowse';
+import {
+  fetchGroupSchedule,
+  fetchGroupStandings,
+  type FcpBrowseMatch,
+  type FcpBrowseStanding,
+} from '@core/services/fcpBrowse';
 import { fetchFcpActa, normFcpName, type FcpActaPartido } from '@core/services/fcpSeason';
 import { FCP_FEDERATION_CODE } from '@core/services/fcpOnboarding';
 import { groupZones, zoneIn, zoneColor } from '@core/data/fcpZones';
@@ -104,6 +109,8 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FcpTeamProfile | null>(null);
   const [matches, setMatches] = useState<TeamMatch[]>([]);
+  // Clasificación OFICIAL del grupo del equipo (la de la Federación), para verla sin salir de la ficha.
+  const [standings, setStandings] = useState<FcpBrowseStanding[]>([]);
   const [sort, setSort] = useState<Sort>('puntos');
   const [tab, setTab] = useState<Tab>('resumen');
 
@@ -134,10 +141,17 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
         // Próximo y últimos: las jornadas del grupo (las de FcpGroup),
         // filtradas por este equipo. Consulta de cliente, sin servidor nuevo.
         if (d?.idGrupo) {
-          const rows = await fetchGroupSchedule(d.idGrupo).catch(() => [] as FcpBrowseMatch[]);
-          if (alive) setMatches(toTeamMatches(rows, d.equipo));
+          const [rows, st] = await Promise.all([
+            fetchGroupSchedule(d.idGrupo).catch(() => [] as FcpBrowseMatch[]),
+            fetchGroupStandings(d.idGrupo).catch(() => null),
+          ]);
+          if (alive) {
+            setMatches(toTeamMatches(rows, d.equipo));
+            setStandings(st?.rows ?? []);
+          }
         } else if (alive) {
           setMatches([]);
+          setStandings([]);
         }
       })
       .catch(() => alive && setData(null))
@@ -362,8 +376,51 @@ export const FcpTeamScreen = ({ navigation, route }: CompetirStackScreenProps<'F
                     ))}
                   </View>
 
+                  {standings.length > 0 && data.idGrupo ? (
+                    <View style={{ marginTop: 22 }}>
+                      <ListHeader
+                        title="CLASIFICACIÓN"
+                        action="VER GRUPO ›"
+                        onAction={() =>
+                          navigation.navigate('FcpGroup', { idGrupo: data.idGrupo!, nombre: data.grupo ?? undefined })
+                        }
+                      />
+                      <View style={styles.miniHead}>
+                        <Text style={[styles.miniTh, { width: 22 }]}>#</Text>
+                        <Text style={[styles.miniTh, { flex: 1 }]}>EQUIPO</Text>
+                        <Text style={[styles.miniTh, { width: 34, textAlign: 'center' }]}>ENF</Text>
+                        <Text style={[styles.miniTh, { width: 34, textAlign: 'right' }]}>PTS</Text>
+                      </View>
+                      <View style={{ gap: 4 }}>
+                        {standings.map((t) => {
+                          const me = t.idEquipo === data.idEquipo || t.equipo === data.equipo;
+                          return (
+                            <Pressable
+                              key={`${t.idEquipo}-${t.equipo}`}
+                              disabled={me || t.idEquipo == null}
+                              onPress={() =>
+                                t.idEquipo != null &&
+                                navigation.push('FcpTeam', { idEquipo: t.idEquipo, name: t.equipo })
+                              }
+                              style={({ pressed }) => [
+                                styles.miniRow,
+                                me && { borderColor: c.accent, backgroundColor: c.accent10 },
+                                pressed && { opacity: 0.85 },
+                              ]}
+                            >
+                              <Text style={[styles.miniPos, { width: 22 }]}>{t.posicion ?? '–'}</Text>
+                              <Text style={[styles.miniTeam, { flex: 1 }, me && { color: c.accent }]}>{t.equipo}</Text>
+                              <Text style={[styles.miniNum, { width: 34, textAlign: 'center' }]}>{t.stats.enf}</Text>
+                              <Text style={[styles.miniPts, { width: 34, textAlign: 'right' }]}>{t.puntos ?? 0}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
+
                   {next ? (
-                    <View style={styles.nextCard}>
+                    <View style={[styles.nextCard, { marginTop: 22 }]}>
                       <Text style={styles.cardEyebrow}>PRÓXIMO</Text>
                       <View style={styles.nextRow}>
                         <View style={styles.jBadge}>
@@ -713,6 +770,22 @@ const makeStyles = (c: Palette) =>
     openLigaText: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
 
     // Resumen
+    miniHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginTop: 10, marginBottom: 4 },
+    miniTh: { color: c.textMuted, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.6 },
+    miniRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: c.hair,
+      backgroundColor: c.bgCard,
+    },
+    miniPos: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
+    miniTeam: { color: c.text, fontSize: 13.5, fontWeight: '700', lineHeight: 18, paddingRight: 8 },
+    miniNum: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
+    miniPts: { color: c.text, fontSize: 15, fontWeight: '800' },
     statBlock: {
       flexDirection: 'row',
       alignItems: 'center',

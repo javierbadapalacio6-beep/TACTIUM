@@ -2616,6 +2616,12 @@ export function FcpTeamView({
     [data?.idGrupo],
     !!data?.idGrupo && !data?.preseason
   );
+  // Clasificación OFICIAL del grupo del equipo, sin salir de la ficha.
+  const groupTable = useAsync(
+    () => fetchFcpStandings(data!.idGrupo!),
+    [data?.idGrupo],
+    !!data?.idGrupo && !data?.preseason
+  );
 
   if (loading) return <SkeletonPage />;
 
@@ -2829,6 +2835,29 @@ export function FcpTeamView({
             <FormPips form={data.form} box={18} />
           </div>
         </Card>
+      ) : null}
+
+      {groupTable.data && groupTable.data.length > 0 ? (
+        <div style={{ marginBottom: 16 }}>
+          <SectionHead title="Clasificación" style={{ margin: "0 0 10px" }} />
+          <FcpStandingsTable
+            slug={slug}
+            rows={groupTable.data}
+            zones={null}
+            myFcpId={data.idEquipo}
+          />
+          {data.idGrupo ? (
+            <p style={{ margin: "10px 0 0", fontSize: 13 }}>
+              <Link
+                href={`/federacion/${slug}/grupo/${encodeURIComponent(data.idGrupo)}`}
+                onClick={pane("grupo", data.idGrupo)}
+                style={{ color: "var(--accent)", fontWeight: 700 }}
+              >
+                Ver el grupo entero ›
+              </Link>
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {nextTM ? (
