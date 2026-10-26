@@ -20,27 +20,22 @@ import { BottomSheet } from './BottomSheet';
  * corta por novedad y un único «Continuar».
  */
 const NOVEDADES = {
-  id: '2026-10-27',
+  id: '2026-10-28',
   items: [
     {
       icon: '🧭',
-      title: 'Guías dentro de las pantallas',
-      text: 'La primera vez que haces una alineación, llenas la plantilla o metes jornadas, te señalamos cada botón y te explicamos cómo funciona. Las repites desde Ajustes.',
+      title: 'Nueva barra de navegación',
+      text: 'La muesca viaja hasta la pestaña que tocas. También puedes arrastrar el dedo por la barra para cambiar de sección.',
     },
     {
-      icon: '🏛',
-      title: 'Clasificación igual que la Federación',
-      text: 'La tabla de cada grupo es la oficial, con todas sus columnas, y la pestaña Stats de Equipo saca partido a las actas.',
+      icon: '🏆',
+      title: 'Guías en los torneos',
+      text: 'Al crear un torneo, llevarlo como organizador o apuntarte, te explicamos cada paso la primera vez.',
     },
     {
-      icon: '🔎',
-      title: 'Ranking con fichas',
-      text: 'En el ranking de la Federación, toca un nombre y abres la ficha del jugador. «Ambos géneros» ya junta hombres y mujeres.',
-    },
-    {
-      icon: '📸',
-      title: 'Fotos por pareja con logo',
-      text: 'Las tarjetas para compartir llevan ahora el logo de tu club y los nombres completos de cada pareja.',
+      icon: '✨',
+      title: 'Guías más suaves',
+      text: 'Las guías sobre la pantalla se deslizan de un botón al siguiente. Las repites desde Ajustes.',
     },
   ],
 };
